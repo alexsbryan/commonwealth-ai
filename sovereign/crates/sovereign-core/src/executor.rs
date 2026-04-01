@@ -5,7 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 
 use crate::error::{Error, Result};
+use crate::oicp::LatencyPreference;
 use crate::registry::ToolRegistry;
+use crate::skills::SkillRegistry;
 use crate::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use crate::types::*;
 
@@ -23,6 +25,7 @@ pub struct Executor {
     pub tools: Arc<ToolRegistry>,
     pub store: Arc<dyn StateStore>,
     pub approval: Arc<dyn ApprovalChannel>,
+    pub skills: Arc<SkillRegistry>,
 }
 
 pub struct TaskContext {
@@ -169,12 +172,14 @@ impl Executor {
         tools: Arc<ToolRegistry>,
         store: Arc<dyn StateStore>,
         approval: Arc<dyn ApprovalChannel>,
+        skills: Arc<SkillRegistry>,
     ) -> Self {
         Self {
             inference,
             tools,
             store,
             approval,
+            skills,
         }
     }
 
@@ -265,16 +270,37 @@ impl Executor {
                 speed,
             } => {
                 let resolved = resolve_inputs(prompt_template, &step.inputs, completed)?;
+
+                let base_system = "You are a helpful assistant performing a step in a multi-step task. Be thorough and specific.";
+                let system_message = if let Some(overrides) =
+                    self.skills.prompt_overrides(&Intent::ComplexTask)
+                {
+                    format!("{overrides}\n\n{base_system}")
+                } else {
+                    base_system.to_string()
+                };
+
+                // Attach OICP requirements from active skills.
+                let mut oicp_req = self.skills.inference_requirements();
+                oicp_req.latency = match speed {
+                    Speed::Fast => LatencyPreference::Interactive,
+                    Speed::Medium => LatencyPreference::BestEffort,
+                    Speed::Slow => LatencyPreference::Throughput,
+                };
+                let oicp = if oicp_req.required.is_empty() && oicp_req.preferred.is_empty() {
+                    None
+                } else {
+                    Some(oicp_req)
+                };
+
                 let request = CompletionRequest {
                     prompt: resolved,
-                    system_message: Some(
-                        "You are a helpful assistant performing a step in a multi-step task. Be thorough and specific."
-                            .to_string(),
-                    ),
+                    system_message: Some(system_message),
                     preferred_speed: *speed,
                     max_tokens: Some(1024),
                     temperature: Some(0.7),
                     structured_output: None,
+                    oicp,
                 };
                 let response = self.inference.complete(&request).await?;
                 Ok(StepOutput::Text(response.text))

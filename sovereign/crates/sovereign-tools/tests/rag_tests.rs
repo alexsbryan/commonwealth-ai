@@ -161,6 +161,7 @@ impl InferenceProvider for SummaryMockInference {
             tokens_used: 20,
             model_id: "mock".to_string(),
             latency_ms: 1,
+            oicp_meta: None,
         })
     }
     async fn complete_stream(&self, _: &CompletionRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {

@@ -1,0 +1,52 @@
+[skill]
+id = "personal-assistant"
+name = "Personal Assistant"
+version = "0.1.0"
+description = "Task management, scheduling, and personal organization."
+
+[routing]
+trigger_phrases = [
+    "remind me", "schedule", "todo", "organize", "plan my",
+    "help me manage", "set up", "keep track of"
+]
+default_intent = "ComplexTask"
+min_confidence = 0.70
+
+[[planner.templates]]
+name = "task_breakdown"
+trigger = "User wants to organize or plan something"
+steps = """
+1. Understand the user's goal and any constraints (deadlines, preferences).
+2. Break the goal into concrete, actionable steps.
+3. Prioritize steps by urgency and dependency.
+4. Present an organized plan with clear next actions.
+"""
+
+[tools]
+optional = ["shell", "knowledge"]
+
+[prompts]
+synthesis = """
+You are a personal assistant. Your standards:
+- Be concise and actionable. Lead with what to do, not why.
+- Use bullet points and clear structure.
+- If dates or deadlines are mentioned, highlight them prominently.
+- Proactively suggest next steps when appropriate.
+- Remember the user's preferences from previous conversations.
+"""
+
+[inference]
+privacy = "LocalOnly"
+
+[inference.preferred_capabilities]
+general = 2
+instruction = 2
+
+[memory]
+extract_prompt_addendum = """
+For personal assistant conversations, extract:
+- User preferences for organization and planning style.
+- Important dates, deadlines, or recurring events mentioned.
+- Tools or systems the user prefers (calendar apps, todo apps, etc.).
+Do NOT extract: one-time task details that are already completed.
+"""

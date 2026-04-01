@@ -90,6 +90,20 @@ pub trait StateStore: Send + Sync {
     // Memory
     async fn save_memory(&self, memory: &Memory) -> Result<()>;
     async fn get_relevant_memories(&self, context: &str, limit: usize) -> Result<Vec<Memory>>;
+    async fn get_all_memories(&self) -> Result<Vec<Memory>>;
+    async fn delete_memory(&self, id: &str) -> Result<()>;
+    async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()>;
+    async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()>;
+
+    // Routing log
+    async fn log_routing(
+        &self,
+        message_hash: &str,
+        classified_as: &str,
+        latency_ms: i64,
+    ) -> Result<()>;
+    async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>>;
+    async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()>;
 
     // Documents (RAG)
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()>;

@@ -38,6 +38,7 @@ impl InferenceProvider for MockInference {
             tokens_used: 10,
             model_id: "mock".to_string(),
             latency_ms: 1,
+            oicp_meta: None,
         })
     }
 
@@ -124,6 +125,27 @@ impl StateStore for MockStore {
     async fn get_relevant_memories(&self, _context: &str, _limit: usize) -> Result<Vec<Memory>> {
         Ok(Vec::new())
     }
+    async fn get_all_memories(&self) -> Result<Vec<Memory>> {
+        Ok(Vec::new())
+    }
+    async fn delete_memory(&self, _id: &str) -> Result<()> {
+        Ok(())
+    }
+    async fn update_memory_confidence(&self, _id: &str, _confidence: f64) -> Result<()> {
+        Ok(())
+    }
+    async fn touch_memory(&self, _id: &str, _timestamp: i64) -> Result<()> {
+        Ok(())
+    }
+    async fn log_routing(&self, _hash: &str, _classified: &str, _latency: i64) -> Result<()> {
+        Ok(())
+    }
+    async fn get_routing_corrections(&self, _limit: usize) -> Result<Vec<RoutingCorrection>> {
+        Ok(Vec::new())
+    }
+    async fn mark_routing_correct(&self, _hash: &str, _correct: bool) -> Result<()> {
+        Ok(())
+    }
     async fn store_chunks(&self, _chunks: &[DocumentChunk]) -> Result<()> {
         Ok(())
     }
@@ -196,6 +218,7 @@ fn make_skill(id: &str, trigger: &str, synthesis: Option<&str>) -> Skill {
         id: id.to_string(),
         name: id.to_string(),
         version: "0.1.0".to_string(),
+        description: String::new(),
         routing: RoutingHints {
             trigger_phrases: vec![trigger.to_string()],
             default_intent: Some("ComplexTask".to_string()),
@@ -213,6 +236,7 @@ fn make_skill(id: &str, trigger: &str, synthesis: Option<&str>) -> Skill {
         memory_rules: MemoryConfig {
             extract_prompt_addendum: Some(format!("Rules for {id}")),
         },
+        inference: SkillInferenceConfig::default(),
     }
 }
 
@@ -290,7 +314,7 @@ fn skill_registry_merge_memory_rules() {
 #[tokio::test]
 async fn build_context_new_conversation() {
     let store = MockStore::new();
-    let ctx = build_context(&store, "new-convo").await.unwrap();
+    let ctx = build_context(&store, "new-convo", "").await.unwrap();
     assert_eq!(ctx.conversation.id, "new-convo");
     assert!(ctx.conversation.messages.is_empty());
     assert!(ctx.memories.is_empty());
@@ -312,7 +336,7 @@ async fn build_context_existing_conversation() {
         .await
         .unwrap();
 
-    let ctx = build_context(&store, "c1").await.unwrap();
+    let ctx = build_context(&store, "c1", "hello").await.unwrap();
     assert_eq!(ctx.conversation.messages.len(), 1);
     assert_eq!(ctx.conversation.messages[0].content, "hello");
 }
@@ -452,7 +476,7 @@ fn build_runtime(response: &str) -> (Runtime, Arc<MockStore>) {
         Box::new(NoOpPlanner),
         Arc::new(ToolRegistry::new()),
         store.clone(),
-        SkillRegistry::new(),
+        Arc::new(SkillRegistry::new()),
         Arc::new(AutoApprovalChannel),
     );
     (runtime, store)
@@ -547,6 +571,7 @@ impl InferenceProvider for SequencedMockInference {
             tokens_used: 10,
             model_id: "mock-seq".to_string(),
             latency_ms: 1,
+            oicp_meta: None,
         })
     }
 
@@ -629,6 +654,7 @@ async fn executor_linear_plan() {
         Arc::new(ToolRegistry::new()),
         store,
         Arc::new(AutoApprovalChannel),
+        Arc::new(SkillRegistry::new()),
     );
 
     let mut ctx = TaskContext {
@@ -708,7 +734,7 @@ async fn executor_parallel_then_merge() {
         updated_at: now(),
     };
 
-    let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel));
+    let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel), Arc::new(SkillRegistry::new()));
     let mut ctx = TaskContext {
         task,
         completed: std::collections::HashMap::new(),
@@ -780,7 +806,7 @@ async fn executor_branch_skips_non_taken_path() {
         updated_at: now(),
     };
 
-    let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel));
+    let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel), Arc::new(SkillRegistry::new()));
     let mut ctx = TaskContext {
         task,
         completed: std::collections::HashMap::new(),
@@ -808,7 +834,7 @@ async fn planner_generates_valid_plan() {
         "fallback",
     ));
 
-    let planner = LlmPlanner::new(inference);
+    let planner = LlmPlanner::new(inference, Arc::new(SkillRegistry::new()));
     let ctx = ConversationContext {
         conversation: Conversation {
             id: "c1".to_string(),
@@ -834,7 +860,7 @@ async fn planner_fallback_on_garbage() {
         "nope",
     ));
 
-    let planner = LlmPlanner::new(inference);
+    let planner = LlmPlanner::new(inference, Arc::new(SkillRegistry::new()));
     let ctx = ConversationContext {
         conversation: Conversation {
             id: "c1".to_string(),
@@ -879,13 +905,14 @@ async fn runtime_complex_task_end_to_end() {
     ));
 
     let store = Arc::new(MockStore::new());
+    let skills = Arc::new(SkillRegistry::new());
     let runtime = Runtime::new(
         inference,
         Box::new(ComplexTaskRouter),
-        Box::new(LlmPlanner::new(Arc::new(MockInference::new(plan_json)))),
+        Box::new(LlmPlanner::new(Arc::new(MockInference::new(plan_json)), Arc::clone(&skills))),
         Arc::new(ToolRegistry::new()),
         store.clone(),
-        SkillRegistry::new(),
+        skills,
         Arc::new(AutoApprovalChannel),
     );
 
@@ -942,6 +969,7 @@ async fn executor_tool_step() {
         Arc::new(tools),
         store,
         Arc::new(AutoApprovalChannel),
+        Arc::new(SkillRegistry::new()),
     );
 
     let mut ctx = TaskContext {
@@ -1033,6 +1061,7 @@ async fn executor_tool_denied_permission_skips() {
         Arc::new(tools),
         store,
         Arc::new(DenyApprovalChannel),
+        Arc::new(SkillRegistry::new()),
     );
 
     let mut ctx = TaskContext {
@@ -1100,6 +1129,7 @@ async fn executor_user_input_step() {
         Arc::new(ToolRegistry::new()),
         store,
         Arc::new(AnsweringApprovalChannel),
+        Arc::new(SkillRegistry::new()),
     );
 
     let mut ctx = TaskContext {

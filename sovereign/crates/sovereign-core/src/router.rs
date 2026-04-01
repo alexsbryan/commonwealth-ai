@@ -1,9 +1,13 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use std::time::Instant;
 
 use async_trait::async_trait;
 
 use crate::error::Result;
-use crate::traits::{InferenceProvider, Router};
+use crate::skills::SkillRegistry;
+use crate::traits::{InferenceProvider, Router, StateStore};
 use crate::types::*;
 
 /// Classification result from the two-pass router.
@@ -22,11 +26,21 @@ pub struct ClassificationResult {
 /// Each pass is a simple, focused question that a 1-3B model can answer reliably.
 pub struct LlmRouter {
     inference: Arc<dyn InferenceProvider>,
+    store: Arc<dyn StateStore>,
+    skills: Arc<SkillRegistry>,
 }
 
 impl LlmRouter {
-    pub fn new(inference: Arc<dyn InferenceProvider>) -> Self {
-        Self { inference }
+    pub fn new(
+        inference: Arc<dyn InferenceProvider>,
+        store: Arc<dyn StateStore>,
+        skills: Arc<SkillRegistry>,
+    ) -> Self {
+        Self {
+            inference,
+            store,
+            skills,
+        }
     }
 
     /// Pass 1: Coarse classification into one of three buckets.
@@ -35,9 +49,39 @@ impl LlmRouter {
         message: &str,
         context: &ConversationContext,
         available_tools: &[ToolDescriptor],
+        corrections: &[RoutingCorrection],
+        routing_hints: &crate::skills::MergedRoutingHints,
     ) -> String {
         let context_str = Self::format_context_summary(context);
         let has_tools = !available_tools.is_empty();
+
+        let corrections_note = if corrections.is_empty() {
+            String::new()
+        } else {
+            let examples: String = corrections
+                .iter()
+                .take(3)
+                .map(|c| format!("- A message was wrongly classified as {}", c.classified_as))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!(
+                "\n\nPrevious classification mistakes (avoid these):\n{examples}"
+            )
+        };
+
+        let skill_hints = if routing_hints.trigger_phrases.is_empty() {
+            String::new()
+        } else {
+            let phrases: String = routing_hints
+                .trigger_phrases
+                .iter()
+                .map(|(phrase, _)| format!("\"{phrase}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "\n\nActive skill hints: If the message relates to {phrases}, prefer ACTION (C)."
+            )
+        };
 
         format!(
             r#"You are a message classifier. Given a user message, classify it into ONE category.
@@ -48,7 +92,7 @@ B) REASONING — Requires analysis, explanation, comparison, creative work, or d
 C) ACTION — Requires doing something: searching, reading files, sending email, running code, or any multi-step task{tools_note}
 
 Conversation context: {context_str}
-User message: "{message}"
+User message: "{message}"{corrections_note}{skill_hints}
 
 Reply with ONLY the letter: A, B, or C"#,
             tools_note = if has_tools {
@@ -152,6 +196,7 @@ Reply with ONLY the letter: A, B, or C"#
             max_tokens: Some(5),
             temperature: Some(0.0),
             structured_output: None,
+            oicp: None,
         };
         let response = self.inference.complete(&request).await?;
         Ok(response.text)
@@ -223,9 +268,21 @@ impl Router for LlmRouter {
         context: &ConversationContext,
         available_tools: &[ToolDescriptor],
     ) -> Result<Intent> {
+        let start = Instant::now();
+
+        // Fetch recent routing corrections for few-shot self-correction.
+        let corrections = self
+            .store
+            .get_routing_corrections(3)
+            .await
+            .unwrap_or_default();
+
+        // Get active skill routing hints.
+        let routing_hints = self.skills.routing_hints();
+
         // Pass 1: Coarse classification.
         let pass1_prompt =
-            Self::build_pass1_prompt(message, context, available_tools);
+            Self::build_pass1_prompt(message, context, available_tools, &corrections, &routing_hints);
         let pass1_response = self.classify_call(pass1_prompt).await?;
         let coarse = Self::parse_letter(&pass1_response);
 
@@ -235,7 +292,6 @@ impl Router for LlmRouter {
             'C' => {
                 // Pass 2: Refine the ACTION branch.
                 if available_tools.is_empty() {
-                    // No tools available — treat as ComplexTask (will fail gracefully).
                     Intent::ComplexTask
                 } else {
                     let pass2_prompt =
@@ -257,6 +313,15 @@ impl Router for LlmRouter {
             }
             _ => Intent::SimpleQuery,
         };
+
+        let latency_ms = start.elapsed().as_millis() as i64;
+
+        // Log routing decision.
+        let mut hasher = DefaultHasher::new();
+        message.hash(&mut hasher);
+        let hash = format!("{:x}", hasher.finish());
+        let intent_str = format!("{intent:?}");
+        let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
 
         eprintln!(
             "[router] \"{}\" → {:?} (pass1={coarse})",

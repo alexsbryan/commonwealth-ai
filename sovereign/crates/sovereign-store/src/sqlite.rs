@@ -328,9 +328,168 @@ impl StateStore for SqliteStateStore {
         Ok(())
     }
 
-    async fn get_relevant_memories(&self, _context: &str, _limit: usize) -> Result<Vec<Memory>> {
-        // Requires embeddings (Phase 9). Return empty for now.
-        Ok(Vec::new())
+    async fn get_relevant_memories(&self, context: &str, limit: usize) -> Result<Vec<Memory>> {
+        if context.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let conn = self.conn.lock().await;
+        let current_time = now();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used
+                 FROM memories m
+                 JOIN memories_fts fts ON m.rowid = fts.rowid
+                 WHERE memories_fts MATCH ?1
+                 LIMIT ?2",
+            )
+            .map_err(map_db)?;
+
+        let memories: Vec<Memory> = stmt
+            .query_map(rusqlite::params![context, (limit * 3) as i64], |row| {
+                Ok(Memory {
+                    id: row.get(0)?,
+                    content: row.get(1)?,
+                    source: row.get(2)?,
+                    confidence: row.get(3)?,
+                    created_at: row.get(4)?,
+                    last_used: row.get(5)?,
+                })
+            })
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap_or_default();
+
+        // Apply confidence decay and filter.
+        let mut scored: Vec<(f64, Memory)> = memories
+            .into_iter()
+            .filter_map(|m| {
+                let months = (current_time - m.last_used) as f64 / (30.0 * 86400.0);
+                let decayed = m.confidence * 0.9_f64.powf(months);
+                if decayed >= 0.2 {
+                    Some((decayed, m))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+
+        // Touch returned memories.
+        for (_, mem) in &scored {
+            let _ = conn.execute(
+                "UPDATE memories SET last_used = ?2 WHERE id = ?1",
+                rusqlite::params![mem.id, current_time],
+            );
+        }
+
+        Ok(scored.into_iter().map(|(_, m)| m).collect())
+    }
+
+    async fn get_all_memories(&self) -> Result<Vec<Memory>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare("SELECT id, content, source, confidence, created_at, last_used FROM memories")
+            .map_err(map_db)?;
+
+        let memories: Vec<Memory> = stmt
+            .query_map([], |row| {
+                Ok(Memory {
+                    id: row.get(0)?,
+                    content: row.get(1)?,
+                    source: row.get(2)?,
+                    confidence: row.get(3)?,
+                    created_at: row.get(4)?,
+                    last_used: row.get(5)?,
+                })
+            })
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(map_db)?;
+
+        Ok(memories)
+    }
+
+    async fn delete_memory(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute("DELETE FROM memories WHERE id = ?1", rusqlite::params![id])
+            .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE memories SET confidence = ?2 WHERE id = ?1",
+            rusqlite::params![id, confidence],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE memories SET last_used = ?2 WHERE id = ?1",
+            rusqlite::params![id, timestamp],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn log_routing(
+        &self,
+        message_hash: &str,
+        classified_as: &str,
+        latency_ms: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT INTO routing_log (message_hash, classified_as, latency_ms, created_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![message_hash, classified_as, latency_ms, now()],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT message_hash, classified_as, was_correct, created_at
+                 FROM routing_log WHERE was_correct = 0
+                 ORDER BY created_at DESC LIMIT ?1",
+            )
+            .map_err(map_db)?;
+
+        let corrections: Vec<RoutingCorrection> = stmt
+            .query_map(rusqlite::params![limit as i64], |row| {
+                Ok(RoutingCorrection {
+                    message_hash: row.get(0)?,
+                    classified_as: row.get(1)?,
+                    was_correct: row.get::<_, bool>(2)?,
+                    created_at: row.get(3)?,
+                })
+            })
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(map_db)?;
+
+        Ok(corrections)
+    }
+
+    async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE routing_log SET was_correct = ?2 WHERE message_hash = ?1",
+            rusqlite::params![message_hash, was_correct],
+        )
+        .map_err(map_db)?;
+        Ok(())
     }
 
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {

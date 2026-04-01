@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use sovereign_core::oicp::*;
 use sovereign_core::types::*;
 use sovereign_inference::health::HealthTracker;
 use sovereign_inference::selector::*;
@@ -96,11 +98,11 @@ fn make_backend(name: &str, priority: u32, cost: Option<f64>, healthy: bool, lat
         health.record_failure();
         health.record_failure();
     }
-    BackendEntry {
-        name: name.to_string(),
-        health,
-        priority,
-        cost_per_token: cost,
+    let is_local = cost.is_none();
+    if is_local {
+        BackendEntry::new_local(name, health, priority)
+    } else {
+        BackendEntry::new_remote(name, health, priority, cost)
     }
 }
 
@@ -215,4 +217,166 @@ async fn local_first_all_down_errors() {
 
     let result = LocalFirstSelector.select(&dummy_request(), &backends).await;
     assert!(result.is_err());
+}
+
+// ─── CapabilityAwareSelector Tests ────────────────────────────
+
+fn make_manifest(models: Vec<ProviderModel>) -> ProviderManifest {
+    ProviderManifest {
+        oicp_version: "0.1.0".to_string(),
+        provider: None,
+        models,
+    }
+}
+
+fn make_model(id: &str, caps: &[(Capability, u8)], context: usize) -> ProviderModel {
+    let capabilities: CapabilityProfile = caps.iter().cloned().collect();
+    ProviderModel {
+        id: id.to_string(),
+        quantization: None,
+        capabilities,
+        context_tokens: context,
+        status: ModelStatus {
+            available: true,
+            loaded: true,
+            estimated_tokens_per_sec: None,
+            estimated_ttft_ms: None,
+            estimated_load_time_sec: None,
+        },
+    }
+}
+
+async fn make_oicp_backend(
+    name: &str,
+    priority: u32,
+    manifest: Option<ProviderManifest>,
+    is_local: bool,
+) -> BackendEntry {
+    let health = Arc::new(HealthTracker::new());
+    health.record_success(50);
+    let mut be = if is_local {
+        BackendEntry::new_local(name, health, priority)
+    } else {
+        BackendEntry::new_remote(name, health, priority, Some(0.01))
+    };
+    if let Some(m) = manifest {
+        *be.oicp_manifest.write().await = Some(m);
+    }
+    be
+}
+
+#[tokio::test]
+async fn capability_selector_falls_back_without_oicp() {
+    let backends = vec![
+        make_backend("high", 10, None, true, 50),
+        make_backend("low", 1, None, true, 50),
+    ];
+
+    let selector = CapabilityAwareSelector {
+        fallback: Box::new(PrioritySelector),
+    };
+
+    // No OICP in request → falls back to priority.
+    let idx = selector.select(&dummy_request(), &backends).await.unwrap();
+    assert_eq!(backends[idx].name, "low");
+}
+
+#[tokio::test]
+async fn capability_selector_respects_local_only() {
+    let backends = vec![
+        make_oicp_backend("remote", 1, None, false).await,
+        make_oicp_backend("local", 2, None, true).await,
+    ];
+
+    let mut req = dummy_request();
+    req.oicp = Some(InferenceRequirements {
+        privacy: PrivacyPreference::LocalOnly,
+        ..Default::default()
+    });
+
+    let selector = CapabilityAwareSelector {
+        fallback: Box::new(PrioritySelector),
+    };
+
+    let idx = selector.select(&req, &backends).await.unwrap();
+    assert_eq!(backends[idx].name, "local");
+}
+
+#[tokio::test]
+async fn capability_selector_picks_best_match() {
+    let code_model = make_model("coder", &[(Capability::Code, 4), (Capability::General, 2)], 32768);
+    let general_model = make_model("general", &[(Capability::General, 3), (Capability::Analysis, 3)], 32768);
+
+    let backends = vec![
+        make_oicp_backend("code-backend", 2, Some(make_manifest(vec![code_model])), false).await,
+        make_oicp_backend("general-backend", 1, Some(make_manifest(vec![general_model])), false).await,
+    ];
+
+    // Request prefers analysis — should pick general-backend.
+    let mut req = dummy_request();
+    let mut preferred = HashMap::new();
+    preferred.insert(Capability::Analysis, 3);
+    preferred.insert(Capability::General, 3);
+    req.oicp = Some(InferenceRequirements {
+        preferred,
+        privacy: PrivacyPreference::MeshAllowed,
+        ..Default::default()
+    });
+
+    let selector = CapabilityAwareSelector {
+        fallback: Box::new(PrioritySelector),
+    };
+
+    let idx = selector.select(&req, &backends).await.unwrap();
+    assert_eq!(backends[idx].name, "general-backend");
+}
+
+#[tokio::test]
+async fn capability_selector_filters_by_required() {
+    let weak_model = make_model("weak", &[(Capability::Code, 1)], 32768);
+    let strong_model = make_model("strong", &[(Capability::Code, 3)], 32768);
+
+    let backends = vec![
+        make_oicp_backend("weak-be", 1, Some(make_manifest(vec![weak_model])), false).await,
+        make_oicp_backend("strong-be", 2, Some(make_manifest(vec![strong_model])), false).await,
+    ];
+
+    // Require code >= 2 → weak-be filtered out.
+    let mut req = dummy_request();
+    let mut required = HashMap::new();
+    required.insert(Capability::Code, 2);
+    req.oicp = Some(InferenceRequirements {
+        required,
+        privacy: PrivacyPreference::MeshAllowed,
+        ..Default::default()
+    });
+
+    let selector = CapabilityAwareSelector {
+        fallback: Box::new(PrioritySelector),
+    };
+
+    let idx = selector.select(&req, &backends).await.unwrap();
+    assert_eq!(backends[idx].name, "strong-be");
+}
+
+#[tokio::test]
+async fn capability_selector_falls_back_no_manifests() {
+    let backends = vec![
+        make_oicp_backend("a", 10, None, false).await,
+        make_oicp_backend("b", 1, None, false).await,
+    ];
+
+    let mut req = dummy_request();
+    req.oicp = Some(InferenceRequirements {
+        privacy: PrivacyPreference::MeshAllowed,
+        ..Default::default()
+    });
+
+    let selector = CapabilityAwareSelector {
+        fallback: Box::new(PrioritySelector),
+    };
+
+    // No manifests → falls back to priority.
+    let idx = selector.select(&req, &backends).await.unwrap();
+    assert_eq!(backends[idx].name, "b");
 }

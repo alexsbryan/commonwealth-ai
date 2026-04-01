@@ -147,9 +147,82 @@ async fn test_permissions(store: &dyn StateStore) {
     assert_eq!(perm, Some(false));
 }
 
-async fn test_memories_stub(store: &dyn StateStore) {
-    let mems = store.get_relevant_memories("anything", 10).await.unwrap();
-    assert!(mems.is_empty());
+async fn test_memory_save_and_retrieve(store: &dyn StateStore) {
+    let mem1 = Memory {
+        id: "mem1".to_string(),
+        content: "User prefers Rust programming".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: now(),
+        last_used: now(),
+    };
+    let mem2 = Memory {
+        id: "mem2".to_string(),
+        content: "User lives in Portland Oregon".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: now(),
+        last_used: now(),
+    };
+    store.save_memory(&mem1).await.unwrap();
+    store.save_memory(&mem2).await.unwrap();
+
+    let all = store.get_all_memories().await.unwrap();
+    assert_eq!(all.len(), 2);
+}
+
+async fn test_memory_delete(store: &dyn StateStore) {
+    let mem = Memory {
+        id: "del1".to_string(),
+        content: "Temporary fact".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: now(),
+        last_used: now(),
+    };
+    store.save_memory(&mem).await.unwrap();
+    assert_eq!(store.get_all_memories().await.unwrap().len(), 1);
+
+    store.delete_memory("del1").await.unwrap();
+    assert!(store.get_all_memories().await.unwrap().is_empty());
+}
+
+async fn test_memory_confidence_update(store: &dyn StateStore) {
+    let mem = Memory {
+        id: "conf1".to_string(),
+        content: "Decaying fact".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: now(),
+        last_used: now(),
+    };
+    store.save_memory(&mem).await.unwrap();
+    store.update_memory_confidence("conf1", 0.5).await.unwrap();
+
+    let all = store.get_all_memories().await.unwrap();
+    assert_eq!(all.len(), 1);
+    assert!((all[0].confidence - 0.5).abs() < 0.01);
+}
+
+async fn test_routing_log(store: &dyn StateStore) {
+    store
+        .log_routing("hash1", "SimpleQuery", 50)
+        .await
+        .unwrap();
+    store
+        .log_routing("hash2", "DeepQuery", 100)
+        .await
+        .unwrap();
+
+    // No corrections yet (all are unknown).
+    let corrections = store.get_routing_corrections(10).await.unwrap();
+    assert!(corrections.is_empty());
+
+    // Mark one as incorrect.
+    store.mark_routing_correct("hash1", false).await.unwrap();
+    let corrections = store.get_routing_corrections(10).await.unwrap();
+    assert_eq!(corrections.len(), 1);
+    assert_eq!(corrections[0].classified_as, "SimpleQuery");
 }
 
 async fn test_documents_stub(store: &dyn StateStore) {
@@ -198,8 +271,23 @@ async fn memory_permissions() {
 }
 
 #[tokio::test]
-async fn memory_memories_stub() {
-    test_memories_stub(&InMemoryStateStore::new()).await;
+async fn memory_save_and_retrieve() {
+    test_memory_save_and_retrieve(&InMemoryStateStore::new()).await;
+}
+
+#[tokio::test]
+async fn memory_delete() {
+    test_memory_delete(&InMemoryStateStore::new()).await;
+}
+
+#[tokio::test]
+async fn memory_confidence_update() {
+    test_memory_confidence_update(&InMemoryStateStore::new()).await;
+}
+
+#[tokio::test]
+async fn memory_routing_log() {
+    test_routing_log(&InMemoryStateStore::new()).await;
 }
 
 #[tokio::test]
@@ -266,8 +354,60 @@ async fn sqlite_permissions() {
 }
 
 #[tokio::test]
-async fn sqlite_memories_stub() {
-    test_memories_stub(&sqlite_store()).await;
+async fn sqlite_save_and_retrieve_memories() {
+    test_memory_save_and_retrieve(&sqlite_store()).await;
+}
+
+#[tokio::test]
+async fn sqlite_delete_memory() {
+    test_memory_delete(&sqlite_store()).await;
+}
+
+#[tokio::test]
+async fn sqlite_memory_confidence_update() {
+    test_memory_confidence_update(&sqlite_store()).await;
+}
+
+#[tokio::test]
+async fn sqlite_routing_log() {
+    test_routing_log(&sqlite_store()).await;
+}
+
+#[tokio::test]
+async fn sqlite_memory_fts5_retrieval() {
+    let store = sqlite_store();
+    let mem1 = Memory {
+        id: "fts1".to_string(),
+        content: "User prefers Rust programming language".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: now(),
+        last_used: now(),
+    };
+    let mem2 = Memory {
+        id: "fts2".to_string(),
+        content: "User lives in Portland Oregon".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: now(),
+        last_used: now(),
+    };
+    store.save_memory(&mem1).await.unwrap();
+    store.save_memory(&mem2).await.unwrap();
+
+    // Search for "Rust" — should find only the first memory.
+    let results = store.get_relevant_memories("Rust", 10).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(results[0].content.contains("Rust"));
+
+    // Search for "Portland" — should find only the second memory.
+    let results = store.get_relevant_memories("Portland", 10).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(results[0].content.contains("Portland"));
+
+    // Empty query returns nothing.
+    let results = store.get_relevant_memories("", 10).await.unwrap();
+    assert!(results.is_empty());
 }
 
 #[tokio::test]

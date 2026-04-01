@@ -4,6 +4,7 @@ use async_trait::async_trait;
 
 use crate::context::format_history_as_prompt;
 use crate::error::{Error, Result};
+use crate::skills::SkillRegistry;
 use crate::traits::{InferenceProvider, Planner};
 use crate::types::*;
 
@@ -14,11 +15,12 @@ use crate::types::*;
 /// single-step Reason plan.
 pub struct LlmPlanner {
     inference: Arc<dyn InferenceProvider>,
+    skills: Arc<SkillRegistry>,
 }
 
 impl LlmPlanner {
-    pub fn new(inference: Arc<dyn InferenceProvider>) -> Self {
-        Self { inference }
+    pub fn new(inference: Arc<dyn InferenceProvider>, skills: Arc<SkillRegistry>) -> Self {
+        Self { inference, skills }
     }
 }
 
@@ -33,8 +35,20 @@ impl Planner for LlmPlanner {
         let context_summary = format_history_as_prompt(context, 4);
         let mut last_error = String::new();
 
+        // Check for matching skill templates.
+        let templates = self.skills.planner_templates(&Intent::ComplexTask);
+        let template_hint = find_matching_template(&templates, goal);
+
         for attempt in 0..3 {
-            let prompt = build_plan_prompt(goal, &context_summary, available_tools, &last_error);
+            let mut prompt =
+                build_plan_prompt(goal, &context_summary, available_tools, &last_error);
+
+            if let Some(ref hint) = template_hint {
+                prompt.push_str(&format!(
+                    "\n\nA suggested plan template for this type of task:\n{hint}\n\n\
+                     You may use this as a starting point and adapt it to the specific goal."
+                ));
+            }
 
             let request = CompletionRequest {
                 prompt,
@@ -43,6 +57,7 @@ impl Planner for LlmPlanner {
                 max_tokens: Some(1024),
                 temperature: Some(0.0),
                 structured_output: None,
+                oicp: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -112,6 +127,7 @@ impl Planner for LlmPlanner {
             max_tokens: Some(1024),
             temperature: Some(0.0),
             structured_output: None,
+            oicp: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -384,6 +400,41 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
     }
 
     Ok(plan)
+}
+
+/// Find a matching template for a goal based on keyword overlap.
+/// Returns the template steps if a match is found.
+fn find_matching_template(
+    templates: &[&crate::skills::PlanTemplate],
+    goal: &str,
+) -> Option<String> {
+    if templates.is_empty() {
+        return None;
+    }
+
+    let goal_lower = goal.to_lowercase();
+    let goal_words: Vec<&str> = goal_lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() > 2)
+        .collect();
+
+    let mut best_match: Option<(usize, &str)> = None;
+
+    for template in templates {
+        let trigger_lower = template.trigger.to_lowercase();
+        let overlap = goal_words
+            .iter()
+            .filter(|w| trigger_lower.contains(**w))
+            .count();
+
+        if overlap > 0 {
+            if best_match.is_none() || overlap > best_match.unwrap().0 {
+                best_match = Some((overlap, &template.steps));
+            }
+        }
+    }
+
+    best_match.map(|(_, steps)| steps.to_string())
 }
 
 /// Create a guaranteed single-step fallback plan.

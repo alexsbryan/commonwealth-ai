@@ -12,9 +12,11 @@ fn now() -> i64 {
 }
 
 /// Build a ConversationContext from the store, creating the conversation if it doesn't exist.
+/// The `query` parameter is used for memory retrieval (FTS5 matching).
 pub async fn build_context(
     store: &dyn StateStore,
     conversation_id: &str,
+    query: &str,
 ) -> Result<ConversationContext> {
     let conversation = match store.get_conversation(conversation_id).await {
         Ok(c) => c,
@@ -29,7 +31,7 @@ pub async fn build_context(
     };
 
     let memories = store
-        .get_relevant_memories(conversation_id, 5)
+        .get_relevant_memories(query, 5)
         .await
         .unwrap_or_default();
 

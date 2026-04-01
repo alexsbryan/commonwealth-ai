@@ -388,6 +388,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     tokens_used,
                     model_id: slot.model_id.clone(),
                     latency_ms,
+                    oicp_meta: None,
                 })
             })
             .await
@@ -409,6 +410,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     tokens_used,
                     model_id: slot.model_id.clone(),
                     latency_ms,
+                    oicp_meta: None,
                 })
             })
             .await

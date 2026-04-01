@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::oicp;
+
 // ─── Identity Types ────────────────────────────────────────────
 
 pub type ToolId = String;
@@ -31,6 +33,10 @@ pub struct CompletionRequest {
     pub max_tokens: Option<usize>,
     pub temperature: Option<f32>,
     pub structured_output: Option<serde_json::Value>,
+    /// OICP capability requirements. Used by providers that support
+    /// OICP to select the best model. Ignored by providers that don't.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oicp: Option<oicp::InferenceRequirements>,
 }
 
 impl CompletionRequest {
@@ -42,6 +48,7 @@ impl CompletionRequest {
             max_tokens: None,
             temperature: None,
             structured_output: None,
+            oicp: None,
         }
     }
 
@@ -52,6 +59,11 @@ impl CompletionRequest {
 
     pub fn with_system(mut self, system: &str) -> Self {
         self.system_message = Some(system.to_string());
+        self
+    }
+
+    pub fn with_oicp(mut self, requirements: oicp::InferenceRequirements) -> Self {
+        self.oicp = Some(requirements);
         self
     }
 
@@ -66,6 +78,7 @@ impl CompletionRequest {
             max_tokens: Some(5),
             temperature: Some(0.0),
             structured_output: None,
+            oicp: None,
         }
     }
 }
@@ -76,6 +89,9 @@ pub struct CompletionResponse {
     pub tokens_used: usize,
     pub model_id: String,
     pub latency_ms: u64,
+    /// OICP metadata from the provider, if available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oicp_meta: Option<oicp::OicpResponseMeta>,
 }
 
 impl CompletionResponse {
@@ -319,6 +335,14 @@ pub struct Memory {
     pub confidence: f64,
     pub created_at: i64,
     pub last_used: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutingCorrection {
+    pub message_hash: String,
+    pub classified_as: String,
+    pub was_correct: bool,
+    pub created_at: i64,
 }
 
 // ─── Document / RAG Types ──────────────────────────────────────

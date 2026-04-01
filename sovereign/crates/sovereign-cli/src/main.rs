@@ -97,6 +97,7 @@ struct Args {
     model: PathBuf,
     primary_model: Option<PathBuf>,
     data_dir: PathBuf,
+    skills_dir: Option<PathBuf>,
     use_router: bool,
     ingest: Option<PathBuf>,
     brave_api_key: Option<String>,
@@ -110,6 +111,7 @@ fn print_usage() {
     eprintln!("  --model <path>           Fast/default model (required)");
     eprintln!("  --primary-model <path>   Larger model for deep reasoning");
     eprintln!("  --data-dir <path>        Database directory (default: data)");
+    eprintln!("  --skills-dir <path>      Skills directory (default: ~/.sovereign/skills)");
     eprintln!("  --ingest <path>          Ingest documents from directory");
     eprintln!("  --router                 Enable LLM-based intent routing");
     eprintln!("  --brave-api-key <key>    Use Brave Search (better quality)");
@@ -121,6 +123,7 @@ fn parse_args() -> Option<Args> {
     let mut model = None;
     let mut primary_model = None;
     let mut data_dir = None;
+    let mut skills_dir = None;
     let mut use_router = false;
     let mut ingest = None;
     let mut brave_api_key = None;
@@ -140,6 +143,10 @@ fn parse_args() -> Option<Args> {
             "--data-dir" => {
                 i += 1;
                 data_dir = args.get(i).map(PathBuf::from);
+            }
+            "--skills-dir" => {
+                i += 1;
+                skills_dir = args.get(i).map(PathBuf::from);
             }
             "--ingest" => {
                 i += 1;
@@ -165,6 +172,7 @@ fn parse_args() -> Option<Args> {
         model: model?,
         primary_model,
         data_dir: data_dir.unwrap_or_else(|| PathBuf::from("data")),
+        skills_dir,
         use_router,
         ingest,
         brave_api_key,
@@ -221,15 +229,45 @@ async fn main() {
     // Build components.
     let inference_arc: Arc<dyn sovereign_core::traits::InferenceProvider> = inference;
 
+    // Load skills.
+    let mut skills = SkillRegistry::new();
+    let skills_dir = args.skills_dir.unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".sovereign")
+            .join("skills")
+    });
+    if skills_dir.exists() {
+        skills.load_and_register(&skills_dir);
+        skills.activate_all();
+        eprintln!("Skills: {} loaded from {}", skills.list().len(), skills_dir.display());
+    } else {
+        eprintln!("Skills: none ({})", skills_dir.display());
+    }
+    // Also check for bundled skills next to the binary.
+    let bundled_skills = std::env::current_dir()
+        .unwrap_or_default()
+        .join("skills");
+    if bundled_skills.exists() && bundled_skills != skills_dir {
+        skills.load_and_register(&bundled_skills);
+        skills.activate_all();
+        eprintln!("Skills: +{} bundled", skills.list().len());
+    }
+    let skills = Arc::new(skills);
+
     let router: Box<dyn sovereign_core::traits::Router> = if args.use_router {
         eprintln!("Router: LLM-based classification");
-        Box::new(LlmRouter::new(Arc::clone(&inference_arc)))
+        Box::new(LlmRouter::new(
+            Arc::clone(&inference_arc),
+            Arc::clone(&store),
+            Arc::clone(&skills),
+        ))
     } else {
         eprintln!("Router: passthrough");
         Box::new(PassthroughRouter)
     };
 
-    let planner = LlmPlanner::new(Arc::clone(&inference_arc));
+    let planner = LlmPlanner::new(Arc::clone(&inference_arc), Arc::clone(&skills));
 
     // Ingest documents if requested.
     if let Some(ref ingest_path) = args.ingest {
@@ -294,7 +332,7 @@ async fn main() {
         Box::new(planner),
         Arc::new(tools),
         store.clone(),
-        SkillRegistry::new(),
+        skills,
         approval,
     );
 
@@ -329,6 +367,8 @@ async fn main() {
             continue;
         }
         if input == "quit" || input == "exit" {
+            eprintln!("Extracting memories...");
+            let _ = runtime.end_conversation(&conversation_id).await;
             break;
         }
 

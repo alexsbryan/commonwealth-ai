@@ -1,0 +1,8 @@
+[input]
+message = "I had a dream last night about being in a house with rooms I'd never seen before."
+
+[expect]
+intent = "DeepQuery"
+synthesis_prompt_contains = ["Dreams and images", "Amplify"]
+# The response should ask what the rooms felt like, not say
+# "houses represent the self in Jungian theory."

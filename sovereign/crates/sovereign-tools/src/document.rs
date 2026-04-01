@@ -57,6 +57,7 @@ impl DocumentTool {
                 max_tokens: Some(512),
                 temperature: Some(0.3),
                 structured_output: None,
+                oicp: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -117,6 +118,7 @@ impl DocumentTool {
                 max_tokens: Some(1024),
                 temperature: Some(0.5),
                 structured_output: None,
+                oicp: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -290,6 +292,7 @@ impl DocumentTool {
                 max_tokens: Some(1024),
                 temperature: Some(0.5),
                 structured_output: None,
+                oicp: None,
             };
 
             let response = self.inference.complete(&request).await?;

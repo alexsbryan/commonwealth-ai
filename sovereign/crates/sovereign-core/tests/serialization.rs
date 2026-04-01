@@ -202,6 +202,7 @@ fn completion_response_as_bool() {
         tokens_used: 1,
         model_id: "test".to_string(),
         latency_ms: 10,
+        oicp_meta: None,
     };
     assert!(yes.as_bool());
 
@@ -210,6 +211,7 @@ fn completion_response_as_bool() {
         tokens_used: 1,
         model_id: "test".to_string(),
         latency_ms: 10,
+        oicp_meta: None,
     };
     assert!(!no.as_bool());
 }

@@ -1,0 +1,78 @@
+[skill]
+id = "research-analyst"
+name = "Research & Analysis"
+version = "0.1.0"
+description = "Deep multi-source research with citations and source evaluation."
+
+[routing]
+trigger_phrases = [
+    "research", "investigate", "compare sources", "what do experts say",
+    "find evidence", "literature on", "what's the consensus"
+]
+default_intent = "ComplexTask"
+min_confidence = 0.75
+
+[[planner.templates]]
+name = "multi_source_research"
+trigger = "User wants information synthesized from multiple sources"
+steps = """
+1. Decompose the question into 3-5 focused sub-queries.
+2. Execute sub-queries in parallel via web_search.
+3. Extract full content from the top results per sub-query.
+4. Cross-reference findings: identify agreement, contradiction, and gaps.
+5. Synthesize into a cited response. Every claim cites its source.
+   If sources conflict, present both positions with credibility assessment.
+"""
+
+[[planner.templates]]
+name = "document_analysis"
+trigger = "User asks about content in their documents"
+steps = """
+1. Search the user's document corpus via the knowledge tool.
+2. If document results are insufficient, supplement with web_search.
+3. Synthesize with clear attribution: distinguish document-sourced
+   claims from web-sourced claims.
+"""
+
+[tools]
+required = ["web_search"]
+optional = ["knowledge"]
+
+[tools.web_search]
+min_sub_queries = 3
+max_sub_queries = 5
+prefer_backends = ["tavily", "brave", "duckduckgo"]
+
+[prompts]
+synthesis = """
+You are a research analyst. Your standards:
+- Every factual claim must cite its source by name.
+- When sources conflict, present both positions and assess
+  which has stronger evidence, explaining why.
+- Distinguish between well-established consensus and emerging findings.
+- If the evidence is insufficient to answer confidently, say so.
+  Do not hedge with vague qualifiers — be specific about what is
+  and isn't known.
+"""
+
+[inference]
+privacy = "MeshAllowed"
+min_context_tokens = 16384
+
+[inference.preferred_capabilities]
+analysis = 3
+general = 3
+
+[inference.required_capabilities]
+analysis = 2
+general = 2
+
+[memory]
+extract_prompt_addendum = """
+For research conversations, extract:
+- Specific topics the user has researched (for future context linkage).
+- Stated positions or conclusions the user has reached.
+- Sources the user found particularly credible or dismissed.
+Do NOT extract: intermediate search results, raw findings that
+weren't synthesized into a conclusion.
+"""

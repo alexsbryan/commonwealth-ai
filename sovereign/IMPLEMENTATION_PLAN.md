@@ -687,40 +687,71 @@ Phase 2+ (Runtime). Can start as early as Phase 6 with a frontend engineer. Pers
 
 ---
 
-## Phase 13: Multi-Backend HybridProvider + RemoteApiProvider + PostgresStateStore
+## Phase 13: Multi-Backend HybridProvider + RemoteApiProvider + PostgresStateStore + OICP Wire-Up
 
-**Delivers:** Server can use multiple inference backends with health tracking and intelligent selection. External OpenAI-compatible endpoints. Postgres for server deployments. This is the foundation for eventual compute coops.
+**Delivers:** Server can use multiple inference backends with health tracking, OICP capability-aware selection, and intelligent fallback. External OpenAI-compatible endpoints with OICP support. Postgres for server deployments. This is the foundation for eventual compute coops.
+
+### Pre-existing Infrastructure (built in earlier phases)
+
+The following OICP foundations are already in place and do NOT need to be built in Phase 13:
+
+- **OICP types** (`sovereign-core/src/oicp.rs`): `Capability`, `InferenceRequirements`, `ProviderManifest`, `OicpResponseMeta`, `MatchQuality`, scoring functions (`satisfies_required`, `score_preferred`)
+- **CompletionRequest.oicp** field: populated by Runtime/Executor from active skill requirements
+- **CompletionResponse.oicp_meta** field: ready to carry provider response metadata
+- **SkillInferenceConfig**: skills declare `preferred_capabilities`, `required_capabilities`, `min_context_tokens`, `privacy` in their TOML manifests
+- **SkillRegistry.inference_requirements()**: merges active skills into a single `InferenceRequirements`
+- **BackendEntry**: has `is_local` flag and `oicp_manifest: Arc<RwLock<Option<ProviderManifest>>>` for cached manifests
+- **CapabilityAwareSelector**: filters by required capabilities, scores by preferred, respects `LocalOnly` privacy, falls back to priority selector when no OICP data
+- **BackendSelector trait** + 4 implementations: `PrioritySelector`, `CostMinimizingSelector`, `LatencyMinimizingSelector`, `LocalFirstSelector`
+- **HealthTracker**: latency EWMA, error rate, availability tracking
 
 ### Files Created/Modified
 
-- `crates/sovereign-inference/src/remote.rs` — `RemoteApiProvider` (any OpenAI-compatible API)
-- `crates/sovereign-inference/src/hybrid.rs` — `HybridProvider` as a multi-backend router (not a two-way switch)
-- `crates/sovereign-inference/src/health.rs` — `HealthTracker`: latency EWMA, error rate, availability, background probes every 30s
-- `crates/sovereign-inference/src/selectors.rs` — `BackendSelector` implementations:
-  - `PrioritySelector` — highest-priority healthy backend, fall through on failure (default)
-  - `CostMinimizingSelector` — prefer local, then cheapest remote
-  - `LatencyMinimizingSelector` — use `health_score * inverse_latency`
-  - `LocalFirstSelector` — never remote unless all local backends unhealthy
-- `crates/sovereign-store/src/postgres.rs` — `PostgresStateStore`
+- `crates/sovereign-inference/src/remote.rs` — **NEW**: `RemoteApiProvider` (any OpenAI-compatible API)
+  - Implements `InferenceProvider` trait
+  - `build_request_body()`: includes `oicp` key from `CompletionRequest.oicp` in outgoing HTTP request body
+  - `parse_response()`: extracts `oicp` metadata from response into `CompletionResponse.oicp_meta`
+  - `fetch_oicp_manifest()`: `GET {endpoint}/oicp/v1/capabilities` → `Option<ProviderManifest>` (returns None if provider doesn't support OICP)
+- `crates/sovereign-inference/src/hybrid.rs` — **NEW**: `HybridProvider` as a multi-backend router
+  - Uses `CapabilityAwareSelector` (with `PrioritySelector` fallback) as default selector
+  - Background health check loop (every 30s): pings backends, calls `fetch_oicp_manifest()` on remote backends, updates cached manifests on `BackendEntry.oicp_manifest`
+  - Implements `InferenceProvider` by delegating to selected backend
+- `crates/sovereign-store/src/postgres.rs` — **NEW**: `PostgresStateStore`
+- `crates/sovereign-store/src/migrations.rs` — Add OICP observability columns to `routing_log`:
+  ```sql
+  ALTER TABLE routing_log ADD COLUMN oicp_match_quality TEXT;
+  ALTER TABLE routing_log ADD COLUMN oicp_model_id TEXT;
+  ```
 
 ### HybridProvider Architecture
 
 ```rust
 pub struct HybridProvider {
-    backends: Vec<BackendEntry>,
+    backends: Vec<(Box<dyn InferenceProvider>, BackendEntry)>,
     selector: Box<dyn BackendSelector>,
-}
-
-struct BackendEntry {
-    provider: Box<dyn InferenceProvider>,
-    name: String,
-    health: Arc<HealthTracker>,
-    priority: u32,
-    cost_per_token: Option<f64>,
 }
 ```
 
-Supports real v1 scenarios: local GPU for Fast slot + self-hosted vLLM for Primary + commercial API (Anthropic/OpenAI) as overflow. Each backend has independent health tracking. The `BackendSelector` trait is internal to `sovereign-inference` — not a Runtime-level trait.
+`BackendEntry` already carries `health`, `priority`, `cost_per_token`, `is_local`, and `oicp_manifest`. The `HybridProvider` pairs each provider with its entry.
+
+Default selector chain: `CapabilityAwareSelector { fallback: PrioritySelector }`. When a `CompletionRequest` carries OICP requirements (populated by the Executor/Runtime from active skills), the selector:
+1. Filters backends by `required` capability thresholds and `min_context_tokens`
+2. Respects `privacy: LocalOnly` by restricting to local backends
+3. Scores remaining backends by `preferred` capabilities using cached OICP manifests
+4. Falls back to priority ordering if no backend has an OICP manifest
+
+### RemoteApiProvider OICP Integration
+
+**Outgoing requests**: When `CompletionRequest.oicp` is `Some`, serialize it into the request body under the `oicp` key. Non-OICP providers ignore unknown keys per the OpenAI API spec.
+
+**Incoming responses**: If the response body contains an `oicp` key, deserialize it into `CompletionResponse.oicp_meta`. Log `match_quality` to the routing log for observability.
+
+**Manifest polling**: `fetch_oicp_manifest()` is called by `HybridProvider`'s background health loop. Returns `None` (not an error) if the provider doesn't support OICP.
+
+### What Does NOT Need OICP Changes
+
+- **`EmbeddedLlamaCpp`**: ignores `CompletionRequest.oicp` entirely. Uses `preferred_speed` as before. `CompletionResponse.oicp_meta` is always `None`.
+- **`InferenceProvider` trait**: signature is unchanged. OICP travels inside `CompletionRequest`/`CompletionResponse`, not as separate trait methods.
 
 ### Future Coop Foundation
 
@@ -731,17 +762,25 @@ The v1 `HybridProvider` becomes the coop foundation through extension, not rewri
 | `backends` configured at startup from TOML | `backends` populated by discovery protocol |
 | `HealthTracker` monitors known endpoints | Also handles nodes joining/leaving |
 | `BackendSelector` chooses among static options | Also factors trust scores + contribution credits |
+| OICP manifests polled per-backend | Manifests aggregated across mesh |
 | No accounting | `ContributionTracker` records GPU-hours |
 
 ### Verification
 
 1. `RemoteApiProvider` pointed at vLLM → completes a prompt
-2. `HybridProvider` with 2 backends: routes to primary, falls back to secondary on failure
-3. `HealthTracker` marks unhealthy backend after 3 consecutive failures, recovers after probe succeeds
-4. `CostMinimizingSelector` prefers local over remote when both healthy
-5. `LocalFirstSelector` never routes remote while local is healthy
-6. `PostgresStateStore` passes same test suite as `SqliteStateStore`
-7. Server boots with Postgres config + multi-backend inference, handles conversations
+2. `RemoteApiProvider` sends `oicp` key in request body when `CompletionRequest.oicp` is present
+3. `RemoteApiProvider` parses `oicp` response metadata into `CompletionResponse.oicp_meta`
+4. `RemoteApiProvider.fetch_oicp_manifest()` returns `Some(manifest)` from an OICP-aware provider, `None` from a non-OICP provider
+5. `HybridProvider` with 2 backends: routes to primary, falls back to secondary on failure
+6. `HybridProvider` background loop updates OICP manifests every 30s
+7. `HybridProvider` with one OICP-aware backend + one non-OICP backend: routes OICP requests to the OICP-aware backend
+8. `HybridProvider` with only non-OICP backends: falls back to priority selection
+9. Skill with `[inference] required_capabilities.code = 2` → request routed to backend with `code >= 2` model
+10. `HealthTracker` marks unhealthy backend after 3 consecutive failures, recovers after probe succeeds
+11. `CostMinimizingSelector` prefers local over remote when both healthy
+12. `LocalFirstSelector` never routes remote while local is healthy
+13. `PostgresStateStore` passes same test suite as `SqliteStateStore`
+14. Server boots with Postgres config + multi-backend inference, handles conversations
 
 ### Dependencies
 

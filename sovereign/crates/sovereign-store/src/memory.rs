@@ -15,6 +15,13 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
+struct RoutingLogEntry {
+    message_hash: String,
+    classified_as: String,
+    was_correct: Option<bool>,
+    created_at: i64,
+}
+
 pub struct InMemoryStateStore {
     conversations: RwLock<HashMap<String, Conversation>>,
     messages: RwLock<Vec<Message>>,
@@ -22,6 +29,7 @@ pub struct InMemoryStateStore {
     memories: RwLock<Vec<Memory>>,
     documents: RwLock<Vec<DocumentChunk>>,
     permissions: RwLock<HashMap<(String, String), bool>>,
+    routing_log: RwLock<Vec<RoutingLogEntry>>,
 }
 
 impl InMemoryStateStore {
@@ -33,6 +41,7 @@ impl InMemoryStateStore {
             memories: RwLock::new(Vec::new()),
             documents: RwLock::new(Vec::new()),
             permissions: RwLock::new(HashMap::new()),
+            routing_log: RwLock::new(Vec::new()),
         }
     }
 }
@@ -118,12 +127,106 @@ impl StateStore for InMemoryStateStore {
     }
 
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
-        self.memories.write().await.push(memory.clone());
+        let mut mems = self.memories.write().await;
+        mems.retain(|m| m.id != memory.id);
+        mems.push(memory.clone());
         Ok(())
     }
 
-    async fn get_relevant_memories(&self, _context: &str, _limit: usize) -> Result<Vec<Memory>> {
-        Ok(Vec::new())
+    async fn get_relevant_memories(&self, context: &str, limit: usize) -> Result<Vec<Memory>> {
+        if context.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mems = self.memories.read().await;
+        let context_lower = context.to_lowercase();
+        let current_time = now();
+
+        let mut scored: Vec<(f64, Memory)> = mems
+            .iter()
+            .filter(|m| m.content.to_lowercase().contains(&context_lower))
+            .filter_map(|m| {
+                let months = (current_time - m.last_used) as f64 / (30.0 * 86400.0);
+                let decayed = m.confidence * 0.9_f64.powf(months);
+                if decayed >= 0.2 {
+                    Some((decayed, m.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+        Ok(scored.into_iter().map(|(_, m)| m).collect())
+    }
+
+    async fn get_all_memories(&self) -> Result<Vec<Memory>> {
+        Ok(self.memories.read().await.clone())
+    }
+
+    async fn delete_memory(&self, id: &str) -> Result<()> {
+        self.memories.write().await.retain(|m| m.id != id);
+        Ok(())
+    }
+
+    async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()> {
+        let mut mems = self.memories.write().await;
+        if let Some(m) = mems.iter_mut().find(|m| m.id == id) {
+            m.confidence = confidence;
+        }
+        Ok(())
+    }
+
+    async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()> {
+        let mut mems = self.memories.write().await;
+        if let Some(m) = mems.iter_mut().find(|m| m.id == id) {
+            m.last_used = timestamp;
+        }
+        Ok(())
+    }
+
+    async fn log_routing(
+        &self,
+        message_hash: &str,
+        classified_as: &str,
+        latency_ms: i64,
+    ) -> Result<()> {
+        let _ = latency_ms;
+        self.routing_log.write().await.push(RoutingLogEntry {
+            message_hash: message_hash.to_string(),
+            classified_as: classified_as.to_string(),
+            was_correct: None,
+            created_at: now(),
+        });
+        Ok(())
+    }
+
+    async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>> {
+        let log = self.routing_log.read().await;
+        let corrections: Vec<RoutingCorrection> = log
+            .iter()
+            .rev()
+            .filter(|e| e.was_correct == Some(false))
+            .take(limit)
+            .map(|e| RoutingCorrection {
+                message_hash: e.message_hash.clone(),
+                classified_as: e.classified_as.clone(),
+                was_correct: false,
+                created_at: e.created_at,
+            })
+            .collect();
+        Ok(corrections)
+    }
+
+    async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()> {
+        let mut log = self.routing_log.write().await;
+        for entry in log.iter_mut().rev() {
+            if entry.message_hash == message_hash {
+                entry.was_correct = Some(was_correct);
+                break;
+            }
+        }
+        Ok(())
     }
 
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {

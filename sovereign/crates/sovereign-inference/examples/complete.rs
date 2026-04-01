@@ -102,6 +102,7 @@ async fn main() {
         max_tokens: Some(args.max_tokens),
         temperature: Some(args.temperature),
         structured_output: None,
+        oicp: None,
     };
 
     if args.stream {

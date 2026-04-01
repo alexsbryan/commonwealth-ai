@@ -5,6 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::context::{build_context, format_history_as_prompt};
 use crate::error::Result;
 use crate::executor::{Executor, TaskContext};
+use crate::memory;
+use crate::oicp::LatencyPreference;
 use crate::registry::ToolRegistry;
 use crate::skills::SkillRegistry;
 use crate::traits::{ApprovalChannel, InferenceProvider, Planner, Router, StateStore};
@@ -23,7 +25,7 @@ pub struct Runtime {
     pub planner: Box<dyn Planner>,
     pub tools: Arc<ToolRegistry>,
     pub store: Arc<dyn StateStore>,
-    pub skills: SkillRegistry,
+    pub skills: Arc<SkillRegistry>,
     pub approval: Arc<dyn ApprovalChannel>,
 }
 
@@ -34,7 +36,7 @@ impl Runtime {
         planner: Box<dyn Planner>,
         tools: Arc<ToolRegistry>,
         store: Arc<dyn StateStore>,
-        skills: SkillRegistry,
+        skills: Arc<SkillRegistry>,
         approval: Arc<dyn ApprovalChannel>,
     ) -> Self {
         Self {
@@ -48,13 +50,97 @@ impl Runtime {
         }
     }
 
+    /// Build OICP requirements from active skills for non-Fast requests.
+    /// Returns None if no skills have OICP configuration.
+    fn build_oicp(
+        &self,
+        latency: LatencyPreference,
+    ) -> Option<crate::oicp::InferenceRequirements> {
+        let mut req = self.skills.inference_requirements();
+        req.latency = latency;
+        if req.required.is_empty() && req.preferred.is_empty() {
+            None
+        } else {
+            Some(req)
+        }
+    }
+
+    /// Build a system message that includes memory context.
+    fn build_system_message(&self, base: &str, context: &ConversationContext) -> String {
+        let mut parts = vec![base.to_string()];
+
+        if let Some(mem_section) = memory::format_memories_for_prompt(&context.memories) {
+            parts.push(mem_section);
+        }
+
+        if let Some(wm) = &context.working_memory {
+            if let Some(goal) = &wm.current_goal {
+                parts.push(format!("Current user goal: {goal}"));
+            }
+            if !wm.facts.is_empty() {
+                parts.push(format!(
+                    "Session context:\n- {}",
+                    wm.facts.join("\n- ")
+                ));
+            }
+        }
+
+        parts.join("\n\n")
+    }
+
+    /// Extract long-term memories from a conversation and save them.
+    /// Call this when a conversation ends (user quits or session ends).
+    pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
+        let context = build_context(self.store.as_ref(), conversation_id, "").await?;
+        if context.conversation.messages.len() < 4 {
+            return Ok(());
+        }
+
+        let memory_rules = self.skills.memory_rules();
+        let extracted = memory::extract_long_term_memories(
+            self.inference.as_ref(),
+            &context.conversation.messages,
+            &memory_rules,
+        )
+        .await?;
+
+        eprintln!("[memory] Extracted {} memories", extracted.len());
+        for mem in extracted {
+            memory::save_with_contradiction_check(
+                self.inference.as_ref(),
+                self.store.as_ref(),
+                mem,
+            )
+            .await?;
+        }
+
+        let pruned = memory::prune_decayed_memories(self.store.as_ref(), now())
+            .await
+            .unwrap_or(0);
+        if pruned > 0 {
+            eprintln!("[memory] Pruned {pruned} decayed memories");
+        }
+
+        Ok(())
+    }
+
     pub async fn handle_message(
         &self,
         message: &str,
         conversation_id: &str,
     ) -> Result<Response> {
-        // 1. Build context from store.
-        let mut context = build_context(self.store.as_ref(), conversation_id).await?;
+        // 1. Build context from store (use message text for memory retrieval).
+        let mut context = build_context(self.store.as_ref(), conversation_id, message).await?;
+
+        // 1b. Compress working memory from conversation history.
+        let working_memory = memory::compress_working_memory(
+            self.inference.as_ref(),
+            &context.conversation.messages,
+            context.working_memory.as_ref(),
+        )
+        .await
+        .ok();
+        context.working_memory = working_memory;
 
         // 2. Save user message.
         let user_msg = Message {
@@ -106,6 +192,14 @@ impl Runtime {
             _ => Speed::Medium,
         };
 
+        // SimpleQuery uses Fast slot (always local) — no OICP.
+        // DeepQuery may route to external providers — attach OICP.
+        let oicp = if matches!(intent, Intent::SimpleQuery) {
+            None
+        } else {
+            self.build_oicp(LatencyPreference::BestEffort)
+        };
+
         let history = format_history_as_prompt(context, 10);
         let prompt = if history.is_empty() {
             message.to_string()
@@ -113,15 +207,19 @@ impl Runtime {
             format!("{history}\n\nAssistant:")
         };
 
+        let system = self.build_system_message(
+            "You are a helpful AI assistant. Respond concisely and accurately.",
+            context,
+        );
+
         let request = CompletionRequest {
             prompt,
-            system_message: Some(
-                "You are a helpful AI assistant. Respond concisely and accurately.".to_string(),
-            ),
+            system_message: Some(system),
             preferred_speed: speed,
             max_tokens: Some(1024),
             temperature: Some(0.7),
             structured_output: None,
+            oicp,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -180,18 +278,21 @@ impl Runtime {
             "{history}\n\nRelevant documents:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
         );
 
+        let system = self.build_system_message(
+            "You are a helpful assistant. Answer the user's question based on the provided documents. \
+             Cite the source when referencing document content. If the documents don't contain \
+             relevant information, say so and answer from general knowledge.",
+            context,
+        );
+
         let request = CompletionRequest {
             prompt,
-            system_message: Some(
-                "You are a helpful assistant. Answer the user's question based on the provided documents. \
-                 Cite the source when referencing document content. If the documents don't contain \
-                 relevant information, say so and answer from general knowledge."
-                    .to_string(),
-            ),
+            system_message: Some(system),
             preferred_speed: Speed::Slow,
             max_tokens: Some(1024),
             temperature: Some(0.7),
             structured_output: None,
+            oicp: self.build_oicp(LatencyPreference::BestEffort),
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -260,6 +361,7 @@ impl Runtime {
             Arc::clone(&self.tools),
             Arc::clone(&self.store),
             Arc::clone(&self.approval),
+            Arc::clone(&self.skills),
         );
 
         let mut ctx = TaskContext {
@@ -318,18 +420,21 @@ impl Runtime {
             step_summaries.join("\n\n")
         );
 
+        let synthesis_system = self.build_system_message(
+            "You are a helpful assistant. Synthesize the given step results into a clear, comprehensive answer.",
+            context,
+        );
+
         let synthesis = self
             .inference
             .complete(&CompletionRequest {
                 prompt: synthesis_prompt,
-                system_message: Some(
-                    "You are a helpful assistant. Synthesize the given step results into a clear, comprehensive answer."
-                        .to_string(),
-                ),
+                system_message: Some(synthesis_system),
                 preferred_speed: Speed::Slow,
                 max_tokens: Some(2048),
                 temperature: Some(0.7),
                 structured_output: None,
+                oicp: self.build_oicp(LatencyPreference::Throughput),
             })
             .await?;
 
