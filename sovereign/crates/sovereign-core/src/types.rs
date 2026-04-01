@@ -1,0 +1,341 @@
+use serde::{Deserialize, Serialize};
+
+// ─── Identity Types ────────────────────────────────────────────
+
+pub type ToolId = String;
+pub type TaskId = String;
+pub type ConversationId = String;
+pub type MessageId = String;
+
+// ─── Inference Types ───────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Speed {
+    Fast,
+    Medium,
+    Slow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Depth {
+    Shallow,
+    Moderate,
+    Deep,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompletionRequest {
+    pub prompt: String,
+    pub system_message: Option<String>,
+    pub preferred_speed: Speed,
+    pub max_tokens: Option<usize>,
+    pub temperature: Option<f32>,
+    pub structured_output: Option<serde_json::Value>,
+}
+
+impl CompletionRequest {
+    pub fn new(prompt: &str) -> Self {
+        Self {
+            prompt: prompt.to_string(),
+            system_message: None,
+            preferred_speed: Speed::Medium,
+            max_tokens: None,
+            temperature: None,
+            structured_output: None,
+        }
+    }
+
+    pub fn with_speed(mut self, speed: Speed) -> Self {
+        self.preferred_speed = speed;
+        self
+    }
+
+    pub fn with_system(mut self, system: &str) -> Self {
+        self.system_message = Some(system.to_string());
+        self
+    }
+
+    pub fn yes_no(condition: &str, context: &str) -> Self {
+        Self {
+            prompt: format!(
+                "Given the following context:\n{context}\n\n\
+                 Answer this yes/no question with only \"yes\" or \"no\":\n{condition}"
+            ),
+            system_message: None,
+            preferred_speed: Speed::Fast,
+            max_tokens: Some(5),
+            temperature: Some(0.0),
+            structured_output: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompletionResponse {
+    pub text: String,
+    pub tokens_used: usize,
+    pub model_id: String,
+    pub latency_ms: u64,
+}
+
+impl CompletionResponse {
+    pub fn as_bool(&self) -> bool {
+        let lower = self.text.trim().to_lowercase();
+        lower.starts_with("yes") || lower.starts_with("true")
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderCapabilities {
+    pub max_context_tokens: usize,
+    pub supports_structured_output: bool,
+    pub relative_speed: Speed,
+    pub relative_reasoning: Depth,
+}
+
+// ─── Routing Types ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Intent {
+    SimpleQuery,
+    DeepQuery,
+    KnowledgeQuery,
+    SimpleAction { tool: ToolId },
+    ComplexTask,
+    Continuation { task_id: TaskId },
+}
+
+// ─── Tool Types ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDescriptor {
+    pub id: ToolId,
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolContext {
+    pub conversation_id: ConversationId,
+    pub task_id: Option<TaskId>,
+    pub working_directory: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Permission {
+    Network,
+    FileRead,
+    FileWrite,
+    Shell,
+    EmailRead,
+    EmailWrite,
+    CalendarRead,
+    CalendarWrite,
+}
+
+// ─── Plan Types ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Plan {
+    pub id: TaskId,
+    pub goal: String,
+    pub steps: Vec<Step>,
+    pub edges: Vec<(usize, usize)>,
+}
+
+impl Plan {
+    pub fn topological_batches(&self) -> Vec<Vec<&Step>> {
+        let n = self.steps.len();
+        let mut in_degree = vec![0usize; n];
+        let mut adj: Vec<Vec<usize>> = vec![vec![]; n];
+
+        for &(from, to) in &self.edges {
+            if from < n && to < n {
+                adj[from].push(to);
+                in_degree[to] += 1;
+            }
+        }
+
+        let mut batches = Vec::new();
+        let mut completed = vec![false; n];
+
+        loop {
+            let batch: Vec<usize> = (0..n)
+                .filter(|&i| !completed[i] && in_degree[i] == 0)
+                .collect();
+
+            if batch.is_empty() {
+                break;
+            }
+
+            let step_refs: Vec<&Step> = batch.iter().map(|&i| &self.steps[i]).collect();
+            batches.push(step_refs);
+
+            for &i in &batch {
+                completed[i] = true;
+                for &j in &adj[i] {
+                    in_degree[j] -= 1;
+                }
+            }
+        }
+
+        batches
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Step {
+    pub id: usize,
+    pub description: String,
+    pub kind: StepKind,
+    pub requires_approval: bool,
+    pub inputs: Vec<StepInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StepKind {
+    Reason {
+        prompt_template: String,
+        speed: Speed,
+    },
+    Tool {
+        tool_id: ToolId,
+        params: serde_json::Value,
+    },
+    UserInput {
+        question: String,
+    },
+    Branch {
+        condition: String,
+        if_true: usize,
+        if_false: usize,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepInput {
+    pub step_id: usize,
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StepOutput {
+    Text(String),
+    Json(serde_json::Value),
+    Jump(usize),
+    Skipped,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepError {
+    pub step_id: usize,
+    pub message: String,
+}
+
+// ─── Conversation Types ────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    pub id: MessageId,
+    pub conversation_id: ConversationId,
+    pub role: Role,
+    pub content: String,
+    pub created_at: i64,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    User,
+    Assistant,
+    System,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Conversation {
+    pub id: ConversationId,
+    pub title: Option<String>,
+    pub messages: Vec<Message>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationContext {
+    pub conversation: Conversation,
+    pub memories: Vec<Memory>,
+    pub working_memory: Option<WorkingMemory>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkingMemory {
+    pub current_goal: Option<String>,
+    pub facts: Vec<String>,
+    pub active_documents: Vec<String>,
+}
+
+// ─── Task Types ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Task {
+    pub id: TaskId,
+    pub conversation_id: ConversationId,
+    pub goal: String,
+    pub plan: Plan,
+    pub status: TaskStatus,
+    pub completed_steps: Vec<(usize, StepOutput)>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskStatus {
+    Running,
+    Paused,
+    Completed,
+    Failed,
+}
+
+// ─── Memory Types ──────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Memory {
+    pub id: String,
+    pub content: String,
+    pub source: String,
+    pub confidence: f64,
+    pub created_at: i64,
+    pub last_used: i64,
+}
+
+// ─── Document / RAG Types ──────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentChunk {
+    pub id: String,
+    pub source: String,
+    pub content: String,
+    pub chunk_index: usize,
+    pub embedding: Option<Vec<f32>>,
+    pub created_at: i64,
+}
+
+// ─── Response Types ────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Response {
+    pub message: Message,
+    pub task: Option<Task>,
+}
+
+// ─── Action Preview (for approval) ────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionPreview {
+    pub tool_id: ToolId,
+    pub description: String,
+    pub params: serde_json::Value,
+}

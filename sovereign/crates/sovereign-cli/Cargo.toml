@@ -1,0 +1,11 @@
+[package]
+name = "sovereign-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-store = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }

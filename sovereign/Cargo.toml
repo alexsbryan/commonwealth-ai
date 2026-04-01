@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sovereign-core",
+    "crates/sovereign-inference",
+    "crates/sovereign-store",
+    "crates/sovereign-tools",
+    "crates/sovereign-server",
+    "crates/sovereign-desktop",
+    "crates/sovereign-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+sovereign-core = { path = "crates/sovereign-core" }
+sovereign-inference = { path = "crates/sovereign-inference" }
+sovereign-store = { path = "crates/sovereign-store" }
+sovereign-tools = { path = "crates/sovereign-tools" }
+
+# Shared dependencies
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+futures = "0.3"

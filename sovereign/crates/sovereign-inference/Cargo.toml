@@ -1,0 +1,20 @@
+[package]
+name = "sovereign-inference"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+llama-cpp-2 = { version = "0.1", features = ["metal"] }
+sysinfo = "0.34"
+encoding_rs = "0.8"
+tokio-stream = "0.1"
+
+[[example]]
+name = "complete"
