@@ -1,6 +1,7 @@
 pub mod context;
 pub mod error;
 pub mod executor;
+pub mod planner;
 pub mod registry;
 pub mod router;
 pub mod runtime;

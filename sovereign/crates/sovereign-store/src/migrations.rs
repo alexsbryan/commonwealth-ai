@@ -69,6 +69,22 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
             created_at  INTEGER NOT NULL
         );
 
+        -- FTS5 for full-text search over documents
+        CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
+            content,
+            source,
+            content=documents,
+            content_rowid=rowid
+        );
+
+        CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
+            INSERT INTO documents_fts(rowid, content, source) VALUES (new.rowid, new.content, new.source);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
+            INSERT INTO documents_fts(documents_fts, rowid, content, source) VALUES('delete', old.rowid, old.content, old.source);
+        END;
+
         -- Long-term user memory
         CREATE TABLE IF NOT EXISTS memories (
             id          TEXT PRIMARY KEY,

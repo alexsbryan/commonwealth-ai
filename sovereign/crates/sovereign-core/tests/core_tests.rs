@@ -7,6 +7,8 @@ use futures::Stream;
 
 use sovereign_core::context::{build_context, format_history_as_prompt};
 use sovereign_core::error::{Error, Result};
+use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};
+use sovereign_core::planner::LlmPlanner;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::skills::*;
@@ -126,6 +128,12 @@ impl StateStore for MockStore {
         Ok(())
     }
     async fn search_documents(&self, _qe: &[f32], _qt: &str, _l: usize) -> Result<Vec<DocumentChunk>> {
+        Ok(Vec::new())
+    }
+    async fn get_chunks_by_source(&self, _source: &str) -> Result<Vec<DocumentChunk>> {
+        Ok(Vec::new())
+    }
+    async fn list_sources(&self) -> Result<Vec<String>> {
         Ok(Vec::new())
     }
     async fn get_permission(&self, _tool_id: &str, _scope: &str) -> Result<Option<bool>> {
@@ -442,9 +450,10 @@ fn build_runtime(response: &str) -> (Runtime, Arc<MockStore>) {
         Arc::new(MockInference::new(response)),
         Box::new(PassthroughRouter),
         Box::new(NoOpPlanner),
-        ToolRegistry::new(),
+        Arc::new(ToolRegistry::new()),
         store.clone(),
         SkillRegistry::new(),
+        Arc::new(AutoApprovalChannel),
     );
     (runtime, store)
 }
@@ -506,4 +515,602 @@ async fn runtime_separate_conversations() {
     assert_eq!(msgs.len(), 4);
     assert_eq!(msgs[0].conversation_id, "convo-a");
     assert_eq!(msgs[2].conversation_id, "convo-b");
+}
+
+// ─── Sequenced Mock (returns different responses per call) ─────
+
+struct SequencedMockInference {
+    responses: tokio::sync::Mutex<Vec<String>>,
+    default: String,
+}
+
+impl SequencedMockInference {
+    fn new(responses: Vec<&str>, default: &str) -> Self {
+        Self {
+            responses: tokio::sync::Mutex::new(responses.into_iter().map(|s| s.to_string()).collect()),
+            default: default.to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl InferenceProvider for SequencedMockInference {
+    async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
+        let mut queue = self.responses.lock().await;
+        let text = if queue.is_empty() {
+            self.default.clone()
+        } else {
+            queue.remove(0)
+        };
+        Ok(CompletionResponse {
+            text,
+            tokens_used: 10,
+            model_id: "mock-seq".to_string(),
+            latency_ms: 1,
+        })
+    }
+
+    async fn complete_stream(
+        &self,
+        _request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        Err(Error::NotImplemented("mock".to_string()))
+    }
+
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+        Err(Error::NotImplemented("mock".to_string()))
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 2048,
+            supports_structured_output: false,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Shallow,
+        }
+    }
+}
+
+// ─── Executor Integration Tests ────────────────────────────────
+
+#[tokio::test]
+async fn executor_linear_plan() {
+    // Two-step linear plan: step 0 → step 1 (step 1 uses step 0's output).
+    let inference = Arc::new(SequencedMockInference::new(
+        vec!["Python is versatile", "Based on that, learn Python first"],
+        "fallback",
+    ));
+    let store = Arc::new(MockStore::new());
+
+    let plan = Plan {
+        id: "t1".to_string(),
+        goal: "recommend a language".to_string(),
+        steps: vec![
+            Step {
+                id: 0,
+                description: "Analyze Python".to_string(),
+                kind: StepKind::Reason {
+                    prompt_template: "List Python strengths".to_string(),
+                    speed: Speed::Slow,
+                },
+                requires_approval: false,
+                inputs: vec![],
+            },
+            Step {
+                id: 1,
+                description: "Recommend".to_string(),
+                kind: StepKind::Reason {
+                    prompt_template: "Given: {0.output}. Recommend a language.".to_string(),
+                    speed: Speed::Slow,
+                },
+                requires_approval: false,
+                inputs: vec![StepInput {
+                    step_id: 0,
+                    key: "output".to_string(),
+                }],
+            },
+        ],
+        edges: vec![(0, 1)],
+    };
+
+    let task = Task {
+        id: "t1".to_string(),
+        conversation_id: "c1".to_string(),
+        goal: "test".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: now(),
+        updated_at: now(),
+    };
+
+    let executor = Executor::new(
+        inference,
+        Arc::new(ToolRegistry::new()),
+        store,
+        Arc::new(AutoApprovalChannel),
+    );
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+
+    assert!(result.error.is_none());
+    assert_eq!(result.completed.len(), 2);
+
+    // Step 0 ran first.
+    assert!(matches!(result.completed.get(&0), Some(StepOutput::Text(t)) if t == "Python is versatile"));
+    // Step 1 used step 0's output.
+    assert!(matches!(result.completed.get(&1), Some(StepOutput::Text(t)) if t.contains("learn Python")));
+}
+
+#[tokio::test]
+async fn executor_parallel_then_merge() {
+    // Steps 0 and 1 are independent, step 2 depends on both.
+    let inference = Arc::new(SequencedMockInference::new(
+        vec!["Python pros", "Rust pros", "Comparison result"],
+        "fallback",
+    ));
+    let store = Arc::new(MockStore::new());
+
+    let plan = Plan {
+        id: "t1".to_string(),
+        goal: "compare".to_string(),
+        steps: vec![
+            Step {
+                id: 0,
+                description: "Python".to_string(),
+                kind: StepKind::Reason {
+                    prompt_template: "List Python pros".to_string(),
+                    speed: Speed::Fast,
+                },
+                requires_approval: false,
+                inputs: vec![],
+            },
+            Step {
+                id: 1,
+                description: "Rust".to_string(),
+                kind: StepKind::Reason {
+                    prompt_template: "List Rust pros".to_string(),
+                    speed: Speed::Fast,
+                },
+                requires_approval: false,
+                inputs: vec![],
+            },
+            Step {
+                id: 2,
+                description: "Compare".to_string(),
+                kind: StepKind::Reason {
+                    prompt_template: "Compare {0.output} and {1.output}".to_string(),
+                    speed: Speed::Slow,
+                },
+                requires_approval: false,
+                inputs: vec![
+                    StepInput { step_id: 0, key: "output".to_string() },
+                    StepInput { step_id: 1, key: "output".to_string() },
+                ],
+            },
+        ],
+        edges: vec![(0, 2), (1, 2)],
+    };
+
+    let task = Task {
+        id: "t1".to_string(),
+        conversation_id: "c1".to_string(),
+        goal: "compare".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: now(),
+        updated_at: now(),
+    };
+
+    let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel));
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    assert!(result.error.is_none());
+    assert_eq!(result.completed.len(), 3);
+}
+
+#[tokio::test]
+async fn executor_branch_skips_non_taken_path() {
+    let inference = Arc::new(SequencedMockInference::new(
+        vec![
+            "yes",           // Branch evaluation → takes true path
+            "True path result",
+        ],
+        "fallback",
+    ));
+    let store = Arc::new(MockStore::new());
+
+    let plan = Plan {
+        id: "t1".to_string(),
+        goal: "test branch".to_string(),
+        steps: vec![
+            Step {
+                id: 0,
+                description: "Check condition".to_string(),
+                kind: StepKind::Branch {
+                    condition: "Is it sunny?".to_string(),
+                    if_true: 1,
+                    if_false: 2,
+                },
+                requires_approval: false,
+                inputs: vec![],
+            },
+            Step {
+                id: 1,
+                description: "Sunny path".to_string(),
+                kind: StepKind::Reason {
+                    prompt_template: "Plan for sunny day".to_string(),
+                    speed: Speed::Fast,
+                },
+                requires_approval: false,
+                inputs: vec![],
+            },
+            Step {
+                id: 2,
+                description: "Rainy path".to_string(),
+                kind: StepKind::Reason {
+                    prompt_template: "Plan for rainy day".to_string(),
+                    speed: Speed::Fast,
+                },
+                requires_approval: false,
+                inputs: vec![],
+            },
+        ],
+        edges: vec![(0, 1), (0, 2)],
+    };
+
+    let task = Task {
+        id: "t1".to_string(),
+        conversation_id: "c1".to_string(),
+        goal: "test".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: now(),
+        updated_at: now(),
+    };
+
+    let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel));
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    assert!(result.error.is_none());
+
+    // Branch jumped to step 1.
+    assert!(matches!(result.completed.get(&0), Some(StepOutput::Jump(1))));
+    // Step 1 (sunny) executed.
+    assert!(matches!(result.completed.get(&1), Some(StepOutput::Text(_))));
+    // Step 2 (rainy) was skipped.
+    assert!(matches!(result.completed.get(&2), Some(StepOutput::Skipped)));
+}
+
+// ─── Planner + Executor Integration ────────────────────────────
+
+#[tokio::test]
+async fn planner_generates_valid_plan() {
+    let plan_json = r#"{"goal": "compare languages", "steps": [{"id": 0, "description": "Analyze", "kind": "reason", "prompt": "Compare Python and Rust", "speed": "slow"}], "edges": []}"#;
+
+    let inference = Arc::new(SequencedMockInference::new(
+        vec![plan_json, "Python is great, Rust is fast"],
+        "fallback",
+    ));
+
+    let planner = LlmPlanner::new(inference);
+    let ctx = ConversationContext {
+        conversation: Conversation {
+            id: "c1".to_string(),
+            title: None,
+            messages: vec![],
+            created_at: 0,
+            updated_at: 0,
+        },
+        memories: vec![],
+        working_memory: None,
+    };
+
+    let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
+    assert!(!plan.steps.is_empty());
+    assert_eq!(plan.goal, "compare languages");
+}
+
+#[tokio::test]
+async fn planner_fallback_on_garbage() {
+    // Mock returns garbage that can't be parsed as JSON.
+    let inference = Arc::new(SequencedMockInference::new(
+        vec!["not json at all", "still not json", "nope"],
+        "nope",
+    ));
+
+    let planner = LlmPlanner::new(inference);
+    let ctx = ConversationContext {
+        conversation: Conversation {
+            id: "c1".to_string(),
+            title: None,
+            messages: vec![],
+            created_at: 0,
+            updated_at: 0,
+        },
+        memories: vec![],
+        working_memory: None,
+    };
+
+    // Should succeed with fallback plan (single step).
+    let plan = planner.plan("do something", &ctx, &[]).await.unwrap();
+    assert_eq!(plan.steps.len(), 1);
+}
+
+// ─── ComplexTask Runtime Integration ───────────────────────────
+
+struct ComplexTaskRouter;
+
+#[async_trait]
+impl Router for ComplexTaskRouter {
+    async fn classify(
+        &self,
+        _message: &str,
+        _context: &ConversationContext,
+        _available_tools: &[ToolDescriptor],
+    ) -> Result<Intent> {
+        Ok(Intent::ComplexTask)
+    }
+}
+
+#[tokio::test]
+async fn runtime_complex_task_end_to_end() {
+    let plan_json = r#"{"goal": "compare", "steps": [{"id": 0, "description": "Think", "kind": "reason", "prompt": "Analyze the question", "speed": "slow"}], "edges": []}"#;
+
+    // Responses: routing classification (unused for ComplexTaskRouter), plan JSON, step execution, synthesis
+    let inference = Arc::new(SequencedMockInference::new(
+        vec![plan_json, "Step result: analysis done", "Final synthesized answer"],
+        "default response",
+    ));
+
+    let store = Arc::new(MockStore::new());
+    let runtime = Runtime::new(
+        inference,
+        Box::new(ComplexTaskRouter),
+        Box::new(LlmPlanner::new(Arc::new(MockInference::new(plan_json)))),
+        Arc::new(ToolRegistry::new()),
+        store.clone(),
+        SkillRegistry::new(),
+        Arc::new(AutoApprovalChannel),
+    );
+
+    let response = runtime.handle_message("compare Python and Rust", "c1").await.unwrap();
+
+    // Should have a task attached.
+    assert!(response.task.is_some());
+    let task = response.task.unwrap();
+    assert!(matches!(task.status, TaskStatus::Completed));
+    assert!(!task.completed_steps.is_empty());
+}
+
+// ─── Executor Tool Step Tests ──────────────────────────────────
+
+#[tokio::test]
+async fn executor_tool_step() {
+    let inference = Arc::new(MockInference::new("response"));
+    let store = Arc::new(MockStore::new());
+
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(DummyTool {
+        id: "test_tool".to_string(),
+    }));
+
+    let plan = Plan {
+        id: "t1".to_string(),
+        goal: "test tool".to_string(),
+        steps: vec![Step {
+            id: 0,
+            description: "Run test tool".to_string(),
+            kind: StepKind::Tool {
+                tool_id: "test_tool".to_string(),
+                params: serde_json::json!({"key": "value"}),
+            },
+            requires_approval: false,
+            inputs: vec![],
+        }],
+        edges: vec![],
+    };
+
+    let task = Task {
+        id: "t1".to_string(),
+        conversation_id: "c1".to_string(),
+        goal: "test".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: now(),
+        updated_at: now(),
+    };
+
+    let executor = Executor::new(
+        inference,
+        Arc::new(tools),
+        store,
+        Arc::new(AutoApprovalChannel),
+    );
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    assert!(result.error.is_none());
+    assert_eq!(result.completed.len(), 1);
+    assert!(matches!(
+        result.completed.get(&0),
+        Some(StepOutput::Text(t)) if t == "ok"
+    ));
+}
+
+// ─── Permission Denial Test ────────────────────────────────────
+
+struct DenyApprovalChannel;
+
+#[async_trait]
+impl ApprovalChannel for DenyApprovalChannel {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+        Ok(false)
+    }
+    async fn ask_user(&self, _question: &str) -> Result<String> {
+        Ok("denied".to_string())
+    }
+    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
+}
+
+struct PermissionRequiringTool;
+
+#[async_trait]
+impl Tool for PermissionRequiringTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "restricted".to_string(),
+            name: "Restricted".to_string(),
+            description: "needs permission".to_string(),
+            parameters: serde_json::json!({}),
+        }
+    }
+    fn required_permissions(&self) -> Vec<Permission> {
+        vec![Permission::Shell]
+    }
+    async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        Ok(StepOutput::Text("executed".to_string()))
+    }
+}
+
+#[tokio::test]
+async fn executor_tool_denied_permission_skips() {
+    let inference = Arc::new(MockInference::new("response"));
+    let store = Arc::new(MockStore::new());
+
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(PermissionRequiringTool));
+
+    let plan = Plan {
+        id: "t1".to_string(),
+        goal: "test denied".to_string(),
+        steps: vec![Step {
+            id: 0,
+            description: "Run restricted tool".to_string(),
+            kind: StepKind::Tool {
+                tool_id: "restricted".to_string(),
+                params: serde_json::json!({}),
+            },
+            requires_approval: false,
+            inputs: vec![],
+        }],
+        edges: vec![],
+    };
+
+    let task = Task {
+        id: "t1".to_string(),
+        conversation_id: "c1".to_string(),
+        goal: "test".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: now(),
+        updated_at: now(),
+    };
+
+    let executor = Executor::new(
+        inference,
+        Arc::new(tools),
+        store,
+        Arc::new(DenyApprovalChannel),
+    );
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    assert!(result.error.is_none());
+    // Step was skipped because permission was denied.
+    assert!(matches!(
+        result.completed.get(&0),
+        Some(StepOutput::Skipped)
+    ));
+}
+
+// ─── UserInput Step Test ───────────────────────────────────────
+
+struct AnsweringApprovalChannel;
+
+#[async_trait]
+impl ApprovalChannel for AnsweringApprovalChannel {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+        Ok(true)
+    }
+    async fn ask_user(&self, _question: &str) -> Result<String> {
+        Ok("42".to_string())
+    }
+    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
+}
+
+#[tokio::test]
+async fn executor_user_input_step() {
+    let inference = Arc::new(MockInference::new("response"));
+    let store = Arc::new(MockStore::new());
+
+    let plan = Plan {
+        id: "t1".to_string(),
+        goal: "ask user".to_string(),
+        steps: vec![Step {
+            id: 0,
+            description: "Ask for a number".to_string(),
+            kind: StepKind::UserInput {
+                question: "What is the answer?".to_string(),
+            },
+            requires_approval: false,
+            inputs: vec![],
+        }],
+        edges: vec![],
+    };
+
+    let task = Task {
+        id: "t1".to_string(),
+        conversation_id: "c1".to_string(),
+        goal: "test".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: now(),
+        updated_at: now(),
+    };
+
+    let executor = Executor::new(
+        inference,
+        Arc::new(ToolRegistry::new()),
+        store,
+        Arc::new(AnsweringApprovalChannel),
+    );
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    assert!(result.error.is_none());
+    assert!(matches!(
+        result.completed.get(&0),
+        Some(StepOutput::Text(t)) if t == "42"
+    ));
 }

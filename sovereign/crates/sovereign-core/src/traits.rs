@@ -99,6 +99,8 @@ pub trait StateStore: Send + Sync {
         query_text: &str,
         limit: usize,
     ) -> Result<Vec<DocumentChunk>>;
+    async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>>;
+    async fn list_sources(&self) -> Result<Vec<String>>;
 
     // Permissions
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>>;

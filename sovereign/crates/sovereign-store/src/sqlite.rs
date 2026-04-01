@@ -361,12 +361,175 @@ impl StateStore for SqliteStateStore {
 
     async fn search_documents(
         &self,
-        _query_embedding: &[f32],
-        _query_text: &str,
-        _limit: usize,
+        query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
     ) -> Result<Vec<DocumentChunk>> {
-        // Requires sqlite-vec (Phase 6). Return empty for now.
-        Ok(Vec::new())
+        let conn = self.conn.lock().await;
+
+        // Hybrid search: combine FTS5 text search with cosine similarity.
+        // Collect results from both, deduplicate by ID, return top N.
+
+        let mut results: std::collections::HashMap<String, (f32, DocumentChunk)> =
+            std::collections::HashMap::new();
+
+        // 1. FTS5 text search (always available, no embeddings needed).
+        if !query_text.is_empty() {
+            let mut fts_stmt = conn
+                .prepare(
+                    "SELECT d.id, d.source, d.content, d.chunk_index, d.embedding, d.created_at
+                     FROM documents d
+                     JOIN documents_fts fts ON d.rowid = fts.rowid
+                     WHERE documents_fts MATCH ?1
+                     LIMIT ?2",
+                )
+                .map_err(map_db)?;
+
+            let fts_results: Vec<DocumentChunk> = fts_stmt
+                .query_map(rusqlite::params![query_text, (limit * 2) as i64], |row| {
+                    let embedding_blob: Option<Vec<u8>> = row.get(4)?;
+                    let embedding = embedding_blob.map(|blob| {
+                        blob.chunks(4)
+                            .map(|c| {
+                                let mut bytes = [0u8; 4];
+                                bytes.copy_from_slice(c);
+                                f32::from_le_bytes(bytes)
+                            })
+                            .collect::<Vec<f32>>()
+                    });
+                    Ok(DocumentChunk {
+                        id: row.get(0)?,
+                        source: row.get(1)?,
+                        content: row.get(2)?,
+                        chunk_index: row.get::<_, i64>(3)? as usize,
+                        embedding,
+                        created_at: row.get(5)?,
+                    })
+                })
+                .map_err(map_db)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .unwrap_or_default();
+
+            for (i, chunk) in fts_results.into_iter().enumerate() {
+                // FTS5 results get a score based on rank position (1.0 → 0.5).
+                let score = 1.0 - (i as f32 * 0.05).min(0.5);
+                results.insert(chunk.id.clone(), (score, chunk));
+            }
+        }
+
+        // 2. Vector similarity search (if embeddings are available).
+        if !query_embedding.is_empty() {
+            let mut vec_stmt = conn
+                .prepare(
+                    "SELECT id, source, content, chunk_index, embedding, created_at
+                     FROM documents WHERE embedding IS NOT NULL",
+                )
+                .map_err(map_db)?;
+
+            let vector_results: Vec<(String, f32, DocumentChunk)> = vec_stmt
+                .query_map([], |row| {
+                    let embedding_blob: Option<Vec<u8>> = row.get(4)?;
+                    let embedding = embedding_blob.map(|blob| {
+                        blob.chunks(4)
+                            .map(|c| {
+                                let mut bytes = [0u8; 4];
+                                bytes.copy_from_slice(c);
+                                f32::from_le_bytes(bytes)
+                            })
+                            .collect::<Vec<f32>>()
+                    });
+                    let id: String = row.get(0)?;
+                    Ok((
+                        id.clone(),
+                        embedding.clone(),
+                        DocumentChunk {
+                            id,
+                            source: row.get(1)?,
+                            content: row.get(2)?,
+                            chunk_index: row.get::<_, i64>(3)? as usize,
+                            embedding,
+                            created_at: row.get(5)?,
+                        },
+                    ))
+                })
+                .map_err(map_db)?
+                .filter_map(|r| r.ok())
+                .filter_map(|(id, emb, chunk)| {
+                    emb.map(|e| {
+                        let sim = cosine_similarity(query_embedding, &e);
+                        (id, sim, chunk)
+                    })
+                })
+                .collect();
+
+            for (id, sim, chunk) in vector_results {
+                results
+                    .entry(id)
+                    .and_modify(|(score, _)| {
+                        // Boost score if found by both methods.
+                        *score = (*score + sim) / 2.0 + 0.1;
+                    })
+                    .or_insert((sim, chunk));
+            }
+        }
+
+        // Sort by score descending, return top N.
+        let mut sorted: Vec<(f32, DocumentChunk)> = results.into_values().collect();
+        sorted.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        Ok(sorted.into_iter().take(limit).map(|(_, c)| c).collect())
+    }
+
+    async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, source, content, chunk_index, embedding, created_at
+                 FROM documents WHERE source = ?1 ORDER BY chunk_index ASC",
+            )
+            .map_err(map_db)?;
+
+        let chunks: Vec<DocumentChunk> = stmt
+            .query_map(rusqlite::params![source], |row| {
+                let embedding_blob: Option<Vec<u8>> = row.get(4)?;
+                let embedding = embedding_blob.map(|blob| {
+                    blob.chunks(4)
+                        .map(|c| {
+                            let mut bytes = [0u8; 4];
+                            bytes.copy_from_slice(c);
+                            f32::from_le_bytes(bytes)
+                        })
+                        .collect::<Vec<f32>>()
+                });
+                Ok(DocumentChunk {
+                    id: row.get(0)?,
+                    source: row.get(1)?,
+                    content: row.get(2)?,
+                    chunk_index: row.get::<_, i64>(3)? as usize,
+                    embedding,
+                    created_at: row.get(5)?,
+                })
+            })
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(map_db)?;
+
+        Ok(chunks)
+    }
+
+    async fn list_sources(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT source FROM documents ORDER BY source")
+            .map_err(map_db)?;
+
+        let sources: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(map_db)?;
+
+        Ok(sources)
     }
 
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {
@@ -394,4 +557,17 @@ impl StateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+}
+
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
+    dot / (norm_a * norm_b)
 }

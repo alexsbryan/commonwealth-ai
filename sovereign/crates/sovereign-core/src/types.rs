@@ -253,6 +253,16 @@ pub enum Role {
     System,
 }
 
+impl Message {
+    pub fn role_str(&self) -> &'static str {
+        match self.role {
+            Role::User => "user",
+            Role::Assistant => "assistant",
+            Role::System => "system",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Conversation {
     pub id: ConversationId,

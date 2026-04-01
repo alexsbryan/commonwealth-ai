@@ -339,3 +339,74 @@ async fn sqlite_multiple_conversations_isolated() {
     assert_eq!(c2.messages.len(), 1);
     assert_eq!(c2.messages[0].content, "convo 2");
 }
+
+// ─── Document Source Tests ─────────────────────────────────────
+
+fn make_chunk(id: &str, source: &str, content: &str, index: usize) -> DocumentChunk {
+    DocumentChunk {
+        id: id.to_string(),
+        source: source.to_string(),
+        content: content.to_string(),
+        chunk_index: index,
+        embedding: None,
+        created_at: now(),
+    }
+}
+
+async fn test_get_chunks_by_source(store: &dyn StateStore) {
+    store
+        .store_chunks(&[
+            make_chunk("a:0", "a.txt", "chunk 0 of a", 0),
+            make_chunk("a:1", "a.txt", "chunk 1 of a", 1),
+            make_chunk("b:0", "b.txt", "chunk 0 of b", 0),
+        ])
+        .await
+        .unwrap();
+
+    let chunks = store.get_chunks_by_source("a.txt").await.unwrap();
+    assert_eq!(chunks.len(), 2);
+    assert_eq!(chunks[0].chunk_index, 0);
+    assert_eq!(chunks[1].chunk_index, 1);
+
+    let chunks = store.get_chunks_by_source("b.txt").await.unwrap();
+    assert_eq!(chunks.len(), 1);
+
+    let chunks = store.get_chunks_by_source("nonexistent").await.unwrap();
+    assert!(chunks.is_empty());
+}
+
+async fn test_list_sources(store: &dyn StateStore) {
+    store
+        .store_chunks(&[
+            make_chunk("a:0", "alpha.txt", "content a", 0),
+            make_chunk("b:0", "beta.md", "content b", 0),
+            make_chunk("a:1", "alpha.txt", "content a2", 1),
+        ])
+        .await
+        .unwrap();
+
+    let sources = store.list_sources().await.unwrap();
+    assert_eq!(sources.len(), 2);
+    assert!(sources.contains(&"alpha.txt".to_string()));
+    assert!(sources.contains(&"beta.md".to_string()));
+}
+
+#[tokio::test]
+async fn memory_get_chunks_by_source() {
+    test_get_chunks_by_source(&InMemoryStateStore::new()).await;
+}
+
+#[tokio::test]
+async fn memory_list_sources() {
+    test_list_sources(&InMemoryStateStore::new()).await;
+}
+
+#[tokio::test]
+async fn sqlite_get_chunks_by_source() {
+    test_get_chunks_by_source(&sqlite_store()).await;
+}
+
+#[tokio::test]
+async fn sqlite_list_sources() {
+    test_list_sources(&sqlite_store()).await;
+}

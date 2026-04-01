@@ -6,4 +6,12 @@ edition.workspace = true
 [dependencies]
 sovereign-core = { workspace = true }
 async-trait = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+
+[dev-dependencies]
+sovereign-store = { workspace = true }
+uuid = { workspace = true }
+futures = { workspace = true }

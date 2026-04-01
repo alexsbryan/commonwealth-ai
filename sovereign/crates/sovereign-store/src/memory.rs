@@ -20,6 +20,7 @@ pub struct InMemoryStateStore {
     messages: RwLock<Vec<Message>>,
     tasks: RwLock<HashMap<String, Task>>,
     memories: RwLock<Vec<Memory>>,
+    documents: RwLock<Vec<DocumentChunk>>,
     permissions: RwLock<HashMap<(String, String), bool>>,
 }
 
@@ -30,6 +31,7 @@ impl InMemoryStateStore {
             messages: RwLock::new(Vec::new()),
             tasks: RwLock::new(HashMap::new()),
             memories: RwLock::new(Vec::new()),
+            documents: RwLock::new(Vec::new()),
             permissions: RwLock::new(HashMap::new()),
         }
     }
@@ -124,7 +126,13 @@ impl StateStore for InMemoryStateStore {
         Ok(Vec::new())
     }
 
-    async fn store_chunks(&self, _chunks: &[DocumentChunk]) -> Result<()> {
+    async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {
+        let mut docs = self.documents.write().await;
+        for chunk in chunks {
+            // Replace existing chunk with same ID.
+            docs.retain(|d| d.id != chunk.id);
+            docs.push(chunk.clone());
+        }
         Ok(())
     }
 
@@ -135,6 +143,29 @@ impl StateStore for InMemoryStateStore {
         _limit: usize,
     ) -> Result<Vec<DocumentChunk>> {
         Ok(Vec::new())
+    }
+
+    async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>> {
+        let docs = self.documents.read().await;
+        let mut chunks: Vec<DocumentChunk> = docs
+            .iter()
+            .filter(|d| d.source == source)
+            .cloned()
+            .collect();
+        chunks.sort_by_key(|c| c.chunk_index);
+        Ok(chunks)
+    }
+
+    async fn list_sources(&self) -> Result<Vec<String>> {
+        let docs = self.documents.read().await;
+        let mut sources: Vec<String> = docs
+            .iter()
+            .map(|d| d.source.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        sources.sort();
+        Ok(sources)
     }
 
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {

@@ -2,19 +2,105 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
+use sovereign_core::error::{Error, Result};
+use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
-use sovereign_core::stubs::{NoOpPlanner, PassthroughRouter};
-use sovereign_core::traits::StateStore;
+use sovereign_core::stubs::PassthroughRouter;
+use sovereign_core::traits::{ApprovalChannel, StateStore};
+use sovereign_core::types::*;
 use sovereign_core::{SkillRegistry, ToolRegistry};
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_store::sqlite::SqliteStateStore;
+use sovereign_tools::shell::ShellTool;
+
+// ─── CLI Approval Channel ──────────────────────────────────────
+
+struct CliApprovalChannel {
+    store: Arc<dyn StateStore>,
+}
+
+impl CliApprovalChannel {
+    fn new(store: Arc<dyn StateStore>) -> Self {
+        Self { store }
+    }
+}
+
+#[async_trait]
+impl ApprovalChannel for CliApprovalChannel {
+    async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool> {
+        eprintln!();
+        eprintln!("  [APPROVAL REQUIRED]");
+        eprintln!("  Step {}: {}", step.id, step.description);
+        eprintln!("  Tool: {}", preview.tool_id);
+        eprintln!("  Action: {}", preview.description);
+        if let Ok(params_str) = serde_json::to_string_pretty(&preview.params) {
+            eprintln!("  Params: {params_str}");
+        }
+
+        loop {
+            eprint!("  Allow? [yes/no/always] ");
+            io::stderr().flush().unwrap_or(());
+
+            let mut answer = String::new();
+            if io::stdin().lock().read_line(&mut answer).unwrap_or(0) == 0 {
+                return Ok(false);
+            }
+
+            match answer.trim().to_lowercase().as_str() {
+                "yes" | "y" => return Ok(true),
+                "no" | "n" => return Ok(false),
+                "always" | "a" => {
+                    // Persist permission for future sessions.
+                    let _ = self
+                        .store
+                        .set_permission(&preview.tool_id, "Shell", true)
+                        .await;
+                    eprintln!("  Permission saved for future sessions.");
+                    return Ok(true);
+                }
+                _ => eprintln!("  Please answer yes, no, or always"),
+            }
+        }
+    }
+
+    async fn ask_user(&self, question: &str) -> Result<String> {
+        eprintln!("\n  [INPUT NEEDED] {question}");
+        eprint!("  > ");
+        io::stderr().flush().unwrap_or(());
+
+        let mut answer = String::new();
+        if io::stdin().lock().read_line(&mut answer).unwrap_or(0) == 0 {
+            return Err(Error::Cancelled);
+        }
+        Ok(answer.trim().to_string())
+    }
+
+    fn emit_progress(&self, step: &Step, output: &StepOutput) {
+        let status = match output {
+            StepOutput::Text(_) | StepOutput::Json(_) => "done",
+            StepOutput::Jump(t) => {
+                eprintln!("  [step {}] {} → jump to {t}", step.id, step.description);
+                return;
+            }
+            StepOutput::Skipped => "skipped",
+        };
+        eprintln!("  [step {}] {} [{status}]", step.id, step.description);
+    }
+}
+
+// ─── Args ──────────────────────────────────────────────────────
 
 struct Args {
     model: PathBuf,
     primary_model: Option<PathBuf>,
     data_dir: PathBuf,
     use_router: bool,
+    ingest: Option<PathBuf>,
+    brave_api_key: Option<String>,
+    tavily_api_key: Option<String>,
 }
 
 fn print_usage() {
@@ -24,7 +110,10 @@ fn print_usage() {
     eprintln!("  --model <path>           Fast/default model (required)");
     eprintln!("  --primary-model <path>   Larger model for deep reasoning");
     eprintln!("  --data-dir <path>        Database directory (default: data)");
+    eprintln!("  --ingest <path>          Ingest documents from directory");
     eprintln!("  --router                 Enable LLM-based intent routing");
+    eprintln!("  --brave-api-key <key>    Use Brave Search (better quality)");
+    eprintln!("  --tavily-api-key <key>   Use Tavily Search (best quality)");
 }
 
 fn parse_args() -> Option<Args> {
@@ -33,6 +122,9 @@ fn parse_args() -> Option<Args> {
     let mut primary_model = None;
     let mut data_dir = None;
     let mut use_router = false;
+    let mut ingest = None;
+    let mut brave_api_key = None;
+    let mut tavily_api_key = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -49,6 +141,18 @@ fn parse_args() -> Option<Args> {
                 i += 1;
                 data_dir = args.get(i).map(PathBuf::from);
             }
+            "--ingest" => {
+                i += 1;
+                ingest = args.get(i).map(PathBuf::from);
+            }
+            "--brave-api-key" => {
+                i += 1;
+                brave_api_key = args.get(i).cloned();
+            }
+            "--tavily-api-key" => {
+                i += 1;
+                tavily_api_key = args.get(i).cloned();
+            }
             "--router" => {
                 use_router = true;
             }
@@ -62,8 +166,13 @@ fn parse_args() -> Option<Args> {
         primary_model,
         data_dir: data_dir.unwrap_or_else(|| PathBuf::from("data")),
         use_router,
+        ingest,
+        brave_api_key,
+        tavily_api_key,
     })
 }
+
+// ─── Main ──────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() {
@@ -75,7 +184,7 @@ async fn main() {
         }
     };
 
-    // Load inference provider.
+    // Load inference.
     eprintln!("Loading model: {}", args.model.display());
     if let Some(ref p) = args.primary_model {
         eprintln!("Primary model: {}", p.display());
@@ -94,7 +203,6 @@ async fn main() {
         }
     };
 
-    // Start idle monitor for primary slot (60s timeout).
     if args.primary_model.is_some() {
         inference.start_idle_monitor(60);
     }
@@ -102,7 +210,7 @@ async fn main() {
     // Open database.
     let db_path = args.data_dir.join("sovereign.db");
     eprintln!("Database: {}", db_path.display());
-    let store = match SqliteStateStore::open(&db_path) {
+    let store: Arc<dyn StateStore> = match SqliteStateStore::open(&db_path) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!("Failed to open database: {e}");
@@ -110,35 +218,95 @@ async fn main() {
         }
     };
 
-    // Build router.
+    // Build components.
+    let inference_arc: Arc<dyn sovereign_core::traits::InferenceProvider> = inference;
+
     let router: Box<dyn sovereign_core::traits::Router> = if args.use_router {
-        eprintln!("Router: LLM-based classification enabled");
-        Box::new(LlmRouter::new(Arc::clone(&inference) as Arc<dyn sovereign_core::traits::InferenceProvider>))
+        eprintln!("Router: LLM-based classification");
+        Box::new(LlmRouter::new(Arc::clone(&inference_arc)))
     } else {
-        eprintln!("Router: passthrough (all messages → SimpleQuery)");
+        eprintln!("Router: passthrough");
         Box::new(PassthroughRouter)
     };
 
+    let planner = LlmPlanner::new(Arc::clone(&inference_arc));
+
+    // Ingest documents if requested.
+    if let Some(ref ingest_path) = args.ingest {
+        eprintln!("Ingesting documents from: {}", ingest_path.display());
+        match sovereign_tools::rag::ingest::ingest_directory(
+            ingest_path,
+            store.as_ref(),
+            Some(inference_arc.as_ref()),
+        )
+        .await
+        {
+            Ok(result) => {
+                eprintln!(
+                    "Ingestion complete: {} files, {} chunks ({} skipped)",
+                    result.files_processed, result.chunks_created, result.files_skipped,
+                );
+            }
+            Err(e) => {
+                eprintln!("Ingestion failed: {e}");
+            }
+        }
+    }
+
+    // Register tools.
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(ShellTool));
+    tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
+        Arc::clone(&store),
+        Arc::clone(&inference_arc),
+    )));
+    tools.register(Box::new(sovereign_tools::knowledge::KnowledgeTool::new(
+        Arc::clone(&store),
+        Arc::clone(&inference_arc),
+    )));
+    // Select search backend: Tavily > Brave > DuckDuckGo (free default).
+    let search_backend = if let Some(ref key) = args.tavily_api_key {
+        eprintln!("Search: Tavily");
+        sovereign_tools::web::search::SearchBackend::Tavily {
+            api_key: key.clone(),
+        }
+    } else if let Some(ref key) = args.brave_api_key {
+        eprintln!("Search: Brave");
+        sovereign_tools::web::search::SearchBackend::Brave {
+            api_key: key.clone(),
+        }
+    } else {
+        eprintln!("Search: DuckDuckGo (free)");
+        sovereign_tools::web::search::SearchBackend::DuckDuckGo
+    };
+    tools.register(Box::new(sovereign_tools::web::WebSearchTool::with_backend(
+        Arc::clone(&inference_arc),
+        search_backend,
+    )));
+    tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
+    eprintln!("Tools: {} registered", tools.count());
+
+    let approval = Arc::new(CliApprovalChannel::new(Arc::clone(&store)));
+
     let runtime = Runtime::new(
-        inference as Arc<dyn sovereign_core::traits::InferenceProvider>,
+        inference_arc,
         router,
-        Box::new(NoOpPlanner),
-        ToolRegistry::new(),
+        Box::new(planner),
+        Arc::new(tools),
         store.clone(),
         SkillRegistry::new(),
+        approval,
     );
 
-    // Resume last conversation or start a new one.
+    // Resume or start conversation.
     let conversation_id = match store.list_conversations(1, 0).await {
         Ok(convos) if !convos.is_empty() => {
-            let id = convos[0].id.clone();
             eprintln!("Resuming conversation");
-            id
+            convos[0].id.clone()
         }
         _ => {
-            let id = uuid::Uuid::new_v4().to_string();
             eprintln!("Starting new conversation");
-            id
+            uuid::Uuid::new_v4().to_string()
         }
     };
 
@@ -166,6 +334,13 @@ async fn main() {
 
         match runtime.handle_message(input, &conversation_id).await {
             Ok(response) => {
+                if let Some(ref task) = response.task {
+                    eprintln!(
+                        "\n[task] {} steps, status: {:?}",
+                        task.completed_steps.len(),
+                        task.status,
+                    );
+                }
                 println!("\n{}\n", response.message.content);
             }
             Err(e) => {

@@ -2,26 +2,15 @@
 
 A self-hosted AI agent that runs entirely on your machine. One binary, no external services, no cloud dependency.
 
-Sovereign combines local LLM inference, intelligent routing across model sizes, multi-step task planning and execution, RAG over your documents, web search, and tool use (email, calendar, shell, MCP) — all behind a single chat interface.
-
 ## What it does
 
-- **Chat with a local LLM** — no API keys, no data leaving your machine
-- **Automatic model routing** — simple questions use a fast small model, complex ones load a larger model on demand
-- **Multi-step task execution** — plans and executes multi-tool workflows with approval gates for anything destructive
-- **RAG** — point it at a folder of documents, ask questions grounded in their content
-- **Web search** — multi-stage pipeline (query decomposition → search → content extraction → cited synthesis), works free with DuckDuckGo or better with a Brave/Tavily API key
-- **Tool use** — email, calendar, files, shell, and any MCP server
-- **Memory** — remembers facts about you across conversations
+- **Local LLM inference** via llama.cpp — no API keys, no data leaving your machine
+- **Dual-slot model routing** — a fast small model handles simple questions instantly; a larger model loads on demand for deep reasoning, then unloads after 60s idle to free VRAM
+- **Plan-and-execute** — complex requests are decomposed into multi-step DAGs by the Planner, then executed by the Executor with parallel step batching, branch logic, and automatic replanning on failure
+- **Persistent conversations** — SQLite with FTS5 full-text search; conversations survive restarts
+- **Trait-based architecture** — five boundaries (`InferenceProvider`, `Router`, `Planner`, `Tool`, `StateStore`) make every component swappable
 
-Ships as a desktop app (Tauri + Svelte) and an HTTP/WebSocket API server for programmatic use.
-
-## Current status
-
-Early development. Phases 0–1 of the [implementation plan](IMPLEMENTATION_PLAN.md) are complete:
-
-- Cargo workspace with trait-based architecture (`sovereign-core`, `sovereign-inference`, `sovereign-store`, `sovereign-tools`, `sovereign-server`, `sovereign-desktop`)
-- Single-slot local inference via llama.cpp (load a GGUF model, complete prompts, stream tokens)
+Planned but not yet built: RAG, web search, tool use (email, calendar, shell, MCP), memory system, desktop app (Tauri + Svelte), HTTP/WebSocket API server.
 
 ## Quick start
 
@@ -29,51 +18,96 @@ Early development. Phases 0–1 of the [implementation plan](IMPLEMENTATION_PLAN
 
 - Rust toolchain (`rustup`)
 - CMake (`brew install cmake` on macOS)
-- A GGUF model file (any llama.cpp-compatible model)
 
 ### Download a model
 
 ```sh
-pip install huggingface-hub  # if you don't have it
+pip install huggingface-hub
 huggingface-cli download Qwen/Qwen2.5-0.5B-Instruct-GGUF qwen2.5-0.5b-instruct-q8_0.gguf --local-dir models
 ```
 
-### Run inference
+### Chat
 
 ```sh
-# Basic completion
-cargo run --example complete -p sovereign-inference -- \
-  --model models/qwen2.5-0.5b-instruct-q8_0.gguf \
-  --prompt "What is the capital of France?"
-
-# Streaming
-cargo run --example complete -p sovereign-inference -- \
-  --model models/qwen2.5-0.5b-instruct-q8_0.gguf \
-  --prompt "Explain recursion in three sentences." \
-  --stream --max-tokens 256 --temperature 0.7
+cargo run -p sovereign-cli -- --model models/qwen2.5-0.5b-instruct-q8_0.gguf
 ```
 
-### Options
+This starts an interactive REPL with persistent conversations (stored in `data/sovereign.db`).
+
+### With intent routing
+
+```sh
+cargo run -p sovereign-cli -- \
+  --model models/qwen2.5-0.5b-instruct-q8_0.gguf \
+  --router
+```
+
+The `--router` flag enables LLM-based two-pass intent classification. Simple questions stay on the fast model; complex requests trigger the Planner, which generates a multi-step execution plan.
+
+### With separate fast and primary models
+
+```sh
+cargo run -p sovereign-cli -- \
+  --model models/small-model.gguf \
+  --primary-model models/large-model.gguf \
+  --router
+```
+
+The fast model handles routing and simple queries. The primary model loads on demand for planning and deep reasoning, and auto-unloads after 60 seconds of inactivity.
+
+### CLI options
 
 | Flag | Default | Description |
 |---|---|---|
-| `--model <path>` | required | Path to a GGUF model file |
-| `--prompt <text>` | required | Prompt text |
-| `--stream` | off | Stream tokens as they generate |
-| `--max-tokens <N>` | 256 | Max tokens to generate |
-| `--temperature <T>` | 0.7 | Sampling temperature (0 = deterministic) |
+| `--model <path>` | required | Fast/default GGUF model |
+| `--primary-model <path>` | same as --model | Larger model for deep reasoning |
+| `--data-dir <path>` | `data` | SQLite database directory |
+| `--router` | off | Enable LLM-based intent classification |
+
+### Raw inference (no runtime)
+
+```sh
+cargo run --example complete -p sovereign-inference -- \
+  --model models/qwen2.5-0.5b-instruct-q8_0.gguf \
+  --prompt "Explain recursion in three sentences." \
+  --stream --max-tokens 256
+```
+
+## How it works
+
+```
+User message
+  → Router (fast model, <200ms): classifies intent
+    → SimpleQuery  → fast model responds directly
+    → DeepQuery    → primary model responds
+    → ComplexTask  → Planner generates step DAG
+                   → Executor walks DAG in topological batches
+                   → Each Reason step calls inference
+                   → Branch steps evaluate conditions, skip non-taken paths
+                   → On failure: replan once, then surface error
+                   → Synthesize final answer from all step outputs
+```
+
+Conversations, tasks, and plan state persist in SQLite. The Executor saves progress after each batch — if the process crashes mid-task, the state is recoverable.
 
 ## Architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design. The short version:
-
-Five trait boundaries (`InferenceProvider`, `Router`, `Planner`, `Tool`, `StateStore`) define the system's extension points. A `Runtime` struct assembles trait objects and dispatches messages. Any component can be swapped without touching the others.
+Five trait boundaries define the system's extension points. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
 
 ```
-sovereign-core          Traits, Runtime, Executor (no deps on UI/HTTP)
-sovereign-inference     llama.cpp FFI, model slot management
-sovereign-store         SQLite/Postgres persistence
-sovereign-tools         Built-in tools, MCP adapter, RAG pipeline
-sovereign-server        Axum HTTP/WebSocket API
-sovereign-desktop       Tauri + Svelte desktop app
+sovereign-core          Traits, Runtime, Executor, Planner, Router
+sovereign-inference     llama.cpp FFI, dual-slot model management
+sovereign-store         SQLite (+ in-memory) StateStore
+sovereign-tools         Built-in tools, MCP adapter (planned)
+sovereign-cli           Interactive REPL
+sovereign-server        Axum HTTP/WebSocket API (planned)
+sovereign-desktop       Tauri + Svelte desktop app (planned)
 ```
+
+## Tests
+
+```sh
+cargo test --workspace  # 97 tests
+```
+
+Covers serialization roundtrips, both StateStore implementations, intent parsing, plan generation/validation, executor step dispatch with branching and skip propagation, and full Runtime integration with mock inference.
