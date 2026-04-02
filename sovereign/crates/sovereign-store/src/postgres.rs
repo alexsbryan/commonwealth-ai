@@ -1,0 +1,532 @@
+use async_trait::async_trait;
+use deadpool_postgres::{Config, Pool, Runtime};
+use tokio_postgres::NoTls;
+
+use sovereign_core::error::{Error, Result};
+use sovereign_core::traits::StateStore;
+use sovereign_core::types::*;
+
+pub struct PostgresStateStore {
+    pool: Pool,
+}
+
+impl PostgresStateStore {
+    /// Connect to PostgreSQL and run migrations.
+    pub async fn connect(connection_url: &str) -> Result<Self> {
+        let mut cfg = Config::new();
+        cfg.url = Some(connection_url.to_string());
+
+        let pool = cfg
+            .create_pool(Some(Runtime::Tokio1), NoTls)
+            .map_err(|e| Error::Storage(format!("Failed to create pool: {e}")))?;
+
+        let store = Self { pool };
+        store.run_migrations().await?;
+        Ok(store)
+    }
+
+    async fn run_migrations(&self) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(format!("Pool error: {e}")))?;
+
+        client
+            .batch_execute(
+                r#"
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at BIGINT NOT NULL,
+                metadata TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_messages_convo ON messages(conversation_id, created_at);
+
+            CREATE TABLE IF NOT EXISTS tasks (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                plan TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'running',
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS memories (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+                created_at BIGINT NOT NULL,
+                last_used BIGINT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                content TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                embedding BYTEA,
+                created_at BIGINT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS permissions (
+                tool_id TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                granted BOOLEAN NOT NULL,
+                granted_at BIGINT NOT NULL,
+                PRIMARY KEY (tool_id, scope)
+            );
+
+            CREATE TABLE IF NOT EXISTS routing_log (
+                id SERIAL PRIMARY KEY,
+                message_hash TEXT NOT NULL,
+                classified_as TEXT NOT NULL,
+                was_correct BOOLEAN,
+                latency_ms BIGINT NOT NULL,
+                oicp_match_quality TEXT,
+                oicp_model_id TEXT,
+                created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+            );
+            "#,
+            )
+            .await
+            .map_err(|e| Error::Storage(format!("Migration failed: {e}")))?;
+
+        Ok(())
+    }
+
+    fn now() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64
+    }
+}
+
+#[async_trait]
+impl StateStore for PostgresStateStore {
+    // ─── Conversations ───────────────────────────────────────
+
+    async fn save_message(&self, msg: &Message) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let now = Self::now();
+
+        // Upsert conversation.
+        client
+            .execute(
+                "INSERT INTO conversations (id, title, created_at, updated_at) \
+                 VALUES ($1, NULL, $2, $2) \
+                 ON CONFLICT (id) DO UPDATE SET updated_at = $2",
+                &[&msg.conversation_id, &now],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        let role = msg.role_str();
+        let metadata = msg.metadata.as_ref().map(|m| m.to_string());
+
+        client
+            .execute(
+                "INSERT INTO messages (id, conversation_id, role, content, created_at, metadata) \
+                 VALUES ($1, $2, $3, $4, $5, $6) \
+                 ON CONFLICT (id) DO NOTHING",
+                &[&msg.id, &msg.conversation_id, &role, &msg.content, &msg.created_at, &metadata],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_conversation(&self, id: &str) -> Result<Conversation> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+
+        let row = client
+            .query_opt(
+                "SELECT id, title, created_at, updated_at FROM conversations WHERE id = $1",
+                &[&id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?
+            .ok_or_else(|| Error::NotFound(format!("Conversation {id}")))?;
+
+        let messages = client
+            .query(
+                "SELECT id, conversation_id, role, content, created_at, metadata \
+                 FROM messages WHERE conversation_id = $1 ORDER BY created_at",
+                &[&id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        let msgs: Vec<Message> = messages
+            .iter()
+            .map(|r| {
+                let role_str: String = r.get("role");
+                Message {
+                    id: r.get("id"),
+                    conversation_id: r.get("conversation_id"),
+                    role: if role_str == "user" { Role::User } else if role_str == "system" { Role::System } else { Role::Assistant },
+                    content: r.get("content"),
+                    created_at: r.get("created_at"),
+                    metadata: r.get::<_, Option<String>>("metadata").and_then(|s| serde_json::from_str(&s).ok()),
+                }
+            })
+            .collect();
+
+        Ok(Conversation {
+            id: row.get("id"),
+            title: row.get("title"),
+            messages: msgs,
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
+    async fn list_conversations(&self, limit: usize, offset: usize) -> Result<Vec<Conversation>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+
+        let rows = client
+            .query(
+                "SELECT id, title, created_at, updated_at FROM conversations \
+                 ORDER BY updated_at DESC LIMIT $1 OFFSET $2",
+                &[&(limit as i64), &(offset as i64)],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows
+            .iter()
+            .map(|r| Conversation {
+                id: r.get("id"),
+                title: r.get("title"),
+                messages: vec![],
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+            })
+            .collect())
+    }
+
+    async fn search_messages(&self, query: &str) -> Result<Vec<Message>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+
+        // Use ILIKE for simple text search. For production, use tsvector.
+        let pattern = format!("%{query}%");
+        let rows = client
+            .query(
+                "SELECT id, conversation_id, role, content, created_at, metadata \
+                 FROM messages WHERE content ILIKE $1 ORDER BY created_at DESC LIMIT 50",
+                &[&pattern],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let role_str: String = r.get("role");
+                Message {
+                    id: r.get("id"),
+                    conversation_id: r.get("conversation_id"),
+                    role: if role_str == "user" { Role::User } else if role_str == "system" { Role::System } else { Role::Assistant },
+                    content: r.get("content"),
+                    created_at: r.get("created_at"),
+                    metadata: r.get::<_, Option<String>>("metadata").and_then(|s| serde_json::from_str(&s).ok()),
+                }
+            })
+            .collect())
+    }
+
+    async fn delete_conversation(&self, id: &str) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        // CASCADE deletes messages.
+        client
+            .execute("DELETE FROM conversations WHERE id = $1", &[&id])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    // ─── Tasks ───────────────────────────────────────────────
+
+    async fn save_task(&self, task: &Task) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let plan = serde_json::to_string(&task.plan).unwrap_or_default();
+        let state = serde_json::to_string(&task.completed_steps).unwrap_or_default();
+        let status = format!("{:?}", task.status);
+        let now = Self::now();
+
+        client
+            .execute(
+                "INSERT INTO tasks (id, conversation_id, goal, plan, state, status, created_at, updated_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $7) \
+                 ON CONFLICT (id) DO UPDATE SET plan = $4, state = $5, status = $6, updated_at = $7",
+                &[&task.id, &task.conversation_id, &task.goal, &plan, &state, &status, &now],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_task(&self, id: &str) -> Result<Task> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let row = client
+            .query_opt("SELECT * FROM tasks WHERE id = $1", &[&id])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?
+            .ok_or_else(|| Error::NotFound(format!("Task {id}")))?;
+
+        let plan_str: String = row.get("plan");
+        let state_str: String = row.get("state");
+
+        Ok(Task {
+            id: row.get("id"),
+            conversation_id: row.get("conversation_id"),
+            goal: row.get("goal"),
+            plan: serde_json::from_str(&plan_str).unwrap_or_else(|_| Plan {
+                id: String::new(),
+                goal: String::new(),
+                steps: vec![],
+                edges: vec![],
+            }),
+            completed_steps: serde_json::from_str(&state_str).unwrap_or_default(),
+            status: TaskStatus::Running,
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
+    // ─── Memory ──────────────────────────────────────────────
+
+    async fn save_memory(&self, memory: &Memory) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "INSERT INTO memories (id, content, source, confidence, created_at, last_used) \
+                 VALUES ($1, $2, $3, $4, $5, $5) \
+                 ON CONFLICT (id) DO UPDATE SET content = $2, confidence = $4",
+                &[&memory.id, &memory.content, &memory.source, &memory.confidence, &memory.created_at],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_relevant_memories(&self, context: &str, limit: usize) -> Result<Vec<Memory>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let pattern = format!("%{context}%");
+        let rows = client
+            .query(
+                "SELECT id, content, source, confidence, created_at, last_used \
+                 FROM memories WHERE content ILIKE $1 AND confidence > 0.1 \
+                 ORDER BY confidence DESC, last_used DESC LIMIT $2",
+                &[&pattern, &(limit as i64)],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows.iter().map(|r| Memory {
+            id: r.get("id"),
+            content: r.get("content"),
+            source: r.get("source"),
+            confidence: r.get("confidence"),
+            created_at: r.get("created_at"),
+            last_used: r.get("last_used"),
+        }).collect())
+    }
+
+    async fn get_all_memories(&self) -> Result<Vec<Memory>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let rows = client
+            .query("SELECT id, content, source, confidence, created_at FROM memories ORDER BY created_at DESC", &[])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows.iter().map(|r| Memory {
+            id: r.get("id"),
+            content: r.get("content"),
+            source: r.get("source"),
+            confidence: r.get("confidence"),
+            created_at: r.get("created_at"),
+            last_used: r.get("last_used"),
+        }).collect())
+    }
+
+    async fn delete_memory(&self, id: &str) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client.execute("DELETE FROM memories WHERE id = $1", &[&id]).await.map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client.execute("UPDATE memories SET confidence = $1 WHERE id = $2", &[&confidence, &id]).await.map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client.execute("UPDATE memories SET last_used = $1 WHERE id = $2", &[&timestamp, &id]).await.map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    // ─── Routing Log ─────────────────────────────────────────
+
+    async fn log_routing(&self, message_hash: &str, classified_as: &str, latency_ms: i64) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let now = Self::now();
+        client
+            .execute(
+                "INSERT INTO routing_log (message_hash, classified_as, latency_ms, created_at) VALUES ($1, $2, $3, $4)",
+                &[&message_hash, &classified_as, &latency_ms, &now],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let rows = client
+            .query(
+                "SELECT message_hash, classified_as, was_correct, created_at FROM routing_log WHERE was_correct = false ORDER BY created_at DESC LIMIT $1",
+                &[&(limit as i64)],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows.iter().map(|r| RoutingCorrection {
+            message_hash: r.get("message_hash"),
+            classified_as: r.get("classified_as"),
+            was_correct: r.get::<_, Option<bool>>("was_correct").unwrap_or(false),
+            created_at: r.get("created_at"),
+        }).collect())
+    }
+
+    async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "UPDATE routing_log SET was_correct = $1 WHERE message_hash = $2",
+                &[&was_correct, &message_hash],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    // ─── Documents (RAG) ─────────────────────────────────────
+
+    async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let now = Self::now();
+        for chunk in chunks {
+            let embedding_bytes: Option<Vec<u8>> = chunk.embedding.as_ref().map(|e| {
+                e.iter().flat_map(|f| f.to_le_bytes()).collect()
+            });
+            client
+                .execute(
+                    "INSERT INTO documents (id, source, content, chunk_index, embedding, created_at) \
+                     VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING",
+                    &[&chunk.id, &chunk.source, &chunk.content, &(chunk.chunk_index as i32), &embedding_bytes, &now],
+                )
+                .await
+                .map_err(|e| Error::Storage(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    async fn search_documents(&self, _query_embedding: &[f32], query_text: &str, limit: usize) -> Result<Vec<DocumentChunk>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let pattern = format!("%{query_text}%");
+        let rows = client
+            .query(
+                "SELECT id, source, content, chunk_index FROM documents WHERE content ILIKE $1 LIMIT $2",
+                &[&pattern, &(limit as i64)],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows.iter().map(|r| {
+            let idx: i32 = r.get("chunk_index");
+            DocumentChunk {
+                id: r.get("id"),
+                source: r.get("source"),
+                content: r.get("content"),
+                chunk_index: idx as usize,
+                embedding: None,
+                created_at: Self::now(),
+            }
+        }).collect())
+    }
+
+    async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let rows = client
+            .query("SELECT id, source, content, chunk_index FROM documents WHERE source = $1 ORDER BY chunk_index", &[&source])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows.iter().map(|r| {
+            let idx: i32 = r.get("chunk_index");
+            DocumentChunk {
+                id: r.get("id"),
+                source: r.get("source"),
+                content: r.get("content"),
+                chunk_index: idx as usize,
+                embedding: None,
+                created_at: Self::now(),
+            }
+        }).collect())
+    }
+
+    async fn list_sources(&self) -> Result<Vec<String>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let rows = client
+            .query("SELECT DISTINCT source FROM documents ORDER BY source", &[])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(rows.iter().map(|r| r.get("source")).collect())
+    }
+
+    // ─── Permissions ─────────────────────────────────────────
+
+    async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let row = client
+            .query_opt(
+                "SELECT granted FROM permissions WHERE tool_id = $1 AND scope = $2",
+                &[&tool_id, &scope],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(row.map(|r| r.get("granted")))
+    }
+
+    async fn set_permission(&self, tool_id: &str, scope: &str, granted: bool) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let now = Self::now();
+        client
+            .execute(
+                "INSERT INTO permissions (tool_id, scope, granted, granted_at) VALUES ($1, $2, $3, $4) \
+                 ON CONFLICT (tool_id, scope) DO UPDATE SET granted = $3, granted_at = $4",
+                &[&tool_id, &scope, &granted, &now],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+}

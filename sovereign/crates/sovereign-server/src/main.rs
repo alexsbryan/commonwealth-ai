@@ -19,6 +19,10 @@ use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::StateStore;
 use sovereign_core::{SkillRegistry, ToolRegistry};
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
+use sovereign_inference::health::HealthTracker;
+use sovereign_inference::hybrid::HybridProvider;
+use sovereign_inference::remote::RemoteApiProvider;
+use sovereign_inference::selector::BackendEntry;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::shell::ShellTool;
 
@@ -65,25 +69,99 @@ async fn main() {
         }
     };
 
-    tracing::info!("Loading model: {}", config.inference.model.display());
+    // Load inference — single model or multi-backend hybrid.
+    let inference: Arc<dyn sovereign_core::traits::InferenceProvider> =
+        if config.inference.backends.is_empty() {
+            // Legacy single-model mode.
+            tracing::info!("Loading model: {}", config.inference.model.display());
+            let embedded = match EmbeddedLlamaCpp::load_dual(
+                &config.inference.model,
+                config.inference.primary_model.as_deref(),
+                config.inference.context_size,
+                None,
+            ) {
+                Ok(p) => Arc::new(p),
+                Err(e) => {
+                    eprintln!("Failed to load model: {e}");
+                    std::process::exit(1);
+                }
+            };
+            if config.inference.primary_model.is_some() {
+                embedded.start_idle_monitor(60);
+            }
+            embedded
+        } else {
+            // Multi-backend hybrid mode.
+            tracing::info!(
+                "Hybrid mode: {} backends configured",
+                config.inference.backends.len()
+            );
+            let mut backends: Vec<(
+                Arc<dyn sovereign_core::traits::InferenceProvider>,
+                BackendEntry,
+            )> = Vec::new();
 
-    // Load inference.
-    let inference = match EmbeddedLlamaCpp::load_dual(
-        &config.inference.model,
-        config.inference.primary_model.as_deref(),
-        config.inference.context_size,
-        None,
-    ) {
-        Ok(p) => Arc::new(p),
-        Err(e) => {
-            eprintln!("Failed to load model: {e}");
-            std::process::exit(1);
-        }
-    };
+            for bc in &config.inference.backends {
+                match bc.backend_type.as_str() {
+                    "embedded" => {
+                        let model = bc.model.as_ref().unwrap_or(&config.inference.model);
+                        tracing::info!("  Backend {}: embedded ({})", bc.name, model.display());
+                        match EmbeddedLlamaCpp::load_dual(
+                            model,
+                            bc.primary_model.as_deref(),
+                            bc.context_size,
+                            None,
+                        ) {
+                            Ok(p) => {
+                                let p = Arc::new(p);
+                                if bc.primary_model.is_some() {
+                                    p.start_idle_monitor(60);
+                                }
+                                let entry = BackendEntry::new_local(
+                                    &bc.name,
+                                    Arc::new(HealthTracker::new()),
+                                    bc.priority,
+                                );
+                                backends.push((p, entry));
+                            }
+                            Err(e) => {
+                                tracing::error!("  Failed to load {}: {e}", bc.name);
+                            }
+                        }
+                    }
+                    "remote" => {
+                        let endpoint = bc.endpoint.as_deref().unwrap_or("http://localhost:8000/v1");
+                        let model_id = bc.model_id.as_deref().unwrap_or("default");
+                        tracing::info!("  Backend {}: remote ({})", bc.name, endpoint);
+                        let provider = Arc::new(RemoteApiProvider::new(
+                            endpoint,
+                            bc.api_key.clone(),
+                            model_id,
+                            bc.context_size,
+                        ));
+                        let entry = BackendEntry::new_remote(
+                            &bc.name,
+                            Arc::new(HealthTracker::new()),
+                            bc.priority,
+                            None,
+                        );
+                        backends.push((provider, entry));
+                    }
+                    other => {
+                        tracing::warn!("  Unknown backend type: {other}");
+                    }
+                }
+            }
 
-    if config.inference.primary_model.is_some() {
-        inference.start_idle_monitor(60);
-    }
+            if backends.is_empty() {
+                eprintln!("No backends loaded successfully");
+                std::process::exit(1);
+            }
+
+            let hybrid = Arc::new(HybridProvider::with_defaults(backends));
+            hybrid.start_health_loop(30);
+            hybrid
+        };
 
     // Open database.
     let store: Arc<dyn StateStore> = match SqliteStateStore::open(&config.store.path) {
@@ -106,31 +184,54 @@ async fn main() {
     let skills = Arc::new(skills);
 
     // Build components.
-    let inference_arc: Arc<dyn sovereign_core::traits::InferenceProvider> = inference;
-
     let router: Box<dyn sovereign_core::traits::Router> = Box::new(LlmRouter::new(
-        Arc::clone(&inference_arc),
+        Arc::clone(&inference),
         Arc::clone(&store),
         Arc::clone(&skills),
     ));
 
-    let planner = LlmPlanner::new(Arc::clone(&inference_arc), Arc::clone(&skills));
+    let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
     // Register tools.
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
         Arc::clone(&store),
-        Arc::clone(&inference_arc),
+        Arc::clone(&inference),
     )));
     tools.register(Box::new(sovereign_tools::knowledge::KnowledgeTool::new(
         Arc::clone(&store),
-        Arc::clone(&inference_arc),
+        Arc::clone(&inference),
     )));
     tools.register(Box::new(sovereign_tools::web::WebSearchTool::new(
-        Arc::clone(&inference_arc),
+        Arc::clone(&inference),
     )));
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
+    tools.register(Box::new(sovereign_tools::compute::ComputeTool));
+
+    // Connect MCP servers.
+    for mcp_config in &config.mcp.servers {
+        let args: Vec<&str> = mcp_config.args.iter().map(|s| s.as_str()).collect();
+        match sovereign_tools::mcp::connect_mcp_server(
+            &mcp_config.command,
+            &args,
+            &mcp_config.name,
+        )
+        .await
+        {
+            Ok(mcp_tools) => {
+                let count = mcp_tools.len();
+                for tool in mcp_tools {
+                    tools.register(tool);
+                }
+                tracing::info!("MCP {}: {} tools connected", mcp_config.name, count);
+            }
+            Err(e) => {
+                tracing::warn!("MCP {} failed: {e}", mcp_config.name);
+            }
+        }
+    }
+
     tracing::info!("Tools: {} registered", tools.count());
 
     // Approval channel.
@@ -138,7 +239,7 @@ async fn main() {
     let approval = Arc::new(approval_channel);
 
     let runtime = Arc::new(Runtime::new(
-        inference_arc,
+        inference,
         router,
         Box::new(planner),
         Arc::new(tools),

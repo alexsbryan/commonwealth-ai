@@ -11,3 +11,12 @@ uuid = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rusqlite = { version = "0.35", features = ["bundled"] }
+
+# Optional PostgreSQL support
+tokio-postgres = { version = "0.7", optional = true }
+deadpool-postgres = { version = "0.14", optional = true }
+postgres-types = { version = "0.2", features = ["derive"], optional = true }
+
+[features]
+default = []
+postgres = ["tokio-postgres", "deadpool-postgres", "postgres-types"]

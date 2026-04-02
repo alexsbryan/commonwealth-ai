@@ -10,6 +10,13 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
+glob = "0.3"
+uuid = { workspace = true }
+lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport"], optional = true }
+
+[features]
+default = []
+email = ["lettre"]
 
 [dev-dependencies]
 sovereign-store = { workspace = true }

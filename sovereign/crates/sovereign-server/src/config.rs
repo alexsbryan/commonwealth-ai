@@ -15,6 +15,8 @@ pub struct ServerConfig {
     pub store: StoreSection,
     #[serde(default)]
     pub skills: SkillsSection,
+    #[serde(default)]
+    pub mcp: McpSection,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -37,6 +39,33 @@ pub struct InferenceSection {
     pub primary_model: Option<PathBuf>,
     #[serde(default = "default_context_size")]
     pub context_size: u32,
+    /// Multi-backend configuration. When present, overrides `model`/`primary_model`.
+    #[serde(default)]
+    pub backends: Vec<BackendConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BackendConfig {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub backend_type: String, // "embedded" or "remote"
+    #[serde(default = "default_priority")]
+    pub priority: u32,
+    #[serde(default)]
+    pub is_local: bool,
+    // Embedded fields
+    pub model: Option<PathBuf>,
+    pub primary_model: Option<PathBuf>,
+    // Remote fields
+    pub endpoint: Option<String>,
+    pub api_key: Option<String>,
+    pub model_id: Option<String>,
+    #[serde(default = "default_context_size")]
+    pub context_size: u32,
+}
+
+fn default_priority() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -45,11 +74,27 @@ pub struct StoreSection {
     pub mode: String,
     #[serde(default = "default_store_path")]
     pub path: PathBuf,
+    /// PostgreSQL connection URL (when mode = "postgres").
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct SkillsSection {
     pub dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct McpSection {
+    #[serde(default)]
+    pub servers: Vec<McpServerConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct McpServerConfig {
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 fn default_bind() -> String {
@@ -76,6 +121,7 @@ fn default_store() -> StoreSection {
     StoreSection {
         mode: default_store_mode(),
         path: default_store_path(),
+        url: None,
     }
 }
 

@@ -131,6 +131,8 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
             classified_as   TEXT,
             was_correct     INTEGER,
             latency_ms      INTEGER,
+            oicp_match_quality TEXT,
+            oicp_model_id   TEXT,
             created_at      INTEGER NOT NULL
         );
         ",
