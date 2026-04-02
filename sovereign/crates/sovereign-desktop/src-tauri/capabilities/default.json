@@ -1,0 +1,21 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:default",
+    "shell:default",
+    "dialog:default",
+    "dialog:allow-open",
+    {
+      "identifier": "core:event:allow-emit",
+      "allow": [{ "event": "*" }]
+    },
+    {
+      "identifier": "core:event:allow-listen",
+      "allow": [{ "event": "*" }]
+    }
+  ]
+}

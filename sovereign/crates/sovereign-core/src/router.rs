@@ -87,9 +87,9 @@ impl LlmRouter {
             r#"You are a message classifier. Given a user message, classify it into ONE category.
 
 Categories:
-A) SIMPLE — Can be answered directly from general knowledge in a sentence or two (greetings, facts, brief questions)
+A) SIMPLE — Can be answered directly from general knowledge in a sentence or two (greetings, basic facts, brief questions)
 B) REASONING — Requires analysis, explanation, comparison, creative work, or detailed thought
-C) ACTION — Requires doing something: searching, reading files, sending email, running code, or any multi-step task{tools_note}
+C) ACTION — Requires doing something: searching the web, reading files, sending email, running code, or any multi-step task. IMPORTANT: Questions about recent events, current news, today's information, specific dates/years, prices, scores, or anything that may have changed since training data was collected are ACTION — they require a web search{tools_note}
 
 Conversation context: {context_str}
 User message: "{message}"{corrections_note}{skill_hints}
@@ -183,6 +183,53 @@ Reply with ONLY the letter: A, B, or C"#
         } else {
             parts.join("\n")
         }
+    }
+
+    /// Heuristic check: does this message likely need current/real-time information?
+    /// This catches cases that small models miss in classification.
+    fn needs_current_info(message: &str) -> bool {
+        let lower = message.to_lowercase();
+
+        // Recent/current year references (2024-2030 covers the near window).
+        let has_recent_year = (2024..=2030).any(|y| lower.contains(&y.to_string()));
+
+        // Temporal keywords that suggest the answer changes over time.
+        let temporal_keywords = [
+            "latest",
+            "recent",
+            "current",
+            "today",
+            "yesterday",
+            "this week",
+            "this month",
+            "this year",
+            "right now",
+            "just happened",
+            "breaking",
+            "news",
+            "score",
+            "price",
+            "stock",
+            "weather",
+            "who won",
+            "who is winning",
+            "election",
+            "results",
+        ];
+        let has_temporal = temporal_keywords.iter().any(|kw| lower.contains(kw));
+
+        // Search-imperative phrases.
+        let search_keywords = [
+            "search for",
+            "look up",
+            "find out",
+            "google",
+            "search the web",
+            "web search",
+        ];
+        let has_search_request = search_keywords.iter().any(|kw| lower.contains(kw));
+
+        has_recent_year || has_temporal || has_search_request
     }
 
     /// Call the fast model with a classification prompt.
@@ -280,11 +327,26 @@ impl Router for LlmRouter {
         // Get active skill routing hints.
         let routing_hints = self.skills.routing_hints();
 
-        // Pass 1: Coarse classification.
-        let pass1_prompt =
-            Self::build_pass1_prompt(message, context, available_tools, &corrections, &routing_hints);
-        let pass1_response = self.classify_call(pass1_prompt).await?;
-        let coarse = Self::parse_letter(&pass1_response);
+        // Pre-check: if the message needs current information and we have
+        // a search tool, skip LLM classification and go straight to ACTION.
+        // Small models (0.5B-3B) are unreliable at detecting temporal queries.
+        let has_search = available_tools.iter().any(|t| t.name.contains("search"));
+        let force_action = has_search && Self::needs_current_info(message);
+
+        // Pass 1: Coarse classification (skipped if force_action).
+        let coarse = if force_action {
+            'C'
+        } else {
+            let pass1_prompt = Self::build_pass1_prompt(
+                message,
+                context,
+                available_tools,
+                &corrections,
+                &routing_hints,
+            );
+            let pass1_response = self.classify_call(pass1_prompt).await?;
+            Self::parse_letter(&pass1_response)
+        };
 
         let intent = match coarse {
             'A' => Intent::SimpleQuery,
@@ -451,5 +513,36 @@ mod tests {
 
         let summary = LlmRouter::format_context_summary(&ctx);
         assert!(summary.contains("user: Hello there"));
+    }
+
+    #[test]
+    fn needs_current_info_recent_year() {
+        assert!(LlmRouter::needs_current_info("Who won the Nobel Prize in 2025?"));
+        assert!(LlmRouter::needs_current_info("What happened in 2024?"));
+        assert!(!LlmRouter::needs_current_info("What happened in 1969?"));
+    }
+
+    #[test]
+    fn needs_current_info_temporal_keywords() {
+        assert!(LlmRouter::needs_current_info("What is the latest news?"));
+        assert!(LlmRouter::needs_current_info("What's the current price of Bitcoin?"));
+        assert!(LlmRouter::needs_current_info("Who won the game today?"));
+        assert!(LlmRouter::needs_current_info("What's the weather like?"));
+        assert!(LlmRouter::needs_current_info("Who won the election?"));
+    }
+
+    #[test]
+    fn needs_current_info_search_requests() {
+        assert!(LlmRouter::needs_current_info("Search for restaurants near me"));
+        assert!(LlmRouter::needs_current_info("Can you look up flight prices?"));
+        assert!(LlmRouter::needs_current_info("Google the EU AI Act"));
+    }
+
+    #[test]
+    fn needs_current_info_false_for_general() {
+        assert!(!LlmRouter::needs_current_info("What is recursion?"));
+        assert!(!LlmRouter::needs_current_info("Explain photosynthesis"));
+        assert!(!LlmRouter::needs_current_info("Hello, how are you?"));
+        assert!(!LlmRouter::needs_current_info("Write a poem about the ocean"));
     }
 }

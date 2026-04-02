@@ -1,0 +1,108 @@
+import { invoke } from "@tauri-apps/api/core";
+import type {
+  MessageResponse,
+  ConversationEntry,
+  ConversationDetail,
+  CreateConversationResponse,
+  SearchResult,
+  SkillEntry,
+  DesktopConfig,
+  SetupConfig,
+  DiscoveredModel,
+  DownloadRequest,
+} from "./types";
+
+export async function sendMessage(
+  message: string,
+  conversationId: string,
+): Promise<MessageResponse> {
+  return invoke("send_message", {
+    message,
+    conversationId,
+  });
+}
+
+export async function createConversation(): Promise<CreateConversationResponse> {
+  return invoke("create_conversation");
+}
+
+export async function listConversations(
+  limit?: number,
+  offset?: number,
+): Promise<ConversationEntry[]> {
+  return invoke("list_conversations", { limit, offset });
+}
+
+export async function getConversation(
+  conversationId: string,
+): Promise<ConversationDetail> {
+  return invoke("get_conversation", { conversationId });
+}
+
+export async function deleteConversation(
+  conversationId: string,
+): Promise<void> {
+  return invoke("delete_conversation", { conversationId });
+}
+
+export async function searchMessages(query: string): Promise<SearchResult[]> {
+  return invoke("search_messages", { query });
+}
+
+export async function submitApproval(
+  key: string,
+  approved: boolean,
+): Promise<boolean> {
+  return invoke("submit_approval", { key, approved });
+}
+
+export async function submitInput(
+  key: string,
+  response: string,
+): Promise<boolean> {
+  return invoke("submit_input", { key, response });
+}
+
+export async function listSkills(): Promise<SkillEntry[]> {
+  return invoke("list_skills");
+}
+
+export async function toggleSkill(
+  skillId: string,
+  active: boolean,
+): Promise<void> {
+  return invoke("toggle_skill", { skillId, active });
+}
+
+export async function getConfig(): Promise<DesktopConfig> {
+  return invoke("get_config");
+}
+
+export async function saveConfig(config: DesktopConfig): Promise<void> {
+  return invoke("save_config", { config });
+}
+
+export async function isSetupComplete(): Promise<boolean> {
+  return invoke("is_setup_complete");
+}
+
+export async function completeSetup(setup: SetupConfig): Promise<void> {
+  return invoke("complete_setup", { setup });
+}
+
+export async function searchWeb(
+  query: string,
+  conversationId: string,
+): Promise<MessageResponse> {
+  return invoke("search_web", { query, conversationId });
+}
+
+export async function scanForModels(): Promise<DiscoveredModel[]> {
+  return invoke("scan_for_models");
+}
+
+export async function downloadModel(
+  request: DownloadRequest,
+): Promise<string> {
+  return invoke("download_model", { request });
+}

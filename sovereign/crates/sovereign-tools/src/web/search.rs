@@ -54,29 +54,84 @@ pub async fn search(
 
 // ─── DuckDuckGo (free, zero-config) ───────────────────────────
 
+const BROWSER_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 async fn search_duckduckgo(
     client: &reqwest::Client,
     query: &str,
     max_results: usize,
 ) -> Result<Vec<SearchResult>> {
-    let url = format!(
-        "https://html.duckduckgo.com/html/?q={}",
-        urlencoded(query)
-    );
-
+    // DDG HTML endpoint — use POST like the actual form does.
     let response = client
-        .get(&url)
-        .header("User-Agent", "Mozilla/5.0 (compatible; Sovereign/0.1)")
+        .post("https://html.duckduckgo.com/html/")
+        .header("User-Agent", BROWSER_UA)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Origin", "https://html.duckduckgo.com")
+        .header("Referer", "https://html.duckduckgo.com/")
+        .body(format!("q={}&b=", urlencoded(query)))
         .send()
         .await
         .map_err(|e| Error::Execution(format!("DuckDuckGo search failed: {e}")))?;
 
+    let status = response.status();
     let html = response
         .text()
         .await
         .map_err(|e| Error::Execution(format!("Failed to read DDG response: {e}")))?;
 
-    Ok(parse_ddg_results(&html, max_results))
+    eprintln!(
+        "[web] DDG HTML response: status={}, body_len={}, has_result_a={}",
+        status,
+        html.len(),
+        html.contains("result__a")
+    );
+
+    // If DDG returns a bot-detection page (status 202 or no results markers),
+    // skip straight to the fallback API approach.
+    if status.as_u16() == 202 || (!html.contains("result__a") && !html.contains("result__url") && html.len() < 20000) {
+        eprintln!("[web] DDG appears to be blocking automated requests, using API fallback");
+        return search_duckduckgo_api(client, query, max_results).await;
+    }
+
+    let results = parse_ddg_results(&html, max_results);
+
+    if !results.is_empty() {
+        return Ok(results);
+    }
+
+    // Fallback: try the DuckDuckGo Lite endpoint (POST, different HTML structure).
+    eprintln!("[web] DDG HTML returned no results, trying Lite endpoint");
+
+    let lite_response = client
+        .post("https://lite.duckduckgo.com/lite/")
+        .header("User-Agent", BROWSER_UA)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Origin", "https://lite.duckduckgo.com")
+        .header("Referer", "https://lite.duckduckgo.com/")
+        .body(format!("q={}", urlencoded(query)))
+        .send()
+        .await
+        .map_err(|e| Error::Execution(format!("DuckDuckGo Lite search failed: {e}")))?;
+
+    let lite_status = lite_response.status();
+    let lite_html = lite_response
+        .text()
+        .await
+        .map_err(|e| Error::Execution(format!("Failed to read DDG Lite response: {e}")))?;
+
+    eprintln!(
+        "[web] DDG Lite response: status={}, body_len={}, has_result_link={}",
+        lite_status,
+        lite_html.len(),
+        lite_html.contains("result-link")
+    );
+
+    let lite_results = parse_ddg_lite_results(&lite_html, max_results);
+    Ok(lite_results)
 }
 
 fn parse_ddg_results(html: &str, max_results: usize) -> Vec<SearchResult> {
@@ -152,6 +207,223 @@ fn parse_ddg_results(html: &str, max_results: usize) -> Vec<SearchResult> {
     }
 
     results
+}
+
+/// Parse results from DuckDuckGo Lite (table-based layout).
+/// Each result is in a table row with class "result-link" for the link
+/// and class "result-snippet" for the snippet text.
+fn parse_ddg_lite_results(html: &str, max_results: usize) -> Vec<SearchResult> {
+    let mut results = Vec::new();
+    let mut pos = 0;
+
+    // DDG Lite wraps each result link in: <a rel="nofollow" href="URL" class="result-link">TITLE</a>
+    while results.len() < max_results {
+        let marker = "class=\"result-link\"";
+        let marker_pos = match html[pos..].find(marker) {
+            Some(i) => pos + i,
+            None => break,
+        };
+
+        // Find the href before the marker.
+        let search_region_start = if marker_pos > 200 { marker_pos - 200 } else { 0 };
+        let href_start = match html[search_region_start..marker_pos].rfind("href=\"") {
+            Some(i) => search_region_start + i + 6,
+            None => {
+                pos = marker_pos + marker.len();
+                continue;
+            }
+        };
+        let href_end = match html[href_start..marker_pos].find('"') {
+            Some(i) => href_start + i,
+            None => {
+                pos = marker_pos + marker.len();
+                continue;
+            }
+        };
+        let raw_url = &html[href_start..href_end];
+        let url = extract_ddg_url(raw_url);
+
+        // Title is between > and </a>.
+        let title_start = match html[marker_pos..].find('>') {
+            Some(i) => marker_pos + i + 1,
+            None => {
+                pos = marker_pos + marker.len();
+                continue;
+            }
+        };
+        let title_end = match html[title_start..].find("</a>") {
+            Some(i) => title_start + i,
+            None => {
+                pos = marker_pos + marker.len();
+                continue;
+            }
+        };
+        let title = strip_html_tags(&html[title_start..title_end]);
+
+        // Snippet: look for class="result-snippet" after the title.
+        let snippet_marker = "class=\"result-snippet\"";
+        let snippet = if let Some(s_pos) = html[title_end..].find(snippet_marker) {
+            let s_abs = title_end + s_pos;
+            if let Some(tag_end) = html[s_abs..].find('>') {
+                let text_start = s_abs + tag_end + 1;
+                if let Some(text_end) = html[text_start..].find("</td") {
+                    strip_html_tags(&html[text_start..text_start + text_end])
+                } else if let Some(text_end) = html[text_start..].find("</span") {
+                    strip_html_tags(&html[text_start..text_start + text_end])
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        if !url.is_empty() && !title.is_empty() && url.starts_with("http") {
+            results.push(SearchResult {
+                title: html_decode(&title),
+                url,
+                snippet: html_decode(&snippet).trim().to_string(),
+            });
+        }
+
+        pos = title_end;
+    }
+
+    results
+}
+
+/// Fallback: scrape Google search results when DDG blocks us.
+async fn search_duckduckgo_api(
+    client: &reqwest::Client,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<SearchResult>> {
+    // Use Google search as the actual fallback since DDG is blocking.
+    let url = format!(
+        "https://www.google.com/search?q={}&num={}&hl=en",
+        urlencoded(query),
+        max_results + 2,
+    );
+
+    let response = client
+        .get(&url)
+        .header("User-Agent", BROWSER_UA)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .send()
+        .await
+        .map_err(|e| Error::Execution(format!("Google search failed: {e}")))?;
+
+    let html = response
+        .text()
+        .await
+        .map_err(|e| Error::Execution(format!("Failed to read Google response: {e}")))?;
+
+    let results = parse_google_results(&html, max_results);
+    eprintln!("[web] Google fallback found {} results", results.len());
+    Ok(results)
+}
+
+/// Parse results from Google search HTML.
+/// Google wraps result links in <a href="/url?q=ACTUAL_URL&..."> tags
+/// and titles in <h3> tags.
+fn parse_google_results(html: &str, max_results: usize) -> Vec<SearchResult> {
+    let mut results = Vec::new();
+    let mut pos = 0;
+
+    while results.len() < max_results {
+        // Find the next <a href="/url?q= which indicates a search result link.
+        let marker = "/url?q=";
+        let marker_pos = match html[pos..].find(marker) {
+            Some(i) => pos + i,
+            None => break,
+        };
+
+        // Extract the actual URL (up to & or ").
+        let url_start = marker_pos + marker.len();
+        let url_end = html[url_start..]
+            .find(|c: char| c == '&' || c == '"')
+            .map(|i| url_start + i)
+            .unwrap_or(url_start);
+
+        let url = urldecoded(&html[url_start..url_end]);
+
+        // Skip Google's own links and non-http URLs.
+        if !url.starts_with("http") || url.contains("google.com") || url.contains("accounts.google") {
+            pos = url_end;
+            continue;
+        }
+
+        // Find an <h3> tag near this link for the title.
+        let search_end = (marker_pos + 500).min(html.len());
+        let search_start = if marker_pos > 500 { marker_pos - 500 } else { 0 };
+        let region = &html[search_start..search_end];
+
+        let title = if let Some(h3_start) = region.find("<h3") {
+            let h3_region = &region[h3_start..];
+            if let Some(tag_end) = h3_region.find('>') {
+                let text_start = tag_end + 1;
+                if let Some(text_end) = h3_region[text_start..].find("</h3>") {
+                    strip_html_tags(&h3_region[text_start..text_start + text_end])
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        // Try to find a snippet (Google uses <span> blocks near the result).
+        let snippet_region_end = (url_end + 2000).min(html.len());
+        let snippet_region = &html[url_end..snippet_region_end];
+        let snippet = extract_google_snippet(snippet_region);
+
+        if !title.is_empty() {
+            results.push(SearchResult {
+                title: html_decode(&title),
+                url,
+                snippet: html_decode(&snippet),
+            });
+        }
+
+        pos = url_end;
+    }
+
+    results
+}
+
+/// Extract a snippet from the HTML region after a Google result link.
+fn extract_google_snippet(region: &str) -> String {
+    // Google puts snippets in spans with various data- attributes.
+    // Look for longer text content in <span> tags.
+    let mut best = String::new();
+
+    let mut search_pos = 0;
+    while let Some(span_start) = region[search_pos..].find("<span") {
+        let abs = search_pos + span_start;
+        if let Some(tag_end) = region[abs..].find('>') {
+            let text_start = abs + tag_end + 1;
+            if let Some(text_end) = region[text_start..].find("</span>") {
+                let text = strip_html_tags(&region[text_start..text_start + text_end]);
+                let trimmed = text.trim();
+                // Keep the longest span content as the snippet.
+                if trimmed.len() > best.len() && trimmed.len() > 40 && trimmed.len() < 500 {
+                    best = trimmed.to_string();
+                }
+                search_pos = text_start + text_end;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    best
 }
 
 fn extract_ddg_url(raw: &str) -> String {

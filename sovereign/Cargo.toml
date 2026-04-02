@@ -6,7 +6,7 @@ members = [
     "crates/sovereign-store",
     "crates/sovereign-tools",
     "crates/sovereign-server",
-    "crates/sovereign-desktop",
+    "crates/sovereign-desktop/src-tauri",
     "crates/sovereign-cli",
 ]
 

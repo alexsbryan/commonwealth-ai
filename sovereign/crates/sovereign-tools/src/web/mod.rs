@@ -15,9 +15,9 @@ use self::search::{SearchBackend, SearchResult};
 
 // ─── WebSearchTool ─────────────────────────────────────────────
 
-/// Multi-stage web search pipeline:
-/// 1. Query decomposition (Fast slot) → 2-3 sub-queries
-/// 2. Search execution (DuckDuckGo) → results per sub-query
+/// Web search pipeline:
+/// 1. Convert query to search keywords (Fast slot)
+/// 2. Search execution → results
 /// 3. Content extraction (top URLs) → clean text
 /// 4. Synthesis (Primary slot) → cited answer
 pub struct WebSearchTool {
@@ -50,43 +50,55 @@ impl WebSearchTool {
         }
     }
 
-    /// Stage 1: Decompose the user query into focused sub-queries.
-    async fn decompose_query(&self, query: &str) -> Result<Vec<String>> {
+    /// Convert a natural language question into effective search keywords.
+    /// A simple LLM call that strips conversational fluff and produces
+    /// 1-2 clean keyword queries (not sub-queries that reference each other).
+    async fn to_search_queries(&self, query: &str) -> Vec<String> {
         let request = CompletionRequest {
             prompt: format!(
-                "Break this search query into 2-3 focused sub-queries that would find the most relevant information.\n\n\
-                 Query: \"{query}\"\n\n\
-                 Return each sub-query on its own line. No numbering, no bullets, just the queries."
+                "Convert this into 1-2 concise search engine queries (keywords only, no full sentences). \
+                 Each query must be independent and self-contained.\n\n\
+                 Input: \"{query}\"\n\n\
+                 Output one query per line, nothing else."
             ),
             system_message: Some(
-                "You generate search queries. Output 2-3 search queries, one per line. Nothing else.".to_string()
+                "You convert questions into short search engine queries. \
+                 Output keywords only, one query per line."
+                    .to_string(),
             ),
             preferred_speed: Speed::Fast,
-            max_tokens: Some(100),
-            temperature: Some(0.3),
+            max_tokens: Some(60),
+            temperature: Some(0.0),
             structured_output: None,
             oicp: None,
         };
 
-        let response = self.inference.complete(&request).await?;
+        match self.inference.complete(&request).await {
+            Ok(response) => {
+                let queries: Vec<String> = response
+                    .text
+                    .lines()
+                    .map(|l| {
+                        l.trim()
+                            .trim_start_matches(|c: char| c == '-' || c == '*' || c.is_numeric() || c == '.' || c == ')')
+                            .trim()
+                            .to_string()
+                    })
+                    .filter(|l| !l.is_empty() && l.len() > 3 && l.len() < 200)
+                    .take(2)
+                    .collect();
 
-        let queries: Vec<String> = response
-            .text
-            .lines()
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty() && l.len() > 3)
-            .take(3)
-            .collect();
-
-        if queries.is_empty() {
-            // Fallback to the original query.
-            Ok(vec![query.to_string()])
-        } else {
-            Ok(queries)
+                if queries.is_empty() {
+                    vec![query.to_string()]
+                } else {
+                    queries
+                }
+            }
+            Err(_) => vec![query.to_string()],
         }
     }
 
-    /// Stage 2: Execute searches and collect results.
+    /// Execute searches and collect results.
     async fn execute_searches(&self, queries: &[String]) -> Vec<SearchResult> {
         let mut all_results = Vec::new();
         let mut seen_urls = std::collections::HashSet::new();
@@ -109,20 +121,19 @@ impl WebSearchTool {
         all_results
     }
 
-    /// Stage 3: Fetch and extract content from top URLs.
-    async fn extract_content(&self, results: &[SearchResult], max_pages: usize) -> Vec<(String, String, String)> {
+    /// Fetch and extract content from top URLs.
+    async fn extract_content(
+        &self,
+        results: &[SearchResult],
+        max_pages: usize,
+    ) -> Vec<(String, String, String)> {
         let mut extracted = Vec::new();
 
         for result in results.iter().take(max_pages) {
             match fetch_and_extract(&self.client, &result.url).await {
                 Ok(text) => {
                     if text.len() > 100 {
-                        // Only keep pages with meaningful content.
-                        extracted.push((
-                            result.title.clone(),
-                            result.url.clone(),
-                            text,
-                        ));
+                        extracted.push((result.title.clone(), result.url.clone(), text));
                     }
                 }
                 Err(_) => {
@@ -141,7 +152,7 @@ impl WebSearchTool {
         extracted
     }
 
-    /// Stage 4: Synthesize a cited answer from extracted content.
+    /// Synthesize a cited answer from extracted content.
     async fn synthesize(
         &self,
         query: &str,
@@ -149,7 +160,7 @@ impl WebSearchTool {
     ) -> Result<String> {
         if sources.is_empty() {
             return Ok(format!(
-                "I searched the web for \"{query}\" but couldn't find relevant results."
+                "I searched the web for \"{query}\" but couldn't extract content from the results."
             ));
         }
 
@@ -241,18 +252,34 @@ impl Tool for WebSearchTool {
 
         eprintln!("[web] Searching: \"{query}\"");
 
-        // 1. Decompose query.
-        let sub_queries = self.decompose_query(query).await?;
-        eprintln!("[web] Sub-queries: {}", sub_queries.join(", "));
+        // 1. Convert to search keywords.
+        let search_queries = self.to_search_queries(query).await;
+        eprintln!("[web] Search queries: {}", search_queries.join(" | "));
 
         // 2. Execute searches.
-        let results = self.execute_searches(&sub_queries).await;
+        let results = self.execute_searches(&search_queries).await;
         eprintln!("[web] Found {} results", results.len());
 
         if results.is_empty() {
-            return Ok(StepOutput::Text(format!(
-                "No web search results found for \"{query}\"."
-            )));
+            // Last resort: try searching with the raw query directly.
+            eprintln!("[web] Retrying with raw query");
+            let raw_results =
+                search::search(&self.client, &self.backend, query, 5)
+                    .await
+                    .unwrap_or_default();
+            eprintln!("[web] Raw query found {} results", raw_results.len());
+
+            if raw_results.is_empty() {
+                return Ok(StepOutput::Text(format!(
+                    "Web search returned no results for \"{query}\". \
+                     The search provider may be temporarily unavailable. \
+                     Try again or configure a different search backend (Brave or Tavily) in Settings."
+                )));
+            }
+
+            let extracted = self.extract_content(&raw_results, 4).await;
+            let answer = self.synthesize(query, &extracted).await?;
+            return Ok(StepOutput::Text(answer));
         }
 
         // 3. Extract content from top pages.

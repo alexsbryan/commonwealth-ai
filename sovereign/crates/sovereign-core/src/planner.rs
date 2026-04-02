@@ -153,19 +153,22 @@ SCHEMA:
 {
   "goal": "<restate the goal>",
   "steps": [
-    {"id": 0, "description": "<what this step does>", "kind": "reason", "prompt": "<detailed prompt>", "speed": "slow", "inputs": []},
+    {"id": 0, "description": "<what>", "kind": "tool", "tool_id": "<tool name>", "params": {"query": "<search query>"}, "inputs": []},
     {"id": 1, "description": "<what>", "kind": "reason", "prompt": "Given the following: {0.output}\n<prompt>", "speed": "slow", "inputs": [{"step_id": 0, "key": "output"}]}
   ],
   "edges": [[0, 1]]
 }
+
+STEP KINDS:
+- "reason": Thinking/analysis. Requires "prompt" and "speed" ("fast" or "slow").
+- "tool": Execute a tool. Requires "tool_id" (must match an available tool name) and "params" (JSON object passed to the tool).
 
 RULES:
 - Step IDs start at 0 and increment by 1
 - "edges" lists [from, to] pairs showing dependencies
 - Use {N.output} in "prompt" to reference step N's output
 - "inputs" must list every step referenced in the prompt
-- "speed" is "fast" or "slow"
-- Only use kind "reason" (thinking/analysis steps)
+- When a question needs current or real-time information, use the web_search tool with a "query" param
 - Keep plans simple: 2-5 steps
 - Output ONLY the JSON object, nothing else"#;
 
@@ -182,8 +185,12 @@ fn build_plan_prompt(
     }
 
     if !available_tools.is_empty() {
-        let tools: Vec<&str> = available_tools.iter().map(|t| t.name.as_str()).collect();
-        prompt.push_str(&format!("\n\nAvailable tools: {}", tools.join(", ")));
+        let tools: String = available_tools
+            .iter()
+            .map(|t| format!("- {} — {}", t.name, t.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+        prompt.push_str(&format!("\n\nAvailable tools:\n{tools}"));
     }
 
     if !error_feedback.is_empty() {
@@ -290,6 +297,18 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
         };
 
         let kind = match kind_str {
+            "tool" => {
+                let tool_id = step_obj
+                    .get("tool_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let params = step_obj
+                    .get("params")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+                StepKind::Tool { tool_id, params }
+            }
             "branch" => {
                 let condition = step_obj
                     .get("condition")
