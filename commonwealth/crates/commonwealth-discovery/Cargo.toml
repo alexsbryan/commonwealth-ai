@@ -11,3 +11,20 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# Join key generation
+blake3 = "1"
+getrandom = "0.3"
+hex = "0.4"
+
+# mDNS
+mdns-sd = "0.12"
+
+# TLS certificate generation
+rcgen = "0.13"
+
+# Gossip peer selection
+rand = "0.9"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
