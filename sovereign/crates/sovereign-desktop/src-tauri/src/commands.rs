@@ -18,6 +18,8 @@ pub struct MessageResponse {
     pub role: String,
     pub content: String,
     pub task: Option<TaskSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -50,6 +52,8 @@ pub struct MessageEntry {
     pub role: String,
     pub content: String,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -70,6 +74,7 @@ pub struct SkillEntry {
     pub name: String,
     pub description: String,
     pub active: bool,
+    pub trust_level: String,
 }
 
 #[derive(Deserialize)]
@@ -87,6 +92,29 @@ pub struct SetupConfig {
     pub search_provider: Option<String>,
     #[serde(default)]
     pub search_api_key: Option<String>,
+    #[serde(default)]
+    pub selected_tier: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct CorpusEntry {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub size_indexed_gb: f64,
+    pub license: String,
+    pub tiers: Vec<String>,
+    pub status: String,
+    pub chunks_count: Option<i64>,
+    pub trust_level: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct CorpusProgressPayload {
+    pub corpus_id: String,
+    pub phase: String,
+    pub percent: f32,
+    pub chunks_processed: usize,
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -96,6 +124,23 @@ fn now_epoch() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
+}
+
+/// The bundled corpus manifest, compiled into the binary.
+const BUNDLED_CORPORA_TOML: &str = include_str!("../../../../data/corpora.toml");
+
+/// Load the corpus registry. Tries a user-local file first, falls back to the
+/// bundled manifest compiled into the binary.
+pub fn load_corpus_registry(data_dir: &Path) -> Option<sovereign_tools::corpus::CorpusRegistry> {
+    // Check if the user has a custom corpora.toml in their data dir.
+    let user_path = data_dir.join("corpora.toml");
+    if user_path.exists() {
+        if let Ok(reg) = sovereign_tools::corpus::CorpusRegistry::load(&user_path) {
+            return Some(reg);
+        }
+    }
+    // Fall back to the bundled manifest.
+    sovereign_tools::corpus::CorpusRegistry::from_toml(BUNDLED_CORPORA_TOML).ok()
 }
 
 macro_rules! require_runtime {
@@ -134,10 +179,11 @@ pub async fn send_message(
 
     let role = response.message.role_str().to_string();
     Ok(MessageResponse {
-        message_id: response.message.id,
+        message_id: response.message.id.clone(),
         role,
-        content: response.message.content,
+        content: response.message.content.clone(),
         task: task_summary,
+        metadata: response.message.metadata,
     })
 }
 
@@ -202,6 +248,7 @@ pub async fn get_conversation(
                     role,
                     content: m.content,
                     created_at: m.created_at,
+                    metadata: m.metadata,
                 }
             })
             .collect(),
@@ -287,6 +334,7 @@ pub async fn list_skills(state: State<'_, Arc<AppState>>) -> Result<Vec<SkillEnt
             id: s.id.clone(),
             name: s.name.clone(),
             description: s.description.clone(),
+            trust_level: format!("{:?}", s.trust_level).to_lowercase(),
         })
         .collect())
 }
@@ -352,12 +400,28 @@ pub async fn complete_setup(
         config.search_backend.provider = provider;
     }
     config.search_backend.api_key = setup.search_api_key;
+    config.selected_tier = setup.selected_tier.clone();
     config.setup_complete = true;
 
     config.save()?;
     drop(config);
 
-    state::bootstrap(&state).await
+    state::bootstrap(&state).await?;
+
+    // Trigger background corpus installs for the selected tier.
+    if let Some(ref tier) = setup.selected_tier {
+        let manager_guard = state.corpus_manager.read().await;
+        if let Some(ref manager) = *manager_guard {
+            let manager = Arc::clone(manager);
+            let tier = tier.clone();
+            let state_ref = Arc::clone(&state);
+            tokio::spawn(async move {
+                start_tier_installs(&state_ref, &manager, &tier).await;
+            });
+        }
+    }
+
+    Ok(())
 }
 
 // ─── Web Search ─────────────────────────────────────────────
@@ -379,6 +443,7 @@ pub async fn search_web(
         content: query.clone(),
         created_at: now_epoch(),
         metadata: None,
+        version: now_epoch(),
     };
     runtime
         .store
@@ -386,11 +451,12 @@ pub async fn search_web(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Execute web_search tool directly.
+    // Execute search tool directly.
     let tool = runtime
         .tools
-        .get("web_search")
-        .map_err(|_| "Web search tool is not enabled.".to_string())?;
+        .get("search")
+        .or(runtime.tools.get("web_search"))
+        .map_err(|_| "Search tool is not enabled.".to_string())?;
 
     let params = serde_json::json!({ "query": query });
     let ctx = sovereign_core::types::ToolContext {
@@ -406,7 +472,11 @@ pub async fn search_web(
 
     let content = match output {
         sovereign_core::types::StepOutput::Text(t) => t,
-        sovereign_core::types::StepOutput::Json(v) => v.to_string(),
+        sovereign_core::types::StepOutput::Json(ref v) => v
+            .get("answer")
+            .and_then(|a| a.as_str())
+            .unwrap_or_else(|| "No results found.")
+            .to_string(),
         _ => "No results found.".to_string(),
     };
 
@@ -419,6 +489,7 @@ pub async fn search_web(
         content: content.clone(),
         created_at: now_epoch(),
         metadata: None,
+        version: now_epoch(),
     };
     runtime
         .store
@@ -431,6 +502,7 @@ pub async fn search_web(
         role: "assistant".to_string(),
         content,
         task: None,
+        metadata: None,
     })
 }
 
@@ -625,4 +697,179 @@ pub async fn download_model(
     );
 
     Ok(dest.display().to_string())
+}
+
+// ─── Corpus Management ──────────────────────────────────────
+
+#[tauri::command]
+pub async fn list_corpora(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<CorpusEntry>, String> {
+    let config = state.config.read().await;
+    let data_dir = config.data_dir.clone();
+    drop(config);
+
+    // Load the registry — this works even without a running corpus manager.
+    let registry = match load_corpus_registry(&data_dir) {
+        Some(r) => r,
+        None => return Ok(Vec::new()),
+    };
+
+    // Get installed states (from corpus manager if available, else empty).
+    let manager_guard = state.corpus_manager.read().await;
+    let installed = match *manager_guard {
+        Some(ref m) => m.installed().await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    drop(manager_guard);
+
+    let installing = state.install_progress.read().await;
+
+    let mut entries = Vec::new();
+    for def in registry.list_corpora() {
+        let is_installing = installing
+            .get(&def.id)
+            .map_or(false, |p| p.phase != "complete" && p.phase != "failed");
+        let inst = installed.iter().find(|s| s.corpus_id == def.id);
+
+        let status = if inst.is_some() {
+            "installed".to_string()
+        } else if is_installing {
+            "installing".to_string()
+        } else {
+            "not_installed".to_string()
+        };
+
+        entries.push(CorpusEntry {
+            id: def.id.clone(),
+            name: def.name.clone(),
+            description: def.description.clone(),
+            size_indexed_gb: def.size_indexed_gb,
+            license: def.license.clone(),
+            tiers: def.tiers.clone(),
+            status,
+            chunks_count: inst.map(|s| s.chunks_count),
+            trust_level: format!("{:?}", def.trust_level()).to_lowercase(),
+        });
+    }
+
+    Ok(entries)
+}
+
+#[tauri::command]
+pub async fn install_corpus(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<(), String> {
+    let manager_guard = state.corpus_manager.read().await;
+    let manager = match *manager_guard {
+        Some(ref m) => Arc::clone(m),
+        None => return Err("Corpus manager not initialized".to_string()),
+    };
+    drop(manager_guard);
+
+    let state_ref = Arc::clone(&state);
+    let cid = corpus_id.clone();
+
+    tokio::spawn(async move {
+        let progress_cid = cid.clone();
+        let progress_handle = app_handle.clone();
+        let progress_state = Arc::clone(&state_ref);
+
+        let progress_cb: sovereign_tools::corpus::ProgressCallback = std::sync::Arc::new(
+            move |p: sovereign_tools::corpus::CorpusProgress| {
+                let payload = CorpusProgressPayload {
+                    corpus_id: progress_cid.clone(),
+                    phase: match &p.phase {
+                        sovereign_tools::corpus::CorpusInstallPhase::Downloading => {
+                            "downloading".to_string()
+                        }
+                        sovereign_tools::corpus::CorpusInstallPhase::Parsing => {
+                            "parsing".to_string()
+                        }
+                        sovereign_tools::corpus::CorpusInstallPhase::Complete => {
+                            "complete".to_string()
+                        }
+                        sovereign_tools::corpus::CorpusInstallPhase::Failed(_) => {
+                            "failed".to_string()
+                        }
+                    },
+                    percent: p.percent,
+                    chunks_processed: p.chunks_processed,
+                };
+                // Update progress map.
+                if let Ok(mut map) = progress_state.install_progress.try_write() {
+                    map.insert(payload.corpus_id.clone(), payload.clone());
+                }
+                let _ = progress_handle.emit("corpus-progress", payload);
+            },
+        );
+
+        match manager.install_corpus(&cid, Some(progress_cb)).await {
+            Ok(_) => tracing::info!("Corpus '{cid}' installed"),
+            Err(e) => {
+                tracing::error!("Corpus '{cid}' install failed: {e}");
+                let payload = CorpusProgressPayload {
+                    corpus_id: cid,
+                    phase: "failed".to_string(),
+                    percent: 0.0,
+                    chunks_processed: 0,
+                };
+                let _ = app_handle.emit("corpus-progress", payload);
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_corpus(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<u64, String> {
+    let manager_guard = state.corpus_manager.read().await;
+    let manager = match *manager_guard {
+        Some(ref m) => m,
+        None => return Err("Corpus manager not initialized".to_string()),
+    };
+    manager
+        .remove_corpus(&corpus_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_corpus_progress(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<Option<CorpusProgressPayload>, String> {
+    let map = state.install_progress.read().await;
+    Ok(map.get(&corpus_id).cloned())
+}
+
+/// Start background installs for all corpora in the given tier.
+async fn start_tier_installs(
+    state: &AppState,
+    manager: &sovereign_tools::corpus::CorpusManager,
+    tier: &str,
+) {
+    // Load registry to get corpora for the tier.
+    let data_dir = state.config.read().await.data_dir.clone();
+    let registry = match load_corpus_registry(&data_dir) {
+        Some(r) => r,
+        None => {
+            tracing::warn!("Cannot load corpus registry for tier install");
+            return;
+        }
+    };
+
+    let corpora = registry.corpora_for_tier(tier);
+    for def in corpora {
+        tracing::info!("Queuing corpus install: {}", def.id);
+        if let Err(e) = manager.install_corpus(&def.id, None).await {
+            tracing::warn!("Failed to install corpus '{}': {e}", def.id);
+        }
+    }
 }

@@ -1,24 +1,61 @@
 [skill]
 id = "research-analyst"
 name = "Research & Analysis"
-version = "0.1.0"
-description = "Deep multi-source research with citations and source evaluation."
+version = "0.2.0"
+description = "Deep multi-source research with citations and source evaluation. Searches local knowledge bases first, supplements with web when needed."
 
 [routing]
 trigger_phrases = [
     "research", "investigate", "compare sources", "what do experts say",
-    "find evidence", "literature on", "what's the consensus"
+    "find evidence", "literature on", "what's the consensus",
+    "what has been published", "survey the field", "explain this concept"
 ]
 default_intent = "ComplexTask"
 min_confidence = 0.75
 
 [[planner.templates]]
+name = "literature_survey"
+trigger = "User wants to know what has been published on a topic"
+steps = """
+1. Search local knowledge bases for the topic, focusing on
+   OpenAlex abstracts and Wikipedia context.
+2. Assess coverage: does the local corpus show the landscape?
+3. If sufficient, synthesize a survey with citations.
+4. If gaps exist, supplement with web search if available.
+5. Present: key authors, central debates, methods, open questions.
+"""
+
+[[planner.templates]]
+name = "concept_explanation"
+trigger = "User wants to understand a concept, theory, or framework"
+steps = """
+1. Search local knowledge bases, prioritizing Stanford
+   Encyclopedia of Philosophy and Wikipedia.
+2. Synthesize: what it is, who originated it, related concepts,
+   main critiques.
+3. Web search only if concept is very recent (post-2024).
+"""
+
+[[planner.templates]]
+name = "methodology_help"
+trigger = "User needs help with research methodology or analysis approach"
+steps = """
+1. Search local knowledge bases for methodology references
+   and established frameworks.
+2. Identify relevant textbooks, handbooks, or survey papers
+   from OpenAlex abstracts.
+3. Synthesize practical guidance with citations to authoritative sources.
+4. Supplement with web search only for very specific or recent methods.
+"""
+
+[[planner.templates]]
 name = "multi_source_research"
 trigger = "User wants information synthesized from multiple sources"
 steps = """
-1. Decompose the question into 3-5 focused sub-queries.
-2. Execute sub-queries in parallel via web_search.
-3. Extract full content from the top results per sub-query.
+1. Search local knowledge bases for the topic across all corpora.
+2. Assess coverage: are the local results sufficient?
+3. If gaps exist, decompose the question into 2-3 focused sub-queries
+   and supplement with web search.
 4. Cross-reference findings: identify agreement, contradiction, and gaps.
 5. Synthesize into a cited response. Every claim cites its source.
    If sources conflict, present both positions with credibility assessment.
@@ -28,20 +65,18 @@ steps = """
 name = "document_analysis"
 trigger = "User asks about content in their documents"
 steps = """
-1. Search the user's document corpus via the knowledge tool.
-2. If document results are insufficient, supplement with web_search.
+1. Search the user's document corpus via the search tool.
+2. If document results are insufficient, supplement with web search.
 3. Synthesize with clear attribution: distinguish document-sourced
    claims from web-sourced claims.
 """
 
 [tools]
-required = ["web_search"]
-optional = ["knowledge"]
+required = ["search"]
+optional = ["document"]
 
-[tools.web_search]
-min_sub_queries = 3
-max_sub_queries = 5
-prefer_backends = ["tavily", "brave", "duckduckgo"]
+[tools.search]
+prefer_local = true
 
 [prompts]
 synthesis = """
@@ -53,6 +88,8 @@ You are a research analyst. Your standards:
 - If the evidence is insufficient to answer confidently, say so.
   Do not hedge with vague qualifiers — be specific about what is
   and isn't known.
+- Prefer local knowledge base sources (Wikipedia, OpenAlex, SEP)
+  over web results when both are available.
 """
 
 [inference]
@@ -76,3 +113,5 @@ For research conversations, extract:
 Do NOT extract: intermediate search results, raw findings that
 weren't synthesized into a conclusion.
 """
+confidence_decay_per_month = 0.05
+prune_threshold = 0.1

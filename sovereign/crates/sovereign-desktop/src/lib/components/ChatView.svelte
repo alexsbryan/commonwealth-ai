@@ -5,12 +5,14 @@
     searchWeb,
     getConversation,
     createConversation,
+    listCorpora,
   } from "../api";
   import type {
     MessageEntry,
     TaskStep,
     ApprovalRequestPayload,
     UserInputRequestPayload,
+    CorpusEntry,
   } from "../types";
   import MessageBubble from "./MessageBubble.svelte";
   import TaskProgress from "./TaskProgress.svelte";
@@ -179,10 +181,20 @@
       <div class="empty-state">
         <h2>Sovereign</h2>
         <p>Start a conversation. Everything runs on your machine.</p>
+        {#await listCorpora() then corpora}
+          {#if corpora.filter((c: CorpusEntry) => c.status === "installed").length > 0}
+            <p class="kb-note">
+              Knowledge bases:
+              {corpora.filter((c: CorpusEntry) => c.status === "installed").map((c: CorpusEntry) => c.name).join(", ")}
+            </p>
+          {/if}
+        {:catch}
+          <!-- silently ignore if corpus listing fails -->
+        {/await}
       </div>
     {:else}
       {#each messages as msg (msg.id)}
-        <MessageBubble role={msg.role} content={msg.content} />
+        <MessageBubble role={msg.role} content={msg.content} metadata={msg.metadata} />
       {/each}
 
       <TaskProgress steps={taskSteps} />
@@ -261,6 +273,12 @@
     font-weight: 300;
     margin-bottom: 0.5rem;
     color: var(--text-secondary);
+  }
+
+  .empty-state :global(.kb-note) {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
   }
 
   .input-area {

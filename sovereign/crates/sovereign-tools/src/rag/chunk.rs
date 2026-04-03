@@ -119,7 +119,7 @@ fn split_oversized_segment(
         // Find the best split point within MAX_CHUNK_CHARS.
         let split_at = find_split_point(remaining, MAX_CHUNK_CHARS);
 
-        let (chunk_text, rest) = remaining.split_at(split_at);
+        let (chunk_text, _) = remaining.split_at(split_at);
         chunks.push(TextChunk {
             content: chunk_text.trim().to_string(),
             index: *chunk_index,

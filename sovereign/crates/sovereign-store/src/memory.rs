@@ -69,6 +69,8 @@ impl StateStore for InMemoryStateStore {
                 messages: Vec::new(),
                 created_at: now(),
                 updated_at: now(),
+                version: 0,
+                deleted_at: None,
             });
 
         if let Some(convo) = convos.get_mut(&msg.conversation_id) {

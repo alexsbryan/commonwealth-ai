@@ -195,6 +195,8 @@ async fn document_tool_summarize_small() {
             embedding: None,
             created_at: 0,
             source_type: SourceType::UserDocument,
+            version: 0,
+            deleted_at: None,
         }])
         .await
         .unwrap();
@@ -234,6 +236,8 @@ async fn document_tool_summarize_large() {
             embedding: None,
             created_at: 0,
             source_type: SourceType::UserDocument,
+            version: 0,
+            deleted_at: None,
         })
         .collect();
 

@@ -2,6 +2,7 @@ pub mod gutenberg;
 pub mod html_crawl;
 pub mod manager;
 pub mod openalex;
+pub mod parquet_reader;
 pub mod registry;
 pub mod stackexchange;
 pub mod wikipedia;
@@ -56,6 +57,8 @@ fn make_chunk(
         source_type: SourceType::Corpus {
             corpus_id: corpus_id.to_string(),
         },
+        version: 0,
+        deleted_at: None,
     }
 }
 

@@ -10,6 +10,8 @@ import type {
   SetupConfig,
   DiscoveredModel,
   DownloadRequest,
+  CorpusEntry,
+  CorpusProgressPayload,
 } from "./types";
 
 export async function sendMessage(
@@ -105,4 +107,24 @@ export async function downloadModel(
   request: DownloadRequest,
 ): Promise<string> {
   return invoke("download_model", { request });
+}
+
+// ─── Corpus Management ──────────────────────────────────────
+
+export async function listCorpora(): Promise<CorpusEntry[]> {
+  return invoke("list_corpora");
+}
+
+export async function installCorpus(corpusId: string): Promise<void> {
+  return invoke("install_corpus", { corpusId });
+}
+
+export async function removeCorpus(corpusId: string): Promise<number> {
+  return invoke("remove_corpus", { corpusId });
+}
+
+export async function getCorpusProgress(
+  corpusId: string,
+): Promise<CorpusProgressPayload | null> {
+  return invoke("get_corpus_progress", { corpusId });
 }

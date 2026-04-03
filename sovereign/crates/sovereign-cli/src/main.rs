@@ -298,10 +298,6 @@ async fn main() {
         Arc::clone(&store),
         Arc::clone(&inference_arc),
     )));
-    tools.register(Box::new(sovereign_tools::knowledge::KnowledgeTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference_arc),
-    )));
     // Select search backend: Tavily > Brave > DuckDuckGo (free default).
     let search_backend = if let Some(ref key) = args.tavily_api_key {
         eprintln!("Search: Tavily");
@@ -317,7 +313,8 @@ async fn main() {
         eprintln!("Search: DuckDuckGo (free)");
         sovereign_tools::web::search::SearchBackend::DuckDuckGo
     };
-    tools.register(Box::new(sovereign_tools::web::WebSearchTool::with_backend(
+    tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
+        Arc::clone(&store),
         Arc::clone(&inference_arc),
         search_backend,
     )));

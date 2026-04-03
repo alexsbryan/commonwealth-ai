@@ -26,6 +26,8 @@ pub async fn build_context(
             messages: Vec::new(),
             created_at: now(),
             updated_at: now(),
+            version: 0,
+            deleted_at: None,
         },
         Err(e) => return Err(e),
     };

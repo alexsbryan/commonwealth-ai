@@ -1,7 +1,11 @@
 <script lang="ts">
+  import { completeSetup } from "../api";
+  import type { SetupConfig } from "../types";
   import ResearchSetup from "./ResearchSetup.svelte";
   import AssistantSetup from "./AssistantSetup.svelte";
   import DeveloperSetup from "./DeveloperSetup.svelte";
+  import KnowledgeBaseSetup from "./KnowledgeBaseSetup.svelte";
+  import WebSearchSetup from "./WebSearchSetup.svelte";
 
   interface Props {
     onComplete: () => void;
@@ -9,12 +13,68 @@
 
   let { onComplete }: Props = $props();
 
-  type Persona = null | "research" | "assistant" | "developer";
-  let selectedPersona: Persona = $state(null);
+  type Persona = "research" | "assistant" | "developer";
+  type Step = "persona" | "persona-setup" | "knowledge" | "websearch" | "finishing";
+
+  let selectedPersona: Persona | null = $state(null);
+  let step: Step = $state("persona");
+  let partialConfig: SetupConfig | null = $state(null);
+  let submitting = $state(false);
+  let error = $state("");
+
+  function handlePersonaNext(config: SetupConfig) {
+    partialConfig = config;
+    step = "knowledge";
+  }
+
+  function handleKnowledgeSelect(tierId: string) {
+    if (partialConfig) partialConfig.selected_tier = tierId;
+    // Developer already configured search in their setup step.
+    if (selectedPersona === "developer") {
+      finishSetup();
+    } else {
+      step = "websearch";
+    }
+  }
+
+  function handleKnowledgeSkip() {
+    if (selectedPersona === "developer") {
+      finishSetup();
+    } else {
+      step = "websearch";
+    }
+  }
+
+  function handleWebConfigure(provider: string, apiKey: string | null) {
+    if (partialConfig) {
+      partialConfig.search_provider = provider !== "duckduckgo" ? provider : undefined;
+      partialConfig.search_api_key = apiKey ?? undefined;
+    }
+    finishSetup();
+  }
+
+  function handleWebSkip() {
+    finishSetup();
+  }
+
+  async function finishSetup() {
+    if (!partialConfig) return;
+    step = "finishing";
+    submitting = true;
+    error = "";
+    try {
+      await completeSetup(partialConfig);
+      onComplete();
+    } catch (e) {
+      error = `Setup failed: ${e}`;
+      step = "knowledge";
+    }
+    submitting = false;
+  }
 </script>
 
 <div class="wizard">
-  {#if selectedPersona === null}
+  {#if step === "persona"}
     <div class="persona-select">
       <h1>Welcome to Sovereign</h1>
       <p class="subtitle">How will you use Sovereign?</p>
@@ -22,7 +82,7 @@
       <div class="persona-cards">
         <button
           class="persona-card"
-          onclick={() => (selectedPersona = "research")}
+          onclick={() => { selectedPersona = "research"; step = "persona-setup"; }}
         >
           <div class="persona-icon">&#128269;</div>
           <h2>Research & Analysis</h2>
@@ -34,7 +94,7 @@
 
         <button
           class="persona-card"
-          onclick={() => (selectedPersona = "assistant")}
+          onclick={() => { selectedPersona = "assistant"; step = "persona-setup"; }}
         >
           <div class="persona-icon">&#128203;</div>
           <h2>Personal Assistant</h2>
@@ -46,7 +106,7 @@
 
         <button
           class="persona-card"
-          onclick={() => (selectedPersona = "developer")}
+          onclick={() => { selectedPersona = "developer"; step = "persona-setup"; }}
         >
           <div class="persona-icon">&#9881;</div>
           <h2>Developer</h2>
@@ -57,21 +117,40 @@
         </button>
       </div>
     </div>
-  {:else if selectedPersona === "research"}
+  {:else if step === "persona-setup" && selectedPersona === "research"}
     <ResearchSetup
-      {onComplete}
-      onBack={() => (selectedPersona = null)}
+      onNext={handlePersonaNext}
+      onBack={() => { step = "persona"; selectedPersona = null; }}
     />
-  {:else if selectedPersona === "assistant"}
+  {:else if step === "persona-setup" && selectedPersona === "assistant"}
     <AssistantSetup
-      {onComplete}
-      onBack={() => (selectedPersona = null)}
+      onNext={handlePersonaNext}
+      onBack={() => { step = "persona"; selectedPersona = null; }}
     />
-  {:else if selectedPersona === "developer"}
+  {:else if step === "persona-setup" && selectedPersona === "developer"}
     <DeveloperSetup
-      {onComplete}
-      onBack={() => (selectedPersona = null)}
+      onNext={handlePersonaNext}
+      onBack={() => { step = "persona"; selectedPersona = null; }}
     />
+  {:else if step === "knowledge" && selectedPersona}
+    <KnowledgeBaseSetup
+      persona={selectedPersona}
+      onSelect={handleKnowledgeSelect}
+      onSkip={handleKnowledgeSkip}
+    />
+  {:else if step === "websearch"}
+    <WebSearchSetup
+      onConfigure={handleWebConfigure}
+      onSkip={handleWebSkip}
+    />
+  {:else if step === "finishing"}
+    <div class="finishing">
+      {#if error}
+        <p class="error">{error}</p>
+      {:else}
+        <p>Setting up Sovereign...</p>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -140,5 +219,14 @@
     font-size: 0.85rem;
     color: var(--text-secondary);
     line-height: 1.4;
+  }
+
+  .finishing {
+    text-align: center;
+    color: var(--text-secondary);
+  }
+
+  .error {
+    color: var(--error);
   }
 </style>

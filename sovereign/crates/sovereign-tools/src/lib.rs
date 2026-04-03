@@ -7,6 +7,7 @@ pub mod file;
 pub mod knowledge;
 pub mod mcp;
 pub mod rag;
+pub mod search;
 pub mod shell;
 pub mod web;
 

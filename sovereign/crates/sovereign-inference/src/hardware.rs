@@ -43,39 +43,35 @@ impl HardwareProfile {
 fn detect_gpu() -> (bool, Option<String>, Option<u64>) {
     // On macOS Intel, Metal + llama.cpp on discrete AMD GPUs produces
     // garbage output. Only trust GPU on Apple Silicon.
-    #[cfg(target_os = "macos")]
-    {
-        #[cfg(not(target_arch = "aarch64"))]
-        {
-            return (false, None, None);
-        }
-    }
+    #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+    return (false, None, None);
 
-    // Check llama.cpp backend devices for a non-CPU device.
-    let devices = llama_cpp_2::list_llama_ggml_backend_devices();
-    for dev in &devices {
-        if dev.memory_total > 0 && dev.name.to_lowercase() != "cpu" {
+    #[cfg(not(all(target_os = "macos", not(target_arch = "aarch64"))))]
+    {
+        // Check llama.cpp backend devices for a non-CPU device.
+        let devices = llama_cpp_2::list_llama_ggml_backend_devices();
+        for dev in &devices {
+            if dev.memory_total > 0 && dev.name.to_lowercase() != "cpu" {
+                return (
+                    true,
+                    Some(dev.name.clone()),
+                    Some(dev.memory_total as u64),
+                );
+            }
+        }
+
+        // On Apple Silicon, unified memory means Metal is always available.
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            let sys = System::new_all();
             return (
                 true,
-                Some(dev.name.clone()),
-                Some(dev.memory_total as u64),
+                Some("Apple Metal (unified memory)".to_string()),
+                Some(sys.total_memory()),
             );
         }
-    }
 
-    // On Apple Silicon, unified memory means Metal is always available.
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    {
-        let sys = System::new_all();
-        return (
-            true,
-            Some("Apple Metal (unified memory)".to_string()),
-            Some(sys.total_memory()),
-        );
-    }
-
-    #[allow(unreachable_code)]
-    {
+        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         (false, None, None)
     }
 }

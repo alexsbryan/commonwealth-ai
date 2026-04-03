@@ -36,7 +36,16 @@
     {#each skills as skill (skill.id)}
       <div class="skill-item">
         <div class="skill-info">
-          <span class="skill-name">{skill.name}</span>
+          <span class="skill-name">
+            {skill.name}
+            {#if skill.trust_level === "communityreviewed"}
+              <span class="trust-badge community">Verified</span>
+            {:else if skill.trust_level === "authorsigned"}
+              <span class="trust-badge signed">Signed</span>
+            {:else}
+              <span class="trust-badge unsigned">Unsigned</span>
+            {/if}
+          </span>
           <span class="skill-desc">{skill.description}</span>
         </div>
         <label class="toggle">
@@ -88,6 +97,30 @@
 
   .skill-name {
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .trust-badge {
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .trust-badge.community {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--success, #22c55e);
+  }
+  .trust-badge.signed {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+  }
+  .trust-badge.unsigned {
+    background: rgba(156, 163, 175, 0.15);
+    color: var(--text-muted);
   }
 
   .skill-desc {

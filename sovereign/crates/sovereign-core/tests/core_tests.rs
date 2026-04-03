@@ -13,6 +13,7 @@ use sovereign_core::registry::ToolRegistry;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::skills::*;
 use sovereign_core::stubs::{NoOpPlanner, PassthroughRouter};
+use sovereign_core::types::TrustLevel;
 use sovereign_core::traits::*;
 use sovereign_core::types::*;
 
@@ -102,6 +103,8 @@ impl StateStore for MockStore {
             messages: conv_msgs,
             created_at: now(),
             updated_at: now(),
+            version: 0,
+            deleted_at: None,
         })
     }
     async fn list_conversations(&self, _limit: usize, _offset: usize) -> Result<Vec<Conversation>> {
@@ -256,8 +259,13 @@ fn make_skill(id: &str, trigger: &str, synthesis: Option<&str>) -> Skill {
         },
         memory_rules: MemoryConfig {
             extract_prompt_addendum: Some(format!("Rules for {id}")),
+            confidence_decay_per_month: None,
+            prune_threshold: None,
         },
         inference: SkillInferenceConfig::default(),
+        signature: None,
+        signed_by: None,
+        trust_level: TrustLevel::Unsigned,
     }
 }
 
@@ -353,6 +361,7 @@ async fn build_context_existing_conversation() {
             content: "hello".to_string(),
             created_at: now(),
             metadata: None,
+            version: 0,
         })
         .await
         .unwrap();
@@ -371,6 +380,8 @@ fn format_history_empty() {
             messages: Vec::new(),
             created_at: 0,
             updated_at: 0,
+            version: 0,
+            deleted_at: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -392,6 +403,7 @@ fn format_history_multi_turn() {
                     content: "Hi".to_string(),
                     created_at: 1,
                     metadata: None,
+                    version: 0,
                 },
                 Message {
                     id: "2".to_string(),
@@ -400,10 +412,13 @@ fn format_history_multi_turn() {
                     content: "Hello!".to_string(),
                     created_at: 2,
                     metadata: None,
+                    version: 0,
                 },
             ],
             created_at: 0,
             updated_at: 0,
+            version: 0,
+            deleted_at: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -424,6 +439,7 @@ fn format_history_truncates_to_max() {
             content: format!("message {i}"),
             created_at: i,
             metadata: None,
+            version: 0,
         })
         .collect();
 
@@ -434,6 +450,8 @@ fn format_history_truncates_to_max() {
             messages,
             created_at: 0,
             updated_at: 0,
+            version: 0,
+            deleted_at: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -458,6 +476,8 @@ async fn passthrough_router_always_simple_query() {
             messages: Vec::new(),
             created_at: 0,
             updated_at: 0,
+            version: 0,
+            deleted_at: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -477,6 +497,8 @@ async fn noop_planner_returns_not_implemented() {
             messages: Vec::new(),
             created_at: 0,
             updated_at: 0,
+            version: 0,
+            deleted_at: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -641,6 +663,8 @@ async fn executor_linear_plan() {
                 },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 1,
@@ -654,6 +678,8 @@ async fn executor_linear_plan() {
                     step_id: 0,
                     key: "output".to_string(),
                 }],
+            sampling: None,
+            evaluation: None,
             },
         ],
         edges: vec![(0, 1)],
@@ -668,6 +694,7 @@ async fn executor_linear_plan() {
         completed_steps: Vec::new(),
         created_at: now(),
         updated_at: now(),
+        version: 0,
     };
 
     let executor = Executor::new(
@@ -716,6 +743,8 @@ async fn executor_parallel_then_merge() {
                 },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 1,
@@ -726,6 +755,8 @@ async fn executor_parallel_then_merge() {
                 },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 2,
@@ -739,6 +770,8 @@ async fn executor_parallel_then_merge() {
                     StepInput { step_id: 0, key: "output".to_string() },
                     StepInput { step_id: 1, key: "output".to_string() },
                 ],
+            sampling: None,
+            evaluation: None,
             },
         ],
         edges: vec![(0, 2), (1, 2)],
@@ -753,6 +786,7 @@ async fn executor_parallel_then_merge() {
         completed_steps: Vec::new(),
         created_at: now(),
         updated_at: now(),
+        version: 0,
     };
 
     let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel), Arc::new(SkillRegistry::new()));
@@ -791,6 +825,8 @@ async fn executor_branch_skips_non_taken_path() {
                 },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 1,
@@ -801,6 +837,8 @@ async fn executor_branch_skips_non_taken_path() {
                 },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 2,
@@ -811,6 +849,8 @@ async fn executor_branch_skips_non_taken_path() {
                 },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
         ],
         edges: vec![(0, 1), (0, 2)],
@@ -825,6 +865,7 @@ async fn executor_branch_skips_non_taken_path() {
         completed_steps: Vec::new(),
         created_at: now(),
         updated_at: now(),
+        version: 0,
     };
 
     let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel), Arc::new(SkillRegistry::new()));
@@ -863,6 +904,8 @@ async fn planner_generates_valid_plan() {
             messages: vec![],
             created_at: 0,
             updated_at: 0,
+            version: 0,
+            deleted_at: None,
         },
         memories: vec![],
         working_memory: None,
@@ -889,6 +932,8 @@ async fn planner_fallback_on_garbage() {
             messages: vec![],
             created_at: 0,
             updated_at: 0,
+            version: 0,
+            deleted_at: None,
         },
         memories: vec![],
         working_memory: None,
@@ -970,6 +1015,8 @@ async fn executor_tool_step() {
             },
             requires_approval: false,
             inputs: vec![],
+        sampling: None,
+        evaluation: None,
         }],
         edges: vec![],
     };
@@ -983,6 +1030,7 @@ async fn executor_tool_step() {
         completed_steps: Vec::new(),
         created_at: now(),
         updated_at: now(),
+        version: 0,
     };
 
     let executor = Executor::new(
@@ -1062,6 +1110,8 @@ async fn executor_tool_denied_permission_skips() {
             },
             requires_approval: false,
             inputs: vec![],
+        sampling: None,
+        evaluation: None,
         }],
         edges: vec![],
     };
@@ -1075,6 +1125,7 @@ async fn executor_tool_denied_permission_skips() {
         completed_steps: Vec::new(),
         created_at: now(),
         updated_at: now(),
+        version: 0,
     };
 
     let executor = Executor::new(
@@ -1130,6 +1181,8 @@ async fn executor_user_input_step() {
             },
             requires_approval: false,
             inputs: vec![],
+        sampling: None,
+        evaluation: None,
         }],
         edges: vec![],
     };
@@ -1143,6 +1196,7 @@ async fn executor_user_input_step() {
         completed_steps: Vec::new(),
         created_at: now(),
         updated_at: now(),
+        version: 0,
     };
 
     let executor = Executor::new(

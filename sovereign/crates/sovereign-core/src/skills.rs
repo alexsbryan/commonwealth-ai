@@ -7,7 +7,7 @@ use crate::oicp::{
     Capability, CapabilityProfile, InferenceRequirements, LatencyPreference, PrivacyPreference,
     ProficiencyLevel,
 };
-use crate::types::Intent;
+use crate::types::{Intent, TrustLevel, compute_trust_level};
 
 // ─── Skill Definition ──────────────────────────────────────────
 
@@ -26,6 +26,12 @@ pub struct Skill {
     /// OICP inference requirements for this skill.
     #[serde(default)]
     pub inference: SkillInferenceConfig,
+    #[serde(default)]
+    pub signature: Option<String>,
+    #[serde(default)]
+    pub signed_by: Option<String>,
+    #[serde(default)]
+    pub trust_level: TrustLevel,
 }
 
 /// OICP inference configuration declared in a skill manifest.
@@ -71,6 +77,10 @@ pub struct PromptOverrides {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MemoryConfig {
     pub extract_prompt_addendum: Option<String>,
+    /// Override the default 10% monthly decay rate (e.g., 0.05 for 5%/month).
+    pub confidence_decay_per_month: Option<f64>,
+    /// Override the default 0.2 prune threshold.
+    pub prune_threshold: Option<f64>,
 }
 
 // ─── Merged Results ────────────────────────────────────────────
@@ -84,6 +94,10 @@ pub struct MergedRoutingHints {
 #[derive(Debug, Clone, Default)]
 pub struct MergedMemoryConfig {
     pub extraction_addenda: Vec<String>,
+    /// Lowest decay rate wins (most conservative — slowest decay).
+    pub confidence_decay_per_month: Option<f64>,
+    /// Lowest prune threshold wins (keeps memories longer).
+    pub prune_threshold: Option<f64>,
 }
 
 // ─── TOML Loading ──────────────────────────────────────────────
@@ -114,6 +128,10 @@ struct SkillMeta {
     version: String,
     #[serde(default)]
     description: String,
+    #[serde(default)]
+    signature: Option<String>,
+    #[serde(default)]
+    signed_by: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -156,6 +174,8 @@ struct PromptsToml {
 #[derive(Debug, Default, Deserialize)]
 struct MemoryToml {
     extract_prompt_addendum: Option<String>,
+    confidence_decay_per_month: Option<f64>,
+    prune_threshold: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -217,6 +237,8 @@ impl SkillToml {
             },
             memory_rules: MemoryConfig {
                 extract_prompt_addendum: self.memory.extract_prompt_addendum,
+                confidence_decay_per_month: self.memory.confidence_decay_per_month,
+                prune_threshold: self.memory.prune_threshold,
             },
             inference: SkillInferenceConfig {
                 preferred_capabilities: self.inference.preferred_capabilities,
@@ -224,6 +246,9 @@ impl SkillToml {
                 min_context_tokens: self.inference.min_context_tokens,
                 privacy: self.inference.privacy,
             },
+            trust_level: compute_trust_level(&self.skill.signature, &self.skill.signed_by),
+            signature: self.skill.signature,
+            signed_by: self.skill.signed_by,
         }
     }
 }
@@ -265,7 +290,11 @@ pub fn load_from_directory(dir: &Path) -> Vec<Skill> {
         match std::fs::read_to_string(&toml_path) {
             Ok(content) => {
                 if let Some(skill) = parse_skill_toml(&content) {
-                    eprintln!("[skills] Loaded: {} v{}", skill.name, skill.version);
+                    if skill.trust_level == TrustLevel::Unsigned {
+                        eprintln!("[skills] Loaded: {} v{} (unsigned)", skill.name, skill.version);
+                    } else {
+                        eprintln!("[skills] Loaded: {} v{}", skill.name, skill.version);
+                    }
                     skills.push(skill);
                 } else {
                     eprintln!(
@@ -425,8 +454,30 @@ impl SkillRegistry {
             if let Some(addendum) = &skill.memory_rules.extract_prompt_addendum {
                 merged.extraction_addenda.push(addendum.clone());
             }
+            if let Some(decay) = skill.memory_rules.confidence_decay_per_month {
+                merged.confidence_decay_per_month = Some(
+                    merged
+                        .confidence_decay_per_month
+                        .map_or(decay, |d: f64| d.min(decay)),
+                );
+            }
+            if let Some(threshold) = skill.memory_rules.prune_threshold {
+                merged.prune_threshold = Some(
+                    merged
+                        .prune_threshold
+                        .map_or(threshold, |t: f64| t.min(threshold)),
+                );
+            }
         }
         merged
+    }
+
+    pub fn trust_level(&self, skill_id: &str) -> TrustLevel {
+        self.skills
+            .iter()
+            .find(|s| s.id == skill_id)
+            .map(|s| s.trust_level)
+            .unwrap_or(TrustLevel::Unsigned)
     }
 }
 

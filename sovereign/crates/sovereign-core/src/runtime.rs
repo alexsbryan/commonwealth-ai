@@ -12,11 +12,50 @@ use crate::skills::SkillRegistry;
 use crate::traits::{ApprovalChannel, InferenceProvider, Planner, Router, StateStore};
 use crate::types::*;
 
+/// Maximum characters of knowledge context to inject into prompts.
+/// ~1000 tokens at ~4 chars/token, leaving room for history + system + response.
+const MAX_KNOWLEDGE_CHARS: usize = 4000;
+
+/// Truncate per-chunk content to produce a budget for the total knowledge context.
+const MAX_CHUNK_CHARS: usize = 600;
+
 fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
+}
+
+/// Build a truncated knowledge context string from document chunks,
+/// staying within a character budget to avoid exceeding model context limits.
+fn truncate_knowledge_context(chunks: &[DocumentChunk], max_chars: usize) -> String {
+    let mut parts = Vec::new();
+    let mut total = 0;
+
+    for c in chunks {
+        let content = if c.content.len() > MAX_CHUNK_CHARS {
+            // Truncate at a word boundary.
+            let truncated = &c.content[..MAX_CHUNK_CHARS];
+            match truncated.rfind(' ') {
+                Some(pos) => format!("{}...", &truncated[..pos]),
+                None => format!("{truncated}..."),
+            }
+        } else {
+            c.content.clone()
+        };
+
+        let part = format!("[Source: {}]\n{content}", c.source);
+        let part_len = part.len() + 5; // account for separator
+
+        if total + part_len > max_chars {
+            break;
+        }
+
+        total += part_len;
+        parts.push(part);
+    }
+
+    parts.join("\n\n---\n\n")
 }
 
 pub struct Runtime {
@@ -150,6 +189,7 @@ impl Runtime {
             content: message.to_string(),
             created_at: now(),
             metadata: None,
+            version: now(),
         };
         self.store.save_message(&user_msg).await?;
         context.conversation.messages.push(user_msg);
@@ -179,6 +219,8 @@ impl Runtime {
     }
 
     /// Handle SimpleQuery, DeepQuery, and other non-plan intents.
+    /// Always searches local knowledge bases for relevant context
+    /// before generating a response.
     async fn handle_simple(
         &self,
         message: &str,
@@ -200,15 +242,65 @@ impl Runtime {
             self.build_oicp(LatencyPreference::BestEffort)
         };
 
+        // Always search local knowledge bases for relevant context.
+        // FTS5 search is fast — the worst case is finding nothing.
+        let embedding = self.inference.embed(message).await.unwrap_or_default();
+        let chunks = self
+            .store
+            .search_documents(&embedding, message, 5)
+            .await
+            .unwrap_or_default();
+
+        // Check what corpora are installed (for provenance reporting).
+        let installed_corpora = self
+            .store
+            .list_corpus_states()
+            .await
+            .unwrap_or_default();
+        let corpora_searched = !installed_corpora.is_empty();
+
+        let search_method = if !chunks.is_empty() {
+            Some("LocalOnly".to_string())
+        } else if corpora_searched {
+            Some("LocalOnly (no matches)".to_string())
+        } else {
+            None
+        };
+
+        // If local search found relevant results, upgrade SimpleQuery to Slow
+        // for a more thorough synthesis.
+        let speed = if !chunks.is_empty() && matches!(intent, Intent::SimpleQuery) {
+            Speed::Slow
+        } else {
+            speed
+        };
+
         let history = format_history_as_prompt(context, 10);
-        let prompt = if history.is_empty() {
+
+        let prompt = if !chunks.is_empty() {
+            let doc_context = truncate_knowledge_context(&chunks, MAX_KNOWLEDGE_CHARS);
+            if history.is_empty() {
+                format!(
+                    "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
+                )
+            } else {
+                let history = format_history_as_prompt(context, 4); // shorter history when knowledge is present
+                format!(
+                    "{history}\n\nRelevant knowledge:\n{doc_context}\n\nAssistant:"
+                )
+            }
+        } else if history.is_empty() {
             message.to_string()
         } else {
             format!("{history}\n\nAssistant:")
         };
 
         let system = self.build_system_message(
-            "You are a helpful AI assistant. Respond concisely and accurately.",
+            if !chunks.is_empty() {
+                "You are a helpful AI assistant. Answer based on the provided knowledge sources when relevant. Cite sources when referencing them."
+            } else {
+                "You are a helpful AI assistant. Respond concisely and accurately."
+            },
             context,
         );
 
@@ -224,6 +316,40 @@ impl Runtime {
 
         let completion = self.inference.complete(&request).await?;
 
+        // Build provenance with source info from retrieved chunks.
+        let mut source_map: HashMap<String, usize> = HashMap::new();
+        for c in &chunks {
+            let origin = match &c.source_type {
+                SourceType::Corpus { corpus_id } => corpus_id.clone(),
+                SourceType::WebSearch { .. } => "web".to_string(),
+                SourceType::UserDocument => "user_document".to_string(),
+            };
+            *source_map.entry(origin).or_insert(0) += 1;
+        }
+        // If no results but corpora are installed, list them as "searched (0 results)".
+        if chunks.is_empty() && corpora_searched {
+            for cs in &installed_corpora {
+                source_map.entry(cs.corpus_id.clone()).or_insert(0);
+            }
+        }
+
+        let provenance = ResponseProvenance {
+            intent: format!("{intent:?}"),
+            search_method,
+            sources: source_map
+                .into_iter()
+                .map(|(origin, count)| SourceSummary { origin, count })
+                .collect(),
+            inference_backend: completion.model_id.clone(),
+            oicp_match: completion
+                .oicp_meta
+                .as_ref()
+                .and_then(|m| m.match_quality.as_ref())
+                .map(|q| format!("{q:?}")),
+            total_latency_ms: completion.latency_ms,
+            tokens_used: completion.tokens_used,
+        };
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -234,7 +360,9 @@ impl Runtime {
                 "model": completion.model_id,
                 "tokens": completion.tokens_used,
                 "latency_ms": completion.latency_ms,
+                "provenance": provenance,
             })),
+            version: now(),
         };
         self.store.save_message(&assistant_msg).await?;
 
@@ -267,11 +395,7 @@ impl Runtime {
         let doc_context = if chunks.is_empty() {
             "No relevant documents found.".to_string()
         } else {
-            chunks
-                .iter()
-                .map(|c| format!("[Source: {}]\n{}", c.source, c.content))
-                .collect::<Vec<_>>()
-                .join("\n\n---\n\n")
+            truncate_knowledge_context(&chunks, MAX_KNOWLEDGE_CHARS)
         };
 
         let prompt = format!(
@@ -297,6 +421,37 @@ impl Runtime {
 
         let completion = self.inference.complete(&request).await?;
 
+        let mut source_map: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for c in &chunks {
+            let origin = match &c.source_type {
+                SourceType::Corpus { corpus_id } => corpus_id.clone(),
+                SourceType::WebSearch { .. } => "web".to_string(),
+                SourceType::UserDocument => "user_document".to_string(),
+            };
+            *source_map.entry(origin).or_insert(0) += 1;
+        }
+        let provenance = ResponseProvenance {
+            intent: "KnowledgeQuery".to_string(),
+            search_method: Some(if chunks.is_empty() {
+                "NoResults".to_string()
+            } else {
+                "LocalOnly".to_string()
+            }),
+            sources: source_map
+                .into_iter()
+                .map(|(origin, count)| SourceSummary { origin, count })
+                .collect(),
+            inference_backend: completion.model_id.clone(),
+            oicp_match: completion
+                .oicp_meta
+                .as_ref()
+                .and_then(|m| m.match_quality.as_ref())
+                .map(|q| format!("{q:?}")),
+            total_latency_ms: completion.latency_ms,
+            tokens_used: completion.tokens_used,
+        };
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -309,7 +464,9 @@ impl Runtime {
                 "latency_ms": completion.latency_ms,
                 "intent": "knowledge_query",
                 "documents_found": chunks.len(),
+                "provenance": provenance,
             })),
+            version: now(),
         };
         self.store.save_message(&assistant_msg).await?;
 
@@ -352,6 +509,7 @@ impl Runtime {
             completed_steps: Vec::new(),
             created_at: now(),
             updated_at: now(),
+            version: now(),
         };
         self.store.save_task(&task).await?;
 
@@ -411,6 +569,21 @@ impl Runtime {
             .iter()
             .filter_map(|(id, output)| match output {
                 StepOutput::Text(t) => Some(format!("Step {id}: {t}")),
+                StepOutput::Json(v) => {
+                    // For search tool output, use the "answer" field.
+                    let text = v
+                        .get("answer")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or_else(|| {
+                            // Fallback: serialize the whole JSON.
+                            ""
+                        });
+                    if text.is_empty() {
+                        Some(format!("Step {id}: {}", serde_json::to_string_pretty(v).unwrap_or_default()))
+                    } else {
+                        Some(format!("Step {id}: {text}"))
+                    }
+                }
                 _ => None,
             })
             .collect();
@@ -448,7 +621,45 @@ impl Runtime {
         task.updated_at = now();
         self.store.save_task(&task).await?;
 
-        // 7. Save and return assistant message.
+        // 7. Extract search provenance from tool step outputs.
+        let mut search_method: Option<String> = None;
+        let mut all_sources: Vec<SourceSummary> = Vec::new();
+        for (_step_idx, output) in &task.completed_steps {
+            if let StepOutput::Json(ref val) = output {
+                if let Some(method) = val.get("search_method").and_then(|v| v.as_str()) {
+                    search_method = Some(method.to_string());
+                }
+                if let Some(sources) = val.get("sources").and_then(|v| v.as_array()) {
+                    for src in sources {
+                        if let (Some(origin), Some(count)) = (
+                            src.get("origin").and_then(|v| v.as_str()),
+                            src.get("count").and_then(|v| v.as_u64()),
+                        ) {
+                            all_sources.push(SourceSummary {
+                                origin: origin.to_string(),
+                                count: count as usize,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Save and return assistant message.
+        let provenance = ResponseProvenance {
+            intent: "ComplexTask".to_string(),
+            search_method,
+            sources: all_sources,
+            inference_backend: synthesis.model_id.clone(),
+            oicp_match: synthesis
+                .oicp_meta
+                .as_ref()
+                .and_then(|m| m.match_quality.as_ref())
+                .map(|q| format!("{q:?}")),
+            total_latency_ms: synthesis.latency_ms,
+            tokens_used: synthesis.tokens_used,
+        };
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -461,7 +672,9 @@ impl Runtime {
                 "latency_ms": synthesis.latency_ms,
                 "task_id": task.id,
                 "steps_completed": task.completed_steps.len(),
+                "provenance": provenance,
             })),
+            version: now(),
         };
         self.store.save_message(&assistant_msg).await?;
 

@@ -96,6 +96,10 @@ fn main() {
             commands::search_web,
             commands::scan_for_models,
             commands::download_model,
+            commands::list_corpora,
+            commands::install_corpus,
+            commands::remove_corpus,
+            commands::get_corpus_progress,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");

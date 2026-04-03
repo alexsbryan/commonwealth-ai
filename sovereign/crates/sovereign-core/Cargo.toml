@@ -10,7 +10,9 @@ async-trait = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+sovereign-store = { workspace = true }

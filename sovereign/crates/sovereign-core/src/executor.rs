@@ -293,17 +293,40 @@ impl Executor {
                     Some(oicp_req)
                 };
 
+                // Adaptive compute: estimate difficulty and adjust budget.
+                let difficulty = self.estimate_difficulty(step, &resolved).await;
+                let budget = self.compute_budget(difficulty, step);
+
+                let effective_speed = budget.speed_override.unwrap_or(*speed);
                 let request = CompletionRequest {
-                    prompt: resolved,
+                    prompt: resolved.clone(),
                     system_message: Some(system_message),
-                    preferred_speed: *speed,
-                    max_tokens: Some(1024),
+                    preferred_speed: effective_speed,
+                    max_tokens: Some(budget.max_tokens),
                     temperature: Some(0.7),
                     structured_output: None,
                     oicp,
                 };
-                let response = self.inference.complete(&request).await?;
-                Ok(StepOutput::Text(response.text))
+
+                // Best-of-N sampling or single completion.
+                let mut output = match &budget.sampling {
+                    Some(config) if config.n > 1 => {
+                        self.sample_and_select(&request, config).await?
+                    }
+                    _ => {
+                        let response = self.inference.complete(&request).await?;
+                        StepOutput::Text(response.text)
+                    }
+                };
+
+                // Evaluation-as-architecture: closed-loop self-correction.
+                if let Some(eval_config) = &budget.evaluation {
+                    output = self
+                        .evaluate_and_retry(output, &resolved, &request, eval_config)
+                        .await?;
+                }
+
+                Ok(output)
             }
 
             StepKind::Branch {
@@ -348,10 +371,9 @@ impl Executor {
                     let granted = self.store.get_permission(tool_id, &scope).await?;
 
                     match granted {
-                        Some(true) => {} // Already approved.
+                        Some(true) => {}
                         Some(false) => return Ok(StepOutput::Skipped),
                         None => {
-                            // Ask for approval.
                             let preview = ActionPreview {
                                 tool_id: tool_id.clone(),
                                 description: format!(
@@ -368,9 +390,6 @@ impl Executor {
                             if !approved {
                                 return Ok(StepOutput::Skipped);
                             }
-                            // Permission granted — persist for this session.
-                            // "Always allow" is handled by the CLI approval channel
-                            // which calls set_permission directly.
                         }
                     }
                 }
@@ -378,14 +397,50 @@ impl Executor {
                 // 4. Validate.
                 tool.validate(&resolved_params)?;
 
-                // 5. Execute.
+                // 5. Execute with retry on transient failures.
                 let tool_ctx = ToolContext {
                     conversation_id: task.conversation_id.clone(),
                     task_id: Some(task.id.clone()),
                     working_directory: None,
                 };
 
-                tool.execute(&resolved_params, &tool_ctx).await
+                let retry = tool.retry_config().unwrap_or_default();
+                let mut last_error = None;
+
+                for attempt in 0..=retry.max_retries {
+                    if attempt > 0 {
+                        let delay = retry
+                            .backoff_ms
+                            .get(attempt - 1)
+                            .copied()
+                            .unwrap_or(3000);
+                        eprintln!(
+                            "[executor] Tool '{}' retry {}/{} after {}ms",
+                            tool_id, attempt, retry.max_retries, delay
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                    }
+
+                    match tool.execute(&resolved_params, &tool_ctx).await {
+                        Ok(output) => return Ok(output),
+                        Err(e) => {
+                            let msg = e.to_string().to_lowercase();
+                            let retryable = msg.contains("timeout")
+                                || msg.contains("rate limit")
+                                || msg.contains("connection")
+                                || msg.contains("temporarily");
+                            if retryable && attempt < retry.max_retries {
+                                last_error = Some(e);
+                                continue;
+                            }
+                            return Err(e);
+                        }
+                    }
+                }
+
+                Err(last_error.unwrap_or_else(|| {
+                    Error::Execution("All retries exhausted".to_string())
+                }))
             }
 
             StepKind::UserInput { question } => {
@@ -393,6 +448,235 @@ impl Executor {
                 let answer = self.approval.ask_user(&resolved).await?;
                 Ok(StepOutput::Text(answer))
             }
+        }
+    }
+
+    // ─── Best-of-N Sampling ──────────────────────────────────
+
+    async fn sample_and_select(
+        &self,
+        request: &CompletionRequest,
+        config: &SamplingConfig,
+    ) -> Result<StepOutput> {
+        // Generate N candidates.
+        let futures: Vec<_> = (0..config.n)
+            .map(|_| self.inference.complete(request))
+            .collect();
+        let results = futures::future::join_all(futures).await;
+        let candidates: Vec<String> = results
+            .into_iter()
+            .filter_map(|r| r.ok())
+            .map(|r| r.text)
+            .collect();
+
+        if candidates.is_empty() {
+            return Err(Error::Execution(
+                "All sampling candidates failed".to_string(),
+            ));
+        }
+        if candidates.len() == 1 {
+            return Ok(StepOutput::Text(candidates.into_iter().next().unwrap()));
+        }
+
+        let best = self
+            .select_best(&candidates, &config.selector, &request.prompt)
+            .await?;
+        Ok(StepOutput::Text(best))
+    }
+
+    async fn select_best(
+        &self,
+        candidates: &[String],
+        selector: &SampleSelector,
+        original_prompt: &str,
+    ) -> Result<String> {
+        match selector {
+            SampleSelector::LlmJudge { selection_prompt } => {
+                let numbered = candidates
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| format!("--- Response {} ---\n{}", i + 1, c))
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+
+                let judge_prompt = format!(
+                    "{}\n\nOriginal task:\n{}\n\nCandidate responses:\n{}\n\n\
+                     Select the best response. Return only the number (1-{}).",
+                    selection_prompt.as_deref().unwrap_or(
+                        "You are evaluating multiple responses. Select the most \
+                         accurate, complete, well-reasoned, and appropriately cited."
+                    ),
+                    &original_prompt[..original_prompt.len().min(500)],
+                    numbered,
+                    candidates.len()
+                );
+
+                let request =
+                    CompletionRequest::new(&judge_prompt).with_speed(Speed::Fast);
+                let response = self.inference.complete(&request).await?;
+                let choice: usize = response.text.trim().parse().unwrap_or(1);
+                let idx = choice.saturating_sub(1).min(candidates.len() - 1);
+                Ok(candidates[idx].clone())
+            }
+
+            SampleSelector::MajorityVote => {
+                let mut votes: HashMap<String, usize> = HashMap::new();
+                for c in candidates {
+                    let key = c.lines().next().unwrap_or("").to_string();
+                    *votes.entry(key).or_insert(0) += 1;
+                }
+                let winner = votes
+                    .into_iter()
+                    .max_by_key(|(_, count)| *count)
+                    .map(|(key, _)| key)
+                    .unwrap_or_default();
+                Ok(candidates
+                    .iter()
+                    .find(|c| c.starts_with(&winner))
+                    .cloned()
+                    .unwrap_or_else(|| candidates[0].clone()))
+            }
+
+            SampleSelector::Verify { tool_id } => {
+                let tool = self.tools.get(tool_id)?;
+                let ctx = ToolContext {
+                    conversation_id: String::new(),
+                    task_id: None,
+                    working_directory: None,
+                };
+                for candidate in candidates {
+                    let params = serde_json::json!({"input": candidate});
+                    if tool.execute(&params, &ctx).await.is_ok() {
+                        return Ok(candidate.clone());
+                    }
+                }
+                Ok(candidates[0].clone())
+            }
+        }
+    }
+
+    // ─── Evaluation & Self-Correction ────────────────────────
+
+    async fn evaluate_and_retry(
+        &self,
+        mut output: StepOutput,
+        original_prompt: &str,
+        request: &CompletionRequest,
+        eval_config: &EvaluationConfig,
+    ) -> Result<StepOutput> {
+        for retry in 0..=eval_config.max_retries {
+            let text = match &output {
+                StepOutput::Text(t) => t.as_str(),
+                _ => return Ok(output),
+            };
+
+            let eval_prompt = format!(
+                "{}\n\nOutput to evaluate:\n{}\n\n\
+                 Respond with JSON: {{\"pass\": true}} or {{\"pass\": false, \"feedback\": \"what's wrong\"}}",
+                eval_config.eval_prompt,
+                &text[..text.len().min(2000)]
+            );
+
+            let eval_request = CompletionRequest::new(&eval_prompt)
+                .with_speed(eval_config.eval_speed);
+            let eval_response = self.inference.complete(&eval_request).await?;
+
+            // Parse evaluation result.
+            let passed = eval_response.text.contains("\"pass\": true")
+                || eval_response.text.contains("\"pass\":true");
+
+            if passed {
+                return Ok(output);
+            }
+
+            if retry >= eval_config.max_retries {
+                eprintln!("[executor] Evaluation failed after {} retries, accepting output", retry);
+                return Ok(output);
+            }
+
+            // Extract feedback and retry.
+            let feedback = eval_response
+                .text
+                .split("\"feedback\":")
+                .nth(1)
+                .and_then(|s| s.split('"').nth(1))
+                .unwrap_or("The previous attempt had quality issues. Please improve.");
+
+            let retry_prompt = format!(
+                "{}\n\n[Previous attempt had an issue: {}. Please correct.]",
+                original_prompt, feedback
+            );
+            let mut retry_request = request.clone();
+            retry_request.prompt = retry_prompt;
+            let response = self.inference.complete(&retry_request).await?;
+            output = StepOutput::Text(response.text);
+        }
+
+        Ok(output)
+    }
+
+    // ─── Adaptive Test-Time Compute ──────────────────────────
+
+    async fn estimate_difficulty(&self, step: &Step, _resolved_prompt: &str) -> StepDifficulty {
+        // Only estimate difficulty if skills are active (production use).
+        // Without active skills, default to Moderate to avoid unnecessary inference calls.
+        if self.skills.active_skills().is_empty() {
+            return StepDifficulty::Moderate;
+        }
+
+        // Use the Fast model for a quick classification.
+        let prompt = format!(
+            "Rate the difficulty of this task as 'routine', 'moderate', or 'hard'. \
+             Respond with one word.\n\nTask: {}",
+            step.description
+        );
+
+        let request = CompletionRequest::new(&prompt).with_speed(Speed::Fast);
+        match self.inference.complete(&request).await {
+            Ok(response) => match response.text.trim().to_lowercase().as_str() {
+                "routine" => StepDifficulty::Routine,
+                "hard" => StepDifficulty::Hard,
+                _ => StepDifficulty::Moderate,
+            },
+            Err(_) => StepDifficulty::Moderate,
+        }
+    }
+
+    fn compute_budget(&self, difficulty: StepDifficulty, step: &Step) -> ComputeBudget {
+        match difficulty {
+            StepDifficulty::Routine => ComputeBudget {
+                max_tokens: 1024,
+                sampling: None,
+                evaluation: None,
+                speed_override: Some(Speed::Fast),
+            },
+            StepDifficulty::Moderate => ComputeBudget {
+                max_tokens: 4096,
+                sampling: step.sampling.clone(),
+                evaluation: step.evaluation.clone(),
+                speed_override: None,
+            },
+            StepDifficulty::Hard => ComputeBudget {
+                max_tokens: 4096,
+                sampling: step.sampling.clone().or_else(|| {
+                    Some(SamplingConfig {
+                        n: 3,
+                        selector: SampleSelector::LlmJudge {
+                            selection_prompt: None,
+                        },
+                    })
+                }),
+                evaluation: step.evaluation.clone().or_else(|| {
+                    Some(EvaluationConfig {
+                        eval_prompt: "Check this output for logical consistency, \
+                                      factual grounding, and completeness."
+                            .to_string(),
+                        max_retries: 1,
+                        eval_speed: Speed::Fast,
+                    })
+                }),
+                speed_override: None,
+            },
         }
     }
 }
@@ -488,6 +772,8 @@ mod tests {
                     },
                     requires_approval: false,
                     inputs: vec![],
+                    sampling: None,
+                    evaluation: None,
                 },
                 Step {
                     id: 1,
@@ -498,6 +784,8 @@ mod tests {
                     },
                     requires_approval: false,
                     inputs: vec![],
+                    sampling: None,
+                    evaluation: None,
                 },
                 Step {
                     id: 2,
@@ -508,6 +796,8 @@ mod tests {
                     },
                     requires_approval: false,
                     inputs: vec![],
+                    sampling: None,
+                    evaluation: None,
                 },
             ],
             edges: vec![(0, 1), (0, 2)],

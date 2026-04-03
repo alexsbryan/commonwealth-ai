@@ -3,10 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use sovereign_core::oicp::{
-    self, CapabilityProfile, InferenceRequirements, PrivacyPreference, ProviderManifest,
-    ProviderModel,
-};
+use sovereign_core::oicp::{self, InferenceRequirements, PrivacyPreference, ProviderManifest};
 use sovereign_core::types::CompletionRequest;
 use sovereign_core::Result;
 

@@ -157,6 +157,8 @@ impl CorpusManager {
             chunks_count: chunks_count as i64,
             index_size_mb: 0,
             last_updated: now,
+            version: now,
+            deleted_at: None,
         };
         self.store.save_corpus_state(&state).await?;
 
@@ -244,6 +246,8 @@ impl CorpusManager {
             chunks_count: chunks_count as i64,
             index_size_mb: 0,
             last_updated: now,
+            version: now,
+            deleted_at: None,
         };
         self.store.save_corpus_state(&state).await?;
 
@@ -411,6 +415,7 @@ impl CorpusManager {
 
         Ok(final_path)
     }
+
 }
 
 // ─── Helpers ─────────────────────────────────────────────────

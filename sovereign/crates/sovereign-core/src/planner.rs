@@ -370,6 +370,8 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
             kind,
             requires_approval: false,
             inputs,
+            sampling: None,
+            evaluation: None,
         });
     }
 
@@ -470,6 +472,8 @@ pub fn fallback_plan(goal: &str) -> Plan {
             },
             requires_approval: false,
             inputs: vec![],
+            sampling: None,
+            evaluation: None,
         }],
         edges: vec![],
     }

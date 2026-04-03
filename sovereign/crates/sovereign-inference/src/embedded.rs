@@ -103,7 +103,28 @@ impl ModelSlot {
         let max_tokens = request.max_tokens.unwrap_or(1024);
 
         let n_batch = ctx.n_batch() as usize;
-        let mut batch = LlamaBatch::new(n_batch.max(tokens.len()), 1);
+        let n_ctx = ctx.n_ctx() as usize;
+
+        // Guard: reject prompts that exceed the model's context or batch limits.
+        if tokens.len() > n_batch {
+            return Err(Error::Inference(format!(
+                "Prompt too long: {} tokens exceeds batch size of {}. \
+                 Try a shorter message or reduce conversation history.",
+                tokens.len(),
+                n_batch
+            )));
+        }
+        if tokens.len() + max_tokens > n_ctx {
+            return Err(Error::Inference(format!(
+                "Prompt too long: {} tokens + {} max response tokens exceeds \
+                 context window of {}. Try a shorter message.",
+                tokens.len(),
+                max_tokens,
+                n_ctx
+            )));
+        }
+
+        let mut batch = LlamaBatch::new(n_batch, 1);
         let last_idx = tokens.len() - 1;
         for (i, &token) in tokens.iter().enumerate() {
             batch
@@ -377,8 +398,23 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 let slot = primary.as_ref().unwrap();
                 let mut ctx_lock = slot.context.blocking_lock();
-                let (text, tokens_used) =
-                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request)?;
+
+                // Catch panics from llama.cpp (e.g., context overflow assertions).
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request)
+                }));
+
+                let (text, tokens_used) = match result {
+                    Ok(Ok(r)) => r,
+                    Ok(Err(e)) => return Err(e),
+                    Err(_) => {
+                        return Err(Error::Inference(
+                            "Model inference failed: prompt may exceed the model's context window. \
+                             Try a shorter message or reduce conversation history.".to_string(),
+                        ));
+                    }
+                };
+
                 let latency_ms = start.elapsed().as_millis() as u64;
 
                 *last_use.blocking_lock() = Some(Instant::now());
@@ -392,7 +428,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 })
             })
             .await
-            .map_err(|e| Error::Inference(format!("Task join error: {e}")))?
+            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?
         } else {
             // Use fast slot.
             let slot = Arc::clone(&self.fast);
@@ -401,8 +437,23 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             tokio::task::spawn_blocking(move || {
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
-                let (text, tokens_used) =
-                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request)?;
+
+                // Catch panics from llama.cpp (e.g., context overflow assertions).
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request)
+                }));
+
+                let (text, tokens_used) = match result {
+                    Ok(Ok(r)) => r,
+                    Ok(Err(e)) => return Err(e),
+                    Err(_) => {
+                        return Err(Error::Inference(
+                            "Model inference failed: prompt may exceed the model's context window. \
+                             Try a shorter message or reduce conversation history.".to_string(),
+                        ));
+                    }
+                };
+
                 let latency_ms = start.elapsed().as_millis() as u64;
 
                 Ok(CompletionResponse {
@@ -414,7 +465,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 })
             })
             .await
-            .map_err(|e| Error::Inference(format!("Task join error: {e}")))?
+            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?
         }
     }
 

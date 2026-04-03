@@ -11,8 +11,9 @@ pub type MessageId = String;
 
 // ─── Inference Types ───────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Speed {
+    #[default]
     Fast,
     Medium,
     Slow,
@@ -150,6 +151,34 @@ pub enum Permission {
     CalendarWrite,
 }
 
+// ─── Trust ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrustLevel {
+    CommunityReviewed,
+    AuthorSigned,
+    Unsigned,
+}
+
+impl Default for TrustLevel {
+    fn default() -> Self {
+        TrustLevel::Unsigned
+    }
+}
+
+/// Compute trust level from signature fields.
+pub fn compute_trust_level(
+    signature: &Option<String>,
+    signed_by: &Option<String>,
+) -> TrustLevel {
+    match (signature, signed_by) {
+        (Some(_), Some(s)) if s == "sovereign-community" => TrustLevel::CommunityReviewed,
+        (Some(_), _) => TrustLevel::AuthorSigned,
+        _ => TrustLevel::Unsigned,
+    }
+}
+
 // ─── Plan Types ────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,6 +236,10 @@ pub struct Step {
     pub kind: StepKind,
     pub requires_approval: bool,
     pub inputs: Vec<StepInput>,
+    #[serde(default)]
+    pub sampling: Option<SamplingConfig>,
+    #[serde(default)]
+    pub evaluation: Option<EvaluationConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -259,6 +292,8 @@ pub struct Message {
     pub content: String,
     pub created_at: i64,
     pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub version: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -286,6 +321,10 @@ pub struct Conversation {
     pub messages: Vec<Message>,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default)]
+    pub version: i64,
+    #[serde(default)]
+    pub deleted_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -314,6 +353,8 @@ pub struct Task {
     pub completed_steps: Vec<(usize, StepOutput)>,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default)]
+    pub version: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -335,6 +376,10 @@ pub struct Memory {
     pub confidence: f64,
     pub created_at: i64,
     pub last_used: i64,
+    #[serde(default)]
+    pub version: i64,
+    #[serde(default)]
+    pub deleted_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -415,6 +460,8 @@ pub struct SearchBudget {
     pub monthly_limit: u32,
     pub used_this_month: u32,
     pub reset_date: i64,
+    #[serde(default)]
+    pub version: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -425,6 +472,16 @@ pub struct CorpusState {
     pub chunks_count: i64,
     pub index_size_mb: i64,
     pub last_updated: i64,
+    #[serde(default)]
+    pub version: i64,
+    #[serde(default)]
+    pub deleted_at: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScoredChunk {
+    pub chunk: DocumentChunk,
+    pub score: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -437,6 +494,80 @@ pub struct DocumentChunk {
     pub created_at: i64,
     #[serde(default)]
     pub source_type: SourceType,
+    #[serde(default)]
+    pub version: i64,
+    #[serde(default)]
+    pub deleted_at: Option<i64>,
+}
+
+// ─── Execution Intelligence Types ─────────────────────────────
+
+/// Retry configuration for tool execution on transient failures.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetryConfig {
+    pub max_retries: usize,
+    pub backoff_ms: Vec<u64>,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 2,
+            backoff_ms: vec![1000, 3000],
+        }
+    }
+}
+
+/// Best-of-N sampling configuration for Reason steps.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SamplingConfig {
+    pub n: usize,
+    pub selector: SampleSelector,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SampleSelector {
+    /// Fast model reads all candidates and selects the best.
+    LlmJudge {
+        #[serde(default)]
+        selection_prompt: Option<String>,
+    },
+    /// Take the most common first-line answer.
+    MajorityVote,
+    /// Run each candidate through a tool; first to pass wins.
+    Verify { tool_id: ToolId },
+}
+
+/// Evaluation configuration for closed-loop self-correction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvaluationConfig {
+    pub eval_prompt: String,
+    #[serde(default = "default_eval_retries")]
+    pub max_retries: usize,
+    #[serde(default)]
+    pub eval_speed: Speed,
+}
+
+fn default_eval_retries() -> usize {
+    1
+}
+
+/// Difficulty estimate for adaptive test-time compute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepDifficulty {
+    Routine,
+    Moderate,
+    Hard,
+}
+
+/// Compute budget derived from difficulty estimation.
+#[derive(Debug, Clone)]
+pub struct ComputeBudget {
+    pub max_tokens: usize,
+    pub sampling: Option<SamplingConfig>,
+    pub evaluation: Option<EvaluationConfig>,
+    pub speed_override: Option<Speed>,
 }
 
 // ─── Response Types ────────────────────────────────────────────
@@ -445,6 +576,25 @@ pub struct DocumentChunk {
 pub struct Response {
     pub message: Message,
     pub task: Option<Task>,
+}
+
+// ─── Response Provenance ──────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseProvenance {
+    pub intent: String,
+    pub search_method: Option<String>,
+    pub sources: Vec<SourceSummary>,
+    pub inference_backend: String,
+    pub oicp_match: Option<String>,
+    pub total_latency_ms: u64,
+    pub tokens_used: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceSummary {
+    pub origin: String,
+    pub count: usize,
 }
 
 // ─── Action Preview (for approval) ────────────────────────────

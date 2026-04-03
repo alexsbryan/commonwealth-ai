@@ -5,6 +5,7 @@ export interface MessageResponse {
   role: string;
   content: string;
   task: TaskSummary | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TaskSummary {
@@ -33,6 +34,7 @@ export interface MessageEntry {
   role: string;
   content: string;
   created_at: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CreateConversationResponse {
@@ -50,6 +52,7 @@ export interface SkillEntry {
   name: string;
   description: string;
   active: boolean;
+  trust_level: string;
 }
 
 export interface DesktopConfig {
@@ -62,6 +65,7 @@ export interface DesktopConfig {
   context_size: number;
   search_backend: SearchBackendConfig;
   setup_complete: boolean;
+  selected_tier: string | null;
 }
 
 export interface SearchBackendConfig {
@@ -77,6 +81,7 @@ export interface SetupConfig {
   enabled_tools: string[];
   search_provider?: string;
   search_api_key?: string;
+  selected_tier?: string;
 }
 
 // ─── Event Payloads ──────────────────────────────────────────
@@ -143,6 +148,27 @@ export interface RecommendedModel {
   size_estimate: string;
   ram_minimum: string;
   description: string;
+}
+
+// ─── Knowledge Base ─────────────────────────────────────────
+
+export interface CorpusEntry {
+  id: string;
+  name: string;
+  description: string;
+  size_indexed_gb: number;
+  license: string;
+  tiers: string[];
+  status: "installed" | "installing" | "not_installed";
+  chunks_count: number | null;
+  trust_level: string;
+}
+
+export interface CorpusProgressPayload {
+  corpus_id: string;
+  phase: "downloading" | "parsing" | "complete" | "failed";
+  percent: number;
+  chunks_processed: number;
 }
 
 // ─── UI State ────────────────────────────────────────────────

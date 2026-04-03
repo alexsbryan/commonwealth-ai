@@ -1,51 +1,42 @@
 <script lang="ts">
-  import { completeSetup } from "../api";
+  import type { SetupConfig } from "../types";
   import ModelSelector from "./ModelSelector.svelte";
 
   interface Props {
-    onComplete: () => void;
+    onNext: (config: SetupConfig) => void;
     onBack: () => void;
   }
 
-  let { onComplete, onBack }: Props = $props();
+  let { onNext, onBack }: Props = $props();
 
   let modelPath = $state("");
   let enableWebSearch = $state(true);
   let enableShell = $state(true);
   let enableKnowledge = $state(true);
-  let submitting = $state(false);
   let error = $state("");
 
-  async function handleSubmit() {
+  function handleSubmit() {
     if (!modelPath.trim()) {
       error = "Please select a model first.";
       return;
     }
-    submitting = true;
     error = "";
 
     const tools: string[] = [];
     if (enableShell) tools.push("shell");
-    if (enableWebSearch) {
-      tools.push("web_search");
+    if (enableWebSearch || enableKnowledge) {
+      tools.push("search");
       tools.push("web_fetch");
     }
     if (enableKnowledge) {
-      tools.push("knowledge");
       tools.push("document");
     }
 
-    try {
-      await completeSetup({
-        model_path: modelPath,
-        active_skills: [],
-        enabled_tools: tools,
-      });
-      onComplete();
-    } catch (e) {
-      error = `Setup failed: ${e}`;
-    }
-    submitting = false;
+    onNext({
+      model_path: modelPath,
+      active_skills: [],
+      enabled_tools: tools,
+    });
   }
 </script>
 
@@ -84,9 +75,9 @@
   <button
     class="submit-btn"
     onclick={handleSubmit}
-    disabled={submitting || !modelPath}
+    disabled={!modelPath}
   >
-    {submitting ? "Setting up..." : "Start"}
+    Next
   </button>
 </div>
 

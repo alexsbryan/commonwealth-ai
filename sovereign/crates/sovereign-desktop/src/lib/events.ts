@@ -4,6 +4,7 @@ import type {
   ApprovalRequestPayload,
   UserInputRequestPayload,
   ErrorPayload,
+  CorpusProgressPayload,
 } from "./types";
 
 export interface EventHandlers {
@@ -14,6 +15,7 @@ export interface EventHandlers {
   onApprovalRequest?: (payload: ApprovalRequestPayload) => void;
   onUserInputRequest?: (payload: UserInputRequestPayload) => void;
   onError?: (payload: ErrorPayload) => void;
+  onCorpusProgress?: (payload: CorpusProgressPayload) => void;
 }
 
 export async function initEventListeners(
@@ -69,6 +71,14 @@ export async function initEventListeners(
     unlisteners.push(
       await listen<ErrorPayload>("error", (event) =>
         handlers.onError!(event.payload),
+      ),
+    );
+  }
+
+  if (handlers.onCorpusProgress) {
+    unlisteners.push(
+      await listen<CorpusProgressPayload>("corpus-progress", (event) =>
+        handlers.onCorpusProgress!(event.payload),
       ),
     );
   }

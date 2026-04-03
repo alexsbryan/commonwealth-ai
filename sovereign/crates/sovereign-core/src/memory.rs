@@ -236,6 +236,8 @@ fn parse_extracted_memories(text: &str) -> Result<Vec<Memory>> {
             confidence: 1.0,
             created_at: current_time,
             last_used: current_time,
+            version: current_time,
+            deleted_at: None,
         })
         .collect())
 }
@@ -317,23 +319,42 @@ pub async fn detect_contradictions(
 
 // ─── Confidence Decay ─────────────────────────────────────────
 
+const DEFAULT_DECAY_RATE: f64 = 0.10; // 10% per month
+const DEFAULT_PRUNE_THRESHOLD: f64 = 0.2;
+
 /// Calculate decayed confidence for a memory based on time since last use.
-/// Decays 10% per month (multiplied by 0.9^months).
+/// `decay_rate` is the fraction lost per month (default 0.10 = 10%).
 pub fn apply_confidence_decay(memory: &Memory, now: i64) -> f64 {
-    let months_elapsed = (now - memory.last_used) as f64 / (30.0 * 86400.0);
-    memory.confidence * 0.9_f64.powf(months_elapsed)
+    apply_confidence_decay_with_rate(memory, now, DEFAULT_DECAY_RATE)
 }
 
-/// Prune memories with decayed confidence below 0.2.
-/// Updates confidence for those still above threshold.
-/// Returns the number of memories pruned.
+/// Calculate decayed confidence with a custom decay rate.
+pub fn apply_confidence_decay_with_rate(memory: &Memory, now: i64, decay_rate: f64) -> f64 {
+    let months_elapsed = (now - memory.last_used) as f64 / (30.0 * 86400.0);
+    let retention = 1.0 - decay_rate.clamp(0.0, 1.0);
+    memory.confidence * retention.powf(months_elapsed)
+}
+
+/// Prune memories with decayed confidence below threshold.
+/// Uses default decay rate (10%/month) and prune threshold (0.2).
 pub async fn prune_decayed_memories(store: &dyn StateStore, now_ts: i64) -> Result<usize> {
+    prune_decayed_memories_with_config(store, now_ts, DEFAULT_DECAY_RATE, DEFAULT_PRUNE_THRESHOLD)
+        .await
+}
+
+/// Prune memories with configurable decay rate and threshold.
+pub async fn prune_decayed_memories_with_config(
+    store: &dyn StateStore,
+    now_ts: i64,
+    decay_rate: f64,
+    prune_threshold: f64,
+) -> Result<usize> {
     let all = store.get_all_memories().await?;
     let mut pruned = 0;
 
     for memory in &all {
-        let decayed = apply_confidence_decay(memory, now_ts);
-        if decayed < 0.2 {
+        let decayed = apply_confidence_decay_with_rate(memory, now_ts, decay_rate);
+        if decayed < prune_threshold {
             store.delete_memory(&memory.id).await?;
             pruned += 1;
         } else if (decayed - memory.confidence).abs() > 0.01 {
@@ -386,6 +407,8 @@ mod tests {
             confidence: 1.0,
             created_at: 0,
             last_used: 0,
+            version: 0,
+            deleted_at: None,
         };
         let one_month = 30 * 86400;
         let decayed = apply_confidence_decay(&mem, one_month);
@@ -401,6 +424,8 @@ mod tests {
             confidence: 1.0,
             created_at: 0,
             last_used: 0,
+            version: 0,
+            deleted_at: None,
         };
         let six_months = 6 * 30 * 86400;
         let decayed = apply_confidence_decay(&mem, six_months);
@@ -416,6 +441,8 @@ mod tests {
             confidence: 1.0,
             created_at: 0,
             last_used: 0,
+            version: 0,
+            deleted_at: None,
         };
         let two_years = 24 * 30 * 86400;
         let decayed = apply_confidence_decay(&mem, two_years);
@@ -437,6 +464,8 @@ mod tests {
                 confidence: 1.0,
                 created_at: 0,
                 last_used: 0,
+                version: 0,
+                deleted_at: None,
             },
             Memory {
                 id: "2".to_string(),
@@ -445,6 +474,8 @@ mod tests {
                 confidence: 1.0,
                 created_at: 0,
                 last_used: 0,
+                version: 0,
+                deleted_at: None,
             },
         ];
         let result = format_memories_for_prompt(&memories).unwrap();

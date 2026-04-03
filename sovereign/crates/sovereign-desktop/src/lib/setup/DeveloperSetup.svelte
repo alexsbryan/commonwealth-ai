@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { completeSetup } from "../api";
+  import type { SetupConfig } from "../types";
   import ModelSelector from "./ModelSelector.svelte";
 
   interface Props {
-    onComplete: () => void;
+    onNext: (config: SetupConfig) => void;
     onBack: () => void;
   }
 
-  let { onComplete, onBack }: Props = $props();
+  let { onNext, onBack }: Props = $props();
 
   let modelPath = $state("");
   let primaryModelPath = $state("");
@@ -15,39 +15,25 @@
   let contextSize = $state(2048);
   let searchProvider = $state("duckduckgo");
   let searchApiKey = $state("");
-  let submitting = $state(false);
   let error = $state("");
 
-  async function handleSubmit() {
+  function handleSubmit() {
     if (!modelPath.trim()) {
       error = "Please select a model first.";
       return;
     }
-    submitting = true;
     error = "";
 
-    try {
-      await completeSetup({
-        model_path: modelPath,
-        primary_model_path: primaryModelPath || undefined,
-        data_dir: dataDir || undefined,
-        active_skills: [],
-        enabled_tools: [
-          "shell",
-          "web_search",
-          "web_fetch",
-          "knowledge",
-          "document",
-        ],
-        search_provider:
-          searchProvider !== "duckduckgo" ? searchProvider : undefined,
-        search_api_key: searchApiKey || undefined,
-      });
-      onComplete();
-    } catch (e) {
-      error = `Setup failed: ${e}`;
-    }
-    submitting = false;
+    onNext({
+      model_path: modelPath,
+      primary_model_path: primaryModelPath || undefined,
+      data_dir: dataDir || undefined,
+      active_skills: [],
+      enabled_tools: ["shell", "search", "web_fetch", "document"],
+      search_provider:
+        searchProvider !== "duckduckgo" ? searchProvider : undefined,
+      search_api_key: searchApiKey || undefined,
+    });
   }
 </script>
 
@@ -127,9 +113,9 @@
   <button
     class="submit-btn"
     onclick={handleSubmit}
-    disabled={submitting || !modelPath}
+    disabled={!modelPath}
   >
-    {submitting ? "Setting up..." : "Start"}
+    Next
   </button>
 </div>
 

@@ -199,12 +199,10 @@ async fn main() {
         Arc::clone(&store),
         Arc::clone(&inference),
     )));
-    tools.register(Box::new(sovereign_tools::knowledge::KnowledgeTool::new(
+    tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
         Arc::clone(&store),
         Arc::clone(&inference),
-    )));
-    tools.register(Box::new(sovereign_tools::web::WebSearchTool::new(
-        Arc::clone(&inference),
+        sovereign_tools::web::search::SearchBackend::DuckDuckGo,
     )));
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     tools.register(Box::new(sovereign_tools::compute::ComputeTool));

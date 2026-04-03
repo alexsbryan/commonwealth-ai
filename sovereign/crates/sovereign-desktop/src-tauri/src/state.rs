@@ -1,8 +1,11 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+
+use sovereign_tools::corpus::CorpusManager;
 
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
@@ -36,6 +39,8 @@ pub struct DesktopConfig {
     pub search_backend: SearchBackendConfig,
     #[serde(default)]
     pub setup_complete: bool,
+    #[serde(default)]
+    pub selected_tier: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -62,9 +67,8 @@ fn default_skills_dir() -> PathBuf {
 fn default_enabled_tools() -> Vec<String> {
     vec![
         "shell".to_string(),
-        "web_search".to_string(),
+        "search".to_string(),
         "web_fetch".to_string(),
-        "knowledge".to_string(),
         "document".to_string(),
     ]
 }
@@ -89,6 +93,7 @@ impl Default for DesktopConfig {
             context_size: default_context_size(),
             search_backend: SearchBackendConfig::default(),
             setup_complete: false,
+            selected_tier: None,
         }
     }
 }
@@ -137,6 +142,8 @@ pub struct AppState {
     /// Reusable across Runtime rebuilds (model stays loaded).
     pub inference: RwLock<Option<Arc<dyn InferenceProvider>>>,
     pub store: RwLock<Option<Arc<dyn StateStore>>>,
+    pub corpus_manager: RwLock<Option<Arc<CorpusManager>>>,
+    pub install_progress: RwLock<HashMap<String, crate::commands::CorpusProgressPayload>>,
 }
 
 impl AppState {
@@ -148,6 +155,8 @@ impl AppState {
             config: RwLock::new(config),
             inference: RwLock::new(None),
             store: RwLock::new(None),
+            corpus_manager: RwLock::new(None),
+            install_progress: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -258,13 +267,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             Arc::clone(&inference),
         )));
     }
-    if enabled.iter().any(|t| t == "knowledge") {
-        tools.register(Box::new(sovereign_tools::knowledge::KnowledgeTool::new(
-            Arc::clone(&store),
-            Arc::clone(&inference),
-        )));
-    }
-    if enabled.iter().any(|t| t == "web_search") {
+    if enabled.iter().any(|t| t == "search" || t == "knowledge" || t == "web_search") {
         let backend = match config.search_backend.provider.as_str() {
             "tavily" => {
                 if let Some(ref key) = config.search_backend.api_key {
@@ -286,7 +289,8 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             }
             _ => sovereign_tools::web::search::SearchBackend::DuckDuckGo,
         };
-        tools.register(Box::new(sovereign_tools::web::WebSearchTool::with_backend(
+        tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
+            Arc::clone(&store),
             Arc::clone(&inference),
             backend,
         )));
@@ -310,6 +314,24 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     );
 
     *state.runtime.write().await = Some(runtime);
+
+    // Initialize corpus manager.
+    if let Some(registry) = crate::commands::load_corpus_registry(&config.data_dir) {
+        let store_ref = state.store.read().await;
+        if let Some(ref s) = *store_ref {
+            let inf_ref = state.inference.read().await;
+            let inf = inf_ref.as_ref().map(Arc::clone);
+            let manager = Arc::new(CorpusManager::new(
+                registry,
+                Arc::clone(s),
+                inf,
+                config.data_dir.clone(),
+            ));
+            *state.corpus_manager.write().await = Some(manager);
+            tracing::info!("Corpus manager ready");
+        }
+    }
+
     tracing::info!("Runtime ready");
     Ok(())
 }

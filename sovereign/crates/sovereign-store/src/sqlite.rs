@@ -36,6 +36,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Migration failed: {e}")))?;
         migrations::run_column_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Column migration failed: {e}")))?;
+        migrations::run_sync_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Sync migration failed: {e}")))?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -50,6 +52,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Migration failed: {e}")))?;
         migrations::run_column_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Column migration failed: {e}")))?;
+        migrations::run_sync_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Sync migration failed: {e}")))?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -108,7 +112,7 @@ impl StateStore for SqliteStateStore {
 
         let (title, created_at, updated_at) = conn
             .query_row(
-                "SELECT title, created_at, updated_at FROM conversations WHERE id = ?1",
+                "SELECT title, created_at, updated_at FROM conversations WHERE id = ?1 AND deleted_at IS NULL",
                 rusqlite::params![id],
                 |row| {
                     Ok((
@@ -149,6 +153,7 @@ impl StateStore for SqliteStateStore {
                     created_at: row.get(4)?,
                     metadata: metadata_str
                         .and_then(|s| serde_json::from_str(&s).ok()),
+                    version: 0,
                 })
             })
             .map_err(map_db)?
@@ -161,6 +166,8 @@ impl StateStore for SqliteStateStore {
             messages,
             created_at,
             updated_at,
+            version: 0,
+            deleted_at: None,
         })
     }
 
@@ -170,7 +177,7 @@ impl StateStore for SqliteStateStore {
         let mut stmt = conn
             .prepare(
                 "SELECT id, title, created_at, updated_at
-                 FROM conversations ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
+                 FROM conversations WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
             )
             .map_err(map_db)?;
 
@@ -182,6 +189,8 @@ impl StateStore for SqliteStateStore {
                     messages: Vec::new(), // Not loading messages for list view.
                     created_at: row.get(2)?,
                     updated_at: row.get(3)?,
+                    version: 0,
+                    deleted_at: None,
                 })
             })
             .map_err(map_db)?
@@ -222,6 +231,7 @@ impl StateStore for SqliteStateStore {
                     created_at: row.get(4)?,
                     metadata: metadata_str
                         .and_then(|s| serde_json::from_str(&s).ok()),
+                    version: 0,
                 })
             })
             .map_err(map_db)?
@@ -233,10 +243,10 @@ impl StateStore for SqliteStateStore {
 
     async fn delete_conversation(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().await;
-        // CASCADE deletes messages too.
+        let ts = now();
         conn.execute(
-            "DELETE FROM conversations WHERE id = ?1",
-            rusqlite::params![id],
+            "UPDATE conversations SET deleted_at = ?2, version = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+            rusqlite::params![id, ts],
         )
         .map_err(map_db)?;
         Ok(())
@@ -305,6 +315,7 @@ impl StateStore for SqliteStateStore {
                     },
                     created_at: row.get(6)?,
                     updated_at: row.get(7)?,
+                    version: 0,
                 })
             },
         )
@@ -340,18 +351,23 @@ impl StateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let current_time = now();
 
+        let fts_context = sanitize_fts5_query(context);
+        if fts_context.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mut stmt = conn
             .prepare(
                 "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used
                  FROM memories m
                  JOIN memories_fts fts ON m.rowid = fts.rowid
-                 WHERE memories_fts MATCH ?1
+                 WHERE memories_fts MATCH ?1 AND m.deleted_at IS NULL
                  LIMIT ?2",
             )
             .map_err(map_db)?;
 
         let memories: Vec<Memory> = stmt
-            .query_map(rusqlite::params![context, (limit * 3) as i64], |row| {
+            .query_map(rusqlite::params![fts_context, (limit * 3) as i64], |row| {
                 Ok(Memory {
                     id: row.get(0)?,
                     content: row.get(1)?,
@@ -359,6 +375,8 @@ impl StateStore for SqliteStateStore {
                     confidence: row.get(3)?,
                     created_at: row.get(4)?,
                     last_used: row.get(5)?,
+                    version: 0,
+                    deleted_at: None,
                 })
             })
             .map_err(map_db)?
@@ -396,7 +414,7 @@ impl StateStore for SqliteStateStore {
     async fn get_all_memories(&self) -> Result<Vec<Memory>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
-            .prepare("SELECT id, content, source, confidence, created_at, last_used FROM memories")
+            .prepare("SELECT id, content, source, confidence, created_at, last_used FROM memories WHERE deleted_at IS NULL")
             .map_err(map_db)?;
 
         let memories: Vec<Memory> = stmt
@@ -408,6 +426,8 @@ impl StateStore for SqliteStateStore {
                     confidence: row.get(3)?,
                     created_at: row.get(4)?,
                     last_used: row.get(5)?,
+                    version: 0,
+                    deleted_at: None,
                 })
             })
             .map_err(map_db)?
@@ -419,8 +439,12 @@ impl StateStore for SqliteStateStore {
 
     async fn delete_memory(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().await;
-        conn.execute("DELETE FROM memories WHERE id = ?1", rusqlite::params![id])
-            .map_err(map_db)?;
+        let ts = now();
+        conn.execute(
+            "UPDATE memories SET deleted_at = ?2, version = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+            rusqlite::params![id, ts],
+        )
+        .map_err(map_db)?;
         Ok(())
     }
 
@@ -540,19 +564,21 @@ impl StateStore for SqliteStateStore {
             std::collections::HashMap::new();
 
         // 1. FTS5 text search (always available, no embeddings needed).
-        if !query_text.is_empty() {
+        // Sanitize query into FTS5-safe keywords.
+        let fts_query = sanitize_fts5_query(query_text);
+        if !fts_query.is_empty() {
             let mut fts_stmt = conn
                 .prepare(
                     "SELECT d.id, d.source, d.content, d.chunk_index, d.embedding, d.created_at, d.source_type, d.corpus_id
                      FROM documents d
                      JOIN documents_fts fts ON d.rowid = fts.rowid
-                     WHERE documents_fts MATCH ?1
+                     WHERE documents_fts MATCH ?1 AND d.deleted_at IS NULL
                      LIMIT ?2",
                 )
                 .map_err(map_db)?;
 
             let fts_results: Vec<DocumentChunk> = fts_stmt
-                .query_map(rusqlite::params![query_text, (limit * 2) as i64], |row| {
+                .query_map(rusqlite::params![fts_query, (limit * 2) as i64], |row| {
                     let embedding_blob: Option<Vec<u8>> = row.get(4)?;
                     let embedding = embedding_blob.map(|blob| {
                         blob.chunks(4)
@@ -573,6 +599,8 @@ impl StateStore for SqliteStateStore {
                         embedding,
                         created_at: row.get(5)?,
                         source_type: SourceType::from_db_columns(&st, cid.as_deref()),
+                        version: 0,
+                        deleted_at: None,
                     })
                 })
                 .map_err(map_db)?
@@ -591,7 +619,7 @@ impl StateStore for SqliteStateStore {
             let mut vec_stmt = conn
                 .prepare(
                     "SELECT id, source, content, chunk_index, embedding, created_at, source_type, corpus_id
-                     FROM documents WHERE embedding IS NOT NULL",
+                     FROM documents WHERE embedding IS NOT NULL AND deleted_at IS NULL",
                 )
                 .map_err(map_db)?;
 
@@ -621,6 +649,8 @@ impl StateStore for SqliteStateStore {
                             embedding,
                             created_at: row.get(5)?,
                             source_type: SourceType::from_db_columns(&st, cid.as_deref()),
+                            version: 0,
+                            deleted_at: None,
                         },
                     ))
                 })
@@ -652,12 +682,140 @@ impl StateStore for SqliteStateStore {
         Ok(sorted.into_iter().take(limit).map(|(_, c)| c).collect())
     }
 
+    async fn search_documents_scored(
+        &self,
+        query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+    ) -> Result<Vec<ScoredChunk>> {
+        // Reuse the same hybrid search logic but preserve scores.
+        let conn = self.conn.lock().await;
+        let mut results: std::collections::HashMap<String, (f32, DocumentChunk)> =
+            std::collections::HashMap::new();
+
+        let fts_query_scored = sanitize_fts5_query(query_text);
+        if !fts_query_scored.is_empty() {
+            let mut fts_stmt = conn
+                .prepare(
+                    "SELECT d.id, d.source, d.content, d.chunk_index, d.embedding, d.created_at, d.source_type, d.corpus_id
+                     FROM documents d
+                     JOIN documents_fts fts ON d.rowid = fts.rowid
+                     WHERE documents_fts MATCH ?1 AND d.deleted_at IS NULL
+                     LIMIT ?2",
+                )
+                .map_err(map_db)?;
+
+            let fts_results: Vec<DocumentChunk> = fts_stmt
+                .query_map(rusqlite::params![fts_query_scored, (limit * 2) as i64], |row| {
+                    let embedding_blob: Option<Vec<u8>> = row.get(4)?;
+                    let embedding = embedding_blob.map(|blob| {
+                        blob.chunks(4)
+                            .map(|c| {
+                                let mut bytes = [0u8; 4];
+                                bytes.copy_from_slice(c);
+                                f32::from_le_bytes(bytes)
+                            })
+                            .collect::<Vec<f32>>()
+                    });
+                    let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                    let cid: Option<String> = row.get(7)?;
+                    Ok(DocumentChunk {
+                        id: row.get(0)?,
+                        source: row.get(1)?,
+                        content: row.get(2)?,
+                        chunk_index: row.get::<_, i64>(3)? as usize,
+                        embedding,
+                        created_at: row.get(5)?,
+                        source_type: SourceType::from_db_columns(&st, cid.as_deref()),
+                        version: 0,
+                        deleted_at: None,
+                    })
+                })
+                .map_err(map_db)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .unwrap_or_default();
+
+            for (i, chunk) in fts_results.into_iter().enumerate() {
+                let score = 1.0 - (i as f32 * 0.05).min(0.5);
+                results.insert(chunk.id.clone(), (score, chunk));
+            }
+        }
+
+        if !query_embedding.is_empty() {
+            let mut vec_stmt = conn
+                .prepare(
+                    "SELECT id, source, content, chunk_index, embedding, created_at, source_type, corpus_id
+                     FROM documents WHERE embedding IS NOT NULL AND deleted_at IS NULL",
+                )
+                .map_err(map_db)?;
+
+            let vector_results: Vec<(String, f32, DocumentChunk)> = vec_stmt
+                .query_map([], |row| {
+                    let embedding_blob: Option<Vec<u8>> = row.get(4)?;
+                    let embedding = embedding_blob.map(|blob| {
+                        blob.chunks(4)
+                            .map(|c| {
+                                let mut bytes = [0u8; 4];
+                                bytes.copy_from_slice(c);
+                                f32::from_le_bytes(bytes)
+                            })
+                            .collect::<Vec<f32>>()
+                    });
+                    let id: String = row.get(0)?;
+                    let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                    let cid: Option<String> = row.get(7)?;
+                    Ok((
+                        id.clone(),
+                        embedding.clone(),
+                        DocumentChunk {
+                            id,
+                            source: row.get(1)?,
+                            content: row.get(2)?,
+                            chunk_index: row.get::<_, i64>(3)? as usize,
+                            embedding,
+                            created_at: row.get(5)?,
+                            source_type: SourceType::from_db_columns(&st, cid.as_deref()),
+                            version: 0,
+                            deleted_at: None,
+                        },
+                    ))
+                })
+                .map_err(map_db)?
+                .filter_map(|r| r.ok())
+                .filter_map(|(id, emb, chunk)| {
+                    emb.map(|e| {
+                        let sim = cosine_similarity(query_embedding, &e);
+                        (id, sim, chunk)
+                    })
+                })
+                .collect();
+
+            for (id, sim, chunk) in vector_results {
+                results
+                    .entry(id)
+                    .and_modify(|(score, _)| {
+                        *score = (*score + sim) / 2.0 + 0.1;
+                    })
+                    .or_insert((sim, chunk));
+            }
+        }
+
+        let mut sorted: Vec<(f32, DocumentChunk)> = results.into_values().collect();
+        sorted.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        Ok(sorted
+            .into_iter()
+            .take(limit)
+            .map(|(score, chunk)| ScoredChunk { chunk, score })
+            .collect())
+    }
+
     async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
                 "SELECT id, source, content, chunk_index, embedding, created_at, source_type, corpus_id
-                 FROM documents WHERE source = ?1 ORDER BY chunk_index ASC",
+                 FROM documents WHERE source = ?1 AND deleted_at IS NULL ORDER BY chunk_index ASC",
             )
             .map_err(map_db)?;
 
@@ -683,6 +841,8 @@ impl StateStore for SqliteStateStore {
                     embedding,
                     created_at: row.get(5)?,
                     source_type: SourceType::from_db_columns(&st, cid.as_deref()),
+                    version: 0,
+                    deleted_at: None,
                 })
             })
             .map_err(map_db)?
@@ -694,10 +854,11 @@ impl StateStore for SqliteStateStore {
 
     async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64> {
         let conn = self.conn.lock().await;
+        let ts = now();
         let count = conn
             .execute(
-                "DELETE FROM documents WHERE corpus_id = ?1",
-                rusqlite::params![corpus_id],
+                "UPDATE documents SET deleted_at = ?2, version = ?2 WHERE corpus_id = ?1 AND deleted_at IS NULL",
+                rusqlite::params![corpus_id, ts],
             )
             .map_err(map_db)?;
         Ok(count as u64)
@@ -706,7 +867,7 @@ impl StateStore for SqliteStateStore {
     async fn list_sources(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
-            .prepare("SELECT DISTINCT source FROM documents ORDER BY source")
+            .prepare("SELECT DISTINCT source FROM documents WHERE deleted_at IS NULL ORDER BY source")
             .map_err(map_db)?;
 
         let sources: Vec<String> = stmt
@@ -740,7 +901,7 @@ impl StateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let result = conn.query_row(
             "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated
-             FROM corpus_state WHERE corpus_id = ?1",
+             FROM corpus_state WHERE corpus_id = ?1 AND deleted_at IS NULL",
             rusqlite::params![corpus_id],
             |row| {
                 Ok(CorpusState {
@@ -750,6 +911,8 @@ impl StateStore for SqliteStateStore {
                     chunks_count: row.get(3)?,
                     index_size_mb: row.get(4)?,
                     last_updated: row.get(5)?,
+                    version: 0,
+                    deleted_at: None,
                 })
             },
         );
@@ -768,7 +931,7 @@ impl StateStore for SqliteStateStore {
         let mut stmt = conn
             .prepare(
                 "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated
-                 FROM corpus_state ORDER BY installed_at DESC",
+                 FROM corpus_state WHERE deleted_at IS NULL ORDER BY installed_at DESC",
             )
             .map_err(map_db)?;
 
@@ -781,6 +944,8 @@ impl StateStore for SqliteStateStore {
                     chunks_count: row.get(3)?,
                     index_size_mb: row.get(4)?,
                     last_updated: row.get(5)?,
+                    version: 0,
+                    deleted_at: None,
                 })
             })
             .map_err(map_db)?
@@ -792,9 +957,10 @@ impl StateStore for SqliteStateStore {
 
     async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()> {
         let conn = self.conn.lock().await;
+        let ts = now();
         conn.execute(
-            "DELETE FROM corpus_state WHERE corpus_id = ?1",
-            rusqlite::params![corpus_id],
+            "UPDATE corpus_state SET deleted_at = ?2, version = ?2 WHERE corpus_id = ?1 AND deleted_at IS NULL",
+            rusqlite::params![corpus_id, ts],
         )
         .map_err(map_db)?;
         Ok(())
@@ -812,6 +978,7 @@ impl StateStore for SqliteStateStore {
                     monthly_limit: row.get(1)?,
                     used_this_month: row.get(2)?,
                     reset_date: row.get(3)?,
+                    version: 0,
                 })
             },
         );
@@ -864,6 +1031,41 @@ impl StateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+}
+
+/// Sanitize a natural language query into FTS5-safe keywords.
+/// Strips punctuation, stopwords, and joins remaining terms with OR
+/// for broader matching.
+fn sanitize_fts5_query(query: &str) -> String {
+    const STOPWORDS: &[&str] = &[
+        "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "shall", "can", "need", "dare", "ought",
+        "to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
+        "into", "through", "during", "before", "after", "above", "below",
+        "between", "out", "off", "over", "under", "again", "further", "then",
+        "once", "here", "there", "when", "where", "why", "how", "all", "both",
+        "each", "few", "more", "most", "other", "some", "such", "no", "nor",
+        "not", "only", "own", "same", "so", "than", "too", "very", "just",
+        "because", "but", "and", "or", "if", "while", "about", "what", "which",
+        "who", "whom", "this", "that", "these", "those", "am", "it", "its",
+        "he", "she", "his", "her", "they", "them", "their", "we", "us", "our",
+        "you", "your", "i", "me", "my",
+    ];
+
+    let words: Vec<&str> = query
+        .split(|c: char| !c.is_alphanumeric() && c != '-')
+        .filter(|w| !w.is_empty())
+        .filter(|w| w.len() > 1)
+        .filter(|w| !STOPWORDS.contains(&w.to_lowercase().as_str()))
+        .collect();
+
+    if words.is_empty() {
+        return String::new();
+    }
+
+    // Use OR to match any keyword (broader recall).
+    words.join(" OR ")
 }
 
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {

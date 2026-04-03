@@ -67,6 +67,8 @@ fn plan_roundtrip() {
                 },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 1,
@@ -77,6 +79,8 @@ fn plan_roundtrip() {
                 },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 2,
@@ -90,6 +94,8 @@ fn plan_roundtrip() {
                     StepInput { step_id: 0, key: "output".to_string() },
                     StepInput { step_id: 1, key: "output".to_string() },
                 ],
+            sampling: None,
+            evaluation: None,
             },
         ],
         edges: vec![(0, 2), (1, 2)],
@@ -115,6 +121,8 @@ fn plan_topological_batches() {
                 kind: StepKind::Reason { prompt_template: "a".to_string(), speed: Speed::Fast },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 1,
@@ -122,6 +130,8 @@ fn plan_topological_batches() {
                 kind: StepKind::Reason { prompt_template: "b".to_string(), speed: Speed::Fast },
                 requires_approval: false,
                 inputs: vec![],
+            sampling: None,
+            evaluation: None,
             },
             Step {
                 id: 2,
@@ -132,6 +142,8 @@ fn plan_topological_batches() {
                     StepInput { step_id: 0, key: "output".to_string() },
                     StepInput { step_id: 1, key: "output".to_string() },
                 ],
+            sampling: None,
+            evaluation: None,
             },
         ],
         edges: vec![(0, 2), (1, 2)],
@@ -172,6 +184,7 @@ fn message_roundtrip() {
         content: "Hello!".to_string(),
         created_at: 1711900000,
         metadata: Some(serde_json::json!({"model": "qwen-1.7b"})),
+        version: 0,
     };
 
     let json = serde_json::to_string(&msg).unwrap();

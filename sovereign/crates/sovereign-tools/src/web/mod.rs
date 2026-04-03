@@ -53,7 +53,7 @@ impl WebSearchTool {
     /// Convert a natural language question into effective search keywords.
     /// A simple LLM call that strips conversational fluff and produces
     /// 1-2 clean keyword queries (not sub-queries that reference each other).
-    async fn to_search_queries(&self, query: &str) -> Vec<String> {
+    pub(crate) async fn to_search_queries(&self, query: &str) -> Vec<String> {
         let request = CompletionRequest {
             prompt: format!(
                 "Convert this into 1-2 concise search engine queries (keywords only, no full sentences). \
@@ -99,7 +99,7 @@ impl WebSearchTool {
     }
 
     /// Execute searches and collect results.
-    async fn execute_searches(&self, queries: &[String]) -> Vec<SearchResult> {
+    pub(crate) async fn execute_searches(&self, queries: &[String]) -> Vec<SearchResult> {
         let mut all_results = Vec::new();
         let mut seen_urls = std::collections::HashSet::new();
 
@@ -122,7 +122,7 @@ impl WebSearchTool {
     }
 
     /// Fetch and extract content from top URLs.
-    async fn extract_content(
+    pub(crate) async fn extract_content(
         &self,
         results: &[SearchResult],
         max_pages: usize,
@@ -153,7 +153,7 @@ impl WebSearchTool {
     }
 
     /// Synthesize a cited answer from extracted content.
-    async fn synthesize(
+    pub(crate) async fn synthesize(
         &self,
         query: &str,
         sources: &[(String, String, String)],

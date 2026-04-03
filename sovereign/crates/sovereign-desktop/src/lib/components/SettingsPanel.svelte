@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { getConfig, saveConfig } from "../api";
   import type { DesktopConfig } from "../types";
+  import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import SkillManager from "./SkillManager.svelte";
 
   interface Props {
@@ -76,6 +77,11 @@
           <span>Skills directory</span>
           <input type="text" bind:value={config.skills_dir} />
         </label>
+      </div>
+
+      <div class="section">
+        <h3>Knowledge Base</h3>
+        <KnowledgeStatus />
       </div>
 
       <div class="section">

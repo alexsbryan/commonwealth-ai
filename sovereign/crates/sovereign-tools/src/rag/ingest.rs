@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sovereign_core::error::Result;
@@ -89,6 +88,8 @@ pub async fn ingest_file(
             embedding,
             created_at: now(),
             source_type: SourceType::UserDocument,
+            version: 0,
+            deleted_at: None,
         });
     }
 

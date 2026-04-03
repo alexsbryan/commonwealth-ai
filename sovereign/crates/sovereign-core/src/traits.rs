@@ -70,6 +70,12 @@ pub trait Tool: Send + Sync {
         let _ = params;
         Ok(())
     }
+
+    /// Retry configuration for transient failures.
+    /// Returns None for tools that should not retry (e.g., email send).
+    fn retry_config(&self) -> Option<RetryConfig> {
+        None
+    }
 }
 
 // ─── 5. Storage ────────────────────────────────────────────────
@@ -113,6 +119,20 @@ pub trait StateStore: Send + Sync {
         query_text: &str,
         limit: usize,
     ) -> Result<Vec<DocumentChunk>>;
+    async fn search_documents_scored(
+        &self,
+        query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+    ) -> Result<Vec<ScoredChunk>> {
+        let chunks = self
+            .search_documents(query_embedding, query_text, limit)
+            .await?;
+        Ok(chunks
+            .into_iter()
+            .map(|c| ScoredChunk { chunk: c, score: 0.0 })
+            .collect())
+    }
     async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>>;
     async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64>;
     async fn list_sources(&self) -> Result<Vec<String>>;

@@ -165,3 +165,22 @@ pub fn run_column_migrations(conn: &Connection) -> rusqlite::Result<()> {
     let _ = conn.execute_batch("ALTER TABLE documents ADD COLUMN corpus_id TEXT");
     Ok(())
 }
+
+/// Add version and deleted_at columns for sync-readiness.
+/// These enable future multi-device sync without schema migration.
+pub fn run_sync_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    // version: Lamport timestamp set on every write.
+    let _ = conn.execute_batch("ALTER TABLE conversations ADD COLUMN version INTEGER DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE conversations ADD COLUMN deleted_at INTEGER");
+    let _ = conn.execute_batch("ALTER TABLE messages ADD COLUMN version INTEGER DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE tasks ADD COLUMN version INTEGER DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN version INTEGER DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN deleted_at INTEGER");
+    let _ = conn.execute_batch("ALTER TABLE documents ADD COLUMN version INTEGER DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE documents ADD COLUMN deleted_at INTEGER");
+    let _ = conn.execute_batch("ALTER TABLE permissions ADD COLUMN version INTEGER DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE corpus_state ADD COLUMN version INTEGER DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE corpus_state ADD COLUMN deleted_at INTEGER");
+    let _ = conn.execute_batch("ALTER TABLE search_budget ADD COLUMN version INTEGER DEFAULT 0");
+    Ok(())
+}
