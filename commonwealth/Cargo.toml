@@ -7,6 +7,7 @@ members = [
     "crates/commonwealth-orchestrator",
     "crates/commonwealth-api",
     "crates/commonwealth-daemon",
+    "crates/commonwealth-test-harness",
 ]
 
 [workspace.package]

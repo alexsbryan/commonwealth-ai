@@ -1,22 +1,25 @@
 [package]
-name = "commonwealth-api"
-description = "Axum HTTP server with OpenAI-compatible and OICP endpoints for Commonwealth"
+name = "commonwealth-test-harness"
+description = "Integration test harness for Commonwealth — simulated nodes, mock servers, failure injection"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
 commonwealth-core = { workspace = true }
+commonwealth-discovery = { workspace = true }
 commonwealth-scheduler = { workspace = true }
 commonwealth-orchestrator = { workspace = true }
-axum = { workspace = true }
+commonwealth-api = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
-
-[dev-dependencies]
-tokio = { workspace = true, features = ["test-util", "macros"] }
+axum = { workspace = true }
 tower = "0.5"
 http-body-util = "0.1"
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

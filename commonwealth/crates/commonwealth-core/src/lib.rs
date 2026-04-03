@@ -8,6 +8,7 @@ pub mod ledger;
 pub mod mesh;
 pub mod model;
 pub mod oicp;
+pub mod oicp_registry;
 pub mod scheduler;
 
 pub use error::{Error, Result};

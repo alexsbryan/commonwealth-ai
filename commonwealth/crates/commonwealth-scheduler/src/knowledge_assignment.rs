@@ -1,0 +1,319 @@
+use std::collections::HashMap;
+
+use commonwealth_core::ids::NodeId;
+use commonwealth_core::knowledge::{ChunkRange, KnowledgeShardAssignment, KnowledgeShardPlan};
+
+/// Information about a corpus to be assigned across the mesh.
+#[derive(Debug, Clone)]
+pub struct CorpusInfo {
+    pub corpus_id: String,
+    pub total_chunks: u64,
+    pub size_gb: f32,
+    /// If false, corpus can only be stored on the node that ingested it.
+    pub mesh_sharing: bool,
+}
+
+/// A node with available storage capacity.
+#[derive(Debug, Clone)]
+pub struct NodeWithCapacity {
+    pub node_id: NodeId,
+    pub free_storage_gb: f32,
+}
+
+/// Assign knowledge corpora across mesh nodes.
+///
+/// Implements the algorithm from the architecture:
+/// 1. If a corpus fits on one node, assign it whole.
+/// 2. If not, split by chunk ID range proportional to free disk space.
+/// 3. Assign replicas to different nodes than the primary.
+/// 4. Respect mesh_sharing flags (restricted corpora are not replicated).
+pub fn assign_knowledge_shards(
+    corpora: &[CorpusInfo],
+    nodes: &[NodeWithCapacity],
+    redundancy_target: usize,
+) -> KnowledgeShardPlan {
+    let mut assignments = Vec::new();
+    let mut redundancy_achieved: HashMap<String, usize> = HashMap::new();
+
+    if nodes.is_empty() {
+        return KnowledgeShardPlan {
+            assignments,
+            redundancy_achieved,
+        };
+    }
+
+    // Sort nodes by free storage descending for greedy assignment.
+    let mut sorted_nodes: Vec<&NodeWithCapacity> = nodes.iter().collect();
+    sorted_nodes.sort_by(|a, b| {
+        b.free_storage_gb
+            .partial_cmp(&a.free_storage_gb)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for corpus in corpora {
+        // Track which nodes get assigned this corpus (for replica placement).
+        let mut assigned_nodes: Vec<NodeId> = Vec::new();
+
+        // Primary assignment.
+        let primaries = assign_corpus_primary(corpus, &sorted_nodes);
+        for assignment in &primaries {
+            assigned_nodes.push(assignment.node_id);
+        }
+        assignments.extend(primaries);
+
+        // Replica assignment (if mesh_sharing allows).
+        if corpus.mesh_sharing {
+            let replica_count =
+                assign_corpus_replicas(corpus, &sorted_nodes, &assigned_nodes, redundancy_target);
+            for assignment in &replica_count {
+                assigned_nodes.push(assignment.node_id);
+            }
+            assignments.extend(replica_count);
+        }
+
+        redundancy_achieved.insert(corpus.corpus_id.clone(), assigned_nodes.len());
+    }
+
+    KnowledgeShardPlan {
+        assignments,
+        redundancy_achieved,
+    }
+}
+
+/// Assign primary copies of a corpus across nodes.
+fn assign_corpus_primary(
+    corpus: &CorpusInfo,
+    nodes: &[&NodeWithCapacity],
+) -> Vec<KnowledgeShardAssignment> {
+    // Find a single node that can hold the entire corpus.
+    let single_node = nodes.iter().find(|n| n.free_storage_gb >= corpus.size_gb);
+
+    if let Some(node) = single_node {
+        // Fits on one node — assign whole.
+        return vec![KnowledgeShardAssignment {
+            node_id: node.node_id,
+            corpus_id: corpus.corpus_id.clone(),
+            chunk_range: None, // Entire corpus.
+            is_replica: false,
+        }];
+    }
+
+    // Doesn't fit on one node — split by chunk range proportional to storage.
+    let eligible: Vec<&&NodeWithCapacity> =
+        nodes.iter().filter(|n| n.free_storage_gb > 0.0).collect();
+
+    if eligible.is_empty() {
+        return vec![];
+    }
+
+    let total_storage: f32 = eligible.iter().map(|n| n.free_storage_gb).sum();
+    let mut assignments = Vec::new();
+    let mut current_chunk: u64 = 0;
+
+    for (i, node) in eligible.iter().enumerate() {
+        let fraction = node.free_storage_gb / total_storage;
+        let chunk_count = if i == eligible.len() - 1 {
+            // Last node gets the remainder to avoid rounding gaps.
+            corpus.total_chunks - current_chunk
+        } else {
+            (fraction * corpus.total_chunks as f32).floor() as u64
+        };
+
+        if chunk_count == 0 {
+            continue;
+        }
+
+        assignments.push(KnowledgeShardAssignment {
+            node_id: node.node_id,
+            corpus_id: corpus.corpus_id.clone(),
+            chunk_range: Some(ChunkRange::new(current_chunk, current_chunk + chunk_count)),
+            is_replica: false,
+        });
+        current_chunk += chunk_count;
+    }
+
+    assignments
+}
+
+/// Assign replica copies of a corpus to nodes that don't already have it.
+fn assign_corpus_replicas(
+    corpus: &CorpusInfo,
+    nodes: &[&NodeWithCapacity],
+    already_assigned: &[NodeId],
+    redundancy_target: usize,
+) -> Vec<KnowledgeShardAssignment> {
+    let copies_needed = redundancy_target.saturating_sub(already_assigned.len());
+    if copies_needed == 0 {
+        return vec![];
+    }
+
+    let mut replicas = Vec::new();
+
+    // Prefer nodes that don't already have this corpus, sorted by most free storage.
+    let candidates: Vec<&&NodeWithCapacity> = nodes
+        .iter()
+        .filter(|n| !already_assigned.contains(&n.node_id))
+        .filter(|n| n.free_storage_gb >= corpus.size_gb * 0.5) // Need at least half for a replica.
+        .collect();
+
+    for node in candidates.iter().take(copies_needed) {
+        replicas.push(KnowledgeShardAssignment {
+            node_id: node.node_id,
+            corpus_id: corpus.corpus_id.clone(),
+            chunk_range: None, // Full replica.
+            is_replica: true,
+        });
+    }
+
+    replicas
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node(id: u128, storage_gb: f32) -> NodeWithCapacity {
+        NodeWithCapacity {
+            node_id: NodeId::from_u128(id),
+            free_storage_gb: storage_gb,
+        }
+    }
+
+    fn corpus(id: &str, chunks: u64, size_gb: f32, sharing: bool) -> CorpusInfo {
+        CorpusInfo {
+            corpus_id: id.into(),
+            total_chunks: chunks,
+            size_gb,
+            mesh_sharing: sharing,
+        }
+    }
+
+    #[test]
+    fn single_corpus_fits_on_one_node() {
+        let nodes = vec![node(1, 100.0), node(2, 50.0)];
+        let corpora = vec![corpus("wikipedia", 6_800_000, 30.0, true)];
+
+        let plan = assign_knowledge_shards(&corpora, &nodes, 2);
+        assert_eq!(plan.assignments.len(), 2); // primary + 1 replica
+        assert_eq!(plan.redundancy_achieved["wikipedia"], 2);
+
+        // Primary should be on node 1 (most storage).
+        let primary = plan.assignments.iter().find(|a| !a.is_replica).unwrap();
+        assert_eq!(primary.node_id, NodeId::from_u128(1));
+        assert!(primary.chunk_range.is_none()); // Whole corpus.
+    }
+
+    #[test]
+    fn large_corpus_splits_across_nodes() {
+        let nodes = vec![node(1, 20.0), node(2, 20.0)];
+        let corpora = vec![corpus("huge_corpus", 10_000_000, 50.0, true)];
+
+        let plan = assign_knowledge_shards(&corpora, &nodes, 1);
+
+        // Should be split across both nodes.
+        let primaries: Vec<_> = plan.assignments.iter().filter(|a| !a.is_replica).collect();
+        assert_eq!(primaries.len(), 2);
+
+        // Chunks should cover the full range.
+        let total_chunks: u64 = primaries
+            .iter()
+            .map(|a| a.chunk_range.unwrap().count())
+            .sum();
+        assert_eq!(total_chunks, 10_000_000);
+
+        // Ranges should be contiguous.
+        let mut ranges: Vec<_> = primaries.iter().map(|a| a.chunk_range.unwrap()).collect();
+        ranges.sort_by_key(|r| r.start_id);
+        assert_eq!(ranges[0].start_id, 0);
+        assert_eq!(ranges[0].end_id, ranges[1].start_id);
+        assert_eq!(ranges[1].end_id, 10_000_000);
+    }
+
+    #[test]
+    fn redundancy_assigns_replicas() {
+        let nodes = vec![node(1, 100.0), node(2, 100.0), node(3, 100.0)];
+        let corpora = vec![corpus("wikipedia", 6_800_000, 30.0, true)];
+
+        let plan = assign_knowledge_shards(&corpora, &nodes, 2);
+        assert_eq!(plan.redundancy_achieved["wikipedia"], 2);
+
+        let replicas: Vec<_> = plan.assignments.iter().filter(|a| a.is_replica).collect();
+        assert_eq!(replicas.len(), 1);
+
+        // Replica should be on a different node than primary.
+        let primary = plan.assignments.iter().find(|a| !a.is_replica).unwrap();
+        assert_ne!(replicas[0].node_id, primary.node_id);
+    }
+
+    #[test]
+    fn mesh_sharing_restriction_prevents_replication() {
+        let nodes = vec![node(1, 100.0), node(2, 100.0)];
+        let corpora = vec![corpus("restricted", 1_000_000, 10.0, false)];
+
+        let plan = assign_knowledge_shards(&corpora, &nodes, 2);
+
+        // mesh_sharing=false: only primary, no replicas.
+        assert_eq!(plan.assignments.len(), 1);
+        assert!(!plan.assignments[0].is_replica);
+        assert_eq!(plan.redundancy_achieved["restricted"], 1);
+    }
+
+    #[test]
+    fn multiple_corpora_assigned_independently() {
+        let nodes = vec![node(1, 200.0), node(2, 200.0), node(3, 100.0)];
+        let corpora = vec![
+            corpus("wikipedia", 6_800_000, 30.0, true),
+            corpus("openalex", 5_000_000, 25.0, true),
+            corpus("sep", 500_000, 5.0, true),
+        ];
+
+        let plan = assign_knowledge_shards(&corpora, &nodes, 2);
+
+        // All three corpora should be in the plan.
+        assert!(plan.redundancy_achieved.contains_key("wikipedia"));
+        assert!(plan.redundancy_achieved.contains_key("openalex"));
+        assert!(plan.redundancy_achieved.contains_key("sep"));
+    }
+
+    #[test]
+    fn empty_nodes_returns_empty_plan() {
+        let corpora = vec![corpus("test", 1000, 1.0, true)];
+        let plan = assign_knowledge_shards(&corpora, &[], 2);
+        assert!(plan.assignments.is_empty());
+    }
+
+    #[test]
+    fn five_node_scenario() {
+        // Architecture scenario: Alice 1TB, Bob 512GB, Carol 2TB, Dave 1TB, Eve 256GB.
+        let nodes = vec![
+            node(1, 800.0),  // Alice
+            node(2, 400.0),  // Bob
+            node(3, 1500.0), // Carol
+            node(4, 800.0),  // Dave
+            node(5, 100.0),  // Eve
+        ];
+
+        let corpora = vec![
+            corpus("wikipedia", 6_800_000, 30.0, true),
+            corpus("openalex", 15_000_000, 80.0, true),
+            corpus("sep", 500_000, 5.0, true),
+            corpus("stackexchange", 3_000_000, 20.0, true),
+        ];
+
+        let plan = assign_knowledge_shards(&corpora, &nodes, 2);
+
+        // All corpora should be assigned.
+        for c in &corpora {
+            assert!(
+                plan.redundancy_achieved.contains_key(&c.corpus_id),
+                "corpus {} not assigned",
+                c.corpus_id
+            );
+            assert!(
+                plan.redundancy_achieved[&c.corpus_id] >= 1,
+                "corpus {} has no copies",
+                c.corpus_id
+            );
+        }
+    }
+}
