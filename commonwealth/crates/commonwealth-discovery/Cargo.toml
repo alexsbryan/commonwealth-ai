@@ -26,5 +26,8 @@ rcgen = "0.13"
 # Gossip peer selection
 rand = "0.9"
 
+# Hardware detection
+sysinfo = "0.35"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }

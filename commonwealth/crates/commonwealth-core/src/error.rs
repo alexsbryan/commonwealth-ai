@@ -22,6 +22,9 @@ pub enum Error {
     #[error("TLS error: {0}")]
     Tls(String),
 
+    #[error("orchestrator error: {0}")]
+    Orchestrator(String),
+
     #[error("{0}")]
     Internal(String),
 }
