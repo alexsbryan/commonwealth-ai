@@ -1,0 +1,13 @@
+[package]
+name = "commonwealth-orchestrator"
+description = "Process management and index management for Commonwealth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { workspace = true }
+commonwealth-scheduler = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }

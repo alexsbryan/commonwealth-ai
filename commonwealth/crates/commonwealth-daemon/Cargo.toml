@@ -1,0 +1,22 @@
+[package]
+name = "commonwealth-daemon"
+description = "CLI and daemon entry point for Commonwealth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "commonwealth"
+path = "src/main.rs"
+
+[dependencies]
+commonwealth-core = { workspace = true }
+commonwealth-discovery = { workspace = true }
+commonwealth-scheduler = { workspace = true }
+commonwealth-orchestrator = { workspace = true }
+commonwealth-api = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

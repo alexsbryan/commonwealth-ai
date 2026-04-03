@@ -1,0 +1,13 @@
+[package]
+name = "commonwealth-discovery"
+description = "mDNS discovery, gossip protocol, and latency probing for Commonwealth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

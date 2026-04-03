@@ -1,0 +1,12 @@
+[package]
+name = "commonwealth-core"
+description = "Shared types, mesh state, shard plans, and ledger for Commonwealth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
