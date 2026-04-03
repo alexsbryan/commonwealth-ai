@@ -1,15 +1,27 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use commonwealth_core::capabilities::*;
 use commonwealth_core::ids::*;
+use commonwealth_core::knowledge::*;
 use commonwealth_core::mesh::*;
+use commonwealth_core::oicp::*;
 use commonwealth_core::scheduler::*;
 
 use commonwealth_discovery::gossip::*;
 use commonwealth_discovery::membership;
+use commonwealth_discovery::threshold::SignificanceThresholds;
 
+use commonwealth_orchestrator::departure::{DepartureState, GracefulDeparture};
+use commonwealth_orchestrator::fault::{
+    FaultDetector, FaultDetectorConfig, FaultEvent, FaultStatus,
+};
+
+use commonwealth_scheduler::knowledge_assignment::{self, CorpusInfo, NodeWithCapacity};
 use commonwealth_scheduler::leader;
+use commonwealth_scheduler::oicp_cache::OicpModelCache;
 use commonwealth_scheduler::plan_builder;
+use commonwealth_scheduler::portfolio::ModelPortfolio;
 
 use commonwealth_test_harness::fixtures::*;
 use commonwealth_test_harness::mock_llama::MockLlamaServer;
@@ -576,4 +588,609 @@ async fn internal_latency_probe_responds() {
 
     let (status, _) = http_get(internal_addr, "/internal/latency/probe").await;
     assert_eq!(status, 200);
+}
+
+// ============================================================================
+// Scenario: Fault Detection State Machine (Phase 8)
+// Nodes transition through health states as heartbeats timeout.
+// ============================================================================
+
+#[test]
+fn fault_detection_timeout_transitions() {
+    let config = FaultDetectorConfig {
+        suspected_timeout: Duration::from_millis(50),
+        away_timeout: Duration::from_millis(100),
+        failure_timeout: Duration::from_millis(200),
+    };
+    let mut fd = FaultDetector::new(config);
+
+    // Register 3 nodes in a simulated mesh.
+    let ids: Vec<NodeId> = (1..=3).map(NodeId::from_u128).collect();
+    for &id in &ids {
+        fd.register_node(id);
+    }
+
+    // All healthy initially.
+    assert_eq!(fd.healthy_nodes().len(), 3);
+    assert!(fd.failed_nodes().is_empty());
+
+    // After enough time, node 1 should transition — but we keep 2 and 3 alive.
+    std::thread::sleep(Duration::from_millis(60));
+
+    // Heartbeat nodes 2 and 3 *after* the sleep so they stay healthy.
+    fd.record_heartbeat(ids[1]);
+    fd.record_heartbeat(ids[2]);
+
+    let events = fd.check_all();
+    assert!(
+        events
+            .iter()
+            .any(|e| *e == FaultEvent::NodeSuspected { node_id: ids[0] }),
+        "node 1 should be suspected after timeout"
+    );
+
+    // Nodes 2, 3 still healthy because we heartbeated them just now.
+    assert_eq!(fd.node_status(ids[1]), Some(FaultStatus::Healthy));
+    assert_eq!(fd.node_status(ids[2]), Some(FaultStatus::Healthy));
+}
+
+#[test]
+fn fault_detection_recovery_on_heartbeat() {
+    let config = FaultDetectorConfig {
+        suspected_timeout: Duration::from_millis(30),
+        away_timeout: Duration::from_millis(60),
+        failure_timeout: Duration::from_millis(120),
+    };
+    let mut fd = FaultDetector::new(config);
+    let id = NodeId::from_u128(1);
+    fd.register_node(id);
+
+    // Let it go suspected.
+    std::thread::sleep(Duration::from_millis(40));
+    fd.check_all();
+    assert_eq!(fd.node_status(id), Some(FaultStatus::Suspected));
+
+    // Heartbeat recovers it.
+    let event = fd.record_heartbeat(id);
+    assert_eq!(event, Some(FaultEvent::NodeRecovered { node_id: id }));
+    assert_eq!(fd.node_status(id), Some(FaultStatus::Healthy));
+}
+
+// ============================================================================
+// Scenario: Graceful Departure Protocol (Phase 8)
+// Full state machine from announcement to safe stop.
+// ============================================================================
+
+#[test]
+fn graceful_departure_full_lifecycle() {
+    let id = NodeId::from_u128(1);
+
+    // Create with very short countdown for testing.
+    let mut dep = GracefulDeparture::with_countdown(id, Duration::from_millis(50));
+    assert_eq!(dep.state(), DepartureState::Announced);
+    assert!(!dep.is_ready_to_stop());
+
+    // Advance through states.
+    assert_eq!(dep.advance(), DepartureState::Rebalancing);
+    assert_eq!(dep.advance(), DepartureState::Draining);
+    assert_eq!(dep.advance(), DepartureState::Complete);
+    assert!(dep.is_ready_to_stop());
+
+    // Integrate with fault detector.
+    let mut fd = FaultDetector::new(FaultDetectorConfig::default());
+    fd.register_node(id);
+    let event = fd.begin_graceful_departure(id);
+    assert_eq!(event, Some(FaultEvent::NodeDeparting { node_id: id }));
+
+    let event = fd.mark_departed(id);
+    assert_eq!(event, Some(FaultEvent::NodeDeparted { node_id: id }));
+    assert!(fd.failed_nodes().contains(&id));
+}
+
+// ============================================================================
+// Scenario: 503 + Retry-After on Backend Failure (Phase 8)
+// Backend unavailable → 503 with Retry-After header.
+// ============================================================================
+
+#[tokio::test]
+async fn inference_503_retry_after_on_backend_failure() {
+    let mut mesh = SimulatedMesh::new("503 Test");
+    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
+    let addrs = mesh.start_all().await;
+    let client_addr = addrs[0].0;
+
+    // Register model pointing to a non-existent llama-server address.
+    let model = coding_model(1);
+    let model_id = model.id;
+    mesh.nodes[0].register_model(model).await;
+    mesh.nodes[0]
+        .set_llama_server_address(model_id, "127.0.0.1:1".into()) // Nothing listening.
+        .await;
+    mesh.nodes[0]
+        .set_inference_plan(InferencePlan {
+            model_plans: vec![ShardPlan {
+                model: model_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 40.0,
+                estimated_ttft_ms: 1000,
+            }],
+        })
+        .await;
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let request_body = serde_json::json!({
+        "messages": [{"role": "user", "content": "Hello"}]
+    });
+    let (status, response) = http_post(client_addr, "/v1/chat/completions", &request_body).await;
+
+    // Should be 503, not 502.
+    assert_eq!(status, 503, "expected 503, got {status}");
+    assert!(
+        response["error"]["type"]
+            .as_str()
+            .unwrap()
+            .contains("unavailable"),
+        "error type should indicate unavailability"
+    );
+}
+
+// ============================================================================
+// Scenario: OICP Routing Selects Correct Model (Phase 9)
+// Two models with different capabilities, verify routing by OICP requirements.
+// ============================================================================
+
+#[tokio::test]
+async fn oicp_routing_selects_correct_model() {
+    // Start two mock llama-servers — one for each model.
+    let mock_coder = MockLlamaServer::start().await;
+    let mock_general = MockLlamaServer::start().await;
+
+    let mut mesh = SimulatedMesh::new("OICP Routing Test");
+    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 48, ComputeType::Cuda));
+    let addrs = mesh.start_all().await;
+    let client_addr = addrs[0].0;
+
+    // Register both models.
+    let coder = coding_model(1);
+    let general = general_model(2);
+    let coder_id = coder.id;
+    let general_id = general.id;
+
+    mesh.nodes[0].register_model(coder).await;
+    mesh.nodes[0].register_model(general).await;
+
+    // Point each to its own mock server.
+    mesh.nodes[0]
+        .set_llama_server_address(coder_id, mock_coder.address_string())
+        .await;
+    mesh.nodes[0]
+        .set_llama_server_address(general_id, mock_general.address_string())
+        .await;
+
+    // Set inference plan with both models.
+    mesh.nodes[0]
+        .set_inference_plan(InferencePlan {
+            model_plans: vec![
+                ShardPlan {
+                    model: coder_id,
+                    entry_node: NodeId::from_u128(1),
+                    assignments: vec![ShardAssignment {
+                        node_id: NodeId::from_u128(1),
+                        layers: LayerRange::new(0, 64),
+                        gpu_index: 0,
+                        rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                    }],
+                    estimated_tokens_per_sec: 45.0,
+                    estimated_ttft_ms: 1100,
+                },
+                ShardPlan {
+                    model: general_id,
+                    entry_node: NodeId::from_u128(1),
+                    assignments: vec![ShardAssignment {
+                        node_id: NodeId::from_u128(1),
+                        layers: LayerRange::new(0, 64),
+                        gpu_index: 0,
+                        rpc_address: "127.0.0.1:50052".parse().unwrap(),
+                    }],
+                    estimated_tokens_per_sec: 38.0,
+                    estimated_ttft_ms: 1300,
+                },
+            ],
+        })
+        .await;
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Request with code requirements → should route to coder model.
+    let code_request = serde_json::json!({
+        "messages": [{"role": "user", "content": "Write Rust code"}],
+        "oicp": {
+            "oicp_version": "0.1.0",
+            "capabilities": {
+                "required": {"code": 3},
+                "preferred": {"code": 4, "instruction": 3}
+            }
+        }
+    });
+    let (status, _) = http_post(client_addr, "/v1/chat/completions", &code_request).await;
+    assert_eq!(status, 200, "code request should succeed");
+    assert_eq!(
+        mock_coder.request_count(),
+        1,
+        "coder should get the request"
+    );
+    assert_eq!(mock_general.request_count(), 0, "general should not get it");
+
+    // Request with analysis requirements → should route to general model.
+    let analysis_request = serde_json::json!({
+        "messages": [{"role": "user", "content": "Analyze this paper"}],
+        "oicp": {
+            "oicp_version": "0.1.0",
+            "capabilities": {
+                "required": {"analysis": 2},
+                "preferred": {"analysis": 3, "general": 3}
+            }
+        }
+    });
+    let (status, _) = http_post(client_addr, "/v1/chat/completions", &analysis_request).await;
+    assert_eq!(status, 200, "analysis request should succeed");
+    assert_eq!(
+        mock_coder.request_count(),
+        1,
+        "coder should not get second request"
+    );
+    assert_eq!(
+        mock_general.request_count(),
+        1,
+        "general should get the analysis request"
+    );
+}
+
+// ============================================================================
+// Scenario: Multi-Model Portfolio Swap (Phase 10)
+// Portfolio manages two models, transitions without gaps.
+// ============================================================================
+
+#[test]
+fn portfolio_multi_model_and_transition() {
+    let mut portfolio = ModelPortfolio::new();
+
+    // Load a coder and a general model.
+    let coder_plan = ShardPlan {
+        model: ModelId::from_u128(1),
+        entry_node: NodeId::from_u128(1),
+        assignments: vec![ShardAssignment {
+            node_id: NodeId::from_u128(1),
+            layers: LayerRange::new(0, 64),
+            gpu_index: 0,
+            rpc_address: "127.0.0.1:50051".parse().unwrap(),
+        }],
+        estimated_tokens_per_sec: 45.0,
+        estimated_ttft_ms: 1100,
+    };
+    let general_plan = ShardPlan {
+        model: ModelId::from_u128(2),
+        entry_node: NodeId::from_u128(1),
+        assignments: vec![ShardAssignment {
+            node_id: NodeId::from_u128(1),
+            layers: LayerRange::new(0, 64),
+            gpu_index: 0,
+            rpc_address: "127.0.0.1:50052".parse().unwrap(),
+        }],
+        estimated_tokens_per_sec: 38.0,
+        estimated_ttft_ms: 1300,
+    };
+
+    portfolio.add_model(ModelId::from_u128(1), coder_plan.clone());
+    portfolio.add_model(ModelId::from_u128(2), general_plan.clone());
+    assert_eq!(portfolio.model_count(), 2);
+
+    // Swap threshold: small improvement not worth it.
+    assert!(!ModelPortfolio::should_swap(0.7, 0.8)); // +0.1 < 0.3
+
+    // Swap threshold: big improvement worth it.
+    assert!(ModelPortfolio::should_swap(0.4, 0.9)); // +0.5 >= 0.3
+
+    // Execute a swap: replace general with a better model.
+    let better_plan = ShardPlan {
+        model: ModelId::from_u128(3),
+        ..general_plan.clone()
+    };
+    portfolio.begin_transition(general_plan, better_plan);
+    assert_eq!(portfolio.transition_count(), 1);
+
+    // During transition, both old and new model serve.
+    assert!(portfolio.is_loaded(ModelId::from_u128(2))); // Old still loaded.
+
+    // Complete the transition.
+    portfolio.advance_transition(0); // Ready
+    portfolio.advance_transition(0); // Complete
+    let applied = portfolio.apply_completed_transitions();
+    assert_eq!(applied, 1);
+
+    // Old model gone, new model present.
+    assert!(!portfolio.is_loaded(ModelId::from_u128(2)));
+    assert!(portfolio.is_loaded(ModelId::from_u128(3)));
+    assert_eq!(portfolio.model_count(), 2); // Coder + new model.
+}
+
+// ============================================================================
+// Scenario: OICP Cache + Portfolio Integration (Phase 9+10)
+// Cache invalidates when portfolio version changes.
+// ============================================================================
+
+#[test]
+fn oicp_cache_invalidates_on_portfolio_change() {
+    let coder = coding_model(1);
+    let general = general_model(2);
+    let models: Vec<&_> = vec![&coder, &general];
+
+    let mut cache = OicpModelCache::new(1);
+
+    // Resolve a coding request.
+    let mut req_profile = CapabilityProfile::new();
+    req_profile.set(Capability::Code, 3);
+    let mut pref_profile = CapabilityProfile::new();
+    pref_profile.set(Capability::Code, 4);
+    let reqs = CapabilityRequirements {
+        required: req_profile,
+        preferred: pref_profile,
+    };
+
+    let result = cache.resolve_or_compute(&reqs, &models);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().0, ModelId::from_u128(1)); // Coder wins.
+
+    // Portfolio changes (version bumps).
+    assert!(!cache.is_stale(1));
+    assert!(cache.is_stale(2)); // New version → stale.
+
+    cache.invalidate();
+    assert!(cache.resolve(&reqs).is_none()); // Cache cleared.
+
+    // Re-resolve after invalidation.
+    cache.set_version(2);
+    let result = cache.resolve_or_compute(&reqs, &models);
+    assert_eq!(result.unwrap().0, ModelId::from_u128(1)); // Still coder.
+}
+
+// ============================================================================
+// Scenario: Knowledge Shard Assignment (Phase 11)
+// Architecture five-node scenario with multiple corpora.
+// ============================================================================
+
+#[test]
+fn knowledge_assignment_five_node_scenario() {
+    let nodes = vec![
+        NodeWithCapacity {
+            node_id: NodeId::from_u128(1),
+            free_storage_gb: 800.0,
+        },
+        NodeWithCapacity {
+            node_id: NodeId::from_u128(2),
+            free_storage_gb: 400.0,
+        },
+        NodeWithCapacity {
+            node_id: NodeId::from_u128(3),
+            free_storage_gb: 1500.0,
+        },
+        NodeWithCapacity {
+            node_id: NodeId::from_u128(4),
+            free_storage_gb: 800.0,
+        },
+        NodeWithCapacity {
+            node_id: NodeId::from_u128(5),
+            free_storage_gb: 100.0,
+        },
+    ];
+
+    let corpora = vec![
+        CorpusInfo {
+            corpus_id: "wikipedia".into(),
+            total_chunks: 6_800_000,
+            size_gb: 30.0,
+            mesh_sharing: true,
+        },
+        CorpusInfo {
+            corpus_id: "openalex".into(),
+            total_chunks: 15_000_000,
+            size_gb: 80.0,
+            mesh_sharing: true,
+        },
+        CorpusInfo {
+            corpus_id: "sep".into(),
+            total_chunks: 500_000,
+            size_gb: 5.0,
+            mesh_sharing: true,
+        },
+    ];
+
+    let plan = knowledge_assignment::assign_knowledge_shards(&corpora, &nodes, 2);
+
+    // Every corpus should be assigned.
+    for c in &corpora {
+        assert!(
+            plan.redundancy_achieved.contains_key(&c.corpus_id),
+            "corpus {} not assigned",
+            c.corpus_id
+        );
+    }
+
+    // With redundancy_target=2, sharing corpora should have ≥2 copies.
+    assert!(plan.redundancy_achieved["wikipedia"] >= 2);
+    assert!(plan.redundancy_achieved["sep"] >= 2);
+}
+
+#[test]
+fn knowledge_assignment_restricted_corpus_no_replicas() {
+    let nodes = vec![
+        NodeWithCapacity {
+            node_id: NodeId::from_u128(1),
+            free_storage_gb: 100.0,
+        },
+        NodeWithCapacity {
+            node_id: NodeId::from_u128(2),
+            free_storage_gb: 100.0,
+        },
+    ];
+
+    let corpora = vec![CorpusInfo {
+        corpus_id: "private".into(),
+        total_chunks: 100_000,
+        size_gb: 5.0,
+        mesh_sharing: false,
+    }];
+
+    let plan = knowledge_assignment::assign_knowledge_shards(&corpora, &nodes, 2);
+
+    // mesh_sharing=false → only 1 copy despite redundancy_target=2.
+    assert_eq!(plan.redundancy_achieved["private"], 1);
+    assert!(plan.assignments.iter().all(|a| !a.is_replica));
+}
+
+// ============================================================================
+// Scenario: Knowledge Search Endpoint (Phase 11)
+// POST /v1/knowledge/search returns results from assigned corpora.
+// ============================================================================
+
+#[tokio::test]
+async fn knowledge_search_returns_results_for_assigned_corpora() {
+    let mut mesh = SimulatedMesh::new("Knowledge Test");
+    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
+    let addrs = mesh.start_all().await;
+    let client_addr = addrs[0].0;
+
+    // Set up knowledge plan with two corpora.
+    let knowledge_plan = KnowledgeShardPlan {
+        assignments: vec![
+            KnowledgeShardAssignment {
+                node_id: NodeId::from_u128(1),
+                corpus_id: "wikipedia".into(),
+                chunk_range: None,
+                is_replica: false,
+            },
+            KnowledgeShardAssignment {
+                node_id: NodeId::from_u128(1),
+                corpus_id: "sep".into(),
+                chunk_range: None,
+                is_replica: false,
+            },
+        ],
+        redundancy_achieved: [("wikipedia".into(), 1), ("sep".into(), 1)]
+            .into_iter()
+            .collect(),
+    };
+    mesh.nodes[0].set_knowledge_plan(knowledge_plan).await;
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Search with specific corpora.
+    let request = serde_json::json!({
+        "query_text": "Ostrom design principles",
+        "corpora": ["wikipedia", "sep"],
+        "limit": 10
+    });
+    let (status, response) = http_post(client_addr, "/v1/knowledge/search", &request).await;
+    assert_eq!(status, 200);
+
+    let results = response["results"].as_array().unwrap();
+    assert_eq!(results.len(), 2); // One stub result per corpus.
+
+    // Verify both corpora are represented.
+    let corpus_ids: Vec<&str> = results
+        .iter()
+        .map(|r| r["corpus_id"].as_str().unwrap())
+        .collect();
+    assert!(corpus_ids.contains(&"wikipedia"));
+    assert!(corpus_ids.contains(&"sep"));
+}
+
+#[tokio::test]
+async fn knowledge_search_empty_when_no_shards() {
+    let mut mesh = SimulatedMesh::new("Empty Knowledge Test");
+    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
+    let addrs = mesh.start_all().await;
+    let client_addr = addrs[0].0;
+
+    // No knowledge plan set — should return 503.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let request = serde_json::json!({
+        "query_text": "test query",
+        "limit": 5
+    });
+    let (status, _) = http_post(client_addr, "/v1/knowledge/search", &request).await;
+    assert_eq!(status, 503);
+}
+
+// ============================================================================
+// Scenario: Significance Thresholds (Phase 3)
+// Verify significance detection matches architecture spec.
+// ============================================================================
+
+#[test]
+fn significance_thresholds_match_architecture_spec() {
+    let thresholds = SignificanceThresholds::default();
+
+    let baseline = AvailableResources {
+        free_vram_gb: 20.0,
+        free_ram_gb: 32.0,
+        free_storage_gb: 500.0,
+        gpu_utilization: 0.3,
+        cpu_utilization: 0.4,
+        available_for_mesh: true,
+    };
+
+    // >10% VRAM change is significant.
+    let vram_change = AvailableResources {
+        free_vram_gb: 17.0, // -15% of 20
+        ..baseline.clone()
+    };
+    assert!(thresholds.is_significant(&baseline, &vram_change));
+
+    // <10% VRAM change is NOT significant.
+    let small_vram = AvailableResources {
+        free_vram_gb: 19.0, // -5% of 20
+        ..baseline.clone()
+    };
+    assert!(!thresholds.is_significant(&baseline, &small_vram));
+
+    // GPU utilization crossing 0.5 boundary.
+    let gpu_cross = AvailableResources {
+        gpu_utilization: 0.6, // crosses 0.5
+        ..baseline.clone()
+    };
+    assert!(thresholds.is_significant(&baseline, &gpu_cross));
+
+    // GPU utilization NOT crossing boundary (same band).
+    let gpu_same_band = AvailableResources {
+        gpu_utilization: 0.4, // both below 0.5
+        ..baseline.clone()
+    };
+    assert!(!thresholds.is_significant(&baseline, &gpu_same_band));
+
+    // GPU utilization crossing 0.9 boundary.
+    let high_baseline = AvailableResources {
+        gpu_utilization: 0.85,
+        ..baseline.clone()
+    };
+    let gpu_cross_90 = AvailableResources {
+        gpu_utilization: 0.95,
+        ..baseline.clone()
+    };
+    assert!(thresholds.is_significant(&high_baseline, &gpu_cross_90));
+
+    // Availability toggle always significant.
+    let toggled = AvailableResources {
+        available_for_mesh: false,
+        ..baseline.clone()
+    };
+    assert!(thresholds.is_significant(&baseline, &toggled));
 }
