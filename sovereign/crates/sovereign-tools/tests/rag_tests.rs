@@ -194,6 +194,7 @@ async fn document_tool_summarize_small() {
             chunk_index: 0,
             embedding: None,
             created_at: 0,
+            source_type: SourceType::UserDocument,
         }])
         .await
         .unwrap();
@@ -232,6 +233,7 @@ async fn document_tool_summarize_large() {
             chunk_index: i,
             embedding: None,
             created_at: 0,
+            source_type: SourceType::UserDocument,
         })
         .collect();
 

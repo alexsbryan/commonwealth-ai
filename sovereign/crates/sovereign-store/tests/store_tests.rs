@@ -490,6 +490,7 @@ fn make_chunk(id: &str, source: &str, content: &str, index: usize) -> DocumentCh
         chunk_index: index,
         embedding: None,
         created_at: now(),
+        source_type: SourceType::UserDocument,
     }
 }
 

@@ -114,7 +114,18 @@ pub trait StateStore: Send + Sync {
         limit: usize,
     ) -> Result<Vec<DocumentChunk>>;
     async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>>;
+    async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64>;
     async fn list_sources(&self) -> Result<Vec<String>>;
+
+    // Corpus state
+    async fn save_corpus_state(&self, state: &CorpusState) -> Result<()>;
+    async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState>;
+    async fn list_corpus_states(&self) -> Result<Vec<CorpusState>>;
+    async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()>;
+
+    // Search budget
+    async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>>;
+    async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()>;
 
     // Permissions
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>>;

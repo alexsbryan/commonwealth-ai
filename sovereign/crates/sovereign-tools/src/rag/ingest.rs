@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sovereign_core::error::Result;
 use sovereign_core::traits::{InferenceProvider, StateStore};
-use sovereign_core::types::DocumentChunk;
+use sovereign_core::types::{DocumentChunk, SourceType};
 
 use super::chunk::chunk_text;
 use super::parse::{list_parseable_files, parse_file};
@@ -88,6 +88,7 @@ pub async fn ingest_file(
             chunk_index: tc.index,
             embedding,
             created_at: now(),
+            source_type: SourceType::UserDocument,
         });
     }
 

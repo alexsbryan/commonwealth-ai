@@ -347,6 +347,86 @@ pub struct RoutingCorrection {
 
 // ─── Document / RAG Types ──────────────────────────────────────
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SourceType {
+    UserDocument,
+    Corpus { corpus_id: String },
+    WebSearch { url: String },
+}
+
+impl Default for SourceType {
+    fn default() -> Self {
+        SourceType::UserDocument
+    }
+}
+
+impl SourceType {
+    pub fn to_db_columns(&self) -> (&'static str, Option<&str>) {
+        match self {
+            SourceType::UserDocument => ("user", None),
+            SourceType::Corpus { corpus_id } => ("corpus", Some(corpus_id.as_str())),
+            SourceType::WebSearch { .. } => ("web", None),
+        }
+    }
+
+    pub fn from_db_columns(source_type: &str, corpus_id: Option<&str>) -> Self {
+        match source_type {
+            "corpus" => SourceType::Corpus {
+                corpus_id: corpus_id.unwrap_or_default().to_string(),
+            },
+            "web" => SourceType::WebSearch {
+                url: String::new(),
+            },
+            _ => SourceType::UserDocument,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "method", rename_all = "snake_case")]
+pub enum SearchMethod {
+    LocalOnly,
+    LocalPlusWeb { reason: String },
+    LocalOnlyIncomplete { reason: String },
+    WebOnly { reason: String },
+    NoResults { reason: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "decision", rename_all = "snake_case")]
+pub enum CoverageDecision {
+    Sufficient,
+    SupplementWithWeb { reason: String },
+    RequiresWeb { reason: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "origin", rename_all = "snake_case")]
+pub enum SourceOrigin {
+    Local { corpus: String, article_title: String },
+    Web { url: String, domain: String },
+    UserDocument { filename: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchBudget {
+    pub backend: String,
+    pub monthly_limit: u32,
+    pub used_this_month: u32,
+    pub reset_date: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusState {
+    pub corpus_id: String,
+    pub installed_at: i64,
+    pub source_date: String,
+    pub chunks_count: i64,
+    pub index_size_mb: i64,
+    pub last_updated: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
     pub id: String,
@@ -355,6 +435,8 @@ pub struct DocumentChunk {
     pub chunk_index: usize,
     pub embedding: Option<Vec<f32>>,
     pub created_at: i64,
+    #[serde(default)]
+    pub source_type: SourceType,
 }
 
 // ─── Response Types ────────────────────────────────────────────

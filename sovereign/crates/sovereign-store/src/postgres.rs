@@ -99,6 +99,25 @@ impl PostgresStateStore {
                 oicp_model_id TEXT,
                 created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
             );
+
+            CREATE TABLE IF NOT EXISTS corpus_state (
+                corpus_id    TEXT PRIMARY KEY,
+                installed_at BIGINT NOT NULL,
+                source_date  TEXT NOT NULL,
+                chunks_count BIGINT NOT NULL DEFAULT 0,
+                index_size_mb BIGINT NOT NULL DEFAULT 0,
+                last_updated BIGINT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS search_budget (
+                backend         TEXT PRIMARY KEY,
+                monthly_limit   INTEGER NOT NULL,
+                used_this_month INTEGER NOT NULL DEFAULT 0,
+                reset_date      BIGINT NOT NULL
+            );
+
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'user';
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS corpus_id TEXT;
             "#,
             )
             .await
@@ -437,11 +456,13 @@ impl StateStore for PostgresStateStore {
             let embedding_bytes: Option<Vec<u8>> = chunk.embedding.as_ref().map(|e| {
                 e.iter().flat_map(|f| f.to_le_bytes()).collect()
             });
+            let (source_type_str, corpus_id) = chunk.source_type.to_db_columns();
+            let corpus_id_owned = corpus_id.map(|s| s.to_string());
             client
                 .execute(
-                    "INSERT INTO documents (id, source, content, chunk_index, embedding, created_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING",
-                    &[&chunk.id, &chunk.source, &chunk.content, &(chunk.chunk_index as i32), &embedding_bytes, &now],
+                    "INSERT INTO documents (id, source, content, chunk_index, embedding, created_at, source_type, corpus_id) \
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING",
+                    &[&chunk.id, &chunk.source, &chunk.content, &(chunk.chunk_index as i32), &embedding_bytes, &now, &source_type_str, &corpus_id_owned],
                 )
                 .await
                 .map_err(|e| Error::Storage(e.to_string()))?;
@@ -454,7 +475,7 @@ impl StateStore for PostgresStateStore {
         let pattern = format!("%{query_text}%");
         let rows = client
             .query(
-                "SELECT id, source, content, chunk_index FROM documents WHERE content ILIKE $1 LIMIT $2",
+                "SELECT id, source, content, chunk_index, source_type, corpus_id FROM documents WHERE content ILIKE $1 LIMIT $2",
                 &[&pattern, &(limit as i64)],
             )
             .await
@@ -462,6 +483,8 @@ impl StateStore for PostgresStateStore {
 
         Ok(rows.iter().map(|r| {
             let idx: i32 = r.get("chunk_index");
+            let st: Option<String> = r.get("source_type");
+            let cid: Option<String> = r.get("corpus_id");
             DocumentChunk {
                 id: r.get("id"),
                 source: r.get("source"),
@@ -469,6 +492,7 @@ impl StateStore for PostgresStateStore {
                 chunk_index: idx as usize,
                 embedding: None,
                 created_at: Self::now(),
+                source_type: SourceType::from_db_columns(st.as_deref().unwrap_or("user"), cid.as_deref()),
             }
         }).collect())
     }
@@ -476,12 +500,14 @@ impl StateStore for PostgresStateStore {
     async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
-            .query("SELECT id, source, content, chunk_index FROM documents WHERE source = $1 ORDER BY chunk_index", &[&source])
+            .query("SELECT id, source, content, chunk_index, source_type, corpus_id FROM documents WHERE source = $1 ORDER BY chunk_index", &[&source])
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
         Ok(rows.iter().map(|r| {
             let idx: i32 = r.get("chunk_index");
+            let st: Option<String> = r.get("source_type");
+            let cid: Option<String> = r.get("corpus_id");
             DocumentChunk {
                 id: r.get("id"),
                 source: r.get("source"),
@@ -489,8 +515,18 @@ impl StateStore for PostgresStateStore {
                 chunk_index: idx as usize,
                 embedding: None,
                 created_at: Self::now(),
+                source_type: SourceType::from_db_columns(st.as_deref().unwrap_or("user"), cid.as_deref()),
             }
         }).collect())
+    }
+
+    async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let count = client
+            .execute("DELETE FROM documents WHERE corpus_id = $1", &[&corpus_id])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(count)
     }
 
     async fn list_sources(&self) -> Result<Vec<String>> {
@@ -500,6 +536,103 @@ impl StateStore for PostgresStateStore {
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(rows.iter().map(|r| r.get("source")).collect())
+    }
+
+    // ─── Corpus State + Search Budget ─────────────────────────
+
+    async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "INSERT INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated) \
+                 VALUES ($1, $2, $3, $4, $5, $6) \
+                 ON CONFLICT (corpus_id) DO UPDATE SET installed_at = $2, source_date = $3, chunks_count = $4, index_size_mb = $5, last_updated = $6",
+                &[&state.corpus_id, &state.installed_at, &state.source_date, &state.chunks_count, &state.index_size_mb, &state.last_updated],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let row = client
+            .query_opt(
+                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated FROM corpus_state WHERE corpus_id = $1",
+                &[&corpus_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        match row {
+            Some(r) => Ok(CorpusState {
+                corpus_id: r.get("corpus_id"),
+                installed_at: r.get("installed_at"),
+                source_date: r.get("source_date"),
+                chunks_count: r.get("chunks_count"),
+                index_size_mb: r.get("index_size_mb"),
+                last_updated: r.get("last_updated"),
+            }),
+            None => Err(Error::NotFound(format!("Corpus {corpus_id}"))),
+        }
+    }
+
+    async fn list_corpus_states(&self) -> Result<Vec<CorpusState>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let rows = client
+            .query("SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated FROM corpus_state ORDER BY installed_at DESC", &[])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows.iter().map(|r| CorpusState {
+            corpus_id: r.get("corpus_id"),
+            installed_at: r.get("installed_at"),
+            source_date: r.get("source_date"),
+            chunks_count: r.get("chunks_count"),
+            index_size_mb: r.get("index_size_mb"),
+            last_updated: r.get("last_updated"),
+        }).collect())
+    }
+
+    async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute("DELETE FROM corpus_state WHERE corpus_id = $1", &[&corpus_id])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let row = client
+            .query_opt(
+                "SELECT backend, monthly_limit, used_this_month, reset_date FROM search_budget WHERE backend = $1",
+                &[&backend],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(row.map(|r| SearchBudget {
+            backend: r.get("backend"),
+            monthly_limit: r.get::<_, i32>("monthly_limit") as u32,
+            used_this_month: r.get::<_, i32>("used_this_month") as u32,
+            reset_date: r.get("reset_date"),
+        }))
+    }
+
+    async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "INSERT INTO search_budget (backend, monthly_limit, used_this_month, reset_date) \
+                 VALUES ($1, $2, $3, $4) \
+                 ON CONFLICT (backend) DO UPDATE SET monthly_limit = $2, used_this_month = $3, reset_date = $4",
+                &[&budget.backend, &(budget.monthly_limit as i32), &(budget.used_this_month as i32), &budget.reset_date],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
     }
 
     // ─── Permissions ─────────────────────────────────────────

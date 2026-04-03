@@ -1,5 +1,6 @@
 pub mod calendar;
 pub mod compute;
+pub mod corpus;
 pub mod document;
 pub mod email;
 pub mod file;

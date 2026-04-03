@@ -144,6 +144,7 @@ impl DocumentTool {
                 chunk_index: i,
                 embedding: None,
                 created_at: 0,
+                source_type: SourceType::UserDocument,
             })
             .collect();
 

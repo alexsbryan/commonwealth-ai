@@ -135,6 +135,33 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
             oicp_model_id   TEXT,
             created_at      INTEGER NOT NULL
         );
+
+        -- Knowledge base: corpus state tracking
+        CREATE TABLE IF NOT EXISTS corpus_state (
+            corpus_id    TEXT PRIMARY KEY,
+            installed_at INTEGER NOT NULL,
+            source_date  TEXT NOT NULL,
+            chunks_count INTEGER NOT NULL DEFAULT 0,
+            index_size_mb INTEGER NOT NULL DEFAULT 0,
+            last_updated INTEGER NOT NULL
+        );
+
+        -- Knowledge base: web search budget tracking
+        CREATE TABLE IF NOT EXISTS search_budget (
+            backend         TEXT PRIMARY KEY,
+            monthly_limit   INTEGER NOT NULL,
+            used_this_month INTEGER NOT NULL DEFAULT 0,
+            reset_date      INTEGER NOT NULL
+        );
         ",
     )
+}
+
+/// Add columns to the documents table for knowledge base support.
+/// These are run separately because SQLite does not support
+/// `ALTER TABLE ADD COLUMN IF NOT EXISTS`.
+pub fn run_column_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch("ALTER TABLE documents ADD COLUMN source_type TEXT DEFAULT 'user'");
+    let _ = conn.execute_batch("ALTER TABLE documents ADD COLUMN corpus_id TEXT");
+    Ok(())
 }

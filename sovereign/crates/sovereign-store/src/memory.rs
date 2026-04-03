@@ -30,6 +30,8 @@ pub struct InMemoryStateStore {
     documents: RwLock<Vec<DocumentChunk>>,
     permissions: RwLock<HashMap<(String, String), bool>>,
     routing_log: RwLock<Vec<RoutingLogEntry>>,
+    corpus_states: RwLock<HashMap<String, CorpusState>>,
+    search_budgets: RwLock<HashMap<String, SearchBudget>>,
 }
 
 impl InMemoryStateStore {
@@ -42,6 +44,8 @@ impl InMemoryStateStore {
             documents: RwLock::new(Vec::new()),
             permissions: RwLock::new(HashMap::new()),
             routing_log: RwLock::new(Vec::new()),
+            corpus_states: RwLock::new(HashMap::new()),
+            search_budgets: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -259,6 +263,15 @@ impl StateStore for InMemoryStateStore {
         Ok(chunks)
     }
 
+    async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64> {
+        let mut docs = self.documents.write().await;
+        let before = docs.len();
+        docs.retain(|d| {
+            !matches!(&d.source_type, SourceType::Corpus { corpus_id: cid } if cid == corpus_id)
+        });
+        Ok((before - docs.len()) as u64)
+    }
+
     async fn list_sources(&self) -> Result<Vec<String>> {
         let docs = self.documents.read().await;
         let mut sources: Vec<String> = docs
@@ -269,6 +282,44 @@ impl StateStore for InMemoryStateStore {
             .collect();
         sources.sort();
         Ok(sources)
+    }
+
+    async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
+        self.corpus_states
+            .write()
+            .await
+            .insert(state.corpus_id.clone(), state.clone());
+        Ok(())
+    }
+
+    async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState> {
+        self.corpus_states
+            .read()
+            .await
+            .get(corpus_id)
+            .cloned()
+            .ok_or_else(|| Error::NotFound(format!("Corpus {corpus_id}")))
+    }
+
+    async fn list_corpus_states(&self) -> Result<Vec<CorpusState>> {
+        Ok(self.corpus_states.read().await.values().cloned().collect())
+    }
+
+    async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()> {
+        self.corpus_states.write().await.remove(corpus_id);
+        Ok(())
+    }
+
+    async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {
+        Ok(self.search_budgets.read().await.get(backend).cloned())
+    }
+
+    async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()> {
+        self.search_budgets
+            .write()
+            .await
+            .insert(budget.backend.clone(), budget.clone());
+        Ok(())
     }
 
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {

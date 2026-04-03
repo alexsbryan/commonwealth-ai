@@ -34,6 +34,8 @@ impl SqliteStateStore {
 
         migrations::run_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Migration failed: {e}")))?;
+        migrations::run_column_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Column migration failed: {e}")))?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -46,6 +48,8 @@ impl SqliteStateStore {
 
         migrations::run_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Migration failed: {e}")))?;
+        migrations::run_column_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Column migration failed: {e}")))?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -500,10 +504,11 @@ impl StateStore for SqliteStateStore {
                     .flat_map(|f| f.to_le_bytes())
                     .collect::<Vec<u8>>()
             });
+            let (source_type_str, corpus_id) = chunk.source_type.to_db_columns();
 
             conn.execute(
-                "INSERT OR REPLACE INTO documents (id, source, content, chunk_index, embedding, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT OR REPLACE INTO documents (id, source, content, chunk_index, embedding, created_at, source_type, corpus_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 rusqlite::params![
                     chunk.id,
                     chunk.source,
@@ -511,6 +516,8 @@ impl StateStore for SqliteStateStore {
                     chunk.chunk_index as i64,
                     embedding_blob,
                     chunk.created_at,
+                    source_type_str,
+                    corpus_id,
                 ],
             )
             .map_err(map_db)?;
@@ -536,7 +543,7 @@ impl StateStore for SqliteStateStore {
         if !query_text.is_empty() {
             let mut fts_stmt = conn
                 .prepare(
-                    "SELECT d.id, d.source, d.content, d.chunk_index, d.embedding, d.created_at
+                    "SELECT d.id, d.source, d.content, d.chunk_index, d.embedding, d.created_at, d.source_type, d.corpus_id
                      FROM documents d
                      JOIN documents_fts fts ON d.rowid = fts.rowid
                      WHERE documents_fts MATCH ?1
@@ -556,6 +563,8 @@ impl StateStore for SqliteStateStore {
                             })
                             .collect::<Vec<f32>>()
                     });
+                    let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                    let cid: Option<String> = row.get(7)?;
                     Ok(DocumentChunk {
                         id: row.get(0)?,
                         source: row.get(1)?,
@@ -563,6 +572,7 @@ impl StateStore for SqliteStateStore {
                         chunk_index: row.get::<_, i64>(3)? as usize,
                         embedding,
                         created_at: row.get(5)?,
+                        source_type: SourceType::from_db_columns(&st, cid.as_deref()),
                     })
                 })
                 .map_err(map_db)?
@@ -580,7 +590,7 @@ impl StateStore for SqliteStateStore {
         if !query_embedding.is_empty() {
             let mut vec_stmt = conn
                 .prepare(
-                    "SELECT id, source, content, chunk_index, embedding, created_at
+                    "SELECT id, source, content, chunk_index, embedding, created_at, source_type, corpus_id
                      FROM documents WHERE embedding IS NOT NULL",
                 )
                 .map_err(map_db)?;
@@ -598,6 +608,8 @@ impl StateStore for SqliteStateStore {
                             .collect::<Vec<f32>>()
                     });
                     let id: String = row.get(0)?;
+                    let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                    let cid: Option<String> = row.get(7)?;
                     Ok((
                         id.clone(),
                         embedding.clone(),
@@ -608,6 +620,7 @@ impl StateStore for SqliteStateStore {
                             chunk_index: row.get::<_, i64>(3)? as usize,
                             embedding,
                             created_at: row.get(5)?,
+                            source_type: SourceType::from_db_columns(&st, cid.as_deref()),
                         },
                     ))
                 })
@@ -643,7 +656,7 @@ impl StateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
-                "SELECT id, source, content, chunk_index, embedding, created_at
+                "SELECT id, source, content, chunk_index, embedding, created_at, source_type, corpus_id
                  FROM documents WHERE source = ?1 ORDER BY chunk_index ASC",
             )
             .map_err(map_db)?;
@@ -660,6 +673,8 @@ impl StateStore for SqliteStateStore {
                         })
                         .collect::<Vec<f32>>()
                 });
+                let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                let cid: Option<String> = row.get(7)?;
                 Ok(DocumentChunk {
                     id: row.get(0)?,
                     source: row.get(1)?,
@@ -667,6 +682,7 @@ impl StateStore for SqliteStateStore {
                     chunk_index: row.get::<_, i64>(3)? as usize,
                     embedding,
                     created_at: row.get(5)?,
+                    source_type: SourceType::from_db_columns(&st, cid.as_deref()),
                 })
             })
             .map_err(map_db)?
@@ -674,6 +690,17 @@ impl StateStore for SqliteStateStore {
             .map_err(map_db)?;
 
         Ok(chunks)
+    }
+
+    async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64> {
+        let conn = self.conn.lock().await;
+        let count = conn
+            .execute(
+                "DELETE FROM documents WHERE corpus_id = ?1",
+                rusqlite::params![corpus_id],
+            )
+            .map_err(map_db)?;
+        Ok(count as u64)
     }
 
     async fn list_sources(&self) -> Result<Vec<String>> {
@@ -689,6 +716,127 @@ impl StateStore for SqliteStateStore {
             .map_err(map_db)?;
 
         Ok(sources)
+    }
+
+    async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT OR REPLACE INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                state.corpus_id,
+                state.installed_at,
+                state.source_date,
+                state.chunks_count,
+                state.index_size_mb,
+                state.last_updated,
+            ],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState> {
+        let conn = self.conn.lock().await;
+        let result = conn.query_row(
+            "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated
+             FROM corpus_state WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+            |row| {
+                Ok(CorpusState {
+                    corpus_id: row.get(0)?,
+                    installed_at: row.get(1)?,
+                    source_date: row.get(2)?,
+                    chunks_count: row.get(3)?,
+                    index_size_mb: row.get(4)?,
+                    last_updated: row.get(5)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(state) => Ok(state),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                Err(Error::NotFound(format!("Corpus {corpus_id}")))
+            }
+            Err(e) => Err(map_db(e)),
+        }
+    }
+
+    async fn list_corpus_states(&self) -> Result<Vec<CorpusState>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated
+                 FROM corpus_state ORDER BY installed_at DESC",
+            )
+            .map_err(map_db)?;
+
+        let states: Vec<CorpusState> = stmt
+            .query_map([], |row| {
+                Ok(CorpusState {
+                    corpus_id: row.get(0)?,
+                    installed_at: row.get(1)?,
+                    source_date: row.get(2)?,
+                    chunks_count: row.get(3)?,
+                    index_size_mb: row.get(4)?,
+                    last_updated: row.get(5)?,
+                })
+            })
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(map_db)?;
+
+        Ok(states)
+    }
+
+    async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "DELETE FROM corpus_state WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {
+        let conn = self.conn.lock().await;
+        let result = conn.query_row(
+            "SELECT backend, monthly_limit, used_this_month, reset_date
+             FROM search_budget WHERE backend = ?1",
+            rusqlite::params![backend],
+            |row| {
+                Ok(SearchBudget {
+                    backend: row.get(0)?,
+                    monthly_limit: row.get(1)?,
+                    used_this_month: row.get(2)?,
+                    reset_date: row.get(3)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(budget) => Ok(Some(budget)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(map_db(e)),
+        }
+    }
+
+    async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT OR REPLACE INTO search_budget (backend, monthly_limit, used_this_month, reset_date)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                budget.backend,
+                budget.monthly_limit,
+                budget.used_this_month,
+                budget.reset_date,
+            ],
+        )
+        .map_err(map_db)?;
+        Ok(())
     }
 
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {

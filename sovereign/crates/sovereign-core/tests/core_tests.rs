@@ -155,8 +155,29 @@ impl StateStore for MockStore {
     async fn get_chunks_by_source(&self, _source: &str) -> Result<Vec<DocumentChunk>> {
         Ok(Vec::new())
     }
+    async fn delete_chunks_by_corpus(&self, _corpus_id: &str) -> Result<u64> {
+        Ok(0)
+    }
     async fn list_sources(&self) -> Result<Vec<String>> {
         Ok(Vec::new())
+    }
+    async fn save_corpus_state(&self, _state: &CorpusState) -> Result<()> {
+        Ok(())
+    }
+    async fn get_corpus_state(&self, _id: &str) -> Result<CorpusState> {
+        Err(Error::NotFound("corpus".to_string()))
+    }
+    async fn list_corpus_states(&self) -> Result<Vec<CorpusState>> {
+        Ok(Vec::new())
+    }
+    async fn delete_corpus_state(&self, _id: &str) -> Result<()> {
+        Ok(())
+    }
+    async fn get_search_budget(&self, _backend: &str) -> Result<Option<SearchBudget>> {
+        Ok(None)
+    }
+    async fn update_search_budget(&self, _budget: &SearchBudget) -> Result<()> {
+        Ok(())
     }
     async fn get_permission(&self, _tool_id: &str, _scope: &str) -> Result<Option<bool>> {
         Ok(None)
