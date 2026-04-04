@@ -20,6 +20,7 @@ sovereign-core = { path = "crates/sovereign-core" }
 sovereign-inference = { path = "crates/sovereign-inference" }
 sovereign-store = { path = "crates/sovereign-store" }
 sovereign-tools = { path = "crates/sovereign-tools" }
+corpus-engine = { path = "../corpus-engine" }
 
 # Shared dependencies
 tokio = { version = "1", features = ["full"] }

@@ -445,6 +445,7 @@ impl SkillRegistry {
             min_context_tokens: min_context,
             latency: LatencyPreference::BestEffort,
             privacy,
+            grounding: None,
         }
     }
 

@@ -8,15 +8,30 @@ pub mod stackexchange;
 pub mod wikipedia;
 
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sovereign_core::error::Result;
+use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{DocumentChunk, SourceType};
 
 use crate::rag::chunk::chunk_text;
 
 pub use manager::{CorpusInstallPhase, CorpusManager, CorpusProgress, ProgressCallback};
 pub use registry::{CorpusDefinition, CorpusRegistry, TierDefinition};
+
+/// Create a corpus-engine `EmbedFn` from Sovereign's `InferenceProvider`.
+pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_engine::EmbedFn {
+    Arc::new(move |text: &str| {
+        let inf = Arc::clone(&inference);
+        let text = text.to_string();
+        Box::pin(async move {
+            inf.embed(&text)
+                .await
+                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+        })
+    })
+}
 
 /// A parser that converts a raw corpus source (file or directory) into
 /// a streaming iterator of DocumentChunks.

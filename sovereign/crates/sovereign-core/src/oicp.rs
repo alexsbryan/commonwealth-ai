@@ -51,6 +51,10 @@ pub struct InferenceRequirements {
     /// Privacy constraint.
     #[serde(default)]
     pub privacy: PrivacyPreference,
+
+    /// Grounding preference for knowledge injection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grounding: Option<GroundingPreference>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +75,16 @@ pub enum PrivacyPreference {
     LocalOnly,
     /// Allow distributed sharding for better model quality.
     MeshAllowed,
+}
+
+/// Grounding preference for knowledge injection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroundingPreference {
+    /// Client handles its own knowledge grounding (Sovereign).
+    ClientManaged,
+    /// Provider should inject knowledge context (Commonwealth).
+    ProviderManaged,
 }
 
 /// Metadata returned by an OICP-aware provider in the response.
@@ -195,6 +209,7 @@ mod tests {
             min_context_tokens: Some(8192),
             latency: LatencyPreference::Interactive,
             privacy: PrivacyPreference::MeshAllowed,
+            grounding: Some(GroundingPreference::ClientManaged),
         };
 
         let json = serde_json::to_string(&req).unwrap();

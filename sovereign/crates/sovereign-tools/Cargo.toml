@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 sovereign-core = { workspace = true }
+corpus-engine = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

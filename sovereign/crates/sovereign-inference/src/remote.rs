@@ -398,6 +398,7 @@ mod tests {
                 min_context_tokens: Some(8192),
                 latency: Default::default(),
                 privacy: Default::default(),
+                grounding: None,
             }),
         };
 
