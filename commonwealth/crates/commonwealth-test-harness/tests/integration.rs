@@ -1194,3 +1194,157 @@ fn significance_thresholds_match_architecture_spec() {
     };
     assert!(thresholds.is_significant(&baseline, &toggled));
 }
+
+// ============================================================================
+// Scenario: OmO Model Alias Routing
+// Client sends cloud model name, alias table infers OICP, routes correctly.
+// ============================================================================
+
+#[tokio::test]
+async fn omo_model_alias_routes_to_coding_model() {
+    // Start two mock llama-servers — one per model.
+    let mock_coder = MockLlamaServer::start().await;
+    let mock_general = MockLlamaServer::start().await;
+
+    let mut mesh = SimulatedMesh::new("OmO Alias Test");
+    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 48, ComputeType::Cuda));
+    let addrs = mesh.start_all().await;
+    let client_addr = addrs[0].0;
+
+    // Register both models.
+    let coder = coding_model(1);
+    let general = general_model(2);
+    let coder_id = coder.id;
+    let general_id = general.id;
+
+    mesh.nodes[0].register_model(coder).await;
+    mesh.nodes[0].register_model(general).await;
+    mesh.nodes[0]
+        .set_llama_server_address(coder_id, mock_coder.address_string())
+        .await;
+    mesh.nodes[0]
+        .set_llama_server_address(general_id, mock_general.address_string())
+        .await;
+
+    // Set inference plan with both models.
+    mesh.nodes[0]
+        .set_inference_plan(InferencePlan {
+            model_plans: vec![
+                ShardPlan {
+                    model: coder_id,
+                    entry_node: NodeId::from_u128(1),
+                    assignments: vec![ShardAssignment {
+                        node_id: NodeId::from_u128(1),
+                        layers: LayerRange::new(0, 64),
+                        gpu_index: 0,
+                        rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                    }],
+                    estimated_tokens_per_sec: 45.0,
+                    estimated_ttft_ms: 1100,
+                },
+                ShardPlan {
+                    model: general_id,
+                    entry_node: NodeId::from_u128(1),
+                    assignments: vec![ShardAssignment {
+                        node_id: NodeId::from_u128(1),
+                        layers: LayerRange::new(0, 64),
+                        gpu_index: 0,
+                        rpc_address: "127.0.0.1:50052".parse().unwrap(),
+                    }],
+                    estimated_tokens_per_sec: 38.0,
+                    estimated_ttft_ms: 1300,
+                },
+            ],
+        })
+        .await;
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // OmO sends "gpt-5.3-codex" — no oicp field.
+    // The alias table should match this to coding requirements
+    // and route to the coder model.
+    let omo_coding_request = serde_json::json!({
+        "model": "gpt-5.3-codex",
+        "messages": [{"role": "user", "content": "Write a Rust function"}]
+    });
+    let (status, _) = http_post(client_addr, "/v1/chat/completions", &omo_coding_request).await;
+    assert_eq!(status, 200, "OmO coding request should succeed");
+    assert_eq!(
+        mock_coder.request_count(),
+        1,
+        "coding request should route to coder model"
+    );
+    assert_eq!(
+        mock_general.request_count(),
+        0,
+        "coding request should NOT route to general model"
+    );
+
+    // OmO sends "claude-opus-4-6" — should route to general model.
+    let omo_orchestration_request = serde_json::json!({
+        "model": "claude-opus-4-6",
+        "messages": [{"role": "user", "content": "Orchestrate this task"}]
+    });
+    let (status, _) = http_post(
+        client_addr,
+        "/v1/chat/completions",
+        &omo_orchestration_request,
+    )
+    .await;
+    assert_eq!(status, 200, "OmO orchestration request should succeed");
+    assert_eq!(
+        mock_coder.request_count(),
+        1,
+        "orchestration request should NOT route to coder"
+    );
+    assert_eq!(
+        mock_general.request_count(),
+        1,
+        "orchestration request should route to general model"
+    );
+}
+
+#[tokio::test]
+async fn unknown_model_name_falls_through_to_default() {
+    let mock = MockLlamaServer::start().await;
+
+    let mut mesh = SimulatedMesh::new("Fallthrough Test");
+    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
+    let addrs = mesh.start_all().await;
+    let client_addr = addrs[0].0;
+
+    let model = general_model(1);
+    let model_id = model.id;
+    mesh.nodes[0].register_model(model).await;
+    mesh.nodes[0]
+        .set_llama_server_address(model_id, mock.address_string())
+        .await;
+    mesh.nodes[0]
+        .set_inference_plan(InferencePlan {
+            model_plans: vec![ShardPlan {
+                model: model_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 38.0,
+                estimated_ttft_ms: 1300,
+            }],
+        })
+        .await;
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Completely unknown model name — no alias match.
+    // Should fall through to default model.
+    let request = serde_json::json!({
+        "model": "totally-unknown-model-v99",
+        "messages": [{"role": "user", "content": "Hello"}]
+    });
+    let (status, _) = http_post(client_addr, "/v1/chat/completions", &request).await;
+    assert_eq!(status, 200, "unknown model should fall through to default");
+    assert_eq!(mock.request_count(), 1);
+}

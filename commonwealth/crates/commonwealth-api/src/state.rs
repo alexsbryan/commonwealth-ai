@@ -7,6 +7,7 @@ use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::knowledge::KnowledgeShardPlan;
 use commonwealth_core::mesh::{Mesh, NodeStatus};
 use commonwealth_core::model::ModelInfo;
+use commonwealth_core::model_aliases::ModelAliasTable;
 use commonwealth_core::scheduler::InferencePlan;
 
 /// Shared application state for all API handlers.
@@ -23,6 +24,7 @@ pub struct AppStateInner {
     /// Maps model_id → llama-server address (host:port) on this node.
     pub llama_server_addresses: RwLock<HashMap<ModelId, String>>,
     pub knowledge_plan: RwLock<KnowledgeShardPlan>,
+    pub model_aliases: ModelAliasTable,
 }
 
 impl AppState {
@@ -40,6 +42,7 @@ impl AppState {
                     assignments: vec![],
                     redundancy_achieved: HashMap::new(),
                 }),
+                model_aliases: ModelAliasTable::default_table(),
             }),
         }
     }

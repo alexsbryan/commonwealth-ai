@@ -2,14 +2,21 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use tracing::warn;
+use tracing::{debug, warn};
 
-use commonwealth_core::oicp::ShardingPrivacy;
+use commonwealth_core::ids::ModelId;
+use commonwealth_core::oicp::{CapabilityRequirements, ShardingPrivacy};
 
 use crate::openai_types::*;
 use crate::state::AppState;
 
 /// POST /v1/chat/completions — OpenAI-compatible chat completions.
+///
+/// Routing priority:
+/// 1. Explicit OICP requirements → route via OICP scoring
+/// 2. Model name matches a loaded model by name → serve directly
+/// 3. Model name matches an alias → synthesize OICP, route via scoring
+/// 4. No match → default model
 pub async fn chat_completions(
     State(state): State<AppState>,
     Json(request): Json<ChatCompletionRequest>,
@@ -23,8 +30,8 @@ pub async fn chat_completions(
                     Json(
                         serde_json::to_value(ErrorResponse::new(
                             "Requests with privacy 'local_only' must be handled by the client's \
-                         local inference engine, not sent to Commonwealth. This is likely a \
-                         client misconfiguration.",
+                             local inference engine, not sent to Commonwealth. This is likely a \
+                             client misconfiguration.",
                             "invalid_request_error",
                         ))
                         .unwrap(),
@@ -35,33 +42,9 @@ pub async fn chat_completions(
         }
     }
 
-    // Determine which model to route to.
-    let model_id = if let Some(ref oicp) = request.oicp {
-        // OICP-aware model selection: find best matching loaded model.
-        let models = state.inner.models.read().await;
-        let plan = state.inner.inference_plan.read().await;
-
-        let mut best_model = None;
-        let mut best_score = -1.0f32;
-
-        for shard_plan in &plan.model_plans {
-            if let Some(model_info) = models.get(&shard_plan.model) {
-                if model_info
-                    .oicp_capabilities
-                    .satisfies(&oicp.capabilities.required)
-                {
-                    let score = model_info
-                        .oicp_capabilities
-                        .score_against(&oicp.capabilities.preferred);
-                    if score > best_score {
-                        best_score = score;
-                        best_model = Some(shard_plan.model);
-                    }
-                }
-            }
-        }
-
-        match best_model {
+    // --- Priority 1: Explicit OICP requirements ---
+    if let Some(ref oicp) = request.oicp {
+        let model_id = match route_with_oicp(&state, &oicp.capabilities).await {
             Some(id) => id,
             None => {
                 return (
@@ -76,28 +59,98 @@ pub async fn chat_completions(
                 )
                     .into_response();
             }
+        };
+        return forward_to_model(&state, model_id, &request).await;
+    }
+
+    // --- Priority 2: Model name matches a loaded model by name ---
+    if let Some(ref requested_model) = request.model {
+        if let Some(model_id) = find_model_by_name(&state, requested_model).await {
+            debug!(
+                model_name = requested_model,
+                "routing to model by exact name match"
+            );
+            return forward_to_model(&state, model_id, &request).await;
         }
-    } else {
-        // No OICP: use default model.
-        match state.default_model_id().await {
-            Some(id) => id,
-            None => {
-                return (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(
-                        serde_json::to_value(ErrorResponse::new(
-                            "No models are currently loaded on the mesh",
-                            "model_not_available",
-                        ))
-                        .unwrap(),
-                    ),
-                )
-                    .into_response();
+
+        // --- Priority 3: Model name matches an alias → synthesize OICP ---
+        if let Some(resolution) = state.inner.model_aliases.resolve(requested_model) {
+            debug!(
+                model_name = requested_model,
+                "model name matched alias, synthesizing OICP requirements"
+            );
+            if let Some(model_id) = route_with_oicp(&state, &resolution.requirements).await {
+                return forward_to_model(&state, model_id, &request).await;
+            }
+            // Alias matched but no model satisfies even preferred requirements.
+            // Fall through to default rather than failing.
+        }
+    }
+
+    // --- Priority 4: Default model ---
+    match state.default_model_id().await {
+        Some(model_id) => forward_to_model(&state, model_id, &request).await,
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(
+                serde_json::to_value(ErrorResponse::new(
+                    "No models are currently loaded on the mesh",
+                    "model_not_available",
+                ))
+                .unwrap(),
+            ),
+        )
+            .into_response(),
+    }
+}
+
+/// Score loaded models against OICP requirements and return the best match.
+async fn route_with_oicp(
+    state: &AppState,
+    requirements: &CapabilityRequirements,
+) -> Option<ModelId> {
+    let models = state.inner.models.read().await;
+    let plan = state.inner.inference_plan.read().await;
+
+    let mut best_model = None;
+    let mut best_score = -1.0f32;
+
+    for shard_plan in &plan.model_plans {
+        if let Some(model_info) = models.get(&shard_plan.model) {
+            if model_info
+                .oicp_capabilities
+                .satisfies(&requirements.required)
+            {
+                let score = model_info
+                    .oicp_capabilities
+                    .score_against(&requirements.preferred);
+                if score > best_score {
+                    best_score = score;
+                    best_model = Some(shard_plan.model);
+                }
             }
         }
-    };
+    }
 
-    // Get the llama-server address for this model.
+    best_model
+}
+
+/// Check if a model name matches any loaded model by its human-readable name.
+async fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
+    let models = state.inner.models.read().await;
+    let name_lower = name.to_lowercase();
+    models
+        .values()
+        .find(|m| m.name.to_lowercase() == name_lower)
+        .map(|m| m.id)
+}
+
+/// Forward a request to the llama-server hosting a specific model.
+async fn forward_to_model(
+    state: &AppState,
+    model_id: ModelId,
+    request: &ChatCompletionRequest,
+) -> Response {
     let llama_addr = match state.get_llama_server_address(model_id).await {
         Some(addr) => addr,
         None => {
@@ -115,29 +168,23 @@ pub async fn chat_completions(
         }
     };
 
-    // Forward the request to llama-server.
-    // In production, this would use hyper to proxy the request (including streaming).
-    // For now, we use a TCP connection + raw HTTP forwarding.
-    let forward_body = serde_json::to_string(&request).unwrap_or_default();
+    let forward_body = serde_json::to_string(request).unwrap_or_default();
     match forward_to_llama_server(&llama_addr, &forward_body).await {
-        Ok(response_body) => {
-            // Parse and return the response.
-            match serde_json::from_str::<serde_json::Value>(&response_body) {
-                Ok(value) => (StatusCode::OK, Json(value)).into_response(),
-                Err(_) => (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    [("retry-after", "10")],
-                    Json(
-                        serde_json::to_value(ErrorResponse::new(
-                            "Invalid response from inference backend",
-                            "backend_error",
-                        ))
-                        .unwrap(),
-                    ),
-                )
-                    .into_response(),
-            }
-        }
+        Ok(response_body) => match serde_json::from_str::<serde_json::Value>(&response_body) {
+            Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+            Err(_) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [("retry-after", "10")],
+                Json(
+                    serde_json::to_value(ErrorResponse::new(
+                        "Invalid response from inference backend",
+                        "backend_error",
+                    ))
+                    .unwrap(),
+                ),
+            )
+                .into_response(),
+        },
         Err(e) => {
             warn!(error = %e, "failed to forward to llama-server");
             (
@@ -159,7 +206,7 @@ pub async fn chat_completions(
     }
 }
 
-/// Forward a request to a llama-server instance.
+/// Forward a request to a llama-server instance via raw HTTP.
 async fn forward_to_llama_server(
     address: &str,
     body: &str,
@@ -180,7 +227,6 @@ async fn forward_to_llama_server(
     stream.writable().await?;
     stream.try_write(request.as_bytes())?;
 
-    // Read response.
     let mut response = Vec::new();
     loop {
         stream.readable().await?;
@@ -194,8 +240,6 @@ async fn forward_to_llama_server(
     }
 
     let response_str = String::from_utf8_lossy(&response);
-
-    // Extract body after HTTP headers.
     if let Some(body_start) = response_str.find("\r\n\r\n") {
         Ok(response_str[body_start + 4..].to_string())
     } else {

@@ -1,0 +1,106 @@
+# ─── Commonwealth Default Model Aliases ─────────────────────────
+#
+# Maps external model names (sent by clients like OmO, Open WebUI,
+# LangChain apps) to OICP capability profiles. When a client sends
+# a model name that doesn't match any locally loaded model and
+# doesn't include an OICP field, Commonwealth checks this table.
+#
+# Patterns are glob-style (* matches any characters). Case-insensitive.
+# First match wins — put specific patterns before generic ones.
+#
+# inferred_preferred: soft scoring (used for ranking among models).
+# inferred_required: hard floor (model must meet these or fail).
+# The defaults use soft matching only (empty required) so requests
+# always succeed even if the ideal model type isn't loaded.
+#
+# latency: "interactive" | "throughput" | "background" | "best_effort"
+
+# ─── OmO Agents ─────────────────────────────────────────────────
+
+# Hephaestus (deep coding agent)
+[[aliases]]
+patterns = ["gpt-5*codex*", "gpt-5.3-codex", "codex*"]
+latency = "throughput"
+[aliases.inferred_preferred]
+code = 3
+instruction = 3
+
+# Sisyphus (orchestrator) — Claude Opus
+[[aliases]]
+patterns = ["claude-opus*", "claude-opus-4-6"]
+latency = "interactive"
+[aliases.inferred_preferred]
+general = 3
+instruction = 3
+analysis = 3
+
+# Quick / small tasks
+[[aliases]]
+patterns = ["gpt-4o-mini*", "gpt-5*mini*", "gpt-5*nano*"]
+latency = "interactive"
+[aliases.inferred_preferred]
+general = 1
+
+# Kimi-based orchestration
+[[aliases]]
+patterns = ["kimi-k2*", "kimi*"]
+latency = "interactive"
+[aliases.inferred_preferred]
+general = 3
+code = 3
+instruction = 3
+
+# GLM-based orchestration
+[[aliases]]
+patterns = ["glm-5*", "glm*"]
+latency = "interactive"
+[aliases.inferred_preferred]
+general = 3
+instruction = 3
+
+# ─── Claude Family ──────────────────────────────────────────────
+
+[[aliases]]
+patterns = ["claude-sonnet*"]
+latency = "best_effort"
+[aliases.inferred_preferred]
+general = 3
+code = 3
+instruction = 3
+
+[[aliases]]
+patterns = ["claude-haiku*"]
+latency = "interactive"
+[aliases.inferred_preferred]
+general = 1
+
+# ─── Gemini Family ──────���──────────────────────────────���────────
+
+[[aliases]]
+patterns = ["gemini*pro*", "gemini*ultra*"]
+latency = "best_effort"
+[aliases.inferred_preferred]
+general = 3
+analysis = 3
+
+[[aliases]]
+patterns = ["gemini*flash*"]
+latency = "interactive"
+[aliases.inferred_preferred]
+general = 2
+
+# ─── Generic Patterns (checked last) ────────────────────────────
+# More specific patterns above win first due to first-match semantics.
+
+[[aliases]]
+patterns = ["*coder*", "*codex*", "*code*"]
+latency = "throughput"
+[aliases.inferred_preferred]
+code = 3
+instruction = 2
+
+[[aliases]]
+patterns = ["*opus*", "*pro*", "*large*"]
+latency = "best_effort"
+[aliases.inferred_preferred]
+general = 3
