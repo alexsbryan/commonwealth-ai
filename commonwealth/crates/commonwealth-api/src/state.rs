@@ -9,6 +9,7 @@ use commonwealth_core::mesh::{Mesh, NodeStatus};
 use commonwealth_core::model::ModelInfo;
 use commonwealth_core::model_aliases::ModelAliasTable;
 use commonwealth_core::scheduler::InferencePlan;
+use corpus_engine::CorpusEngine;
 
 /// Shared application state for all API handlers.
 #[derive(Clone)]
@@ -25,6 +26,7 @@ pub struct AppStateInner {
     pub llama_server_addresses: RwLock<HashMap<ModelId, String>>,
     pub knowledge_plan: RwLock<KnowledgeShardPlan>,
     pub model_aliases: ModelAliasTable,
+    pub corpus_engine: Option<Arc<CorpusEngine>>,
 }
 
 impl AppState {
@@ -43,6 +45,7 @@ impl AppState {
                     redundancy_achieved: HashMap::new(),
                 }),
                 model_aliases: ModelAliasTable::default_table(),
+                corpus_engine: None,
             }),
         }
     }

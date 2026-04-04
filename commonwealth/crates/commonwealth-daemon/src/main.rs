@@ -51,8 +51,11 @@ enum Commands {
     Leave,
     /// List available and loaded models
     Models,
-    /// List available and hosted knowledge bases
-    Corpora,
+    /// Manage knowledge corpora
+    Corpus {
+        #[command(subcommand)]
+        command: CorpusCommands,
+    },
     /// Show daemon logs
     Logs {
         /// Follow log output
@@ -69,6 +72,28 @@ enum Commands {
         #[command(subcommand)]
         command: DaemonCommands,
     },
+}
+
+#[derive(Subcommand)]
+enum CorpusCommands {
+    /// List installed and available corpora
+    List,
+    /// Install a corpus
+    Install {
+        /// Corpus ID (e.g., "wikipedia")
+        id: String,
+        /// Install from a recipe file
+        #[arg(long)]
+        recipe: Option<PathBuf>,
+    },
+    /// Remove an installed corpus
+    Remove { id: String },
+    /// Check for corpus updates
+    Update { id: String },
+    /// Show shard status for all corpora
+    Status,
+    /// Merge shard files into a complete index
+    Consolidate { id: String },
 }
 
 #[derive(Subcommand)]
@@ -121,7 +146,14 @@ fn main() -> Result<()> {
         Commands::Resume => cmd_resume(&config),
         Commands::Leave => cmd_leave(&config),
         Commands::Models => cmd_models(&config),
-        Commands::Corpora => cmd_corpora(&config),
+        Commands::Corpus { command } => match command {
+            CorpusCommands::List => cmd_corpus_list(&config),
+            CorpusCommands::Install { id, recipe } => cmd_corpus_install(&id, recipe.as_deref(), &config),
+            CorpusCommands::Remove { id } => cmd_corpus_remove(&id, &config),
+            CorpusCommands::Update { id } => cmd_corpus_update(&id, &config),
+            CorpusCommands::Status => cmd_corpus_status(&config),
+            CorpusCommands::Consolidate { id } => cmd_corpus_consolidate(&id, &config),
+        },
         Commands::Logs { follow } => cmd_logs(follow, &config),
         Commands::Mesh { command } => match command {
             MeshCommands::Set { key, value } => cmd_mesh_set(&key, &value, &config),
@@ -273,8 +305,41 @@ fn cmd_models(config: &Option<DaemonConfig>) -> Result<()> {
     Ok(())
 }
 
-fn cmd_corpora(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("(In production, this would list hosted knowledge corpora from the daemon.)");
+fn cmd_corpus_list(_config: &Option<DaemonConfig>) -> Result<()> {
+    println!("(In production, this would list installed and available knowledge corpora.)");
+    Ok(())
+}
+
+fn cmd_corpus_install(id: &str, recipe: Option<&std::path::Path>, _config: &Option<DaemonConfig>) -> Result<()> {
+    if let Some(path) = recipe {
+        println!("Installing corpus '{id}' from recipe: {}", path.display());
+    } else {
+        println!("Installing builtin corpus '{id}'...");
+    }
+    println!("(In production, this would ingest the corpus via corpus-engine.)");
+    Ok(())
+}
+
+fn cmd_corpus_remove(id: &str, _config: &Option<DaemonConfig>) -> Result<()> {
+    println!("Removing corpus '{id}'...");
+    println!("(In production, this would remove the index file and update the mesh.)");
+    Ok(())
+}
+
+fn cmd_corpus_update(id: &str, _config: &Option<DaemonConfig>) -> Result<()> {
+    println!("Checking for updates to corpus '{id}'...");
+    println!("(In production, this would check the source for newer data.)");
+    Ok(())
+}
+
+fn cmd_corpus_status(_config: &Option<DaemonConfig>) -> Result<()> {
+    println!("(In production, this would show shard status for all corpora on this node.)");
+    Ok(())
+}
+
+fn cmd_corpus_consolidate(id: &str, _config: &Option<DaemonConfig>) -> Result<()> {
+    println!("Consolidating shards for corpus '{id}'...");
+    println!("(In production, this would merge all local shard files into a complete index.)");
     Ok(())
 }
 

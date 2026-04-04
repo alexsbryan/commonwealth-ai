@@ -6,6 +6,7 @@ members = [
     "crates/commonwealth-scheduler",
     "crates/commonwealth-orchestrator",
     "crates/commonwealth-api",
+    "crates/commonwealth-corpus",
     "crates/commonwealth-daemon",
     "crates/commonwealth-test-harness",
 ]
@@ -39,9 +40,13 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
+# External
+corpus-engine = { path = "../corpus-engine" }
+
 # Internal crates
 commonwealth-core = { path = "crates/commonwealth-core" }
 commonwealth-discovery = { path = "crates/commonwealth-discovery" }
 commonwealth-scheduler = { path = "crates/commonwealth-scheduler" }
 commonwealth-orchestrator = { path = "crates/commonwealth-orchestrator" }
 commonwealth-api = { path = "crates/commonwealth-api" }
+commonwealth-corpus = { path = "crates/commonwealth-corpus" }

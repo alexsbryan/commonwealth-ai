@@ -9,6 +9,7 @@ license.workspace = true
 commonwealth-core = { workspace = true }
 commonwealth-scheduler = { workspace = true }
 commonwealth-orchestrator = { workspace = true }
+corpus-engine = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

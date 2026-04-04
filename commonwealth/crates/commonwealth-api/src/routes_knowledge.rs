@@ -52,8 +52,9 @@ pub async fn knowledge_search(
         );
     }
 
-    // In a full implementation, we would fan out queries to each shard node
-    // via POST /internal/knowledge/search and merge the results.
+    // TODO: When AppState.corpus_engine is Some, use corpus_engine::CorpusIndex::search()
+    // to query local shards, then fan out to remote shard nodes via
+    // POST /internal/knowledge/search and merge the results.
     // For now, return a stub response indicating which corpora would be searched.
     let mut results = Vec::new();
     for assignment in &relevant_assignments {

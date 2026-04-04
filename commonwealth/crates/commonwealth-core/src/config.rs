@@ -53,6 +53,31 @@ pub struct InferenceConfig {
 pub struct KnowledgeConfig {
     #[serde(default = "default_index_dir")]
     pub index_dir: String,
+    #[serde(default)]
+    pub grounding: GroundingConfig,
+}
+
+/// Configuration for knowledge grounding of non-OICP requests.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroundingConfig {
+    #[serde(default = "default_grounding_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub corpora: Vec<String>,
+    #[serde(default = "default_max_chunks")]
+    pub max_chunks: usize,
+    #[serde(default = "default_min_relevance")]
+    pub min_relevance: f32,
+}
+
+fn default_grounding_enabled() -> bool {
+    true
+}
+fn default_max_chunks() -> usize {
+    5
+}
+fn default_min_relevance() -> f32 {
+    0.65
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -126,7 +151,7 @@ fn default_rpc_server() -> String {
     "rpc-server".into()
 }
 fn default_index_dir() -> String {
-    "~/.commonwealth/indexes".into()
+    "~/.sovereign/indexes".into()
 }
 fn default_max_concurrent() -> u32 {
     10
@@ -159,6 +184,18 @@ impl Default for KnowledgeConfig {
     fn default() -> Self {
         Self {
             index_dir: default_index_dir(),
+            grounding: GroundingConfig::default(),
+        }
+    }
+}
+
+impl Default for GroundingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            corpora: Vec::new(),
+            max_chunks: 5,
+            min_relevance: 0.65,
         }
     }
 }
