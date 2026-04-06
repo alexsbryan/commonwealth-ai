@@ -3,6 +3,7 @@
   import { getConfig, saveConfig } from "../api";
   import type { DesktopConfig } from "../types";
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
+  import MeshSettings from "./MeshSettings.svelte";
   import SkillManager from "./SkillManager.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
 
@@ -94,6 +95,16 @@
       <div class="section">
         <h3>Knowledge Base</h3>
         <KnowledgeStatus />
+      </div>
+
+      <div class="section" id="mesh-section">
+        <h3>Community Mesh</h3>
+        <p class="section-help">
+          Pool compute and knowledge with people you trust. Tap a
+          <code>sovereign://join/…</code> link to join an existing mesh,
+          or create one to invite friends.
+        </p>
+        <MeshSettings />
       </div>
 
       <div class="section">
@@ -207,6 +218,14 @@
     margin-top: -6px;
     margin-bottom: 12px;
     line-height: 1.4;
+  }
+
+  .section-help code {
+    background: var(--bg-input);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.74rem;
   }
 
   label {

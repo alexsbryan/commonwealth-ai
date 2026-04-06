@@ -16,6 +16,7 @@ export interface EventHandlers {
   onUserInputRequest?: (payload: UserInputRequestPayload) => void;
   onError?: (payload: ErrorPayload) => void;
   onCorpusProgress?: (payload: CorpusProgressPayload) => void;
+  onDeepLink?: (url: string) => void;
 }
 
 export async function initEventListeners(
@@ -79,6 +80,14 @@ export async function initEventListeners(
     unlisteners.push(
       await listen<CorpusProgressPayload>("corpus-progress", (event) =>
         handlers.onCorpusProgress!(event.payload),
+      ),
+    );
+  }
+
+  if (handlers.onDeepLink) {
+    unlisteners.push(
+      await listen<string>("deep-link-received", (event) =>
+        handlers.onDeepLink!(event.payload),
       ),
     );
   }

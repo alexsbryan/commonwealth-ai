@@ -11,6 +11,7 @@
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
+  import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
   import SetupWizard from "./lib/setup/SetupWizard.svelte";
 
   type AppView = "loading" | "setup" | "chat" | "settings";
@@ -20,6 +21,9 @@
   let backendError: string | null = $state(null);
   let selectedConversationId: string | null = $state(null);
   let showSettings = $state(false);
+
+  // Deep-link join dialog state.
+  let pendingJoinLink: string | null = $state(null);
 
   // Task progress state (shared across chat).
   let taskSteps: TaskStep[] = $state([]);
@@ -62,6 +66,11 @@
       },
       onError: (payload) => {
         console.error("Backend error:", payload.message);
+      },
+      onDeepLink: (url: string) => {
+        if (url.startsWith("sovereign://join/")) {
+          pendingJoinLink = url;
+        }
       },
     });
 
@@ -138,6 +147,17 @@
       {/if}
     </main>
   </div>
+{/if}
+
+{#if pendingJoinLink}
+  <MeshJoinDialog
+    link={pendingJoinLink}
+    onClose={() => (pendingJoinLink = null)}
+    onJoined={() => {
+      pendingJoinLink = null;
+      showSettings = true;
+    }}
+  />
 {/if}
 
 <style>

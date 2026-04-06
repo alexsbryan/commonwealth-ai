@@ -6,6 +6,7 @@
     deleteConversation,
   } from "../api";
   import type { ConversationEntry } from "../types";
+  import MeshStatusIndicator from "./MeshStatusIndicator.svelte";
 
   interface Props {
     selectedConversationId: string | null;
@@ -110,6 +111,10 @@
     {#if conversations.length === 0}
       <p class="empty">No conversations yet</p>
     {/if}
+  </div>
+
+  <div class="sidebar-footer">
+    <MeshStatusIndicator onOpen={onToggleSettings} />
   </div>
 </div>
 
@@ -220,5 +225,10 @@
     color: var(--text-muted);
     padding: 2rem;
     font-size: 0.9rem;
+  }
+
+  .sidebar-footer {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
   }
 </style>

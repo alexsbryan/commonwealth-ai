@@ -14,6 +14,10 @@ import type {
   CorpusProgressPayload,
   HardwareInfo,
   StreamStartedResponse,
+  CreateMeshResponse,
+  JoinMeshResponse,
+  JoinConfirmation,
+  MeshStateResponse,
 } from "./types";
 
 export async function sendMessage(
@@ -143,4 +147,32 @@ export async function getCorpusProgress(
   corpusId: string,
 ): Promise<CorpusProgressPayload | null> {
   return invoke("get_corpus_progress", { corpusId });
+}
+
+// ─── Community Mesh ─────────────────────────────────────────
+
+export async function meshCreate(meshName: string): Promise<CreateMeshResponse> {
+  return invoke("mesh_create", { meshName });
+}
+
+export async function meshJoin(link: string): Promise<JoinMeshResponse> {
+  return invoke("mesh_join", { link });
+}
+
+export async function meshPreviewJoinLink(
+  link: string,
+): Promise<JoinConfirmation> {
+  return invoke("mesh_preview_join_link", { link });
+}
+
+export async function meshGetState(): Promise<MeshStateResponse | null> {
+  return invoke("mesh_get_state");
+}
+
+export async function meshIsRunning(): Promise<boolean> {
+  return invoke("mesh_is_running");
+}
+
+export async function meshLeave(): Promise<void> {
+  return invoke("mesh_leave");
 }

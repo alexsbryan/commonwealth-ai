@@ -195,6 +195,79 @@ export interface CorpusProgressPayload {
   chunks_processed: number;
 }
 
+// ─── Community Mesh ──────────────────────────────────────────
+
+export interface CreateMeshResponse {
+  mesh_name: string;
+  join_key: string;
+  join_link: string;
+}
+
+export interface JoinMeshResponse {
+  mesh_name: string;
+  node_id: string;
+}
+
+export interface JoinConfirmation {
+  mesh_name: string;
+  invited_by: string | null;
+  join_key: string;
+  relay_hint: string | null;
+}
+
+export type MemberStatus = "online" | "busy" | "away" | "offline";
+
+export interface MeshStatus {
+  name: string;
+  members_online: number;
+  members_total: number;
+  model_name: string | null;
+  knowledge_corpora: string[];
+  is_connected: boolean;
+}
+
+export interface MeshMember {
+  name: string;
+  node_id: string;
+  is_self: boolean;
+  status: MemberStatus;
+  contribution_level: number; // 0-5
+  contribution_label: string;
+}
+
+export type CorpusInstallStatus =
+  | { type: "available" }
+  | { type: "installing"; percent: number; node: string }
+  | { type: "installed" }
+  | { type: "shared_by_peer"; peer_name: string };
+
+export interface MeshCorpus {
+  id: string;
+  name: string;
+  description: string;
+  article_count: string;
+  download_size: string;
+  // The Rust enum serializes as `{ available: null }` etc., so we accept
+  // both shapes for resilience.
+  status: CorpusInstallStatus | string;
+}
+
+export interface ContributionSummary {
+  compute_hours_contributed: number;
+  compute_hours_used: number;
+  storage_hosted_gb: number;
+  bandwidth_served_gb: number;
+  is_net_contributor: boolean;
+  summary_text: string;
+}
+
+export interface MeshStateResponse {
+  status: MeshStatus;
+  members: MeshMember[];
+  corpora: MeshCorpus[];
+  contribution: ContributionSummary | null;
+}
+
 // ─── UI State ────────────────────────────────────────────────
 
 export interface TaskStep {
