@@ -101,20 +101,48 @@ pub struct CorpusEntry {
     pub id: String,
     pub name: String,
     pub description: String,
+    pub size_compressed_gb: f64,
     pub size_indexed_gb: f64,
     pub license: String,
     pub tiers: Vec<String>,
+    /// "installed", "installing", or "not_installed".
     pub status: String,
-    pub chunks_count: Option<i64>,
-    pub trust_level: String,
+    /// Chunk count when installed; null otherwise.
+    pub chunks_count: Option<u64>,
+    /// True when the recipe enables the epistemic enrichment phase.
+    pub enrichment_enabled: bool,
 }
 
+/// Progress payload sent to the frontend during a corpus install.
+/// `phase` covers the entire pipeline including enrichment, so the
+/// download bar can keep moving through claim and relationship
+/// extraction rather than appearing to stall after "indexing".
 #[derive(Serialize, Clone)]
 pub struct CorpusProgressPayload {
     pub corpus_id: String,
+    /// One of: "downloading", "extracting", "chunking", "embedding",
+    /// "indexing", "extracting_claims", "finding_relationships",
+    /// "extracting_relationships", "complete", "failed".
     pub phase: String,
     pub percent: f32,
-    pub chunks_processed: usize,
+    pub chunks_processed: u64,
+    /// Optional human-readable status line for the more verbose phases.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Tier groupings for the desktop knowledge picker. Pure UI metadata —
+/// the engine doesn't care about tiers.
+fn tiers_for(corpus_id: &str) -> Vec<String> {
+    match corpus_id {
+        "wikipedia" => vec!["essential".into(), "research".into(), "technical".into(), "full".into()],
+        "sep" => vec!["research".into(), "full".into()],
+        "openalex" => vec!["research".into(), "full".into()],
+        "stackexchange" => vec!["technical".into(), "full".into()],
+        "gutenberg" => vec!["full".into()],
+        "crs_reports" => vec!["research".into(), "full".into()],
+        _ => vec!["full".into()],
+    }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -124,25 +152,6 @@ fn now_epoch() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
-}
-
-/// The bundled corpus manifest, compiled into the binary.
-/// Copied into OUT_DIR by build.rs from the workspace `data/corpora.toml`,
-/// or a minimal fallback if that file is unavailable at build time.
-const BUNDLED_CORPORA_TOML: &str = include_str!(concat!(env!("OUT_DIR"), "/corpora.toml"));
-
-/// Load the corpus registry. Tries a user-local file first, falls back to the
-/// bundled manifest compiled into the binary.
-pub fn load_corpus_registry(data_dir: &Path) -> Option<sovereign_tools::corpus::CorpusRegistry> {
-    // Check if the user has a custom corpora.toml in their data dir.
-    let user_path = data_dir.join("corpora.toml");
-    if user_path.exists() {
-        if let Ok(reg) = sovereign_tools::corpus::CorpusRegistry::load(&user_path) {
-            return Some(reg);
-        }
-    }
-    // Fall back to the bundled manifest.
-    sovereign_tools::corpus::CorpusRegistry::from_toml(BUNDLED_CORPORA_TOML).ok()
 }
 
 macro_rules! require_runtime {
@@ -578,15 +587,12 @@ pub async fn complete_setup(
 
     // Trigger background corpus installs for the selected tier.
     if let Some(ref tier) = setup.selected_tier {
-        let manager_guard = state.corpus_manager.read().await;
-        if let Some(ref manager) = *manager_guard {
-            let manager = Arc::clone(manager);
-            let tier = tier.clone();
-            let state_ref = Arc::clone(&state);
-            tokio::spawn(async move {
-                start_tier_installs(&state_ref, &manager, &tier).await;
-            });
-        }
+        let tier = tier.clone();
+        let state_ref = Arc::clone(&state);
+        let app = app_handle.clone();
+        tokio::spawn(async move {
+            start_tier_installs(&app, &state_ref, &tier).await;
+        });
     }
 
     Ok(())
@@ -870,56 +876,187 @@ pub async fn download_model(
 }
 
 // ─── Corpus Management ──────────────────────────────────────
+//
+// All corpus operations route through the shared `CorpusEngine` stored
+// in `AppState::corpus_engine`. The catalog of available corpora comes
+// from `corpus_engine::recipe::builtin_recipes()` (Rust source — no
+// sidecar TOML), and installed state comes from `installed_indexes()`
+// scanning `~/.sovereign/indexes`. The legacy `CorpusManager` /
+// `CorpusRegistry` / `data/corpora.toml` path has been removed.
 
+/// Map a `corpus_engine::IngestProgress` variant to a frontend-friendly
+/// `CorpusProgressPayload`. Covers the full pipeline including the
+/// optional enrichment phases so progress reporting doesn't go silent
+/// during the (often long) claim/relationship extraction stages.
+fn ingest_progress_to_payload(
+    corpus_id: &str,
+    progress: &corpus_engine::IngestProgress,
+) -> CorpusProgressPayload {
+    use corpus_engine::IngestProgress;
+    match progress {
+        IngestProgress::Downloading {
+            percent,
+            bytes_downloaded,
+            ..
+        } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "downloading".into(),
+            percent: *percent,
+            chunks_processed: 0,
+            message: Some(format!("{:.1} MB", *bytes_downloaded as f64 / 1_048_576.0)),
+        },
+        IngestProgress::Extracting {
+            documents_processed,
+        } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "extracting".into(),
+            percent: 0.0,
+            chunks_processed: *documents_processed,
+            message: Some(format!("{} documents", documents_processed)),
+        },
+        IngestProgress::Chunking { chunks_created } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "chunking".into(),
+            percent: 0.0,
+            chunks_processed: *chunks_created,
+            message: None,
+        },
+        IngestProgress::Embedding {
+            chunks_embedded,
+            total,
+        } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "embedding".into(),
+            percent: if *total > 0 {
+                (*chunks_embedded as f32 / *total as f32) * 100.0
+            } else {
+                0.0
+            },
+            chunks_processed: *chunks_embedded,
+            message: None,
+        },
+        IngestProgress::Indexing {
+            chunks_indexed,
+            total,
+        } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "indexing".into(),
+            percent: if *total > 0 {
+                (*chunks_indexed as f32 / *total as f32) * 100.0
+            } else {
+                0.0
+            },
+            chunks_processed: *chunks_indexed,
+            message: None,
+        },
+        IngestProgress::ExtractingClaims { current, total } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "extracting_claims".into(),
+            percent: if *total > 0 {
+                (*current as f32 / *total as f32) * 100.0
+            } else {
+                0.0
+            },
+            chunks_processed: *current,
+            message: Some(format!("Extracting claims ({current}/{total})")),
+        },
+        IngestProgress::FoundCandidatePairs { count } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "finding_relationships".into(),
+            percent: 0.0,
+            chunks_processed: 0,
+            message: Some(format!("Found {count} candidate claim pairs")),
+        },
+        IngestProgress::ExtractingRelationships { current, total } => {
+            CorpusProgressPayload {
+                corpus_id: corpus_id.into(),
+                phase: "extracting_relationships".into(),
+                percent: if *total > 0 {
+                    (*current as f32 / *total as f32) * 100.0
+                } else {
+                    0.0
+                },
+                chunks_processed: *current,
+                message: Some(format!("Extracting relationships ({current}/{total})")),
+            }
+        }
+        IngestProgress::Complete {
+            total_chunks,
+            duration_secs,
+        } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "complete".into(),
+            percent: 100.0,
+            chunks_processed: *total_chunks,
+            message: Some(format!("Done in {duration_secs}s")),
+        },
+    }
+}
+
+/// List all corpora available to the user — a union of:
+/// - Built-in recipes (Wikipedia, SEP, …) from `corpus_engine::builtin_corpora()`
+/// - Locally-installed indexes from `corpus_engine::installed_indexes()`
+///
+/// Built-in entries that are also installed get their `status` set to
+/// "installed" with the live chunk count from the on-disk index.
 #[tauri::command]
 pub async fn list_corpora(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<CorpusEntry>, String> {
-    let config = state.config.read().await;
-    let data_dir = config.data_dir.clone();
-    drop(config);
-
-    // Load the registry — this works even without a running corpus manager.
-    let registry = match load_corpus_registry(&data_dir) {
-        Some(r) => r,
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
         None => return Ok(Vec::new()),
     };
+    drop(engine_guard);
 
-    // Get installed states (from corpus manager if available, else empty).
-    let manager_guard = state.corpus_manager.read().await;
-    let installed = match *manager_guard {
-        Some(ref m) => m.installed().await.unwrap_or_default(),
-        None => Vec::new(),
+    // Pull built-in catalog (always available — it's source code).
+    let builtins = engine.builtin_corpora();
+
+    // Look up live install status. Failure here is non-fatal — we still
+    // want to render the catalog so the user can choose what to install.
+    let installed = engine.installed_indexes().await.unwrap_or_default();
+
+    // Recipes ship with their full enrichment config; consult the recipe
+    // list to see which corpora will run claim extraction.
+    let recipes = corpus_engine::recipe::builtin_recipes();
+    let enrichment_for = |id: &str| -> bool {
+        recipes
+            .iter()
+            .find(|r| r.corpus.id == id)
+            .and_then(|r| r.enrichment.as_ref())
+            .map(|e| e.enabled)
+            .unwrap_or(false)
     };
-    drop(manager_guard);
 
     let installing = state.install_progress.read().await;
 
     let mut entries = Vec::new();
-    for def in registry.list_corpora() {
+    for b in &builtins {
+        let installed_info = installed.iter().find(|i| i.corpus_id == b.id && !i.is_shard);
         let is_installing = installing
-            .get(&def.id)
-            .map_or(false, |p| p.phase != "complete" && p.phase != "failed");
-        let inst = installed.iter().find(|s| s.corpus_id == def.id);
+            .get(&b.id)
+            .is_some_and(|p| p.phase != "complete" && p.phase != "failed");
 
-        let status = if inst.is_some() {
-            "installed".to_string()
+        let status = if installed_info.is_some() {
+            "installed"
         } else if is_installing {
-            "installing".to_string()
+            "installing"
         } else {
-            "not_installed".to_string()
+            "not_installed"
         };
 
         entries.push(CorpusEntry {
-            id: def.id.clone(),
-            name: def.name.clone(),
-            description: def.description.clone(),
-            size_indexed_gb: def.size_indexed_gb,
-            license: def.license.clone(),
-            tiers: def.tiers.clone(),
-            status,
-            chunks_count: inst.map(|s| s.chunks_count),
-            trust_level: format!("{:?}", def.trust_level()).to_lowercase(),
+            id: b.id.clone(),
+            name: b.name.clone(),
+            description: b.description.clone(),
+            size_compressed_gb: b.size_compressed_gb,
+            size_indexed_gb: b.size_indexed_gb,
+            license: b.license.clone(),
+            tiers: tiers_for(&b.id),
+            status: status.to_string(),
+            chunks_count: installed_info.map(|i| i.chunk_count),
+            enrichment_enabled: enrichment_for(&b.id),
         });
     }
 
@@ -932,60 +1069,78 @@ pub async fn install_corpus(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<(), String> {
-    let manager_guard = state.corpus_manager.read().await;
-    let manager = match *manager_guard {
-        Some(ref m) => Arc::clone(m),
-        None => return Err("Corpus manager not initialized".to_string()),
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
     };
-    drop(manager_guard);
+    drop(engine_guard);
 
     let state_ref = Arc::clone(&state);
     let cid = corpus_id.clone();
 
     tokio::spawn(async move {
+        // Mark as installing right away so the UI flips state before the
+        // first IngestProgress event arrives.
+        {
+            let initial = CorpusProgressPayload {
+                corpus_id: cid.clone(),
+                phase: "downloading".into(),
+                percent: 0.0,
+                chunks_processed: 0,
+                message: Some("Starting…".into()),
+            };
+            if let Ok(mut map) = state_ref.install_progress.try_write() {
+                map.insert(cid.clone(), initial.clone());
+            }
+            let _ = app_handle.emit("corpus-progress", initial);
+        }
+
+        // The progress callback runs from inside the engine's async tasks.
         let progress_cid = cid.clone();
         let progress_handle = app_handle.clone();
         let progress_state = Arc::clone(&state_ref);
+        let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
+            let payload = ingest_progress_to_payload(&progress_cid, &p);
+            if let Ok(mut map) = progress_state.install_progress.try_write() {
+                map.insert(payload.corpus_id.clone(), payload.clone());
+            }
+            let _ = progress_handle.emit("corpus-progress", payload);
+        });
 
-        let progress_cb: sovereign_tools::corpus::ProgressCallback = std::sync::Arc::new(
-            move |p: sovereign_tools::corpus::CorpusProgress| {
+        let spec = corpus_engine::CorpusSpec::Builtin(cid.clone());
+        match engine.ingest(&spec, Some(progress_cb)).await {
+            Ok(result) => {
+                tracing::info!(
+                    "Corpus '{cid}' installed: {} chunks, {:.1} MB, {}s",
+                    result.chunks_created,
+                    result.index_size_bytes as f64 / 1_048_576.0,
+                    result.duration_secs,
+                );
                 let payload = CorpusProgressPayload {
-                    corpus_id: progress_cid.clone(),
-                    phase: match &p.phase {
-                        sovereign_tools::corpus::CorpusInstallPhase::Downloading => {
-                            "downloading".to_string()
-                        }
-                        sovereign_tools::corpus::CorpusInstallPhase::Parsing => {
-                            "parsing".to_string()
-                        }
-                        sovereign_tools::corpus::CorpusInstallPhase::Complete => {
-                            "complete".to_string()
-                        }
-                        sovereign_tools::corpus::CorpusInstallPhase::Failed(_) => {
-                            "failed".to_string()
-                        }
-                    },
-                    percent: p.percent,
-                    chunks_processed: p.chunks_processed,
+                    corpus_id: cid.clone(),
+                    phase: "complete".into(),
+                    percent: 100.0,
+                    chunks_processed: result.chunks_created,
+                    message: Some(format!("Done in {}s", result.duration_secs)),
                 };
-                // Update progress map.
-                if let Ok(mut map) = progress_state.install_progress.try_write() {
-                    map.insert(payload.corpus_id.clone(), payload.clone());
+                if let Ok(mut map) = state_ref.install_progress.try_write() {
+                    map.insert(cid.clone(), payload.clone());
                 }
-                let _ = progress_handle.emit("corpus-progress", payload);
-            },
-        );
-
-        match manager.install_corpus(&cid, Some(progress_cb)).await {
-            Ok(_) => tracing::info!("Corpus '{cid}' installed"),
+                let _ = app_handle.emit("corpus-progress", payload);
+            }
             Err(e) => {
                 tracing::error!("Corpus '{cid}' install failed: {e}");
                 let payload = CorpusProgressPayload {
-                    corpus_id: cid,
-                    phase: "failed".to_string(),
+                    corpus_id: cid.clone(),
+                    phase: "failed".into(),
                     percent: 0.0,
                     chunks_processed: 0,
+                    message: Some(e.to_string()),
                 };
+                if let Ok(mut map) = state_ref.install_progress.try_write() {
+                    map.insert(cid.clone(), payload.clone());
+                }
                 let _ = app_handle.emit("corpus-progress", payload);
             }
         }
@@ -998,16 +1153,21 @@ pub async fn install_corpus(
 pub async fn remove_corpus(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<u64, String> {
-    let manager_guard = state.corpus_manager.read().await;
-    let manager = match *manager_guard {
-        Some(ref m) => m,
-        None => return Err("Corpus manager not initialized".to_string()),
+) -> Result<(), String> {
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
     };
-    manager
-        .remove_corpus(&corpus_id)
-        .await
-        .map_err(|e| e.to_string())
+    drop(engine_guard);
+
+    engine.remove_index(&corpus_id).map_err(|e| e.to_string())?;
+
+    // Clear any stale progress entry so the UI returns to "not_installed".
+    if let Ok(mut map) = state.install_progress.try_write() {
+        map.remove(&corpus_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1019,27 +1179,60 @@ pub async fn get_corpus_progress(
     Ok(map.get(&corpus_id).cloned())
 }
 
-/// Start background installs for all corpora in the given tier.
+/// Kick off background installs for every corpus in the given tier.
+/// Used by the setup wizard's "install tier" affordance.
 async fn start_tier_installs(
-    state: &AppState,
-    manager: &sovereign_tools::corpus::CorpusManager,
+    app_handle: &tauri::AppHandle,
+    state: &Arc<AppState>,
     tier: &str,
 ) {
-    // Load registry to get corpora for the tier.
-    let data_dir = state.config.read().await.data_dir.clone();
-    let registry = match load_corpus_registry(&data_dir) {
-        Some(r) => r,
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
         None => {
-            tracing::warn!("Cannot load corpus registry for tier install");
+            tracing::warn!("start_tier_installs: corpus engine not initialized");
             return;
         }
     };
+    drop(engine_guard);
 
-    let corpora = registry.corpora_for_tier(tier);
-    for def in corpora {
-        tracing::info!("Queuing corpus install: {}", def.id);
-        if let Err(e) = manager.install_corpus(&def.id, None).await {
-            tracing::warn!("Failed to install corpus '{}': {e}", def.id);
+    let builtins = engine.builtin_corpora();
+    for b in &builtins {
+        if !tiers_for(&b.id).iter().any(|t| t == tier) {
+            continue;
         }
+        tracing::info!("Queuing corpus install for tier '{tier}': {}", b.id);
+        // Reuse the install command's spawn-and-emit logic by calling it
+        // directly. Each install runs in its own task; they don't block
+        // each other but compete for download bandwidth.
+        let app = app_handle.clone();
+        let state_clone = Arc::clone(state);
+        let cid = b.id.clone();
+        // Synthesize a State<'_, Arc<AppState>> isn't possible here; just
+        // duplicate the spawn pattern inline.
+        tokio::spawn(async move {
+            let engine_guard = state_clone.corpus_engine.read().await;
+            let engine = match engine_guard.as_ref() {
+                Some(e) => Arc::clone(e),
+                None => return,
+            };
+            drop(engine_guard);
+
+            let progress_cid = cid.clone();
+            let progress_handle = app.clone();
+            let progress_state = Arc::clone(&state_clone);
+            let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
+                let payload = ingest_progress_to_payload(&progress_cid, &p);
+                if let Ok(mut map) = progress_state.install_progress.try_write() {
+                    map.insert(payload.corpus_id.clone(), payload.clone());
+                }
+                let _ = progress_handle.emit("corpus-progress", payload);
+            });
+
+            let spec = corpus_engine::CorpusSpec::Builtin(cid.clone());
+            if let Err(e) = engine.ingest(&spec, Some(progress_cb)).await {
+                tracing::warn!("Tier install for '{cid}' failed: {e}");
+            }
+        });
     }
 }

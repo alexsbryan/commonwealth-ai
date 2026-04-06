@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use sovereign_tools::corpus::CorpusManager;
+use corpus_engine::CorpusEngine;
 
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
@@ -142,7 +142,12 @@ pub struct AppState {
     /// Reusable across Runtime rebuilds (model stays loaded).
     pub inference: RwLock<Option<Arc<dyn InferenceProvider>>>,
     pub store: RwLock<Option<Arc<dyn StateStore>>>,
-    pub corpus_manager: RwLock<Option<Arc<CorpusManager>>>,
+    /// The shared corpus engine. Set during bootstrap and used by both
+    /// the install/list/remove Tauri commands and the in-runtime
+    /// epistemic tools (`ClaimSearchTool`, `EpistemicLandscapeTool`).
+    /// Built-in recipes ship as Rust source via `builtin_recipes()` —
+    /// no sidecar TOML or build-time `include_str!` magic.
+    pub corpus_engine: RwLock<Option<Arc<CorpusEngine>>>,
     pub install_progress: RwLock<HashMap<String, crate::commands::CorpusProgressPayload>>,
     /// Embedded Commonwealth daemon — started on-demand when the user
     /// creates or joins a mesh.
@@ -158,7 +163,7 @@ impl AppState {
             config: RwLock::new(config),
             inference: RwLock::new(None),
             store: RwLock::new(None),
-            corpus_manager: RwLock::new(None),
+            corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
             mesh: Arc::new(sovereign_mesh::EmbeddedDaemon::new()),
         }
@@ -303,9 +308,14 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     }
 
-    // Construct a shared CorpusEngine for the epistemic tools.
-    // Uses the same `~/.sovereign/indexes` directory the CorpusManager
-    // and the corpus-engine pipeline both write to.
+    // Construct a shared CorpusEngine. This single instance backs both
+    // the install/list/remove Tauri commands AND the in-runtime epistemic
+    // tools — there's no second corpus subsystem.
+    //
+    // Built-in recipes (Wikipedia, SEP, OpenAlex, …) live in Rust source
+    // via `corpus_engine::recipe::builtin_recipes()`. Users can drop
+    // additional `.toml` files into `~/.sovereign/recipes` for custom
+    // corpora; nothing is bundled at build time.
     let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
     let recipes_dir = home.join(".sovereign").join("recipes");
     let indexes_dir = home.join(".sovereign").join("indexes");
@@ -316,6 +326,8 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
             .with_inference_fn(inference_fn),
     );
+    *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
+
     tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
         Arc::clone(&corpus_engine),
     )));
@@ -338,23 +350,6 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     );
 
     *state.runtime.write().await = Some(Arc::new(runtime));
-
-    // Initialize corpus manager.
-    if let Some(registry) = crate::commands::load_corpus_registry(&config.data_dir) {
-        let store_ref = state.store.read().await;
-        if let Some(ref s) = *store_ref {
-            let inf_ref = state.inference.read().await;
-            let inf = inf_ref.as_ref().map(Arc::clone);
-            let manager = Arc::new(CorpusManager::new(
-                registry,
-                Arc::clone(s),
-                inf,
-                config.data_dir.clone(),
-            ));
-            *state.corpus_manager.write().await = Some(manager);
-            tracing::info!("Corpus manager ready");
-        }
-    }
 
     tracing::info!("Runtime ready");
     Ok(())

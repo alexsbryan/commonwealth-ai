@@ -3,3 +3,4 @@
 /data
 *.gguf
 *node_modules
+dist*

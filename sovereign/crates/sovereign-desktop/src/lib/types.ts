@@ -180,19 +180,34 @@ export interface CorpusEntry {
   id: string;
   name: string;
   description: string;
+  size_compressed_gb: number;
   size_indexed_gb: number;
   license: string;
   tiers: string[];
   status: "installed" | "installing" | "not_installed";
   chunks_count: number | null;
-  trust_level: string;
+  /** True if the recipe enables claim/relationship enrichment (e.g. SEP). */
+  enrichment_enabled: boolean;
 }
+
+export type CorpusInstallPhase =
+  | "downloading"
+  | "extracting"
+  | "chunking"
+  | "embedding"
+  | "indexing"
+  | "extracting_claims"
+  | "finding_relationships"
+  | "extracting_relationships"
+  | "complete"
+  | "failed";
 
 export interface CorpusProgressPayload {
   corpus_id: string;
-  phase: "downloading" | "parsing" | "complete" | "failed";
+  phase: CorpusInstallPhase;
   percent: number;
   chunks_processed: number;
+  message?: string;
 }
 
 // ─── Community Mesh ──────────────────────────────────────────

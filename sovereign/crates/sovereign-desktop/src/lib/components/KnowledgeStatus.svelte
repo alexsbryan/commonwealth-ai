@@ -15,84 +15,20 @@
     { id: "full", name: "Full", desc: "All knowledge bases" },
   ];
 
-  // Fallback list shown when the backend hasn't bundled the corpus manifest
-  // or hasn't initialized the corpus manager yet. Ensures users always see
-  // what's available rather than a dead-end "no knowledge bases" message.
-  const FALLBACK_CORPORA: CorpusEntry[] = [
-    {
-      id: "wikipedia",
-      name: "Wikipedia",
-      description: "6.8M English articles — broad general knowledge",
-      size_indexed_gb: 55,
-      license: "CC BY-SA 4.0",
-      tiers: ["essential", "research", "technical", "full"],
-      status: "not_installed",
-      chunks_count: null,
-      trust_level: "unsigned",
-    },
-    {
-      id: "sep",
-      name: "Stanford Encyclopedia of Philosophy",
-      description: "Peer-reviewed philosophy articles",
-      size_indexed_gb: 0.5,
-      license: "CC BY-NC-ND 4.0",
-      tiers: ["research", "full"],
-      status: "not_installed",
-      chunks_count: null,
-      trust_level: "unsigned",
-    },
-    {
-      id: "openalex",
-      name: "OpenAlex",
-      description: "250M+ scholarly abstracts with citations",
-      size_indexed_gb: 45,
-      license: "CC0",
-      tiers: ["research", "full"],
-      status: "not_installed",
-      chunks_count: null,
-      trust_level: "unsigned",
-    },
-    {
-      id: "stackexchange",
-      name: "Stack Exchange",
-      description: "Expert Q&A across 170+ communities",
-      size_indexed_gb: 40,
-      license: "CC BY-SA 4.0",
-      tiers: ["technical", "full"],
-      status: "not_installed",
-      chunks_count: null,
-      trust_level: "unsigned",
-    },
-    {
-      id: "gutenberg",
-      name: "Project Gutenberg",
-      description: "70,000+ public domain books",
-      size_indexed_gb: 25,
-      license: "Public Domain",
-      tiers: ["full"],
-      status: "not_installed",
-      chunks_count: null,
-      trust_level: "unsigned",
-    },
-    {
-      id: "crs_reports",
-      name: "CRS Reports",
-      description: "US Congressional policy analysis",
-      size_indexed_gb: 4,
-      license: "Public Domain",
-      tiers: ["research", "full"],
-      status: "not_installed",
-      chunks_count: null,
-      trust_level: "unsigned",
-    },
-  ];
+  // The backend (`list_corpora` Tauri command) returns the full catalog
+  // from `corpus_engine::builtin_corpora()` — there's no longer a fallback
+  // path because the catalog ships in Rust source, not a sidecar TOML.
 
   let installedCount = $derived(
     corpora.filter((c) => c.status === "installed").length,
   );
   let anyInstalling = $derived(
     corpora.some(
-      (c) => c.status === "installing" || progress[c.id]?.phase === "downloading" || progress[c.id]?.phase === "parsing",
+      (c) =>
+        c.status === "installing" ||
+        (progress[c.id] &&
+          progress[c.id].phase !== "complete" &&
+          progress[c.id].phase !== "failed"),
     ),
   );
 
@@ -116,14 +52,10 @@
 
   async function refresh() {
     try {
-      const result = await listCorpora();
-      // If the backend returns nothing (manager not initialized, manifest
-      // missing, etc.), fall back to the hardcoded list so the user always
-      // sees what's available.
-      corpora = result.length > 0 ? result : FALLBACK_CORPORA;
+      corpora = await listCorpora();
     } catch (e) {
       console.error("Failed to list corpora:", e);
-      corpora = FALLBACK_CORPORA;
+      corpora = [];
     }
   }
 
@@ -159,9 +91,21 @@
   function phaseLabel(phase: string): string {
     switch (phase) {
       case "downloading":
-        return "Downloading...";
-      case "parsing":
-        return "Indexing...";
+        return "Downloading…";
+      case "extracting":
+        return "Extracting documents…";
+      case "chunking":
+        return "Chunking…";
+      case "embedding":
+        return "Embedding…";
+      case "indexing":
+        return "Building index…";
+      case "extracting_claims":
+        return "Extracting claims…";
+      case "finding_relationships":
+        return "Finding relationships…";
+      case "extracting_relationships":
+        return "Extracting relationships…";
       case "complete":
         return "Complete";
       case "failed":
@@ -187,17 +131,25 @@
   {/if}
 
   {#each corpora as corpus}
+    {@const inProgress =
+      corpus.status === "installing" ||
+      (progress[corpus.id] &&
+        progress[corpus.id].phase !== "complete" &&
+        progress[corpus.id].phase !== "failed")}
     <div class="corpus-row">
       <div class="corpus-info">
         <div class="corpus-name">
           {#if corpus.status === "installed"}
             <span class="dot installed"></span>
-          {:else if corpus.status === "installing" || progress[corpus.id]?.phase === "downloading" || progress[corpus.id]?.phase === "parsing"}
+          {:else if inProgress}
             <span class="dot installing"></span>
           {:else}
             <span class="dot"></span>
           {/if}
           {corpus.name}
+          {#if corpus.enrichment_enabled}
+            <span class="enrichment-pill" title="Includes claim and relationship enrichment for the epistemic-research skill">✦ enriched</span>
+          {/if}
         </div>
         <div class="corpus-detail">
           {#if corpus.status === "installed"}
@@ -205,17 +157,21 @@
             {#if corpus.chunks_count}
               &middot; {corpus.chunks_count.toLocaleString()} chunks
             {/if}
-          {:else if corpus.status === "installing" || progress[corpus.id]}
+          {:else if inProgress}
             {#if progress[corpus.id]}
               {phaseLabel(progress[corpus.id].phase)}
               {#if progress[corpus.id].percent > 0}
-                {progress[corpus.id].percent.toFixed(0)}%
+                · {progress[corpus.id].percent.toFixed(0)}%
+              {/if}
+              {#if progress[corpus.id].message}
+                · {progress[corpus.id].message}
               {/if}
             {:else}
-              Starting...
+              Starting…
             {/if}
           {:else}
-            {corpus.size_indexed_gb} GB &middot; {corpus.description}
+            ~{corpus.size_compressed_gb} GB download · ~{corpus.size_indexed_gb} GB indexed
+            <div class="corpus-blurb">{corpus.description}</div>
           {/if}
         </div>
       </div>
@@ -225,7 +181,7 @@
           <button class="action-btn remove" onclick={() => handleRemove(corpus.id)}>
             Remove
           </button>
-        {:else if corpus.status === "installing" || progress[corpus.id]}
+        {:else if inProgress}
           {#if progress[corpus.id]?.percent > 0}
             <div class="progress-bar">
               <div
@@ -234,7 +190,7 @@
               ></div>
             </div>
           {:else}
-            <span class="status-text">Working...</span>
+            <span class="status-text">Working…</span>
           {/if}
         {:else}
           <button class="action-btn install" onclick={() => handleInstall(corpus.id)}>
@@ -378,10 +334,24 @@
     font-size: 0.8rem;
     color: var(--text-muted);
   }
-  .empty {
-    font-size: 0.85rem;
+  .enrichment-pill {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+  .corpus-blurb {
+    font-size: 0.75rem;
     color: var(--text-muted);
-    text-align: center;
-    padding: 12px 0;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
