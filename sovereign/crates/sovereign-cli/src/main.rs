@@ -80,7 +80,7 @@ impl ApprovalChannel for CliApprovalChannel {
 
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
         let status = match output {
-            StepOutput::Text(_) | StepOutput::Json(_) => "done",
+            StepOutput::Text(_) | StepOutput::Json(_) | StepOutput::ReasonWithToolsResult { .. } => "done",
             StepOutput::Jump(t) => {
                 eprintln!("  [step {}] {} → jump to {t}", step.id, step.description);
                 return;

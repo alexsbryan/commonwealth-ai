@@ -46,6 +46,15 @@ impl InferenceProvider for DeterministicInference {
         } else if prompt_lower.contains("\"steps\"") && prompt_lower.contains("\"edges\"") {
             // Plan generation
             r#"{"goal":"test","steps":[{"id":0,"description":"answer","kind":"reason","prompt":"Answer the question","speed":"slow"}],"edges":[]}"#.to_string()
+        } else if prompt_lower.contains("how to search") && prompt_lower.contains("[search results for") {
+            // ReasonWithTools: has search results — synthesize now
+            "Based on what I found, here is the answer. [Source: sep] The knowledge base confirms this.".to_string()
+        } else if prompt_lower.contains("how to search") && prompt_lower.contains("available tools") {
+            // ReasonWithTools: first iteration — emit a tool call
+            r#"Let me search for relevant information. <tool_call>{"tool":"search","query":"Bergson laughter humor"}</tool_call>"#.to_string()
+        } else if prompt_lower.contains("you have used all available searches") {
+            // ReasonWithTools: forced synthesis after hitting cap
+            "Forced synthesis after reaching search limit. [Source: sep] Based on available findings.".to_string()
         } else if prompt_lower.contains("relevant knowledge:") {
             // Synthesis with knowledge context
             "Based on the provided knowledge, here is the answer. [Source: local knowledge] The sources indicate this is correct.".to_string()
@@ -85,6 +94,53 @@ impl InferenceProvider for DeterministicInference {
 
     async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
         // Return a zero vector — FTS5 text search will be the primary retrieval method
+        Ok(vec![0.0; 8])
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 4096,
+            supports_structured_output: false,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Moderate,
+        }
+    }
+}
+
+// ─── AlwaysSearchInference (for cap testing) ────────────────
+
+/// An inference provider that always emits tool calls in a ReasonWithTools
+/// loop, except when forced to synthesize after hitting the cap.
+pub struct AlwaysSearchInference;
+
+#[async_trait]
+impl InferenceProvider for AlwaysSearchInference {
+    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
+        let prompt_lower = request.prompt.to_lowercase();
+        let text = if prompt_lower.contains("you have used all available searches") {
+            "Forced synthesis after cap.".to_string()
+        } else if prompt_lower.contains("how to search") {
+            r#"Searching again. <tool_call>{"tool":"search","query":"more results"}</tool_call>"#.to_string()
+        } else {
+            "fallback".to_string()
+        };
+        Ok(CompletionResponse {
+            text,
+            tokens_used: 5,
+            model_id: "always-search".to_string(),
+            latency_ms: 1,
+            oicp_meta: None,
+        })
+    }
+
+    async fn complete_stream(
+        &self,
+        _request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        Err(Error::NotImplemented("not supported".to_string()))
+    }
+
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
         Ok(vec![0.0; 8])
     }
 

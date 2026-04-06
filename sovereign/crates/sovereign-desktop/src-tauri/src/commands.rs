@@ -463,6 +463,7 @@ pub async fn search_web(
         conversation_id: conversation_id.clone(),
         task_id: None,
         working_directory: None,
+        in_reasoning_loop: false,
     };
 
     let output = tool
@@ -477,6 +478,7 @@ pub async fn search_web(
             .and_then(|a| a.as_str())
             .unwrap_or_else(|| "No results found.")
             .to_string(),
+        sovereign_core::types::StepOutput::ReasonWithToolsResult { text, .. } => text,
         _ => "No results found.".to_string(),
     };
 

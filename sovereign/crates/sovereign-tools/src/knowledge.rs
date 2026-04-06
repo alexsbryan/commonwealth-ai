@@ -92,11 +92,11 @@ impl Tool for KnowledgeTool {
         let corpus_chunks: Vec<(String, String, f32)> =
             if let (Some(ref engine), Some(ref emb)) = (&self.corpus_engine, &embedding) {
                 let mut results = Vec::new();
-                if let Ok(indexes) = engine.installed_indexes() {
+                if let Ok(indexes) = engine.installed_indexes().await {
                     for info in &indexes {
-                        match engine.open_index(&info.path) {
+                        match engine.open_index(&info.path).await {
                             Ok(idx) => {
-                                if let Ok(scored) = idx.search(emb, query, 5) {
+                                if let Ok(scored) = idx.search(emb, query, 5).await {
                                     for sc in scored {
                                         let source = sc.title.unwrap_or(sc.corpus_id);
                                         results.push((source, sc.content, sc.score));

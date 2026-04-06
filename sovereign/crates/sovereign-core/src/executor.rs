@@ -18,6 +18,27 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
+// ─── Tool Call Parsing ────────────────────────────────────────
+
+struct ParsedToolCall {
+    tool_id: String,
+    query: String,
+}
+
+/// Parse a `<tool_call>{"tool":"...","query":"..."}</tool_call>` from model output.
+fn parse_tool_call(text: &str) -> Option<ParsedToolCall> {
+    let start = text.find("<tool_call>")?;
+    let end = text.find("</tool_call>")?;
+    if end <= start {
+        return None;
+    }
+    let json_str = &text[start + "<tool_call>".len()..end];
+    let value: serde_json::Value = serde_json::from_str(json_str.trim()).ok()?;
+    let tool_id = value.get("tool")?.as_str()?.to_string();
+    let query = value.get("query")?.as_str()?.to_string();
+    Some(ParsedToolCall { tool_id, query })
+}
+
 // ─── Public Types ──────────────────────────────────────────────
 
 pub struct Executor {
@@ -56,7 +77,7 @@ impl ApprovalChannel for AutoApprovalChannel {
 
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
         let status = match output {
-            StepOutput::Text(_) | StepOutput::Json(_) => "done",
+            StepOutput::Text(_) | StepOutput::Json(_) | StepOutput::ReasonWithToolsResult { .. } => "done",
             StepOutput::Jump(t) => {
                 eprintln!("  [step {}] {} → jump to {t}", step.id, step.description);
                 return;
@@ -95,6 +116,7 @@ pub fn resolve_inputs(
                         .unwrap_or_default()
                 }
             }
+            StepOutput::ReasonWithToolsResult { ref text, .. } => text.clone(),
             StepOutput::Jump(_) | StepOutput::Skipped => String::new(),
         };
 
@@ -402,6 +424,7 @@ impl Executor {
                     conversation_id: task.conversation_id.clone(),
                     task_id: Some(task.id.clone()),
                     working_directory: None,
+                    in_reasoning_loop: false,
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();
@@ -448,7 +471,255 @@ impl Executor {
                 let answer = self.approval.ask_user(&resolved).await?;
                 Ok(StepOutput::Text(answer))
             }
+
+            StepKind::ReasonWithTools {
+                prompt_template,
+                speed,
+                available_tools,
+                max_iterations,
+            } => {
+                let resolved = resolve_inputs(prompt_template, &step.inputs, completed)?;
+
+                // Adaptive compute: adjust max iterations based on difficulty.
+                let difficulty = self.estimate_difficulty(step, &resolved).await;
+                let effective_max_iter = match difficulty {
+                    StepDifficulty::Routine => (*max_iterations).min(2),
+                    StepDifficulty::Moderate => *max_iterations,
+                    StepDifficulty::Hard => *max_iterations + 2,
+                };
+
+                let output = self
+                    .execute_reason_with_tools(
+                        &resolved,
+                        *speed,
+                        available_tools,
+                        effective_max_iter,
+                        task,
+                    )
+                    .await?;
+
+                // Apply evaluation if configured.
+                if let Some(eval_config) = &step.evaluation {
+                    if let StepOutput::ReasonWithToolsResult { ref text, .. } = output {
+                        let text_output = StepOutput::Text(text.clone());
+                        let evaluated = self
+                            .evaluate_and_retry(
+                                text_output,
+                                &resolved,
+                                &CompletionRequest::new(&resolved).with_speed(*speed),
+                                eval_config,
+                            )
+                            .await?;
+                        if let StepOutput::Text(improved_text) = evaluated {
+                            if let StepOutput::ReasonWithToolsResult {
+                                search_log,
+                                iterations,
+                                capped,
+                                ..
+                            } = output
+                            {
+                                return Ok(StepOutput::ReasonWithToolsResult {
+                                    text: improved_text,
+                                    search_log,
+                                    iterations,
+                                    capped,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                Ok(output)
+            }
         }
+    }
+
+    // ─── ReasonWithTools Loop ─────────────────────────────────
+
+    async fn execute_reason_with_tools(
+        &self,
+        prompt: &str,
+        speed: Speed,
+        available_tools: &[ToolId],
+        max_iterations: usize,
+        task: &Task,
+    ) -> Result<StepOutput> {
+        // Build tool descriptions for the system prompt.
+        let tool_descs: Vec<String> = available_tools
+            .iter()
+            .filter_map(|id| self.tools.get(id).ok())
+            .map(|t| {
+                let d = t.descriptor();
+                format!("- {} (id: {}): {}", d.name, d.id, d.description)
+            })
+            .collect();
+
+        let system = self.build_retrieval_reasoning_prompt(&tool_descs, max_iterations);
+
+        // Build the growing conversation as a single prompt.
+        let mut conversation = format!(
+            "{system}\n\n---\n\nUser question: {prompt}\n\nAssistant:"
+        );
+
+        let mut search_log: Vec<SearchLogEntry> = Vec::new();
+        let mut iterations = 0;
+
+        loop {
+            let request = CompletionRequest {
+                prompt: conversation.clone(),
+                system_message: None, // System is baked into the prompt
+                preferred_speed: speed,
+                max_tokens: Some(2048),
+                temperature: Some(0.3),
+                structured_output: None,
+                oicp: None,
+            };
+
+            let response = self.inference.complete(&request).await?;
+            let response_text = response.text.trim().to_string();
+
+            // Check if the model emitted a tool call.
+            if let Some(tool_call) = parse_tool_call(&response_text) {
+                // Find and execute the tool.
+                let tool_result = match self.tools.get(&tool_call.tool_id) {
+                    Ok(tool) => {
+                        let params = serde_json::json!({"query": tool_call.query});
+                        let ctx = ToolContext {
+                            conversation_id: task.conversation_id.clone(),
+                            task_id: Some(task.id.clone()),
+                            working_directory: None,
+                            in_reasoning_loop: true,
+                        };
+                        match tool.execute(&params, &ctx).await {
+                            Ok(output) => match output {
+                                StepOutput::Text(t) => t,
+                                StepOutput::Json(v) => v
+                                    .get("answer")
+                                    .and_then(|a| a.as_str())
+                                    .unwrap_or("No results.")
+                                    .to_string(),
+                                _ => "No results.".to_string(),
+                            },
+                            Err(e) => format!("Search failed: {e}. Try a different query."),
+                        }
+                    }
+                    Err(_) => format!("Tool '{}' not available.", tool_call.tool_id),
+                };
+
+                // Count results (rough heuristic: count [Source lines).
+                let result_count = tool_result.matches("[Source").count();
+
+                search_log.push(SearchLogEntry {
+                    iteration: iterations,
+                    tool_id: tool_call.tool_id.clone(),
+                    query: tool_call.query.clone(),
+                    result_count,
+                });
+
+                // Append model's thinking + tool results to the conversation.
+                let thinking = response_text
+                    .split("<tool_call>")
+                    .next()
+                    .unwrap_or("")
+                    .trim();
+                conversation.push_str(&format!(
+                    " {thinking}\n\n[Search results for \"{}\"]:\n{tool_result}\n\nAssistant:",
+                    tool_call.query
+                ));
+
+                iterations += 1;
+
+                // Safety cap.
+                if iterations >= max_iterations {
+                    conversation.push_str(
+                        " You have used all available searches. Synthesize your answer now \
+                         from what you've found. If you couldn't find everything, note what's \
+                         missing.\n\nAssistant:",
+                    );
+
+                    let final_request = CompletionRequest {
+                        prompt: conversation,
+                        system_message: None,
+                        preferred_speed: speed,
+                        max_tokens: Some(2048),
+                        temperature: Some(0.3),
+                        structured_output: None,
+                        oicp: None,
+                    };
+                    let final_response = self.inference.complete(&final_request).await?;
+
+                    return Ok(StepOutput::ReasonWithToolsResult {
+                        text: final_response.text.trim().to_string(),
+                        search_log,
+                        iterations,
+                        capped: true,
+                    });
+                }
+
+                continue;
+            }
+
+            // No tool call — model is done reasoning. Return the synthesis.
+            return Ok(StepOutput::ReasonWithToolsResult {
+                text: response_text,
+                search_log,
+                iterations,
+                capped: false,
+            });
+        }
+    }
+
+    fn build_retrieval_reasoning_prompt(
+        &self,
+        tool_descriptions: &[String],
+        max_iterations: usize,
+    ) -> String {
+        let tools_list = tool_descriptions.join("\n");
+
+        // Check if active skills have a retrieval reasoning addendum.
+        let skill_addendum = self
+            .skills
+            .prompt_overrides(&Intent::ComplexTask)
+            .unwrap_or_default();
+
+        format!(
+            r#"You are a research assistant with access to knowledge bases. Answer the user's question by searching for relevant information and reasoning about what you find.
+
+## How to search
+
+When you need information, emit a tool call in this exact format:
+<tool_call>{{"tool":"search","query":"your search terms"}}</tool_call>
+
+After each search, you'll receive results. Read them carefully, then either:
+- Search again with different terms if you need more information
+- Write your final answer if you have enough
+
+## When to search
+
+- Search when you need factual information you're not certain about.
+- Search when you need specific details, quotes, dates, or names.
+- If results are incomplete, try different search terms — different angle, more specific, or broader.
+- Don't search for things you already found.
+
+## When to stop
+
+- Stop when you have enough sources to answer confidently.
+- Stop when additional searches return information you've already seen.
+- You have a maximum of {max_iterations} searches. Use them wisely.
+
+## Your answer
+
+When ready to answer (without a <tool_call>):
+- Cite sources using [Source: name] notation.
+- If sources conflict, present both positions.
+- If you couldn't find part of the answer, say so explicitly.
+
+## Available tools
+
+{tools_list}
+
+{skill_addendum}"#
+        )
     }
 
     // ─── Best-of-N Sampling ──────────────────────────────────
@@ -543,6 +814,7 @@ impl Executor {
                     conversation_id: String::new(),
                     task_id: None,
                     working_directory: None,
+                    in_reasoning_loop: false,
                 };
                 for candidate in candidates {
                     let params = serde_json::json!({"input": candidate});

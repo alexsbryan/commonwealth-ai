@@ -8,6 +8,7 @@ fn tool_ctx() -> ToolContext {
         conversation_id: "test".to_string(),
         task_id: None,
         working_directory: None,
+        in_reasoning_loop: false,
     }
 }
 

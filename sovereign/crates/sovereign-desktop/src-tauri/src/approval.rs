@@ -155,7 +155,7 @@ impl ApprovalChannel for TauriApprovalChannel {
             .unwrap_or_default();
 
         let status = match output {
-            StepOutput::Text(_) | StepOutput::Json(_) => "done".to_string(),
+            StepOutput::Text(_) | StepOutput::Json(_) | StepOutput::ReasonWithToolsResult { .. } => "done".to_string(),
             StepOutput::Jump(t) => format!("jump to {t}"),
             StepOutput::Skipped => "skipped".to_string(),
         };

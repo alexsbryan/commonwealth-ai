@@ -584,6 +584,10 @@ impl Runtime {
                         Some(format!("Step {id}: {text}"))
                     }
                 }
+                StepOutput::ReasonWithToolsResult { ref text, iterations, capped, .. } => {
+                    let note = if *capped { " (search cap reached)" } else { "" };
+                    Some(format!("Step {id} ({iterations} searches{note}): {text}"))
+                }
                 _ => None,
             })
             .collect();
@@ -625,23 +629,46 @@ impl Runtime {
         let mut search_method: Option<String> = None;
         let mut all_sources: Vec<SourceSummary> = Vec::new();
         for (_step_idx, output) in &task.completed_steps {
-            if let StepOutput::Json(ref val) = output {
-                if let Some(method) = val.get("search_method").and_then(|v| v.as_str()) {
-                    search_method = Some(method.to_string());
-                }
-                if let Some(sources) = val.get("sources").and_then(|v| v.as_array()) {
-                    for src in sources {
-                        if let (Some(origin), Some(count)) = (
-                            src.get("origin").and_then(|v| v.as_str()),
-                            src.get("count").and_then(|v| v.as_u64()),
-                        ) {
-                            all_sources.push(SourceSummary {
-                                origin: origin.to_string(),
-                                count: count as usize,
-                            });
+            match output {
+                StepOutput::Json(ref val) => {
+                    if let Some(method) = val.get("search_method").and_then(|v| v.as_str()) {
+                        search_method = Some(method.to_string());
+                    }
+                    if let Some(sources) = val.get("sources").and_then(|v| v.as_array()) {
+                        for src in sources {
+                            if let (Some(origin), Some(count)) = (
+                                src.get("origin").and_then(|v| v.as_str()),
+                                src.get("count").and_then(|v| v.as_u64()),
+                            ) {
+                                all_sources.push(SourceSummary {
+                                    origin: origin.to_string(),
+                                    count: count as usize,
+                                });
+                            }
                         }
                     }
                 }
+                StepOutput::ReasonWithToolsResult {
+                    search_log,
+                    iterations,
+                    ..
+                } => {
+                    search_method = Some(format!("ReasonWithTools ({iterations} iterations)"));
+                    // Aggregate search log into source summaries.
+                    let mut tool_counts: HashMap<String, usize> = HashMap::new();
+                    for entry in search_log {
+                        *tool_counts
+                            .entry(entry.tool_id.clone())
+                            .or_insert(0) += entry.result_count;
+                    }
+                    for (tool_id, count) in tool_counts {
+                        all_sources.push(SourceSummary {
+                            origin: tool_id,
+                            count,
+                        });
+                    }
+                }
+                _ => {}
             }
         }
 

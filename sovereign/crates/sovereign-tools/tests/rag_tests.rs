@@ -209,6 +209,7 @@ async fn document_tool_summarize_small() {
                 conversation_id: "c1".to_string(),
                 task_id: None,
                 working_directory: None,
+                in_reasoning_loop: false,
             },
         )
         .await
@@ -251,6 +252,7 @@ async fn document_tool_summarize_large() {
                 conversation_id: "c1".to_string(),
                 task_id: None,
                 working_directory: None,
+                in_reasoning_loop: false,
             },
         )
         .await
@@ -278,6 +280,7 @@ async fn document_tool_source_not_found() {
                 conversation_id: "c1".to_string(),
                 task_id: None,
                 working_directory: None,
+                in_reasoning_loop: false,
             },
         )
         .await

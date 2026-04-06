@@ -101,6 +101,9 @@ impl Planner for LlmPlanner {
                 let out_str = match output {
                     StepOutput::Text(t) => t.chars().take(200).collect::<String>(),
                     StepOutput::Json(v) => serde_json::to_string(v).unwrap_or_default(),
+                    StepOutput::ReasonWithToolsResult { text, iterations, .. } => {
+                        format!("({iterations} searches) {}", text.chars().take(200).collect::<String>())
+                    }
                     StepOutput::Jump(t) => format!("jumped to step {t}"),
                     StepOutput::Skipped => "skipped".to_string(),
                 };
@@ -162,6 +165,7 @@ SCHEMA:
 STEP KINDS:
 - "reason": Thinking/analysis. Requires "prompt" and "speed" ("fast" or "slow").
 - "tool": Execute a tool. Requires "tool_id" (must match an available tool name) and "params" (JSON object passed to the tool).
+- "reason_with_tools": Iterative research. The model thinks, searches, examines results, and searches again as needed. Requires "prompt", "speed", "tools" (list of tool IDs like ["search"]), and "max_iterations" (number, typically 6). Use for complex questions needing multiple searches.
 
 RULES:
 - Step IDs start at 0 and increment by 1
@@ -327,6 +331,33 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                     condition,
                     if_true,
                     if_false,
+                }
+            }
+            "reason_with_tools" => {
+                let prompt = step_obj
+                    .get("prompt")
+                    .or_else(|| step_obj.get("prompt_template"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&description)
+                    .to_string();
+                let tools: Vec<String> = step_obj
+                    .get("tools")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_else(|| vec!["search".to_string()]);
+                let max_iter = step_obj
+                    .get("max_iterations")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(6) as usize;
+                StepKind::ReasonWithTools {
+                    prompt_template: prompt,
+                    speed,
+                    available_tools: tools,
+                    max_iterations: max_iter,
                 }
             }
             _ => {

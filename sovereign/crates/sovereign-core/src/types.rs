@@ -137,6 +137,10 @@ pub struct ToolContext {
     pub conversation_id: ConversationId,
     pub task_id: Option<TaskId>,
     pub working_directory: Option<String>,
+    /// True when this tool is being called inside a ReasonWithTools loop.
+    /// Tools may format results differently for reasoning vs. synthesis.
+    #[serde(default)]
+    pub in_reasoning_loop: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,6 +264,14 @@ pub enum StepKind {
         if_true: usize,
         if_false: usize,
     },
+    /// Iterative reasoning with tool access. The model thinks, calls tools,
+    /// examines results, and decides whether to search again or synthesize.
+    ReasonWithTools {
+        prompt_template: String,
+        speed: Speed,
+        available_tools: Vec<ToolId>,
+        max_iterations: usize,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -274,6 +286,20 @@ pub enum StepOutput {
     Json(serde_json::Value),
     Jump(usize),
     Skipped,
+    ReasonWithToolsResult {
+        text: String,
+        search_log: Vec<SearchLogEntry>,
+        iterations: usize,
+        capped: bool,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchLogEntry {
+    pub iteration: usize,
+    pub tool_id: ToolId,
+    pub query: String,
+    pub result_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

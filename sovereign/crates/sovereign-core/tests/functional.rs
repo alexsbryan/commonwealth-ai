@@ -332,3 +332,188 @@ async fn corpus_state_tracks_chunk_count() {
     let state = h.store.get_corpus_state("wiki").await.unwrap();
     assert_eq!(state.chunks_count, 3);
 }
+
+// ─── ReasonWithTools ─────────────────────────────────────────
+
+use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};
+use sovereign_core::ToolRegistry;
+use sovereign_core::SkillRegistry;
+
+#[tokio::test]
+async fn reason_with_tools_searches_then_synthesizes() {
+    let h = TestHarness::new();
+    h.ingest_test_corpus(
+        "sep",
+        vec![
+            ("bergson", "Henri Bergson wrote Laughter examining comedy as social corrective."),
+            ("epistemology", "Epistemology studies the nature and scope of knowledge."),
+        ],
+    )
+    .await;
+
+    // Build an executor with the real store (which has corpus data).
+    let inference = std::sync::Arc::new(harness::DeterministicInference);
+    let store: std::sync::Arc<dyn sovereign_core::traits::StateStore> =
+        std::sync::Arc::clone(&h.store) as std::sync::Arc<dyn sovereign_core::traits::StateStore>;
+
+    // Register the search tool so ReasonWithTools can call it.
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(sovereign_tools::search::SearchTool::new(
+        std::sync::Arc::clone(&store),
+        std::sync::Arc::clone(&inference) as std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>,
+    )));
+
+    let executor = Executor::new(
+        inference,
+        std::sync::Arc::new(tools),
+        store,
+        std::sync::Arc::new(AutoApprovalChannel),
+        std::sync::Arc::new(SkillRegistry::new()),
+    );
+
+    let plan = Plan {
+        id: "rwt-test".to_string(),
+        goal: "research Bergson".to_string(),
+        steps: vec![Step {
+            id: 0,
+            description: "Research Bergson's theory of humor".to_string(),
+            kind: StepKind::ReasonWithTools {
+                prompt_template: "What did Bergson write about humor and laughter?".to_string(),
+                speed: Speed::Slow,
+                available_tools: vec!["search".to_string()],
+                max_iterations: 4,
+            },
+            requires_approval: false,
+            inputs: vec![],
+            sampling: None,
+            evaluation: None,
+        }],
+        edges: vec![],
+    };
+
+    let task = Task {
+        id: "rwt-task".to_string(),
+        conversation_id: "rwt-conv".to_string(),
+        goal: "test".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: 0,
+        updated_at: 0,
+        version: 0,
+    };
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    assert!(result.error.is_none(), "Execution should succeed");
+
+    // Verify the output is a ReasonWithToolsResult.
+    let output = result.completed.get(&0).expect("Step 0 should have output");
+    match output {
+        StepOutput::ReasonWithToolsResult {
+            text,
+            search_log,
+            iterations,
+            capped,
+        } => {
+            assert!(!text.is_empty(), "Synthesis text should not be empty");
+            assert!(
+                *iterations >= 1,
+                "Should have at least 1 search iteration, got {iterations}"
+            );
+            assert!(
+                !search_log.is_empty(),
+                "Search log should have at least 1 entry"
+            );
+            assert!(
+                !capped,
+                "Should not have hit the iteration cap with max_iterations=4"
+            );
+            // The search log should show what was queried.
+            assert!(
+                !search_log[0].query.is_empty(),
+                "Search log entry should have a query"
+            );
+        }
+        other => panic!(
+            "Expected ReasonWithToolsResult, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    }
+}
+
+#[tokio::test]
+async fn reason_with_tools_caps_at_max_iterations() {
+    let h = TestHarness::new();
+    h.ingest_test_corpus("sep", vec![("test", "Some content.")]).await;
+
+    let inference = std::sync::Arc::new(harness::AlwaysSearchInference);
+    let store: std::sync::Arc<dyn sovereign_core::traits::StateStore> =
+        std::sync::Arc::clone(&h.store) as std::sync::Arc<dyn sovereign_core::traits::StateStore>;
+
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(sovereign_tools::search::SearchTool::new(
+        std::sync::Arc::clone(&store),
+        std::sync::Arc::clone(&inference) as std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>,
+    )));
+
+    let executor = Executor::new(
+        inference,
+        std::sync::Arc::new(tools),
+        store,
+        std::sync::Arc::new(AutoApprovalChannel),
+        std::sync::Arc::new(SkillRegistry::new()),
+    );
+
+    let plan = Plan {
+        id: "cap-test".to_string(),
+        goal: "test cap".to_string(),
+        steps: vec![Step {
+            id: 0,
+            description: "Search repeatedly".to_string(),
+            kind: StepKind::ReasonWithTools {
+                prompt_template: "Keep searching".to_string(),
+                speed: Speed::Fast,
+                available_tools: vec!["search".to_string()],
+                max_iterations: 2,
+            },
+            requires_approval: false,
+            inputs: vec![],
+            sampling: None,
+            evaluation: None,
+        }],
+        edges: vec![],
+    };
+
+    let task = Task {
+        id: "cap-task".to_string(),
+        conversation_id: "cap-conv".to_string(),
+        goal: "test".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: 0,
+        updated_at: 0,
+        version: 0,
+    };
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    let output = result.completed.get(&0).unwrap();
+
+    match output {
+        StepOutput::ReasonWithToolsResult { iterations, capped, .. } => {
+            assert_eq!(*iterations, 2, "Should hit the cap at 2 iterations");
+            assert!(*capped, "Should be capped");
+        }
+        other => panic!("Expected ReasonWithToolsResult, got {:?}", std::mem::discriminant(other)),
+    }
+}
