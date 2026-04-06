@@ -144,6 +144,9 @@ pub struct AppState {
     pub store: RwLock<Option<Arc<dyn StateStore>>>,
     pub corpus_manager: RwLock<Option<Arc<CorpusManager>>>,
     pub install_progress: RwLock<HashMap<String, crate::commands::CorpusProgressPayload>>,
+    /// Embedded Commonwealth daemon — started on-demand when the user
+    /// creates or joins a mesh.
+    pub mesh: Arc<sovereign_mesh::EmbeddedDaemon>,
 }
 
 impl AppState {
@@ -157,6 +160,7 @@ impl AppState {
             store: RwLock::new(None),
             corpus_manager: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
+            mesh: Arc::new(sovereign_mesh::EmbeddedDaemon::new()),
         }
     }
 }

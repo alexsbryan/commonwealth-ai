@@ -5,6 +5,7 @@ members = [
     "crates/sovereign-inference",
     "crates/sovereign-store",
     "crates/sovereign-tools",
+    "crates/sovereign-mesh",
     "crates/sovereign-server",
     "crates/sovereign-desktop/src-tauri",
     "crates/sovereign-cli",
@@ -20,6 +21,7 @@ sovereign-core = { path = "crates/sovereign-core" }
 sovereign-inference = { path = "crates/sovereign-inference" }
 sovereign-store = { path = "crates/sovereign-store" }
 sovereign-tools = { path = "crates/sovereign-tools" }
+sovereign-mesh = { path = "crates/sovereign-mesh" }
 corpus-engine = { path = "../corpus-engine" }
 
 # Shared dependencies

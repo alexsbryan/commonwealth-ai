@@ -8,6 +8,7 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true }
+sovereign-mesh = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -19,6 +20,7 @@ tracing-subscriber = { workspace = true }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-deep-link = "2"
 reqwest = { workspace = true, features = ["stream"] }
 futures = { workspace = true }
 walkdir = "2"

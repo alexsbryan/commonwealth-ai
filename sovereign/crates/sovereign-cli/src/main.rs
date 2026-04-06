@@ -1,3 +1,5 @@
+mod mesh_cmd;
+
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -184,6 +186,22 @@ fn parse_args() -> Option<Args> {
 
 #[tokio::main]
 async fn main() {
+    // Check for subcommands before standard arg parsing.
+    let raw_args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(first) = raw_args.first() {
+        match first.as_str() {
+            "mesh" => {
+                let code = mesh_cmd::run_mesh(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "corpus" => {
+                let code = mesh_cmd::run_corpus(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            _ => {}
+        }
+    }
+
     let args = match parse_args() {
         Some(a) => a,
         None => {

@@ -1,5 +1,6 @@
 mod approval;
 mod commands;
+mod mesh_commands;
 mod state;
 mod tray;
 
@@ -22,7 +23,21 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
+            // Listen for sovereign:// deep links and forward them to the frontend.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        let url_str = url.to_string();
+                        tracing::info!("Deep link received: {url_str}");
+                        let _ = handle.emit("deep-link-received", url_str);
+                    }
+                });
+            }
+
             let handle = app.handle().clone();
 
             // Create approval channel with app handle for event emission.
@@ -100,6 +115,12 @@ fn main() {
             commands::install_corpus,
             commands::remove_corpus,
             commands::get_corpus_progress,
+            mesh_commands::mesh_create,
+            mesh_commands::mesh_join,
+            mesh_commands::mesh_preview_join_link,
+            mesh_commands::mesh_get_state,
+            mesh_commands::mesh_is_running,
+            mesh_commands::mesh_leave,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");
