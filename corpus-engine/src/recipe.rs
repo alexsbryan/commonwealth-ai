@@ -671,4 +671,126 @@ type = "paragraph"
             assert!(!recipe.corpus.name.is_empty(), "recipe name must not be empty");
         }
     }
+
+    /// The SEP recipe is the demo target for the epistemic enrichment
+    /// layer and the canonical example of a parquet-sourced corpus.
+    /// These assertions guard against accidental regression to the old
+    /// HTML web-crawl path or the wrong source URL.
+    #[test]
+    fn sep_recipe_uses_huggingface_parquet_source() {
+        let recipes = builtin_recipes();
+        let sep = recipes
+            .iter()
+            .find(|r| r.corpus.id == "sep")
+            .expect("SEP recipe should be in builtin_recipes()");
+
+        // Acquirer must be a bulk download from HuggingFace, not a web crawl.
+        match &sep.acquire {
+            AcquirerConfig::BulkDownload { url, resume } => {
+                assert!(
+                    url.contains("huggingface.co"),
+                    "SEP source should be hosted on HuggingFace, got: {url}"
+                );
+                assert!(
+                    url.contains(".parquet"),
+                    "SEP source should be a parquet file, got: {url}"
+                );
+                assert!(*resume, "SEP downloads should support resume");
+            }
+            other => panic!("SEP must use BulkDownload, got {other:?}"),
+        }
+
+        // Extractor must be Parquet pointed at the right columns.
+        match &sep.extract {
+            ExtractorConfig::Parquet {
+                content_column,
+                label_column,
+            } => {
+                assert_eq!(content_column, "text");
+                assert_eq!(label_column.as_deref(), Some("title"));
+            }
+            other => panic!("SEP must use Parquet extractor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sep_recipe_has_enrichment_enabled() {
+        let recipes = builtin_recipes();
+        let sep = recipes
+            .iter()
+            .find(|r| r.corpus.id == "sep")
+            .expect("SEP recipe should be in builtin_recipes()");
+
+        let enrichment = sep
+            .enrichment
+            .as_ref()
+            .expect("SEP must have an enrichment block");
+
+        assert!(enrichment.enabled, "SEP enrichment must be enabled");
+        assert!(
+            !enrichment.claim_extraction_prompt.is_empty(),
+            "SEP claim extraction prompt must not be empty"
+        );
+        assert!(
+            enrichment.claim_extraction_prompt.contains("epistemic_status"),
+            "SEP claim prompt should ask for epistemic_status"
+        );
+
+        assert!(
+            enrichment.extract_relationships,
+            "SEP must extract relationships"
+        );
+        let rel_prompt = enrichment
+            .relationship_extraction_prompt
+            .as_ref()
+            .expect("SEP must have a relationship extraction prompt");
+        assert!(rel_prompt.contains("{claim_a}"));
+        assert!(rel_prompt.contains("{claim_b}"));
+        assert!(rel_prompt.contains("contradicts"));
+    }
+
+    #[test]
+    fn sep_recipe_size_estimate_matches_huggingface_dataset() {
+        let recipes = builtin_recipes();
+        let sep = recipes
+            .iter()
+            .find(|r| r.corpus.id == "sep")
+            .unwrap();
+        // The HuggingFace parquet is roughly 1–2 GB compressed and
+        // expands to several GB indexed once embeddings + claims are
+        // included. The old 0.5/1.5 estimates were wildly wrong.
+        assert!(
+            sep.corpus.size_compressed_gb >= 1.0,
+            "SEP compressed size should reflect the real ~1.4 GB parquet, got {}",
+            sep.corpus.size_compressed_gb
+        );
+        assert!(
+            sep.corpus.size_indexed_gb >= 4.0,
+            "SEP indexed size should account for embeddings + enrichment, got {}",
+            sep.corpus.size_indexed_gb
+        );
+    }
+
+    /// Recipes that don't request enrichment must explicitly opt out
+    /// (None or `enabled = false`). This catches recipes that pick up
+    /// stray enrichment configs by accident.
+    #[test]
+    fn non_sep_builtin_recipes_skip_enrichment_by_default() {
+        let recipes = builtin_recipes();
+        for recipe in &recipes {
+            if recipe.corpus.id == "sep" {
+                continue;
+            }
+            let enrichment_active = recipe
+                .enrichment
+                .as_ref()
+                .map(|e| e.enabled)
+                .unwrap_or(false);
+            assert!(
+                !enrichment_active,
+                "Recipe '{}' has enrichment enabled by default — only SEP should",
+                recipe.corpus.id
+            );
+        }
+    }
 }
