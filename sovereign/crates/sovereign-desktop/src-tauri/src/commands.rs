@@ -127,7 +127,9 @@ fn now_epoch() -> i64 {
 }
 
 /// The bundled corpus manifest, compiled into the binary.
-const BUNDLED_CORPORA_TOML: &str = include_str!("../../../../data/corpora.toml");
+/// Copied into OUT_DIR by build.rs from the workspace `data/corpora.toml`,
+/// or a minimal fallback if that file is unavailable at build time.
+const BUNDLED_CORPORA_TOML: &str = include_str!(concat!(env!("OUT_DIR"), "/corpora.toml"));
 
 /// Load the corpus registry. Tries a user-local file first, falls back to the
 /// bundled manifest compiled into the binary.
