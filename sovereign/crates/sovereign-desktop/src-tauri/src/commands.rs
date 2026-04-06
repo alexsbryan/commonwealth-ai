@@ -1236,3 +1236,207 @@ async fn start_tier_installs(
         });
     }
 }
+
+// ─── Tests ───────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use corpus_engine::IngestProgress;
+
+    // ── tiers_for ───────────────────────────────────────────
+
+    #[test]
+    fn tiers_for_wikipedia_includes_essential_and_full() {
+        let tiers = tiers_for("wikipedia");
+        assert!(tiers.contains(&"essential".to_string()));
+        assert!(tiers.contains(&"research".to_string()));
+        assert!(tiers.contains(&"technical".to_string()));
+        assert!(tiers.contains(&"full".to_string()));
+    }
+
+    #[test]
+    fn tiers_for_sep_is_research_only() {
+        let tiers = tiers_for("sep");
+        assert!(tiers.contains(&"research".to_string()));
+        assert!(tiers.contains(&"full".to_string()));
+        // SEP is research-grade and not part of the essential
+        // tier — installing it pulls multiple GB.
+        assert!(!tiers.contains(&"essential".to_string()));
+    }
+
+    #[test]
+    fn tiers_for_stackexchange_is_technical() {
+        let tiers = tiers_for("stackexchange");
+        assert!(tiers.contains(&"technical".to_string()));
+        assert!(tiers.contains(&"full".to_string()));
+        assert!(!tiers.contains(&"essential".to_string()));
+    }
+
+    #[test]
+    fn tiers_for_unknown_corpus_falls_back_to_full() {
+        let tiers = tiers_for("some_user_corpus");
+        assert_eq!(tiers, vec!["full".to_string()]);
+    }
+
+    // ── ingest_progress_to_payload ──────────────────────────
+
+    #[test]
+    fn payload_for_downloading_carries_percent_and_size_message() {
+        let payload = ingest_progress_to_payload(
+            "wikipedia",
+            &IngestProgress::Downloading {
+                percent: 42.5,
+                bytes_downloaded: 5_242_880, // 5 MB
+                bytes_total: Some(10_485_760),
+            },
+        );
+        assert_eq!(payload.corpus_id, "wikipedia");
+        assert_eq!(payload.phase, "downloading");
+        assert!((payload.percent - 42.5).abs() < 1e-3);
+        // The message should describe the download size in MB so the
+        // UI can show "5.0 MB" while progress is below 100%.
+        let message = payload.message.expect("downloading payload should have a message");
+        assert!(message.contains("MB"), "expected MB in message, got '{message}'");
+    }
+
+    #[test]
+    fn payload_for_embedding_computes_percent_from_total() {
+        let payload = ingest_progress_to_payload(
+            "sep",
+            &IngestProgress::Embedding {
+                chunks_embedded: 250,
+                total: 1000,
+            },
+        );
+        assert_eq!(payload.phase, "embedding");
+        assert!((payload.percent - 25.0).abs() < 1e-3);
+        assert_eq!(payload.chunks_processed, 250);
+    }
+
+    #[test]
+    fn payload_for_embedding_handles_zero_total() {
+        // The pipeline reports `total: 0` early, before it knows the
+        // chunk count. The mapping must not divide-by-zero.
+        let payload = ingest_progress_to_payload(
+            "sep",
+            &IngestProgress::Embedding {
+                chunks_embedded: 0,
+                total: 0,
+            },
+        );
+        assert_eq!(payload.percent, 0.0);
+    }
+
+    #[test]
+    fn payload_for_extracting_claims_uses_friendly_phase_name() {
+        // The desktop UI distinguishes the standard ingest phases
+        // (downloading/embedding/indexing) from the enrichment phases
+        // (extracting_claims, finding_relationships, …) so it can show
+        // a calibrated status line. Verify the phase string matches
+        // what the frontend `phaseLabel()` function expects.
+        let payload = ingest_progress_to_payload(
+            "sep",
+            &IngestProgress::ExtractingClaims {
+                current: 50,
+                total: 200,
+            },
+        );
+        assert_eq!(payload.phase, "extracting_claims");
+        assert!((payload.percent - 25.0).abs() < 1e-3);
+        assert_eq!(payload.chunks_processed, 50);
+        let message = payload.message.expect("should include a status message");
+        assert!(message.contains("50/200"));
+    }
+
+    #[test]
+    fn payload_for_found_candidate_pairs_emits_count() {
+        let payload = ingest_progress_to_payload(
+            "sep",
+            &IngestProgress::FoundCandidatePairs { count: 1234 },
+        );
+        assert_eq!(payload.phase, "finding_relationships");
+        let message = payload.message.expect("should include a count message");
+        assert!(message.contains("1234"));
+    }
+
+    #[test]
+    fn payload_for_extracting_relationships_includes_progress() {
+        let payload = ingest_progress_to_payload(
+            "sep",
+            &IngestProgress::ExtractingRelationships {
+                current: 7,
+                total: 14,
+            },
+        );
+        assert_eq!(payload.phase, "extracting_relationships");
+        assert!((payload.percent - 50.0).abs() < 1e-3);
+        let message = payload.message.expect("should describe pair progress");
+        assert!(message.contains("7/14"));
+    }
+
+    #[test]
+    fn payload_for_complete_marks_full_progress() {
+        let payload = ingest_progress_to_payload(
+            "sep",
+            &IngestProgress::Complete {
+                total_chunks: 5000,
+                duration_secs: 1234,
+            },
+        );
+        assert_eq!(payload.phase, "complete");
+        assert_eq!(payload.percent, 100.0);
+        assert_eq!(payload.chunks_processed, 5000);
+        let message = payload.message.expect("should include duration");
+        assert!(message.contains("1234"));
+    }
+
+    /// Cover every variant of `IngestProgress` to catch the case where
+    /// a future variant is added to corpus-engine but the desktop's
+    /// mapping table is not updated. Without this, a new variant
+    /// would silently fall through to whatever default behavior the
+    /// match arm produces.
+    #[test]
+    fn payload_phase_is_set_for_every_progress_variant() {
+        let cases = [
+            IngestProgress::Downloading {
+                percent: 0.0,
+                bytes_downloaded: 0,
+                bytes_total: None,
+            },
+            IngestProgress::Extracting {
+                documents_processed: 1,
+            },
+            IngestProgress::Chunking { chunks_created: 1 },
+            IngestProgress::Embedding {
+                chunks_embedded: 1,
+                total: 1,
+            },
+            IngestProgress::Indexing {
+                chunks_indexed: 1,
+                total: 1,
+            },
+            IngestProgress::ExtractingClaims {
+                current: 1,
+                total: 1,
+            },
+            IngestProgress::FoundCandidatePairs { count: 1 },
+            IngestProgress::ExtractingRelationships {
+                current: 1,
+                total: 1,
+            },
+            IngestProgress::Complete {
+                total_chunks: 1,
+                duration_secs: 1,
+            },
+        ];
+        for case in cases {
+            let payload = ingest_progress_to_payload("test", &case);
+            assert!(
+                !payload.phase.is_empty(),
+                "every IngestProgress variant must map to a non-empty phase string"
+            );
+            assert_eq!(payload.corpus_id, "test");
+        }
+    }
+}
