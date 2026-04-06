@@ -46,7 +46,7 @@ impl Default for GroundingConfig {
 }
 
 /// Search local indexes and return relevant chunks for grounding.
-pub fn search_for_grounding(
+pub async fn search_for_grounding(
     engine: &CorpusEngine,
     query_embedding: &[f32],
     query_text: &str,
@@ -54,15 +54,17 @@ pub fn search_for_grounding(
 ) -> corpus_engine::Result<Vec<ScoredChunk>> {
     let mut results = Vec::new();
 
-    for info in engine.installed_indexes()? {
+    for info in engine.installed_indexes().await? {
         // Filter to configured corpora if specified.
         if !config.corpora.is_empty() && !config.corpora.contains(&info.corpus_id) {
             continue;
         }
 
-        match engine.open_index(&info.path) {
+        match engine.open_index(&info.path).await {
             Ok(index) => {
-                let hits = index.search(query_embedding, query_text, config.max_chunks)?;
+                let hits = index
+                    .search(query_embedding, query_text, config.max_chunks)
+                    .await?;
                 results.extend(hits);
             }
             Err(e) => {

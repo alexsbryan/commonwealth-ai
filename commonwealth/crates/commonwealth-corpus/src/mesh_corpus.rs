@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, CorpusSpec, IngestResult};
 use corpus_engine::progress::ProgressCallback;
+use corpus_engine::{CorpusEngine, CorpusSpec, IngestResult};
 
 pub struct MeshCorpusManager {
     engine: Arc<CorpusEngine>,
@@ -21,7 +21,8 @@ impl MeshCorpusManager {
         // Already installed locally?
         if self
             .engine
-            .installed_indexes()?
+            .installed_indexes()
+            .await?
             .iter()
             .any(|i| i.corpus_id == corpus_id && !i.is_shard)
         {
@@ -34,8 +35,8 @@ impl MeshCorpusManager {
     }
 
     /// List installed indexes.
-    pub fn installed(&self) -> corpus_engine::Result<Vec<corpus_engine::IndexInfo>> {
-        self.engine.installed_indexes()
+    pub async fn installed(&self) -> corpus_engine::Result<Vec<corpus_engine::IndexInfo>> {
+        self.engine.installed_indexes().await
     }
 
     /// Remove an installed corpus.

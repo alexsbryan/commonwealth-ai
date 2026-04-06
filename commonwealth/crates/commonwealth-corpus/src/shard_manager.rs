@@ -15,8 +15,8 @@ impl ShardManager {
         Self { engine, shard_dir }
     }
 
-    /// Prepare shard files for distribution to assigned nodes.
-    pub fn prepare_shards(
+    /// Prepare shard directories for distribution to assigned nodes.
+    pub async fn prepare_shards(
         &self,
         corpus_id: &str,
         assignments: &[KnowledgeShardAssignment],
@@ -28,11 +28,14 @@ impl ShardManager {
             }
             if let Some(ref range) = assignment.chunk_range {
                 let output = self.shard_dir.join(format!(
-                    "{}-shard-{}-{}.db",
+                    "{}-shard-{}-{}",
                     corpus_id, range.start_id, range.end_id
                 ));
                 let chunk_range = ChunkRange::new(range.start_id, range.end_id);
-                let info = self.engine.extract_shard(corpus_id, chunk_range, &output)?;
+                let info = self
+                    .engine
+                    .extract_shard(corpus_id, chunk_range, &output)
+                    .await?;
                 shards.push(PreparedShard {
                     target_node: assignment.node_id,
                     info,
@@ -42,45 +45,45 @@ impl ShardManager {
         Ok(shards)
     }
 
-    /// Install a received shard file into the shared index directory.
+    /// Install a received shard directory into the shared index directory.
     pub fn install_received_shard(
         &self,
         corpus_id: &str,
         chunk_range: &ChunkRange,
-        received_file: &Path,
+        received_dir: &Path,
     ) -> corpus_engine::Result<PathBuf> {
         let dest = self.engine.index_dir().join(format!(
-            "{}-shard-{}-{}.db",
+            "{}-shard-{}-{}",
             corpus_id, chunk_range.start_id, chunk_range.end_id
         ));
-        std::fs::rename(received_file, &dest)
-            .map_err(corpus_engine::Error::Io)?;
+        std::fs::rename(received_dir, &dest).map_err(corpus_engine::Error::Io)?;
         Ok(dest)
     }
 
-    /// Merge all local shard files for a corpus into a complete index.
-    pub fn consolidate_shards(
+    /// Merge all local shard directories for a corpus into a complete index.
+    pub async fn consolidate_shards(
         &self,
         corpus_id: &str,
     ) -> corpus_engine::Result<IndexInfo> {
-        let shard_files: Vec<PathBuf> = self
+        let shard_dirs: Vec<PathBuf> = self
             .engine
-            .installed_indexes()?
+            .installed_indexes()
+            .await?
             .iter()
             .filter(|i| i.corpus_id == corpus_id && i.is_shard)
             .map(|i| i.path.clone())
             .collect();
 
-        if shard_files.is_empty() {
+        if shard_dirs.is_empty() {
             return Err(corpus_engine::Error::NoShardsFound(corpus_id.into()));
         }
 
-        let output = self.engine.index_dir().join(format!("{corpus_id}.db"));
-        let info = self.engine.merge_shards(&shard_files, &output)?;
+        let output = self.engine.index_dir().join(corpus_id);
+        let info = self.engine.merge_shards(&shard_dirs, &output).await?;
 
-        // Clean up shard files after successful merge.
-        for path in &shard_files {
-            std::fs::remove_file(path).ok();
+        // Clean up shard directories after successful merge.
+        for path in &shard_dirs {
+            std::fs::remove_dir_all(path).ok();
         }
 
         Ok(info)
