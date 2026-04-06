@@ -83,6 +83,8 @@ pub struct SetupConfig {
     #[serde(default)]
     pub primary_model_path: Option<String>,
     #[serde(default)]
+    pub embed_model_path: Option<String>,
+    #[serde(default)]
     pub data_dir: Option<String>,
     #[serde(default)]
     pub active_skills: Vec<String>,
@@ -563,6 +565,7 @@ pub async fn complete_setup(
     let mut config = state.config.write().await;
     config.model_path = setup.model_path.into();
     config.primary_model_path = setup.primary_model_path.map(|p| p.into());
+    config.embed_model_path = setup.embed_model_path.map(|p| p.into());
     if let Some(dir) = setup.data_dir {
         config.data_dir = dir.into();
     }

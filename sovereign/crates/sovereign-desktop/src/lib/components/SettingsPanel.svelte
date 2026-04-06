@@ -73,6 +73,27 @@
       </div>
 
       <div class="section">
+        <h3>Embedding model <em>(required for knowledge bases)</em></h3>
+        <p class="section-help">
+          Dedicated GGUF embedding model. Required to install knowledge
+          bases (Wikipedia, SEP, …) and to use RAG over your documents.
+          A small model like <code>nomic-embed-text-v1.5.Q4_K_M.gguf</code>
+          works well — typically &lt;500 MB.
+        </p>
+        <ModelSelector
+          selectedPath={config.embed_model_path ?? ""}
+          onSelect={(p) => (config!.embed_model_path = p || null)}
+          showRawInput={true}
+        />
+        {#if !config.embed_model_path}
+          <p class="warning-text">
+            ⚠ No embedding model configured. Knowledge base installs will
+            fail until you select one.
+          </p>
+        {/if}
+      </div>
+
+      <div class="section">
         <h3>Inference</h3>
         <label>
           <span>Context size</span>
@@ -226,6 +247,17 @@
     border-radius: 3px;
     font-family: ui-monospace, SFMono-Regular, monospace;
     font-size: 0.74rem;
+  }
+
+  .warning-text {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(217, 119, 6, 0.1);
+    border: 1px solid rgba(217, 119, 6, 0.3);
+    border-radius: var(--radius);
+    color: rgb(180, 83, 9);
+    font-size: 0.78rem;
+    line-height: 1.4;
   }
 
   label {

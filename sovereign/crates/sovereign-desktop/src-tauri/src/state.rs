@@ -25,6 +25,12 @@ pub struct DesktopConfig {
     pub model_path: PathBuf,
     #[serde(default)]
     pub primary_model_path: Option<PathBuf>,
+    /// Optional dedicated embedding model. Required for any feature
+    /// that needs vector search: corpus install, RAG, knowledge tools.
+    /// When unset, those features return a clear "configure an
+    /// embedding model" error rather than producing garbage vectors.
+    #[serde(default)]
+    pub embed_model_path: Option<PathBuf>,
     #[serde(default = "default_data_dir")]
     pub data_dir: PathBuf,
     #[serde(default = "default_skills_dir")]
@@ -86,6 +92,7 @@ impl Default for DesktopConfig {
         Self {
             model_path: PathBuf::from("models/fast.gguf"),
             primary_model_path: None,
+            embed_model_path: None,
             data_dir: default_data_dir(),
             skills_dir: default_skills_dir(),
             active_skills: Vec::new(),
@@ -182,18 +189,28 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         ));
     }
 
-    // Load inference (reuse if already loaded).
+    // Load inference (reuse if already loaded). Loads up to three slots:
+    // fast (always), primary (optional, lazy), embed (optional, eager).
     let inference: Arc<dyn InferenceProvider> = {
         let existing = state.inference.read().await;
         if let Some(ref inf) = *existing {
             Arc::clone(inf)
         } else {
             drop(existing);
-            tracing::info!("Loading model: {}", config.model_path.display());
+            tracing::info!("Loading fast model: {}", config.model_path.display());
+            if let Some(ref ep) = config.embed_model_path {
+                tracing::info!("Loading embed model: {}", ep.display());
+            } else {
+                tracing::warn!(
+                    "No embedding model configured. Corpus install and RAG features \
+                     will be unavailable until you set Settings → Embedding model."
+                );
+            }
             let loaded = Arc::new(
-                EmbeddedLlamaCpp::load_dual(
+                EmbeddedLlamaCpp::load_full(
                     &config.model_path,
                     config.primary_model_path.as_deref(),
+                    config.embed_model_path.as_deref(),
                     config.context_size,
                     None,
                 )

@@ -58,6 +58,8 @@ export interface SkillEntry {
 export interface DesktopConfig {
   model_path: string;
   primary_model_path: string | null;
+  /** Optional GGUF embedding model. Required for corpus install / RAG. */
+  embed_model_path: string | null;
   data_dir: string;
   skills_dir: string;
   active_skills: string[];
@@ -76,6 +78,7 @@ export interface SearchBackendConfig {
 export interface SetupConfig {
   model_path: string;
   primary_model_path?: string;
+  embed_model_path?: string;
   data_dir?: string;
   active_skills: string[];
   enabled_tools: string[];

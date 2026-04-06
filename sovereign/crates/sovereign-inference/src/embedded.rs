@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use tokio::sync::Mutex;
 
-use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
@@ -228,20 +228,167 @@ impl ModelSlot {
     }
 }
 
-// ─── EmbeddedLlamaCpp (dual-slot) ──────────────────────────────
+// ─── EmbedSlot ────────────────────────────────────────────────
+
+/// Dedicated embedding slot. Loads an embedding model (e.g.
+/// `nomic-embed-text-v1.5.Q4_K_M.gguf`) with `embeddings = true` and
+/// mean pooling, so a single decode pass yields one normalized
+/// sentence vector.
+///
+/// The slot stores its `LlamaContext` with an extended `'static`
+/// lifetime via the same `Arc<LlamaModel>` trick the chat slot uses.
+/// We clear the KV cache between calls so each `embed()` invocation
+/// is an independent sequence.
+struct EmbedSlot {
+    model: Arc<LlamaModel>,
+    context: Mutex<EmbedSlotContext>,
+    /// Embedding dimensionality reported by the model. Cached so the
+    /// hot path doesn't have to call `model.n_embd()` on every embed.
+    n_embd: usize,
+    /// Maximum tokens we can pack into the batch / context. Used to
+    /// truncate long inputs gracefully instead of crashing llama.cpp.
+    max_tokens: usize,
+}
+
+struct EmbedSlotContext {
+    ctx: llama_cpp_2::context::LlamaContext<'static>,
+    _model: Arc<LlamaModel>,
+}
+
+unsafe impl Send for EmbedSlotContext {}
+unsafe impl Sync for EmbedSlotContext {}
+
+impl EmbedSlot {
+    fn load(
+        backend: &Arc<LlamaBackend>,
+        model_path: &Path,
+        n_gpu_layers: u32,
+    ) -> Result<Self> {
+        let model_params = LlamaModelParams::default().with_n_gpu_layers(n_gpu_layers);
+
+        let model = LlamaModel::load_from_file(backend, model_path, &model_params)
+            .map_err(|e| Error::Inference(format!("Failed to load embed model: {e}")))?;
+
+        let n_embd = model.n_embd() as usize;
+        // Embedding models are bidirectional encoders — the whole input
+        // gets packed into a single batch. 2048 tokens is enough for
+        // any chunk we produce (paragraph chunker maxes around 512).
+        let max_tokens = 2048;
+
+        let model = Arc::new(model);
+
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(NonZeroU32::new(max_tokens as u32))
+            .with_n_batch(max_tokens as u32)
+            .with_n_ubatch(max_tokens as u32)
+            .with_embeddings(true)
+            .with_pooling_type(LlamaPoolingType::Mean);
+
+        let ctx = unsafe {
+            let model_ref: &'static LlamaModel =
+                &*(Arc::as_ptr(&model) as *const LlamaModel);
+            model_ref
+                .new_context(backend, ctx_params)
+                .map_err(|e| Error::Inference(format!("Failed to create embed context: {e}")))?
+        };
+
+        eprintln!(
+            "Embed slot loaded: {} dims, {} layers, {}MB",
+            n_embd,
+            model.n_layer(),
+            model.size() / (1024 * 1024),
+        );
+
+        Ok(Self {
+            model: model.clone(),
+            context: Mutex::new(EmbedSlotContext {
+                ctx,
+                _model: model,
+            }),
+            n_embd,
+            max_tokens,
+        })
+    }
+
+    /// Embed a single piece of text. Runs synchronously inside a
+    /// `tokio::task::spawn_blocking` from the async wrapper.
+    fn embed_sync(
+        model: &LlamaModel,
+        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        text: &str,
+        n_embd: usize,
+        max_tokens: usize,
+    ) -> Result<Vec<f32>> {
+        // Each call is its own sequence — wipe the KV cache so previous
+        // embeddings don't bleed into this one.
+        ctx.clear_kv_cache();
+
+        let mut tokens = model
+            .str_to_token(text, AddBos::Always)
+            .map_err(|e| Error::Inference(format!("Embed tokenization failed: {e}")))?;
+
+        // Truncate inputs that exceed the context window. Embedding
+        // models lose nothing critical by dropping trailing tokens —
+        // the alternative is a llama.cpp panic on overflow.
+        if tokens.len() > max_tokens {
+            tokens.truncate(max_tokens);
+        }
+
+        if tokens.is_empty() {
+            // The empty-string case. Return a zero vector rather than
+            // erroring out — corpus-engine occasionally calls embed
+            // with whitespace-only chunks during testing.
+            return Ok(vec![0.0; n_embd]);
+        }
+
+        let mut batch = LlamaBatch::new(max_tokens, 1);
+        for (i, &token) in tokens.iter().enumerate() {
+            batch
+                .add(token, i as i32, &[0], true)
+                .map_err(|e| Error::Inference(format!("Embed batch add failed: {e}")))?;
+        }
+
+        ctx.decode(&mut batch)
+            .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
+
+        // With mean pooling, sequence 0 has the pooled embedding.
+        let raw = ctx
+            .embeddings_seq_ith(0)
+            .map_err(|e| Error::Inference(format!("Failed to read embeddings: {e}")))?;
+
+        // L2-normalize so the resulting vectors are directly comparable
+        // by cosine similarity (which is what corpus-engine's vector
+        // search assumes).
+        let mut out = raw.to_vec();
+        let norm: f32 = out.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if norm > 0.0 {
+            for v in out.iter_mut() {
+                *v /= norm;
+            }
+        }
+        Ok(out)
+    }
+}
+
+// ─── EmbeddedLlamaCpp (triple-slot) ────────────────────────────
 
 /// Configuration for loading the inference provider.
 pub struct InferenceConfig {
     pub fast_model: PathBuf,
     pub primary_model: Option<PathBuf>,
+    pub embed_model: Option<PathBuf>,
     pub context_size: u32,
     pub gpu_layers: Option<u32>,
 }
 
-/// Dual-slot inference provider wrapping llama.cpp via FFI.
+/// Triple-slot inference provider wrapping llama.cpp via FFI.
 ///
 /// - **Fast slot**: always loaded, small model for classification and simple queries.
 /// - **Primary slot**: loaded on-demand for deep reasoning, unloaded after idle timeout.
+/// - **Embed slot**: optional dedicated embedding model for RAG / corpus indexing.
+///   When absent, `embed()` returns a clear "no embed model configured" error so
+///   callers can guide the user to configure one rather than silently producing
+///   garbage vectors.
 pub struct EmbeddedLlamaCpp {
     #[allow(dead_code)]
     backend: Arc<LlamaBackend>,
@@ -252,6 +399,7 @@ pub struct EmbeddedLlamaCpp {
     gpu_layers: u32,
     primary_backend: Arc<LlamaBackend>,
     last_primary_use: Arc<Mutex<Option<Instant>>>,
+    embed_slot: Option<Arc<EmbedSlot>>,
     hardware: HardwareProfile,
 }
 
@@ -267,10 +415,29 @@ impl EmbeddedLlamaCpp {
         )
     }
 
-    /// Load with separate fast and primary models.
+    /// Load with separate fast and primary models. No embed slot.
     pub fn load_dual(
         fast_model_path: &Path,
         primary_model_path: Option<&Path>,
+        context_size: u32,
+        gpu_layers: Option<u32>,
+    ) -> Result<Self> {
+        Self::load_full(
+            fast_model_path,
+            primary_model_path,
+            None,
+            context_size,
+            gpu_layers,
+        )
+    }
+
+    /// Load with separate fast, primary, and embed models. The embed
+    /// slot is optional — when absent, `embed()` returns a clear
+    /// "no embedding model configured" error.
+    pub fn load_full(
+        fast_model_path: &Path,
+        primary_model_path: Option<&Path>,
+        embed_model_path: Option<&Path>,
         context_size: u32,
         gpu_layers: Option<u32>,
     ) -> Result<Self> {
@@ -289,6 +456,25 @@ impl EmbeddedLlamaCpp {
             n_gpu_layers,
         )?);
 
+        // Embedding models are usually small (~100-500 MB) and we want
+        // them resident any time corpus ingestion or search runs, so we
+        // load eagerly rather than lazily. Failure to load is logged
+        // but not fatal — the rest of the runtime keeps working and
+        // `embed()` will return a clear error.
+        let embed_slot = match embed_model_path {
+            Some(path) => {
+                eprintln!("Loading embed slot from {}...", path.display());
+                match EmbedSlot::load(&backend, path, n_gpu_layers) {
+                    Ok(slot) => Some(Arc::new(slot)),
+                    Err(e) => {
+                        eprintln!("Failed to load embed slot: {e}. Embedding will be unavailable.");
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+
         Ok(Self {
             backend: Arc::clone(&backend),
             fast,
@@ -298,8 +484,14 @@ impl EmbeddedLlamaCpp {
             gpu_layers: n_gpu_layers,
             primary_backend: backend,
             last_primary_use: Arc::new(Mutex::new(None)),
+            embed_slot,
             hardware,
         })
+    }
+
+    /// Returns true if an embedding model is loaded and ready.
+    pub fn has_embed_slot(&self) -> bool {
+        self.embed_slot.is_some()
     }
 
     /// Ensure the primary slot is loaded, returning a reference.
@@ -491,10 +683,42 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         Ok(Box::pin(stream))
     }
 
-    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
-        Err(Error::NotImplemented(
-            "Embedding not available yet (Phase 6)".to_string(),
-        ))
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        let slot = self.embed_slot.as_ref().ok_or_else(|| {
+            Error::Inference(
+                "No embedding model is configured. Open Settings → Embedding model and \
+                 select a GGUF embedding model (e.g. nomic-embed-text-v1.5.Q4_K_M.gguf), \
+                 then retry.".to_string(),
+            )
+        })?;
+        let slot = Arc::clone(slot);
+        let text = text.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let mut ctx_lock = slot.context.blocking_lock();
+            // Catch panics from llama.cpp (e.g., context overflow assertions)
+            // so they surface as a regular error instead of taking down the
+            // whole runtime.
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                EmbedSlot::embed_sync(
+                    &slot.model,
+                    &mut ctx_lock.ctx,
+                    &text,
+                    slot.n_embd,
+                    slot.max_tokens,
+                )
+            }));
+            match result {
+                Ok(Ok(v)) => Ok(v),
+                Ok(Err(e)) => Err(e),
+                Err(_) => Err(Error::Inference(
+                    "Embedding inference panicked — input may be malformed or \
+                     the embed model is incompatible.".to_string(),
+                )),
+            }
+        })
+        .await
+        .map_err(|e| Error::Inference(format!("Embed task failed: {e}")))?
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
