@@ -23,6 +23,8 @@ pub struct CorpusEngine {
     recipes_dir: PathBuf,
     index_dir: PathBuf,
     embed: EmbedFn,
+    /// Optional inference function. Required only for the enrichment phase.
+    inference: Option<crate::types::InferenceFn>,
     expected_embedding_model: String,
 }
 
@@ -36,6 +38,7 @@ impl CorpusEngine {
             recipes_dir,
             index_dir,
             embed,
+            inference: None,
             expected_embedding_model: "nomic-embed-text-v2".to_string(),
         }
     }
@@ -45,8 +48,23 @@ impl CorpusEngine {
         self
     }
 
+    /// Provide an inference function for the optional enrichment phase.
+    /// Without this, recipes that request `[enrichment] enabled = true`
+    /// will log a warning and skip enrichment.
+    pub fn with_inference_fn(mut self, inference: crate::types::InferenceFn) -> Self {
+        self.inference = Some(inference);
+        self
+    }
+
     pub fn index_dir(&self) -> &Path {
         &self.index_dir
+    }
+
+    /// Embed a piece of text via the engine's embedding function.
+    /// Exposed for downstream callers (tools, etc.) that need to construct
+    /// query embeddings using the same model the corpus was indexed with.
+    pub async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        (self.embed)(text).await
     }
 
     // ── Ingestion ───────────────────────────────────────
@@ -186,6 +204,39 @@ impl CorpusEngine {
         // Build search indexes (IVF-PQ + FTS).
         index.build_indexes().await?;
 
+        // Optional enrichment phase: extract claims and relationships.
+        if let Some(enrichment_config) = recipe.enrichment.as_ref() {
+            if enrichment_config.enabled {
+                match self.inference.as_ref() {
+                    Some(inference) => {
+                        let enricher = crate::enrichment::EnrichmentEngine::new(
+                            self.embed.clone(),
+                            inference.clone(),
+                        );
+                        let claims = enricher
+                            .extract_claims(&index, enrichment_config, &progress)
+                            .await?;
+                        index.store_claims(&claims).await?;
+
+                        if enrichment_config.extract_relationships {
+                            let rels = enricher
+                                .extract_relationships(&claims, enrichment_config, &progress)
+                                .await?;
+                            index.store_relationships(&rels).await?;
+                        }
+
+                        index.build_claims_index().await?;
+                    }
+                    None => {
+                        tracing::warn!(
+                            "Recipe '{}' requests enrichment but no InferenceFn was provided to CorpusEngine — skipping",
+                            recipe.corpus.id,
+                        );
+                    }
+                }
+            }
+        }
+
         let duration_secs = start.elapsed().as_secs();
         let info = index.info().await?;
 
@@ -270,6 +321,31 @@ impl CorpusEngine {
             std::fs::remove_dir_all(&path)?;
         }
         Ok(())
+    }
+
+    /// Open an index by corpus ID. Convenience wrapper for tools that
+    /// don't want to construct a path manually.
+    pub async fn open_index_for_corpus(&self, corpus_id: &str) -> Result<CorpusIndex> {
+        let path = self.index_dir.join(corpus_id);
+        self.open_index(&path).await
+    }
+
+    /// Return the IDs of all installed corpora that have an enriched
+    /// `claims` table. Used by the `ClaimSearchTool` and
+    /// `EpistemicLandscapeTool` to know which corpora to consult.
+    pub async fn enriched_corpus_ids(&self) -> Result<Vec<String>> {
+        let mut out = Vec::new();
+        for info in self.installed_indexes().await? {
+            // Try to open the index and check for a claims table.
+            // We swallow open errors here so a single broken index
+            // doesn't prevent the rest from being listed.
+            if let Ok(index) = CorpusIndex::open(&info.path).await {
+                if index.has_claims_table().await {
+                    out.push(info.corpus_id);
+                }
+            }
+        }
+        Ok(out)
     }
 
     // ── Shard Operations ────────────────────────────────

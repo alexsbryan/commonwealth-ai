@@ -44,6 +44,14 @@ fn default_embedding_dimensions() -> usize {
     768
 }
 
+fn default_similarity_threshold() -> f32 {
+    0.55
+}
+
+fn default_max_relationship_candidates() -> usize {
+    50_000
+}
+
 // ---------------------------------------------------------------------------
 // Top-level Recipe
 // ---------------------------------------------------------------------------
@@ -56,6 +64,67 @@ pub struct Recipe {
     pub chunk: ChunkerConfig,
     #[serde(default)]
     pub index: IndexConfig,
+    /// Optional epistemic enrichment configuration. When present and
+    /// `enabled = true`, an enrichment phase runs after standard ingestion.
+    /// Requires the engine to have been given an `InferenceFn`.
+    #[serde(default)]
+    pub enrichment: Option<EnrichmentConfig>,
+}
+
+// ---------------------------------------------------------------------------
+// EnrichmentConfig
+// ---------------------------------------------------------------------------
+
+/// Configures the optional epistemic enrichment pipeline.
+///
+/// The two prompts are domain-specific — SEP's hedging patterns differ
+/// from legal opinions or medical literature. The recipe author writes
+/// the prompt that fits their corpus's conventions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnrichmentConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Prompt that teaches the model to extract claims from a passage.
+    /// Should ask for a JSON array; the engine tolerates surrounding
+    /// prose and markdown code fences.
+    pub claim_extraction_prompt: String,
+
+    /// Whether to also extract relationships between claims.
+    #[serde(default)]
+    pub extract_relationships: bool,
+
+    /// Prompt for relationship classification. Required if
+    /// `extract_relationships` is true. Supports placeholders:
+    /// `{claim_a}`, `{claim_b}`, `{source_a}`, `{source_b}`,
+    /// `{attributed_a}`, `{attributed_b}`.
+    #[serde(default)]
+    pub relationship_extraction_prompt: Option<String>,
+
+    /// Minimum cosine similarity between two claims (from different
+    /// entries) for them to be considered as candidate pairs. Lower
+    /// values surface more potential relationships at the cost of more
+    /// inference calls.
+    #[serde(default = "default_similarity_threshold")]
+    pub relationship_similarity_threshold: f32,
+
+    /// Maximum number of candidate pairs to evaluate. Caps the cost
+    /// of relationship extraction on large corpora.
+    #[serde(default = "default_max_relationship_candidates")]
+    pub max_relationship_candidates: usize,
+}
+
+impl Default for EnrichmentConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            claim_extraction_prompt: String::new(),
+            extract_relationships: false,
+            relationship_extraction_prompt: None,
+            relationship_similarity_threshold: default_similarity_threshold(),
+            max_relationship_candidates: default_max_relationship_candidates(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +351,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 overlap_chars: 256,
             },
             index: IndexConfig::default(),
+            enrichment: None,
         },
         // 2. Stack Exchange
         Recipe {
@@ -305,6 +375,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 overlap_chars: 256,
             },
             index: IndexConfig::default(),
+            enrichment: None,
         },
         // 3. OpenAlex
         Recipe {
@@ -333,6 +404,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 overlap_chars: 256,
             },
             index: IndexConfig::default(),
+            enrichment: None,
         },
         // 4. Project Gutenberg
         Recipe {
@@ -358,6 +430,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 overlap_chars: 256,
             },
             index: IndexConfig::default(),
+            enrichment: None,
         },
         // 5. Stanford Encyclopedia of Philosophy
         Recipe {
@@ -387,6 +460,16 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 overlap_chars: 256,
             },
             index: IndexConfig::default(),
+            enrichment: Some(EnrichmentConfig {
+                enabled: true,
+                claim_extraction_prompt: SEP_CLAIM_PROMPT.to_string(),
+                extract_relationships: true,
+                relationship_extraction_prompt: Some(
+                    SEP_RELATIONSHIP_PROMPT.to_string(),
+                ),
+                relationship_similarity_threshold: 0.55,
+                max_relationship_candidates: 50_000,
+            }),
         },
         // 6. CRS Reports
         Recipe {
@@ -413,9 +496,67 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 overlap_chars: 256,
             },
             index: IndexConfig::default(),
+            enrichment: None,
         },
     ]
 }
+
+// ---------------------------------------------------------------------------
+// Built-in enrichment prompts (SEP)
+// ---------------------------------------------------------------------------
+
+const SEP_CLAIM_PROMPT: &str = r#"Extract propositional claims from this encyclopedia passage.
+
+For each claim, provide:
+1. "claim": A single declarative statement capturing the position.
+2. "epistemic_status": One of: "consensus", "majority", "contested",
+   "minority", "established", "unclear".
+3. "hedging_language": The source text's exact words indicating
+   epistemic status (e.g., "it is widely accepted that").
+   Null if the text doesn't hedge.
+4. "attributed_to": Who holds this position — a philosopher name,
+   a school of thought, or null if it's the article's own framing.
+
+SEP articles use distinctive hedging patterns:
+- "It is widely accepted..." / "There is broad agreement..." → consensus
+- "Most philosophers hold..." / "The standard view..." → majority
+- "This remains controversial..." / "There is ongoing debate..." → contested
+- "Some philosophers argue..." / "Critics maintain..." → minority
+- "It is uncontroversial that..." / "It has been established..." → established
+
+Extract 3-8 claims per passage. Focus on substantive philosophical
+positions, not bibliographic or historical facts. If a passage is
+purely biographical or administrative, return an empty array.
+
+Return ONLY a JSON array of claim objects. No other text.
+"#;
+
+const SEP_RELATIONSHIP_PROMPT: &str = r#"Given two claims from different encyclopedia entries, determine
+their epistemic relationship.
+
+Claim A: {claim_a}
+  From: {source_a}
+  Attributed to: {attributed_a}
+
+Claim B: {claim_b}
+  From: {source_b}
+  Attributed to: {attributed_b}
+
+What is the relationship?
+- "contradicts": Claim A directly opposes Claim B.
+- "supports": Claim A provides evidence or argument for Claim B.
+- "refines": Claim A qualifies or adds nuance to Claim B.
+- "competing_answers": Both claims answer the same question differently.
+- "presupposes": Claim A depends on or assumes Claim B.
+- "none": No meaningful epistemic relationship.
+
+Also provide:
+- "connecting_issue": The question or topic that connects them.
+  Null if the relationship is "none".
+- "confidence": 0.0 to 1.0, how confident you are in this classification.
+
+Return ONLY a JSON object. No other text.
+"#;
 
 // ---------------------------------------------------------------------------
 // Tests

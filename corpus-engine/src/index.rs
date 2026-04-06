@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow_array::{
-    Array, Float32Array, Int64Array, RecordBatch, StringArray,
+    Array, Float32Array, Int64Array, RecordBatch, StringArray, UInt64Array,
     FixedSizeListArray,
     types::Float32Type,
 };
@@ -17,8 +17,12 @@ use futures::TryStreamExt;
 use lancedb::index::scalar::FullTextSearchQuery;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
+use crate::enrichment::claims::{EpistemicStatus, ExtractedClaim};
+use crate::enrichment::landscape::EpistemicLandscape;
+use crate::enrichment::relationships::{ClaimRelationship, RelationshipType};
+use crate::enrichment::schema::{claims_schema, relationships_schema};
 use crate::error::{Error, Result};
-use crate::types::{ChunkRange, IndexInfo, ScoredChunk};
+use crate::types::{ChunkRange, IndexInfo, ScoredChunk, ScoredClaim};
 
 // ─── Helper types ──────────────────────────────────────────
 
@@ -28,6 +32,14 @@ pub struct InsertChunk {
     pub title: Option<String>,
     pub url: Option<String>,
     pub metadata: Option<String>, // JSON string
+}
+
+/// A chunk read out of an index, used by the enrichment pipeline.
+#[derive(Debug, Clone)]
+pub struct StoredChunk {
+    pub id: u64,
+    pub content: String,
+    pub title: Option<String>,
 }
 
 // ─── CorpusIndex ───────────────────────────────────────────
@@ -109,6 +121,8 @@ fn write_meta(index_dir: &Path, meta: &IndexMeta) -> Result<()> {
 }
 
 const CHUNKS_TABLE: &str = "chunks";
+const CLAIMS_TABLE: &str = "claims";
+const RELATIONSHIPS_TABLE: &str = "relationships";
 
 impl CorpusIndex {
     // ── Construction ───────────────────────────────────────
@@ -524,6 +538,428 @@ impl CorpusIndex {
         meta.chunk_range_end = Some(chunk_range.end_id);
         write_meta(index_dir, &meta)
     }
+
+    /// The corpus ID this index belongs to.
+    pub fn corpus_id(&self) -> &str {
+        &self.corpus_id
+    }
+
+    // ── Enrichment: chunk iteration ──────────────────────
+
+    /// Read every chunk in the index. Used by the enrichment pipeline
+    /// to feed claim extraction prompts.
+    ///
+    /// Materializes all chunks into memory. For very large corpora this
+    /// is significant — but enrichment runs offline as a one-time job
+    /// and the chunks are reasonably bounded (a few hundred bytes each
+    /// of content + title; embeddings are not loaded here).
+    pub async fn all_chunks(&self) -> Result<Vec<StoredChunk>> {
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "id".to_string(),
+                "content".to_string(),
+                "title".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("all_chunks query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("all_chunks collect: {e}")))?;
+
+        let mut out = Vec::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let contents = batch
+                .column_by_name("content")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| Error::Serialization("missing content column".into()))?;
+            let titles = batch
+                .column_by_name("title")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| Error::Serialization("missing title column".into()))?;
+
+            for i in 0..batch.num_rows() {
+                out.push(StoredChunk {
+                    id: ids.value(i) as u64,
+                    content: contents.value(i).to_string(),
+                    title: if titles.is_null(i) {
+                        None
+                    } else {
+                        Some(titles.value(i).to_string())
+                    },
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    // ── Enrichment: detection ────────────────────────────
+
+    /// True if this index has a `claims` table.
+    pub async fn has_claims_table(&self) -> bool {
+        self.has_table(CLAIMS_TABLE).await
+    }
+
+    /// True if this index has a `relationships` table.
+    pub async fn has_relationships_table(&self) -> bool {
+        self.has_table(RELATIONSHIPS_TABLE).await
+    }
+
+    async fn has_table(&self, name: &str) -> bool {
+        match self.db.table_names().execute().await {
+            Ok(names) => names.iter().any(|n| n == name),
+            Err(_) => false,
+        }
+    }
+
+    async fn open_table(&self, name: &str) -> Result<lancedb::Table> {
+        self.db
+            .open_table(name)
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("open_table {name}: {e}")))
+    }
+
+    // ── Enrichment: storage ──────────────────────────────
+
+    /// Store extracted claims into the index's `claims` table.
+    /// Creates the table if it doesn't already exist.
+    pub async fn store_claims(&self, claims: &[ExtractedClaim]) -> Result<()> {
+        if claims.is_empty() {
+            return Ok(());
+        }
+
+        let schema = claims_schema(self.embedding_dimensions);
+        let table = match self.open_table(CLAIMS_TABLE).await {
+            Ok(t) => t,
+            Err(_) => self
+                .db
+                .create_empty_table(CLAIMS_TABLE, schema.clone())
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("create claims table: {e}")))?,
+        };
+
+        let ids: Vec<u64> = claims.iter().map(|c| c.id).collect();
+        let contents: Vec<&str> = claims.iter().map(|c| c.claim.as_str()).collect();
+        let source_chunk_ids: Vec<u64> = claims.iter().map(|c| c.source_chunk_id).collect();
+        let corpus_ids: Vec<&str> = claims.iter().map(|c| c.corpus_id.as_str()).collect();
+        let statuses: Vec<&str> = claims.iter().map(|c| c.epistemic_status.label()).collect();
+        let hedges: Vec<Option<&str>> = claims.iter().map(|c| c.hedging_language.as_deref()).collect();
+        let attributions: Vec<Option<&str>> = claims.iter().map(|c| c.attributed_to.as_deref()).collect();
+        let entries: Vec<Option<&str>> = claims.iter().map(|c| c.source_entry.as_deref()).collect();
+
+        let dim = self.embedding_dimensions as i32;
+        let embedding_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+            claims.iter().map(|c| Some(c.embedding.iter().map(|&v| Some(v)))),
+            dim,
+        );
+
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(UInt64Array::from(ids)),
+                Arc::new(StringArray::from(contents)),
+                Arc::new(UInt64Array::from(source_chunk_ids)),
+                Arc::new(StringArray::from(corpus_ids)),
+                Arc::new(StringArray::from(statuses)),
+                Arc::new(StringArray::from(hedges)),
+                Arc::new(StringArray::from(attributions)),
+                Arc::new(StringArray::from(entries)),
+                Arc::new(embedding_array),
+            ],
+        )
+        .map_err(|e| Error::Serialization(format!("claims batch: {e}")))?;
+
+        table
+            .add(vec![batch])
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("insert claims: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Store claim relationships into the index's `relationships` table.
+    /// Creates the table if it doesn't already exist.
+    pub async fn store_relationships(&self, rels: &[ClaimRelationship]) -> Result<()> {
+        if rels.is_empty() {
+            return Ok(());
+        }
+
+        let schema = relationships_schema();
+        let table = match self.open_table(RELATIONSHIPS_TABLE).await {
+            Ok(t) => t,
+            Err(_) => self
+                .db
+                .create_empty_table(RELATIONSHIPS_TABLE, schema.clone())
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("create relationships table: {e}")))?,
+        };
+
+        let ids: Vec<u64> = rels.iter().map(|r| r.id).collect();
+        let a_ids: Vec<u64> = rels.iter().map(|r| r.claim_a_id).collect();
+        let b_ids: Vec<u64> = rels.iter().map(|r| r.claim_b_id).collect();
+        let kinds: Vec<&str> = rels.iter().map(|r| r.relationship.label()).collect();
+        let issues: Vec<Option<&str>> = rels.iter().map(|r| r.connecting_issue.as_deref()).collect();
+        let evidence: Vec<String> = rels
+            .iter()
+            .map(|r| serde_json::to_string(&r.evidence_chunk_ids).unwrap_or_else(|_| "[]".into()))
+            .collect();
+        let evidence_refs: Vec<&str> = evidence.iter().map(|s| s.as_str()).collect();
+        let confidences: Vec<f32> = rels.iter().map(|r| r.confidence).collect();
+
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(UInt64Array::from(ids)),
+                Arc::new(UInt64Array::from(a_ids)),
+                Arc::new(UInt64Array::from(b_ids)),
+                Arc::new(StringArray::from(kinds)),
+                Arc::new(StringArray::from(issues)),
+                Arc::new(StringArray::from(evidence_refs)),
+                Arc::new(Float32Array::from(confidences)),
+            ],
+        )
+        .map_err(|e| Error::Serialization(format!("relationships batch: {e}")))?;
+
+        table
+            .add(vec![batch])
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("insert relationships: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Build the IVF-PQ vector index on the `claims` table's embedding column.
+    /// Should be called after all claims are stored.
+    pub async fn build_claims_index(&self) -> Result<()> {
+        let table = match self.open_table(CLAIMS_TABLE).await {
+            Ok(t) => t,
+            Err(_) => return Ok(()), // no claims table, nothing to index
+        };
+        let count = table
+            .count_rows(None)
+            .await
+            .map_err(|e| Error::Database(format!("count claims: {e}")))?;
+        if count >= 256 {
+            table
+                .create_index(&["embedding"], lancedb::index::Index::Auto)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("claims vector index: {e}")))?;
+        }
+        // FTS index on the claim text itself.
+        let _ = table
+            .create_index(
+                &["claim"],
+                lancedb::index::Index::FTS(
+                    lancedb::index::scalar::FtsIndexBuilder::default(),
+                ),
+            )
+            .execute()
+            .await;
+        Ok(())
+    }
+
+    // ── Enrichment: search ───────────────────────────────
+
+    /// Search extracted claims by hybrid vector + FTS query.
+    /// Falls back to wrapping chunk search results when no claims table exists.
+    pub async fn search_claims(
+        &self,
+        query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+    ) -> Result<Vec<ScoredClaim>> {
+        if !self.has_claims_table().await {
+            // Graceful degradation: wrap chunk results as Unclear claims.
+            let chunks = self.search(query_embedding, query_text, limit).await?;
+            return Ok(chunks
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| ScoredClaim::from_chunk(c, i as u64))
+                .collect());
+        }
+
+        let table = self.open_table(CLAIMS_TABLE).await?;
+        let do_vector = !query_embedding.is_empty();
+        let sanitized = sanitize_fts_query(query_text);
+        let do_fts = !sanitized.is_empty();
+
+        if !do_vector && !do_fts {
+            return Ok(Vec::new());
+        }
+
+        let batches: Vec<RecordBatch> = if do_vector && do_fts {
+            table
+                .query()
+                .nearest_to(query_embedding.to_vec())
+                .map_err(|e| Error::Database(format!("claim vector query: {e}")))?
+                .full_text_search(FullTextSearchQuery::new(sanitized))
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("claim hybrid search: {e}")))?
+                .try_collect()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
+        } else if do_vector {
+            table
+                .query()
+                .nearest_to(query_embedding.to_vec())
+                .map_err(|e| Error::Database(format!("claim vector query: {e}")))?
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("claim vector search: {e}")))?
+                .try_collect()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
+        } else {
+            table
+                .query()
+                .full_text_search(FullTextSearchQuery::new(sanitized))
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("claim FTS search: {e}")))?
+                .try_collect()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
+        };
+
+        let mut out = Vec::new();
+        for batch in &batches {
+            let claims_in_batch = parse_claims_from_batch(batch)?;
+            let distance_col = batch
+                .column_by_name("_distance")
+                .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+            for (i, claim) in claims_in_batch.into_iter().enumerate() {
+                let score = distance_col
+                    .map(|d| 1.0 / (1.0 + d.value(i)))
+                    .unwrap_or(1.0);
+                out.push(ScoredClaim { claim, score });
+            }
+        }
+
+        out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        out.truncate(limit);
+        Ok(out)
+    }
+
+    /// Look up a single claim by its ID.
+    pub async fn get_claim(&self, claim_id: u64) -> Result<Option<ExtractedClaim>> {
+        if !self.has_claims_table().await {
+            return Ok(None);
+        }
+        let table = self.open_table(CLAIMS_TABLE).await?;
+        let batches: Vec<RecordBatch> = table
+            .query()
+            .only_if(format!("id = {claim_id}"))
+            .limit(1)
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("get_claim query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("collect: {e}")))?;
+        for batch in &batches {
+            let claims = parse_claims_from_batch(batch)?;
+            if let Some(c) = claims.into_iter().next() {
+                return Ok(Some(c));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Find claims that have a relationship to the given claim, optionally
+    /// filtered to specific relationship types.
+    pub async fn related_claims(
+        &self,
+        claim_id: u64,
+        relationship_types: Option<&[RelationshipType]>,
+    ) -> Result<Vec<(ExtractedClaim, ClaimRelationship)>> {
+        if !self.has_relationships_table().await {
+            return Ok(Vec::new());
+        }
+        let rel_table = self.open_table(RELATIONSHIPS_TABLE).await?;
+        let batches: Vec<RecordBatch> = rel_table
+            .query()
+            .only_if(format!(
+                "claim_a_id = {claim_id} OR claim_b_id = {claim_id}"
+            ))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("related_claims query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("collect: {e}")))?;
+
+        let mut out = Vec::new();
+        for batch in &batches {
+            let rels = parse_relationships_from_batch(batch)?;
+            for rel in rels {
+                if let Some(types) = relationship_types {
+                    if !types.contains(&rel.relationship) {
+                        continue;
+                    }
+                }
+                let other_id = if rel.claim_a_id == claim_id {
+                    rel.claim_b_id
+                } else {
+                    rel.claim_a_id
+                };
+                if let Some(other) = self.get_claim(other_id).await? {
+                    out.push((other, rel));
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Build a structured epistemic landscape for a topic.
+    /// Search for seed claims, expand by following relationships,
+    /// then group by status and connecting issue.
+    pub async fn epistemic_landscape(
+        &self,
+        query_embedding: &[f32],
+        query_text: &str,
+    ) -> Result<EpistemicLandscape> {
+        if !self.has_claims_table().await {
+            return Ok(EpistemicLandscape::empty());
+        }
+
+        // Step 1: seed claims.
+        let seed = self.search_claims(query_embedding, query_text, 20).await?;
+
+        // Step 2: expand by following relationships.
+        let mut all_claims: HashMap<u64, ExtractedClaim> = HashMap::new();
+        let mut all_rels: Vec<ClaimRelationship> = Vec::new();
+
+        for s in &seed {
+            all_claims.entry(s.claim.id).or_insert_with(|| s.claim.clone());
+            let related = self.related_claims(s.claim.id, None).await?;
+            for (claim, rel) in related {
+                all_claims.entry(claim.id).or_insert(claim);
+                all_rels.push(rel);
+            }
+        }
+
+        let landscape = EpistemicLandscape::from_claims_and_relationships(
+            all_claims.into_values(),
+            &all_rels,
+        );
+        Ok(landscape)
+    }
 }
 
 // ─── Free helpers ──────────────────────────────────────────
@@ -565,6 +1001,116 @@ fn sanitize_fts_query(raw: &str) -> String {
         })
         .collect();
     cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+// ─── Claim/relationship batch parsing ──────────────────────
+
+fn parse_claims_from_batch(batch: &RecordBatch) -> Result<Vec<ExtractedClaim>> {
+    let ids = batch
+        .column_by_name("id")
+        .and_then(|c| c.as_any().downcast_ref::<UInt64Array>())
+        .ok_or_else(|| Error::Serialization("claims: missing id".into()))?;
+    let claim_texts = batch
+        .column_by_name("claim")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+        .ok_or_else(|| Error::Serialization("claims: missing claim".into()))?;
+    let source_chunk_ids = batch
+        .column_by_name("source_chunk_id")
+        .and_then(|c| c.as_any().downcast_ref::<UInt64Array>())
+        .ok_or_else(|| Error::Serialization("claims: missing source_chunk_id".into()))?;
+    let corpus_ids = batch
+        .column_by_name("corpus_id")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+        .ok_or_else(|| Error::Serialization("claims: missing corpus_id".into()))?;
+    let statuses = batch
+        .column_by_name("epistemic_status")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+        .ok_or_else(|| Error::Serialization("claims: missing epistemic_status".into()))?;
+    let hedges = batch
+        .column_by_name("hedging_language")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+    let attributions = batch
+        .column_by_name("attributed_to")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+    let entries = batch
+        .column_by_name("source_entry")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+    let mut out = Vec::new();
+    for i in 0..batch.num_rows() {
+        out.push(ExtractedClaim {
+            id: ids.value(i),
+            claim: claim_texts.value(i).to_string(),
+            source_chunk_id: source_chunk_ids.value(i),
+            corpus_id: corpus_ids.value(i).to_string(),
+            epistemic_status: EpistemicStatus::parse(statuses.value(i)),
+            hedging_language: hedges.and_then(|h| {
+                if h.is_null(i) { None } else { Some(h.value(i).to_string()) }
+            }),
+            attributed_to: attributions.and_then(|a| {
+                if a.is_null(i) { None } else { Some(a.value(i).to_string()) }
+            }),
+            source_entry: entries.and_then(|e| {
+                if e.is_null(i) { None } else { Some(e.value(i).to_string()) }
+            }),
+            // Embedding intentionally skipped — not used by downstream consumers
+            // of search results, and not always present in projection.
+            embedding: Vec::new(),
+        });
+    }
+    Ok(out)
+}
+
+fn parse_relationships_from_batch(batch: &RecordBatch) -> Result<Vec<ClaimRelationship>> {
+    let ids = batch
+        .column_by_name("id")
+        .and_then(|c| c.as_any().downcast_ref::<UInt64Array>())
+        .ok_or_else(|| Error::Serialization("rels: missing id".into()))?;
+    let a_ids = batch
+        .column_by_name("claim_a_id")
+        .and_then(|c| c.as_any().downcast_ref::<UInt64Array>())
+        .ok_or_else(|| Error::Serialization("rels: missing claim_a_id".into()))?;
+    let b_ids = batch
+        .column_by_name("claim_b_id")
+        .and_then(|c| c.as_any().downcast_ref::<UInt64Array>())
+        .ok_or_else(|| Error::Serialization("rels: missing claim_b_id".into()))?;
+    let kinds = batch
+        .column_by_name("relationship")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+        .ok_or_else(|| Error::Serialization("rels: missing relationship".into()))?;
+    let issues = batch
+        .column_by_name("connecting_issue")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+    let evidence = batch
+        .column_by_name("evidence_chunk_ids")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+        .ok_or_else(|| Error::Serialization("rels: missing evidence_chunk_ids".into()))?;
+    let confidences = batch
+        .column_by_name("confidence")
+        .and_then(|c| c.as_any().downcast_ref::<Float32Array>())
+        .ok_or_else(|| Error::Serialization("rels: missing confidence".into()))?;
+
+    let mut out = Vec::new();
+    for i in 0..batch.num_rows() {
+        let kind = match RelationshipType::parse(kinds.value(i)) {
+            Some(k) => k,
+            None => continue,
+        };
+        let evidence_chunks: Vec<u64> =
+            serde_json::from_str(evidence.value(i)).unwrap_or_default();
+        out.push(ClaimRelationship {
+            id: ids.value(i),
+            claim_a_id: a_ids.value(i),
+            claim_b_id: b_ids.value(i),
+            relationship: kind,
+            connecting_issue: issues.and_then(|x| {
+                if x.is_null(i) { None } else { Some(x.value(i).to_string()) }
+            }),
+            evidence_chunk_ids: evidence_chunks,
+            confidence: confidences.value(i),
+        });
+    }
+    Ok(out)
 }
 
 // ─── Tests ─────────────────────────────────────────────────

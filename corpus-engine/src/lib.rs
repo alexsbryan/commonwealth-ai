@@ -13,6 +13,7 @@
 pub mod acquirers;
 pub mod chunkers;
 pub mod engine;
+pub mod enrichment;
 pub mod error;
 pub mod extractors;
 pub mod index;
@@ -25,11 +26,15 @@ pub mod types;
 // ─── Public API Re-exports ──────────────────────────────
 
 pub use engine::CorpusEngine;
+pub use enrichment::{
+    ClaimRelationship, ContestedCluster, EnrichmentEngine, EpistemicLandscape,
+    EpistemicStatus, ExtractedClaim, Position, RelationshipType,
+};
 pub use error::{Error, Result};
-pub use index::{CorpusIndex, InsertChunk};
+pub use index::{CorpusIndex, InsertChunk, StoredChunk};
 pub use progress::{IngestProgress, ProgressCallback};
-pub use recipe::Recipe;
+pub use recipe::{EnrichmentConfig, Recipe};
 pub use types::{
-    BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo,
-    IndexStats, IngestResult, ScoredChunk, ShardInfo,
+    BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
+    InferenceFn, IngestResult, ScoredChunk, ScoredClaim, ShardInfo,
 };
