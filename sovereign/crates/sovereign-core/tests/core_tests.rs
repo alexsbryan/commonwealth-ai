@@ -262,6 +262,7 @@ fn make_skill(id: &str, trigger: &str, synthesis: Option<&str>) -> Skill {
             confidence_decay_per_month: None,
             prune_threshold: None,
         },
+        evaluation_prompts: std::collections::HashMap::new(),
         inference: SkillInferenceConfig::default(),
         signature: None,
         signed_by: None,

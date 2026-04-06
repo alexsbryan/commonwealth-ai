@@ -297,7 +297,12 @@ impl Runtime {
 
         let system = self.build_system_message(
             if !chunks.is_empty() {
-                "You are a helpful AI assistant. Answer based on the provided knowledge sources when relevant. Cite sources when referencing them."
+                "You are a helpful AI assistant. Answer based on the provided knowledge sources when relevant. \
+                 Cite sources when referencing them using [Source: name] notation. \
+                 IMPORTANT: If you make a claim that is NOT directly supported by the provided sources, \
+                 mark it with [unverified] so the user knows it comes from your general knowledge rather \
+                 than a retrieved source. Only omit [unverified] when a claim is directly supported by \
+                 a provided source that you cite."
             } else {
                 "You are a helpful AI assistant. Respond concisely and accurately."
             },

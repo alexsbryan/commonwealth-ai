@@ -710,7 +710,10 @@ After each search, you'll receive results. Read them carefully, then either:
 ## Your answer
 
 When ready to answer (without a <tool_call>):
-- Cite sources using [Source: name] notation.
+- Cite sources using [Source: name] notation for every claim backed by search results.
+- If you make a claim that is NOT directly supported by your search results,
+  mark it with [unverified] so the user knows it comes from your general
+  knowledge rather than a retrieved source.
 - If sources conflict, present both positions.
 - If you couldn't find part of the answer, say so explicitly.
 

@@ -23,6 +23,9 @@ pub struct Skill {
     pub tool_config: ToolPreferences,
     pub prompts: PromptOverrides,
     pub memory_rules: MemoryConfig,
+    /// Named evaluation prompts (e.g., "synthesis" → eval prompt).
+    #[serde(default)]
+    pub evaluation_prompts: HashMap<String, String>,
     /// OICP inference requirements for this skill.
     #[serde(default)]
     pub inference: SkillInferenceConfig,
@@ -119,6 +122,8 @@ struct SkillToml {
     memory: MemoryToml,
     #[serde(default)]
     inference: InferenceToml,
+    #[serde(default)]
+    evaluation: EvaluationToml,
 }
 
 #[derive(Debug, Deserialize)]
@@ -169,6 +174,14 @@ struct ToolsToml {
 #[derive(Debug, Default, Deserialize)]
 struct PromptsToml {
     synthesis: Option<String>,
+}
+
+/// Named evaluation prompts for step-level quality checking.
+/// Keys are eval names (e.g., "synthesis"), values are eval prompts.
+#[derive(Debug, Default, Deserialize)]
+struct EvaluationToml {
+    #[serde(flatten)]
+    prompts: HashMap<String, String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -240,6 +253,7 @@ impl SkillToml {
                 confidence_decay_per_month: self.memory.confidence_decay_per_month,
                 prune_threshold: self.memory.prune_threshold,
             },
+            evaluation_prompts: self.evaluation.prompts,
             inference: SkillInferenceConfig {
                 preferred_capabilities: self.inference.preferred_capabilities,
                 required_capabilities: self.inference.required_capabilities,
