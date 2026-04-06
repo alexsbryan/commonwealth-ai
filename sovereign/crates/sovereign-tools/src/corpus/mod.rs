@@ -33,6 +33,27 @@ pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_en
     })
 }
 
+/// Create a corpus-engine `InferenceFn` from Sovereign's `InferenceProvider`.
+/// Used by the optional enrichment pipeline to run claim and relationship
+/// extraction prompts. The inference call uses `Speed::Slow` so the
+/// Primary slot is preferred (enrichment quality matters more than latency).
+pub fn inference_to_inference_fn(
+    inference: Arc<dyn InferenceProvider>,
+) -> corpus_engine::InferenceFn {
+    use sovereign_core::types::{CompletionRequest, Speed};
+    Arc::new(move |prompt: &str| {
+        let inf = Arc::clone(&inference);
+        let request = CompletionRequest::new(prompt).with_speed(Speed::Slow);
+        Box::pin(async move {
+            let resp = inf
+                .complete(&request)
+                .await
+                .map_err(|e| corpus_engine::Error::Embed(format!("inference: {e}")))?;
+            Ok(resp.text)
+        })
+    })
+}
+
 /// A parser that converts a raw corpus source (file or directory) into
 /// a streaming iterator of DocumentChunks.
 ///

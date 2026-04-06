@@ -9,6 +9,7 @@ sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true }
 sovereign-mesh = { workspace = true }
+corpus-engine = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -309,12 +309,32 @@ async fn main() {
         }
     }
 
+    // Construct a shared CorpusEngine for the epistemic tools.
+    // The recipes dir is where user-supplied recipes live; the index dir
+    // is the shared on-disk corpus directory used by both Sovereign and
+    // Commonwealth.
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    let recipes_dir = home.join(".sovereign").join("recipes");
+    let indexes_dir = home.join(".sovereign").join("indexes");
+    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference_arc));
+    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference_arc));
+    let corpus_engine = Arc::new(
+        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
+            .with_inference_fn(inference_fn),
+    );
+
     // Register tools.
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
         Arc::clone(&store),
         Arc::clone(&inference_arc),
+    )));
+    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
+        Arc::clone(&corpus_engine),
+    )));
+    tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
+        Arc::clone(&corpus_engine),
     )));
     // Select search backend: Tavily > Brave > DuckDuckGo (free default).
     let search_backend = if let Some(ref key) = args.tavily_api_key {

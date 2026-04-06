@@ -192,6 +192,18 @@ async fn main() {
 
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
+    // Construct a shared CorpusEngine for the epistemic tools.
+    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let recipes_dir = home.join(".sovereign").join("recipes");
+    let indexes_dir = home.join(".sovereign").join("indexes");
+    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
+    let inference_fn =
+        sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
+    let corpus_engine = Arc::new(
+        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
+            .with_inference_fn(inference_fn),
+    );
+
     // Register tools.
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(ShellTool));
@@ -206,6 +218,12 @@ async fn main() {
     )));
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     tools.register(Box::new(sovereign_tools::compute::ComputeTool));
+    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
+        Arc::clone(&corpus_engine),
+    )));
+    tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
+        Arc::clone(&corpus_engine),
+    )));
 
     // Connect MCP servers.
     for mcp_config in &config.mcp.servers {

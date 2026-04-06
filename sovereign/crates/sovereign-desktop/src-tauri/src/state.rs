@@ -302,6 +302,26 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     if enabled.iter().any(|t| t == "web_fetch") {
         tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     }
+
+    // Construct a shared CorpusEngine for the epistemic tools.
+    // Uses the same `~/.sovereign/indexes` directory the CorpusManager
+    // and the corpus-engine pipeline both write to.
+    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let recipes_dir = home.join(".sovereign").join("recipes");
+    let indexes_dir = home.join(".sovereign").join("indexes");
+    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
+    let inference_fn =
+        sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
+    let corpus_engine = Arc::new(
+        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
+            .with_inference_fn(inference_fn),
+    );
+    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
+        Arc::clone(&corpus_engine),
+    )));
+    tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     tracing::info!("Tools: {} registered", tools.count());
 
     let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =
