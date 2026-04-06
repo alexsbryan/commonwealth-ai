@@ -1,9 +1,12 @@
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use futures::{Stream, StreamExt};
+
 use crate::context::{build_context, format_history_as_prompt};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::executor::{Executor, TaskContext};
 use crate::memory;
 use crate::oicp::LatencyPreference;
@@ -56,6 +59,16 @@ fn truncate_knowledge_context(chunks: &[DocumentChunk], max_chars: usize) -> Str
     }
 
     parts.join("\n\n---\n\n")
+}
+
+/// Streaming handle returned by [`Runtime::handle_message_stream`].
+///
+/// Holds the assistant message id (assigned up-front so callers can correlate
+/// chunks) and a stream of text chunks. The runtime persists the full message
+/// to the store after the stream is exhausted.
+pub struct StreamHandle {
+    pub message_id: String,
+    pub stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
 }
 
 pub struct Runtime {
@@ -161,6 +174,234 @@ impl Runtime {
         }
 
         Ok(())
+    }
+
+    /// Stream a chat response token-by-token.
+    ///
+    /// Builds context, saves the user message, routes the intent, and starts
+    /// streaming inference for SimpleQuery / DeepQuery / KnowledgeQuery. The
+    /// returned [`StreamHandle`] yields response chunks; once the stream
+    /// completes, the assistant message is persisted under `message_id`.
+    ///
+    /// Returns [`Error::NotImplemented`] for ComplexTask intents — callers
+    /// should fall back to [`Self::handle_message`] in that case.
+    pub async fn handle_message_stream(
+        &self,
+        message: &str,
+        conversation_id: &str,
+    ) -> Result<StreamHandle> {
+        // 1. Build context.
+        let mut context = build_context(self.store.as_ref(), conversation_id, message).await?;
+
+        let working_memory = memory::compress_working_memory(
+            self.inference.as_ref(),
+            &context.conversation.messages,
+            context.working_memory.as_ref(),
+        )
+        .await
+        .ok();
+        context.working_memory = working_memory;
+
+        // 2. Save user message.
+        let user_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::User,
+            content: message.to_string(),
+            created_at: now(),
+            metadata: None,
+            version: now(),
+        };
+        self.store.save_message(&user_msg).await?;
+        context.conversation.messages.push(user_msg);
+
+        // 3. Route.
+        let tool_descriptors = self.tools.descriptors();
+        let intent = self
+            .router
+            .classify(message, &context, &tool_descriptors)
+            .await?;
+
+        if matches!(intent, Intent::ComplexTask) {
+            return Err(Error::NotImplemented(
+                "Streaming not supported for complex tasks".into(),
+            ));
+        }
+
+        // 4. Build the completion request (mirrors handle_simple).
+        let speed = match intent {
+            Intent::SimpleQuery => Speed::Fast,
+            Intent::DeepQuery => Speed::Slow,
+            _ => Speed::Medium,
+        };
+
+        let oicp = if matches!(intent, Intent::SimpleQuery) {
+            None
+        } else {
+            self.build_oicp(LatencyPreference::BestEffort)
+        };
+
+        let embedding = self.inference.embed(message).await.unwrap_or_default();
+        let chunks = self
+            .store
+            .search_documents(&embedding, message, 5)
+            .await
+            .unwrap_or_default();
+
+        let installed_corpora = self
+            .store
+            .list_corpus_states()
+            .await
+            .unwrap_or_default();
+        let corpora_searched = !installed_corpora.is_empty();
+
+        let search_method = if !chunks.is_empty() {
+            Some("LocalOnly".to_string())
+        } else if corpora_searched {
+            Some("LocalOnly (no matches)".to_string())
+        } else {
+            None
+        };
+
+        let speed = if !chunks.is_empty() && matches!(intent, Intent::SimpleQuery) {
+            Speed::Slow
+        } else {
+            speed
+        };
+
+        let history = format_history_as_prompt(&context, 10);
+
+        let prompt = if !chunks.is_empty() {
+            let doc_context = truncate_knowledge_context(&chunks, MAX_KNOWLEDGE_CHARS);
+            if history.is_empty() {
+                format!(
+                    "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
+                )
+            } else {
+                let history = format_history_as_prompt(&context, 4);
+                format!(
+                    "{history}\n\nRelevant knowledge:\n{doc_context}\n\nAssistant:"
+                )
+            }
+        } else if history.is_empty() {
+            message.to_string()
+        } else {
+            format!("{history}\n\nAssistant:")
+        };
+
+        let system = self.build_system_message(
+            if !chunks.is_empty() {
+                "You are a helpful AI assistant. Answer based on the provided knowledge sources when relevant. \
+                 Cite sources when referencing them using [Source: name] notation. \
+                 IMPORTANT: If you make a claim that is NOT directly supported by the provided sources, \
+                 mark it with [unverified] so the user knows it comes from your general knowledge rather \
+                 than a retrieved source. Only omit [unverified] when a claim is directly supported by \
+                 a provided source that you cite."
+            } else {
+                "You are a helpful AI assistant. Respond concisely and accurately."
+            },
+            &context,
+        );
+
+        let request = CompletionRequest {
+            prompt,
+            system_message: Some(system),
+            preferred_speed: speed,
+            max_tokens: Some(1024),
+            temperature: Some(0.7),
+            structured_output: None,
+            oicp,
+        };
+
+        // Build provenance source map (no inference results yet — we fill in
+        // model_id/latency on completion).
+        let mut source_map: HashMap<String, usize> = HashMap::new();
+        for c in &chunks {
+            let origin = match &c.source_type {
+                SourceType::Corpus { corpus_id } => corpus_id.clone(),
+                SourceType::WebSearch { .. } => "web".to_string(),
+                SourceType::UserDocument => "user_document".to_string(),
+            };
+            *source_map.entry(origin).or_insert(0) += 1;
+        }
+        if chunks.is_empty() && corpora_searched {
+            for cs in &installed_corpora {
+                source_map.entry(cs.corpus_id.clone()).or_insert(0);
+            }
+        }
+        let sources: Vec<SourceSummary> = source_map
+            .into_iter()
+            .map(|(origin, count)| SourceSummary { origin, count })
+            .collect();
+
+        let intent_label = format!("{intent:?}");
+        let message_id = uuid::Uuid::new_v4().to_string();
+
+        // 5. Spawn streaming task.
+        let inference = Arc::clone(&self.inference);
+        let store = Arc::clone(&self.store);
+        let conversation_id_owned = conversation_id.to_string();
+        let message_id_owned = message_id.clone();
+
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
+
+        tokio::spawn(async move {
+            let started = std::time::Instant::now();
+            let mut full_text = String::new();
+
+            let stream_result = inference.complete_stream(&request).await;
+            match stream_result {
+                Ok(mut s) => {
+                    while let Some(item) = s.next().await {
+                        match item {
+                            Ok(chunk) => {
+                                full_text.push_str(&chunk);
+                                if tx.send(Ok(chunk)).await.is_err() {
+                                    return;
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.send(Err(e)).await;
+                                return;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+            }
+
+            // Persist final assistant message.
+            let provenance = ResponseProvenance {
+                intent: intent_label,
+                search_method,
+                sources,
+                inference_backend: "streaming".to_string(),
+                oicp_match: None,
+                total_latency_ms: started.elapsed().as_millis() as u64,
+                tokens_used: 0,
+            };
+            let assistant_msg = Message {
+                id: message_id_owned,
+                conversation_id: conversation_id_owned,
+                role: Role::Assistant,
+                content: full_text,
+                created_at: now(),
+                metadata: Some(serde_json::json!({
+                    "streamed": true,
+                    "provenance": provenance,
+                })),
+                version: now(),
+            };
+            let _ = store.save_message(&assistant_msg).await;
+        });
+
+        let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
+            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+
+        Ok(StreamHandle { message_id, stream })
     }
 
     pub async fn handle_message(

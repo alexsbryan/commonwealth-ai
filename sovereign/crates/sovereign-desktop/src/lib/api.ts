@@ -12,6 +12,8 @@ import type {
   DownloadRequest,
   CorpusEntry,
   CorpusProgressPayload,
+  HardwareInfo,
+  StreamStartedResponse,
 } from "./types";
 
 export async function sendMessage(
@@ -19,6 +21,16 @@ export async function sendMessage(
   conversationId: string,
 ): Promise<MessageResponse> {
   return invoke("send_message", {
+    message,
+    conversationId,
+  });
+}
+
+export async function sendMessageStream(
+  message: string,
+  conversationId: string,
+): Promise<StreamStartedResponse> {
+  return invoke("send_message_stream", {
     message,
     conversationId,
   });
@@ -90,6 +102,10 @@ export async function isSetupComplete(): Promise<boolean> {
 
 export async function completeSetup(setup: SetupConfig): Promise<void> {
   return invoke("complete_setup", { setup });
+}
+
+export async function detectHardware(): Promise<HardwareInfo> {
+  return invoke("detect_hardware");
 }
 
 export async function searchWeb(

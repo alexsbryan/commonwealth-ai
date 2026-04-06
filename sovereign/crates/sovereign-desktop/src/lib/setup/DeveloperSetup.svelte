@@ -55,12 +55,16 @@
     <h3>Advanced</h3>
 
     <label>
-      <span>Primary model (optional, for deep reasoning)</span>
+      <span>Deep reasoning model (optional)</span>
       <input
         type="text"
         bind:value={primaryModelPath}
         placeholder="models/primary.gguf"
       />
+      <small style="font-size: 0.75rem; color: var(--text-muted);">
+        Larger model loaded on demand for complex tasks. Unloads after 60s idle.
+        The model above is the fast slot — used for routing and most queries.
+      </small>
     </label>
 
     <label>

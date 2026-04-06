@@ -11,6 +11,7 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = "0.1"
 toml = { workspace = true }
 
 [dev-dependencies]

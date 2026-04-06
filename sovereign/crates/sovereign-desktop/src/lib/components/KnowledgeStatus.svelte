@@ -15,6 +15,78 @@
     { id: "full", name: "Full", desc: "All knowledge bases" },
   ];
 
+  // Fallback list shown when the backend hasn't bundled the corpus manifest
+  // or hasn't initialized the corpus manager yet. Ensures users always see
+  // what's available rather than a dead-end "no knowledge bases" message.
+  const FALLBACK_CORPORA: CorpusEntry[] = [
+    {
+      id: "wikipedia",
+      name: "Wikipedia",
+      description: "6.8M English articles — broad general knowledge",
+      size_indexed_gb: 55,
+      license: "CC BY-SA 4.0",
+      tiers: ["essential", "research", "technical", "full"],
+      status: "not_installed",
+      chunks_count: null,
+      trust_level: "unsigned",
+    },
+    {
+      id: "sep",
+      name: "Stanford Encyclopedia of Philosophy",
+      description: "Peer-reviewed philosophy articles",
+      size_indexed_gb: 0.5,
+      license: "CC BY-NC-ND 4.0",
+      tiers: ["research", "full"],
+      status: "not_installed",
+      chunks_count: null,
+      trust_level: "unsigned",
+    },
+    {
+      id: "openalex",
+      name: "OpenAlex",
+      description: "250M+ scholarly abstracts with citations",
+      size_indexed_gb: 45,
+      license: "CC0",
+      tiers: ["research", "full"],
+      status: "not_installed",
+      chunks_count: null,
+      trust_level: "unsigned",
+    },
+    {
+      id: "stackexchange",
+      name: "Stack Exchange",
+      description: "Expert Q&A across 170+ communities",
+      size_indexed_gb: 40,
+      license: "CC BY-SA 4.0",
+      tiers: ["technical", "full"],
+      status: "not_installed",
+      chunks_count: null,
+      trust_level: "unsigned",
+    },
+    {
+      id: "gutenberg",
+      name: "Project Gutenberg",
+      description: "70,000+ public domain books",
+      size_indexed_gb: 25,
+      license: "Public Domain",
+      tiers: ["full"],
+      status: "not_installed",
+      chunks_count: null,
+      trust_level: "unsigned",
+    },
+    {
+      id: "crs_reports",
+      name: "CRS Reports",
+      description: "US Congressional policy analysis",
+      size_indexed_gb: 4,
+      license: "Public Domain",
+      tiers: ["research", "full"],
+      status: "not_installed",
+      chunks_count: null,
+      trust_level: "unsigned",
+    },
+  ];
+
   let installedCount = $derived(
     corpora.filter((c) => c.status === "installed").length,
   );
@@ -44,9 +116,14 @@
 
   async function refresh() {
     try {
-      corpora = await listCorpora();
+      const result = await listCorpora();
+      // If the backend returns nothing (manager not initialized, manifest
+      // missing, etc.), fall back to the hardcoded list so the user always
+      // sees what's available.
+      corpora = result.length > 0 ? result : FALLBACK_CORPORA;
     } catch (e) {
       console.error("Failed to list corpora:", e);
+      corpora = FALLBACK_CORPORA;
     }
   }
 
@@ -168,9 +245,6 @@
     </div>
   {/each}
 
-  {#if corpora.length === 0}
-    <p class="empty">No knowledge bases available. Check that corpora.toml is in your data directory.</p>
-  {/if}
 </div>
 
 <style>

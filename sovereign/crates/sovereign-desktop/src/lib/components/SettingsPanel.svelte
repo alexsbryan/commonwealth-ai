@@ -4,6 +4,7 @@
   import type { DesktopConfig } from "../types";
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import SkillManager from "./SkillManager.svelte";
+  import ModelSelector from "../setup/ModelSelector.svelte";
 
   interface Props {
     onClose: () => void;
@@ -46,21 +47,32 @@
   {#if config}
     <div class="settings-body">
       <div class="section">
-        <h3>Model</h3>
-        <label>
-          <span>Model path</span>
-          <input type="text" bind:value={config.model_path} />
-        </label>
-        <label>
-          <span>Primary model (optional)</span>
-          <input
-            type="text"
-            value={config.primary_model_path ?? ""}
-            oninput={(e) =>
-              (config!.primary_model_path =
-                (e.target as HTMLInputElement).value || null)}
-          />
-        </label>
+        <h3>Fast model <em>(always loaded)</em></h3>
+        <p class="section-help">
+          Used for routing, quick answers, and most queries. Stays in memory.
+        </p>
+        <ModelSelector
+          selectedPath={config.model_path}
+          onSelect={(p) => (config!.model_path = p)}
+          showRawInput={true}
+        />
+      </div>
+
+      <div class="section">
+        <h3>Deep reasoning model <em>(loads on demand)</em></h3>
+        <p class="section-help">
+          Larger model for complex reasoning. Loads when needed, unloads after
+          60s idle. Optional.
+        </p>
+        <ModelSelector
+          selectedPath={config.primary_model_path ?? ""}
+          onSelect={(p) => (config!.primary_model_path = p || null)}
+          showRawInput={true}
+        />
+      </div>
+
+      <div class="section">
+        <h3>Inference</h3>
         <label>
           <span>Context size</span>
           <input type="number" bind:value={config.context_size} />
@@ -180,6 +192,23 @@
     margin-bottom: 12px;
   }
 
+  .section h3 em {
+    font-style: normal;
+    color: var(--text-muted);
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.8rem;
+  }
+
+  .section-help {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: -6px;
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+
   label {
     display: flex;
     flex-direction: column;
@@ -190,6 +219,20 @@
   label span {
     font-size: 0.85rem;
     color: var(--text-secondary);
+  }
+
+  label span em {
+    font-style: normal;
+    color: var(--text-muted);
+    font-weight: normal;
+    font-size: 0.78rem;
+  }
+
+  .field-help {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    line-height: 1.4;
   }
 
   input,

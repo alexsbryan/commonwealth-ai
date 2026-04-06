@@ -95,6 +95,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::send_message,
+            commands::send_message_stream,
             commands::create_conversation,
             commands::list_conversations,
             commands::get_conversation,
@@ -108,6 +109,7 @@ fn main() {
             commands::save_config,
             commands::is_setup_complete,
             commands::complete_setup,
+            commands::detect_hardware,
             commands::search_web,
             commands::scan_for_models,
             commands::download_model,

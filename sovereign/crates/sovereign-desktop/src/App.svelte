@@ -133,6 +133,7 @@
           onClearTask={clearTaskState}
           onApprovalHandled={() => (pendingApproval = null)}
           onInputHandled={() => (pendingInput = null)}
+          onOpenSettings={() => (showSettings = true)}
         />
       {/if}
     </main>

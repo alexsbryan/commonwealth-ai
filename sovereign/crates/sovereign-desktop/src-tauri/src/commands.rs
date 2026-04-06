@@ -155,7 +155,169 @@ macro_rules! require_runtime {
     }};
 }
 
+// ─── Hardware Detection ─────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct HardwareInfo {
+    pub system_ram_gb: f64,
+    pub gpu_available: bool,
+    pub gpu_name: Option<String>,
+}
+
+#[tauri::command]
+pub async fn detect_hardware() -> Result<HardwareInfo, String> {
+    let profile = tokio::task::spawn_blocking(|| {
+        sovereign_inference::hardware::HardwareProfile::detect()
+    })
+    .await
+    .map_err(|e| format!("Hardware detection failed: {e}"))?;
+
+    Ok(HardwareInfo {
+        system_ram_gb: profile.system_ram_gb(),
+        gpu_available: profile.gpu_available,
+        gpu_name: profile.gpu_name,
+    })
+}
+
 // ─── Commands ────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct MessageChunkPayload {
+    pub conversation_id: String,
+    pub message_id: String,
+    pub chunk: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct MessageCompletePayload {
+    pub conversation_id: String,
+    pub message_id: String,
+    pub full_text: String,
+}
+
+#[derive(Serialize)]
+pub struct StreamStartedResponse {
+    pub message_id: String,
+    pub streaming: bool,
+}
+
+/// Start a streaming chat response. Returns the assigned message_id immediately;
+/// the frontend should listen for `message-chunk` and `message-complete` events
+/// (or `message-error`) filtered by the returned message_id.
+///
+/// If the runtime cannot stream the request (e.g. ComplexTask intent), this
+/// transparently falls back to `handle_message` and emits a single
+/// `message-complete` event with the full result. The `streaming` field on the
+/// response indicates which path was taken.
+#[tauri::command]
+pub async fn send_message_stream(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    message: String,
+    conversation_id: String,
+) -> Result<StreamStartedResponse, String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap().clone();
+    drop(guard);
+
+    state.approval.set_task_id(&conversation_id).await;
+
+    // Try streaming path first.
+    match runtime
+        .handle_message_stream(&message, &conversation_id)
+        .await
+    {
+        Ok(handle) => {
+            let message_id = handle.message_id.clone();
+            let conversation_id_owned = conversation_id.clone();
+            let app = app_handle.clone();
+            let mut stream = handle.stream;
+
+            tauri::async_runtime::spawn(async move {
+                use futures::StreamExt;
+                let mut full_text = String::new();
+                while let Some(item) = stream.next().await {
+                    match item {
+                        Ok(chunk) => {
+                            full_text.push_str(&chunk);
+                            let _ = app.emit(
+                                "message-chunk",
+                                MessageChunkPayload {
+                                    conversation_id: conversation_id_owned.clone(),
+                                    message_id: message_id.clone(),
+                                    chunk,
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            let _ = app.emit(
+                                "message-error",
+                                crate::approval::ErrorPayload {
+                                    message: e.to_string(),
+                                },
+                            );
+                            return;
+                        }
+                    }
+                }
+                let _ = app.emit(
+                    "message-complete",
+                    MessageCompletePayload {
+                        conversation_id: conversation_id_owned,
+                        message_id,
+                        full_text,
+                    },
+                );
+            });
+
+            Ok(StreamStartedResponse {
+                message_id: handle.message_id,
+                streaming: true,
+            })
+        }
+        Err(_not_streamable) => {
+            // Fall back to non-streaming for ComplexTask.
+            let app = app_handle.clone();
+            let conversation_id_owned = conversation_id.clone();
+            let runtime = runtime.clone();
+            let message_owned = message.clone();
+            let pending_id = uuid::Uuid::new_v4().to_string();
+            let pending_clone = pending_id.clone();
+
+            tauri::async_runtime::spawn(async move {
+                match runtime
+                    .handle_message(&message_owned, &conversation_id_owned)
+                    .await
+                {
+                    Ok(response) => {
+                        let _ = app.emit(
+                            "message-complete",
+                            MessageCompletePayload {
+                                conversation_id: conversation_id_owned,
+                                message_id: response.message.id,
+                                full_text: response.message.content,
+                            },
+                        );
+                    }
+                    Err(e) => {
+                        let _ = app.emit(
+                            "message-error",
+                            crate::approval::ErrorPayload {
+                                message: e.to_string(),
+                            },
+                        );
+                    }
+                }
+                drop(pending_clone);
+            });
+
+            Ok(StreamStartedResponse {
+                message_id: pending_id,
+                streaming: false,
+            })
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn send_message(
@@ -385,6 +547,7 @@ pub async fn is_setup_complete(state: State<'_, Arc<AppState>>) -> Result<bool, 
 
 #[tauri::command]
 pub async fn complete_setup(
+    app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     setup: SetupConfig,
 ) -> Result<(), String> {
@@ -409,6 +572,9 @@ pub async fn complete_setup(
     drop(config);
 
     state::bootstrap(&state).await?;
+
+    // Notify the frontend that the backend is ready so the loading screen unblocks.
+    let _ = app_handle.emit("backend-ready", ());
 
     // Trigger background corpus installs for the selected tier.
     if let Some(ref tier) = setup.selected_tier {

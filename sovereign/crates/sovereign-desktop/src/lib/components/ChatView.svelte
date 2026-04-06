@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import {
-    sendMessage,
+    sendMessageStream,
     searchWeb,
     getConversation,
     createConversation,
@@ -13,10 +14,14 @@
     ApprovalRequestPayload,
     UserInputRequestPayload,
     CorpusEntry,
+    MessageChunkPayload,
+    MessageCompletePayload,
+    ErrorPayload,
   } from "../types";
   import MessageBubble from "./MessageBubble.svelte";
   import TaskProgress from "./TaskProgress.svelte";
   import ApprovalCard from "./ApprovalCard.svelte";
+  import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
 
   interface Props {
     conversationId: string | null;
@@ -26,6 +31,7 @@
     onClearTask: () => void;
     onApprovalHandled: () => void;
     onInputHandled: () => void;
+    onOpenSettings?: () => void;
   }
 
   let {
@@ -36,6 +42,7 @@
     onClearTask,
     onApprovalHandled,
     onInputHandled,
+    onOpenSettings,
   }: Props = $props();
 
   let messages: MessageEntry[] = $state([]);
@@ -43,12 +50,65 @@
   let isLoading = $state(false);
   let messagesContainer: HTMLDivElement;
   let activeConversationId: string | null = $state(null);
+  let streamingMessageId: string | null = null;
+  let unlistenChunk: UnlistenFn | null = null;
+  let unlistenComplete: UnlistenFn | null = null;
+  let unlistenError: UnlistenFn | null = null;
 
   $effect(() => {
     if (conversationId !== activeConversationId) {
       activeConversationId = conversationId;
       loadConversation();
     }
+  });
+
+  onMount(async () => {
+    unlistenChunk = await listen<MessageChunkPayload>(
+      "message-chunk",
+      (event) => {
+        const p = event.payload;
+        if (p.message_id !== streamingMessageId) return;
+        const idx = messages.findIndex((m) => m.id === p.message_id);
+        if (idx === -1) return;
+        messages[idx].content += p.chunk;
+        scrollToBottom();
+      },
+    );
+
+    unlistenComplete = await listen<MessageCompletePayload>(
+      "message-complete",
+      (event) => {
+        const p = event.payload;
+        if (p.message_id !== streamingMessageId) return;
+        const idx = messages.findIndex((m) => m.id === p.message_id);
+        if (idx !== -1) {
+          // For non-streaming fallback, the placeholder may be empty.
+          if (messages[idx].content.length === 0) {
+            messages[idx].content = p.full_text;
+          }
+        }
+        streamingMessageId = null;
+        isLoading = false;
+        scrollToBottom();
+      },
+    );
+
+    unlistenError = await listen<ErrorPayload>("message-error", (event) => {
+      if (!streamingMessageId) return;
+      const idx = messages.findIndex((m) => m.id === streamingMessageId);
+      if (idx !== -1) {
+        messages[idx].content =
+          messages[idx].content + `\n\nError: ${event.payload.message}`;
+      }
+      streamingMessageId = null;
+      isLoading = false;
+    });
+  });
+
+  onDestroy(() => {
+    unlistenChunk?.();
+    unlistenComplete?.();
+    unlistenError?.();
   });
 
   async function loadConversation() {
@@ -91,14 +151,18 @@
     scrollToBottom();
 
     try {
-      const response = await sendMessage(text, convoId);
-      const assistantMsg: MessageEntry = {
-        id: response.message_id,
+      const started = await sendMessageStream(text, convoId);
+      streamingMessageId = started.message_id;
+      // Add empty placeholder; chunks will append to it.
+      const placeholder: MessageEntry = {
+        id: started.message_id,
         role: "assistant",
-        content: response.content,
+        content: "",
         created_at: Math.floor(Date.now() / 1000),
       };
-      messages = [...messages, assistantMsg];
+      messages = [...messages, placeholder];
+      scrollToBottom();
+      // isLoading stays true until message-complete arrives.
     } catch (e) {
       const errorMsg: MessageEntry = {
         id: crypto.randomUUID(),
@@ -107,10 +171,9 @@
         created_at: Math.floor(Date.now() / 1000),
       };
       messages = [...messages, errorMsg];
+      isLoading = false;
+      scrollToBottom();
     }
-
-    isLoading = false;
-    scrollToBottom();
   }
 
   async function handleSearch() {
@@ -176,6 +239,7 @@
 </script>
 
 <div class="chat-view">
+  <CorpusProgressBanner {onOpenSettings} />
   <div class="messages" bind:this={messagesContainer}>
     {#if messages.length === 0 && !isLoading}
       <div class="empty-state">

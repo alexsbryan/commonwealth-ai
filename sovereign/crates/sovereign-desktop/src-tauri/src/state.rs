@@ -136,7 +136,7 @@ impl DesktopConfig {
 // ─── App State ───────────────────────────────────────────────
 
 pub struct AppState {
-    pub runtime: RwLock<Option<Runtime>>,
+    pub runtime: RwLock<Option<Arc<Runtime>>>,
     pub approval: Arc<TauriApprovalChannel>,
     pub config: RwLock<DesktopConfig>,
     /// Reusable across Runtime rebuilds (model stays loaded).
@@ -337,7 +337,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         approval,
     );
 
-    *state.runtime.write().await = Some(runtime);
+    *state.runtime.write().await = Some(Arc::new(runtime));
 
     // Initialize corpus manager.
     if let Some(registry) = crate::commands::load_corpus_registry(&config.data_dir) {

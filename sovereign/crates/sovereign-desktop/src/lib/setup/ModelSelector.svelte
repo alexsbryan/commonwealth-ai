@@ -2,11 +2,12 @@
   import { onMount } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { scanForModels, downloadModel } from "../api";
+  import { scanForModels, downloadModel, detectHardware } from "../api";
   import type {
     DiscoveredModel,
     DownloadProgress,
     RecommendedModel,
+    HardwareInfo,
   } from "../types";
 
   interface Props {
@@ -27,6 +28,7 @@
   let showManualInput = $state(false);
   let manualPath = $state("");
   let unlisten: UnlistenFn | null = null;
+  let hardware: HardwareInfo | null = $state(null);
 
   const RECOMMENDED_MODELS: RecommendedModel[] = [
     {
@@ -36,24 +38,67 @@
       size_estimate: "~600 MB",
       ram_minimum: "8 GB",
       description: "Fast and lightweight. Great for getting started.",
+      min_ram_gb: 4,
     },
     {
       name: "Qwen 2.5 3B",
       file_name: "qwen2.5-3b-instruct-q4_k_m.gguf",
       url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
       size_estimate: "~2 GB",
-      ram_minimum: "16 GB",
+      ram_minimum: "8 GB",
       description: "Good balance of speed and quality.",
+      min_ram_gb: 8,
     },
     {
       name: "Qwen 2.5 7B",
       file_name: "qwen2.5-7b-instruct-q4_k_m.gguf",
       url: "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
       size_estimate: "~4.7 GB",
-      ram_minimum: "16 GB+",
-      description: "Best quality. Needs more memory.",
+      ram_minimum: "16 GB",
+      description: "Strong general-purpose quality.",
+      min_ram_gb: 16,
+    },
+    {
+      name: "Qwen 2.5 14B",
+      file_name: "qwen2.5-14b-instruct-q4_k_m.gguf",
+      url: "https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf",
+      size_estimate: "~9 GB",
+      ram_minimum: "32 GB",
+      description: "Higher quality. Better at reasoning and coding.",
+      min_ram_gb: 24,
+    },
+    {
+      name: "Qwen 2.5 32B",
+      file_name: "qwen2.5-32b-instruct-q4_k_m.gguf",
+      url: "https://huggingface.co/Qwen/Qwen2.5-32B-Instruct-GGUF/resolve/main/qwen2.5-32b-instruct-q4_k_m.gguf",
+      size_estimate: "~20 GB",
+      ram_minimum: "48 GB",
+      description: "Excellent quality for deep reasoning workloads.",
+      min_ram_gb: 40,
+    },
+    {
+      name: "Qwen 2.5 72B",
+      file_name: "qwen2.5-72b-instruct-q4_k_m.gguf",
+      url: "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct-GGUF/resolve/main/qwen2.5-72b-instruct-q4_k_m.gguf",
+      size_estimate: "~42 GB",
+      ram_minimum: "96 GB",
+      description: "Frontier-class local model. Requires a workstation.",
+      min_ram_gb: 80,
     },
   ];
+
+  // Models that fit in this system's RAM (with a 2 GB headroom).
+  let visibleModels = $derived.by(() => {
+    if (!hardware) return RECOMMENDED_MODELS.slice(0, 3);
+    const ram = hardware.system_ram_gb;
+    return RECOMMENDED_MODELS.filter((m) => m.min_ram_gb + 2 <= ram);
+  });
+
+  // Largest model that fits — flagged as the recommendation.
+  let recommendedFileName = $derived.by(() => {
+    if (!hardware || visibleModels.length === 0) return null;
+    return visibleModels[visibleModels.length - 1].file_name;
+  });
 
   onMount(async () => {
     // Listen for download progress events.
@@ -94,6 +139,13 @@
       console.error("Model scan failed:", e);
     }
     scanning = false;
+
+    // Detect hardware to filter recommended models.
+    try {
+      hardware = await detectHardware();
+    } catch (e) {
+      console.error("Hardware detection failed:", e);
+    }
   });
 
   async function rescan(autoSelectFileName?: string) {
@@ -199,17 +251,31 @@
   <!-- Section B: Download a Model -->
   <div class="section-header">
     {discovered.length > 0 ? "Or download a model" : "Download a model"}
+    {#if hardware}
+      <span class="hw-summary">
+        &middot; {hardware.system_ram_gb.toFixed(0)} GB RAM{hardware.gpu_available
+          ? ` &middot; GPU: ${hardware.gpu_name ?? "available"}`
+          : ""}
+      </span>
+    {/if}
   </div>
   <div class="model-grid">
-    {#each RECOMMENDED_MODELS as model (model.file_name)}
+    {#each visibleModels as model (model.file_name)}
       {@const alreadyHave = discovered.some(
         (m) => m.file_name === model.file_name,
       )}
+      {@const isRecommended = model.file_name === recommendedFileName}
       <div
         class="model-card download-card"
         class:already-have={alreadyHave}
+        class:recommended={isRecommended}
       >
-        <div class="model-name">{model.name}</div>
+        <div class="model-name">
+          {model.name}
+          {#if isRecommended}
+            <span class="badge">Recommended for your system</span>
+          {/if}
+        </div>
         <div class="model-desc">{model.description}</div>
         <div class="model-meta">
           <span class="model-size">{model.size_estimate}</span>
@@ -372,6 +438,31 @@
 
   .download-card {
     cursor: default;
+  }
+
+  .download-card.recommended {
+    border-color: var(--accent);
+    background: rgba(233, 69, 96, 0.05);
+  }
+
+  .badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 500;
+    vertical-align: middle;
+  }
+
+  .hw-summary {
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: normal;
   }
 
   .btn-action {

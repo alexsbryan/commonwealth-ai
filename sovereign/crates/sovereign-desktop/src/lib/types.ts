@@ -148,6 +148,30 @@ export interface RecommendedModel {
   size_estimate: string;
   ram_minimum: string;
   description: string;
+  min_ram_gb: number;
+}
+
+export interface StreamStartedResponse {
+  message_id: string;
+  streaming: boolean;
+}
+
+export interface MessageChunkPayload {
+  conversation_id: string;
+  message_id: string;
+  chunk: string;
+}
+
+export interface MessageCompletePayload {
+  conversation_id: string;
+  message_id: string;
+  full_text: string;
+}
+
+export interface HardwareInfo {
+  system_ram_gb: number;
+  gpu_available: boolean;
+  gpu_name: string | null;
 }
 
 // ─── Knowledge Base ─────────────────────────────────────────
