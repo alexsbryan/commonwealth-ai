@@ -407,6 +407,11 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             enrichment: None,
         },
         // 4. Project Gutenberg
+        //
+        // Sourced from the sedthh/gutenberg_english dataset on HuggingFace,
+        // which mirrors ~55k English Gutenberg books as a single parquet file.
+        // The `TEXT` column contains the full book text (boilerplate already
+        // stripped by the dataset maintainer).
         Recipe {
             corpus: CorpusMeta {
                 id: "gutenberg".to_string(),
@@ -414,16 +419,16 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 description: "Public-domain books from Project Gutenberg.".to_string(),
                 license: "Public Domain".to_string(),
                 mesh_sharing: true,
-                size_compressed_gb: 12.0,
-                size_indexed_gb: 30.0,
+                size_compressed_gb: 8.0,
+                size_indexed_gb: 20.0,
             },
             acquire: AcquirerConfig::BulkDownload {
-                url: "https://www.gutenberg.org/robot/harvest".to_string(),
+                url: "https://huggingface.co/datasets/sedthh/gutenberg_english/resolve/main/data/train-00000-of-00001.parquet".to_string(),
                 resume: true,
             },
-            extract: ExtractorConfig::Plaintext {
-                title_pattern: None,
-                strip_boilerplate: Some("gutenberg".to_string()),
+            extract: ExtractorConfig::Parquet {
+                content_column: "TEXT".to_string(),
+                label_column: None,
             },
             chunk: ChunkerConfig::Paragraph {
                 max_chars: 2048,
