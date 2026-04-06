@@ -40,5 +40,8 @@ pub enum IngestProgress {
     },
 }
 
-/// Thread-safe progress callback.
-pub type ProgressCallback = Box<dyn Fn(IngestProgress) + Send>;
+/// Thread-safe progress callback. Must be `Sync` because the engine's
+/// async pipeline holds an `&Option<ProgressCallback>` across `.await`
+/// points, which requires the callback itself to be safe to share by
+/// reference between tasks.
+pub type ProgressCallback = Box<dyn Fn(IngestProgress) + Send + Sync>;

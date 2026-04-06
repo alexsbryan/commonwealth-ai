@@ -433,27 +433,33 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             enrichment: None,
         },
         // 5. Stanford Encyclopedia of Philosophy
+        //
+        // Sourced from the AiresPucrs/stanford-encyclopedia-philosophy
+        // dataset on HuggingFace, which mirrors SEP entries as a single
+        // parquet file. This avoids scraping plato.stanford.edu directly
+        // (which would be slow, fragile, and rude to Stanford's servers).
+        // The parquet has columns: `title`, `text`, `url`.
         Recipe {
             corpus: CorpusMeta {
                 id: "sep".to_string(),
                 name: "Stanford Encyclopedia of Philosophy".to_string(),
-                description: "Peer-reviewed encyclopedia entries from the Stanford Encyclopedia of Philosophy."
+                description: "Peer-reviewed encyclopedia entries from the Stanford Encyclopedia of Philosophy. Includes claim and relationship enrichment for the epistemic-research skill."
                     .to_string(),
-                license: "Copyright Stanford University".to_string(),
+                license: "Copyright Stanford University (educational/research use)".to_string(),
                 mesh_sharing: false,
-                size_compressed_gb: 0.5,
-                size_indexed_gb: 1.5,
+                // The parquet is roughly 1.4 GB compressed; indexed with
+                // embeddings + claims + relationships it lands around
+                // 5–6 GB on disk depending on enrichment depth.
+                size_compressed_gb: 1.4,
+                size_indexed_gb: 6.0,
             },
-            acquire: AcquirerConfig::WebCrawl {
-                seed_urls: vec![
-                    "https://plato.stanford.edu/entries/".to_string(),
-                ],
-                link_pattern: r"https://plato\.stanford\.edu/entries/[\w-]+/".to_string(),
-                max_pages: 10_000,
+            acquire: AcquirerConfig::BulkDownload {
+                url: "https://huggingface.co/datasets/AiresPucrs/stanford-encyclopedia-philosophy/resolve/main/data/train-00000-of-00001.parquet".to_string(),
+                resume: true,
             },
-            extract: ExtractorConfig::Html {
-                content_selector: Some("#aueditable".to_string()),
-                title_selector: Some("h1".to_string()),
+            extract: ExtractorConfig::Parquet {
+                content_column: "text".to_string(),
+                label_column: Some("title".to_string()),
             },
             chunk: ChunkerConfig::Paragraph {
                 max_chars: 2048,

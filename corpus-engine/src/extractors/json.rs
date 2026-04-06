@@ -54,7 +54,7 @@ impl Extractor for JsonlExtractor {
     fn extract(
         &self,
         source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>>>> {
+    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         let file = File::open(source_path)
             .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
 
@@ -64,7 +64,7 @@ impl Extractor for JsonlExtractor {
                 .and_then(|e| e.to_str())
                 .map_or(false, |e| e == "gz");
 
-        let reader: Box<dyn BufRead> = if is_gz {
+        let reader: Box<dyn BufRead + Send> = if is_gz {
             Box::new(BufReader::new(flate2::read::GzDecoder::new(file)))
         } else {
             Box::new(BufReader::new(file))
@@ -80,7 +80,7 @@ impl Extractor for JsonlExtractor {
 }
 
 struct JsonlIterator {
-    lines: std::io::Lines<Box<dyn BufRead>>,
+    lines: std::io::Lines<Box<dyn BufRead + Send>>,
     content_field: Option<String>,
     title_field: Option<String>,
     pending: VecDeque<ExtractedDoc>,

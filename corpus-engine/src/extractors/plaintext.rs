@@ -30,7 +30,7 @@ impl Extractor for PlaintextExtractor {
     fn extract(
         &self,
         source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>>>> {
+    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         let files = collect_text_files(source_path)?;
         Ok(Box::new(PlaintextIterator {
             files: files.into(),

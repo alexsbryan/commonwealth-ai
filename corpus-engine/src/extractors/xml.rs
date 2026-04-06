@@ -48,7 +48,7 @@ impl Extractor for MediawikiExtractor {
     fn extract(
         &self,
         source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>>>> {
+    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         let file = File::open(source_path)
             .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
 
@@ -58,7 +58,7 @@ impl Extractor for MediawikiExtractor {
                 .and_then(|e| e.to_str())
                 .map_or(false, |e| e == "bz2");
 
-        let reader: Box<dyn std::io::Read> = if is_bz2 {
+        let reader: Box<dyn std::io::Read + Send> = if is_bz2 {
             Box::new(bzip2::read::BzDecoder::new(BufReader::new(file)))
         } else {
             Box::new(BufReader::new(file))
@@ -83,7 +83,7 @@ impl Extractor for MediawikiExtractor {
 }
 
 struct WikiDumpIterator {
-    reader: XmlReader<BufReader<Box<dyn std::io::Read>>>,
+    reader: XmlReader<BufReader<Box<dyn std::io::Read + Send>>>,
     buf: Vec<u8>,
     namespace_filter: Vec<u32>,
     skip_redirects: bool,
@@ -239,7 +239,7 @@ impl Extractor for StackExchangeExtractor {
     fn extract(
         &self,
         source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>>>> {
+    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         let files = find_posts_files(source_path)?;
         Ok(Box::new(StackExchangeIterator {
             files: files.into(),

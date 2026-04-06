@@ -34,7 +34,7 @@ impl Extractor for ParquetExtractor {
     fn extract(
         &self,
         source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>>>> {
+    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         let file = File::open(source_path)
             .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
 
@@ -57,7 +57,7 @@ impl Extractor for ParquetExtractor {
 }
 
 struct ParquetIterator {
-    reader: Box<dyn Iterator<Item = std::result::Result<RecordBatch, ArrowError>>>,
+    reader: Box<dyn Iterator<Item = std::result::Result<RecordBatch, ArrowError>> + Send>,
     content_column: String,
     label_column: Option<String>,
     pending: VecDeque<ExtractedDoc>,

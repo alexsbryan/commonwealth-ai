@@ -20,10 +20,12 @@ pub struct ExtractedDoc {
 /// Trait for extracting documents from source data.
 pub trait Extractor: Send + Sync {
     /// Parse the source and return an iterator of extracted documents.
+    /// The iterator must be `Send` so the engine can hold it across
+    /// `.await` points inside `tokio::spawn`-ed ingest tasks.
     fn extract(
         &self,
         source_path: &std::path::Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>>>>;
+    ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>>;
 }
 
 // ─── Shared Utilities ─────────────────────────────────────────
