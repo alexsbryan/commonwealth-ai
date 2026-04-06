@@ -107,21 +107,100 @@ impl CorpusEngine {
 
     /// Ingest a corpus from source. Downloads, parses, chunks,
     /// embeds, and writes a complete index.
+    ///
+    /// Failure modes are surfaced cleanly:
+    ///
+    /// 1. **Pre-flight check.** Before touching disk, the engine asks
+    ///    the configured `EmbedFn` to embed a tiny smoke string. If
+    ///    that fails (most commonly because no embedding model is
+    ///    configured), the error is returned immediately and no
+    ///    index directory is created. This prevents the "ghost
+    ///    install" state where a half-built directory makes the UI
+    ///    think a corpus is installed.
+    ///
+    /// 2. **Cleanup on failure.** If any step *after* the pre-flight
+    ///    fails (download error, parquet schema mismatch, embed
+    ///    overflow mid-batch, …), the partial index directory is
+    ///    deleted before the error propagates so the corpus appears
+    ///    as "not installed" in the UI on the next refresh.
     pub async fn ingest(
         &self,
         corpus: &CorpusSpec,
         progress: Option<ProgressCallback>,
     ) -> Result<IngestResult> {
         let recipe = self.resolve_recipe(corpus)?;
-        let start = Instant::now();
 
-        // Ensure index directory exists.
+        // Ensure parent directory exists so `_downloads` and the
+        // per-corpus index dir can be created underneath.
         std::fs::create_dir_all(&self.index_dir)?;
+
+        // ── Pre-flight: validate the embed function works ─────────
+        //
+        // We do this before creating the index directory so a missing
+        // or broken embedder fails fast with no on-disk side effects.
+        // The smoke string is short and the result is discarded —
+        // we only care that the call returns Ok and produces a vector
+        // of the expected dimensionality.
+        let probe = (self.embed)("probe").await.map_err(|e| {
+            Error::Embed(format!(
+                "Embedding function is not available: {e}. \
+                 Configure an embedding model before installing corpora."
+            ))
+        })?;
+        if probe.is_empty() {
+            return Err(Error::Embed(
+                "Embedding function returned an empty vector. \
+                 The configured embed model may be misloaded."
+                    .to_string(),
+            ));
+        }
+        if probe.len() != recipe.index.embedding_dimensions {
+            return Err(Error::Embed(format!(
+                "Embedding function returned {} dimensions but the recipe \
+                 expects {}. Use a compatible embed model.",
+                probe.len(),
+                recipe.index.embedding_dimensions,
+            )));
+        }
+
+        // ── Run the actual pipeline with cleanup-on-failure ───────
+        let index_path = self.index_dir.join(&recipe.corpus.id);
+        let result = self
+            .ingest_inner(&recipe, &index_path, &progress)
+            .await;
+
+        match result {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                // Wipe the half-built index directory so the UI doesn't
+                // misreport a failed install as "installed".
+                if index_path.exists() {
+                    if let Err(rm) = std::fs::remove_dir_all(&index_path) {
+                        tracing::warn!(
+                            "Failed to clean up partial index at {}: {rm}",
+                            index_path.display()
+                        );
+                    }
+                }
+                Err(e)
+            }
+        }
+    }
+
+    /// The actual ingest pipeline. Pulled into its own function so the
+    /// public `ingest()` can wrap it with cleanup-on-failure logic.
+    async fn ingest_inner(
+        &self,
+        recipe: &Recipe,
+        index_path: &Path,
+        progress: &Option<ProgressCallback>,
+    ) -> Result<IngestResult> {
+        let start = Instant::now();
 
         // Step 1: Acquire source data.
         let download_dir = self.index_dir.join("_downloads");
         let source_path = self
-            .acquire_source(&recipe, &download_dir, &progress)
+            .acquire_source(recipe, &download_dir, progress)
             .await?;
 
         // Step 2: Extract documents.
@@ -130,10 +209,9 @@ impl CorpusEngine {
 
         // Step 3: Chunk, embed, and index.
         let chunker = self.make_chunker(&recipe.chunk);
-        let index_path = self.index_dir.join(&recipe.corpus.id);
 
         let index = CorpusIndex::create(
-            &index_path,
+            index_path,
             &recipe.corpus.id,
             &recipe.corpus.name,
             &recipe.index.embedding_model,
@@ -201,6 +279,19 @@ impl CorpusEngine {
             index.insert_batch(&batch).await?;
         }
 
+        // A pipeline that produced zero chunks is almost always a bug
+        // (wrong column name, empty parquet, all docs filtered out).
+        // Surface this rather than leaving an empty index that pretends
+        // to be installed.
+        if total_chunks == 0 {
+            return Err(Error::Extraction(format!(
+                "Ingest produced zero chunks for corpus '{}'. \
+                 The source may be empty, the extractor may be \
+                 misconfigured, or every document may have been filtered.",
+                recipe.corpus.id,
+            )));
+        }
+
         // Build search indexes (IVF-PQ + FTS).
         index.build_indexes().await?;
 
@@ -214,13 +305,13 @@ impl CorpusEngine {
                             inference.clone(),
                         );
                         let claims = enricher
-                            .extract_claims(&index, enrichment_config, &progress)
+                            .extract_claims(&index, enrichment_config, progress)
                             .await?;
                         index.store_claims(&claims).await?;
 
                         if enrichment_config.extract_relationships {
                             let rels = enricher
-                                .extract_relationships(&claims, enrichment_config, &progress)
+                                .extract_relationships(&claims, enrichment_config, progress)
                                 .await?;
                             index.store_relationships(&rels).await?;
                         }
@@ -248,7 +339,7 @@ impl CorpusEngine {
         }
 
         Ok(IngestResult {
-            corpus_id: recipe.corpus.id,
+            corpus_id: recipe.corpus.id.clone(),
             chunks_created: total_chunks,
             index_size_bytes: info.index_size_bytes,
             duration_secs,
