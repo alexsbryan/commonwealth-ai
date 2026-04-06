@@ -2,129 +2,129 @@
 //! and Commonwealth.
 //!
 //! - `index_stats`: report chunk ID range, count, and size
-//! - `extract_shard`: extract a subset of an index into a new file
-//! - `merge_shards`: merge multiple shard files into a single index
+//! - `extract_shard`: extract a subset of an index into a new directory
+//! - `merge_shards`: merge multiple shard directories into a single index
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use rusqlite::params;
+use arrow_array::{Int64Array, RecordBatch};
+use futures::TryStreamExt;
+use lancedb::query::{ExecutableQuery, QueryBase, Select};
 
 use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
 use crate::types::{ChunkRange, IndexInfo, IndexStats, ShardInfo};
 
 /// Report chunk ID range, count, and size for an index.
-pub fn index_stats(index_path: &Path) -> Result<IndexStats> {
-    let index = CorpusIndex::open(index_path)?;
-    let info = index.info()?;
+pub async fn index_stats(index_path: &Path) -> Result<IndexStats> {
+    let index = CorpusIndex::open(index_path).await?;
+    let info = index.info().await?;
 
-    let db = index.connection();
-    let (min_id, max_id): (u64, u64) = db.query_row(
-        "SELECT COALESCE(MIN(id), 0), COALESCE(MAX(id) + 1, 0) FROM chunks",
-        [],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    )?;
+    // Query min/max IDs.
+    let batches: Vec<RecordBatch> = index
+        .table()
+        .query()
+        .select(Select::Columns(vec!["id".into()]))
+        .execute()
+        .await
+        .map_err(|e| Error::Database(format!("stats query: {e}")))?
+        .try_collect()
+        .await
+        .map_err(|e| Error::Database(format!("stats collect: {e}")))?;
 
-    let file_size = std::fs::metadata(index_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let mut min_id = u64::MAX;
+    let mut max_id = 0u64;
+    for batch in &batches {
+        if let Some(ids) = batch
+            .column_by_name("id")
+            .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+        {
+            for i in 0..ids.len() {
+                let id = ids.value(i) as u64;
+                min_id = min_id.min(id);
+                max_id = max_id.max(id);
+            }
+        }
+    }
+
+    if min_id == u64::MAX {
+        min_id = 0;
+    }
 
     Ok(IndexStats {
         corpus_id: info.corpus_id,
         total_chunks: info.chunk_count,
         min_chunk_id: min_id,
-        max_chunk_id: max_id,
-        index_size_bytes: file_size,
+        max_chunk_id: max_id + 1, // exclusive
+        index_size_bytes: info.index_size_bytes,
     })
 }
 
-/// Extract a subset of an existing index into a new file.
+/// Extract a subset of an existing index into a new directory.
 /// Output contains only chunks with IDs in the given range.
-/// Embeddings, FTS entries, and metadata are preserved.
-pub fn extract_shard(
+pub async fn extract_shard(
     source_path: &Path,
     chunk_range: ChunkRange,
     output_path: &Path,
 ) -> Result<ShardInfo> {
-    let source = CorpusIndex::open(source_path)?;
-    let source_info = source.info()?;
+    let source = CorpusIndex::open(source_path).await?;
+    let source_info = source.info().await?;
 
-    // Create the shard index with the same metadata.
-    let mut shard = CorpusIndex::create(
+    // Create the shard index.
+    let shard = CorpusIndex::create(
         output_path,
         &source_info.corpus_id,
         &source_info.corpus_name,
         &source_info.embedding_model,
         source_info.embedding_dimensions,
         source_info.mesh_sharing,
-        "",
-    )?;
+        &"",
+    )
+    .await?;
 
-    // Mark as shard in metadata.
-    shard.set_meta("is_shard", "true")?;
-    shard.set_meta("chunk_range_start", &chunk_range.start_id.to_string())?;
-    shard.set_meta("chunk_range_end", &chunk_range.end_id.to_string())?;
+    // Mark as shard.
+    shard.set_shard_meta(chunk_range)?;
 
-    // Copy chunks in the range from source to shard.
-    let source_db = source.connection();
-    let mut stmt = source_db.prepare(
-        "SELECT id, content, title, url, embedding, metadata FROM chunks \
-         WHERE id >= ?1 AND id < ?2 ORDER BY id",
-    )?;
+    // Query chunks in range from source.
+    let filter = format!(
+        "id >= {} AND id < {}",
+        chunk_range.start_id, chunk_range.end_id
+    );
+    let batches: Vec<RecordBatch> = source
+        .table()
+        .query()
+        .only_if(filter)
+        .execute()
+        .await
+        .map_err(|e| Error::Database(format!("shard extract query: {e}")))?
+        .try_collect()
+        .await
+        .map_err(|e| Error::Database(format!("shard extract collect: {e}")))?;
 
-    let mut rows = stmt.query(params![chunk_range.start_id, chunk_range.end_id])?;
-    let mut chunk_count = 0u64;
-
-    let shard_db = shard.connection();
-    shard_db.execute_batch("BEGIN")?;
-
-    while let Some(row) = rows.next()? {
-        let id: i64 = row.get(0)?;
-        let content: String = row.get(1)?;
-        let title: Option<String> = row.get(2)?;
-        let url: Option<String> = row.get(3)?;
-        let embedding: Vec<u8> = row.get(4)?;
-        let metadata: Option<String> = row.get(5)?;
-
-        shard_db.execute(
-            "INSERT INTO chunks (id, content, title, url, embedding, metadata) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, content, title, url, embedding, metadata],
-        )?;
-
-        // FTS5 insert.
-        shard_db.execute(
-            "INSERT INTO chunks_fts(rowid, content, title) VALUES (?1, ?2, ?3)",
-            params![id, content, title],
-        )?;
-
-        // Vec insert (if available).
-        let _ = shard_db.execute(
-            "INSERT INTO chunks_vec(rowid, embedding) VALUES (?1, ?2)",
-            params![id, embedding],
-        );
-
-        chunk_count += 1;
+    if !batches.is_empty() {
+        shard
+            .table()
+            .add(batches)
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("shard insert: {e}")))?;
     }
 
-    shard_db.execute_batch("COMMIT")?;
-
-    let file_size = std::fs::metadata(output_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let chunk_count = shard.chunk_count().await?;
+    let size_bytes = dir_size(output_path);
 
     Ok(ShardInfo {
         path: output_path.to_path_buf(),
         chunk_range,
         chunk_count,
-        size_bytes: file_size,
+        size_bytes,
     })
 }
 
-/// Merge multiple shard files into a single index.
+/// Merge multiple shard directories into a single index.
 /// Chunks are renumbered to form a contiguous ID space.
-/// Embeddings and FTS entries are rebuilt for the merged set.
-pub fn merge_shards(
+pub async fn merge_shards(
     shard_paths: &[PathBuf],
     output_path: &Path,
 ) -> Result<IndexInfo> {
@@ -133,8 +133,8 @@ pub fn merge_shards(
     }
 
     // Read metadata from first shard.
-    let first = CorpusIndex::open(&shard_paths[0])?;
-    let first_info = first.info()?;
+    let first = CorpusIndex::open(&shard_paths[0]).await?;
+    let first_info = first.info().await?;
     drop(first);
 
     // Create output index.
@@ -146,52 +146,80 @@ pub fn merge_shards(
         first_info.embedding_dimensions,
         first_info.mesh_sharing,
         "",
-    )?;
+    )
+    .await?;
 
-    let merged_db = merged.connection();
-    merged_db.execute_batch("BEGIN")?;
-
+    let dim = first_info.embedding_dimensions;
     let mut next_id: i64 = 1;
 
     for shard_path in shard_paths {
-        let shard = CorpusIndex::open(shard_path)?;
-        let shard_db = shard.connection();
+        let shard = CorpusIndex::open(shard_path).await?;
 
-        let mut stmt = shard_db.prepare(
-            "SELECT content, title, url, embedding, metadata FROM chunks ORDER BY id",
-        )?;
-        let mut rows = stmt.query([])?;
+        let batches: Vec<RecordBatch> = shard
+            .table()
+            .query()
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("shard read: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("shard collect: {e}")))?;
 
-        while let Some(row) = rows.next()? {
-            let content: String = row.get(0)?;
-            let title: Option<String> = row.get(1)?;
-            let url: Option<String> = row.get(2)?;
-            let embedding: Vec<u8> = row.get(3)?;
-            let metadata: Option<String> = row.get(4)?;
+        for batch in &batches {
+            let num_rows = batch.num_rows();
+            if num_rows == 0 {
+                continue;
+            }
 
-            merged_db.execute(
-                "INSERT INTO chunks (id, content, title, url, embedding, metadata) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![next_id, content, title, url, embedding, metadata],
-            )?;
+            // Renumber IDs.
+            let new_ids: Vec<i64> = (0..num_rows)
+                .map(|i| {
+                    let id = next_id + i as i64;
+                    id
+                })
+                .collect();
+            next_id += num_rows as i64;
 
-            merged_db.execute(
-                "INSERT INTO chunks_fts(rowid, content, title) VALUES (?1, ?2, ?3)",
-                params![next_id, content, title],
-            )?;
+            // Rebuild batch with new IDs.
+            let schema = crate::index::corpus_schema(dim);
+            let new_batch = RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int64Array::from(new_ids)),
+                    batch.column_by_name("content").unwrap().clone(),
+                    batch.column_by_name("title").unwrap().clone(),
+                    batch.column_by_name("url").unwrap().clone(),
+                    batch.column_by_name("embedding").unwrap().clone(),
+                    batch.column_by_name("metadata").unwrap().clone(),
+                ],
+            )
+            .map_err(|e| Error::Serialization(format!("merge batch: {e}")))?;
 
-            let _ = merged_db.execute(
-                "INSERT INTO chunks_vec(rowid, embedding) VALUES (?1, ?2)",
-                params![next_id, embedding],
-            );
-
-            next_id += 1;
+            merged
+                .table()
+                .add(vec![new_batch])
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("merge insert: {e}")))?;
         }
     }
 
-    merged_db.execute_batch("COMMIT")?;
+    merged.info().await
+}
 
-    merged.info()
+fn dir_size(path: &Path) -> u64 {
+    let mut total = 0;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                total += dir_size(&p);
+            } else if let Ok(m) = p.metadata() {
+                total += m.len();
+            }
+        }
+    }
+    total
 }
 
 #[cfg(test)]
@@ -203,10 +231,11 @@ mod tests {
         (0..8).map(|i| seed + i as f32 * 0.1).collect()
     }
 
-    fn create_test_index(path: &Path, chunk_count: u64) -> CorpusIndex {
-        let mut index = CorpusIndex::create(
+    async fn create_test_index(path: &Path, chunk_count: u64) -> CorpusIndex {
+        let index = CorpusIndex::create(
             path, "test", "Test Corpus", "test-model", 8, true, "MIT",
         )
+        .await
         .unwrap();
 
         let chunks: Vec<_> = (0..chunk_count)
@@ -222,17 +251,17 @@ mod tests {
                 )
             })
             .collect();
-        index.insert_batch(&chunks).unwrap();
+        index.insert_batch(&chunks).await.unwrap();
         index
     }
 
-    #[test]
-    fn test_index_stats() {
+    #[tokio::test]
+    async fn test_index_stats() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("test.db");
-        create_test_index(&path, 10);
+        let path = dir.path().join("test-stats");
+        create_test_index(&path, 10).await;
 
-        let stats = index_stats(&path).unwrap();
+        let stats = index_stats(&path).await.unwrap();
         assert_eq!(stats.corpus_id, "test");
         assert_eq!(stats.total_chunks, 10);
         assert!(stats.min_chunk_id >= 1);
@@ -240,66 +269,65 @@ mod tests {
         assert!(stats.index_size_bytes > 0);
     }
 
-    #[test]
-    fn test_extract_shard() {
+    #[tokio::test]
+    async fn test_extract_shard() {
         let dir = tempfile::tempdir().unwrap();
-        let source_path = dir.path().join("source.db");
-        create_test_index(&source_path, 10);
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 10).await;
 
-        // Get stats to know the ID range.
-        let stats = index_stats(&source_path).unwrap();
-
-        // Extract a shard of the first 5 chunks.
+        let stats = index_stats(&source_path).await.unwrap();
         let mid = stats.min_chunk_id + 5;
-        let shard_path = dir.path().join("shard.db");
+
+        let shard_path = dir.path().join("shard");
         let shard_info = extract_shard(
             &source_path,
             ChunkRange::new(stats.min_chunk_id, mid),
             &shard_path,
         )
+        .await
         .unwrap();
 
         assert_eq!(shard_info.chunk_count, 5);
         assert!(shard_info.size_bytes > 0);
 
-        // Verify the shard is searchable.
-        let shard = CorpusIndex::open(&shard_path).unwrap();
-        let info = shard.info().unwrap();
+        let shard = CorpusIndex::open(&shard_path).await.unwrap();
+        let info = shard.info().await.unwrap();
         assert_eq!(info.chunk_count, 5);
         assert!(info.is_shard);
     }
 
-    #[test]
-    fn test_merge_shards() {
+    #[tokio::test]
+    async fn test_merge_shards() {
         let dir = tempfile::tempdir().unwrap();
-        let source_path = dir.path().join("source.db");
-        create_test_index(&source_path, 10);
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 10).await;
 
-        let stats = index_stats(&source_path).unwrap();
+        let stats = index_stats(&source_path).await.unwrap();
         let mid = stats.min_chunk_id + 5;
 
-        // Extract two shards.
-        let shard1_path = dir.path().join("shard1.db");
-        let shard2_path = dir.path().join("shard2.db");
+        let shard1_path = dir.path().join("shard1");
+        let shard2_path = dir.path().join("shard2");
         extract_shard(
             &source_path,
             ChunkRange::new(stats.min_chunk_id, mid),
             &shard1_path,
         )
+        .await
         .unwrap();
         extract_shard(
             &source_path,
             ChunkRange::new(mid, stats.max_chunk_id),
             &shard2_path,
         )
+        .await
         .unwrap();
 
-        // Merge them.
-        let merged_path = dir.path().join("merged.db");
+        let merged_path = dir.path().join("merged");
         let merged_info = merge_shards(
             &[shard1_path, shard2_path],
             &merged_path,
         )
+        .await
         .unwrap();
 
         assert_eq!(merged_info.chunk_count, 10);
@@ -307,15 +335,13 @@ mod tests {
         assert_eq!(merged_info.corpus_id, "test");
     }
 
-    #[test]
-    fn test_round_trip() {
+    #[tokio::test]
+    async fn test_round_trip() {
         let dir = tempfile::tempdir().unwrap();
-        let source_path = dir.path().join("source.db");
-        create_test_index(&source_path, 20);
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 20).await;
 
-        let stats = index_stats(&source_path).unwrap();
-
-        // Extract 3 shards.
+        let stats = index_stats(&source_path).await.unwrap();
         let chunk_size = stats.total_chunks / 3;
         let mut shard_paths = Vec::new();
         let mut start = stats.min_chunk_id;
@@ -326,26 +352,26 @@ mod tests {
             } else {
                 start + chunk_size
             };
-            let shard_path = dir.path().join(format!("shard{i}.db"));
+            let shard_path = dir.path().join(format!("shard{i}"));
             extract_shard(
                 &source_path,
                 ChunkRange::new(start, end),
                 &shard_path,
             )
+            .await
             .unwrap();
             shard_paths.push(shard_path);
             start = end;
         }
 
-        // Merge back.
-        let merged_path = dir.path().join("merged.db");
-        let merged_info = merge_shards(&shard_paths, &merged_path).unwrap();
-
+        let merged_path = dir.path().join("merged");
+        let merged_info = merge_shards(&shard_paths, &merged_path).await.unwrap();
         assert_eq!(merged_info.chunk_count, 20);
 
         // Search should work on merged index.
-        let merged = CorpusIndex::open(&merged_path).unwrap();
-        let results = merged.search(&[], "chunk", 5).unwrap();
+        let merged = CorpusIndex::open(&merged_path).await.unwrap();
+        let emb = make_test_embedding(5.0);
+        let results = merged.search(&emb, "", 5).await.unwrap();
         assert!(!results.is_empty());
     }
 }

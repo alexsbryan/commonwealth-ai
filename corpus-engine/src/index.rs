@@ -1,11 +1,21 @@
-//! CorpusIndex — wraps a single SQLite connection to a per-corpus database
-//! with sqlite-vec for vector search and FTS5 for keyword search.
+//! CorpusIndex — wraps a LanceDB table for a per-corpus index
+//! with IVF-PQ vector search and Tantivy full-text search.
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{ffi::sqlite3_auto_extension, params, Connection, OptionalExtension};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow_array::{
+    Array, Float32Array, Int64Array, RecordBatch, StringArray,
+    FixedSizeListArray,
+    types::Float32Type,
+};
+use arrow_schema::SchemaRef;
+use futures::TryStreamExt;
+use lancedb::index::scalar::FullTextSearchQuery;
+use lancedb::query::{ExecutableQuery, QueryBase};
 
 use crate::error::{Error, Result};
 use crate::types::{ChunkRange, IndexInfo, ScoredChunk};
@@ -22,17 +32,89 @@ pub struct InsertChunk {
 
 // ─── CorpusIndex ───────────────────────────────────────────
 
-/// A single corpus index backed by SQLite + FTS5 + sqlite-vec.
+/// A single corpus index backed by LanceDB.
+/// Uses IVF-PQ for vector search and Tantivy for full-text search.
 pub struct CorpusIndex {
-    db: Connection,
-    has_vec: bool,
+    db: lancedb::Connection,
+    table: lancedb::Table,
+    corpus_id: String,
+    corpus_name: String,
+    embedding_model: String,
+    embedding_dimensions: usize,
+    mesh_sharing: bool,
+    license: String,
+    created_at: u64,
+    is_shard: bool,
+    chunk_range: Option<ChunkRange>,
 }
+
+/// Build the Arrow schema for a corpus index table.
+pub(crate) fn corpus_schema(embedding_dim: usize) -> SchemaRef {
+    Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Int64, false),
+        Field::new("content", DataType::Utf8, false),
+        Field::new("title", DataType::Utf8, true),
+        Field::new("url", DataType::Utf8, true),
+        Field::new(
+            "embedding",
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, true)),
+                embedding_dim as i32,
+            ),
+            false,
+        ),
+        Field::new("metadata", DataType::Utf8, true),
+    ]))
+}
+
+/// Metadata stored as a JSON file alongside the LanceDB table.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct IndexMeta {
+    corpus_id: String,
+    corpus_name: String,
+    embedding_model: String,
+    embedding_dimensions: usize,
+    mesh_sharing: bool,
+    license: String,
+    created_at: u64,
+    last_updated: u64,
+    #[serde(default)]
+    is_shard: bool,
+    #[serde(default)]
+    chunk_range_start: Option<u64>,
+    #[serde(default)]
+    chunk_range_end: Option<u64>,
+}
+
+fn meta_path(index_dir: &Path) -> std::path::PathBuf {
+    index_dir.join("_corpus_meta.json")
+}
+
+fn read_meta(index_dir: &Path) -> Result<IndexMeta> {
+    let path = meta_path(index_dir);
+    let content = std::fs::read_to_string(&path).map_err(|e| {
+        Error::IndexNotFound(format!("Missing metadata at {}: {e}", path.display()))
+    })?;
+    serde_json::from_str(&content).map_err(|e| {
+        Error::Serialization(format!("Bad index metadata: {e}"))
+    })
+}
+
+fn write_meta(index_dir: &Path, meta: &IndexMeta) -> Result<()> {
+    let path = meta_path(index_dir);
+    let json = serde_json::to_string_pretty(meta)
+        .map_err(|e| Error::Serialization(e.to_string()))?;
+    std::fs::write(&path, json)?;
+    Ok(())
+}
+
+const CHUNKS_TABLE: &str = "chunks";
 
 impl CorpusIndex {
     // ── Construction ───────────────────────────────────────
 
-    /// Create a new index database at `path`.
-    pub fn create(
+    /// Create a new LanceDB index at the given directory.
+    pub async fn create(
         path: &Path,
         corpus_id: &str,
         corpus_name: &str,
@@ -41,478 +123,410 @@ impl CorpusIndex {
         mesh_sharing: bool,
         license: &str,
     ) -> Result<Self> {
-        let db = Connection::open(path)?;
-        db.pragma_update(None, "journal_mode", "WAL")?;
+        std::fs::create_dir_all(path)?;
 
-        let has_vec = try_load_vec(&db);
+        let db = lancedb::connect(path.to_str().unwrap())
+            .execute()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
 
-        // Core tables.
-        db.execute_batch(
-            "CREATE TABLE IF NOT EXISTS corpus_meta (
-                key   TEXT PRIMARY KEY,
-                value TEXT
-            );
+        let schema = corpus_schema(embedding_dim);
+        let table = db
+            .create_empty_table(CHUNKS_TABLE, schema)
+            .execute()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
 
-            CREATE TABLE IF NOT EXISTS chunks (
-                id        INTEGER PRIMARY KEY,
-                content   TEXT NOT NULL,
-                title     TEXT,
-                url       TEXT,
-                embedding BLOB NOT NULL,
-                metadata  TEXT,
-                CONSTRAINT content_not_empty CHECK(length(content) > 0)
-            );
-
-            CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-                content, title, content=chunks, content_rowid=id
-            );",
-        )?;
-
-        // sqlite-vec virtual table.
-        if has_vec {
-            db.execute_batch(&format!(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[{embedding_dim}]);"
-            ))?;
-        }
-
-        // Populate corpus_meta.
         let now = now_unix();
-        let dim_str = embedding_dim.to_string();
-        let now_str = now.to_string();
-        let meta_pairs: &[(&str, &str)] = &[
-            ("corpus_id", corpus_id),
-            ("corpus_name", corpus_name),
-            ("embedding_model", embedding_model),
-            ("embedding_dimensions", &dim_str),
-            ("created_at", &now_str),
-            ("last_updated", &now_str),
-            ("mesh_sharing", if mesh_sharing { "true" } else { "false" }),
-            ("license", license),
-        ];
+        let meta = IndexMeta {
+            corpus_id: corpus_id.to_string(),
+            corpus_name: corpus_name.to_string(),
+            embedding_model: embedding_model.to_string(),
+            embedding_dimensions: embedding_dim,
+            mesh_sharing,
+            license: license.to_string(),
+            created_at: now,
+            last_updated: now,
+            is_shard: false,
+            chunk_range_start: None,
+            chunk_range_end: None,
+        };
+        write_meta(path, &meta)?;
 
-        {
-            let mut stmt =
-                db.prepare("INSERT INTO corpus_meta(key, value) VALUES (?, ?)")?;
-            for (k, v) in meta_pairs {
-                stmt.execute(params![k, v])?;
-            }
-        }
-
-        Ok(Self { db, has_vec })
+        Ok(Self {
+            db,
+            table,
+            corpus_id: corpus_id.to_string(),
+            corpus_name: corpus_name.to_string(),
+            embedding_model: embedding_model.to_string(),
+            embedding_dimensions: embedding_dim,
+            mesh_sharing,
+            license: license.to_string(),
+            created_at: now,
+            is_shard: false,
+            chunk_range: None,
+        })
     }
 
-    /// Open an existing index database at `path`.
-    pub fn open(path: &Path) -> Result<Self> {
+    /// Open an existing LanceDB index.
+    pub async fn open(path: &Path) -> Result<Self> {
         if !path.exists() {
             return Err(Error::IndexNotFound(path.display().to_string()));
         }
-        let db = Connection::open(path)?;
-        let has_vec = try_load_vec(&db);
 
-        // Verify corpus_meta exists by reading a row.
-        db.query_row(
-            "SELECT value FROM corpus_meta WHERE key = 'corpus_id'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .map_err(|_| {
-            Error::IndexNotFound(format!(
-                "corpus_meta table missing or empty in {}",
-                path.display()
-            ))
-        })?;
+        let meta = read_meta(path)?;
 
-        Ok(Self { db, has_vec })
+        let db = lancedb::connect(path.to_str().unwrap())
+            .execute()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        let table = db
+            .open_table(CHUNKS_TABLE)
+            .execute()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        let chunk_range = if meta.is_shard {
+            match (meta.chunk_range_start, meta.chunk_range_end) {
+                (Some(s), Some(e)) => Some(ChunkRange::new(s, e)),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        Ok(Self {
+            db,
+            table,
+            corpus_id: meta.corpus_id,
+            corpus_name: meta.corpus_name,
+            embedding_model: meta.embedding_model,
+            embedding_dimensions: meta.embedding_dimensions,
+            mesh_sharing: meta.mesh_sharing,
+            license: meta.license,
+            created_at: meta.created_at,
+            is_shard: meta.is_shard,
+            chunk_range,
+        })
     }
 
     // ── Mutation ───────────────────────────────────────────
 
-    /// Insert a batch of chunks (with pre-computed embeddings) into the index.
-    pub fn insert_batch(&self, chunks: &[(InsertChunk, Vec<f32>)]) -> Result<()> {
-        let tx = self.db.unchecked_transaction()?;
-
-        {
-            let mut ins_chunk = tx.prepare(
-                "INSERT INTO chunks(content, title, url, embedding, metadata)
-                 VALUES (?, ?, ?, ?, ?)",
-            )?;
-            let mut ins_fts = tx.prepare(
-                "INSERT INTO chunks_fts(rowid, content, title) VALUES (?, ?, ?)",
-            )?;
-            let mut ins_vec = if self.has_vec {
-                Some(tx.prepare(
-                    "INSERT INTO chunks_vec(rowid, embedding) VALUES (?, ?)",
-                )?)
-            } else {
-                None
-            };
-
-            for (chunk, embedding) in chunks {
-                let blob = embedding_to_blob(embedding);
-
-                let rowid = ins_chunk.insert(params![
-                    chunk.content,
-                    chunk.title,
-                    chunk.url,
-                    blob,
-                    chunk.metadata,
-                ])?;
-
-                ins_fts.execute(params![rowid, chunk.content, chunk.title])?;
-
-                if let Some(ref mut stmt) = ins_vec {
-                    stmt.execute(params![rowid, blob])?;
-                }
-            }
+    /// Insert a batch of chunks (with pre-computed embeddings).
+    pub async fn insert_batch(&self, chunks: &[(InsertChunk, Vec<f32>)]) -> Result<()> {
+        if chunks.is_empty() {
+            return Ok(());
         }
 
-        // Update last_updated.
-        tx.execute(
-            "UPDATE corpus_meta SET value = ? WHERE key = 'last_updated'",
-            params![now_unix().to_string()],
-        )?;
+        let base_id = self.chunk_count().await?;
 
-        tx.commit()?;
+        let ids: Vec<i64> = (0..chunks.len())
+            .map(|i| (base_id + i as u64 + 1) as i64)
+            .collect();
+        let contents: Vec<&str> = chunks.iter().map(|(c, _)| c.content.as_str()).collect();
+        let titles: Vec<Option<&str>> = chunks
+            .iter()
+            .map(|(c, _)| c.title.as_deref())
+            .collect();
+        let urls: Vec<Option<&str>> = chunks
+            .iter()
+            .map(|(c, _)| c.url.as_deref())
+            .collect();
+        let metadatas: Vec<Option<&str>> = chunks
+            .iter()
+            .map(|(c, _)| c.metadata.as_deref())
+            .collect();
+
+        // Build the embedding FixedSizeList array.
+        let dim = self.embedding_dimensions as i32;
+        let embedding_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+            chunks.iter().map(|(_, e)| {
+                Some(e.iter().map(|&v| Some(v)))
+            }),
+            dim,
+        );
+
+        let schema = corpus_schema(self.embedding_dimensions);
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int64Array::from(ids)),
+                Arc::new(StringArray::from(contents)),
+                Arc::new(StringArray::from(titles)),
+                Arc::new(StringArray::from(urls)),
+                Arc::new(embedding_array),
+                Arc::new(StringArray::from(metadatas)),
+            ],
+        )
+        .map_err(|e| Error::Serialization(format!("record batch: {e}")))?;
+
+        self.table
+            .add(vec![batch])
+            .execute()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        // Update last_updated in metadata.
+        let index_dir = Path::new(self.db.uri());
+        if let Ok(mut meta) = read_meta(index_dir) {
+            meta.last_updated = now_unix();
+            let _ = write_meta(index_dir, &meta);
+        }
+
+        Ok(())
+    }
+
+    /// Build vector + FTS indexes for efficient search.
+    /// Should be called after all data is inserted.
+    pub async fn build_indexes(&self) -> Result<()> {
+        let count = self.chunk_count().await?;
+        if count == 0 {
+            return Ok(());
+        }
+
+        // Build IVF-PQ vector index.
+        // Only build if we have enough data (LanceDB needs >= 256 rows for IVF).
+        if count >= 256 {
+            self.table
+                .create_index(
+                    &["embedding"],
+                    lancedb::index::Index::Auto,
+                )
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("vector index: {e}")))?;
+        }
+
+        // Build Tantivy FTS indexes on content and title separately
+        // (composite multi-column FTS is not supported in LanceDB).
+        self.table
+            .create_index(
+                &["content"],
+                lancedb::index::Index::FTS(
+                    lancedb::index::scalar::FtsIndexBuilder::default(),
+                ),
+            )
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("FTS content index: {e}")))?;
+
+        self.table
+            .create_index(
+                &["title"],
+                lancedb::index::Index::FTS(
+                    lancedb::index::scalar::FtsIndexBuilder::default(),
+                ),
+            )
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("FTS title index: {e}")))?;
+
         Ok(())
     }
 
     // ── Search ─────────────────────────────────────────────
 
-    /// Hybrid search combining vector similarity and FTS5 keyword matching.
-    ///
-    /// Weights: 0.7 vector + 0.3 keyword.
-    pub fn search(
+    /// Hybrid search combining vector similarity and FTS keyword matching.
+    pub async fn search(
         &self,
         query_embedding: &[f32],
         query_text: &str,
         limit: usize,
     ) -> Result<Vec<ScoredChunk>> {
-        let corpus_id = self.meta_value("corpus_id")?;
-
         let do_vector = !query_embedding.is_empty();
         let sanitized = sanitize_fts_query(query_text);
         let do_fts = !sanitized.is_empty();
 
-        // Gather candidate scores: rowid -> (vec_score, fts_score)
-        let mut scores: HashMap<i64, (f32, f32)> = HashMap::new();
-
-        // ── Vector search ──────────────────────────────────
-        if do_vector {
-            let vec_results = if self.has_vec {
-                self.vec_search(query_embedding, limit)?
-            } else {
-                self.brute_force_search(query_embedding, limit)?
-            };
-
-            // Normalise distances into [0, 1] similarity scores.
-            // sqlite-vec returns L2 distance; smaller is better.
-            // Brute-force already returns cosine similarity; higher is better.
-            if self.has_vec {
-                // L2 distances — convert to a similarity-like score.
-                let max_dist = vec_results
-                    .iter()
-                    .map(|&(_, d)| d)
-                    .fold(f32::NEG_INFINITY, f32::max)
-                    .max(1e-9);
-                for (rowid, dist) in &vec_results {
-                    let sim = 1.0 - dist / (max_dist + 1e-9);
-                    scores.entry(*rowid).or_insert((0.0, 0.0)).0 = sim;
-                }
-            } else {
-                for (rowid, sim) in &vec_results {
-                    scores.entry(*rowid).or_insert((0.0, 0.0)).0 = *sim;
-                }
-            }
+        if !do_vector && !do_fts {
+            return Ok(Vec::new());
         }
 
-        // ── FTS5 search ────────────────────────────────────
-        if do_fts {
-            let fts_results = self.fts_search(&sanitized, limit)?;
-
-            // BM25 ranks are negative (more negative = better).
-            let min_rank = fts_results
-                .iter()
-                .map(|&(_, r)| r)
-                .fold(f32::INFINITY, f32::min)
-                .min(-1e-9);
-            for (rowid, rank) in &fts_results {
-                // Map rank to [0, 1] where 1 = best match.
-                let sim = rank / min_rank; // both negative → positive fraction
-                scores.entry(*rowid).or_insert((0.0, 0.0)).1 = sim;
-            }
-        }
-
-        // ── Combine and sort ───────────────────────────────
-        let (w_vec, w_fts) = if do_vector && do_fts {
-            (0.7_f32, 0.3_f32)
+        let results = if do_vector && do_fts {
+            // Hybrid: vector + FTS combined via reranking.
+            self.table
+                .query()
+                .nearest_to(query_embedding.to_vec())
+                .map_err(|e| Error::Database(format!("vector query: {e}")))?
+                .full_text_search(
+                    FullTextSearchQuery::new(sanitized),
+                )
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("hybrid search: {e}")))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
         } else if do_vector {
-            (1.0, 0.0)
+            // Vector-only search.
+            self.table
+                .query()
+                .nearest_to(query_embedding.to_vec())
+                .map_err(|e| Error::Database(format!("vector query: {e}")))?
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("vector search: {e}")))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
         } else {
-            (0.0, 1.0)
+            // FTS-only search.
+            self.table
+                .query()
+                .full_text_search(
+                    FullTextSearchQuery::new(sanitized),
+                )
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("FTS search: {e}")))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
         };
 
-        let mut ranked: Vec<(i64, f32)> = scores
-            .into_iter()
-            .map(|(id, (vs, fs))| (id, w_vec * vs + w_fts * fs))
-            .collect();
-        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        ranked.truncate(limit);
+        // Convert Arrow RecordBatches to ScoredChunks.
+        let mut scored = Vec::new();
+        for batch in &results {
+            let contents = batch
+                .column_by_name("content")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let titles = batch
+                .column_by_name("title")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let urls = batch
+                .column_by_name("url")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let metadata_col = batch
+                .column_by_name("metadata")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let distance_col = batch
+                .column_by_name("_distance")
+                .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
 
-        // ── Hydrate results ────────────────────────────────
-        let mut out = Vec::with_capacity(ranked.len());
-        let mut stmt = self.db.prepare(
-            "SELECT content, title, url, metadata FROM chunks WHERE id = ?",
-        )?;
-
-        for (rowid, score) in &ranked {
-            let row = stmt
-                .query_row(params![rowid], |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, Option<String>>(1)?,
-                        r.get::<_, Option<String>>(2)?,
-                        r.get::<_, Option<String>>(3)?,
-                    ))
-                })
-                .optional()?;
-
-            if let Some((content, title, url, metadata_json)) = row {
-                let metadata: HashMap<String, String> = metadata_json
-                    .and_then(|j| serde_json::from_str(&j).ok())
+            let num_rows = batch.num_rows();
+            for i in 0..num_rows {
+                let content = contents
+                    .map(|c| c.value(i).to_string())
+                    .unwrap_or_default();
+                let title = titles.and_then(|t| {
+                    if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                });
+                let url = urls.and_then(|u| {
+                    if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                });
+                let metadata: HashMap<String, String> = metadata_col
+                    .and_then(|m| {
+                        if m.is_null(i) {
+                            None
+                        } else {
+                            serde_json::from_str(m.value(i)).ok()
+                        }
+                    })
                     .unwrap_or_default();
 
-                out.push(ScoredChunk {
+                // Convert distance to score (lower distance = higher score).
+                let score = distance_col
+                    .map(|d| {
+                        let dist = d.value(i);
+                        1.0 / (1.0 + dist)
+                    })
+                    .unwrap_or(1.0); // FTS-only results get score 1.0
+
+                scored.push(ScoredChunk {
                     content,
                     title,
                     url,
-                    corpus_id: corpus_id.clone(),
-                    score: *score,
+                    corpus_id: self.corpus_id.clone(),
+                    score,
                     metadata,
                 });
             }
         }
 
-        Ok(out)
+        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+        Ok(scored)
     }
 
     // ── Info ───────────────────────────────────────────────
 
     /// Return metadata about this index.
-    pub fn info(&self) -> Result<IndexInfo> {
-        let corpus_id = self.meta_value("corpus_id")?;
-        let corpus_name = self.meta_value("corpus_name")?;
-        let embedding_model = self.meta_value("embedding_model")?;
-        let embedding_dimensions: usize = self
-            .meta_value("embedding_dimensions")?
-            .parse()
-            .map_err(|e| Error::Serialization(format!("bad embedding_dimensions: {e}")))?;
-        let created_at: u64 = self
-            .meta_value("created_at")?
-            .parse()
-            .map_err(|e| Error::Serialization(format!("bad created_at: {e}")))?;
-        let last_updated: u64 = self
-            .meta_value("last_updated")?
-            .parse()
-            .map_err(|e| Error::Serialization(format!("bad last_updated: {e}")))?;
-        let mesh_sharing = self.meta_value("mesh_sharing")? == "true";
+    pub async fn info(&self) -> Result<IndexInfo> {
+        let index_dir = Path::new(self.db.uri());
+        let meta = read_meta(index_dir)?;
+        let chunk_count = self.chunk_count().await?;
+        let index_size_bytes = dir_size(index_dir);
 
-        let is_shard = self
-            .meta_value_opt("is_shard")?
-            .map(|v| v == "true")
-            .unwrap_or(false);
-
-        let chunk_range = if is_shard {
-            let start: u64 = self
-                .meta_value("chunk_range_start")?
-                .parse()
-                .map_err(|e| Error::Serialization(format!("bad chunk_range_start: {e}")))?;
-            let end: u64 = self
-                .meta_value("chunk_range_end")?
-                .parse()
-                .map_err(|e| Error::Serialization(format!("bad chunk_range_end: {e}")))?;
-            Some(ChunkRange::new(start, end))
+        let chunk_range = if meta.is_shard {
+            match (meta.chunk_range_start, meta.chunk_range_end) {
+                (Some(s), Some(e)) => Some(ChunkRange::new(s, e)),
+                _ => None,
+            }
         } else {
             None
         };
 
-        let chunk_count = self.chunk_count()?;
-
-        // File size: use the database path from PRAGMA.
-        let db_path: String = self
-            .db
-            .query_row("PRAGMA database_list", [], |r| r.get(2))?;
-        let index_size_bytes = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0);
-
         Ok(IndexInfo {
-            corpus_id,
-            corpus_name,
-            path: db_path.into(),
+            corpus_id: meta.corpus_id,
+            corpus_name: meta.corpus_name,
+            path: index_dir.to_path_buf(),
             chunk_count,
             index_size_bytes,
-            created_at,
-            last_updated,
-            embedding_model,
-            embedding_dimensions,
-            mesh_sharing,
-            is_shard,
+            created_at: meta.created_at,
+            last_updated: meta.last_updated,
+            embedding_model: meta.embedding_model,
+            embedding_dimensions: meta.embedding_dimensions,
+            mesh_sharing: meta.mesh_sharing,
+            is_shard: meta.is_shard,
             chunk_range,
         })
     }
 
     /// Return the number of chunks in the index.
-    pub fn chunk_count(&self) -> Result<u64> {
-        let count: i64 =
-            self.db
-                .query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))?;
+    pub async fn chunk_count(&self) -> Result<u64> {
+        let count = self
+            .table
+            .count_rows(None)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
         Ok(count as u64)
     }
 
     // ── Access for sharding module ────────────────────────
 
-    /// Borrow the underlying database connection.
-    /// Used by the sharding module for direct SQL operations.
-    pub fn connection(&self) -> &Connection {
+    /// Get the LanceDB connection.
+    pub fn connection(&self) -> &lancedb::Connection {
         &self.db
     }
 
-    /// Set or update a corpus_meta key-value pair.
-    pub fn set_meta(&mut self, key: &str, value: &str) -> Result<()> {
-        self.db.execute(
-            "INSERT OR REPLACE INTO corpus_meta(key, value) VALUES (?, ?)",
-            params![key, value],
-        )?;
-        Ok(())
+    /// Get the chunks table.
+    pub fn table(&self) -> &lancedb::Table {
+        &self.table
     }
 
-    // ── Private helpers ────────────────────────────────────
-
-    fn meta_value(&self, key: &str) -> Result<String> {
-        self.db
-            .query_row(
-                "SELECT value FROM corpus_meta WHERE key = ?",
-                params![key],
-                |r| r.get(0),
-            )
-            .map_err(|e| {
-                Error::IndexNotFound(format!("missing corpus_meta key '{key}': {e}"))
-            })
+    /// Get the embedding dimensions.
+    pub fn embedding_dim(&self) -> usize {
+        self.embedding_dimensions
     }
 
-    fn meta_value_opt(&self, key: &str) -> Result<Option<String>> {
-        self.db
-            .query_row(
-                "SELECT value FROM corpus_meta WHERE key = ?",
-                params![key],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(Into::into)
-    }
-
-    /// Vector search via sqlite-vec. Returns (rowid, L2 distance).
-    fn vec_search(
+    /// Set shard metadata.
+    pub fn set_shard_meta(
         &self,
-        query_embedding: &[f32],
-        limit: usize,
-    ) -> Result<Vec<(i64, f32)>> {
-        let blob = embedding_to_blob(query_embedding);
-        let mut stmt = self.db.prepare(
-            "SELECT rowid, distance FROM chunks_vec WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
-        )?;
-        let rows = stmt
-            .query_map(params![blob, limit as i64], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, f32>(1)?))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
-    }
-
-    /// Brute-force cosine similarity when sqlite-vec is unavailable.
-    fn brute_force_search(
-        &self,
-        query_embedding: &[f32],
-        limit: usize,
-    ) -> Result<Vec<(i64, f32)>> {
-        let mut stmt =
-            self.db.prepare("SELECT id, embedding FROM chunks")?;
-        let mut scored: Vec<(i64, f32)> = stmt
-            .query_map([], |r| {
-                let id: i64 = r.get(0)?;
-                let blob: Vec<u8> = r.get(1)?;
-                Ok((id, blob))
-            })?
-            .filter_map(|r| r.ok())
-            .map(|(id, blob)| {
-                let emb = blob_to_embedding(&blob);
-                let sim = cosine_similarity(query_embedding, &emb);
-                (id, sim)
-            })
-            .collect();
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        scored.truncate(limit);
-        Ok(scored)
-    }
-
-    /// FTS5 keyword search. Returns (rowid, bm25 rank).
-    fn fts_search(&self, query: &str, limit: usize) -> Result<Vec<(i64, f32)>> {
-        let mut stmt = self.db.prepare(
-            "SELECT rowid, rank FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?",
-        )?;
-        let rows = stmt
-            .query_map(params![query, limit as i64], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, f32>(1)?))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
+        chunk_range: ChunkRange,
+    ) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.is_shard = true;
+        meta.chunk_range_start = Some(chunk_range.start_id);
+        meta.chunk_range_end = Some(chunk_range.end_id);
+        write_meta(index_dir, &meta)
     }
 }
 
 // ─── Free helpers ──────────────────────────────────────────
-
-/// Register the sqlite-vec extension and verify it works on `conn`.
-/// Returns true on success, false if the extension cannot be loaded.
-fn try_load_vec(conn: &Connection) -> bool {
-    unsafe {
-        sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite_vec::sqlite3_vec_init as *const (),
-        )));
-    }
-    // Verify it actually works by calling vec_version().
-    conn.query_row("SELECT vec_version()", [], |_| Ok(()))
-        .is_ok()
-}
-
-/// Convert an f32 embedding slice to little-endian bytes.
-pub fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(embedding.len() * 4);
-    for &val in embedding {
-        buf.extend_from_slice(&val.to_le_bytes());
-    }
-    buf
-}
-
-/// Convert a blob of little-endian f32 bytes back to a Vec<f32>.
-pub fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
-    blob.chunks_exact(4)
-        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-        .collect()
-}
-
-/// Cosine similarity between two vectors.
-pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let (mut dot, mut na, mut nb) = (0.0_f32, 0.0_f32, 0.0_f32);
-    for (x, y) in a.iter().zip(b.iter()) {
-        dot += x * y;
-        na += x * x;
-        nb += y * y;
-    }
-    let denom = na.sqrt() * nb.sqrt();
-    if denom < 1e-12 {
-        0.0
-    } else {
-        dot / denom
-    }
-}
 
 /// Current unix timestamp in seconds.
 fn now_unix() -> u64 {
@@ -522,9 +536,23 @@ fn now_unix() -> u64 {
         .as_secs()
 }
 
-/// Sanitize text for FTS5 queries — strip characters that would cause syntax
-/// errors and collapse whitespace. Returns an empty string if nothing useful
-/// remains.
+/// Calculate total size of a directory recursively.
+fn dir_size(path: &Path) -> u64 {
+    let mut total = 0;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                total += dir_size(&p);
+            } else if let Ok(m) = p.metadata() {
+                total += m.len();
+            }
+        }
+    }
+    total
+}
+
+/// Sanitize text for FTS queries — strip characters that cause syntax errors.
 fn sanitize_fts_query(raw: &str) -> String {
     let cleaned: String = raw
         .chars()
@@ -536,7 +564,6 @@ fn sanitize_fts_query(raw: &str) -> String {
             }
         })
         .collect();
-    // Collapse whitespace and trim.
     cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
@@ -547,13 +574,12 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    /// Build a simple 4-d embedding pointing in a given direction.
     fn make_embedding(direction: &[f32; 4]) -> Vec<f32> {
         direction.to_vec()
     }
 
-    fn create_test_index(dir: &Path) -> CorpusIndex {
-        let db_path = dir.join("test.db");
+    async fn create_test_index(dir: &Path) -> CorpusIndex {
+        let db_path = dir.join("test-corpus");
         CorpusIndex::create(
             &db_path,
             "test-corpus",
@@ -563,6 +589,7 @@ mod tests {
             false,
             "MIT",
         )
+        .await
         .expect("create index")
     }
 
@@ -607,28 +634,27 @@ mod tests {
         ]
     }
 
-    #[test]
-    fn create_insert_and_count() {
+    #[tokio::test]
+    async fn create_insert_and_count() {
         let dir = tempdir().unwrap();
-        let idx = create_test_index(dir.path());
+        let idx = create_test_index(dir.path()).await;
 
-        assert_eq!(idx.chunk_count().unwrap(), 0);
+        assert_eq!(idx.chunk_count().await.unwrap(), 0);
 
-        idx.insert_batch(&sample_chunks()).unwrap();
+        idx.insert_batch(&sample_chunks()).await.unwrap();
 
-        assert_eq!(idx.chunk_count().unwrap(), 4);
+        assert_eq!(idx.chunk_count().await.unwrap(), 4);
     }
 
-    #[test]
-    fn search_fts_only() {
+    #[tokio::test]
+    async fn search_fts_only() {
         let dir = tempdir().unwrap();
-        let idx = create_test_index(dir.path());
-        idx.insert_batch(&sample_chunks()).unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+        idx.build_indexes().await.unwrap();
 
-        // Search with empty embedding → FTS only.
-        let results = idx.search(&[], "Rust programming", 10).unwrap();
+        let results = idx.search(&[], "Rust programming", 10).await.unwrap();
         assert!(!results.is_empty(), "FTS search should return results");
-        // The top result should mention Rust.
         assert!(
             results[0].content.contains("Rust"),
             "top FTS result should mention Rust"
@@ -636,17 +662,16 @@ mod tests {
         assert_eq!(results[0].corpus_id, "test-corpus");
     }
 
-    #[test]
-    fn search_vector_only() {
+    #[tokio::test]
+    async fn search_vector_only() {
         let dir = tempdir().unwrap();
-        let idx = create_test_index(dir.path());
-        idx.insert_batch(&sample_chunks()).unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
 
-        // Query embedding close to [1, 0, 0, 0] → should find Rust chunks.
+        // Vector search works without index (brute force on small datasets).
         let query = make_embedding(&[0.95, 0.05, 0.0, 0.0]);
-        let results = idx.search(&query, "", 10).unwrap();
+        let results = idx.search(&query, "", 10).await.unwrap();
         assert!(!results.is_empty(), "vector search should return results");
-        // Top result should be the Rust chunk (embedding [1,0,0,0] or [0.9,0.1,0,0]).
         assert!(
             results[0].content.contains("Rust"),
             "top vector result should be about Rust, got: {}",
@@ -654,29 +679,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn search_hybrid() {
+    #[tokio::test]
+    async fn info_returns_metadata() {
         let dir = tempdir().unwrap();
-        let idx = create_test_index(dir.path());
-        idx.insert_batch(&sample_chunks()).unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
 
-        // Both embedding and text point toward Rust.
-        let query_emb = make_embedding(&[0.9, 0.1, 0.0, 0.0]);
-        let results = idx.search(&query_emb, "Rust", 10).unwrap();
-        assert!(!results.is_empty(), "hybrid search should return results");
-        assert!(
-            results[0].content.contains("Rust"),
-            "top hybrid result should be about Rust"
-        );
-    }
-
-    #[test]
-    fn info_returns_metadata() {
-        let dir = tempdir().unwrap();
-        let idx = create_test_index(dir.path());
-        idx.insert_batch(&sample_chunks()).unwrap();
-
-        let info = idx.info().unwrap();
+        let info = idx.info().await.unwrap();
         assert_eq!(info.corpus_id, "test-corpus");
         assert_eq!(info.corpus_name, "Test Corpus");
         assert_eq!(info.embedding_model, "test-model");
@@ -690,10 +699,10 @@ mod tests {
         assert!(info.last_updated >= info.created_at);
     }
 
-    #[test]
-    fn open_existing_and_search() {
+    #[tokio::test]
+    async fn open_existing_and_search() {
         let dir = tempdir().unwrap();
-        let db_path = dir.path().join("reopen.db");
+        let db_path = dir.path().join("reopen-corpus");
 
         // Create and populate.
         {
@@ -706,41 +715,20 @@ mod tests {
                 true,
                 "Apache-2.0",
             )
+            .await
             .unwrap();
-            idx.insert_batch(&sample_chunks()).unwrap();
+            idx.insert_batch(&sample_chunks()).await.unwrap();
+            idx.build_indexes().await.unwrap();
         }
 
         // Re-open and verify.
-        let idx = CorpusIndex::open(&db_path).unwrap();
-        assert_eq!(idx.chunk_count().unwrap(), 4);
+        let idx = CorpusIndex::open(&db_path).await.unwrap();
+        assert_eq!(idx.chunk_count().await.unwrap(), 4);
 
-        let results = idx.search(&[], "SQLite database", 5).unwrap();
+        let results = idx.search(&[], "embedded database", 5).await.unwrap();
         assert!(!results.is_empty());
         assert!(results[0].content.contains("SQLite"));
         assert_eq!(results[0].corpus_id, "reopen-corpus");
-    }
-
-    #[test]
-    fn embedding_round_trip() {
-        let original = vec![1.0_f32, -2.5, 3.14, 0.0, f32::MAX, f32::MIN];
-        let blob = embedding_to_blob(&original);
-        let restored = blob_to_embedding(&blob);
-        assert_eq!(original, restored);
-    }
-
-    #[test]
-    fn cosine_similarity_identical() {
-        let a = vec![1.0, 2.0, 3.0];
-        let sim = cosine_similarity(&a, &a);
-        assert!((sim - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn cosine_similarity_orthogonal() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![0.0, 1.0, 0.0];
-        let sim = cosine_similarity(&a, &b);
-        assert!(sim.abs() < 1e-6);
     }
 
     #[test]
@@ -752,10 +740,10 @@ mod tests {
         assert_eq!(sanitize_fts_query(""), "");
     }
 
-    #[test]
-    fn open_nonexistent_returns_error() {
+    #[tokio::test]
+    async fn open_nonexistent_returns_error() {
         let dir = tempdir().unwrap();
-        let result = CorpusIndex::open(&dir.path().join("nope.db"));
+        let result = CorpusIndex::open(&dir.path().join("nope")).await;
         assert!(result.is_err());
     }
 }

@@ -8,7 +8,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Database error: {0}")]
-    Database(#[from] rusqlite::Error),
+    Database(String),
 
     #[error("Serialization error: {0}")]
     Serialization(String),

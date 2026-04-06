@@ -110,11 +110,9 @@ impl CorpusEngine {
         let extractor = self.make_extractor(&recipe.extract);
         let doc_iter = extractor.extract(&source_path)?;
 
-        // Step 3: Chunk and embed.
+        // Step 3: Chunk, embed, and index.
         let chunker = self.make_chunker(&recipe.chunk);
-        let index_path = self
-            .index_dir
-            .join(format!("{}.db", recipe.corpus.id));
+        let index_path = self.index_dir.join(&recipe.corpus.id);
 
         let index = CorpusIndex::create(
             &index_path,
@@ -124,7 +122,8 @@ impl CorpusEngine {
             recipe.index.embedding_dimensions,
             recipe.corpus.mesh_sharing,
             &recipe.corpus.license,
-        )?;
+        )
+        .await?;
 
         let mut total_chunks = 0u64;
         let mut batch: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
@@ -141,7 +140,6 @@ impl CorpusEngine {
             let text_chunks = chunker.chunk(&doc.content);
 
             for tc in text_chunks {
-                // Build the content with title prefix if available.
                 let content = if let Some(ref title) = doc.title {
                     if !tc.content.starts_with(title.as_str()) {
                         format!("{title}\n\n{}", tc.content)
@@ -152,7 +150,6 @@ impl CorpusEngine {
                     tc.content
                 };
 
-                // Embed.
                 let embedding = (self.embed)(&content).await?;
 
                 batch.push((
@@ -160,23 +157,20 @@ impl CorpusEngine {
                         content,
                         title: doc.title.clone(),
                         url: doc.url.clone(),
-                        metadata: doc
-                            .metadata
-                            .as_ref()
-                            .map(|m| m.to_string()),
+                        metadata: doc.metadata.as_ref().map(|m| m.to_string()),
                     },
                     embedding,
                 ));
 
                 if batch.len() >= EMBED_BATCH_SIZE {
                     total_chunks += batch.len() as u64;
-                    index.insert_batch(&batch)?;
+                    index.insert_batch(&batch).await?;
                     batch.clear();
 
                     if let Some(ref cb) = progress {
                         cb(IngestProgress::Embedding {
                             chunks_embedded: total_chunks,
-                            total: 0, // unknown total
+                            total: 0,
                         });
                     }
                 }
@@ -186,13 +180,14 @@ impl CorpusEngine {
         // Flush remaining.
         if !batch.is_empty() {
             total_chunks += batch.len() as u64;
-            index.insert_batch(&batch)?;
+            index.insert_batch(&batch).await?;
         }
 
+        // Build search indexes (IVF-PQ + FTS).
+        index.build_indexes().await?;
+
         let duration_secs = start.elapsed().as_secs();
-        let index_size_bytes = std::fs::metadata(&index_path)
-            .map(|m| m.len())
-            .unwrap_or(0);
+        let info = index.info().await?;
 
         if let Some(ref cb) = progress {
             cb(IngestProgress::Complete {
@@ -204,15 +199,16 @@ impl CorpusEngine {
         Ok(IngestResult {
             corpus_id: recipe.corpus.id,
             chunks_created: total_chunks,
-            index_size_bytes,
+            index_size_bytes: info.index_size_bytes,
             duration_secs,
         })
     }
 
     // ── Index Management ────────────────────────────────
 
-    /// List all index files present in the index directory.
-    pub fn installed_indexes(&self) -> Result<Vec<IndexInfo>> {
+    /// List all indexes present in the index directory.
+    /// Each index is a subdirectory containing LanceDB data.
+    pub async fn installed_indexes(&self) -> Result<Vec<IndexInfo>> {
         let mut indexes = Vec::new();
         if !self.index_dir.is_dir() {
             return Ok(indexes);
@@ -221,36 +217,40 @@ impl CorpusEngine {
         for entry in std::fs::read_dir(&self.index_dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("db") {
-                // Skip internal directories.
-                let name = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
-                if name.starts_with('_') {
-                    continue;
-                }
-                match CorpusIndex::open(&path) {
-                    Ok(idx) => match idx.info() {
-                        Ok(info) => indexes.push(info),
-                        Err(e) => {
-                            eprintln!("Skipping {}: {e}", path.display());
-                        }
-                    },
+            if !path.is_dir() {
+                continue;
+            }
+            // Skip internal directories.
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            if name.starts_with('_') {
+                continue;
+            }
+            // Check for _corpus_meta.json to identify valid indexes.
+            if !path.join("_corpus_meta.json").exists() {
+                continue;
+            }
+            match CorpusIndex::open(&path).await {
+                Ok(idx) => match idx.info().await {
+                    Ok(info) => indexes.push(info),
                     Err(e) => {
                         eprintln!("Skipping {}: {e}", path.display());
                     }
+                },
+                Err(e) => {
+                    eprintln!("Skipping {}: {e}", path.display());
                 }
             }
         }
         Ok(indexes)
     }
 
-    /// Open an index file (complete or shard) for search.
-    /// Validates that the embedding model matches.
-    pub fn open_index(&self, path: &Path) -> Result<CorpusIndex> {
-        let index = CorpusIndex::open(path)?;
-        let info = index.info()?;
+    /// Open an index for search. Validates embedding model.
+    pub async fn open_index(&self, path: &Path) -> Result<CorpusIndex> {
+        let index = CorpusIndex::open(path).await?;
+        let info = index.info().await?;
 
         if info.embedding_model != self.expected_embedding_model {
             return Err(Error::IncompatibleEmbedding {
@@ -263,46 +263,41 @@ impl CorpusEngine {
         Ok(index)
     }
 
-    /// Remove an index file.
+    /// Remove an index directory.
     pub fn remove_index(&self, corpus_id: &str) -> Result<()> {
-        let path = self.index_dir.join(format!("{corpus_id}.db"));
-        if path.exists() {
-            std::fs::remove_file(&path)?;
+        let path = self.index_dir.join(corpus_id);
+        if path.exists() && path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
         }
-        // Also remove any WAL/SHM files.
-        let wal = self.index_dir.join(format!("{corpus_id}.db-wal"));
-        let shm = self.index_dir.join(format!("{corpus_id}.db-shm"));
-        let _ = std::fs::remove_file(wal);
-        let _ = std::fs::remove_file(shm);
         Ok(())
     }
 
     // ── Shard Operations ────────────────────────────────
 
     /// Report chunk ID range, count, and size for an index.
-    pub fn index_stats(&self, corpus_id: &str) -> Result<IndexStats> {
+    pub async fn index_stats(&self, corpus_id: &str) -> Result<IndexStats> {
         let path = self.find_index_path(corpus_id)?;
-        crate::sharding::index_stats(&path)
+        crate::sharding::index_stats(&path).await
     }
 
-    /// Extract a subset of an existing index into a new file.
-    pub fn extract_shard(
+    /// Extract a subset of an existing index into a new directory.
+    pub async fn extract_shard(
         &self,
         source_corpus_id: &str,
         chunk_range: ChunkRange,
         output_path: &Path,
     ) -> Result<ShardInfo> {
         let source_path = self.find_index_path(source_corpus_id)?;
-        crate::sharding::extract_shard(&source_path, chunk_range, output_path)
+        crate::sharding::extract_shard(&source_path, chunk_range, output_path).await
     }
 
-    /// Merge multiple shard files into a single index.
-    pub fn merge_shards(
+    /// Merge multiple shard directories into a single index.
+    pub async fn merge_shards(
         &self,
         shard_paths: &[PathBuf],
         output_path: &Path,
     ) -> Result<IndexInfo> {
-        crate::sharding::merge_shards(shard_paths, output_path)
+        crate::sharding::merge_shards(shard_paths, output_path).await
     }
 
     // ── Private helpers ────────────────────────────────
@@ -436,8 +431,8 @@ impl CorpusEngine {
     }
 
     fn find_index_path(&self, corpus_id: &str) -> Result<PathBuf> {
-        let path = self.index_dir.join(format!("{corpus_id}.db"));
-        if path.exists() {
+        let path = self.index_dir.join(corpus_id);
+        if path.exists() && path.is_dir() {
             return Ok(path);
         }
         Err(Error::IndexNotFound(format!(
@@ -471,26 +466,25 @@ mod tests {
         assert!(corpora.iter().any(|c| c.id == "wikipedia"));
     }
 
-    #[test]
-    fn installed_indexes_empty_dir() {
+    #[tokio::test]
+    async fn installed_indexes_empty_dir() {
         let dir = tempfile::tempdir().unwrap();
         let engine = CorpusEngine::new(
             dir.path().join("recipes"),
             dir.path().join("indexes"),
             mock_embed_fn(),
         );
-        let indexes = engine.installed_indexes().unwrap();
+        let indexes = engine.installed_indexes().await.unwrap();
         assert!(indexes.is_empty());
     }
 
-    #[test]
-    fn open_index_validates_embedding_model() {
+    #[tokio::test]
+    async fn open_index_validates_embedding_model() {
         let dir = tempfile::tempdir().unwrap();
         let idx_dir = dir.path().join("indexes");
         std::fs::create_dir_all(&idx_dir).unwrap();
 
-        // Create an index with a different embedding model.
-        let idx_path = idx_dir.join("test.db");
+        let idx_path = idx_dir.join("test");
         CorpusIndex::create(
             &idx_path,
             "test",
@@ -500,6 +494,7 @@ mod tests {
             true,
             "MIT",
         )
+        .await
         .unwrap();
 
         let engine = CorpusEngine::new(
@@ -508,18 +503,20 @@ mod tests {
             mock_embed_fn(),
         );
 
-        let result = engine.open_index(&idx_path);
+        let result = engine.open_index(&idx_path).await;
         assert!(matches!(result, Err(Error::IncompatibleEmbedding { .. })));
     }
 
-    #[test]
-    fn remove_index_works() {
+    #[tokio::test]
+    async fn remove_index_works() {
         let dir = tempfile::tempdir().unwrap();
         let idx_dir = dir.path().join("indexes");
         std::fs::create_dir_all(&idx_dir).unwrap();
 
-        let idx_path = idx_dir.join("test.db");
-        CorpusIndex::create(&idx_path, "test", "Test", "m", 8, true, "MIT").unwrap();
+        let idx_path = idx_dir.join("test");
+        CorpusIndex::create(&idx_path, "test", "Test", "m", 8, true, "MIT")
+            .await
+            .unwrap();
         assert!(idx_path.exists());
 
         let engine = CorpusEngine::new(

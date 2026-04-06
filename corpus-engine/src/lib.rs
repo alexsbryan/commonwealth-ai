@@ -5,7 +5,7 @@
 //! - Source data acquisition (download, crawl, local file)
 //! - Content extraction (XML, JSON, HTML, CSV, Parquet, plaintext)
 //! - Text chunking (paragraph, sentence, fixed, semantic)
-//! - SQLite indexing with sqlite-vec (vector search) and FTS5 (keyword search)
+//! - LanceDB indexing with IVF-PQ vector search and Tantivy full-text search
 //! - Shard operations (extract, merge, stats) for distributed indexes
 //!
 //! It has zero dependency on Sovereign or Commonwealth crates.

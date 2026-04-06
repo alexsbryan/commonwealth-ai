@@ -21,9 +21,13 @@ futures = "0.3"
 # HTTP
 reqwest = { version = "0.12", features = ["gzip", "brotli", "stream", "json"] }
 
-# Database
-rusqlite = { version = "0.35", features = ["bundled", "vtab"] }
-sqlite-vec = "0.1"
+# Vector database
+lancedb = "0.27"
+
+# Arrow (version driven by lancedb)
+arrow = "57"
+arrow-array = "57"
+arrow-schema = "57"
 
 # XML
 quick-xml = "0.36"
@@ -35,8 +39,7 @@ scraper = "0.20"
 jsonpath-rust = "0.7"
 
 # Data formats
-arrow = "55"
-parquet = "55"
+parquet = "57"
 csv = "1.3"
 
 # Compression
