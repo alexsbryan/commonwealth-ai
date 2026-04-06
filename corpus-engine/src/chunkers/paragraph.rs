@@ -178,6 +178,16 @@ fn split_oversized_segment(
 /// Find the best character position to split at, up to max_len.
 /// Prefers: sentence end (. ! ?) > comma/semicolon > word boundary.
 fn find_split_point(text: &str, max_len: usize) -> usize {
+    // Clamp to a valid UTF-8 char boundary — byte index max_len may land
+    // inside a multi-byte character (e.g. curly quotes, em-dashes).
+    let max_len = if text.is_char_boundary(max_len) {
+        max_len
+    } else {
+        (0..max_len)
+            .rev()
+            .find(|&i| text.is_char_boundary(i))
+            .unwrap_or(0)
+    };
     let search_region = &text[..max_len];
 
     // Try sentence boundary (last '. ' or '! ' or '? ' in the region).

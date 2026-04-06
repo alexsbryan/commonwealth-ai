@@ -128,7 +128,7 @@ impl CorpusEngine {
         corpus: &CorpusSpec,
         progress: Option<ProgressCallback>,
     ) -> Result<IngestResult> {
-        let recipe = self.resolve_recipe(corpus)?;
+        let mut recipe = self.resolve_recipe(corpus)?;
 
         // Ensure parent directory exists so `_downloads` and the
         // per-corpus index dir can be created underneath.
@@ -154,13 +154,17 @@ impl CorpusEngine {
                     .to_string(),
             ));
         }
+        // Auto-adapt: use the model's actual output dimensionality rather
+        // than rejecting it. Recipe defaults (768 for nomic) are just
+        // hints — the real schema is determined by what the model returns.
         if probe.len() != recipe.index.embedding_dimensions {
-            return Err(Error::Embed(format!(
-                "Embedding function returned {} dimensions but the recipe \
-                 expects {}. Use a compatible embed model.",
+            tracing::info!(
+                "Embedding model returns {} dimensions; recipe default was {}. \
+                 Using actual model dimensions.",
                 probe.len(),
                 recipe.index.embedding_dimensions,
-            )));
+            );
+            recipe.index.embedding_dimensions = probe.len();
         }
 
         // ── Run the actual pipeline with cleanup-on-failure ───────
