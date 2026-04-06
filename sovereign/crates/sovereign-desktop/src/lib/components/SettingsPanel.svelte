@@ -84,6 +84,7 @@
           selectedPath={config.embed_model_path ?? ""}
           onSelect={(p) => (config!.embed_model_path = p || null)}
           showRawInput={true}
+          embedMode={true}
         />
         {#if !config.embed_model_path}
           <p class="warning-text">

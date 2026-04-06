@@ -14,9 +14,11 @@
     selectedPath: string;
     onSelect: (path: string) => void;
     showRawInput?: boolean;
+    /** When true, shows embedding-specific model recommendations */
+    embedMode?: boolean;
   }
 
-  let { selectedPath, onSelect, showRawInput = false }: Props = $props();
+  let { selectedPath, onSelect, showRawInput = false, embedMode = false }: Props = $props();
 
   let discovered: DiscoveredModel[] = $state([]);
   let scanning = $state(true);
@@ -29,6 +31,45 @@
   let manualPath = $state("");
   let unlisten: UnlistenFn | null = null;
   let hardware: HardwareInfo | null = $state(null);
+
+  const EMBED_MODELS: RecommendedModel[] = [
+    {
+      name: "nomic-embed-text-v1.5",
+      file_name: "nomic-embed-text-v1.5.Q4_K_M.gguf",
+      url: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q4_K_M.gguf",
+      size_estimate: "~80 MB",
+      ram_minimum: "4 GB",
+      description: "Fast, high-quality 768-dim embeddings. Best default choice.",
+      min_ram_gb: 2,
+    },
+    {
+      name: "mxbai-embed-large-v1",
+      file_name: "mxbai-embed-large-v1.Q4_K_M.gguf",
+      url: "https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1-GGUF/resolve/main/mxbai-embed-large-v1.Q4_K_M.gguf",
+      size_estimate: "~340 MB",
+      ram_minimum: "4 GB",
+      description: "1024-dim, top-ranked on MTEB. Great retrieval quality.",
+      min_ram_gb: 2,
+    },
+    {
+      name: "bge-large-en-v1.5",
+      file_name: "bge-large-en-v1.5-q4_k_m.gguf",
+      url: "https://huggingface.co/second-state/BGE-large-EN-v1.5-GGUF/resolve/main/bge-large-en-v1.5-q4_k_m.gguf",
+      size_estimate: "~330 MB",
+      ram_minimum: "4 GB",
+      description: "1024-dim, strong semantic search performance.",
+      min_ram_gb: 2,
+    },
+    {
+      name: "snowflake-arctic-embed-m-v1.5",
+      file_name: "snowflake-arctic-embed-m-v1.5.Q4_K_M.gguf",
+      url: "https://huggingface.co/Snowflake/snowflake-arctic-embed-m-v1.5-GGUF/resolve/main/snowflake-arctic-embed-m-v1.5.Q4_K_M.gguf",
+      size_estimate: "~120 MB",
+      ram_minimum: "4 GB",
+      description: "768-dim, compact and accurate for document retrieval.",
+      min_ram_gb: 2,
+    },
+  ];
 
   const RECOMMENDED_MODELS: RecommendedModel[] = [
     {
@@ -87,11 +128,14 @@
     },
   ];
 
+  // Active model list — embed models are all small enough to always show.
+  let activeModels = $derived(embedMode ? EMBED_MODELS : RECOMMENDED_MODELS);
+
   // Models that fit in this system's RAM (with a 2 GB headroom).
   let visibleModels = $derived.by(() => {
-    if (!hardware) return RECOMMENDED_MODELS.slice(0, 3);
+    if (!hardware) return activeModels.slice(0, 3);
     const ram = hardware.system_ram_gb;
-    return RECOMMENDED_MODELS.filter((m) => m.min_ram_gb + 2 <= ram);
+    return activeModels.filter((m) => m.min_ram_gb + 2 <= ram);
   });
 
   // Largest model that fits — flagged as the recommendation.

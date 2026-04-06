@@ -547,7 +547,14 @@ pub async fn save_config(
     config: DesktopConfig,
 ) -> Result<(), String> {
     config.save()?;
+    let old_embed = state.config.read().await.embed_model_path.clone();
+    let new_embed = config.embed_model_path.clone();
     *state.config.write().await = config;
+    // If the embedding model changed, drop the cached inference so bootstrap
+    // reloads it with the new embed model path.
+    if old_embed != new_embed {
+        *state.inference.write().await = None;
+    }
     state::rebuild_runtime(&state).await
 }
 
