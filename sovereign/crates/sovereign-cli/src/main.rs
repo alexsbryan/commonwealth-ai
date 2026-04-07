@@ -369,6 +369,7 @@ async fn main() {
         store.clone(),
         skills,
         approval,
+        sovereign_core::types::InferenceConfig::default(),
     );
 
     // Resume or start conversation.

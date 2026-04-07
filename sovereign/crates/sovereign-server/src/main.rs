@@ -262,6 +262,7 @@ async fn main() {
         store,
         skills,
         approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
+        sovereign_core::types::InferenceConfig::default(),
     ));
 
     // Auth state.

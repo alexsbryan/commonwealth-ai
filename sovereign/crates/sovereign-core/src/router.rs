@@ -309,10 +309,11 @@ Reply with ONLY the letter: A, B, or C"#
             max_tokens: Some(5),
             temperature: Some(0.0),
             structured_output: None,
-            think_budget: None,
+            think_budget: Some(0),  // suppress thinking — prevents Qwen <think> consuming the 5-token budget
             oicp: None,
         };
         let response = self.inference.complete(&request).await?;
+        eprintln!("[router] classify raw output: {:?}", response.text);
         Ok(response.text)
     }
 
