@@ -43,11 +43,39 @@ impl EnrichmentEngine {
         let mut next_id: u64 = 0;
         let corpus_id = index.corpus_id().to_string();
 
+        // Observability counters.
+        let mut claims_found: u64 = 0;
+        let mut inference_errors: u64 = 0;
+        let mut parse_errors: u64 = 0;
+        let mut window_start = std::time::Instant::now();
+        let mut window_chunks: u64 = 0;
+        let mut chunks_per_sec: f32 = 0.0;
+        const REPORT_EVERY: usize = 50;
+
         for (i, chunk) in chunks.iter().enumerate() {
+            window_chunks += 1;
+
+            // Recompute throughput and emit terminal summary every REPORT_EVERY chunks.
+            if i > 0 && i % REPORT_EVERY == 0 {
+                let secs = window_start.elapsed().as_secs_f32().max(0.001);
+                chunks_per_sec = window_chunks as f32 / secs;
+                window_start = std::time::Instant::now();
+                window_chunks = 0;
+                eprintln!(
+                    "[{corpus_id}] claims {}/{total} | {claims_found} found | \
+                     {inference_errors} inf-err | {parse_errors} parse-err | {chunks_per_sec:.1} chunks/s",
+                    i + 1,
+                );
+            }
+
             if let Some(ref cb) = progress {
                 cb(IngestProgress::ExtractingClaims {
-                    current: i as u64,
+                    current: i as u64 + 1,
                     total,
+                    claims_found,
+                    inference_errors,
+                    parse_errors,
+                    chunks_per_sec,
                 });
             }
 
@@ -59,12 +87,21 @@ impl EnrichmentEngine {
             let response = match (self.inference)(&prompt).await {
                 Ok(r) => r,
                 Err(e) => {
-                    tracing::warn!("Inference failed for chunk {}: {e}", chunk.id);
+                    inference_errors += 1;
+                    eprintln!("[{corpus_id}] chunk {i}/{total}: inference error — {e}");
                     continue;
                 }
             };
 
             let raw_claims = parse_extracted_claims(&response);
+
+            if raw_claims.is_empty() && !response.trim().is_empty() {
+                parse_errors += 1;
+                eprintln!(
+                    "[{corpus_id}] chunk {i}/{total}: parse failed — {:?}",
+                    &response[..response.len().min(120)],
+                );
+            }
 
             for raw in raw_claims {
                 let status = EpistemicStatus::parse(&raw.epistemic_status);
@@ -88,8 +125,14 @@ impl EnrichmentEngine {
                     embedding,
                 });
                 next_id += 1;
+                claims_found += 1;
             }
         }
+
+        eprintln!(
+            "[{corpus_id}] claims extraction complete — {claims_found} claims from {total} chunks \
+             ({inference_errors} inf-err, {parse_errors} parse-err)",
+        );
 
         Ok(claims)
     }

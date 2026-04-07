@@ -234,7 +234,9 @@ impl CorpusEngine {
             index_path,
             &recipe.corpus.id,
             &recipe.corpus.name,
-            &recipe.index.embedding_model,
+            // Use the engine's actual embedding model name (derived from the
+            // configured file path), not the recipe's hardcoded default string.
+            &self.expected_embedding_model,
             recipe.index.embedding_dimensions,
             recipe.corpus.mesh_sharing,
             &recipe.corpus.license,
@@ -541,15 +543,46 @@ impl CorpusEngine {
         let index = CorpusIndex::open(path).await?;
         let info = index.info().await?;
 
+        // Warn on mismatch rather than hard-erroring so that indexes written
+        // before the model name was recorded correctly (they all stored the
+        // placeholder "nomic-embed-text-v2") remain searchable after the fix.
+        // A true incompatibility (different dimensionality) will surface as a
+        // search error anyway; the string check is informational only.
         if info.embedding_model != self.expected_embedding_model {
-            return Err(Error::IncompatibleEmbedding {
-                index_model: info.embedding_model,
-                expected_model: self.expected_embedding_model.clone(),
-                path: path.to_owned(),
-            });
+            tracing::warn!(
+                "Corpus '{}' was indexed with model '{}' but current engine expects '{}'. \
+                 Search results may be degraded if the models differ. Re-install the corpus to fix.",
+                info.corpus_id,
+                info.embedding_model,
+                self.expected_embedding_model,
+            );
         }
 
         Ok(index)
+    }
+
+    /// Validate that all installed indexes were built with the same embedding
+    /// dimensions as the currently loaded model produces.
+    ///
+    /// Call this at startup after performing a probe embed to detect
+    /// switched embed models early — before a search call surfaces an
+    /// opaque LanceDB schema error at query time.
+    ///
+    /// Returns an error naming the first mismatched corpus. The caller
+    /// should surface this as a plain-language warning (not a hard abort)
+    /// so that existing users who switch embed models are not blocked.
+    pub async fn validate_embed_dimensions(&self, loaded_dims: usize) -> Result<()> {
+        for info in self.installed_indexes().await? {
+            if info.embedding_dimensions != 0 && info.embedding_dimensions != loaded_dims {
+                return Err(crate::Error::Database(format!(
+                    "Corpus '{}' was built with {} embedding dimensions but the \
+                     loaded model produces {}. To fix: rebuild the corpus in \
+                     Settings → Knowledge → Rebuild.",
+                    info.corpus_id, info.embedding_dimensions, loaded_dims,
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Remove an index directory.
