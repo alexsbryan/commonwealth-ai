@@ -93,15 +93,17 @@ impl EnrichmentEngine {
                 }
             };
 
-            let raw_claims = parse_extracted_claims(&response);
-
-            if raw_claims.is_empty() && !response.trim().is_empty() {
-                parse_errors += 1;
-                eprintln!(
-                    "[{corpus_id}] chunk {i}/{total}: parse failed — {:?}",
-                    &response[..response.len().min(120)],
-                );
-            }
+            let raw_claims = match parse_extracted_claims(&response) {
+                Some(v) => v,
+                None => {
+                    parse_errors += 1;
+                    eprintln!(
+                        "[{corpus_id}] chunk {i}/{total}: parse failed — {:?}",
+                        &response[..response.len().min(120)],
+                    );
+                    continue;
+                }
+            };
 
             for raw in raw_claims {
                 let status = EpistemicStatus::parse(&raw.epistemic_status);
@@ -321,29 +323,65 @@ struct RawRelationship {
 }
 
 /// Parse a JSON array of claims out of an inference response, tolerating
-/// markdown code fences.
-fn parse_extracted_claims(response: &str) -> Vec<RawExtractedClaim> {
-    if let Ok(claims) = serde_json::from_str::<Vec<RawExtractedClaim>>(response) {
-        return claims;
+/// markdown code fences and `<think>` blocks.
+///
+/// Returns `Some(claims)` on success (including empty arrays — the model
+/// legitimately found no claims). Returns `None` only when JSON extraction
+/// failed entirely, so callers can distinguish a real parse error from a
+/// valid empty result.
+fn parse_extracted_claims(response: &str) -> Option<Vec<RawExtractedClaim>> {
+    let cleaned = strip_think_tags(response);
+    let s = cleaned.trim();
+    if s.is_empty() {
+        return Some(Vec::new());
     }
-    if let Some(json) = extract_json_from_response(response) {
+    if let Ok(claims) = serde_json::from_str::<Vec<RawExtractedClaim>>(s) {
+        return Some(claims);
+    }
+    if let Some(json) = extract_json_from_response(s) {
         if let Ok(claims) = serde_json::from_str::<Vec<RawExtractedClaim>>(&json) {
-            return claims;
+            return Some(claims);
         }
     }
-    Vec::new()
+    None
 }
 
 fn parse_raw_relationship(response: &str) -> Option<RawRelationship> {
-    if let Ok(r) = serde_json::from_str::<RawRelationship>(response) {
+    let cleaned = strip_think_tags(response);
+    let s = cleaned.trim();
+    if let Ok(r) = serde_json::from_str::<RawRelationship>(s) {
         return Some(r);
     }
-    if let Some(json) = extract_json_from_response(response) {
+    if let Some(json) = extract_json_from_response(s) {
         if let Ok(r) = serde_json::from_str::<RawRelationship>(&json) {
             return Some(r);
         }
     }
     None
+}
+
+/// Remove all `<think>…</think>` blocks from a model response.
+/// Qwen3 and similar models may emit these even when thinking is nominally
+/// disabled; stripping them before JSON extraction prevents false-positive
+/// parse-error logs and keeps the JSON extractor from finding stray brackets
+/// inside the think block.
+fn strip_think_tags(s: &str) -> String {
+    if !s.contains("<think>") {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("</think>") {
+            Some(rel_end) => {
+                rest = &rest[start + rel_end + "</think>".len()..];
+            }
+            None => break, // unclosed tag — drop the rest
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Strip markdown code fences and return the inner JSON, if present.
@@ -404,7 +442,7 @@ mod tests {
     #[test]
     fn extract_json_handles_plain_array() {
         let resp = r#"[{"claim": "x", "epistemic_status": "consensus"}]"#;
-        let parsed = parse_extracted_claims(resp);
+        let parsed = parse_extracted_claims(resp).unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].claim, "x");
     }
@@ -412,7 +450,7 @@ mod tests {
     #[test]
     fn extract_json_handles_code_fence() {
         let resp = "Here you go:\n```json\n[{\"claim\": \"y\", \"epistemic_status\": \"contested\"}]\n```\n";
-        let parsed = parse_extracted_claims(resp);
+        let parsed = parse_extracted_claims(resp).unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].claim, "y");
         assert_eq!(parsed[0].epistemic_status, "contested");
@@ -421,9 +459,37 @@ mod tests {
     #[test]
     fn extract_json_handles_surrounding_prose() {
         let resp = r#"The claims are: [{"claim": "z", "epistemic_status": "majority"}] thank you"#;
-        let parsed = parse_extracted_claims(resp);
+        let parsed = parse_extracted_claims(resp).unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].claim, "z");
+    }
+
+    #[test]
+    fn empty_array_is_some_not_none() {
+        // Model legitimately found no claims — should be Some([]), not a parse error.
+        let resp = "<think>\n</think>\n\n```json\n[]\n```";
+        let parsed = parse_extracted_claims(resp).unwrap();
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn strip_think_tags_removes_block() {
+        let s = "<think>\nsome reasoning\n</think>\n\nActual response";
+        assert_eq!(strip_think_tags(s).trim(), "Actual response");
+    }
+
+    #[test]
+    fn strip_think_tags_empty_block() {
+        let s = "<think>\n</think>\n\n```json\n[]\n```";
+        let stripped = strip_think_tags(s);
+        assert!(!stripped.contains("<think>"));
+        assert!(stripped.contains("```json"));
+    }
+
+    #[test]
+    fn parse_fails_on_truly_unparseable() {
+        let resp = "Sorry, I cannot help with that.";
+        assert!(parse_extracted_claims(resp).is_none());
     }
 
     #[test]
