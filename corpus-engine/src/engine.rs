@@ -63,6 +63,12 @@ impl CorpusEngine {
         &self.index_dir
     }
 
+    /// Return a clone of the embedding function.
+    /// Used by `CorpusIndexChecker` to re-embed corrupt chunks.
+    pub fn embed_fn(&self) -> crate::types::EmbedFn {
+        self.embed.clone()
+    }
+
     /// Embed a piece of text via the engine's embedding function.
     /// Exposed for downstream callers (tools, etc.) that need to construct
     /// query embeddings using the same model the corpus was indexed with.
@@ -288,12 +294,16 @@ impl CorpusEngine {
 
                 let embedding = (self.embed)(&content).await?;
 
+                let content_hash = blake3_hex(&content);
                 batch.push((
                     InsertChunk {
                         content,
                         title: doc.title.clone(),
                         url: doc.url.clone(),
                         metadata: doc.metadata.as_ref().map(|m| m.to_string()),
+                        content_hash: Some(content_hash),
+                        source_doc_id: doc.url.clone()
+                            .or_else(|| Some(doc.source_id.clone())),
                     },
                     embedding,
                 ));
@@ -648,6 +658,134 @@ impl CorpusEngine {
         crate::sharding::merge_shards(shard_paths, output_path).await
     }
 
+    // ── CorpusUpdater / health helpers ──────────────────
+
+    /// Find and parse the recipe for `corpus_id`.
+    /// Checks builtin recipes first, then scans the recipes directory.
+    pub fn load_recipe(&self, corpus_id: &str) -> Result<Recipe> {
+        // Check builtins first.
+        if let Some(r) = crate::recipe::builtin_recipes()
+            .into_iter()
+            .find(|r| r.corpus.id == corpus_id)
+        {
+            return Ok(r);
+        }
+        // Scan recipes directory for a .toml whose corpus.id matches.
+        let dir = &self.recipes_dir;
+        if dir.exists() {
+            for entry in std::fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("toml") {
+                    if let Ok(recipe) = Recipe::from_file(&path) {
+                        if recipe.corpus.id == corpus_id {
+                            return Ok(recipe);
+                        }
+                    }
+                }
+            }
+        }
+        Err(Error::Recipe(format!("No recipe found for corpus_id: {corpus_id}")))
+    }
+
+    /// Chunk a document's text content using the recipe's chunker config.
+    pub fn chunk_document(&self, recipe: &Recipe, content: &str) -> Result<Vec<crate::index::InsertChunk>> {
+        let chunker = self.make_chunker(&recipe.chunk);
+        let chunks: Vec<_> = chunker
+            .chunk(content)
+            .into_iter()
+            .map(|tc| {
+                let hash = blake3_hex(&tc.content);
+                crate::index::InsertChunk {
+                    content: tc.content,
+                    title: None,
+                    url: None,
+                    metadata: None,
+                    content_hash: Some(hash),
+                    source_doc_id: None,
+                }
+            })
+            .collect();
+        Ok(chunks)
+    }
+
+    /// Embed a batch of `InsertChunk` objects, returning `EmbeddedChunk` pairs.
+    pub async fn embed_chunks(
+        &self,
+        chunks: &[crate::index::InsertChunk],
+    ) -> Result<Vec<crate::index::EmbeddedChunk>> {
+        let mut out = Vec::with_capacity(chunks.len());
+        for chunk in chunks {
+            let embedding = (self.embed)(&chunk.content).await?;
+            out.push(crate::index::EmbeddedChunk {
+                insert: chunk.clone(),
+                embedding,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Persist the `_update_progress.json` sidecar for a corpus.
+    pub fn save_update_progress(
+        &self,
+        corpus_id: &str,
+        log: &crate::update::delta::UpdateProgressLog,
+    ) -> Result<()> {
+        let path = self.index_dir.join(corpus_id).join("_update_progress.json");
+        let json = serde_json::to_string_pretty(log)
+            .map_err(|e| Error::Serialization(e.to_string()))?;
+        std::fs::write(&path, json)?;
+        Ok(())
+    }
+
+    /// Load the `_update_progress.json` sidecar for a corpus.
+    pub fn load_update_progress(
+        &self,
+        corpus_id: &str,
+    ) -> Result<crate::update::delta::UpdateProgressLog> {
+        let path = self.index_dir.join(corpus_id).join("_update_progress.json");
+        if !path.exists() {
+            return Ok(Default::default());
+        }
+        let json = std::fs::read_to_string(&path)?;
+        serde_json::from_str(&json).map_err(|e| Error::Serialization(e.to_string()))
+    }
+
+    /// Delete the `_update_progress.json` sidecar for a corpus.
+    pub fn clear_update_progress(&self, corpus_id: &str) -> Result<()> {
+        let path = self.index_dir.join(corpus_id).join("_update_progress.json");
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+        }
+        Ok(())
+    }
+
+    /// Load the stored `VersionManifest` for a corpus.
+    pub fn load_stored_manifest(
+        &self,
+        corpus_id: &str,
+    ) -> Result<crate::update::delta::VersionManifest> {
+        let path = self.index_dir.join(corpus_id).join("_version_manifest.json");
+        if !path.exists() {
+            return Err(Error::IndexNotFound(format!("No manifest for {corpus_id}")));
+        }
+        let json = std::fs::read_to_string(&path)?;
+        serde_json::from_str(&json).map_err(|e| Error::Serialization(e.to_string()))
+    }
+
+    /// Save the `VersionManifest` for a corpus.
+    pub fn save_stored_manifest(
+        &self,
+        corpus_id: &str,
+        manifest: &crate::update::delta::VersionManifest,
+    ) -> Result<()> {
+        let path = self.index_dir.join(corpus_id).join("_version_manifest.json");
+        let json = serde_json::to_string_pretty(manifest)
+            .map_err(|e| Error::Serialization(e.to_string()))?;
+        std::fs::write(&path, json)?;
+        Ok(())
+    }
+
     // ── Private helpers ────────────────────────────────
 
     fn resolve_recipe(&self, corpus: &CorpusSpec) -> Result<Recipe> {
@@ -832,6 +970,11 @@ fn controversy_patterns_from_config(config: &ExtractorConfig) -> Vec<String> {
         } => controversy_patterns.clone(),
         _ => vec![],
     }
+}
+
+/// Compute the BLAKE3 hex digest of a string.
+pub(crate) fn blake3_hex(s: &str) -> String {
+    blake3::hash(s.as_bytes()).to_hex().to_string()
 }
 
 /// Strip model-generated artifacts from raw corpus text before chunking.

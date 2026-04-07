@@ -92,6 +92,26 @@ pub struct IndexInfo {
     pub mesh_sharing: bool,
     pub is_shard: bool,
     pub chunk_range: Option<ChunkRange>,
+
+    // ── Health-check fields ──────────────────────────────────
+    /// Expected total chunks from ingestion start; None for legacy indexes.
+    #[serde(default)]
+    pub chunks_expected: Option<u64>,
+    /// Resume cursor from the last interrupted ingest (batch ID).
+    #[serde(default)]
+    pub resume_from: Option<String>,
+    /// True if the enrichment pipeline has ever been run for this corpus.
+    #[serde(default)]
+    pub enrichment_enabled: bool,
+    /// Number of chunks that have at least one extracted claim.
+    #[serde(default)]
+    pub enriched_chunks: Option<u64>,
+    /// Source dataset version (e.g. a date stamp or hash from the manifest).
+    #[serde(default)]
+    pub source_version: Option<String>,
+    /// URL used to check for newer versions of this corpus.
+    #[serde(default)]
+    pub update_manifest_url: Option<String>,
 }
 
 // ─── Scored Chunk (search result) ───────────────────────
@@ -157,6 +177,7 @@ impl ScoredClaim {
                 id: claim_id,
                 claim: chunk.content.clone(),
                 source_chunk_id: 0,
+                source_chunk_hash: None,
                 corpus_id: chunk.corpus_id.clone(),
                 epistemic_status: crate::enrichment::EpistemicStatus::Unclear,
                 hedging_language: None,

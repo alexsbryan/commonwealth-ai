@@ -22,6 +22,7 @@ pub mod recipe;
 pub mod safety;
 pub mod sharding;
 pub mod types;
+pub mod update;
 
 // ─── Public API Re-exports ──────────────────────────────
 

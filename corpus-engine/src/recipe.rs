@@ -91,6 +91,28 @@ pub struct Recipe {
     /// Requires the engine to have been given an `InferenceFn`.
     #[serde(default)]
     pub enrichment: Option<EnrichmentConfig>,
+
+    /// Optional corpus update configuration. When present, the health
+    /// monitor can check for new versions and apply delta updates.
+    #[serde(default)]
+    pub update: Option<UpdateConfig>,
+}
+
+// ---------------------------------------------------------------------------
+// UpdateConfig
+// ---------------------------------------------------------------------------
+
+/// Configures automatic corpus updates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateConfig {
+    /// URL that returns a version manifest JSON for this corpus.
+    pub manifest_url: String,
+
+    /// If true the health monitor applies updates autonomously during the
+    /// maintenance window. If false, a pending decision is surfaced to the
+    /// user instead.
+    #[serde(default)]
+    pub auto_update: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -420,6 +442,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             },
             index: IndexConfig::default(),
             enrichment: None,
+            update: None,
         },
         // 2. Stack Exchange
         Recipe {
@@ -444,6 +467,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             },
             index: IndexConfig::default(),
             enrichment: None,
+            update: None,
         },
         // 3. OpenAlex
         Recipe {
@@ -473,6 +497,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             },
             index: IndexConfig::default(),
             enrichment: None,
+            update: None,
         },
         // 4. Project Gutenberg
         //
@@ -506,6 +531,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             },
             index: IndexConfig::default(),
             enrichment: None,
+            update: None,
         },
         // 5. Stanford Encyclopedia of Philosophy
         //
@@ -552,6 +578,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 relationship_similarity_threshold: 0.55,
                 max_relationship_candidates: 50_000,
             }),
+            update: None,
         },
         // 6. Wikipedia (Structured) — editorial-quality signals
         //
@@ -593,6 +620,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             },
             index: IndexConfig::default(),
             enrichment: None,
+            update: None,
         },
         // 7. CRS Reports
         Recipe {
@@ -620,6 +648,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             },
             index: IndexConfig::default(),
             enrichment: None,
+            update: None,
         },
     ]
 }

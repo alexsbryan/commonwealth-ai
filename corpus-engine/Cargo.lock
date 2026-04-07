@@ -716,6 +716,7 @@ dependencies = [
  "arrow",
  "arrow-array",
  "arrow-schema",
+ "blake3",
  "bzip2",
  "csv",
  "flate2",

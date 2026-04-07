@@ -16,6 +16,10 @@ pub struct ExtractedClaim {
     /// The chunk this claim was extracted from.
     pub source_chunk_id: u64,
 
+    /// BLAKE3 hex of the chunk text at extraction time.
+    /// When this diverges from the chunk's `content_hash`, the claim is stale.
+    pub source_chunk_hash: Option<String>,
+
     /// The corpus this claim belongs to.
     pub corpus_id: String,
 
@@ -122,6 +126,7 @@ mod tests {
             id: 42,
             claim: "Free will is compatible with determinism".into(),
             source_chunk_id: 100,
+            source_chunk_hash: Some("abc123".into()),
             corpus_id: "sep".into(),
             epistemic_status: EpistemicStatus::Majority,
             hedging_language: Some("Most contemporary philosophers hold that...".into()),

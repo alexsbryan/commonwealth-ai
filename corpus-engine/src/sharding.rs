@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow_array::{Int64Array, RecordBatch};
+use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
 
@@ -181,7 +181,20 @@ pub async fn merge_shards(
             next_id += num_rows as i64;
 
             // Rebuild batch with new IDs.
+            // Column order must match corpus_schema() exactly:
+            //   id, content, title, url, embedding, metadata, content_hash, source_doc_id
             let schema = crate::index::corpus_schema(dim);
+            let null_str_col: ArrayRef = Arc::new(
+                StringArray::from(vec![Option::<String>::None; num_rows]),
+            );
+            let content_hash_col = batch
+                .column_by_name("content_hash")
+                .cloned()
+                .unwrap_or_else(|| null_str_col.clone());
+            let source_doc_id_col = batch
+                .column_by_name("source_doc_id")
+                .cloned()
+                .unwrap_or_else(|| null_str_col.clone());
             let new_batch = RecordBatch::try_new(
                 schema.clone(),
                 vec![
@@ -191,6 +204,8 @@ pub async fn merge_shards(
                     batch.column_by_name("url").unwrap().clone(),
                     batch.column_by_name("embedding").unwrap().clone(),
                     batch.column_by_name("metadata").unwrap().clone(),
+                    content_hash_col,
+                    source_doc_id_col,
                 ],
             )
             .map_err(|e| Error::Serialization(format!("merge batch: {e}")))?;
@@ -246,6 +261,8 @@ mod tests {
                         title: Some(format!("Title {i}")),
                         url: None,
                         metadata: None,
+                        content_hash: None,
+                        source_doc_id: None,
                     },
                     make_test_embedding(i as f32),
                 )

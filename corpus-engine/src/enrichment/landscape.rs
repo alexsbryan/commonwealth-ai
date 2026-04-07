@@ -172,6 +172,7 @@ mod tests {
             id,
             claim: format!("claim {id}"),
             source_chunk_id: id,
+            source_chunk_hash: None,
             corpus_id: "test".into(),
             epistemic_status: status,
             hedging_language: None,

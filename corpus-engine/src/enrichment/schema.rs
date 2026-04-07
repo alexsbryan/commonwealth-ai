@@ -16,6 +16,7 @@ pub fn claims_schema(embedding_dim: usize) -> SchemaRef {
         Field::new("id", DataType::UInt64, false),
         Field::new("claim", DataType::Utf8, false),
         Field::new("source_chunk_id", DataType::UInt64, false),
+        Field::new("source_chunk_hash", DataType::Utf8, true),
         Field::new("corpus_id", DataType::Utf8, false),
         Field::new("epistemic_status", DataType::Utf8, false),
         Field::new("hedging_language", DataType::Utf8, true),

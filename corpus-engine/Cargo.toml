@@ -56,6 +56,9 @@ glob = "0.3"
 # Misc
 tempfile = "3"
 
+# Hashing
+blake3 = "1"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
 tempfile = "3"
