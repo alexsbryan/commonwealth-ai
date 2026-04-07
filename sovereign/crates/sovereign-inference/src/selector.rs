@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use sovereign_core::oicp::{self, InferenceRequirements, PrivacyPreference, ProviderManifest};
+use sovereign_core::oicp::{self, InferenceRequirements, ProviderManifest, ShardingPrivacy};
 use sovereign_core::types::CompletionRequest;
 use sovereign_core::Result;
 
@@ -191,8 +191,9 @@ impl BackendSelector for CapabilityAwareSelector {
             None => return self.fallback.select(request, backends).await,
         };
 
-        // Privacy check: if LocalOnly, only consider local backends.
-        if matches!(requirements.privacy, PrivacyPreference::LocalOnly) {
+        // Privacy check: if LocalOnly (the OICP §3.1 default), only consider
+        // local backends.
+        if requirements.sharding() == ShardingPrivacy::LocalOnly {
             if let Some(idx) = backends
                 .iter()
                 .position(|b| b.health.is_healthy() && b.is_local)
@@ -238,17 +239,17 @@ fn score_backend_manifest(
     manifest: &ProviderManifest,
     requirements: &InferenceRequirements,
 ) -> Option<f32> {
+    let required = requirements.required();
+    let preferred = requirements.preferred();
+    let min_tokens = requirements.min_tokens();
+
     let scores: Vec<f32> = manifest
         .models
         .iter()
         .filter(|m| m.status.available)
-        .filter(|m| oicp::satisfies_required(m, &requirements.required))
-        .filter(|m| {
-            requirements
-                .min_context_tokens
-                .map_or(true, |min| m.context_tokens >= min)
-        })
-        .map(|m| oicp::score_preferred(&m.capabilities, &requirements.preferred))
+        .filter(|m| oicp::satisfies_required(&m.capabilities, required))
+        .filter(|m| min_tokens.map_or(true, |min| m.context_tokens >= min))
+        .map(|m| oicp::score_preferred(&m.capabilities, preferred))
         .collect();
 
     if scores.is_empty() {

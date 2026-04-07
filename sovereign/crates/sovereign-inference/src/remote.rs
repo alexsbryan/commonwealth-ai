@@ -376,7 +376,10 @@ mod tests {
 
     #[test]
     fn build_request_with_oicp() {
-        use sovereign_core::oicp::{Capability, InferenceRequirements};
+        use sovereign_core::oicp::{
+            Capability, CapabilityProfile, CapabilityRequirements, ContextRequirements,
+            InferenceRequirements,
+        };
 
         let provider = RemoteApiProvider::new(
             "http://localhost:8000/v1",
@@ -385,7 +388,7 @@ mod tests {
             4096,
         );
 
-        let mut required = std::collections::HashMap::new();
+        let mut required = CapabilityProfile::new();
         required.insert(Capability::Code, 3);
 
         let request = CompletionRequest {
@@ -398,19 +401,26 @@ mod tests {
             think_budget: None,
             top_k: None,
             top_p: None,
-            oicp: Some(InferenceRequirements {
-                required,
-                preferred: Default::default(),
-                min_context_tokens: Some(8192),
-                latency: Default::default(),
-                privacy: Default::default(),
-                grounding: None,
-            }),
+            oicp: Some(
+                InferenceRequirements::new()
+                    .with_capabilities(CapabilityRequirements {
+                        required,
+                        preferred: CapabilityProfile::new(),
+                    })
+                    .with_context(ContextRequirements {
+                        min_tokens: Some(8192),
+                        preferred_tokens: None,
+                    }),
+            ),
         };
 
         let body = provider.build_request(&request);
         assert!(body.get("oicp").is_some());
-        assert!(body["oicp"]["required"]["code"].as_u64().is_some());
+        // Per OICP §3, capability requirements live under `capabilities.required`.
+        assert!(body["oicp"]["capabilities"]["required"]["code"]
+            .as_u64()
+            .is_some());
+        assert_eq!(body["oicp"]["context"]["min_tokens"].as_u64(), Some(8192));
     }
 
     #[test]

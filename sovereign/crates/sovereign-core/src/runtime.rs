@@ -106,18 +106,17 @@ impl Runtime {
     }
 
     /// Build OICP requirements from active skills for non-Fast requests.
-    /// Returns None if no skills have OICP configuration.
+    /// Returns None if no skills have OICP capability configuration.
     fn build_oicp(
         &self,
         latency: LatencyPreference,
     ) -> Option<crate::oicp::InferenceRequirements> {
-        let mut req = self.skills.inference_requirements();
-        req.latency = latency;
-        if req.required.is_empty() && req.preferred.is_empty() {
-            None
-        } else {
-            Some(req)
+        let req = self.skills.inference_requirements();
+        // Skip if there are no capability requirements to express.
+        if req.required().is_empty() && req.preferred().is_empty() {
+            return None;
         }
+        Some(req.with_latency(latency))
     }
 
     /// Build a system message that includes memory context.

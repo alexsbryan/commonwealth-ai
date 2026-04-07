@@ -303,16 +303,17 @@ impl Executor {
                 };
 
                 // Attach OICP requirements from active skills.
-                let mut oicp_req = self.skills.inference_requirements();
-                oicp_req.latency = match speed {
+                let oicp_req = self.skills.inference_requirements();
+                let latency = match speed {
                     Speed::Fast => LatencyPreference::Interactive,
                     Speed::Medium => LatencyPreference::BestEffort,
                     Speed::Slow => LatencyPreference::Throughput,
                 };
-                let oicp = if oicp_req.required.is_empty() && oicp_req.preferred.is_empty() {
+                let oicp = if oicp_req.required().is_empty() && oicp_req.preferred().is_empty()
+                {
                     None
                 } else {
-                    Some(oicp_req)
+                    Some(oicp_req.with_latency(latency))
                 };
 
                 // Adaptive compute: estimate difficulty and adjust budget.

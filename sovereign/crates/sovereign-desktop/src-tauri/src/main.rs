@@ -66,10 +66,11 @@ fn main() {
                     if !setup_done {
                         tracing::info!("First launch — waiting for setup wizard");
                     } else {
-                        tracing::warn!("Model not found — returning to setup wizard");
-                        // Reset setup so the wizard shows again.
+                        tracing::warn!("Model not found — clearing stale path and returning to setup wizard");
+                        // Clear the stale model path so the wizard starts fresh.
                         let mut config = state_clone.config.write().await;
                         config.setup_complete = false;
+                        config.model_path = std::path::PathBuf::new();
                         let _ = config.save();
                     }
                     let _ = handle_clone.emit("setup-required", ());

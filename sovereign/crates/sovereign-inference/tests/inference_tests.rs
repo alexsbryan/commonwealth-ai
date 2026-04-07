@@ -222,17 +222,14 @@ async fn local_first_all_down_errors() {
 // ─── CapabilityAwareSelector Tests ────────────────────────────
 
 fn make_manifest(models: Vec<ProviderModel>) -> ProviderManifest {
-    ProviderManifest {
-        oicp_version: "0.1.0".to_string(),
-        provider: None,
-        models,
-    }
+    ProviderManifest::new(models)
 }
 
-fn make_model(id: &str, caps: &[(Capability, u8)], context: usize) -> ProviderModel {
-    let capabilities: CapabilityProfile = caps.iter().cloned().collect();
+fn make_model(id: &str, caps: &[(Capability, u8)], context: u32) -> ProviderModel {
+    let capabilities: CapabilityProfile = caps.iter().copied().collect();
     ProviderModel {
         id: id.to_string(),
+        base_model: None,
         quantization: None,
         capabilities,
         context_tokens: context,
@@ -289,10 +286,7 @@ async fn capability_selector_respects_local_only() {
     ];
 
     let mut req = dummy_request();
-    req.oicp = Some(InferenceRequirements {
-        privacy: PrivacyPreference::LocalOnly,
-        ..Default::default()
-    });
+    req.oicp = Some(InferenceRequirements::new().with_sharding(ShardingPrivacy::LocalOnly));
 
     let selector = CapabilityAwareSelector {
         fallback: Box::new(PrioritySelector),
@@ -317,11 +311,14 @@ async fn capability_selector_picks_best_match() {
     let mut preferred = HashMap::new();
     preferred.insert(Capability::Analysis, 3);
     preferred.insert(Capability::General, 3);
-    req.oicp = Some(InferenceRequirements {
-        preferred,
-        privacy: PrivacyPreference::MeshAllowed,
-        ..Default::default()
-    });
+    req.oicp = Some(
+        InferenceRequirements::new()
+            .with_capabilities(CapabilityRequirements {
+                required: CapabilityProfile::new(),
+                preferred,
+            })
+            .with_sharding(ShardingPrivacy::MeshAllowed),
+    );
 
     let selector = CapabilityAwareSelector {
         fallback: Box::new(PrioritySelector),
@@ -345,11 +342,14 @@ async fn capability_selector_filters_by_required() {
     let mut req = dummy_request();
     let mut required = HashMap::new();
     required.insert(Capability::Code, 2);
-    req.oicp = Some(InferenceRequirements {
-        required,
-        privacy: PrivacyPreference::MeshAllowed,
-        ..Default::default()
-    });
+    req.oicp = Some(
+        InferenceRequirements::new()
+            .with_capabilities(CapabilityRequirements {
+                required,
+                preferred: CapabilityProfile::new(),
+            })
+            .with_sharding(ShardingPrivacy::MeshAllowed),
+    );
 
     let selector = CapabilityAwareSelector {
         fallback: Box::new(PrioritySelector),
@@ -367,10 +367,7 @@ async fn capability_selector_falls_back_no_manifests() {
     ];
 
     let mut req = dummy_request();
-    req.oicp = Some(InferenceRequirements {
-        privacy: PrivacyPreference::MeshAllowed,
-        ..Default::default()
-    });
+    req.oicp = Some(InferenceRequirements::new().with_sharding(ShardingPrivacy::MeshAllowed));
 
     let selector = CapabilityAwareSelector {
         fallback: Box::new(PrioritySelector),

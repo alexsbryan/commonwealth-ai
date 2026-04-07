@@ -4,8 +4,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::oicp::{
-    Capability, CapabilityProfile, InferenceRequirements, LatencyPreference, PrivacyPreference,
-    ProficiencyLevel,
+    Capability, CapabilityProfile, CapabilityRequirements, ContextRequirements,
+    InferenceRequirements, ProficiencyLevel, ShardingPrivacy,
 };
 use crate::types::{Intent, TrustLevel, compute_trust_level};
 
@@ -47,7 +47,7 @@ pub struct SkillInferenceConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_context_tokens: Option<usize>,
     #[serde(default)]
-    pub privacy: PrivacyPreference,
+    pub privacy: ShardingPrivacy,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -199,7 +199,7 @@ struct InferenceToml {
     required_capabilities: HashMap<Capability, ProficiencyLevel>,
     min_context_tokens: Option<usize>,
     #[serde(default)]
-    privacy: PrivacyPreference,
+    privacy: ShardingPrivacy,
 }
 
 impl SkillToml {
@@ -420,27 +420,29 @@ impl SkillRegistry {
         }
     }
 
-    /// Merges OICP inference requirements from all active skills.
-    /// Required: takes the maximum level across skills.
-    /// Preferred: takes the maximum level across skills.
-    /// Privacy: LocalOnly wins (most restrictive).
-    /// Context: takes the maximum across skills.
+    /// Merges OICP inference requirements from all active skills into a
+    /// single canonical `InferenceRequirements` (OICP §3).
+    ///
+    /// - Required: takes the maximum level across skills.
+    /// - Preferred: takes the maximum level across skills.
+    /// - Privacy: LocalOnly wins (most restrictive).
+    /// - Context: takes the maximum across skills.
     pub fn inference_requirements(&self) -> InferenceRequirements {
         let mut required: CapabilityProfile = HashMap::new();
         let mut preferred: CapabilityProfile = HashMap::new();
         let mut min_context: Option<usize> = None;
-        let mut privacy = PrivacyPreference::MeshAllowed;
+        let mut privacy = ShardingPrivacy::MeshAllowed;
 
         for skill in self.active_skills() {
             let inf = &skill.inference;
 
             for (cap, &level) in &inf.required_capabilities {
-                let entry = required.entry(cap.clone()).or_insert(0);
+                let entry = required.entry(*cap).or_insert(0);
                 *entry = (*entry).max(level);
             }
 
             for (cap, &level) in &inf.preferred_capabilities {
-                let entry = preferred.entry(cap.clone()).or_insert(0);
+                let entry = preferred.entry(*cap).or_insert(0);
                 *entry = (*entry).max(level);
             }
 
@@ -448,19 +450,28 @@ impl SkillRegistry {
                 min_context = Some(min_context.map_or(tokens, |t: usize| t.max(tokens)));
             }
 
-            if matches!(inf.privacy, PrivacyPreference::LocalOnly) {
-                privacy = PrivacyPreference::LocalOnly;
+            if matches!(inf.privacy, ShardingPrivacy::LocalOnly) {
+                privacy = ShardingPrivacy::LocalOnly;
             }
         }
 
-        InferenceRequirements {
-            required,
-            preferred,
-            min_context_tokens: min_context,
-            latency: LatencyPreference::BestEffort,
-            privacy,
-            grounding: None,
+        let mut req = InferenceRequirements::new().with_sharding(privacy);
+
+        if !required.is_empty() || !preferred.is_empty() {
+            req = req.with_capabilities(CapabilityRequirements {
+                required,
+                preferred,
+            });
         }
+
+        if let Some(tokens) = min_context {
+            req = req.with_context(ContextRequirements {
+                min_tokens: Some(tokens as u32),
+                preferred_tokens: None,
+            });
+        }
+
+        req
     }
 
     pub fn memory_rules(&self) -> MergedMemoryConfig {

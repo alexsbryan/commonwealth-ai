@@ -87,8 +87,12 @@
   });
 
   function handleSetupComplete() {
-    view = "loading";
-    // Backend will emit "backend-ready" after bootstrap.
+    // complete_setup already bootstrapped the backend before returning,
+    // so we can go directly to chat rather than waiting for backend-ready.
+    // (backend-ready fires before complete_setup returns, so it would be
+    // missed if we set view = "loading" here.)
+    backendReady = true;
+    view = "chat";
   }
 
   function handleConversationSelect(id: string | null) {

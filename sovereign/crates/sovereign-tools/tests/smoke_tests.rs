@@ -159,6 +159,7 @@ fn build_runtime(store: Arc<SqliteStateStore>) -> Runtime {
         store_trait,
         skills,
         approval,
+        InferenceConfig::default(),
     )
 }
 
