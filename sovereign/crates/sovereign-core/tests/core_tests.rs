@@ -522,6 +522,7 @@ fn build_runtime(response: &str) -> (Runtime, Arc<MockStore>) {
         store.clone(),
         Arc::new(SkillRegistry::new()),
         Arc::new(AutoApprovalChannel),
+        sovereign_core::types::InferenceConfig::default(),
     );
     (runtime, store)
 }
@@ -981,6 +982,7 @@ async fn runtime_complex_task_end_to_end() {
         store.clone(),
         skills,
         Arc::new(AutoApprovalChannel),
+        sovereign_core::types::InferenceConfig::default(),
     );
 
     let response = runtime.handle_message("compare Python and Rust", "c1").await.unwrap();

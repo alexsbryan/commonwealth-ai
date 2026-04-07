@@ -58,6 +58,8 @@ impl DocumentTool {
                 temperature: Some(0.3),
                 structured_output: None,
             think_budget: None,
+                top_k: None,
+                top_p: None,
                 oicp: None,
             };
 
@@ -120,6 +122,8 @@ impl DocumentTool {
                 temperature: Some(0.5),
                 structured_output: None,
             think_budget: None,
+                top_k: None,
+                top_p: None,
                 oicp: None,
             };
 
@@ -298,6 +302,8 @@ impl DocumentTool {
                 temperature: Some(0.5),
                 structured_output: None,
             think_budget: None,
+                top_k: None,
+                top_p: None,
                 oicp: None,
             };
 

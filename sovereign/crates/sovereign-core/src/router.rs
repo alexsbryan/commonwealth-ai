@@ -310,6 +310,8 @@ Reply with ONLY the letter: A, B, or C"#
             temperature: Some(0.0),
             structured_output: None,
             think_budget: Some(0),  // suppress thinking — prevents Qwen <think> consuming the 5-token budget
+            top_k: None,
+            top_p: None,
             oicp: None,
         };
         let response = self.inference.complete(&request).await?;

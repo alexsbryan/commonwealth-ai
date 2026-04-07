@@ -1,0 +1,242 @@
+# models.toml — Sovereign Model Manifest
+#
+# Source of truth for slot configuration per hardware profile.
+# The hardware detector selects a profile; the setup/download flow reads
+# this file to know which files to fetch and which family to assign.
+#
+# Each slot entry specifies:
+#   repo        HuggingFace repo ID (for download)
+#   file        Exact GGUF filename within that repo
+#   family      ModelFamily variant (drives default quirks)
+#   quant       Quantisation label (informational, for display)
+#   size_gb     Approximate on-disk size after download
+#   thinking    Whether this slot uses thinking mode (bool)
+#               Fast slot: always false
+#               Thoughtful slot: true unless family is AlwaysOn or None
+#   hf_url      Direct link for the developer/user
+#
+# Optional [profiles.X.Y.quirks_override] tables override individual
+# fields from the family's default_quirks(). Only specify what differs.
+#
+# ── Fast slot notes ──────────────────────────────────────────────────────────
+# Stays on Qwen3 (not Qwen3.5) across all profiles. Reasons:
+#   1. Qwen3.5 small models (0.8B, 2B) show thinking-loop instability
+#      even with /no_think. Not acceptable for a <200ms classification call.
+#   2. Qwen3.5 carries vision encoder weights. The Fast slot does routing
+#      only — no multimodal input ever arrives here.
+#   3. Qwen3-1.7B is well-validated for structured JSON output at this size.
+# The Fast slot does NOT scale up with hardware. A larger router buys
+# nothing for classification quality and wastes always-resident VRAM.
+#
+# ── Thoughtful slot notes ────────────────────────────────────────────────────
+# Switches to Qwen3.5 at low_mem/default/high/very_high. Qwen3.5-9B
+# measurably outperforms Qwen3-8B on GPQA Diamond and tool calling (BFCL-V4).
+# The 35B-A3B surpasses Qwen3-235B-A22B with only 3B active parameters.
+#
+# The high profile uses Qwen3.5-27B, which requires ~16.5 GB VRAM at Q4_K_M.
+# The hardware detector must confirm ≥20 GB free VRAM before selecting this
+# profile. If VRAM is 16–19 GB, fall through to default (Qwen3.5-9B).
+#
+# ── Embed slot notes ─────────────────────────────────────────────────────────
+# Qwen3-Embedding is purpose-built for retrieval. Qwen3.5 is generative with
+# a vision backbone — not a replacement. The 0.6B model is used as
+# always-resident for cpu_only/low_mem/default; 4B for high/very_high.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[profiles.cpu_only]
+
+[profiles.cpu_only.fast]
+repo     = "Qwen/Qwen3-0.6B-GGUF"
+file     = "Qwen3-0.6B-Q4_K_M.gguf"
+family   = "Qwen3"
+quant    = "Q4_K_M"
+size_gb  = 0.4
+thinking = false
+hf_url   = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF"
+
+[profiles.cpu_only.thoughtful]
+repo     = "Qwen/Qwen3-4B-GGUF"
+file     = "Qwen3-4B-Q4_K_M.gguf"
+family   = "Qwen3"
+quant    = "Q4_K_M"
+size_gb  = 2.6
+thinking = false  # thinking=false on CPU: latency renders it unusable
+hf_url   = "https://huggingface.co/Qwen/Qwen3-4B-GGUF"
+
+[profiles.cpu_only.embed]
+repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
+file    = "Qwen3-Embedding-0.6B-Q4_K_M.gguf"
+family  = "Qwen3Embedding"
+quant   = "Q4_K_M"
+size_gb = 0.4
+thinking = false
+hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
+[profiles.cpu_only.embed.quirks_override]
+"embed.output_dimensions" = 1024
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+[profiles.low_mem]
+
+[profiles.low_mem.fast]
+repo     = "Qwen/Qwen3-0.6B-GGUF"
+file     = "Qwen3-0.6B-Q8_0.gguf"
+family   = "Qwen3"
+quant    = "Q8_0"
+size_gb  = 0.6
+thinking = false
+hf_url   = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF"
+
+[profiles.low_mem.thoughtful]
+repo     = "Qwen/Qwen3.5-4B-GGUF"
+file     = "Qwen3.5-4B-Q4_K_M.gguf"
+family   = "Qwen35"
+quant    = "Q4_K_M"
+size_gb  = 2.6
+thinking = true
+hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF"
+
+[profiles.low_mem.embed]
+repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
+file    = "Qwen3-Embedding-0.6B-Q8_0.gguf"
+family  = "Qwen3Embedding"
+quant   = "Q8_0"
+size_gb = 0.6
+thinking = false
+hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
+[profiles.low_mem.embed.quirks_override]
+"embed.output_dimensions" = 1024
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+[profiles.default]   # 8–19 GB VRAM (RTX 3080/3090, RTX 4070, M2 Pro 16-32 GB)
+
+[profiles.default.fast]
+repo     = "Qwen/Qwen3-1.7B-GGUF"
+file     = "Qwen3-1.7B-Q4_K_M.gguf"
+family   = "Qwen3"
+quant    = "Q4_K_M"
+size_gb  = 1.1
+thinking = false
+hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+
+[profiles.default.thoughtful]
+repo     = "bartowski/Qwen_Qwen3.5-9B-GGUF"
+file     = "Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+family   = "Qwen35"
+quant    = "Q4_K_M"
+size_gb  = 5.5
+thinking = true
+hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF"
+
+[profiles.default.embed]
+repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
+file    = "Qwen3-Embedding-0.6B-Q8_0.gguf"
+family  = "Qwen3Embedding"
+quant   = "Q8_0"
+size_gb = 0.6
+thinking = false
+hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
+[profiles.default.embed.quirks_override]
+"embed.output_dimensions" = 1024
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+[profiles.high]   # 20–23 GB VRAM (RTX 4080, M2/M3 Max 36-48 GB)
+                  # Requires ≥20 GB free VRAM. If <20 GB, hardware detector
+                  # must fall through to profiles.default.
+
+[profiles.high.fast]
+repo     = "Qwen/Qwen3-1.7B-GGUF"
+file     = "Qwen3-1.7B-Q8_0.gguf"
+family   = "Qwen3"
+quant    = "Q8_0"
+size_gb  = 1.9
+thinking = false
+hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+
+[profiles.high.thoughtful]
+repo     = "bartowski/Qwen_Qwen3.5-27B-GGUF"
+file     = "Qwen_Qwen3.5-27B-Q4_K_M.gguf"
+family   = "Qwen35"
+quant    = "Q4_K_M"
+size_gb  = 16.5
+thinking = true
+hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-27B-GGUF"
+
+[profiles.high.embed]
+repo    = "Mungert/Qwen3-Embedding-4B-GGUF"
+file    = "Qwen3-Embedding-4B-Q4_K_M.gguf"
+family  = "Qwen3Embedding"
+quant   = "Q4_K_M"
+size_gb = 2.5
+thinking = false
+hf_url  = "https://huggingface.co/Mungert/Qwen3-Embedding-4B-GGUF"
+[profiles.high.embed.quirks_override]
+"embed.output_dimensions" = 2560
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+[profiles.very_high]   # ≥24 GB VRAM (RTX 4090, M2/M3/M4 Ultra 64-192 GB)
+
+[profiles.very_high.fast]
+repo     = "Qwen/Qwen3-1.7B-GGUF"
+file     = "Qwen3-1.7B-Q8_0.gguf"
+family   = "Qwen3"
+quant    = "Q8_0"
+size_gb  = 1.9
+thinking = false
+hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+
+[profiles.very_high.thoughtful]
+repo     = "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF"
+file     = "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf"
+family   = "Qwen35"
+quant    = "Q4_K_M"
+size_gb  = 18.5
+thinking = true
+hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF"
+
+[profiles.very_high.embed]
+repo    = "Mungert/Qwen3-Embedding-4B-GGUF"
+file    = "Qwen3-Embedding-4B-Q8_0.gguf"
+family  = "Qwen3Embedding"
+quant   = "Q8_0"
+size_gb = 4.3
+thinking = false
+hf_url  = "https://huggingface.co/Mungert/Qwen3-Embedding-4B-GGUF"
+[profiles.very_high.embed.quirks_override]
+"embed.output_dimensions" = 2560
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BYOM EXAMPLES
+# Users replace any slot by dropping a [[user_slots]] entry. The family field
+# drives all defaults; quirks_override patches only what differs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# [[user_slots]]
+# slot    = "thoughtful"
+# repo    = "bartowski/Phi-4-GGUF"
+# file    = "Phi-4-Q4_K_M.gguf"
+# family  = "Phi4"         # No thinking injection. 16K context limit — warn user.
+# quant   = "Q4_K_M"
+# size_gb = 9.1
+# thinking = false
+# hf_url  = "https://huggingface.co/bartowski/Phi-4-GGUF"
+
+# [[user_slots]]
+# slot    = "embed"
+# repo    = "nomic-ai/nomic-embed-text-v1.5-GGUF"
+# file    = "nomic-embed-text-v1.5.f16.gguf"
+# family  = "Unknown"
+# quant   = "F16"
+# size_gb = 0.55
+# thinking = false
+# hf_url  = "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF"
+# [user_slots.quirks_override]
+# "embed.pooling"              = "Mean"
+# "embed.normalize"            = "Server"
+# "embed.query_instruction"    = "search_query: "
+# "embed.document_instruction" = "search_document: "
+# "embed.append_eos_token"     = false
+# "embed.output_dimensions"    = 768

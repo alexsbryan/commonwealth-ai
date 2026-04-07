@@ -982,7 +982,14 @@ fn ingest_progress_to_payload(
             chunks_processed: *chunks_indexed,
             message: None,
         },
-        IngestProgress::ExtractingClaims { current, total } => CorpusProgressPayload {
+        IngestProgress::ExtractingClaims {
+            current,
+            total,
+            claims_found,
+            inference_errors,
+            parse_errors,
+            chunks_per_sec,
+        } => CorpusProgressPayload {
             corpus_id: corpus_id.into(),
             phase: "extracting_claims".into(),
             percent: if *total > 0 {
@@ -991,7 +998,14 @@ fn ingest_progress_to_payload(
                 0.0
             },
             chunks_processed: *current,
-            message: Some(format!("Extracting claims ({current}/{total})")),
+            message: Some(format!(
+                "{current}/{total} chunks · {claims_found} claims · {chunks_per_sec:.1}/s{}",
+                if *inference_errors + *parse_errors > 0 {
+                    format!(" · {} errors", inference_errors + parse_errors)
+                } else {
+                    String::new()
+                }
+            )),
         },
         IngestProgress::FoundCandidatePairs { count } => CorpusProgressPayload {
             corpus_id: corpus_id.into(),
@@ -1422,6 +1436,10 @@ mod tests {
             &IngestProgress::ExtractingClaims {
                 current: 50,
                 total: 200,
+                claims_found: 312,
+                inference_errors: 0,
+                parse_errors: 2,
+                chunks_per_sec: 4.2,
             },
         );
         assert_eq!(payload.phase, "extracting_claims");
@@ -1501,6 +1519,10 @@ mod tests {
             IngestProgress::ExtractingClaims {
                 current: 1,
                 total: 1,
+                claims_found: 0,
+                inference_errors: 0,
+                parse_errors: 0,
+                chunks_per_sec: 0.0,
             },
             IngestProgress::FoundCandidatePairs { count: 1 },
             IngestProgress::ExtractingRelationships {

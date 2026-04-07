@@ -19,6 +19,16 @@ pub trait InferenceProvider: Send + Sync {
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>>;
 
+    /// Embed a query string, applying any model-specific query instruction prefix.
+    ///
+    /// Default implementation calls `embed()` — override in providers that support
+    /// asymmetric instruction-aware models (e.g. Qwen3-Embedding) where the query
+    /// side gets a different prefix than the document side. The distinction yields
+    /// 1–5% retrieval improvement on instruction-aware models.
+    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        self.embed(query).await
+    }
+
     fn capabilities(&self) -> ProviderCapabilities;
 }
 

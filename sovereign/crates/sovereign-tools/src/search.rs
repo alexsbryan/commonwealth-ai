@@ -293,6 +293,8 @@ impl SearchTool {
             temperature: Some(0.3),
             structured_output: None,
             think_budget: None,
+            top_k: None,
+            top_p: None,
             oicp: None,
         };
 

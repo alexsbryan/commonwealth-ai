@@ -16,6 +16,7 @@ use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
 
 use sovereign_core::error::Error;
+use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, ThinkingControl};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 use sovereign_core::Result;
@@ -93,8 +94,9 @@ impl ModelSlot {
         model: &LlamaModel,
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         request: &CompletionRequest,
+        quirks: &ModelQuirks,
     ) -> Result<(String, usize)> {
-        let full_prompt = format_prompt(model, request)?;
+        let full_prompt = format_prompt(model, request, quirks)?;
 
         let tokens = model
             .str_to_token(&full_prompt, AddBos::Always)
@@ -135,7 +137,7 @@ impl ModelSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
 
-        let mut sampler = build_sampler(model, request.temperature);
+        let mut sampler = build_sampler(model, request, quirks);
         let mut output = String::new();
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
@@ -218,8 +220,9 @@ impl ModelSlot {
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         request: &CompletionRequest,
         tx: &tokio::sync::mpsc::Sender<Result<String>>,
+        quirks: &ModelQuirks,
     ) -> Result<()> {
-        let full_prompt = format_prompt(model, request)?;
+        let full_prompt = format_prompt(model, request, quirks)?;
 
         let tokens = model
             .str_to_token(&full_prompt, AddBos::Always)
@@ -238,7 +241,7 @@ impl ModelSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
 
-        let mut sampler = build_sampler(model, request.temperature);
+        let mut sampler = build_sampler(model, request, quirks);
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
 
@@ -334,6 +337,10 @@ struct EmbedSlot {
     /// Maximum tokens we can pack into the batch / context. Used to
     /// truncate long inputs gracefully instead of crashing llama.cpp.
     max_tokens: usize,
+    /// Family-specific embedding configuration: pooling strategy,
+    /// instruction prefixes, EOS appending. None = nomic/mxbai-style
+    /// defaults (mean pooling, no instructions, no EOS).
+    embed_quirks: Option<EmbedQuirks>,
 }
 
 struct EmbedSlotContext {
@@ -349,6 +356,7 @@ impl EmbedSlot {
         backend: &Arc<LlamaBackend>,
         model_path: &Path,
         n_gpu_layers: u32,
+        embed_quirks: Option<EmbedQuirks>,
     ) -> Result<Self> {
         let model_params = LlamaModelParams::default().with_n_gpu_layers(n_gpu_layers);
 
@@ -363,12 +371,20 @@ impl EmbedSlot {
 
         let model = Arc::new(model);
 
+        // Use the pooling strategy from EmbedQuirks when available.
+        // Defaults to Mean (nomic/mxbai-style) when no quirks are provided.
+        let pooling_type = match embed_quirks.as_ref().map(|q| &q.pooling) {
+            Some(PoolingStrategy::Last) => LlamaPoolingType::Last,
+            Some(PoolingStrategy::Cls)  => LlamaPoolingType::Cls,
+            _                           => LlamaPoolingType::Mean,
+        };
+
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(NonZeroU32::new(max_tokens as u32))
             .with_n_batch(max_tokens as u32)
             .with_n_ubatch(max_tokens as u32)
             .with_embeddings(true)
-            .with_pooling_type(LlamaPoolingType::Mean);
+            .with_pooling_type(pooling_type);
 
         let ctx = unsafe {
             let model_ref: &'static LlamaModel =
@@ -378,8 +394,13 @@ impl EmbedSlot {
                 .map_err(|e| Error::Inference(format!("Failed to create embed context: {e}")))?
         };
 
+        let pooling_name = match embed_quirks.as_ref().map(|q| &q.pooling) {
+            Some(PoolingStrategy::Last) => "last-token",
+            Some(PoolingStrategy::Cls)  => "cls",
+            _                           => "mean",
+        };
         eprintln!(
-            "Embed slot loaded: {} dims, {} layers, {}MB",
+            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}",
             n_embd,
             model.n_layer(),
             model.size() / (1024 * 1024),
@@ -393,15 +414,61 @@ impl EmbedSlot {
             }),
             n_embd,
             max_tokens,
+            embed_quirks,
         })
     }
 
-    /// Embed a single piece of text. Runs synchronously inside a
-    /// `tokio::task::spawn_blocking` from the async wrapper.
+    /// Embed a document string, applying the document-side instruction prefix
+    /// and EOS token from the embed quirks (when configured).
     fn embed_sync(
         model: &LlamaModel,
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         text: &str,
+        n_embd: usize,
+        max_tokens: usize,
+        embed_quirks: Option<&EmbedQuirks>,
+    ) -> Result<Vec<f32>> {
+        let prepared = if let Some(eq) = embed_quirks {
+            let prefixed = format!("{}{text}", eq.document_instruction);
+            if eq.append_eos_token {
+                format!("{prefixed}<|endoftext|>")
+            } else {
+                prefixed
+            }
+        } else {
+            text.to_string()
+        };
+        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_tokens)
+    }
+
+    /// Embed a query string, applying the query-side instruction prefix
+    /// and EOS token from the embed quirks (when configured).
+    fn embed_query_sync(
+        model: &LlamaModel,
+        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        query: &str,
+        n_embd: usize,
+        max_tokens: usize,
+        embed_quirks: Option<&EmbedQuirks>,
+    ) -> Result<Vec<f32>> {
+        let prepared = if let Some(eq) = embed_quirks {
+            let prefixed = format!("{}{query}", eq.query_instruction);
+            if eq.append_eos_token {
+                format!("{prefixed}<|endoftext|>")
+            } else {
+                prefixed
+            }
+        } else {
+            query.to_string()
+        };
+        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_tokens)
+    }
+
+    /// Core embedding routine: tokenize, batch-decode, pool, and L2-normalize.
+    fn run_embed_sync(
+        model: &LlamaModel,
+        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        input: &str,
         n_embd: usize,
         max_tokens: usize,
     ) -> Result<Vec<f32>> {
@@ -410,7 +477,7 @@ impl EmbedSlot {
         ctx.clear_kv_cache();
 
         let mut tokens = model
-            .str_to_token(text, AddBos::Always)
+            .str_to_token(input, AddBos::Always)
             .map_err(|e| Error::Inference(format!("Embed tokenization failed: {e}")))?;
 
         // Truncate inputs that exceed the context window. Embedding
@@ -437,14 +504,16 @@ impl EmbedSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
 
-        // With mean pooling, sequence 0 has the pooled embedding.
+        // Sequence 0 has the pooled embedding (mean, last, or cls depending on
+        // the context params set at load time).
         let raw = ctx
             .embeddings_seq_ith(0)
             .map_err(|e| Error::Inference(format!("Failed to read embeddings: {e}")))?;
 
         // L2-normalize so the resulting vectors are directly comparable
-        // by cosine similarity (which is what corpus-engine's vector
-        // search assumes).
+        // by cosine similarity (which is what corpus-engine's vector search assumes).
+        // We always normalise in-process — NormalizationStrategy::Server only applies
+        // in remote llama-server mode.
         let mut out = raw.to_vec();
         let norm: f32 = out.iter().map(|x| x * x).sum::<f32>().sqrt();
         if norm > 0.0 {
@@ -465,6 +534,29 @@ pub struct InferenceConfig {
     pub embed_model: Option<PathBuf>,
     pub context_size: u32,
     pub gpu_layers: Option<u32>,
+    /// Model family for the fast slot. Drives thinking injection and
+    /// sampling defaults. Defaults to `Unknown` (conservative no-thinking).
+    pub fast_family: ModelFamily,
+    /// Model family for the primary (thoughtful) slot.
+    pub primary_family: ModelFamily,
+    /// Model family for the embed slot. Must be `Qwen3Embedding` for
+    /// last-token pooling and query instruction support.
+    pub embed_family: ModelFamily,
+}
+
+impl Default for InferenceConfig {
+    fn default() -> Self {
+        Self {
+            fast_model: PathBuf::from("models/fast.gguf"),
+            primary_model: None,
+            embed_model: None,
+            context_size: 2048,
+            gpu_layers: None,
+            fast_family: ModelFamily::Unknown,
+            primary_family: ModelFamily::Unknown,
+            embed_family: ModelFamily::Unknown,
+        }
+    }
 }
 
 /// Triple-slot inference provider wrapping llama.cpp via FFI.
@@ -487,6 +579,10 @@ pub struct EmbeddedLlamaCpp {
     last_primary_use: Arc<Mutex<Option<Instant>>>,
     embed_slot: Option<Arc<EmbedSlot>>,
     hardware: HardwareProfile,
+    /// Quirks for the fast slot — controls thinking injection and sampling defaults.
+    fast_quirks: ModelQuirks,
+    /// Quirks for the primary (thoughtful) slot.
+    primary_quirks: ModelQuirks,
 }
 
 impl EmbeddedLlamaCpp {
@@ -527,14 +623,43 @@ impl EmbeddedLlamaCpp {
         context_size: u32,
         gpu_layers: Option<u32>,
     ) -> Result<Self> {
+        Self::load_full_with_families(
+            fast_model_path,
+            primary_model_path,
+            embed_model_path,
+            context_size,
+            gpu_layers,
+            ModelFamily::Unknown,
+            ModelFamily::Unknown,
+            ModelFamily::Unknown,
+        )
+    }
+
+    /// Load with separate fast, primary, and embed models, specifying the model
+    /// family for each slot. The family drives thinking injection, sampling
+    /// defaults, and embedding pooling/instruction behaviour.
+    pub fn load_full_with_families(
+        fast_model_path: &Path,
+        primary_model_path: Option<&Path>,
+        embed_model_path: Option<&Path>,
+        context_size: u32,
+        gpu_layers: Option<u32>,
+        fast_family: ModelFamily,
+        primary_family: ModelFamily,
+        embed_family: ModelFamily,
+    ) -> Result<Self> {
         let hardware = HardwareProfile::detect();
         let n_gpu_layers = gpu_layers.unwrap_or(hardware.recommended_gpu_layers);
+
+        let fast_quirks = fast_family.default_quirks();
+        let primary_quirks = primary_family.default_quirks();
+        let embed_quirks = embed_family.default_quirks().embed;
 
         let backend = LlamaBackend::init()
             .map_err(|e| Error::Inference(format!("Failed to init llama backend: {e}")))?;
         let backend = Arc::new(backend);
 
-        eprintln!("Loading fast slot...");
+        eprintln!("Loading fast slot ({fast_family:?})...");
         let fast = Arc::new(ModelSlot::load(
             &backend,
             fast_model_path,
@@ -549,8 +674,8 @@ impl EmbeddedLlamaCpp {
         // `embed()` will return a clear error.
         let embed_slot = match embed_model_path {
             Some(path) => {
-                eprintln!("Loading embed slot from {}...", path.display());
-                match EmbedSlot::load(&backend, path, n_gpu_layers) {
+                eprintln!("Loading embed slot from {} ({embed_family:?})...", path.display());
+                match EmbedSlot::load(&backend, path, n_gpu_layers, embed_quirks) {
                     Ok(slot) => Some(Arc::new(slot)),
                     Err(e) => {
                         eprintln!("Failed to load embed slot: {e}. Embedding will be unavailable.");
@@ -572,6 +697,8 @@ impl EmbeddedLlamaCpp {
             last_primary_use: Arc::new(Mutex::new(None)),
             embed_slot,
             hardware,
+            fast_quirks,
+            primary_quirks,
         })
     }
 
@@ -662,6 +789,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let gpu_layers = self.gpu_layers;
             let last_use = Arc::clone(&self.last_primary_use);
             let request = request.clone();
+            let quirks = self.primary_quirks.clone();
 
             tokio::task::spawn_blocking(move || {
                 let start = Instant::now();
@@ -679,7 +807,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request)
+                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request, &quirks)
                 }));
 
                 let (text, tokens_used) = match result {
@@ -711,6 +839,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // Use fast slot.
             let slot = Arc::clone(&self.fast);
             let request = request.clone();
+            let quirks = self.fast_quirks.clone();
 
             tokio::task::spawn_blocking(move || {
                 let start = Instant::now();
@@ -718,7 +847,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request)
+                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request, &quirks)
                 }));
 
                 let (text, tokens_used) = match result {
@@ -762,6 +891,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let ctx_size = self.primary_ctx_size;
             let gpu_layers = self.gpu_layers;
             let last_use = Arc::clone(&self.last_primary_use);
+            let quirks = self.primary_quirks.clone();
 
             tokio::task::spawn_blocking(move || {
                 let mut primary = primary_lock.blocking_lock();
@@ -779,17 +909,18 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx)
+                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks)
                 {
                     let _ = tx.blocking_send(Err(e));
                 }
             });
         } else {
             let slot = Arc::clone(&self.fast);
+            let quirks = self.fast_quirks.clone();
             tokio::task::spawn_blocking(move || {
                 let mut ctx_lock = slot.context.blocking_lock();
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx)
+                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks)
                 {
                     let _ = tx.blocking_send(Err(e));
                 }
@@ -822,6 +953,43 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     &text,
                     slot.n_embd,
                     slot.max_tokens,
+                    slot.embed_quirks.as_ref(),
+                )
+            }));
+            match result {
+                Ok(Ok(v)) => Ok(v),
+                Ok(Err(e)) => Err(e),
+                Err(_) => Err(Error::Inference(
+                    "Embedding inference panicked — input may be malformed or \
+                     the embed model is incompatible.".to_string(),
+                )),
+            }
+        })
+        .await
+        .map_err(|e| Error::Inference(format!("Embed task failed: {e}")))?
+    }
+
+    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        let slot = self.embed_slot.as_ref().ok_or_else(|| {
+            Error::Inference(
+                "No embedding model is configured. Open Settings → Embedding model and \
+                 select a GGUF embedding model (e.g. nomic-embed-text-v1.5.Q4_K_M.gguf), \
+                 then retry.".to_string(),
+            )
+        })?;
+        let slot = Arc::clone(slot);
+        let query = query.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let mut ctx_lock = slot.context.blocking_lock();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                EmbedSlot::embed_query_sync(
+                    &slot.model,
+                    &mut ctx_lock.ctx,
+                    &query,
+                    slot.n_embd,
+                    slot.max_tokens,
+                    slot.embed_quirks.as_ref(),
                 )
             }));
             match result {
@@ -853,12 +1021,32 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
 // ─── Shared helpers ────────────────────────────────────────────
 
-fn format_prompt(model: &LlamaModel, request: &CompletionRequest) -> Result<String> {
+fn format_prompt(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> Result<String> {
+    // Inject thinking-mode token into the system message based on family quirks.
+    // `think_budget == Some(0)` signals the caller wants thinking suppressed.
+    // For SystemPromptToken families (Qwen3, Qwen3.5, SmolLM3): append /think or /no_think.
+    // For AlwaysOn (Phi-4-reasoning): thinking cannot be disabled — don't inject.
+    // For None (Gemma3, Llama3, Phi-4): no thinking tokens exist — don't inject.
+    let base_system = request.system_message.as_deref().unwrap_or("");
+    let system_with_thinking = match &quirks.thinking {
+        ThinkingControl::SystemPromptToken { enable, disable } => {
+            let token = if request.think_budget == Some(0) { disable } else { enable };
+            if base_system.is_empty() {
+                token.clone()
+            } else {
+                format!("{base_system}\n{token}")
+            }
+        }
+        // AlwaysOn: thinking is structural — injecting /no_think degrades output.
+        // None: family has no thinking tokens — nothing to inject.
+        ThinkingControl::AlwaysOn | ThinkingControl::None => base_system.to_string(),
+    };
+
     if let Ok(template) = model.chat_template(None) {
         let mut messages = Vec::new();
-        if let Some(sys) = &request.system_message {
+        if !system_with_thinking.is_empty() {
             messages.push(
-                LlamaChatMessage::new("system".to_string(), sys.clone())
+                LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
                     .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
             );
         }
@@ -871,9 +1059,10 @@ fn format_prompt(model: &LlamaModel, request: &CompletionRequest) -> Result<Stri
         }
     }
 
-    Ok(match &request.system_message {
-        Some(sys) => format!("{sys}\n\n{}", request.prompt),
-        None => request.prompt.clone(),
+    Ok(if system_with_thinking.is_empty() {
+        request.prompt.clone()
+    } else {
+        format!("{system_with_thinking}\n\n{}", request.prompt)
     })
 }
 
@@ -895,12 +1084,19 @@ const THINK_BUDGET: usize = 512;
 ///   a collapsed distribution. When uncertain it relaxes, preserving diversity.
 /// - **penalties**: kept as a backstop for single-token repetition that DRY's
 ///   `allowed_length = 2` intentionally ignores.
-fn build_sampler(model: &LlamaModel, temperature: Option<f32>) -> LlamaSampler {
-    let temp = temperature.unwrap_or(0.7);
+fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> LlamaSampler {
+    // Temperature: per-request override → family default.
+    let temp = request.temperature.unwrap_or(quirks.default_temperature);
+    // Top-k: per-request override → family default → hard fallback of 40.
+    let top_k_val = request.top_k
+        .or(quirks.default_top_k)
+        .unwrap_or(40) as i32;
     // Sequence breakers tell DRY where one "thought unit" ends and another
     // begins — any of these tokens resets the repeated-suffix detector.
     let breakers: &[&[u8]] = &[b"\n", b".", b"?", b"!", b":", b"\"", b"*"];
     if temp < 0.01 {
+        // Greedy decoding — DRY and penalties still applied to prevent
+        // degenerate repetition loops even in greedy mode.
         LlamaSampler::chain_simple([
             LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()),
             LlamaSampler::penalties(128, 1.15, 0.1, 0.1),
@@ -910,7 +1106,7 @@ fn build_sampler(model: &LlamaModel, temperature: Option<f32>) -> LlamaSampler {
         LlamaSampler::chain_simple([
             LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()),
             LlamaSampler::penalties(128, 1.15, 0.1, 0.1),
-            LlamaSampler::top_k(40),
+            LlamaSampler::top_k(top_k_val),
             LlamaSampler::min_p(0.05, 1),
             LlamaSampler::temp(temp),
             LlamaSampler::dist(rand_seed()),

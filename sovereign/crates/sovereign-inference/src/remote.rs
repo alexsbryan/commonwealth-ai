@@ -359,6 +359,9 @@ mod tests {
             max_tokens: Some(100),
             temperature: Some(0.5),
             structured_output: None,
+            think_budget: None,
+            top_k: None,
+            top_p: None,
             oicp: None,
         };
 
@@ -392,6 +395,9 @@ mod tests {
             max_tokens: None,
             temperature: None,
             structured_output: None,
+            think_budget: None,
+            top_k: None,
+            top_p: None,
             oicp: Some(InferenceRequirements {
                 required,
                 preferred: Default::default(),

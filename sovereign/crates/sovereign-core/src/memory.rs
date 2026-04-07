@@ -78,6 +78,8 @@ pub async fn compress_working_memory(
         temperature: Some(0.1),
         structured_output: None,
             think_budget: None,
+        top_k: None,
+        top_p: None,
         oicp: None,
     };
 
@@ -200,6 +202,8 @@ pub async fn extract_long_term_memories(
         temperature: Some(0.3),
         structured_output: None,
             think_budget: None,
+        top_k: None,
+        top_p: None,
         oicp: None,
     };
 
@@ -295,6 +299,8 @@ pub async fn detect_contradictions(
         temperature: Some(0.0),
         structured_output: None,
             think_budget: None,
+        top_k: None,
+        top_p: None,
         oicp: None,
     };
 

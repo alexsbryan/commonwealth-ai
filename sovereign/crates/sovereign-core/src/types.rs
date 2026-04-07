@@ -62,6 +62,14 @@ pub struct CompletionRequest {
     /// compiled-in `THINK_BUDGET` constant if unavailable).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub think_budget: Option<usize>,
+    /// Override the family-default top-k sampling parameter.
+    /// `None` falls back to `ModelQuirks::default_top_k`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
+    /// Override the family-default top-p (nucleus) sampling parameter.
+    /// `None` falls back to `ModelQuirks::default_top_p`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
     /// OICP capability requirements. Used by providers that support
     /// OICP to select the best model. Ignored by providers that don't.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -78,6 +86,8 @@ impl CompletionRequest {
             temperature: None,
             structured_output: None,
             think_budget: None,
+            top_k: None,
+            top_p: None,
             oicp: None,
         }
     }
@@ -109,6 +119,8 @@ impl CompletionRequest {
             temperature: Some(0.0),
             structured_output: None,
             think_budget: Some(0), // No thinking needed for yes/no
+            top_k: None,
+            top_p: None,
             oicp: None,
         }
     }

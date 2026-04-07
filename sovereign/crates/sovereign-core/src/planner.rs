@@ -58,6 +58,8 @@ impl Planner for LlmPlanner {
                 temperature: Some(0.0),
                 structured_output: None,
             think_budget: None,
+                top_k: None,
+                top_p: None,
                 oicp: None,
             };
 
@@ -132,6 +134,8 @@ impl Planner for LlmPlanner {
             temperature: Some(0.0),
             structured_output: None,
             think_budget: None,
+            top_k: None,
+            top_p: None,
             oicp: None,
         };
 

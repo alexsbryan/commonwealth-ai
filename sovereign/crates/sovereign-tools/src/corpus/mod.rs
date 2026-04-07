@@ -35,15 +35,30 @@ pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_en
 
 /// Create a corpus-engine `InferenceFn` from Sovereign's `InferenceProvider`.
 /// Used by the optional enrichment pipeline to run claim and relationship
-/// extraction prompts. The inference call uses `Speed::Slow` so the
-/// Primary slot is preferred (enrichment quality matters more than latency).
+/// extraction prompts.
+///
+/// Uses `Speed::Fast` (the smaller always-loaded model) with thinking disabled
+/// and a capped token budget. Structured JSON extraction doesn't benefit from
+/// the 27B primary model or from chain-of-thought reasoning, and running the
+/// primary model at ~1 min/chunk makes enrichment impractical on large corpora.
 pub fn inference_to_inference_fn(
     inference: Arc<dyn InferenceProvider>,
 ) -> corpus_engine::InferenceFn {
     use sovereign_core::types::{CompletionRequest, Speed};
     Arc::new(move |prompt: &str| {
         let inf = Arc::clone(&inference);
-        let request = CompletionRequest::new(prompt).with_speed(Speed::Slow);
+        let request = CompletionRequest {
+            prompt: prompt.to_string(),
+            system_message: None,
+            preferred_speed: Speed::Fast,  // fast model — structured extraction doesn't need 27B
+            max_tokens: Some(768),         // 8 claims × ~80 tokens; 768 is ample
+            temperature: Some(0.1),        // low temperature for consistent JSON output
+            think_budget: Some(0),         // suppress thinking — hurts JSON, wastes tokens
+            structured_output: None,
+            top_k: None,
+            top_p: None,
+            oicp: None,
+        };
         Box::pin(async move {
             let resp = inf
                 .complete(&request)

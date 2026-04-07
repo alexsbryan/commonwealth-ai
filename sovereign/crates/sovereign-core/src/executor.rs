@@ -328,6 +328,8 @@ impl Executor {
                     temperature: Some(0.7),
                     structured_output: None,
             think_budget: None,
+                    top_k: None,
+                    top_p: None,
                     oicp,
                 };
 
@@ -574,6 +576,8 @@ impl Executor {
                 temperature: Some(0.3),
                 structured_output: None,
             think_budget: None,
+                top_k: None,
+                top_p: None,
                 oicp: None,
             };
 
@@ -647,6 +651,8 @@ impl Executor {
                         temperature: Some(0.3),
                         structured_output: None,
             think_budget: None,
+                        top_k: None,
+                        top_p: None,
                         oicp: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;

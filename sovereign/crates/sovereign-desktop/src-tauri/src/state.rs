@@ -367,11 +367,44 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
     let inference_fn =
         sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
+    // Derive the embedding model identifier from the configured file path so
+    // _corpus_meta.json records the actual model rather than the hardcoded
+    // "nomic-embed-text-v2" default.  We use the filename stem (without .gguf)
+    // as a stable, human-readable identifier.
+    let embed_model_name = config
+        .embed_model_path
+        .as_ref()
+        .and_then(|p| p.file_stem())
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown-embed-model")
+        .to_string();
     let corpus_engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
+            .with_embedding_model(&embed_model_name)
             .with_inference_fn(inference_fn),
     );
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
+
+    // Startup dimension guard: probe the loaded embed model's actual output
+    // size and compare against every installed corpus index. A mismatch means
+    // the user swapped embed models after building their library — retrieval
+    // will silently return wrong results unless they rebuild.
+    if config.embed_model_path.is_some() {
+        match inference.embed("probe").await {
+            Ok(probe_vec) => {
+                let dims = probe_vec.len();
+                if let Err(e) = corpus_engine.validate_embed_dimensions(dims).await {
+                    tracing::warn!(
+                        "Embed dimension mismatch detected at startup: {} \
+                         Retrieval results may be incorrect until the affected \
+                         corpus is rebuilt (Settings → Knowledge → Rebuild).",
+                        e
+                    );
+                }
+            }
+            Err(_) => {} // embed not configured or failed — skip validation
+        }
+    }
 
     tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
         Arc::clone(&corpus_engine),

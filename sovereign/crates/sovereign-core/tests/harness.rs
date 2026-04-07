@@ -185,6 +185,7 @@ impl TestHarness {
             store_trait,
             skills,
             approval,
+            sovereign_core::types::InferenceConfig::default(),
         );
 
         Self {
