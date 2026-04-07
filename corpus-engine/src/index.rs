@@ -107,6 +107,13 @@ struct IndexMeta {
     chunk_range_start: Option<u64>,
     #[serde(default)]
     chunk_range_end: Option<u64>,
+    /// Set to true when ingestion starts, cleared to false only on successful
+    /// completion. If the process is killed mid-ingest this stays true, allowing
+    /// `installed_indexes()` to skip the partial index rather than reporting it
+    /// as fully installed. Defaults to false so existing complete indexes (written
+    /// before this field existed) are treated as complete.
+    #[serde(default)]
+    ingestion_in_progress: bool,
 }
 
 fn meta_path(index_dir: &Path) -> std::path::PathBuf {
@@ -176,6 +183,7 @@ impl CorpusIndex {
             is_shard: false,
             chunk_range_start: None,
             chunk_range_end: None,
+            ingestion_in_progress: true,
         };
         write_meta(path, &meta)?;
 
@@ -301,6 +309,24 @@ impl CorpusIndex {
         }
 
         Ok(())
+    }
+
+    /// Clear the `ingestion_in_progress` flag. Called by the engine once the
+    /// full pipeline (embed → index → optional enrichment) completes successfully.
+    pub fn mark_ingestion_complete(&self) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.ingestion_in_progress = false;
+        write_meta(index_dir, &meta)
+    }
+
+    /// Returns true if the index has a complete, fully-committed ingestion.
+    /// Used by `installed_indexes()` to skip partially-ingested directories
+    /// left behind by a process kill.
+    pub fn is_ingestion_complete(path: &Path) -> bool {
+        read_meta(path)
+            .map(|m| !m.ingestion_in_progress)
+            .unwrap_or(false)
     }
 
     /// Build vector + FTS indexes for efficient search.

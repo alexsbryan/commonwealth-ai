@@ -14,7 +14,12 @@ pub enum IngestProgress {
     },
     Embedding {
         chunks_embedded: u64,
+        /// Total chunks expected. Zero means unknown (e.g. streaming extraction).
         total: u64,
+        /// Number of source documents processed so far.
+        docs_processed: u64,
+        /// Embedding throughput in chunks per second over the last batch.
+        chunks_per_sec: f32,
     },
     Indexing {
         chunks_indexed: u64,

@@ -229,7 +229,14 @@ impl CorpusEngine {
         .await?;
 
         let mut total_chunks = 0u64;
+        let mut docs_processed = 0u64;
         let mut batch: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
+        let mut batch_start = Instant::now();
+
+        eprintln!(
+            "[{}] Starting embed+index pipeline",
+            recipe.corpus.id
+        );
 
         for doc_result in doc_iter {
             let doc = match doc_result {
@@ -239,6 +246,8 @@ impl CorpusEngine {
                     continue;
                 }
             };
+
+            docs_processed += 1;
 
             let text_chunks = chunker.chunk(&doc.content);
 
@@ -266,16 +275,30 @@ impl CorpusEngine {
                 ));
 
                 if batch.len() >= EMBED_BATCH_SIZE {
+                    let batch_secs = batch_start.elapsed().as_secs_f32().max(0.001);
+                    let chunks_per_sec = batch.len() as f32 / batch_secs;
                     total_chunks += batch.len() as u64;
                     index.insert_batch(&batch).await?;
                     batch.clear();
+
+                    let elapsed = start.elapsed();
+                    eprintln!(
+                        "[{}] {total_chunks} chunks | {docs_processed} docs | {chunks_per_sec:.1} chunks/s | {}m{}s elapsed",
+                        recipe.corpus.id,
+                        elapsed.as_secs() / 60,
+                        elapsed.as_secs() % 60,
+                    );
 
                     if let Some(ref cb) = progress {
                         cb(IngestProgress::Embedding {
                             chunks_embedded: total_chunks,
                             total: 0,
+                            docs_processed,
+                            chunks_per_sec,
                         });
                     }
+
+                    batch_start = Instant::now();
                 }
             }
         }
@@ -284,6 +307,10 @@ impl CorpusEngine {
         if !batch.is_empty() {
             total_chunks += batch.len() as u64;
             index.insert_batch(&batch).await?;
+            eprintln!(
+                "[{}] Flushed final batch — {total_chunks} chunks total from {docs_processed} docs",
+                recipe.corpus.id
+            );
         }
 
         // A pipeline that produced zero chunks is almost always a bug
@@ -374,6 +401,19 @@ impl CorpusEngine {
         let duration_secs = start.elapsed().as_secs();
         let info = index.info().await?;
 
+        // Mark the index as fully committed so it survives a restart as "Indexed"
+        // rather than being treated as a partial/incomplete ingest.
+        if let Err(e) = index.mark_ingestion_complete() {
+            tracing::warn!("Failed to mark ingestion complete for '{}': {e}", recipe.corpus.id);
+        }
+
+        eprintln!(
+            "[{}] Ingestion complete — {total_chunks} chunks in {}m{}s",
+            recipe.corpus.id,
+            duration_secs / 60,
+            duration_secs % 60,
+        );
+
         if let Some(ref cb) = progress {
             cb(IngestProgress::Complete {
                 total_chunks,
@@ -415,6 +455,15 @@ impl CorpusEngine {
             }
             // Check for _corpus_meta.json to identify valid indexes.
             if !path.join("_corpus_meta.json").exists() {
+                continue;
+            }
+            // Skip indexes where ingestion was interrupted (process killed mid-embed).
+            if !CorpusIndex::is_ingestion_complete(&path) {
+                eprintln!(
+                    "[corpus-engine] Skipping partial index at '{}' — ingestion was not completed. \
+                     Re-install the corpus to build a complete index.",
+                    name
+                );
                 continue;
             }
             match CorpusIndex::open(&path).await {
