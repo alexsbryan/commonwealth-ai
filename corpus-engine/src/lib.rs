@@ -27,11 +27,12 @@ pub mod types;
 
 pub use engine::CorpusEngine;
 pub use enrichment::{
-    ClaimRelationship, ContestedCluster, EnrichmentEngine, EpistemicLandscape,
-    EpistemicStatus, ExtractedClaim, Position, RelationshipType,
+    ArticleEpistemicProfile, ClaimRelationship, ContestedCluster, EnrichmentEngine,
+    EpistemicLandscape, EpistemicStatus, ExtractedClaim, LinkGraphBuilder, Position,
+    RelationshipType, WikiLink, WikipediaChunkMetadata,
 };
 pub use error::{Error, Result};
-pub use index::{CorpusIndex, InsertChunk, StoredChunk};
+pub use index::{CorpusIndex, InsertChunk, StoredChunk, StoredChunkWithMetadata};
 pub use progress::{IngestProgress, ProgressCallback};
 pub use recipe::{EnrichmentConfig, Recipe};
 pub use types::{

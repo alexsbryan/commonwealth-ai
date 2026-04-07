@@ -315,6 +315,10 @@ async fn ingest_progress_callback_fires_for_enrichment_phases() {
                 "extracting_relationships"
             }
             corpus_engine::IngestProgress::Complete { .. } => "complete",
+            corpus_engine::IngestProgress::BuildingLinkGraph { .. } => "building_link_graph",
+            corpus_engine::IngestProgress::ComputingArticleProfiles { .. } => {
+                "computing_article_profiles"
+            }
         };
         phases_inner.lock().unwrap().push(label);
     });

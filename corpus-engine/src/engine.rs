@@ -8,6 +8,8 @@ use crate::acquirers::bulk_download::BulkDownloader;
 use crate::acquirers::huggingface::HuggingFaceDatasetAcquirer;
 use crate::acquirers::local_file::LocalFileAcquirer;
 use crate::chunkers::{self, Chunker};
+use crate::enrichment::article_profile::compute_article_profiles;
+use crate::enrichment::link_graph::LinkGraphBuilder;
 use crate::error::{Error, Result};
 use crate::extractors::{self, Extractor};
 use crate::index::{CorpusIndex, InsertChunk};
@@ -333,6 +335,42 @@ impl CorpusEngine {
             }
         }
 
+        // Structural enrichment phase: link graph + article profiles.
+        // Runs when the recipe uses a WikipediaStructured extractor with
+        // structural_signals = true. No LLM required.
+        if structural_signals_enabled(&recipe.extract) {
+            let controversy_patterns =
+                controversy_patterns_from_config(&recipe.extract);
+
+            if let Some(ref cb) = progress {
+                cb(IngestProgress::BuildingLinkGraph {
+                    current: 0,
+                    total: 0,
+                });
+            }
+
+            let builder = LinkGraphBuilder {
+                controversy_section_types: vec!["controversy".to_string()],
+            };
+            let link_rels = builder.build(&index, &progress).await?;
+
+            if !link_rels.is_empty() {
+                index.store_relationships(&link_rels).await?;
+            }
+
+            let profiles = compute_article_profiles(&index, &link_rels).await?;
+
+            if let Some(ref cb) = progress {
+                cb(IngestProgress::ComputingArticleProfiles {
+                    article_count: profiles.len(),
+                });
+            }
+
+            if !profiles.is_empty() {
+                index.store_article_profiles(&profiles).await?;
+            }
+        }
+
         let duration_secs = start.elapsed().as_secs();
         let info = index.info().await?;
 
@@ -576,6 +614,20 @@ impl CorpusEngine {
                 title_pattern: title_pattern.clone(),
                 strip_boilerplate: strip_boilerplate.clone(),
             }),
+            ExtractorConfig::WikipediaStructured {
+                title_column,
+                url_column,
+                controversy_patterns,
+                factual_patterns,
+                ..
+            } => Box::new(
+                extractors::wikipedia_structured::WikipediaStructuredExtractor {
+                    title_column: title_column.clone(),
+                    url_column: url_column.clone(),
+                    controversy_patterns: controversy_patterns.clone(),
+                    factual_patterns: factual_patterns.clone(),
+                },
+            ),
         }
     }
 
@@ -617,6 +669,30 @@ impl CorpusEngine {
             "No index found for corpus '{corpus_id}' in {}",
             self.index_dir.display()
         )))
+    }
+}
+
+/// Returns true if the extractor config requests structural signal extraction
+/// (i.e., is a WikipediaStructured extractor with structural_signals = true).
+fn structural_signals_enabled(config: &ExtractorConfig) -> bool {
+    matches!(
+        config,
+        ExtractorConfig::WikipediaStructured {
+            structural_signals: true,
+            ..
+        }
+    )
+}
+
+/// Extract the controversy patterns from a WikipediaStructured extractor config.
+/// Returns an empty vec for all other extractor types.
+fn controversy_patterns_from_config(config: &ExtractorConfig) -> Vec<String> {
+    match config {
+        ExtractorConfig::WikipediaStructured {
+            controversy_patterns,
+            ..
+        } => controversy_patterns.clone(),
+        _ => vec![],
     }
 }
 

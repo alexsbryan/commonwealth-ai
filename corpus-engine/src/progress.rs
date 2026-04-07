@@ -34,6 +34,15 @@ pub enum IngestProgress {
         current: u64,
         total: u64,
     },
+    /// Structural enrichment (Wikipedia): building link-based relationship graph.
+    BuildingLinkGraph {
+        current: usize,
+        total: usize,
+    },
+    /// Structural enrichment (Wikipedia): computing per-article epistemic profiles.
+    ComputingArticleProfiles {
+        article_count: usize,
+    },
     Complete {
         total_chunks: u64,
         duration_secs: u64,

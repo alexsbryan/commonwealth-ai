@@ -8,8 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow_array::{
-    Array, Float32Array, Int64Array, RecordBatch, StringArray, UInt64Array,
-    FixedSizeListArray,
+    Array, BooleanArray, Float32Array, Int64Array, RecordBatch, StringArray, UInt32Array,
+    UInt64Array, FixedSizeListArray,
     types::Float32Type,
 };
 use arrow_schema::SchemaRef;
@@ -17,10 +17,11 @@ use futures::TryStreamExt;
 use lancedb::index::scalar::FullTextSearchQuery;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
+use crate::enrichment::article_profile::ArticleEpistemicProfile;
 use crate::enrichment::claims::{EpistemicStatus, ExtractedClaim};
 use crate::enrichment::landscape::EpistemicLandscape;
 use crate::enrichment::relationships::{ClaimRelationship, RelationshipType};
-use crate::enrichment::schema::{claims_schema, relationships_schema};
+use crate::enrichment::schema::{article_profiles_schema, claims_schema, relationships_schema};
 use crate::error::{Error, Result};
 use crate::types::{ChunkRange, IndexInfo, ScoredChunk, ScoredClaim};
 
@@ -40,6 +41,16 @@ pub struct StoredChunk {
     pub id: u64,
     pub content: String,
     pub title: Option<String>,
+}
+
+/// A chunk with its raw metadata JSON string, used by the structural
+/// enrichment pipeline (link graph builder and article profile builder).
+#[derive(Debug, Clone)]
+pub struct StoredChunkWithMetadata {
+    pub id: u64,
+    pub title: Option<String>,
+    pub url: Option<String>,
+    pub metadata_raw: Option<String>,
 }
 
 // ─── CorpusIndex ───────────────────────────────────────────
@@ -123,6 +134,7 @@ fn write_meta(index_dir: &Path, meta: &IndexMeta) -> Result<()> {
 const CHUNKS_TABLE: &str = "chunks";
 const CLAIMS_TABLE: &str = "claims";
 const RELATIONSHIPS_TABLE: &str = "relationships";
+const ARTICLE_PROFILES_TABLE: &str = "article_profiles";
 
 impl CorpusIndex {
     // ── Construction ───────────────────────────────────────
@@ -599,6 +611,60 @@ impl CorpusIndex {
         Ok(out)
     }
 
+    /// Like `all_chunks` but also returns the raw `metadata` JSON string and
+    /// the URL, for use by the structural enrichment pipeline (link graph
+    /// builder and article profile builder).
+    pub async fn all_chunks_with_raw_metadata(&self) -> Result<Vec<StoredChunkWithMetadata>> {
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "id".to_string(),
+                "title".to_string(),
+                "url".to_string(),
+                "metadata".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("all_chunks_with_raw_metadata query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("all_chunks_with_raw_metadata collect: {e}")))?;
+
+        let mut out = Vec::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let titles = batch
+                .column_by_name("title")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let urls = batch
+                .column_by_name("url")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let metadatas = batch
+                .column_by_name("metadata")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+            for i in 0..batch.num_rows() {
+                out.push(StoredChunkWithMetadata {
+                    id: ids.value(i) as u64,
+                    title: titles.and_then(|t| {
+                        if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                    }),
+                    url: urls.and_then(|u| {
+                        if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                    }),
+                    metadata_raw: metadatas.and_then(|m| {
+                        if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                    }),
+                });
+            }
+        }
+        Ok(out)
+    }
+
     // ── Enrichment: detection ────────────────────────────
 
     /// True if this index has a `claims` table.
@@ -609,6 +675,27 @@ impl CorpusIndex {
     /// True if this index has a `relationships` table.
     pub async fn has_relationships_table(&self) -> bool {
         self.has_table(RELATIONSHIPS_TABLE).await
+    }
+
+    /// True if this index has an `article_profiles` table (structured Wikipedia).
+    pub async fn has_article_profiles(&self) -> bool {
+        self.has_table(ARTICLE_PROFILES_TABLE).await
+    }
+
+    /// Number of extracted claims stored in this index. Returns 0 if no claims table exists.
+    pub async fn claim_count(&self) -> u64 {
+        match self.open_table(CLAIMS_TABLE).await {
+            Ok(table) => table.count_rows(None).await.unwrap_or(0) as u64,
+            Err(_) => 0,
+        }
+    }
+
+    /// Number of stored relationships in this index. Returns 0 if no relationships table exists.
+    pub async fn relationship_count(&self) -> u64 {
+        match self.open_table(RELATIONSHIPS_TABLE).await {
+            Ok(table) => table.count_rows(None).await.unwrap_or(0) as u64,
+            Err(_) => 0,
+        }
     }
 
     async fn has_table(&self, name: &str) -> bool {
@@ -735,6 +822,69 @@ impl CorpusIndex {
             .execute()
             .await
             .map_err(|e| Error::Database(format!("insert relationships: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Store per-article epistemic profiles into the `article_profiles` table.
+    /// Creates the table if it doesn't already exist.
+    pub async fn store_article_profiles(
+        &self,
+        profiles: &[ArticleEpistemicProfile],
+    ) -> Result<()> {
+        if profiles.is_empty() {
+            return Ok(());
+        }
+
+        let schema = article_profiles_schema();
+        let table = match self.open_table(ARTICLE_PROFILES_TABLE).await {
+            Ok(t) => t,
+            Err(_) => self
+                .db
+                .create_empty_table(ARTICLE_PROFILES_TABLE, schema.clone())
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("create article_profiles table: {e}")))?,
+        };
+
+        let titles: Vec<&str> = profiles.iter().map(|p| p.article_title.as_str()).collect();
+        let urls: Vec<Option<&str>> = profiles.iter().map(|p| p.article_url.as_deref()).collect();
+        let confidences: Vec<f32> = profiles.iter().map(|p| p.editorial_confidence).collect();
+        let has_controversy: Vec<bool> =
+            profiles.iter().map(|p| p.has_controversy_sections).collect();
+        let controversy_count: Vec<u32> =
+            profiles.iter().map(|p| p.controversy_section_count).collect();
+        let citation_needed: Vec<u32> =
+            profiles.iter().map(|p| p.citation_needed_count).collect();
+        let pov: Vec<u32> = profiles.iter().map(|p| p.pov_count).collect();
+        let clarification: Vec<u32> =
+            profiles.iter().map(|p| p.clarification_needed_count).collect();
+        let inlinks: Vec<u32> = profiles.iter().map(|p| p.controversy_inlink_count).collect();
+        let llm_candidates: Vec<bool> =
+            profiles.iter().map(|p| p.llm_enrichment_candidate).collect();
+
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(StringArray::from(titles)),
+                Arc::new(StringArray::from(urls)),
+                Arc::new(Float32Array::from(confidences)),
+                Arc::new(BooleanArray::from(has_controversy)),
+                Arc::new(UInt32Array::from(controversy_count)),
+                Arc::new(UInt32Array::from(citation_needed)),
+                Arc::new(UInt32Array::from(pov)),
+                Arc::new(UInt32Array::from(clarification)),
+                Arc::new(UInt32Array::from(inlinks)),
+                Arc::new(BooleanArray::from(llm_candidates)),
+            ],
+        )
+        .map_err(|e| Error::Serialization(format!("article_profiles batch: {e}")))?;
+
+        table
+            .add(vec![batch])
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("insert article_profiles: {e}")))?;
 
         Ok(())
     }

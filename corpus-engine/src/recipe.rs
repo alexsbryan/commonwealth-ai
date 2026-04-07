@@ -28,6 +28,28 @@ fn default_min_score() -> i32 {
     3
 }
 
+fn default_title_column() -> String {
+    "name".to_string()
+}
+
+fn default_url_column() -> String {
+    "url".to_string()
+}
+
+fn default_controversy_patterns() -> Vec<String> {
+    crate::extractors::wikipedia_structured::DEFAULT_CONTROVERSY_PATTERNS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+fn default_factual_patterns() -> Vec<String> {
+    crate::extractors::wikipedia_structured::DEFAULT_FACTUAL_PATTERNS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
 fn default_max_chunk_chars() -> usize {
     2048
 }
@@ -254,6 +276,30 @@ pub enum ExtractorConfig {
         title_pattern: Option<String>,
         #[serde(default)]
         strip_boilerplate: Option<String>,
+    },
+    /// Extractor for the `wikimedia/structured-wikipedia` HuggingFace dataset.
+    /// Produces one `ExtractedDoc` per section, carrying editorial metadata
+    /// (maintenance tags, section type, outgoing links) in the `metadata` JSON.
+    #[serde(rename = "wikipedia_structured")]
+    WikipediaStructured {
+        /// Parquet column for the article title (default: "name").
+        #[serde(default = "default_title_column")]
+        title_column: String,
+        /// Parquet column for the article URL (default: "url").
+        #[serde(default = "default_url_column")]
+        url_column: String,
+        /// Section names (case-insensitive substrings) that classify as
+        /// controversy/criticism. Default: see `DEFAULT_CONTROVERSY_PATTERNS`.
+        #[serde(default = "default_controversy_patterns")]
+        controversy_patterns: Vec<String>,
+        /// Section names (case-insensitive substrings) that classify as
+        /// factual/biographical. Default: see `DEFAULT_FACTUAL_PATTERNS`.
+        #[serde(default = "default_factual_patterns")]
+        factual_patterns: Vec<String>,
+        /// Whether to run the post-ingestion structural enrichment pipeline
+        /// (link graph + article profiles). Enabled by default.
+        #[serde(default = "default_true")]
+        structural_signals: bool,
     },
 }
 
@@ -507,7 +553,48 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 max_relationship_candidates: 50_000,
             }),
         },
-        // 6. CRS Reports
+        // 6. Wikipedia (Structured) — editorial-quality signals
+        //
+        // Sourced from wikimedia/structured-wikipedia on HuggingFace. Unlike
+        // the plain wikimedia/wikipedia dataset, this version includes nested
+        // section structure, per-article maintenance tags (citation_needed_count,
+        // pov_count, etc.), and per-section inter-article links. These editorial
+        // signals are stored as chunk metadata and used by the post-ingestion
+        // structural enrichment pipeline (Layers 1+2). No LLM is required for
+        // Layers 1+2; Layer 3 is activated separately via the [enrichment] block.
+        Recipe {
+            corpus: CorpusMeta {
+                id: "structured_wikipedia".to_string(),
+                name: "Wikipedia (English, Structured)".to_string(),
+                description: "English Wikipedia with editorial quality signals: \
+                    maintenance tags (citation_needed, pov, clarification), \
+                    section classification, and inter-article link graph. \
+                    Sourced from wikimedia/structured-wikipedia (September 2024 snapshot)."
+                    .to_string(),
+                license: "CC-BY-SA-4.0".to_string(),
+                mesh_sharing: true,
+                size_compressed_gb: 18.0,
+                size_indexed_gb: 60.0,
+            },
+            acquire: AcquirerConfig::HuggingFaceDataset {
+                repo: "wikimedia/structured-wikipedia".to_string(),
+                subset: Some("20240916.en".to_string()),
+            },
+            extract: ExtractorConfig::WikipediaStructured {
+                title_column: "name".to_string(),
+                url_column: "url".to_string(),
+                controversy_patterns: default_controversy_patterns(),
+                factual_patterns: default_factual_patterns(),
+                structural_signals: true,
+            },
+            chunk: ChunkerConfig::Paragraph {
+                max_chars: 1024,
+                overlap_chars: 128,
+            },
+            index: IndexConfig::default(),
+            enrichment: None,
+        },
+        // 7. CRS Reports
         Recipe {
             corpus: CorpusMeta {
                 id: "crs_reports".to_string(),
@@ -678,7 +765,7 @@ type = "paragraph"
     #[test]
     fn builtin_recipes_count() {
         let recipes = builtin_recipes();
-        assert_eq!(recipes.len(), 6);
+        assert_eq!(recipes.len(), 7);
     }
 
     #[test]
@@ -689,6 +776,7 @@ type = "paragraph"
             "openalex",
             "gutenberg",
             "sep",
+            "structured_wikipedia",
             "crs_reports",
         ];
         let recipes = builtin_recipes();
@@ -850,6 +938,73 @@ type = "paragraph"
                 assert_eq!(subset.as_deref(), Some("en"));
             }
             _ => panic!("wrong acquirer variant after TOML round-trip"),
+        }
+    }
+
+    #[test]
+    fn structured_wikipedia_builtin_recipe_parses() {
+        let recipes = builtin_recipes();
+        let sw = recipes
+            .iter()
+            .find(|r| r.corpus.id == "structured_wikipedia")
+            .expect("structured_wikipedia recipe must exist");
+
+        match &sw.acquire {
+            AcquirerConfig::HuggingFaceDataset { repo, subset } => {
+                assert_eq!(repo, "wikimedia/structured-wikipedia");
+                assert_eq!(subset.as_deref(), Some("20240916.en"));
+            }
+            other => panic!("expected HuggingFaceDataset, got {other:?}"),
+        }
+
+        match &sw.extract {
+            ExtractorConfig::WikipediaStructured {
+                title_column,
+                url_column,
+                structural_signals,
+                ..
+            } => {
+                assert_eq!(title_column, "name");
+                assert_eq!(url_column, "url");
+                assert!(*structural_signals, "structural_signals must be true by default");
+            }
+            other => panic!("expected WikipediaStructured extractor, got {other:?}"),
+        }
+
+        assert!(sw.enrichment.is_none() || !sw.enrichment.as_ref().unwrap().enabled);
+    }
+
+    #[test]
+    fn wikipedia_structured_variant_round_trips_toml() {
+        let toml_str = r#"
+[corpus]
+id = "structured_wikipedia"
+name = "Wikipedia (Structured)"
+
+[acquire]
+type = "huggingface_dataset"
+repo = "wikimedia/structured-wikipedia"
+subset = "20240916.en"
+
+[extract]
+type = "wikipedia_structured"
+
+[chunk]
+type = "paragraph"
+"#;
+        let recipe = Recipe::from_toml(toml_str).expect("should parse wikipedia_structured recipe");
+        match &recipe.extract {
+            ExtractorConfig::WikipediaStructured {
+                title_column,
+                url_column,
+                structural_signals,
+                ..
+            } => {
+                assert_eq!(title_column, "name"); // default
+                assert_eq!(url_column, "url"); // default
+                assert!(*structural_signals); // default
+            }
+            other => panic!("expected WikipediaStructured, got {other:?}"),
         }
     }
 

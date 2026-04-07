@@ -4,6 +4,7 @@ pub mod html;
 pub mod csv;
 pub mod parquet;
 pub mod plaintext;
+pub mod wikipedia_structured;
 
 use crate::error::Result;
 
