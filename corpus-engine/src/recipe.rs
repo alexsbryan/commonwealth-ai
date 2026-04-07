@@ -176,6 +176,19 @@ pub enum AcquirerConfig {
     },
     #[serde(rename = "local_file")]
     LocalFile { path: String },
+    /// Download all parquet shards for a public HuggingFace dataset.
+    /// Uses the HF dataset API to enumerate shards, then downloads each
+    /// with resume support, returning a directory of parquet files.
+    #[serde(rename = "huggingface_dataset")]
+    HuggingFaceDataset {
+        /// Dataset repo in `org/name` format, e.g. `"manu/project_gutenberg"`.
+        repo: String,
+        /// Optional subset prefix to filter shards, e.g. `"en"` matches
+        /// filenames starting with `data/en-`. If absent, all parquet shards
+        /// are downloaded.
+        #[serde(default)]
+        subset: Option<String>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -408,10 +421,11 @@ pub fn builtin_recipes() -> Vec<Recipe> {
         },
         // 4. Project Gutenberg
         //
-        // Sourced from the sedthh/gutenberg_english dataset on HuggingFace,
-        // which mirrors ~55k English Gutenberg books as a single parquet file.
-        // The `TEXT` column contains the full book text (boilerplate already
-        // stripped by the dataset maintainer).
+        // Sourced from the manu/project_gutenberg dataset on HuggingFace,
+        // which mirrors ~61k English Gutenberg books across 52 parquet shards.
+        // The HuggingFaceDataset acquirer enumerates all shards via the HF API
+        // and downloads them into a local directory; the parquet extractor then
+        // chains across all shards. The `text` column holds the full book text.
         Recipe {
             corpus: CorpusMeta {
                 id: "gutenberg".to_string(),
@@ -419,16 +433,16 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 description: "Public-domain books from Project Gutenberg.".to_string(),
                 license: "Public Domain".to_string(),
                 mesh_sharing: true,
-                size_compressed_gb: 8.0,
-                size_indexed_gb: 20.0,
+                size_compressed_gb: 9.0,
+                size_indexed_gb: 25.0,
             },
-            acquire: AcquirerConfig::BulkDownload {
-                url: "https://huggingface.co/datasets/sedthh/gutenberg_english/resolve/main/data/train-00000-of-00001.parquet".to_string(),
-                resume: true,
+            acquire: AcquirerConfig::HuggingFaceDataset {
+                repo: "manu/project_gutenberg".to_string(),
+                subset: Some("en".to_string()),
             },
             extract: ExtractorConfig::Parquet {
-                content_column: "TEXT".to_string(),
-                label_column: None,
+                content_column: "text".to_string(),
+                label_column: Some("id".to_string()),
             },
             chunk: ChunkerConfig::Paragraph {
                 max_chars: 2048,
@@ -774,6 +788,57 @@ type = "paragraph"
             "SEP indexed size should account for embeddings + enrichment, got {}",
             sep.corpus.size_indexed_gb
         );
+    }
+
+    #[test]
+    fn gutenberg_recipe_uses_huggingface_dataset_acquirer() {
+        let recipes = builtin_recipes();
+        let gut = recipes
+            .iter()
+            .find(|r| r.corpus.id == "gutenberg")
+            .expect("gutenberg recipe must exist");
+        match &gut.acquire {
+            AcquirerConfig::HuggingFaceDataset { repo, subset } => {
+                assert_eq!(repo, "manu/project_gutenberg");
+                assert_eq!(subset.as_deref(), Some("en"));
+            }
+            other => panic!("expected HuggingFaceDataset, got {other:?}"),
+        }
+        match &gut.extract {
+            ExtractorConfig::Parquet { content_column, .. } => {
+                assert_eq!(content_column, "text");
+            }
+            other => panic!("expected Parquet extractor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn huggingface_dataset_variant_round_trips_toml() {
+        let toml_str = r#"
+[corpus]
+id = "gutenberg"
+name = "Project Gutenberg"
+
+[acquire]
+type = "huggingface_dataset"
+repo = "manu/project_gutenberg"
+subset = "en"
+
+[extract]
+type = "parquet"
+content_column = "text"
+
+[chunk]
+type = "paragraph"
+"#;
+        let recipe = Recipe::from_toml(toml_str).expect("should parse");
+        match &recipe.acquire {
+            AcquirerConfig::HuggingFaceDataset { repo, subset } => {
+                assert_eq!(repo, "manu/project_gutenberg");
+                assert_eq!(subset.as_deref(), Some("en"));
+            }
+            _ => panic!("wrong acquirer variant after TOML round-trip"),
+        }
     }
 
     /// Recipes that don't request enrichment must explicitly opt out

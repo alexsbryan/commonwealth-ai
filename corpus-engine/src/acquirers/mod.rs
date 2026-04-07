@@ -1,4 +1,5 @@
 pub mod bulk_download;
+pub mod huggingface;
 pub mod local_file;
 
 use std::path::{Path, PathBuf};

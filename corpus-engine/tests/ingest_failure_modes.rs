@@ -197,9 +197,11 @@ async fn ingest_fails_fast_when_embed_function_is_unavailable() {
 
 /// If the embed function returns the wrong number of dimensions, the
 /// engine must reject the install up front rather than producing an
-/// index with mismatched embeddings that breaks search later.
+/// The engine auto-adapts to whatever dimension count the model actually
+/// returns, so a recipe that says 8-dim but gets a 4-dim model should
+/// succeed and produce a usable index at the real dimension count.
 #[tokio::test]
-async fn ingest_rejects_dimension_mismatch_in_preflight() {
+async fn ingest_adapts_to_actual_embedding_dimensions() {
     let dir = tempfile::tempdir().unwrap();
     let recipes_dir = dir.path().join("recipes");
     let indexes_dir = dir.path().join("indexes");
@@ -208,7 +210,7 @@ async fn ingest_rejects_dimension_mismatch_in_preflight() {
     let parquet_path = dir.path().join("fixture.parquet");
     make_tiny_parquet(&parquet_path);
 
-    // Recipe asks for 8-dim embeddings; the embedder returns 4.
+    // Recipe says 8-dim but the embedder returns 4 — engine should adapt.
     let recipe_path = write_recipe(&recipes_dir, &parquet_path, 8);
 
     let engine = build_engine(
@@ -217,18 +219,14 @@ async fn ingest_rejects_dimension_mismatch_in_preflight() {
         indexes_dir.clone(),
     );
 
-    let err = engine
+    let result = engine
         .ingest(&CorpusSpec::RecipePath(recipe_path), None)
         .await
-        .expect_err("ingest should reject dimension mismatch");
-    let msg = err.to_string();
-    assert!(
-        msg.contains("dimensions") || msg.contains("dimension"),
-        "error should mention dimension mismatch, got: {msg}"
-    );
+        .expect("ingest should succeed with auto-adapted dimensions");
 
-    // No ghost directory.
-    assert!(!indexes_dir.join("test_corpus").exists());
+    assert!(result.chunks_created > 0, "should have produced chunks");
+    // Index directory was created (not cleaned up as a ghost).
+    assert!(indexes_dir.join("test_corpus").exists());
 }
 
 /// The cleanup path. The pre-flight succeeds, but the embed function

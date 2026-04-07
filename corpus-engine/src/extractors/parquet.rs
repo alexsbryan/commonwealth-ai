@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use arrow::array::{AsArray, RecordBatch};
 use arrow::datatypes::DataType;
@@ -35,24 +35,126 @@ impl Extractor for ParquetExtractor {
         &self,
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
-        let file = File::open(source_path)
-            .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
+        if source_path.is_dir() {
+            // Collect all .parquet files in the directory, sorted so shards
+            // are processed in the correct order (zero-padded names sort correctly).
+            let mut paths: Vec<PathBuf> = std::fs::read_dir(source_path)
+                .map_err(|e| {
+                    Error::Extraction(format!(
+                        "Failed to read directory {}: {e}",
+                        source_path.display()
+                    ))
+                })?
+                .filter_map(|entry| entry.ok())
+                .map(|e| e.path())
+                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("parquet"))
+                .collect();
 
-        let builder = ParquetRecordBatchReaderBuilder::try_new(file)
-            .map_err(|e| Error::Extraction(format!("Failed to read Parquet: {e}")))?;
+            if paths.is_empty() {
+                return Err(Error::Extraction(format!(
+                    "No .parquet files found in directory: {}",
+                    source_path.display()
+                )));
+            }
 
-        let reader = builder
-            .with_batch_size(256)
-            .build()
-            .map_err(|e| Error::Extraction(format!("Failed to build Parquet reader: {e}")))?;
+            paths.sort();
 
-        Ok(Box::new(ParquetIterator {
-            reader: Box::new(reader),
-            content_column: self.content_column.clone(),
-            label_column: self.label_column.clone(),
-            pending: VecDeque::new(),
-            row_counter: 0,
-        }))
+            Ok(Box::new(MultiShardParquetIterator {
+                paths: paths.into(),
+                current: None,
+                content_column: self.content_column.clone(),
+                label_column: self.label_column.clone(),
+            }))
+        } else {
+            let file = File::open(source_path).map_err(|e| {
+                Error::Extraction(format!(
+                    "Failed to open {}: {e}",
+                    source_path.display()
+                ))
+            })?;
+
+            let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+                .map_err(|e| Error::Extraction(format!("Failed to read Parquet: {e}")))?;
+
+            let reader = builder
+                .with_batch_size(256)
+                .build()
+                .map_err(|e| Error::Extraction(format!("Failed to build Parquet reader: {e}")))?;
+
+            Ok(Box::new(ParquetIterator {
+                reader: Box::new(reader),
+                content_column: self.content_column.clone(),
+                label_column: self.label_column.clone(),
+                pending: VecDeque::new(),
+                row_counter: 0,
+            }))
+        }
+    }
+}
+
+/// Lazily chains multiple parquet shards. Opens each file only when the
+/// previous shard is exhausted — only one file handle and one batch buffer
+/// are live at a time regardless of shard count.
+struct MultiShardParquetIterator {
+    paths: VecDeque<PathBuf>,
+    current: Option<ParquetIterator>,
+    content_column: String,
+    label_column: Option<String>,
+}
+
+impl Iterator for MultiShardParquetIterator {
+    type Item = Result<ExtractedDoc>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            // Drain the active shard first.
+            if let Some(ref mut iter) = self.current {
+                if let Some(item) = iter.next() {
+                    return Some(item);
+                }
+                self.current = None;
+            }
+
+            // Open the next shard.
+            let path = self.paths.pop_front()?;
+            let file = match File::open(&path) {
+                Ok(f) => f,
+                Err(e) => {
+                    return Some(Err(Error::Extraction(format!(
+                        "Failed to open shard {}: {e}",
+                        path.display()
+                    ))));
+                }
+            };
+
+            let builder = match ParquetRecordBatchReaderBuilder::try_new(file) {
+                Ok(b) => b,
+                Err(e) => {
+                    return Some(Err(Error::Extraction(format!(
+                        "Failed to read parquet shard {}: {e}",
+                        path.display()
+                    ))));
+                }
+            };
+
+            let reader = match builder.with_batch_size(256).build() {
+                Ok(r) => r,
+                Err(e) => {
+                    return Some(Err(Error::Extraction(format!(
+                        "Failed to build reader for shard {}: {e}",
+                        path.display()
+                    ))));
+                }
+            };
+
+            self.current = Some(ParquetIterator {
+                reader: Box::new(reader),
+                content_column: self.content_column.clone(),
+                label_column: self.label_column.clone(),
+                pending: VecDeque::new(),
+                row_counter: 0,
+            });
+        }
     }
 }
 
@@ -226,6 +328,33 @@ mod tests {
         let mut iter = extractor.extract(&file_path).unwrap();
         let result = iter.next().unwrap();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_parquet_directory_chains_shards() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_parquet(&dir.path().join("shard-00.parquet"));
+        make_test_parquet(&dir.path().join("shard-01.parquet"));
+
+        let extractor = ParquetExtractor::new("text", Some("category"));
+        let docs: Vec<_> = extractor
+            .extract(dir.path())
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+
+        // Each shard has 2 non-empty rows → total 4.
+        assert_eq!(docs.len(), 4);
+        // Shards processed in sorted order.
+        assert_eq!(docs[0].title.as_deref(), Some("Bergson"));
+        assert_eq!(docs[2].title.as_deref(), Some("Bergson"));
+    }
+
+    #[test]
+    fn empty_directory_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let extractor = ParquetExtractor::new("text", None);
+        assert!(extractor.extract(dir.path()).is_err());
     }
 
     #[test]

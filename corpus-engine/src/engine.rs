@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::acquirers::bulk_download::BulkDownloader;
+use crate::acquirers::huggingface::HuggingFaceDatasetAcquirer;
 use crate::acquirers::local_file::LocalFileAcquirer;
 use crate::chunkers::{self, Chunker};
 use crate::error::{Error, Result};
@@ -501,6 +502,10 @@ impl CorpusEngine {
             AcquirerConfig::LocalFile { path } => {
                 let acq = LocalFileAcquirer::new(path);
                 acq.acquire()
+            }
+            AcquirerConfig::HuggingFaceDataset { repo, subset } => {
+                let acq = HuggingFaceDatasetAcquirer::new(repo, subset.as_deref());
+                acq.download(download_dir, &recipe.corpus.id, progress).await
             }
             AcquirerConfig::WebCrawl { .. } => {
                 Err(Error::Recipe("Web crawl acquirer not yet implemented".into()))
