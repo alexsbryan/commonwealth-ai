@@ -153,6 +153,28 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
             used_this_month INTEGER NOT NULL DEFAULT 0,
             reset_date      INTEGER NOT NULL
         );
+
+        -- Health: per-cycle check reports
+        CREATE TABLE IF NOT EXISTS health_reports (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            component   TEXT    NOT NULL,
+            status      TEXT    NOT NULL,
+            issues_json TEXT    NOT NULL,
+            summary     TEXT    NOT NULL,
+            measured_at INTEGER NOT NULL
+        );
+
+        -- Health: pending decisions that require user action
+        CREATE TABLE IF NOT EXISTS pending_health_decisions (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            component    TEXT    NOT NULL,
+            issue_json   TEXT    NOT NULL,
+            question     TEXT    NOT NULL,
+            options_json TEXT    NOT NULL,
+            consequence  TEXT    NOT NULL,
+            surfaced_at  INTEGER NOT NULL,
+            resolved_at  INTEGER
+        );
         ",
     )
 }

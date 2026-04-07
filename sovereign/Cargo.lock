@@ -1348,6 +1348,7 @@ dependencies = [
  "arrow 57.3.0",
  "arrow-array 57.3.0",
  "arrow-schema 57.3.0",
+ "blake3",
  "bzip2",
  "csv",
  "flate2",
@@ -7751,6 +7752,8 @@ name = "sovereign-core"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
+ "dashmap",
  "futures",
  "serde",
  "serde_json",
@@ -7759,7 +7762,9 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "toml 0.8.2",
+ "tracing",
  "uuid",
 ]
 
@@ -7785,6 +7790,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-shell",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
@@ -8952,6 +8958,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]

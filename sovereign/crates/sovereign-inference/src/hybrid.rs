@@ -86,6 +86,17 @@ impl HybridProvider {
             }
         });
     }
+
+    /// Return the `HealthTracker` for the primary (first) backend, if any.
+    /// Used by `RouterCircuitChecker` to monitor circuit state.
+    pub fn primary_health_tracker(&self) -> Option<Arc<crate::health::HealthTracker>> {
+        self.entries.first().map(|e| e.health.clone())
+    }
+
+    /// Return the `HealthTracker` for every registered backend.
+    pub fn all_health_trackers(&self) -> Vec<Arc<crate::health::HealthTracker>> {
+        self.entries.iter().map(|e| e.health.clone()).collect()
+    }
 }
 
 /// Try to downcast an InferenceProvider to RemoteApiProvider.

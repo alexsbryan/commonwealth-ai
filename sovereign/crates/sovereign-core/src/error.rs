@@ -44,6 +44,12 @@ pub enum Error {
     #[error("Task cancelled")]
     Cancelled,
 
+    #[error("Repair not supported for this issue type")]
+    RepairNotSupported,
+
+    #[error("Corpus update not authorised (auto_update = false in recipe)")]
+    UpdateNotAuthorised,
+
     #[error(transparent)]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 }

@@ -79,6 +79,11 @@ impl HealthTracker {
         self.error_count.store(0, Ordering::Relaxed);
         self.available.store(true, Ordering::Relaxed);
     }
+
+    /// Current consecutive error count.
+    pub fn error_count(&self) -> u32 {
+        self.error_count.load(Ordering::Relaxed)
+    }
 }
 
 impl Default for HealthTracker {

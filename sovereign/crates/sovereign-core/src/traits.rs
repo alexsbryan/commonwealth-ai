@@ -160,6 +160,35 @@ pub trait StateStore: Send + Sync {
     // Permissions
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>>;
     async fn set_permission(&self, tool_id: &str, scope: &str, granted: bool) -> Result<()>;
+
+    // Health
+    async fn save_health_report(
+        &self,
+        report: &crate::health::HealthReport,
+    ) -> Result<()> {
+        let _ = report;
+        Ok(())
+    }
+    async fn save_pending_decision(
+        &self,
+        d: &crate::health::PendingDecision,
+    ) -> Result<()> {
+        let _ = d;
+        Ok(())
+    }
+    async fn list_pending_decisions(
+        &self,
+    ) -> Result<Vec<crate::health::PendingDecision>> {
+        Ok(vec![])
+    }
+    async fn resolve_pending_decision(
+        &self,
+        id: i64,
+        chosen: crate::health::RepairKind,
+    ) -> Result<()> {
+        let _ = (id, chosen);
+        Ok(())
+    }
 }
 
 // ─── Approval Channel ─────────────────────────────────────────

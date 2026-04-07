@@ -39,3 +39,6 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dashmap = "6"
+tokio-util = { version = "0.7", features = ["rt"] }
+chrono = { version = "0.4", features = ["serde"] }

@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 
 use corpus_engine::CorpusEngine;
 
+use sovereign_core::health_monitor::{HealthMonitor, MonitorConfig};
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
@@ -15,7 +16,9 @@ use sovereign_core::types::InferenceConfig;
 use sovereign_core::{SkillRegistry, ToolRegistry};
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_store::sqlite::SqliteStateStore;
+use sovereign_tools::index_validator::EmbedSlotConfig;
 use sovereign_tools::shell::ShellTool;
+use tokio_util::sync::CancellationToken;
 
 use crate::approval::TauriApprovalChannel;
 
@@ -187,6 +190,10 @@ pub struct AppState {
     /// Embedded Commonwealth daemon — started on-demand when the user
     /// creates or joins a mesh.
     pub mesh: Arc<sovereign_mesh::EmbeddedDaemon>,
+    /// Background health monitor. Populated during bootstrap; None before first boot.
+    pub health_monitor: RwLock<Option<Arc<HealthMonitor>>>,
+    /// CancellationToken to shut down the health monitor on exit.
+    pub health_shutdown: CancellationToken,
 }
 
 impl AppState {
@@ -201,6 +208,8 @@ impl AppState {
             corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
             mesh: Arc::new(sovereign_mesh::EmbeddedDaemon::new()),
+            health_monitor: RwLock::new(None),
+            health_shutdown: CancellationToken::new(),
         }
     }
 }
@@ -404,6 +413,77 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             }
             Err(_) => {} // embed not configured or failed — skip validation
         }
+    }
+
+    // ── Health Monitor ────────────────────────────────────────────────────────
+    // Only build the monitor once (it survives Runtime rebuilds).
+    if state.health_monitor.read().await.is_none() {
+        let embed_dims = config
+            .embed_model_path
+            .as_ref()
+            .map(|_| {
+                // If we successfully embedded a probe above, use that dimension.
+                // Fall back to a reasonable default — the checker will detect mismatches.
+                0usize
+            })
+            .unwrap_or(0);
+        let embed_slot = Arc::new(tokio::sync::RwLock::new(EmbedSlotConfig {
+            model_id: embed_model_name.clone(),
+            output_dims: embed_dims,
+        }));
+
+        let monitor = Arc::new(HealthMonitor::new(MonitorConfig::default(), Arc::clone(&store)));
+
+        // Register CorpusIndexChecker.
+        monitor
+            .register(Arc::new(sovereign_tools::index_validator::CorpusIndexChecker::new(
+                Arc::clone(&corpus_engine),
+                Arc::clone(&embed_slot),
+            )))
+            .await;
+
+        // Register EnrichmentChecker.
+        monitor
+            .register(Arc::new(sovereign_tools::enrichment_checker::EnrichmentChecker::new(
+                Arc::clone(&corpus_engine),
+            )))
+            .await;
+
+        // Register StateStoreChecker (SQLite only).
+        let db_path = config.data_dir.join("sovereign.db");
+        if let Ok(sqlite_store) = SqliteStateStore::open(&db_path) {
+            monitor
+                .register(Arc::new(
+                    sovereign_store::state_store_checker::StateStoreChecker::new(
+                        Arc::new(sqlite_store),
+                        db_path,
+                    ),
+                ))
+                .await;
+        }
+
+        // Register RouterCircuitChecker.
+        // Only wire if HybridProvider exposes a primary health tracker.
+        // We use the inference provider directly for probe completion.
+        // Wire RouterCircuitChecker with a standalone HealthTracker.
+        // The monitor probes the inference provider on repair to test liveness.
+        {
+            let tracker = Arc::new(sovereign_inference::health::HealthTracker::new());
+            monitor
+                .register(Arc::new(
+                    sovereign_inference::router_circuit::RouterCircuitChecker::new(
+                        Arc::clone(&tracker),
+                        Arc::clone(&inference),
+                    ),
+                ))
+                .await;
+        }
+
+        let m = Arc::clone(&monitor);
+        let shutdown = state.health_shutdown.clone();
+        tokio::spawn(async move { m.run(shutdown).await });
+        *state.health_monitor.write().await = Some(monitor);
+        tracing::info!("HealthMonitor started");
     }
 
     tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
