@@ -1,4 +1,4 @@
-use super::{Chunker, TextChunk};
+use super::{floor_char_boundary, Chunker, TextChunk};
 
 /// Fixed-size chunker with overlap.
 ///
@@ -46,18 +46,7 @@ impl Chunker for FixedChunker {
         let mut start = 0;
 
         while start < text.len() {
-            let end = {
-                let raw = (start + self.max_chars).min(text.len());
-                // Clamp to a valid UTF-8 char boundary.
-                if text.is_char_boundary(raw) {
-                    raw
-                } else {
-                    (start..raw)
-                        .rev()
-                        .find(|&i| text.is_char_boundary(i))
-                        .unwrap_or(start)
-                }
-            };
+            let end = floor_char_boundary(text, (start + self.max_chars).min(text.len()));
 
             // If we're not at the end, find a word boundary to split at.
             let split_at = if end < text.len() {
@@ -83,18 +72,7 @@ impl Chunker for FixedChunker {
             }
 
             // Move forward, applying overlap.
-            let next_start = {
-                let raw = split_at.saturating_sub(self.overlap_chars);
-                // Clamp to a valid UTF-8 char boundary before slicing.
-                if text.is_char_boundary(raw) {
-                    raw
-                } else {
-                    (0..raw)
-                        .rev()
-                        .find(|&i| text.is_char_boundary(i))
-                        .unwrap_or(raw)
-                }
-            };
+            let next_start = floor_char_boundary(text, split_at.saturating_sub(self.overlap_chars));
             // Align to a word boundary.
             let next_start = text[next_start..split_at]
                 .rfind(' ')

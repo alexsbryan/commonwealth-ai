@@ -19,6 +19,8 @@ pub struct ParquetExtractor {
     pub content_column: String,
     /// Column name for a category/title label (optional).
     pub label_column: Option<String>,
+    /// Column name for a source URL (optional). Populates `ExtractedDoc::url`.
+    pub url_column: Option<String>,
 }
 
 impl ParquetExtractor {
@@ -26,7 +28,13 @@ impl ParquetExtractor {
         Self {
             content_column: content_column.to_string(),
             label_column: label_column.map(|s| s.to_string()),
+            url_column: None,
         }
+    }
+
+    pub fn with_url_column(mut self, col: &str) -> Self {
+        self.url_column = Some(col.to_string());
+        self
     }
 }
 
@@ -64,6 +72,7 @@ impl Extractor for ParquetExtractor {
                 current: None,
                 content_column: self.content_column.clone(),
                 label_column: self.label_column.clone(),
+                url_column: self.url_column.clone(),
             }))
         } else {
             let file = File::open(source_path).map_err(|e| {
@@ -85,6 +94,7 @@ impl Extractor for ParquetExtractor {
                 reader: Box::new(reader),
                 content_column: self.content_column.clone(),
                 label_column: self.label_column.clone(),
+                url_column: self.url_column.clone(),
                 pending: VecDeque::new(),
                 row_counter: 0,
             }))
@@ -100,6 +110,7 @@ struct MultiShardParquetIterator {
     current: Option<ParquetIterator>,
     content_column: String,
     label_column: Option<String>,
+    url_column: Option<String>,
 }
 
 impl Iterator for MultiShardParquetIterator {
@@ -151,6 +162,7 @@ impl Iterator for MultiShardParquetIterator {
                 reader: Box::new(reader),
                 content_column: self.content_column.clone(),
                 label_column: self.label_column.clone(),
+                url_column: self.url_column.clone(),
                 pending: VecDeque::new(),
                 row_counter: 0,
             });
@@ -162,6 +174,7 @@ struct ParquetIterator {
     reader: Box<dyn Iterator<Item = std::result::Result<RecordBatch, ArrowError>> + Send>,
     content_column: String,
     label_column: Option<String>,
+    url_column: Option<String>,
     pending: VecDeque<ExtractedDoc>,
     row_counter: usize,
 }
@@ -202,6 +215,11 @@ impl Iterator for ParquetIterator {
                 .as_ref()
                 .and_then(|name| schema.index_of(name).ok());
 
+            let url_idx = self
+                .url_column
+                .as_ref()
+                .and_then(|name| schema.index_of(name).ok());
+
             let num_rows = batch.num_rows();
             for row in 0..num_rows {
                 let content = get_string_value(&batch, content_idx, row);
@@ -214,22 +232,22 @@ impl Iterator for ParquetIterator {
                     .map(|idx| get_string_value(&batch, idx, row))
                     .unwrap_or_default();
 
+                let url = url_idx
+                    .map(|idx| get_string_value(&batch, idx, row))
+                    .filter(|s| !s.is_empty());
+
                 let source_id = if !label.is_empty() {
                     slug(&label)
                 } else {
                     format!("row-{}", self.row_counter)
                 };
 
-                let title = if !label.is_empty() {
-                    Some(label)
-                } else {
-                    None
-                };
+                let title = if !label.is_empty() { Some(label) } else { None };
 
                 self.pending.push_back(ExtractedDoc {
                     title,
                     content,
-                    url: None,
+                    url,
                     source_id,
                     metadata: None,
                 });

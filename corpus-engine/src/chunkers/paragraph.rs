@@ -1,4 +1,4 @@
-use super::{Chunker, TextChunk};
+use super::{floor_char_boundary, Chunker, TextChunk};
 
 /// Paragraph-boundary chunker.
 ///
@@ -165,7 +165,7 @@ fn split_oversized_segment(
         *chunk_index += 1;
 
         // Apply overlap: start the next chunk a bit before where we cut.
-        let overlap_start = split_at.saturating_sub(overlap_chars);
+        let overlap_start = floor_char_boundary(remaining, split_at.saturating_sub(overlap_chars));
         let overlap_start = remaining[overlap_start..split_at]
             .rfind(' ')
             .map(|i| overlap_start + i + 1)
@@ -180,14 +180,7 @@ fn split_oversized_segment(
 fn find_split_point(text: &str, max_len: usize) -> usize {
     // Clamp to a valid UTF-8 char boundary — byte index max_len may land
     // inside a multi-byte character (e.g. curly quotes, em-dashes).
-    let max_len = if text.is_char_boundary(max_len) {
-        max_len
-    } else {
-        (0..max_len)
-            .rev()
-            .find(|&i| text.is_char_boundary(i))
-            .unwrap_or(0)
-    };
+    let max_len = floor_char_boundary(text, max_len);
     let search_region = &text[..max_len];
 
     // Try sentence boundary (last '. ' or '! ' or '? ' in the region).
@@ -242,7 +235,7 @@ fn finalize_chunk(
     *chunk_index += 1;
 
     // Start next chunk with overlap from the end of this one.
-    let overlap_start = content.len().saturating_sub(overlap_chars);
+    let overlap_start = floor_char_boundary(&content, content.len().saturating_sub(overlap_chars));
     let overlap_start = content[overlap_start..]
         .find(' ')
         .map(|i| overlap_start + i + 1)

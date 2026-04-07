@@ -243,6 +243,10 @@ pub enum ExtractorConfig {
         content_column: String,
         #[serde(default)]
         label_column: Option<String>,
+        /// Optional column to use as the document URL (e.g. `"url"` in
+        /// `wikimedia/wikipedia`). Populates search result source links.
+        #[serde(default)]
+        url_column: Option<String>,
     },
     #[serde(rename = "plaintext")]
     Plaintext {
@@ -338,26 +342,31 @@ impl Recipe {
 pub fn builtin_recipes() -> Vec<Recipe> {
     vec![
         // 1. Wikipedia
+        //
+        // Sourced from the wikimedia/wikipedia dataset on HuggingFace, which
+        // provides a clean pre-processed snapshot of English Wikipedia as 41
+        // parquet shards (~6.4M articles, 11.6 GB compressed). Uses the
+        // HuggingFaceDataset acquirer's parquet API fallback to enumerate shards
+        // for this config-based repo. The `url` column is passed through so each
+        // search result links back to the source Wikipedia article.
         Recipe {
             corpus: CorpusMeta {
                 id: "wikipedia".to_string(),
                 name: "Wikipedia (English)".to_string(),
-                description: "English Wikipedia articles, sourced from Wikimedia dump files."
-                    .to_string(),
+                description: "English Wikipedia articles from the November 2023 snapshot.".to_string(),
                 license: "CC-BY-SA-4.0".to_string(),
                 mesh_sharing: true,
-                size_compressed_gb: 22.0,
+                size_compressed_gb: 11.6,
                 size_indexed_gb: 45.0,
             },
-            acquire: AcquirerConfig::BulkDownload {
-                url: "https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2"
-                    .to_string(),
-                resume: true,
+            acquire: AcquirerConfig::HuggingFaceDataset {
+                repo: "wikimedia/wikipedia".to_string(),
+                subset: Some("20231101.en".to_string()),
             },
-            extract: ExtractorConfig::MediawikiXml {
-                namespace_filter: vec![0],
-                skip_redirects: true,
-                decompress: Some("bzip2".to_string()),
+            extract: ExtractorConfig::Parquet {
+                content_column: "text".to_string(),
+                label_column: Some("title".to_string()),
+                url_column: Some("url".to_string()),
             },
             chunk: ChunkerConfig::Paragraph {
                 max_chars: 2048,
@@ -443,6 +452,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             extract: ExtractorConfig::Parquet {
                 content_column: "text".to_string(),
                 label_column: Some("id".to_string()),
+                url_column: None,
             },
             chunk: ChunkerConfig::Paragraph {
                 max_chars: 2048,
@@ -479,6 +489,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             extract: ExtractorConfig::Parquet {
                 content_column: "text".to_string(),
                 label_column: Some("title".to_string()),
+                url_column: None,
             },
             chunk: ChunkerConfig::Paragraph {
                 max_chars: 2048,
@@ -602,7 +613,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_wikipedia_recipe_from_toml() {
+    fn parse_mediawiki_xml_recipe_from_toml() {
         let toml_str = r#"
 [corpus]
 id = "wikipedia"
@@ -724,6 +735,7 @@ type = "paragraph"
             ExtractorConfig::Parquet {
                 content_column,
                 label_column,
+                ..
             } => {
                 assert_eq!(content_column, "text");
                 assert_eq!(label_column.as_deref(), Some("title"));

@@ -1,9 +1,20 @@
 //! HuggingFace multi-shard dataset acquirer.
 //!
-//! Calls the HuggingFace dataset API to enumerate parquet shards for a public
-//! dataset repo, then downloads each shard with resume support. All shards are
-//! written into a local directory; aggregate progress is reported via
-//! `IngestProgress::Downloading` across the full download session.
+//! Supports two kinds of HuggingFace dataset layouts:
+//!
+//! 1. **Flat repos** (e.g. `manu/project_gutenberg`): parquet files listed in
+//!    the `siblings` array of `/api/datasets/{repo}`, filtered by a subset
+//!    prefix (`data/{subset}-*` or `{subset}/*`).
+//!
+//! 2. **Config-based repos** (e.g. `wikimedia/wikipedia`): parquet files are
+//!    not in `siblings` but accessible via the parquet conversion API at
+//!    `/api/datasets/{repo}/parquet/{subset}/train`, which returns a JSON
+//!    array of direct CDN URLs.
+//!
+//! The acquirer tries the siblings approach first; if it finds no matching
+//! shards and `subset` is set, it falls back to the parquet API.
+//! All shards are downloaded with resume support into a local directory,
+//! and the directory `PathBuf` is returned for the extractor to consume.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -39,7 +50,7 @@ impl HuggingFaceDatasetAcquirer {
             .user_agent(HF_USER_AGENT)
             .build()?;
 
-        // ── 1. Enumerate shards via HuggingFace API ───────────────────
+        // Each shard is (local_filename, download_url).
         let shards = self.list_shards(&client).await?;
         if shards.is_empty() {
             return Err(Error::Recipe(format!(
@@ -51,18 +62,14 @@ impl HuggingFaceDatasetAcquirer {
 
         let n = shards.len() as u64;
         let mut total_bytes_downloaded: u64 = 0;
-        // Running estimate of the full corpus download size. Updated each time
-        // we learn a new shard's content-length so progress converges quickly.
         let mut known_total: Option<u64> = None;
         let mut last_report: u64 = 0;
 
-        for (shard_idx, rfilename) in shards.iter().enumerate() {
-            // Strip leading directory component for the local filename.
-            let local_name = rfilename.rsplit('/').next().unwrap_or(rfilename.as_str());
+        for (shard_idx, (local_name, download_url)) in shards.iter().enumerate() {
             let final_path = dest_dir.join(local_name);
             let part_path = dest_dir.join(format!("{local_name}.part"));
 
-            // Resume: fully-downloaded shards count toward aggregate progress.
+            // Resume: skip fully-downloaded shards.
             if final_path.exists() {
                 let existing = std::fs::metadata(&final_path)
                     .map(|m| m.len())
@@ -77,12 +84,7 @@ impl HuggingFaceDatasetAcquirer {
                 0
             };
 
-            let download_url = format!(
-                "https://huggingface.co/datasets/{}/resolve/main/{}",
-                self.repo, rfilename
-            );
-
-            let mut request = client.get(&download_url);
+            let mut request = client.get(download_url.as_str());
             if existing_len > 0 {
                 request = request.header("Range", format!("bytes={existing_len}-"));
             }
@@ -97,7 +99,7 @@ impl HuggingFaceDatasetAcquirer {
                 if is_partial { cl + existing_len } else { cl }
             });
 
-            // Extrapolate total download size from first known shard size.
+            // Extrapolate total size from the first shard's content-length.
             if let Some(sz) = shard_total {
                 let remaining = n - shard_idx as u64;
                 known_total = Some(total_bytes_downloaded + sz * remaining);
@@ -118,7 +120,6 @@ impl HuggingFaceDatasetAcquirer {
                 file.write_all(&chunk)?;
                 total_bytes_downloaded += chunk.len() as u64;
 
-                // Report every 1 MiB of aggregate progress.
                 if total_bytes_downloaded - last_report >= 1_048_576 {
                     last_report = total_bytes_downloaded;
                     if let Some(ref cb) = progress {
@@ -137,7 +138,6 @@ impl HuggingFaceDatasetAcquirer {
             std::fs::rename(&part_path, &final_path)?;
         }
 
-        // Final 100% report.
         if let Some(ref cb) = progress {
             cb(IngestProgress::Downloading {
                 percent: 100.0,
@@ -149,11 +149,45 @@ impl HuggingFaceDatasetAcquirer {
         Ok(dest_dir)
     }
 
-    /// Query the HuggingFace dataset API and return all rfilenames that are
-    /// parquet files, optionally filtered by the configured subset prefix.
-    async fn list_shards(&self, client: &reqwest::Client) -> Result<Vec<String>> {
-        let api_url = format!("https://huggingface.co/api/datasets/{}", self.repo);
+    /// Return `(local_filename, download_url)` pairs for all parquet shards.
+    ///
+    /// Two-pass strategy:
+    /// 1. Try the siblings API (works for flat repos like `manu/project_gutenberg`).
+    /// 2. If no shards found, try the parquet conversion API (works for
+    ///    config-based repos like `wikimedia/wikipedia`).
+    async fn list_shards(&self, client: &reqwest::Client) -> Result<Vec<(String, String)>> {
+        // ── Pass 1: siblings API ──────────────────────────────────────
+        let siblings_shards = self.list_from_siblings(client).await?;
+        if !siblings_shards.is_empty() {
+            return Ok(siblings_shards);
+        }
 
+        // ── Pass 2: parquet conversion API ───────────────────────────
+        if let Some(ref subset) = self.subset {
+            match self.list_from_parquet_api(client, subset).await {
+                Ok(shards) if !shards.is_empty() => return Ok(shards),
+                Ok(_) => {}
+                Err(e) => tracing::debug!(
+                    "Parquet API fallback for '{}' config '{}' failed: {e}",
+                    self.repo, subset
+                ),
+            }
+        }
+
+        Ok(Vec::new())
+    }
+
+    /// Query `GET /api/datasets/{repo}` and filter `siblings[].rfilename` to
+    /// parquet files matching the subset prefix.
+    ///
+    /// Subset matching (either pattern may apply depending on the repo layout):
+    /// - `data/{subset}-*`  e.g. `data/en-00000-of-00052-hash.parquet`
+    /// - `{subset}/*`       e.g. `20231101.en/train-00000-of-00041.parquet`
+    async fn list_from_siblings(
+        &self,
+        client: &reqwest::Client,
+    ) -> Result<Vec<(String, String)>> {
+        let api_url = format!("https://huggingface.co/api/datasets/{}", self.repo);
         let resp = client.get(&api_url).send().await?;
         if !resp.status().is_success() {
             return Err(Error::Recipe(format!(
@@ -165,25 +199,79 @@ impl HuggingFaceDatasetAcquirer {
         }
 
         let body: serde_json::Value = resp.json().await?;
-        let siblings = body["siblings"].as_array().ok_or_else(|| {
-            Error::Recipe(format!(
-                "HuggingFace API response for '{}' has no 'siblings' array. \
-                 The API format may have changed.",
-                self.repo
-            ))
-        })?;
+        let siblings = match body["siblings"].as_array() {
+            Some(s) => s,
+            None => return Ok(Vec::new()), // config-based dataset — no siblings
+        };
 
-        let prefix = self.subset.as_ref().map(|s| format!("data/{}-", s));
+        let flat_prefix = self.subset.as_ref().map(|s| format!("data/{}-", s));
+        let dir_prefix = self.subset.as_ref().map(|s| format!("{}/", s));
 
-        let shards: Vec<String> = siblings
+        let shards: Vec<(String, String)> = siblings
             .iter()
             .filter_map(|s| s["rfilename"].as_str())
             .filter(|f| f.ends_with(".parquet"))
-            .filter(|f| match &prefix {
-                Some(p) => f.starts_with(p.as_str()),
-                None => true,
+            .filter(|f| match (&flat_prefix, &dir_prefix) {
+                (Some(fp), Some(dp)) => f.starts_with(fp.as_str()) || f.starts_with(dp.as_str()),
+                (None, None) => true,
+                _ => false,
             })
-            .map(|f| f.to_string())
+            .map(|rfilename| {
+                let local = rfilename.rsplit('/').next().unwrap_or(rfilename).to_string();
+                let url = format!(
+                    "https://huggingface.co/datasets/{}/resolve/main/{}",
+                    self.repo, rfilename
+                );
+                (local, url)
+            })
+            .collect();
+
+        Ok(shards)
+    }
+
+    /// Query `GET /api/datasets/{repo}/parquet/{config}/train` which returns a
+    /// JSON array of direct CDN download URLs for config-based datasets.
+    async fn list_from_parquet_api(
+        &self,
+        client: &reqwest::Client,
+        config: &str,
+    ) -> Result<Vec<(String, String)>> {
+        let api_url = format!(
+            "https://huggingface.co/api/datasets/{}/parquet/{}/train",
+            self.repo, config
+        );
+        let resp = client.get(&api_url).send().await?;
+        if !resp.status().is_success() {
+            return Err(Error::Recipe(format!(
+                "HuggingFace parquet API returned {} for '{}/{}'. \
+                 The config name may be wrong.",
+                resp.status(),
+                self.repo,
+                config,
+            )));
+        }
+
+        let urls: Vec<String> = resp.json().await.map_err(|e| {
+            Error::Recipe(format!("HuggingFace parquet API returned unexpected JSON: {e}"))
+        })?;
+
+        let shards: Vec<(String, String)> = urls
+            .into_iter()
+            .enumerate()
+            .map(|(i, url)| {
+                // Use the last path component as the local filename, falling
+                // back to a zero-padded index if the URL has no clean basename.
+                let local = url
+                    .split('/')
+                    .last()
+                    .and_then(|s| {
+                        // Strip query strings and decode %2F etc.
+                        let s = s.split('?').next().unwrap_or(s);
+                        if s.ends_with(".parquet") { Some(s.to_string()) } else { None }
+                    })
+                    .unwrap_or_else(|| format!("{i:05}.parquet"));
+                (local, url)
+            })
             .collect();
 
         Ok(shards)
