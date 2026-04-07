@@ -43,22 +43,33 @@
         onclick={() => (provenanceExpanded = !provenanceExpanded)}
         onkeydown={(e) => e.key === "Enter" && (provenanceExpanded = !provenanceExpanded)}
       >
-        <span class="prov-chip">{provenance.inference_backend}</span>
-        <span class="prov-chip">{provenance.tokens_used} tokens</span>
-        <span class="prov-chip">{provenance.total_latency_ms}ms</span>
-        {#if provenance.oicp_match}
-          <span class="prov-chip">{provenance.oicp_match}</span>
+        <span class="prov-chip">{provenance.intent}</span>
+        {#each (provenance.sources ?? []).filter(s => s.count > 0) as src}
+          <span class="prov-chip prov-source">{src.origin} · {src.count}</span>
+        {/each}
+        <span class="prov-chip prov-meta">{provenance.total_latency_ms}ms</span>
+        {#if provenance.tokens_used > 0}
+          <span class="prov-chip prov-meta">{provenance.tokens_used} tok</span>
         {/if}
       </div>
       {#if provenanceExpanded}
         <div class="provenance-detail">
-          <div>Intent: {provenance.intent}</div>
+          <div><strong>Model:</strong> {provenance.inference_backend}</div>
           {#if provenance.search_method}
-            <div>Search: {provenance.search_method}</div>
+            <div><strong>Search:</strong> {provenance.search_method}</div>
           {/if}
-          {#each provenance.sources ?? [] as src}
-            <div>{src.origin}: {src.count} chunks</div>
-          {/each}
+          {#if provenance.oicp_match}
+            <div><strong>OICP:</strong> {provenance.oicp_match}</div>
+          {/if}
+          {#if (provenance.sources ?? []).length > 0}
+            <div style="margin-top: 4px"><strong>Sources:</strong></div>
+            {#each provenance.sources ?? [] as src}
+              <div class="prov-source-row">
+                <span class="prov-origin">{src.origin}</span>
+                <span class="prov-count">{src.count === 0 ? "searched, 0 results" : `${src.count} chunks`}</span>
+              </div>
+            {/each}
+          {/if}
         </div>
       {/if}
     {/if}
@@ -117,6 +128,15 @@
     white-space: nowrap;
   }
 
+  .prov-source {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .prov-meta {
+    opacity: 0.7;
+  }
+
   .provenance-detail {
     margin-top: 6px;
     padding: 8px 12px;
@@ -127,5 +147,20 @@
     color: var(--text-secondary);
     line-height: 1.5;
     white-space: normal;
+  }
+
+  .prov-source-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 1px 0 1px 8px;
+    gap: 12px;
+  }
+
+  .prov-origin {
+    font-weight: 500;
+  }
+
+  .prov-count {
+    color: var(--text-muted);
   }
 </style>
