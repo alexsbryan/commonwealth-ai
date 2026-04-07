@@ -16,6 +16,7 @@
   let config: DesktopConfig | null = $state(null);
   let saving = $state(false);
   let saveMessage = $state("");
+  let advancedOpen = $state(false);
 
   onMount(async () => {
     try {
@@ -100,6 +101,70 @@
           <span>Context size</span>
           <input type="number" bind:value={config.context_size} />
         </label>
+      </div>
+
+      <div class="section">
+        <button
+          class="advanced-toggle"
+          onclick={() => (advancedOpen = !advancedOpen)}
+          aria-expanded={advancedOpen}
+        >
+          <span class="advanced-toggle-arrow" class:open={advancedOpen}>▶</span>
+          Advanced Tuning
+        </button>
+
+        {#if advancedOpen}
+          <div class="advanced-body">
+            <p class="section-help">
+              These parameters control the generation behaviour of the local
+              model. Defaults are tuned for balanced quality and speed — adjust
+              carefully. Changes take effect after <strong>Save &amp; Apply</strong>.
+            </p>
+
+            <label>
+              <span>Temperature <em>(0.0–1.0)</em></span>
+              <input
+                type="number"
+                min="0" max="1" step="0.05"
+                bind:value={config.temperature}
+              />
+              <span class="field-help">
+                Controls randomness. Lower = more focused and deterministic;
+                higher = more creative and varied. 0.7 is a good default.
+              </span>
+            </label>
+
+            <label>
+              <span>Max response tokens</span>
+              <input
+                type="number"
+                min="256" max="8192" step="128"
+                bind:value={config.max_tokens}
+              />
+              <span class="field-help">
+                Hard ceiling on the number of tokens generated per response
+                (including any thinking). 2048 suits most answers; increase
+                for long-form writing or code.
+              </span>
+            </label>
+
+            <label>
+              <span>Think-block budget <em>(tokens)</em></span>
+              <input
+                type="number"
+                min="0" max="4096" step="64"
+                bind:value={config.think_budget}
+              />
+              <span class="field-help">
+                Maximum tokens a reasoning model may spend inside
+                <code>&lt;think&gt;…&lt;/think&gt;</code> before it is
+                force-closed and the model must produce its answer. Set to 0
+                to disable budget enforcement. 512 suits most questions;
+                increase for complex multi-step reasoning.
+              </span>
+            </label>
+          </div>
+        {/if}
       </div>
 
       <div class="section">
@@ -285,6 +350,45 @@
     color: var(--text-muted);
     margin-top: 4px;
     line-height: 1.4;
+  }
+
+  .advanced-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .advanced-toggle:hover {
+    color: var(--text-secondary);
+  }
+
+  .advanced-toggle-arrow {
+    font-size: 0.65rem;
+    transition: transform 0.15s ease;
+    display: inline-block;
+  }
+
+  .advanced-toggle-arrow.open {
+    transform: rotate(90deg);
+  }
+
+  .advanced-body {
+    margin-top: 12px;
+    padding: 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
   }
 
   input,

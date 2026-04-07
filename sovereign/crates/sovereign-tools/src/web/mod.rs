@@ -70,6 +70,7 @@ impl WebSearchTool {
             max_tokens: Some(60),
             temperature: Some(0.0),
             structured_output: None,
+            think_budget: None,
             oicp: None,
         };
 
@@ -190,6 +191,7 @@ impl WebSearchTool {
             max_tokens: Some(1024),
             temperature: Some(0.5),
             structured_output: None,
+            think_budget: None,
             oicp: None,
         };
 

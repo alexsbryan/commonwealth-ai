@@ -63,6 +63,7 @@ impl HybridProvider {
                         max_tokens: Some(1),
                         temperature: Some(0.0),
                         structured_output: None,
+            think_budget: None,
                         oicp: None,
                     };
 

@@ -68,6 +68,10 @@ export interface DesktopConfig {
   search_backend: SearchBackendConfig;
   setup_complete: boolean;
   selected_tier: string | null;
+  // Advanced tuning
+  temperature: number;
+  max_tokens: number;
+  think_budget: number;
 }
 
 export interface SearchBackendConfig {

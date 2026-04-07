@@ -185,6 +185,72 @@ Reply with ONLY the letter: A, B, or C"#
         }
     }
 
+    /// Heuristic check: does this message require deep reasoning?
+    ///
+    /// Small fast models (0.5B–3B) are unreliable at distinguishing "is free will
+    /// compatible with determinism?" (DeepQuery) from "what is free will?" (SimpleQuery).
+    /// This function catches the obvious cases so the LLM only handles genuinely
+    /// ambiguous ones.
+    fn needs_deep_reasoning(message: &str) -> bool {
+        let lower = message.to_lowercase();
+
+        // Explicit analysis/comparison directives — unambiguous DeepQuery signals.
+        let analysis_markers = [
+            "compare", "contrast", "analyze", "analyse",
+            "explain how", "explain why", "explain the difference",
+            "what are the arguments", "what are the implications",
+            "evaluate", "critically", "assess",
+            "discuss", "debate",
+            "reconcile", "how does", "why does", "in what ways",
+            "pros and cons", "advantages and disadvantages",
+            "relationship between", "difference between",
+            "summarize the", "summarise the",
+            "history of", "overview of", "evolution of",
+            "how have", "how has",
+        ];
+
+        // Complex conceptual domains where even short questions require reasoning.
+        let complex_domains = [
+            "free will", "determinism", "compatibilism", "incompatibilism",
+            "consciousness", "qualia", "hard problem",
+            "epistemology", "ontology", "metaphysics", "phenomenology",
+            "moral realism", "ethics", "morality", "normative",
+            "political philosophy", "social contract", "justice",
+            "dialectic", "existentialism", "absurdism",
+            "artificial general intelligence", "alignment problem",
+            "philosophy of mind", "philosophy of language",
+            "emergence", "supervenience", "reduction",
+        ];
+
+        // Compatibility/tension questions — always require reasoning regardless of domain.
+        let tension_markers = [
+            "compatible", "incompatible",
+            "consistent with", "inconsistent with",
+            "reconcile", "tension between",
+            "can both", "are both",
+        ];
+
+        let word_count = message.split_whitespace().count();
+
+        // Explicit analysis directive → always deep.
+        if analysis_markers.iter().any(|m| lower.contains(m)) {
+            return true;
+        }
+
+        // Compatibility/tension question on any subject → always deep.
+        if tension_markers.iter().any(|m| lower.contains(m)) {
+            return true;
+        }
+
+        // Complex philosophical/technical domain + non-trivial question length → deep.
+        // (Excludes "what is X?" which is short and definitional.)
+        if complex_domains.iter().any(|d| lower.contains(d)) && word_count > 5 {
+            return true;
+        }
+
+        false
+    }
+
     /// Heuristic check: does this message likely need current/real-time information?
     /// This catches cases that small models miss in classification.
     fn needs_current_info(message: &str) -> bool {
@@ -243,6 +309,7 @@ Reply with ONLY the letter: A, B, or C"#
             max_tokens: Some(5),
             temperature: Some(0.0),
             structured_output: None,
+            think_budget: None,
             oicp: None,
         };
         let response = self.inference.complete(&request).await?;
@@ -327,15 +394,21 @@ impl Router for LlmRouter {
         // Get active skill routing hints.
         let routing_hints = self.skills.routing_hints();
 
-        // Pre-check: if the message needs current information and we have
-        // a search tool, skip LLM classification and go straight to ACTION.
-        // Small models (0.5B-3B) are unreliable at detecting temporal queries.
+        // Pre-check 1: temporal/current-info → force ACTION (search).
+        // Small models are unreliable at detecting these.
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
         let force_action = has_search && Self::needs_current_info(message);
 
-        // Pass 1: Coarse classification (skipped if force_action).
+        // Pre-check 2: deep reasoning signal → force REASONING before the LLM sees it.
+        // This catches philosophical, analytical, and compatibility questions that
+        // small fast models frequently mis-classify as SimpleQuery.
+        let force_deep = !force_action && Self::needs_deep_reasoning(message);
+
+        // Pass 1: Coarse classification (skipped for pre-checked cases).
         let coarse = if force_action {
             'C'
+        } else if force_deep {
+            'B'
         } else {
             let pass1_prompt = Self::build_pass1_prompt(
                 message,

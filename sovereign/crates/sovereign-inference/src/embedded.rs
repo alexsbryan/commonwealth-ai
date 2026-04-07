@@ -135,10 +135,18 @@ impl ModelSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
 
-        let mut sampler = build_sampler(request.temperature);
+        let mut sampler = build_sampler(model, request.temperature);
         let mut output = String::new();
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
+
+        // Think-block budget forcing: track position inside <think>…</think>
+        // and inject a closing tag once the budget is exhausted so the model
+        // is forced to summarise rather than spiral indefinitely.
+        let mut tail = String::with_capacity(32);
+        let mut in_think = false;
+        let mut think_tokens = 0usize;
+        let mut think_budget_fired = false;
 
         while n_generated < max_tokens {
             let token = sampler.sample(ctx, -1);
@@ -149,6 +157,20 @@ impl ModelSlot {
             }
 
             if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
+                // Update sliding tail for tag detection.
+                tail.push_str(&piece);
+                if tail.len() > 32 {
+                    tail.drain(..tail.len() - 32);
+                }
+                if !in_think && tail.contains("<think>") {
+                    in_think = true;
+                } else if in_think && tail.contains("</think>") {
+                    in_think = false;
+                }
+                if in_think {
+                    think_tokens += 1;
+                }
+
                 output.push_str(&piece);
             }
 
@@ -162,6 +184,28 @@ impl ModelSlot {
 
             ctx.decode(&mut batch)
                 .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+
+            // Budget forcing: inject </think> if the think block runs too long.
+            if in_think && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET) && !think_budget_fired {
+                think_budget_fired = true;
+                let force = "\n</think>\n\n";
+                if let Ok(close_tokens) = model.str_to_token(force, AddBos::Never) {
+                    for &ct in &close_tokens {
+                        if let Ok(fp) = model.token_to_piece(ct, &mut decoder, true, None) {
+                            output.push_str(&fp);
+                        }
+                        sampler.accept(ct);
+                        batch.clear();
+                        batch
+                            .add(ct, (tokens.len() + n_generated) as i32, &[0], true)
+                            .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+                        ctx.decode(&mut batch)
+                            .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+                        n_generated += 1;
+                    }
+                }
+                in_think = false;
+            }
         }
 
         ctx.clear_kv_cache();
@@ -194,9 +238,14 @@ impl ModelSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
 
-        let mut sampler = build_sampler(request.temperature);
+        let mut sampler = build_sampler(model, request.temperature);
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
+
+        let mut tail = String::with_capacity(32);
+        let mut in_think = false;
+        let mut think_tokens = 0usize;
+        let mut think_budget_fired = false;
 
         while n_generated < max_tokens {
             let token = sampler.sample(ctx, -1);
@@ -207,6 +256,19 @@ impl ModelSlot {
             }
 
             if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
+                tail.push_str(&piece);
+                if tail.len() > 32 {
+                    tail.drain(..tail.len() - 32);
+                }
+                if !in_think && tail.contains("<think>") {
+                    in_think = true;
+                } else if in_think && tail.contains("</think>") {
+                    in_think = false;
+                }
+                if in_think {
+                    think_tokens += 1;
+                }
+
                 if tx.blocking_send(Ok(piece)).is_err() {
                     break;
                 }
@@ -221,6 +283,30 @@ impl ModelSlot {
 
             ctx.decode(&mut batch)
                 .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+
+            if in_think && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET) && !think_budget_fired {
+                think_budget_fired = true;
+                let force = "\n</think>\n\n";
+                if let Ok(close_tokens) = model.str_to_token(force, AddBos::Never) {
+                    for &ct in &close_tokens {
+                        let fp = model
+                            .token_to_piece(ct, &mut decoder, true, None)
+                            .unwrap_or_default();
+                        sampler.accept(ct);
+                        batch.clear();
+                        batch
+                            .add(ct, (tokens.len() + n_generated) as i32, &[0], true)
+                            .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+                        ctx.decode(&mut batch)
+                            .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+                        n_generated += 1;
+                        if tx.blocking_send(Ok(fp)).is_err() {
+                            break;
+                        }
+                    }
+                }
+                in_think = false;
+            }
         }
 
         ctx.clear_kv_cache();
@@ -791,18 +877,41 @@ fn format_prompt(model: &LlamaModel, request: &CompletionRequest) -> Result<Stri
     })
 }
 
-fn build_sampler(temperature: Option<f32>) -> LlamaSampler {
+/// Token budget for `<think>` blocks. After this many tokens inside a thinking
+/// block the generation loop injects `</think>` into the KV cache and stream,
+/// forcing the model to transition to its answer rather than spiral endlessly.
+const THINK_BUDGET: usize = 512;
+
+/// Build the sampler chain.
+///
+/// Technique rationale:
+/// - **DRY** ("Don't Repeat Yourself"): penalises repeated *token sequences*
+///   rather than individual tokens. This is the primary fix for the
+///   "completely totally wholly fully …" cascade — those are all different
+///   tokens, so standard `penalties` misses them, but DRY catches the
+///   recurring suffix pattern they form.
+/// - **min_p**: replaces top_p. When the model is confident (high-probability
+///   next token) min_p becomes more selective, preventing runaway picks from
+///   a collapsed distribution. When uncertain it relaxes, preserving diversity.
+/// - **penalties**: kept as a backstop for single-token repetition that DRY's
+///   `allowed_length = 2` intentionally ignores.
+fn build_sampler(model: &LlamaModel, temperature: Option<f32>) -> LlamaSampler {
     let temp = temperature.unwrap_or(0.7);
+    // Sequence breakers tell DRY where one "thought unit" ends and another
+    // begins — any of these tokens resets the repeated-suffix detector.
+    let breakers: &[&[u8]] = &[b"\n", b".", b"?", b"!", b":", b"\"", b"*"];
     if temp < 0.01 {
         LlamaSampler::chain_simple([
-            LlamaSampler::penalties(512, 1.3, 0.15, 0.15),
+            LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()),
+            LlamaSampler::penalties(128, 1.15, 0.1, 0.1),
             LlamaSampler::greedy(),
         ])
     } else {
         LlamaSampler::chain_simple([
-            LlamaSampler::penalties(512, 1.3, 0.15, 0.15),
+            LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()),
+            LlamaSampler::penalties(128, 1.15, 0.1, 0.1),
             LlamaSampler::top_k(40),
-            LlamaSampler::top_p(0.9, 1),
+            LlamaSampler::min_p(0.05, 1),
             LlamaSampler::temp(temp),
             LlamaSampler::dist(rand_seed()),
         ])

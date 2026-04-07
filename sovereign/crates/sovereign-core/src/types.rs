@@ -26,6 +26,29 @@ pub enum Depth {
     Deep,
 }
 
+/// User-configurable inference parameters, sourced from `DesktopConfig`.
+/// Passed to `Runtime::new()` and used when building every `CompletionRequest`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InferenceConfig {
+    /// Generation temperature for conversational responses (0.0–1.0).
+    pub temperature: f32,
+    /// Maximum tokens to generate per response.
+    pub max_tokens: usize,
+    /// Maximum tokens allowed inside a `<think>` block before the
+    /// generation loop force-closes it.
+    pub think_budget: usize,
+}
+
+impl Default for InferenceConfig {
+    fn default() -> Self {
+        Self {
+            temperature: 0.7,
+            max_tokens: 2048,
+            think_budget: 512,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionRequest {
     pub prompt: String,
@@ -34,6 +57,11 @@ pub struct CompletionRequest {
     pub max_tokens: Option<usize>,
     pub temperature: Option<f32>,
     pub structured_output: Option<serde_json::Value>,
+    /// Overrides the default think-block token budget for this request.
+    /// `None` falls back to the value in `InferenceConfig` (or the
+    /// compiled-in `THINK_BUDGET` constant if unavailable).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub think_budget: Option<usize>,
     /// OICP capability requirements. Used by providers that support
     /// OICP to select the best model. Ignored by providers that don't.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -49,6 +77,7 @@ impl CompletionRequest {
             max_tokens: None,
             temperature: None,
             structured_output: None,
+            think_budget: None,
             oicp: None,
         }
     }
@@ -79,6 +108,7 @@ impl CompletionRequest {
             max_tokens: Some(5),
             temperature: Some(0.0),
             structured_output: None,
+            think_budget: Some(0), // No thinking needed for yes/no
             oicp: None,
         }
     }

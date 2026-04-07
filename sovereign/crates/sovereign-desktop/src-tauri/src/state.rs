@@ -11,6 +11,7 @@ use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{InferenceProvider, StateStore};
+use sovereign_core::types::InferenceConfig;
 use sovereign_core::{SkillRegistry, ToolRegistry};
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_store::sqlite::SqliteStateStore;
@@ -47,6 +48,18 @@ pub struct DesktopConfig {
     pub setup_complete: bool,
     #[serde(default)]
     pub selected_tier: Option<String>,
+
+    // ── Advanced Tuning ─────────────────────────────────────────
+    /// Generation temperature (0.0–1.0). Higher = more creative, lower = more focused.
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+    /// Maximum tokens to generate per response.
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+    /// Maximum tokens allowed inside a `<think>` block before it is
+    /// force-closed, preventing the model from spiralling indefinitely.
+    #[serde(default = "default_think_budget")]
+    pub think_budget: u32,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -83,6 +96,18 @@ fn default_context_size() -> u32 {
     2048
 }
 
+fn default_temperature() -> f32 {
+    0.7
+}
+
+fn default_max_tokens() -> u32 {
+    2048
+}
+
+fn default_think_budget() -> u32 {
+    512
+}
+
 fn default_search_provider() -> String {
     "duckduckgo".to_string()
 }
@@ -101,6 +126,9 @@ impl Default for DesktopConfig {
             search_backend: SearchBackendConfig::default(),
             setup_complete: false,
             selected_tier: None,
+            temperature: default_temperature(),
+            max_tokens: default_max_tokens(),
+            think_budget: default_think_budget(),
         }
     }
 }
@@ -356,6 +384,15 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =
         Arc::clone(&state.approval) as Arc<dyn sovereign_core::traits::ApprovalChannel>;
 
+    let inference_config = {
+        let cfg = state.config.read().await;
+        InferenceConfig {
+            temperature: cfg.temperature,
+            max_tokens: cfg.max_tokens as usize,
+            think_budget: cfg.think_budget as usize,
+        }
+    };
+
     let runtime = Runtime::new(
         inference,
         router,
@@ -364,6 +401,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         store,
         skills,
         approval,
+        inference_config,
     );
 
     *state.runtime.write().await = Some(Arc::new(runtime));

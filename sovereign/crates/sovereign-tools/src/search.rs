@@ -292,6 +292,7 @@ impl SearchTool {
             max_tokens: Some(1024),
             temperature: Some(0.3),
             structured_output: None,
+            think_budget: None,
             oicp: None,
         };
 

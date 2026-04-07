@@ -327,6 +327,7 @@ impl Executor {
                     max_tokens: Some(budget.max_tokens),
                     temperature: Some(0.7),
                     structured_output: None,
+            think_budget: None,
                     oicp,
                 };
 
@@ -572,6 +573,7 @@ impl Executor {
                 max_tokens: Some(2048),
                 temperature: Some(0.3),
                 structured_output: None,
+            think_budget: None,
                 oicp: None,
             };
 
@@ -644,6 +646,7 @@ impl Executor {
                         max_tokens: Some(2048),
                         temperature: Some(0.3),
                         structured_output: None,
+            think_budget: None,
                         oicp: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;

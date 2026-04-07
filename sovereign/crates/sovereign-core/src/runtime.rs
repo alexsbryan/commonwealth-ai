@@ -79,6 +79,7 @@ pub struct Runtime {
     pub store: Arc<dyn StateStore>,
     pub skills: Arc<SkillRegistry>,
     pub approval: Arc<dyn ApprovalChannel>,
+    pub inference_config: InferenceConfig,
 }
 
 impl Runtime {
@@ -90,6 +91,7 @@ impl Runtime {
         store: Arc<dyn StateStore>,
         skills: Arc<SkillRegistry>,
         approval: Arc<dyn ApprovalChannel>,
+        inference_config: InferenceConfig,
     ) -> Self {
         Self {
             inference,
@@ -99,6 +101,7 @@ impl Runtime {
             store,
             skills,
             approval,
+            inference_config,
         }
     }
 
@@ -307,8 +310,9 @@ impl Runtime {
             prompt,
             system_message: Some(system),
             preferred_speed: speed,
-            max_tokens: Some(2048),
-            temperature: Some(0.7),
+            max_tokens: Some(self.inference_config.max_tokens),
+            temperature: Some(self.inference_config.temperature),
+            think_budget: Some(self.inference_config.think_budget),
             structured_output: None,
             oicp,
         };
@@ -554,8 +558,9 @@ impl Runtime {
             prompt,
             system_message: Some(system),
             preferred_speed: speed,
-            max_tokens: Some(2048),
-            temperature: Some(0.7),
+            max_tokens: Some(self.inference_config.max_tokens),
+            temperature: Some(self.inference_config.temperature),
+            think_budget: Some(self.inference_config.think_budget),
             structured_output: None,
             oicp,
         };
@@ -659,8 +664,9 @@ impl Runtime {
             prompt,
             system_message: Some(system),
             preferred_speed: Speed::Slow,
-            max_tokens: Some(2048),
-            temperature: Some(0.7),
+            max_tokens: Some(self.inference_config.max_tokens),
+            temperature: Some(self.inference_config.temperature),
+            think_budget: Some(self.inference_config.think_budget),
             structured_output: None,
             oicp: self.build_oicp(LatencyPreference::BestEffort),
         };
@@ -854,8 +860,9 @@ impl Runtime {
                 prompt: synthesis_prompt,
                 system_message: Some(synthesis_system),
                 preferred_speed: Speed::Slow,
-                max_tokens: Some(2048),
-                temperature: Some(0.7),
+                max_tokens: Some(self.inference_config.max_tokens),
+                temperature: Some(self.inference_config.temperature),
+                think_budget: Some(self.inference_config.think_budget),
                 structured_output: None,
                 oicp: self.build_oicp(LatencyPreference::Throughput),
             })
