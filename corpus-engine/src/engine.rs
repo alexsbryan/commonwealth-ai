@@ -217,7 +217,8 @@ impl CorpusEngine {
         // Step 3: Chunk, embed, and index.
         let chunker = self.make_chunker(&recipe.chunk);
 
-        let index = CorpusIndex::create(
+        // Open or resume a partial index (supports resuming after process kill).
+        let (index, resume_iter_pos) = CorpusIndex::create_or_resume(
             index_path,
             &recipe.corpus.id,
             &recipe.corpus.name,
@@ -228,17 +229,25 @@ impl CorpusEngine {
         )
         .await?;
 
-        let mut total_chunks = 0u64;
-        let mut docs_processed = 0u64;
+        // Initialise counters. On resume these start from where we left off.
+        let mut total_chunks = index.chunk_count().await.unwrap_or(0);
+        let mut docs_processed = 0u64; // successful docs in THIS run
+        let mut iter_pos = 0u64;       // absolute position in the source iterator
         let mut batch: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
         let mut batch_start = Instant::now();
 
-        eprintln!(
-            "[{}] Starting embed+index pipeline",
-            recipe.corpus.id
-        );
+        if resume_iter_pos == 0 {
+            eprintln!("[{}] Starting embed+index pipeline", recipe.corpus.id);
+        }
 
         for doc_result in doc_iter {
+            iter_pos += 1;
+
+            // Skip documents that were already committed in a previous run.
+            if iter_pos <= resume_iter_pos {
+                continue;
+            }
+
             let doc = match doc_result {
                 Ok(d) => d,
                 Err(e) => {
@@ -279,12 +288,15 @@ impl CorpusEngine {
                     let chunks_per_sec = batch.len() as f32 / batch_secs;
                     total_chunks += batch.len() as u64;
                     index.insert_batch(&batch).await?;
+                    // Checkpoint: persist how far we've iterated so a restart can resume.
+                    let _ = index.update_committed_iter_pos(iter_pos);
                     batch.clear();
 
                     let elapsed = start.elapsed();
                     eprintln!(
-                        "[{}] {total_chunks} chunks | {docs_processed} docs | {chunks_per_sec:.1} chunks/s | {}m{}s elapsed",
+                        "[{}] {total_chunks} chunks | {} docs | {chunks_per_sec:.1} chunks/s | {}m{}s elapsed",
                         recipe.corpus.id,
+                        resume_iter_pos + docs_processed,
                         elapsed.as_secs() / 60,
                         elapsed.as_secs() % 60,
                     );
@@ -293,7 +305,7 @@ impl CorpusEngine {
                         cb(IngestProgress::Embedding {
                             chunks_embedded: total_chunks,
                             total: 0,
-                            docs_processed,
+                            docs_processed: resume_iter_pos + docs_processed,
                             chunks_per_sec,
                         });
                     }
@@ -307,16 +319,18 @@ impl CorpusEngine {
         if !batch.is_empty() {
             total_chunks += batch.len() as u64;
             index.insert_batch(&batch).await?;
+            let _ = index.update_committed_iter_pos(iter_pos);
             eprintln!(
-                "[{}] Flushed final batch — {total_chunks} chunks total from {docs_processed} docs",
-                recipe.corpus.id
+                "[{}] Flushed final batch — {total_chunks} chunks total from {} docs",
+                recipe.corpus.id,
+                resume_iter_pos + docs_processed,
             );
         }
 
         // A pipeline that produced zero chunks is almost always a bug
         // (wrong column name, empty parquet, all docs filtered out).
-        // Surface this rather than leaving an empty index that pretends
-        // to be installed.
+        // On resume: if we skipped everything (all docs were committed), total_chunks
+        // is from the existing table and we proceed to build indexes normally.
         if total_chunks == 0 {
             return Err(Error::Extraction(format!(
                 "Ingest produced zero chunks for corpus '{}'. \

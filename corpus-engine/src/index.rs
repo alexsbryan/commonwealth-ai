@@ -114,6 +114,12 @@ struct IndexMeta {
     /// before this field existed) are treated as complete.
     #[serde(default)]
     ingestion_in_progress: bool,
+    /// Number of source documents iterated (including skipped/errored) at the
+    /// last successful batch flush. Used to resume a killed ingest from the
+    /// correct position without re-embedding already-committed chunks.
+    /// Defaults to 0 so existing complete indexes don't try to resume.
+    #[serde(default)]
+    committed_iter_pos: u64,
 }
 
 fn meta_path(index_dir: &Path) -> std::path::PathBuf {
@@ -184,6 +190,7 @@ impl CorpusIndex {
             chunk_range_start: None,
             chunk_range_end: None,
             ingestion_in_progress: true,
+            committed_iter_pos: 0,
         };
         write_meta(path, &meta)?;
 
@@ -200,6 +207,65 @@ impl CorpusIndex {
             is_shard: false,
             chunk_range: None,
         })
+    }
+
+    /// Create a fresh index, or resume an interrupted one.
+    ///
+    /// If a partial index (with `ingestion_in_progress: true`) already exists at
+    /// `path`, this opens it in append mode and returns `(index, committed_iter_pos)`
+    /// so the caller can skip already-processed source documents. This makes
+    /// long ingests (hours) resumable after a process kill or crash.
+    ///
+    /// If no index exists, a fresh one is created and `committed_iter_pos` is 0.
+    pub async fn create_or_resume(
+        path: &Path,
+        corpus_id: &str,
+        corpus_name: &str,
+        embedding_model: &str,
+        embedding_dim: usize,
+        mesh_sharing: bool,
+        license: &str,
+    ) -> Result<(Self, u64)> {
+        // Resume path: partial index exists from a previous killed run.
+        if path.exists() && !Self::is_ingestion_complete(path) {
+            match Self::open(path).await {
+                Ok(index) => {
+                    let iter_pos = read_meta(path)
+                        .map(|m| m.committed_iter_pos)
+                        .unwrap_or(0);
+                    let existing = index.chunk_count().await.unwrap_or(0);
+                    eprintln!(
+                        "[corpus] Resuming '{}' — skipping first {iter_pos} source docs ({existing} chunks already indexed)",
+                        corpus_id,
+                    );
+                    return Ok((index, iter_pos));
+                }
+                Err(e) => {
+                    // Corrupt partial index — wipe and start fresh.
+                    tracing::warn!(
+                        "Partial index at '{}' could not be opened ({e}); starting fresh",
+                        path.display()
+                    );
+                    if let Err(rm) = std::fs::remove_dir_all(path) {
+                        tracing::warn!("Failed to remove corrupt partial index: {rm}");
+                    }
+                }
+            }
+        }
+
+        // Fresh start.
+        let index = Self::create(path, corpus_id, corpus_name, embedding_model, embedding_dim, mesh_sharing, license).await?;
+        Ok((index, 0))
+    }
+
+    /// Persist the current iterator position as a resume checkpoint.
+    /// Called after each successful batch flush so that a subsequent restart
+    /// can skip already-committed source documents.
+    pub fn update_committed_iter_pos(&self, iter_pos: u64) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.committed_iter_pos = iter_pos;
+        write_meta(index_dir, &meta)
     }
 
     /// Open an existing LanceDB index.
