@@ -120,6 +120,12 @@ struct IndexMeta {
     /// Defaults to 0 so existing complete indexes don't try to resume.
     #[serde(default)]
     committed_iter_pos: u64,
+    /// Set to true once `build_indexes()` completes successfully.
+    /// Allows a resume to skip index-building if it already finished in a
+    /// previous run (e.g. process killed between build_indexes and
+    /// mark_ingestion_complete). Defaults to false.
+    #[serde(default)]
+    indexes_built: bool,
 }
 
 fn meta_path(index_dir: &Path) -> std::path::PathBuf {
@@ -191,6 +197,7 @@ impl CorpusIndex {
             chunk_range_end: None,
             ingestion_in_progress: true,
             committed_iter_pos: 0,
+            indexes_built: false,
         };
         write_meta(path, &meta)?;
 
@@ -402,6 +409,23 @@ impl CorpusIndex {
         read_meta(path)
             .map(|m| m.committed_iter_pos > 0)
             .unwrap_or(false)
+    }
+
+    /// Returns true if the vector + FTS search indexes were already built in a
+    /// previous run. A resume can skip `build_indexes()` entirely when this is
+    /// true, jumping straight to `mark_ingestion_complete()`.
+    pub fn indexes_are_built(path: &Path) -> bool {
+        read_meta(path)
+            .map(|m| m.indexes_built)
+            .unwrap_or(false)
+    }
+
+    /// Persist that search indexes have been successfully built.
+    pub fn mark_indexes_built(&self) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.indexes_built = true;
+        write_meta(index_dir, &meta)
     }
 
     /// Build vector + FTS indexes for efficient search.

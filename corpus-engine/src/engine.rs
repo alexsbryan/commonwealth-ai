@@ -353,22 +353,35 @@ impl CorpusEngine {
         }
 
         // Build search indexes (IVF-PQ + FTS).
-        eprintln!(
-            "[{}] Building search indexes over {total_chunks} chunks (this may take several minutes)...",
-            recipe.corpus.id,
-        );
-        if let Some(ref cb) = progress {
-            cb(IngestProgress::Indexing {
-                chunks_indexed: 0,
-                total: total_chunks,
-            });
-        }
-        index.build_indexes().await?;
-        if let Some(ref cb) = progress {
-            cb(IngestProgress::Indexing {
-                chunks_indexed: total_chunks,
-                total: total_chunks,
-            });
+        // Skip if already completed in a previous run — this is the common case
+        // when a process was killed after build_indexes() but before
+        // mark_ingestion_complete(). We detect it via the `indexes_built` flag
+        // so we don't waste minutes rebuilding what's already there.
+        if CorpusIndex::indexes_are_built(index_path) {
+            eprintln!(
+                "[{}] Search indexes already built — skipping to completion",
+                recipe.corpus.id,
+            );
+        } else {
+            eprintln!(
+                "[{}] Building search indexes over {total_chunks} chunks (this may take several minutes)...",
+                recipe.corpus.id,
+            );
+            if let Some(ref cb) = progress {
+                cb(IngestProgress::Indexing {
+                    chunks_indexed: 0,
+                    total: total_chunks,
+                });
+            }
+            index.build_indexes().await?;
+            // Checkpoint: if killed after this point, resume can skip rebuild.
+            let _ = index.mark_indexes_built();
+            if let Some(ref cb) = progress {
+                cb(IngestProgress::Indexing {
+                    chunks_indexed: total_chunks,
+                    total: total_chunks,
+                });
+            }
         }
 
         // Optional enrichment phase: extract claims and relationships.
