@@ -272,7 +272,8 @@ impl CorpusEngine {
 
             docs_processed += 1;
 
-            let text_chunks = chunker.chunk(&doc.content);
+            let cleaned_content = normalize_content(&doc.content);
+            let text_chunks = chunker.chunk(&cleaned_content);
 
             for tc in text_chunks {
                 let content = if let Some(ref title) = doc.title {
@@ -831,6 +832,28 @@ fn controversy_patterns_from_config(config: &ExtractorConfig) -> Vec<String> {
         } => controversy_patterns.clone(),
         _ => vec![],
     }
+}
+
+/// Strip model-generated artifacts from raw corpus text before chunking.
+/// Some HuggingFace datasets contain LLM-generated content with `<think>`
+/// blocks; storing those verbatim pollutes every chunk and breaks enrichment.
+fn normalize_content(s: &str) -> String {
+    if !s.contains("<think>") {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("</think>") {
+            Some(rel_end) => {
+                rest = &rest[start + rel_end + "</think>".len()..];
+            }
+            None => break,
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 #[cfg(test)]
