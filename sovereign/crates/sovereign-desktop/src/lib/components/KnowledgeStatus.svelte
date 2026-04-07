@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus } from "../api";
-  import type { CorpusEntry, CorpusProgressPayload } from "../types";
+  import { listCorpora, installCorpus, removeCorpus, getCorpusHealth } from "../api";
+  import type { CorpusEntry, CorpusProgressPayload, CorpusHealthDetail } from "../types";
 
   let corpora: CorpusEntry[] = $state([]);
   let progress: Record<string, CorpusProgressPayload> = $state({});
+  let expanded: Set<string> = $state(new Set());
+  let health: Record<string, CorpusHealthDetail> = $state({});
   let unlisten: UnlistenFn | null = null;
 
   const tiers: { id: string; name: string; desc: string }[] = [
@@ -88,6 +90,32 @@
     }
   }
 
+  async function toggleHealth(id: string) {
+    if (expanded.has(id)) {
+      expanded.delete(id);
+      expanded = new Set(expanded);
+    } else {
+      expanded.add(id);
+      expanded = new Set(expanded);
+      if (!health[id]) {
+        try {
+          const detail = await getCorpusHealth(id);
+          if (detail) health = { ...health, [id]: detail };
+        } catch (e) {
+          console.error("Failed to load corpus health:", e);
+        }
+      }
+    }
+  }
+
+  function formatDate(unixSecs: number): string {
+    return new Date(unixSecs * 1000).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
   function phaseLabel(phase: string): string {
     switch (phase) {
       case "downloading":
@@ -106,6 +134,10 @@
         return "Finding relationships…";
       case "extracting_relationships":
         return "Extracting relationships…";
+      case "building_link_graph":
+        return "Building link graph…";
+      case "computing_profiles":
+        return "Computing article profiles…";
       case "complete":
         return "Complete";
       case "failed":
@@ -153,9 +185,40 @@
         </div>
         <div class="corpus-detail">
           {#if corpus.status === "installed"}
+            <button
+              class="detail-toggle"
+              onclick={() => toggleHealth(corpus.id)}
+              title="Show index details"
+            >
+              {expanded.has(corpus.id) ? "▾" : "▸"}
+            </button>
             Indexed
+            {#if corpus.indexed_at}
+              &middot; {formatDate(corpus.indexed_at)}
+            {/if}
             {#if corpus.chunks_count}
               &middot; {corpus.chunks_count.toLocaleString()} chunks
+            {/if}
+            {#if expanded.has(corpus.id)}
+              <div class="health-panel">
+                {#if corpus.embedding_model}
+                  <span class="health-chip">{corpus.embedding_model}{corpus.embedding_dimensions ? ` (${corpus.embedding_dimensions}-dim)` : ""}</span>
+                {/if}
+                {#if health[corpus.id]}
+                  {#if health[corpus.id].claims_count > 0}
+                    <span class="health-chip enriched">✦ {health[corpus.id].claims_count.toLocaleString()} claims · {health[corpus.id].relationships_count.toLocaleString()} relationships</span>
+                  {:else if corpus.enrichment_enabled}
+                    <span class="health-chip">✦ enriched (no claims yet)</span>
+                  {:else}
+                    <span class="health-chip muted">No enrichment</span>
+                  {/if}
+                  {#if health[corpus.id].has_article_profiles}
+                    <span class="health-chip">Article profiles</span>
+                  {/if}
+                {:else}
+                  <span class="health-chip muted">Loading…</span>
+                {/if}
+              </div>
             {/if}
           {:else if inProgress}
             {#if progress[corpus.id]}
@@ -332,6 +395,44 @@
   }
   .status-text {
     font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .detail-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    line-height: 1;
+    margin-right: 2px;
+  }
+  .detail-toggle:hover {
+    color: var(--text-secondary);
+  }
+  .health-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    margin-left: 0;
+  }
+  .health-chip {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    padding: 1px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .health-chip.enriched {
+    color: var(--accent);
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.25);
+  }
+  .health-chip.muted {
     color: var(--text-muted);
   }
   .enrichment-pill {

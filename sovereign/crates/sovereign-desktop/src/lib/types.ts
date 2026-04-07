@@ -191,6 +191,20 @@ export interface CorpusEntry {
   chunks_count: number | null;
   /** True if the recipe enables claim/relationship enrichment (e.g. SEP). */
   enrichment_enabled: boolean;
+  /** Unix timestamp (seconds) when this corpus was indexed. Null if not installed. */
+  indexed_at: number | null;
+  /** Embedding model name used when indexing. Null if not installed. */
+  embedding_model: string | null;
+  /** Embedding vector dimensions. Null if not installed. */
+  embedding_dimensions: number | null;
+}
+
+/** Detailed health stats for an installed corpus — loaded on demand. */
+export interface CorpusHealthDetail {
+  corpus_id: string;
+  claims_count: number;
+  relationships_count: number;
+  has_article_profiles: boolean;
 }
 
 export type CorpusInstallPhase =
@@ -202,6 +216,8 @@ export type CorpusInstallPhase =
   | "extracting_claims"
   | "finding_relationships"
   | "extracting_relationships"
+  | "building_link_graph"
+  | "computing_profiles"
   | "complete"
   | "failed";
 

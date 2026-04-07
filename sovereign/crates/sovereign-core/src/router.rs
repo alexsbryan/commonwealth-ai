@@ -87,7 +87,7 @@ impl LlmRouter {
             r#"You are a message classifier. Given a user message, classify it into ONE category.
 
 Categories:
-A) SIMPLE — Can be answered directly from general knowledge in a sentence or two (greetings, basic facts, brief questions)
+A) SIMPLE — Can be answered directly from general knowledge in a sentence or two (greetings, basic facts, brief questions). NOTE: yes/no questions about contested philosophical, ethical, or metaphysical topics (free will, consciousness, moral realism, God's existence, political philosophy) are NOT simple — classify these as B or follow skill hints below.
 B) REASONING — Requires analysis, explanation, comparison, creative work, or detailed thought
 C) ACTION — Requires doing something: searching the web, reading files, sending email, running code, or any multi-step task. IMPORTANT: Questions about recent events, current news, today's information, specific dates/years, prices, scores, or anything that may have changed since training data was collected are ACTION — they require a web search{tools_note}
 

@@ -117,6 +117,7 @@ fn main() {
             commands::install_corpus,
             commands::remove_corpus,
             commands::get_corpus_progress,
+            commands::get_corpus_health,
             mesh_commands::mesh_create,
             mesh_commands::mesh_join,
             mesh_commands::mesh_preview_join_link,

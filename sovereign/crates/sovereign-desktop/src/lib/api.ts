@@ -12,6 +12,7 @@ import type {
   DownloadRequest,
   CorpusEntry,
   CorpusProgressPayload,
+  CorpusHealthDetail,
   HardwareInfo,
   StreamStartedResponse,
   CreateMeshResponse,
@@ -147,6 +148,12 @@ export async function getCorpusProgress(
   corpusId: string,
 ): Promise<CorpusProgressPayload | null> {
   return invoke("get_corpus_progress", { corpusId });
+}
+
+export async function getCorpusHealth(
+  corpusId: string,
+): Promise<CorpusHealthDetail | null> {
+  return invoke("get_corpus_health", { corpusId });
 }
 
 // ─── Community Mesh ─────────────────────────────────────────

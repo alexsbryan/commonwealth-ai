@@ -16,6 +16,14 @@ trigger_phrases = [
     "what do philosophers think", "is there agreement",
     "who disagrees", "what are the positions on",
     "is it settled", "ongoing debate",
+    # Yes/no philosophical questions that are deeply contested
+    "free will", "determinism", "is consciousness",
+    "is it ethical", "is it right to", "is it wrong to",
+    "are moral facts", "objective morality", "moral realism",
+    "does god exist", "is god", "can we be morally",
+    "do we have free will", "is the mind",
+    # Epistemic framing without explicit debate language
+    "philosophers agree", "is there a fact of the matter",
 ]
 default_intent = "ComplexTask"
 min_confidence = 0.7

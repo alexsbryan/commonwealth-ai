@@ -113,6 +113,25 @@ pub struct CorpusEntry {
     pub chunks_count: Option<u64>,
     /// True when the recipe enables the epistemic enrichment phase.
     pub enrichment_enabled: bool,
+    /// Unix timestamp (seconds) when the index was created. Null unless installed.
+    pub indexed_at: Option<u64>,
+    /// Embedding model name used when indexing. Null unless installed.
+    pub embedding_model: Option<String>,
+    /// Embedding vector dimensions. Null unless installed.
+    pub embedding_dimensions: Option<usize>,
+}
+
+/// Detailed health report for a single installed corpus, loaded on demand
+/// (avoids opening every LanceDB index on every `list_corpora` call).
+#[derive(Serialize)]
+pub struct CorpusHealthDetail {
+    pub corpus_id: String,
+    /// Number of extracted claims (0 if no claims table).
+    pub claims_count: u64,
+    /// Number of stored relationships (0 if no relationships table).
+    pub relationships_count: u64,
+    /// True if an article_profiles table exists (structured Wikipedia only).
+    pub has_article_profiles: bool,
 }
 
 /// Progress payload sent to the frontend during a corpus install.
@@ -990,6 +1009,24 @@ fn ingest_progress_to_payload(
                 message: Some(format!("Extracting relationships ({current}/{total})")),
             }
         }
+        IngestProgress::BuildingLinkGraph { current, total } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "building_link_graph".into(),
+            percent: if *total > 0 {
+                (*current as f32 / *total as f32) * 100.0
+            } else {
+                0.0
+            },
+            chunks_processed: *current as u64,
+            message: Some(format!("Building link graph ({current}/{total})")),
+        },
+        IngestProgress::ComputingArticleProfiles { article_count } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "computing_profiles".into(),
+            percent: 0.0,
+            chunks_processed: *article_count as u64,
+            message: Some(format!("Computing profiles for {article_count} articles")),
+        },
         IngestProgress::Complete {
             total_chunks,
             duration_secs,
@@ -1067,6 +1104,9 @@ pub async fn list_corpora(
             status: status.to_string(),
             chunks_count: installed_info.map(|i| i.chunk_count),
             enrichment_enabled: enrichment_for(&b.id),
+            indexed_at: installed_info.map(|i| i.created_at),
+            embedding_model: installed_info.map(|i| i.embedding_model.clone()),
+            embedding_dimensions: installed_info.map(|i| i.embedding_dimensions),
         });
     }
 
@@ -1187,6 +1227,34 @@ pub async fn get_corpus_progress(
 ) -> Result<Option<CorpusProgressPayload>, String> {
     let map = state.install_progress.read().await;
     Ok(map.get(&corpus_id).cloned())
+}
+
+/// Return health details for a single installed corpus (claim/relationship
+/// counts, article profiles flag). Loaded on demand so `list_corpora` stays
+/// fast — the frontend calls this only when the user expands the detail panel.
+#[tauri::command]
+pub async fn get_corpus_health(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<Option<CorpusHealthDetail>, String> {
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Ok(None),
+    };
+    drop(engine_guard);
+
+    let index = match engine.open_index_for_corpus(&corpus_id).await {
+        Ok(idx) => idx,
+        Err(_) => return Ok(None),
+    };
+
+    Ok(Some(CorpusHealthDetail {
+        corpus_id: corpus_id.clone(),
+        claims_count: index.claim_count().await,
+        relationships_count: index.relationship_count().await,
+        has_article_profiles: index.has_article_profiles().await,
+    }))
 }
 
 /// Kick off background installs for every corpus in the given tier.
