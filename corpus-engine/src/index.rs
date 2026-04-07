@@ -395,6 +395,15 @@ impl CorpusIndex {
             .unwrap_or(false)
     }
 
+    /// Returns true if at least one batch of chunks has been committed to this
+    /// index. Used by the ingest cleanup logic to decide whether to wipe a
+    /// failed install (safe only if no work has been done yet).
+    pub fn has_committed_data(path: &Path) -> bool {
+        read_meta(path)
+            .map(|m| m.committed_iter_pos > 0)
+            .unwrap_or(false)
+    }
+
     /// Build vector + FTS indexes for efficient search.
     /// Should be called after all data is inserted.
     pub async fn build_indexes(&self) -> Result<()> {

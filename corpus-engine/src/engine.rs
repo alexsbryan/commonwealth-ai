@@ -179,14 +179,26 @@ impl CorpusEngine {
         match result {
             Ok(r) => Ok(r),
             Err(e) => {
-                // Wipe the half-built index directory so the UI doesn't
-                // misreport a failed install as "installed".
                 if index_path.exists() {
-                    if let Err(rm) = std::fs::remove_dir_all(&index_path) {
-                        tracing::warn!(
-                            "Failed to clean up partial index at {}: {rm}",
-                            index_path.display()
+                    if CorpusIndex::has_committed_data(&index_path) {
+                        // Committed chunks exist — preserve the partial index so
+                        // the user can resume without re-embedding everything.
+                        tracing::info!(
+                            "Corpus '{}' install failed ({e}), but committed chunks exist — preserving for resume",
+                            recipe.corpus.id,
                         );
+                        eprintln!(
+                            "[{}] Install failed ({e}). Committed chunks are preserved — re-install to resume.",
+                            recipe.corpus.id,
+                        );
+                    } else {
+                        // No chunks committed — fresh install failed early. Safe to wipe.
+                        if let Err(rm) = std::fs::remove_dir_all(&index_path) {
+                            tracing::warn!(
+                                "Failed to clean up partial index at {}: {rm}",
+                                index_path.display()
+                            );
+                        }
                     }
                 }
                 Err(e)
@@ -341,7 +353,23 @@ impl CorpusEngine {
         }
 
         // Build search indexes (IVF-PQ + FTS).
+        eprintln!(
+            "[{}] Building search indexes over {total_chunks} chunks (this may take several minutes)...",
+            recipe.corpus.id,
+        );
+        if let Some(ref cb) = progress {
+            cb(IngestProgress::Indexing {
+                chunks_indexed: 0,
+                total: total_chunks,
+            });
+        }
         index.build_indexes().await?;
+        if let Some(ref cb) = progress {
+            cb(IngestProgress::Indexing {
+                chunks_indexed: total_chunks,
+                total: total_chunks,
+            });
+        }
 
         // Optional enrichment phase: extract claims and relationships.
         if let Some(enrichment_config) = recipe.enrichment.as_ref() {
