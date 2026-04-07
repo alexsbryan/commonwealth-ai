@@ -5,7 +5,7 @@ use axum::Json;
 use tracing::{debug, warn};
 
 use commonwealth_core::ids::ModelId;
-use commonwealth_core::oicp::{CapabilityRequirements, ShardingPrivacy};
+use commonwealth_core::oicp::{self, CapabilityRequirements, ShardingPrivacy};
 
 use crate::openai_types::*;
 use crate::state::AppState;
@@ -22,45 +22,47 @@ pub async fn chat_completions(
     Json(request): Json<ChatCompletionRequest>,
 ) -> Response {
     // Privacy enforcement: reject local_only requests.
-    if let Some(ref oicp) = request.oicp {
-        if let Some(ref privacy) = oicp.privacy {
-            if privacy.sharding == ShardingPrivacy::LocalOnly {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(
-                        serde_json::to_value(ErrorResponse::new(
-                            "Requests with privacy 'local_only' must be handled by the client's \
-                             local inference engine, not sent to Commonwealth. This is likely a \
-                             client misconfiguration.",
-                            "invalid_request_error",
-                        ))
-                        .unwrap(),
-                    ),
-                )
-                    .into_response();
-            }
+    // ShardingPrivacy defaults to LocalOnly per spec §3.1, so absent
+    // privacy fields are treated as if explicitly local.
+    if let Some(ref oicp_req) = request.oicp {
+        if oicp_req.sharding() == ShardingPrivacy::LocalOnly {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    serde_json::to_value(ErrorResponse::new(
+                        "Requests with privacy 'local_only' must be handled by the client's \
+                         local inference engine, not sent to Commonwealth. This is likely a \
+                         client misconfiguration.",
+                        "invalid_request_error",
+                    ))
+                    .unwrap(),
+                ),
+            )
+                .into_response();
         }
     }
 
-    // --- Priority 1: Explicit OICP requirements ---
-    if let Some(ref oicp) = request.oicp {
-        let model_id = match route_with_oicp(&state, &oicp.capabilities).await {
-            Some(id) => id,
-            None => {
-                return (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(
-                        serde_json::to_value(ErrorResponse::new(
-                            "No loaded model satisfies the OICP requirements",
-                            "model_not_available",
-                        ))
-                        .unwrap(),
-                    ),
-                )
-                    .into_response();
-            }
-        };
-        return forward_to_model(&state, model_id, &request).await;
+    // --- Priority 1: Explicit OICP capability requirements ---
+    if let Some(ref oicp_req) = request.oicp {
+        if let Some(ref caps) = oicp_req.capabilities {
+            let model_id = match route_with_oicp(&state, caps).await {
+                Some(id) => id,
+                None => {
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(
+                            serde_json::to_value(ErrorResponse::new(
+                                "No loaded model satisfies the OICP requirements",
+                                "model_not_available",
+                            ))
+                            .unwrap(),
+                        ),
+                    )
+                        .into_response();
+                }
+            };
+            return forward_to_model(&state, model_id, &request).await;
+        }
     }
 
     // --- Priority 2: Model name matches a loaded model by name ---
@@ -117,13 +119,14 @@ async fn route_with_oicp(
 
     for shard_plan in &plan.model_plans {
         if let Some(model_info) = models.get(&shard_plan.model) {
-            if model_info
-                .oicp_capabilities
-                .satisfies(&requirements.required)
-            {
-                let score = model_info
-                    .oicp_capabilities
-                    .score_against(&requirements.preferred);
+            if oicp::satisfies_required(
+                &model_info.oicp_capabilities,
+                &requirements.required,
+            ) {
+                let score = oicp::score_preferred(
+                    &model_info.oicp_capabilities,
+                    &requirements.preferred,
+                );
                 if score > best_score {
                     best_score = score;
                     best_model = Some(shard_plan.model);

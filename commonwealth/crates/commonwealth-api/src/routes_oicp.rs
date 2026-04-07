@@ -1,115 +1,78 @@
 use axum::extract::State;
 use axum::Json;
-use serde::Serialize;
+
+use commonwealth_core::oicp::{
+    CorpusDescriptor, FederationManifest, KnowledgeManifest, ModelStatus, OICP_VERSION,
+    PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel, ProviderType,
+};
 
 use crate::state::AppState;
 
-/// GET /oicp/v1/capabilities — OICP provider manifest.
+/// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
 pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifest> {
     let mesh = state.inner.mesh.read().await;
     let models = state.inner.models.read().await;
     let plan = state.inner.inference_plan.read().await;
     let addresses = state.inner.llama_server_addresses.read().await;
 
-    let model_entries: Vec<OicpModelEntry> = models
+    let model_entries: Vec<ProviderModel> = models
         .values()
         .map(|model| {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
             let loaded = addresses.contains_key(&model.id);
 
-            OicpModelEntry {
+            ProviderModel {
                 id: model.name.clone(),
-                quantization: model.quantization.clone(),
-                capabilities: serde_json::to_value(&model.oicp_capabilities).unwrap_or_default(),
-                context_tokens: 32768, // TODO: derive from model metadata
-                status: OicpModelStatus {
+                base_model: None,
+                quantization: if model.quantization.is_empty() {
+                    None
+                } else {
+                    Some(model.quantization.clone())
+                },
+                capabilities: model.oicp_capabilities.clone(),
+                context_tokens: 32_768, // TODO: derive from model metadata
+                status: ModelStatus {
                     available: true,
                     loaded,
-                    estimated_tokens_per_sec: shard_plan
-                        .map(|p| p.estimated_tokens_per_sec)
-                        .unwrap_or(0.0),
-                    estimated_ttft_ms: shard_plan.map(|p| p.estimated_ttft_ms).unwrap_or(0),
+                    estimated_tokens_per_sec: shard_plan.map(|p| p.estimated_tokens_per_sec),
+                    estimated_ttft_ms: shard_plan.map(|p| p.estimated_ttft_ms),
+                    estimated_load_time_sec: None,
                 },
             }
         })
         .collect();
 
-    let peers: Vec<FederationPeer> = mesh
+    let peers: Vec<PeerDescriptor> = mesh
         .peers
         .iter()
-        .map(|p| FederationPeer {
+        .map(|p| PeerDescriptor {
             name: p.peer_mesh_name.clone(),
             capabilities_url: p
                 .contact_nodes
                 .first()
                 .map(|addr| format!("http://{}:9741/oicp/v1/capabilities", addr.ip()))
                 .unwrap_or_default(),
-            trust_level: format!("{:?}", p.trust_level).to_lowercase(),
+            trust_level: Some(format!("{:?}", p.trust_level).to_lowercase()),
         })
         .collect();
 
+    let federation = if peers.is_empty() {
+        None
+    } else {
+        Some(FederationManifest { peers })
+    };
+
     Json(ProviderManifest {
-        oicp_version: "0.2.0".into(),
-        provider: ProviderInfo {
-            name: mesh.name.clone(),
-            provider_type: "mesh".into(),
-        },
+        oicp_version: OICP_VERSION.to_string(),
+        provider: Some(ProviderInfo {
+            name: Some(mesh.name.clone()),
+            provider_type: Some(ProviderType::Mesh),
+        }),
         models: model_entries,
-        knowledge: KnowledgeManifest {
-            corpora: vec![], // Populated in Phase 11.
+        knowledge: Some(KnowledgeManifest {
+            corpora: Vec::<CorpusDescriptor>::new(), // Populated when knowledge fan-out lands.
             search_endpoint: "/v1/knowledge/search".into(),
-        },
-        federation: FederationManifest { peers },
+        }),
+        federation,
     })
-}
-
-#[derive(Debug, Serialize)]
-pub struct ProviderManifest {
-    pub oicp_version: String,
-    pub provider: ProviderInfo,
-    pub models: Vec<OicpModelEntry>,
-    pub knowledge: KnowledgeManifest,
-    pub federation: FederationManifest,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ProviderInfo {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub provider_type: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct OicpModelEntry {
-    pub id: String,
-    pub quantization: String,
-    pub capabilities: serde_json::Value,
-    pub context_tokens: u32,
-    pub status: OicpModelStatus,
-}
-
-#[derive(Debug, Serialize)]
-pub struct OicpModelStatus {
-    pub available: bool,
-    pub loaded: bool,
-    pub estimated_tokens_per_sec: f32,
-    pub estimated_ttft_ms: u32,
-}
-
-#[derive(Debug, Serialize)]
-pub struct KnowledgeManifest {
-    pub corpora: Vec<serde_json::Value>,
-    pub search_endpoint: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FederationManifest {
-    pub peers: Vec<FederationPeer>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FederationPeer {
-    pub name: String,
-    pub capabilities_url: String,
-    pub trust_level: String,
 }

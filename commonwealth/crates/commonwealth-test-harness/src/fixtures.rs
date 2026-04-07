@@ -27,9 +27,9 @@ pub fn test_model(id: u128, name: &str, layers: u32, size_gb: u64) -> ModelInfo 
 /// Create a coding model with appropriate OICP capabilities.
 pub fn coding_model(id: u128) -> ModelInfo {
     let mut caps = CapabilityProfile::default();
-    caps.set(Capability::Code, 4);
-    caps.set(Capability::Instruction, 3);
-    caps.set(Capability::General, 2);
+    caps.insert(Capability::Code, 4);
+    caps.insert(Capability::Instruction, 3);
+    caps.insert(Capability::General, 2);
 
     let mut model = test_model(id, "qwen3-coder-30b", 64, 17);
     model.oicp_capabilities = caps;
@@ -39,10 +39,10 @@ pub fn coding_model(id: u128) -> ModelInfo {
 /// Create a general-purpose model with appropriate OICP capabilities.
 pub fn general_model(id: u128) -> ModelInfo {
     let mut caps = CapabilityProfile::default();
-    caps.set(Capability::General, 3);
-    caps.set(Capability::Analysis, 3);
-    caps.set(Capability::Creative, 3);
-    caps.set(Capability::Code, 2);
+    caps.insert(Capability::General, 3);
+    caps.insert(Capability::Analysis, 3);
+    caps.insert(Capability::Creative, 3);
+    caps.insert(Capability::Code, 2);
 
     let mut model = test_model(id, "qwen3-30b", 64, 17);
     model.oicp_capabilities = caps;

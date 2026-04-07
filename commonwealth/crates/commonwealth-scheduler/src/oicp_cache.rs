@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use commonwealth_core::ids::ModelId;
 use commonwealth_core::model::ModelInfo;
-use commonwealth_core::oicp::CapabilityRequirements;
+use commonwealth_core::oicp::{self, CapabilityRequirements};
 
 /// Cached resolution from OICP requirements to the best matching model.
 /// Recomputed only when the model portfolio changes.
@@ -72,7 +72,7 @@ fn hash_requirements(requirements: &CapabilityRequirements) -> u64 {
     let mut hasher = DefaultHasher::new();
 
     // Hash required capabilities in sorted order for determinism.
-    let mut required: Vec<_> = requirements.required.0.iter().collect();
+    let mut required: Vec<_> = requirements.required.iter().collect();
     required.sort_by_key(|(cap, _)| format!("{cap:?}"));
     for (cap, level) in &required {
         format!("{cap:?}").hash(&mut hasher);
@@ -80,7 +80,7 @@ fn hash_requirements(requirements: &CapabilityRequirements) -> u64 {
     }
 
     // Hash preferred capabilities in sorted order.
-    let mut preferred: Vec<_> = requirements.preferred.0.iter().collect();
+    let mut preferred: Vec<_> = requirements.preferred.iter().collect();
     preferred.sort_by_key(|(cap, _)| format!("{cap:?}"));
     for (cap, level) in &preferred {
         format!("{cap:?}").hash(&mut hasher);
@@ -98,12 +98,11 @@ fn compute_best_model(
     let mut best: Option<(ModelId, f32)> = None;
 
     for model in models {
-        if !model.oicp_capabilities.satisfies(&requirements.required) {
+        if !oicp::satisfies_required(&model.oicp_capabilities, &requirements.required) {
             continue;
         }
-        let score = model
-            .oicp_capabilities
-            .score_against(&requirements.preferred);
+        let score =
+            oicp::score_preferred(&model.oicp_capabilities, &requirements.preferred);
         if best.is_none_or(|(_, best_score)| score > best_score) {
             best = Some((model.id, score));
         }
@@ -121,7 +120,7 @@ mod tests {
     fn make_model(id: u128, caps: &[(Capability, u8)]) -> ModelInfo {
         let mut profile = CapabilityProfile::new();
         for &(cap, level) in caps {
-            profile.set(cap, level);
+            profile.insert(cap, level);
         }
         ModelInfo {
             id: ModelId::from_u128(id),
@@ -143,11 +142,11 @@ mod tests {
     ) -> CapabilityRequirements {
         let mut req_profile = CapabilityProfile::new();
         for &(cap, level) in required {
-            req_profile.set(cap, level);
+            req_profile.insert(cap, level);
         }
         let mut pref_profile = CapabilityProfile::new();
         for &(cap, level) in preferred {
-            pref_profile.set(cap, level);
+            pref_profile.insert(cap, level);
         }
         CapabilityRequirements {
             required: req_profile,

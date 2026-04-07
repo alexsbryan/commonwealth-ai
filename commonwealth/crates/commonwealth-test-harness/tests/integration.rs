@@ -490,7 +490,7 @@ async fn inference_e2e_rejects_local_only_privacy() {
     let request_body = serde_json::json!({
         "messages": [{"role": "user", "content": "Hello"}],
         "oicp": {
-            "oicp_version": "0.1.0",
+            "oicp_version": "0.2.0",
             "privacy": { "sharding": "local_only" }
         }
     });
@@ -809,14 +809,16 @@ async fn oicp_routing_selects_correct_model() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // Request with code requirements → should route to coder model.
+    // Mesh-bound requests must explicitly opt out of LocalOnly per OICP §3.1.
     let code_request = serde_json::json!({
         "messages": [{"role": "user", "content": "Write Rust code"}],
         "oicp": {
-            "oicp_version": "0.1.0",
+            "oicp_version": "0.2.0",
             "capabilities": {
                 "required": {"code": 3},
                 "preferred": {"code": 4, "instruction": 3}
-            }
+            },
+            "privacy": {"sharding": "mesh_allowed"}
         }
     });
     let (status, _) = http_post(client_addr, "/v1/chat/completions", &code_request).await;
@@ -832,11 +834,12 @@ async fn oicp_routing_selects_correct_model() {
     let analysis_request = serde_json::json!({
         "messages": [{"role": "user", "content": "Analyze this paper"}],
         "oicp": {
-            "oicp_version": "0.1.0",
+            "oicp_version": "0.2.0",
             "capabilities": {
                 "required": {"analysis": 2},
                 "preferred": {"analysis": 3, "general": 3}
-            }
+            },
+            "privacy": {"sharding": "mesh_allowed"}
         }
     });
     let (status, _) = http_post(client_addr, "/v1/chat/completions", &analysis_request).await;
@@ -936,9 +939,9 @@ fn oicp_cache_invalidates_on_portfolio_change() {
 
     // Resolve a coding request.
     let mut req_profile = CapabilityProfile::new();
-    req_profile.set(Capability::Code, 3);
+    req_profile.insert(Capability::Code, 3);
     let mut pref_profile = CapabilityProfile::new();
-    pref_profile.set(Capability::Code, 4);
+    pref_profile.insert(Capability::Code, 4);
     let reqs = CapabilityRequirements {
         required: req_profile,
         preferred: pref_profile,
@@ -1092,7 +1095,9 @@ async fn knowledge_search_returns_results_for_assigned_corpora() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // Search with specific corpora.
+    // Both query_embedding and query_text are required by OICP §6.1.
     let request = serde_json::json!({
+        "query_embedding": [],
         "query_text": "Ostrom design principles",
         "corpora": ["wikipedia", "sep"],
         "limit": 10
@@ -1123,6 +1128,7 @@ async fn knowledge_search_empty_when_no_shards() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let request = serde_json::json!({
+        "query_embedding": [],
         "query_text": "test query",
         "limit": 5
     });

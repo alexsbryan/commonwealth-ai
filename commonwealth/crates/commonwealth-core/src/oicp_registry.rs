@@ -48,7 +48,7 @@ pub fn lookup_profile<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oicp::Capability;
+    use crate::oicp::{self, Capability};
 
     #[test]
     fn parse_single_profile() {
@@ -68,8 +68,8 @@ math = 3
         let profile = parse_profile(toml).unwrap();
         assert_eq!(profile.model_repo, "Qwen/Qwen3-Coder-30B-GGUF");
         assert_eq!(profile.quantization, "Q4_K_M");
-        assert_eq!(profile.capabilities.get(Capability::Code), 4);
-        assert_eq!(profile.capabilities.get(Capability::General), 2);
+        assert_eq!(oicp::proficiency(&profile.capabilities, Capability::Code), 4);
+        assert_eq!(oicp::proficiency(&profile.capabilities, Capability::General), 2);
         assert_eq!(profile.context_tokens, 32768);
         assert_eq!(profile.notes.as_deref(), Some("Strong coding model"));
     }
@@ -100,9 +100,12 @@ creative = 3
 "#;
         let registry = parse_registry(toml).unwrap();
         assert_eq!(registry.profiles.len(), 2);
-        assert_eq!(registry.profiles[0].capabilities.get(Capability::Code), 4);
         assert_eq!(
-            registry.profiles[1].capabilities.get(Capability::General),
+            oicp::proficiency(&registry.profiles[0].capabilities, Capability::Code),
+            4
+        );
+        assert_eq!(
+            oicp::proficiency(&registry.profiles[1].capabilities, Capability::General),
             3
         );
     }
@@ -130,7 +133,10 @@ general = 3
 
         let found = lookup_profile(&registry, "Qwen/Qwen3-Coder-30B-GGUF", "Q4_K_M");
         assert!(found.is_some());
-        assert_eq!(found.unwrap().capabilities.get(Capability::Code), 4);
+        assert_eq!(
+            oicp::proficiency(&found.unwrap().capabilities, Capability::Code),
+            4
+        );
 
         let not_found = lookup_profile(&registry, "Qwen/Qwen3-Coder-30B-GGUF", "Q8_0");
         assert!(not_found.is_none());
@@ -152,8 +158,8 @@ code = 3
         let back: OicpProfileEntry = toml::from_str(&serialized).unwrap();
         assert_eq!(back.model_repo, profile.model_repo);
         assert_eq!(
-            back.capabilities.get(Capability::Code),
-            profile.capabilities.get(Capability::Code)
+            oicp::proficiency(&back.capabilities, Capability::Code),
+            oicp::proficiency(&profile.capabilities, Capability::Code)
         );
     }
 }

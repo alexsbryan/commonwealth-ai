@@ -263,7 +263,7 @@ mod tests {
         use std::collections::HashMap;
 
         let mut caps = CapabilityProfile::default();
-        caps.set(Capability::Code, 4);
+        caps.insert(Capability::Code, 4);
 
         let model = ModelInfo {
             id: commonwealth_core::ModelId::from_u128(1),

@@ -1,4 +1,3 @@
-pub mod knowledge_types;
 pub mod openai_types;
 pub mod routes_inference;
 pub mod routes_internal;

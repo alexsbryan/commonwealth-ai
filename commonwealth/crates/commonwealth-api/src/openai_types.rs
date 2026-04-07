@@ -131,7 +131,7 @@ mod tests {
         let json = r#"{
             "messages": [{"role": "user", "content": "Write code"}],
             "oicp": {
-                "oicp_version": "0.1.0",
+                "oicp_version": "0.2.0",
                 "capabilities": {
                     "required": {"code": 2},
                     "preferred": {"code": 4}
@@ -141,7 +141,7 @@ mod tests {
         let req: ChatCompletionRequest = serde_json::from_str(json).unwrap();
         assert!(req.oicp.is_some());
         let oicp = req.oicp.unwrap();
-        assert_eq!(oicp.oicp_version, "0.1.0");
+        assert_eq!(oicp.oicp_version, "0.2.0");
     }
 
     #[test]

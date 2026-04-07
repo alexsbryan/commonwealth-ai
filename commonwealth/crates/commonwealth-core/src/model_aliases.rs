@@ -86,14 +86,14 @@ impl ModelAliasTable {
                 let mut required = CapabilityProfile::new();
                 for (cap_str, &level) in &entry.inferred_required {
                     if let Some(cap) = parse_capability(cap_str) {
-                        required.set(cap, level);
+                        required.insert(cap, level);
                     }
                 }
 
                 let mut preferred = CapabilityProfile::new();
                 for (cap_str, &level) in &entry.inferred_preferred {
                     if let Some(cap) = parse_capability(cap_str) {
-                        preferred.set(cap, level);
+                        preferred.insert(cap, level);
                     }
                 }
 
@@ -168,6 +168,7 @@ fn parse_capability(s: &str) -> Option<Capability> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oicp;
 
     #[test]
     fn default_table_parses_from_toml() {
@@ -183,7 +184,7 @@ mod tests {
     fn omo_codex_resolves_to_coding() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.3-codex").unwrap();
-        assert!(result.requirements.preferred.get(Capability::Code) >= 3);
+        assert!(oicp::proficiency(&result.requirements.preferred, Capability::Code) >= 3);
         assert_eq!(result.latency, LatencyPreference::Throughput);
     }
 
@@ -191,8 +192,8 @@ mod tests {
     fn omo_opus_resolves_to_general() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("claude-opus-4-6").unwrap();
-        assert!(result.requirements.preferred.get(Capability::General) >= 3);
-        assert!(result.requirements.preferred.get(Capability::Analysis) >= 3);
+        assert!(oicp::proficiency(&result.requirements.preferred, Capability::General) >= 3);
+        assert!(oicp::proficiency(&result.requirements.preferred, Capability::Analysis) >= 3);
         assert_eq!(result.latency, LatencyPreference::Interactive);
     }
 
@@ -200,7 +201,10 @@ mod tests {
     fn omo_mini_resolves_to_lightweight() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.4-nano").unwrap();
-        assert_eq!(result.requirements.preferred.get(Capability::General), 1);
+        assert_eq!(
+            oicp::proficiency(&result.requirements.preferred, Capability::General),
+            1
+        );
         assert_eq!(result.latency, LatencyPreference::Interactive);
     }
 
@@ -208,7 +212,7 @@ mod tests {
     fn generic_coder_pattern() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("deepseek-coder-v3").unwrap();
-        assert!(result.requirements.preferred.get(Capability::Code) >= 3);
+        assert!(oicp::proficiency(&result.requirements.preferred, Capability::Code) >= 3);
     }
 
     #[test]
@@ -222,7 +226,9 @@ mod tests {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.3-codex").unwrap();
         // The first match (OmO Hephaestus) has instruction: 3.
-        assert!(result.requirements.preferred.get(Capability::Instruction) >= 3);
+        assert!(
+            oicp::proficiency(&result.requirements.preferred, Capability::Instruction) >= 3
+        );
     }
 
     #[test]
@@ -230,7 +236,7 @@ mod tests {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.3-codex").unwrap();
         assert!(
-            result.requirements.required.0.is_empty(),
+            result.requirements.required.is_empty(),
             "default aliases should use soft matching (no required)"
         );
     }
@@ -247,8 +253,14 @@ math = 3
 "#;
         let table = ModelAliasTable::parse_toml(toml).unwrap();
         let result = table.resolve("my-custom-model-v2").unwrap();
-        assert_eq!(result.requirements.preferred.get(Capability::Code), 4);
-        assert_eq!(result.requirements.preferred.get(Capability::Math), 3);
+        assert_eq!(
+            oicp::proficiency(&result.requirements.preferred, Capability::Code),
+            4
+        );
+        assert_eq!(
+            oicp::proficiency(&result.requirements.preferred, Capability::Math),
+            3
+        );
     }
 
     #[test]
@@ -265,8 +277,14 @@ instruction = 3
 "#;
         let table = ModelAliasTable::parse_toml(toml).unwrap();
         let result = table.resolve("strict-coder-v1").unwrap();
-        assert_eq!(result.requirements.required.get(Capability::Code), 3);
-        assert_eq!(result.requirements.preferred.get(Capability::Code), 4);
+        assert_eq!(
+            oicp::proficiency(&result.requirements.required, Capability::Code),
+            3
+        );
+        assert_eq!(
+            oicp::proficiency(&result.requirements.preferred, Capability::Code),
+            4
+        );
     }
 
     #[test]
@@ -291,7 +309,7 @@ creative = 4
     fn kimi_resolves() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("kimi-k2-latest").unwrap();
-        assert!(result.requirements.preferred.get(Capability::Code) >= 3);
+        assert!(oicp::proficiency(&result.requirements.preferred, Capability::Code) >= 3);
     }
 
     #[test]
