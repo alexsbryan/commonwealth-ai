@@ -665,22 +665,52 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        // Streaming always uses the fast slot for simplicity in Phase 4.
-        let slot = Arc::clone(&self.fast);
+        let use_primary = self.select_slot_for_speed(request.preferred_speed);
         let request = request.clone();
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(32);
 
-        tokio::task::spawn_blocking(move || {
-            let mut ctx_lock = slot.context.blocking_lock();
-            let result =
-                ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx);
-            if let Err(e) = result {
-                let _ = tx.blocking_send(Err(e));
-            }
-        });
+        if use_primary {
+            let primary_path = self.primary_path.clone().unwrap();
+            let primary_lock = Arc::clone(&self.primary);
+            let backend = Arc::clone(&self.primary_backend);
+            let ctx_size = self.primary_ctx_size;
+            let gpu_layers = self.gpu_layers;
+            let last_use = Arc::clone(&self.last_primary_use);
 
-        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-        Ok(Box::pin(stream))
+            tokio::task::spawn_blocking(move || {
+                let mut primary = primary_lock.blocking_lock();
+                if primary.is_none() {
+                    eprintln!("Loading primary slot for streaming...");
+                    match ModelSlot::load(&backend, &primary_path, ctx_size, gpu_layers) {
+                        Ok(slot) => *primary = Some(slot),
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(e));
+                            return;
+                        }
+                    }
+                }
+                let slot = primary.as_ref().unwrap();
+                let mut ctx_lock = slot.context.blocking_lock();
+                *last_use.blocking_lock() = Some(Instant::now());
+                if let Err(e) =
+                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx)
+                {
+                    let _ = tx.blocking_send(Err(e));
+                }
+            });
+        } else {
+            let slot = Arc::clone(&self.fast);
+            tokio::task::spawn_blocking(move || {
+                let mut ctx_lock = slot.context.blocking_lock();
+                if let Err(e) =
+                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx)
+                {
+                    let _ = tx.blocking_send(Err(e));
+                }
+            });
+        }
+
+        Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
@@ -765,12 +795,12 @@ fn build_sampler(temperature: Option<f32>) -> LlamaSampler {
     let temp = temperature.unwrap_or(0.7);
     if temp < 0.01 {
         LlamaSampler::chain_simple([
-            LlamaSampler::penalties(256, 1.3, 0.1, 0.1),
+            LlamaSampler::penalties(512, 1.3, 0.15, 0.15),
             LlamaSampler::greedy(),
         ])
     } else {
         LlamaSampler::chain_simple([
-            LlamaSampler::penalties(256, 1.3, 0.1, 0.1),
+            LlamaSampler::penalties(512, 1.3, 0.15, 0.15),
             LlamaSampler::top_k(40),
             LlamaSampler::top_p(0.9, 1),
             LlamaSampler::temp(temp),

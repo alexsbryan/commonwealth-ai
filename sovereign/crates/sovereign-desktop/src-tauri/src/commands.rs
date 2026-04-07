@@ -953,6 +953,8 @@ fn ingest_progress_to_payload(
         IngestProgress::Embedding {
             chunks_embedded,
             total,
+            docs_processed,
+            chunks_per_sec,
         } => CorpusProgressPayload {
             corpus_id: corpus_id.into(),
             phase: "embedding".into(),
@@ -962,7 +964,9 @@ fn ingest_progress_to_payload(
                 0.0
             },
             chunks_processed: *chunks_embedded,
-            message: None,
+            message: Some(format!(
+                "{chunks_embedded} chunks · {docs_processed} docs · {chunks_per_sec:.1} chunks/s"
+            )),
         },
         IngestProgress::Indexing {
             chunks_indexed,
