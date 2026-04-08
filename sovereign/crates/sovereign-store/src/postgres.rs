@@ -544,10 +544,10 @@ impl StateStore for PostgresStateStore {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         client
             .execute(
-                "INSERT INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated) \
-                 VALUES ($1, $2, $3, $4, $5, $6) \
-                 ON CONFLICT (corpus_id) DO UPDATE SET installed_at = $2, source_date = $3, chunks_count = $4, index_size_mb = $5, last_updated = $6",
-                &[&state.corpus_id, &state.installed_at, &state.source_date, &state.chunks_count, &state.index_size_mb, &state.last_updated],
+                "INSERT INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, vector_index_ready) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) \
+                 ON CONFLICT (corpus_id) DO UPDATE SET installed_at = $2, source_date = $3, chunks_count = $4, index_size_mb = $5, last_updated = $6, vector_index_ready = $7",
+                &[&state.corpus_id, &state.installed_at, &state.source_date, &state.chunks_count, &state.index_size_mb, &state.last_updated, &(state.vector_index_ready as i64)],
             )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
@@ -558,7 +558,7 @@ impl StateStore for PostgresStateStore {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
             .query_opt(
-                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated FROM corpus_state WHERE corpus_id = $1",
+                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0) FROM corpus_state WHERE corpus_id = $1",
                 &[&corpus_id],
             )
             .await
@@ -572,6 +572,9 @@ impl StateStore for PostgresStateStore {
                 chunks_count: r.get("chunks_count"),
                 index_size_mb: r.get("index_size_mb"),
                 last_updated: r.get("last_updated"),
+                version: 0,
+                deleted_at: None,
+                vector_index_ready: r.get::<_, i64>("vector_index_ready") != 0,
             }),
             None => Err(Error::NotFound(format!("Corpus {corpus_id}"))),
         }
@@ -580,7 +583,7 @@ impl StateStore for PostgresStateStore {
     async fn list_corpus_states(&self) -> Result<Vec<CorpusState>> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
-            .query("SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated FROM corpus_state ORDER BY installed_at DESC", &[])
+            .query("SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0) FROM corpus_state ORDER BY installed_at DESC", &[])
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
@@ -591,6 +594,9 @@ impl StateStore for PostgresStateStore {
             chunks_count: r.get("chunks_count"),
             index_size_mb: r.get("index_size_mb"),
             last_updated: r.get("last_updated"),
+            version: 0,
+            deleted_at: None,
+            vector_index_ready: r.get::<_, i64>("vector_index_ready") != 0,
         }).collect())
     }
 
@@ -601,6 +607,30 @@ impl StateStore for PostgresStateStore {
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
+    }
+
+    async fn set_vector_index_ready(&self, corpus_id: &str, ready: bool) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "UPDATE corpus_state SET vector_index_ready = $1 WHERE corpus_id = $2",
+                &[&(ready as i64), &corpus_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_vector_index_ready(&self, corpus_id: &str) -> Result<bool> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let row = client
+            .query_opt(
+                "SELECT COALESCE(vector_index_ready, 0) FROM corpus_state WHERE corpus_id = $1",
+                &[&corpus_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(row.map(|r| r.get::<_, i64>(0) != 0).unwrap_or(false))
     }
 
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {

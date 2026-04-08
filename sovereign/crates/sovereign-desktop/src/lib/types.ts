@@ -202,6 +202,8 @@ export interface CorpusEntry {
   embedding_model: string | null;
   /** Embedding vector dimensions. Null if not installed. */
   embedding_dimensions: number | null;
+  /** True when the IVF-PQ vector index is built and semantic search is available. */
+  vector_index_ready: boolean;
 }
 
 /** Detailed health stats for an installed corpus — loaded on demand. */

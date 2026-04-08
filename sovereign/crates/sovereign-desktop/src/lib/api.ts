@@ -146,6 +146,10 @@ export async function removeCorpus(corpusId: string): Promise<number> {
   return invoke("remove_corpus", { corpusId });
 }
 
+export async function buildCorpusIndex(corpusId: string): Promise<void> {
+  return invoke("build_corpus_index", { corpusId });
+}
+
 export async function getCorpusProgress(
   corpusId: string,
 ): Promise<CorpusProgressPayload | null> {

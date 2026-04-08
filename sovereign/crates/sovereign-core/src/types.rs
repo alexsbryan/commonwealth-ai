@@ -564,6 +564,10 @@ pub struct CorpusState {
     pub version: i64,
     #[serde(default)]
     pub deleted_at: Option<i64>,
+    /// True when the IVF-PQ vector index is built for this corpus.
+    /// When false, searches fall back to FTS only (no full-scan hang).
+    #[serde(default)]
+    pub vector_index_ready: bool,
 }
 
 #[derive(Debug, Clone)]

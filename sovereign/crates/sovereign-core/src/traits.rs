@@ -174,6 +174,10 @@ pub trait StateStore: Send + Sync {
     async fn list_corpus_states(&self) -> Result<Vec<CorpusState>>;
     async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()>;
 
+    // Vector index readiness
+    async fn set_vector_index_ready(&self, corpus_id: &str, ready: bool) -> Result<()>;
+    async fn get_vector_index_ready(&self, corpus_id: &str) -> Result<bool>;
+
     // Search budget
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>>;
     async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()>;

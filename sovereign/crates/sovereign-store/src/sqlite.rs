@@ -40,6 +40,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Sync migration failed: {e}")))?;
         migrations::run_metacognition_log_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Metacognition log migration failed: {e}")))?;
+        migrations::run_index_readiness_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Index readiness migration failed: {e}")))?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -75,6 +77,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Sync migration failed: {e}")))?;
         migrations::run_metacognition_log_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Metacognition log migration failed: {e}")))?;
+        migrations::run_index_readiness_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Index readiness migration failed: {e}")))?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -926,8 +930,8 @@ impl StateStore for SqliteStateStore {
     async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
         let conn = self.conn.lock().await;
         conn.execute(
-            "INSERT OR REPLACE INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT OR REPLACE INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, vector_index_ready)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             rusqlite::params![
                 state.corpus_id,
                 state.installed_at,
@@ -935,6 +939,7 @@ impl StateStore for SqliteStateStore {
                 state.chunks_count,
                 state.index_size_mb,
                 state.last_updated,
+                state.vector_index_ready as i64,
             ],
         )
         .map_err(map_db)?;
@@ -944,7 +949,7 @@ impl StateStore for SqliteStateStore {
     async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState> {
         let conn = self.conn.lock().await;
         let result = conn.query_row(
-            "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated
+            "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0)
              FROM corpus_state WHERE corpus_id = ?1 AND deleted_at IS NULL",
             rusqlite::params![corpus_id],
             |row| {
@@ -957,6 +962,7 @@ impl StateStore for SqliteStateStore {
                     last_updated: row.get(5)?,
                     version: 0,
                     deleted_at: None,
+                    vector_index_ready: row.get::<_, i64>(6)? != 0,
                 })
             },
         );
@@ -974,7 +980,7 @@ impl StateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
-                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated
+                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0)
                  FROM corpus_state WHERE deleted_at IS NULL ORDER BY installed_at DESC",
             )
             .map_err(map_db)?;
@@ -990,6 +996,7 @@ impl StateStore for SqliteStateStore {
                     last_updated: row.get(5)?,
                     version: 0,
                     deleted_at: None,
+                    vector_index_ready: row.get::<_, i64>(6)? != 0,
                 })
             })
             .map_err(map_db)?
@@ -997,6 +1004,28 @@ impl StateStore for SqliteStateStore {
             .map_err(map_db)?;
 
         Ok(states)
+    }
+
+    async fn set_vector_index_ready(&self, corpus_id: &str, ready: bool) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE corpus_state SET vector_index_ready = ?1 WHERE corpus_id = ?2",
+            rusqlite::params![ready as i64, corpus_id],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn get_vector_index_ready(&self, corpus_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().await;
+        let v: i64 = conn
+            .query_row(
+                "SELECT COALESCE(vector_index_ready, 0) FROM corpus_state WHERE corpus_id = ?1",
+                rusqlite::params![corpus_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        Ok(v != 0)
     }
 
     async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()> {

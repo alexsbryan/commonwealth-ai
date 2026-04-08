@@ -159,6 +159,7 @@ impl CorpusManager {
             last_updated: now,
             version: now,
             deleted_at: None,
+            vector_index_ready: false,
         };
         self.store.save_corpus_state(&state).await?;
 
@@ -248,6 +249,7 @@ impl CorpusManager {
             last_updated: now,
             version: now,
             deleted_at: None,
+            vector_index_ready: false,
         };
         self.store.save_corpus_state(&state).await?;
 

@@ -517,13 +517,43 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         router,
         Box::new(planner),
         Arc::new(tools),
-        store,
+        Arc::clone(&store),
         skills,
         approval,
         inference_config,
-    );
+    )
+    .with_corpus_engine(Arc::clone(&corpus_engine));
 
     *state.runtime.write().await = Some(Arc::new(runtime));
+
+    // Background startup task: verify per-corpus vector index readiness and
+    // write results to the store so handle_knowledge_query can gate correctly.
+    {
+        let verify_store = Arc::clone(&store);
+        let verify_engine = Arc::clone(&corpus_engine);
+        tokio::spawn(async move {
+            let corpora = verify_store.list_corpus_states().await.unwrap_or_default();
+            for cs in corpora {
+                let Ok(indexes) = verify_engine.installed_indexes().await else { continue };
+                let Some(info) = indexes.iter().find(|i| i.corpus_id == cs.corpus_id) else {
+                    continue
+                };
+                let Ok(idx) = verify_engine.open_index(&info.path).await else { continue };
+                let ready = idx.is_vector_index_ready().await;
+                let _ = verify_store
+                    .set_vector_index_ready(&cs.corpus_id, ready)
+                    .await;
+                if !ready {
+                    tracing::warn!(
+                        corpus = %cs.corpus_id,
+                        "Vector index not built — KnowledgeQuery will use FTS-only search"
+                    );
+                } else {
+                    tracing::info!(corpus = %cs.corpus_id, "Vector index ready");
+                }
+            }
+        });
+    }
 
     tracing::info!("Runtime ready");
     Ok(())

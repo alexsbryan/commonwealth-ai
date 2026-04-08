@@ -312,6 +312,23 @@ impl StateStore for InMemoryStateStore {
         Ok(())
     }
 
+    async fn set_vector_index_ready(&self, corpus_id: &str, ready: bool) -> Result<()> {
+        if let Some(cs) = self.corpus_states.write().await.get_mut(corpus_id) {
+            cs.vector_index_ready = ready;
+        }
+        Ok(())
+    }
+
+    async fn get_vector_index_ready(&self, corpus_id: &str) -> Result<bool> {
+        Ok(self
+            .corpus_states
+            .read()
+            .await
+            .get(corpus_id)
+            .map(|cs| cs.vector_index_ready)
+            .unwrap_or(false))
+    }
+
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {
         Ok(self.search_budgets.read().await.get(backend).cloned())
     }

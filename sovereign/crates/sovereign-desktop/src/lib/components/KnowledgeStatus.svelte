@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus, getCorpusHealth, retryEnrichmentFailures } from "../api";
+  import { listCorpora, installCorpus, removeCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures } from "../api";
   import type { CorpusEntry, CorpusProgressPayload, CorpusHealthDetail } from "../types";
 
   let corpora: CorpusEntry[] = $state([]);
@@ -9,7 +9,10 @@
   let expanded: Set<string> = $state(new Set());
   let health: Record<string, CorpusHealthDetail> = $state({});
   let repairing: Set<string> = $state(new Set());
+  let building: Set<string> = $state(new Set());
   let unlisten: UnlistenFn | null = null;
+  let unlistenBuildComplete: UnlistenFn | null = null;
+  let unlistenBuildError: UnlistenFn | null = null;
 
   const tiers: { id: string; name: string; desc: string }[] = [
     { id: "essential", name: "Essential", desc: "Wikipedia" },
@@ -47,10 +50,28 @@
         }
       },
     );
+    unlistenBuildComplete = await listen<{ corpus_id: string }>(
+      "index-build-complete",
+      (event) => {
+        const { corpus_id } = event.payload;
+        building = new Set([...building].filter((i) => i !== corpus_id));
+        refresh();
+      },
+    );
+    unlistenBuildError = await listen<{ corpus_id: string; error: string }>(
+      "index-build-error",
+      (event) => {
+        const { corpus_id } = event.payload;
+        building = new Set([...building].filter((i) => i !== corpus_id));
+        console.error("Index build failed for", corpus_id, event.payload.error);
+      },
+    );
   });
 
   onDestroy(() => {
     if (unlisten) unlisten();
+    if (unlistenBuildComplete) unlistenBuildComplete();
+    if (unlistenBuildError) unlistenBuildError();
   });
 
   async function refresh() {
@@ -123,6 +144,16 @@
     }
   }
 
+  async function handleBuildIndex(id: string) {
+    building = new Set([...building, id]);
+    try {
+      await buildCorpusIndex(id);
+    } catch (e) {
+      console.error("Build index failed:", e);
+      building = new Set([...building].filter((i) => i !== id));
+    }
+  }
+
   function formatDate(unixSecs: number): string {
     return new Date(unixSecs * 1000).toLocaleDateString(undefined, {
       year: "numeric",
@@ -186,8 +217,10 @@
     <div class="corpus-row">
       <div class="corpus-info">
         <div class="corpus-name">
-          {#if corpus.status === "installed"}
-            <span class="dot installed"></span>
+          {#if corpus.status === "installed" && corpus.vector_index_ready}
+            <span class="dot installed" title="Semantic search ready"></span>
+          {:else if corpus.status === "installed"}
+            <span class="dot fts-only" title="Keyword search only — semantic index not built"></span>
           {:else if inProgress}
             <span class="dot installing"></span>
           {:else}
@@ -200,6 +233,18 @@
         </div>
         <div class="corpus-detail">
           {#if corpus.status === "installed"}
+            {#if !corpus.vector_index_ready}
+              <div class="fts-only-notice">
+                <span>Keyword search only</span>
+                <button
+                  class="btn-build-index"
+                  onclick={() => handleBuildIndex(corpus.id)}
+                  disabled={building.has(corpus.id)}
+                >
+                  {building.has(corpus.id) ? "Building…" : "Build index"}
+                </button>
+              </div>
+            {/if}
             <button
               class="detail-toggle"
               onclick={() => toggleHealth(corpus.id)}
@@ -358,9 +403,39 @@
   .dot.installed {
     background: var(--success, #22c55e);
   }
+  .dot.fts-only {
+    background: var(--warning, #e6a817);
+  }
   .dot.installing {
     background: var(--accent);
     animation: pulse 1.5s infinite;
+  }
+  .fts-only-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--warning, #e6a817);
+    margin-bottom: 2px;
+  }
+  .btn-build-index {
+    padding: 1px 8px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    border: 1px solid var(--warning, #e6a817);
+    color: var(--warning, #e6a817);
+    border-radius: var(--radius);
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    transition: opacity 0.15s;
+  }
+  .btn-build-index:hover:not(:disabled) {
+    opacity: 0.75;
+  }
+  .btn-build-index:disabled {
+    cursor: default;
+    opacity: 0.5;
   }
   @keyframes pulse {
     0%,

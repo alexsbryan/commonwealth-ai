@@ -40,22 +40,22 @@ clearly-labelled general knowledge is acceptable.\n\
 - Fabricating specific facts (names, statistics, dates, roster members) to fill a gap \
 is never acceptable, even if it would make the response sound more complete.";
 
-/// System prompt for KnowledgeQuery synthesis — anchors the response to retrieved content.
-const KNOWLEDGE_SYNTHESIS_SYSTEM: &str = "Answer the following question using the retrieved \
-content provided in the prompt.\n\n\
-Rules:\n\
-1. Base your answer on the retrieved content. If the content answers the question clearly, \
-use it and cite the source.\n\
-2. If the content is PARTIAL — for example, it names some but not all members of a list — \
-say exactly that: \"The [source] article lists [what you found] but I cannot confirm the \
-complete [list/roster/record] from what was retrieved.\"\n\
-3. If the retrieved content contains NOTHING relevant to the question, do not answer from \
-memory. Say: \"I searched the available sources and didn't find a specific answer to this.\" \
-If you have confident general knowledge that directly answers the question, you may share it \
-but label it: \"From general knowledge, not from the search results:\"\n\
-4. NEVER present information from your training weights as if it came from the retrieved content.\n\
-5. NEVER invent or complete a list, roster, or statistic. A partial answer labelled as partial \
-is correct. A fabricated complete answer is wrong.";
+/// System prompt for KnowledgeQuery synthesis — anchors `<think>` and response to retrieved passages.
+const KNOWLEDGE_SYNTHESIS_SYSTEM: &str = "\
+You have been given retrieved passages from an installed knowledge base. \
+Your answer must be grounded in these passages.\n\
+\n\
+In your <think> block: reason over the RETRIEVED PASSAGES provided in the prompt, \
+not from training memory. Read each passage carefully before forming any conclusion.\n\
+\n\
+After reasoning:\n\
+- If the passages answer the question: synthesise and cite [Source: title].\n\
+- If the passages are partial (e.g. name some but not all items in a list): state \
+  exactly what was found and what is missing. Do not complete the list from memory.\n\
+- If the passages do not contain the answer: say so clearly. Do not fill gaps from memory.\n\
+\n\
+NEVER present information from your training weights as if it came from the retrieved passages.\n\
+NEVER invent or complete a list, roster, or statistic.";
 
 fn now() -> i64 {
     SystemTime::now()
@@ -96,6 +96,38 @@ fn truncate_knowledge_context(chunks: &[DocumentChunk], max_chars: usize) -> Str
     parts.join("\n\n---\n\n")
 }
 
+/// Build a truncated knowledge context string from corpus-engine scored chunks,
+/// staying within a character budget.
+fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
+    let mut parts = Vec::new();
+    let mut total = 0;
+
+    for c in chunks {
+        let content = if c.content.len() > MAX_CHUNK_CHARS {
+            let truncated = &c.content[..MAX_CHUNK_CHARS];
+            match truncated.rfind(' ') {
+                Some(pos) => format!("{}...", &truncated[..pos]),
+                None => format!("{truncated}..."),
+            }
+        } else {
+            c.content.clone()
+        };
+
+        let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
+        let part = format!("[Source: {title}]\n{content}");
+        let part_len = part.len() + 5; // account for separator
+
+        if total + part_len > max_chars {
+            break;
+        }
+
+        total += part_len;
+        parts.push(part);
+    }
+
+    parts.join("\n\n---\n\n")
+}
+
 /// Streaming handle returned by [`Runtime::handle_message_stream`].
 ///
 /// Holds the assistant message id (assigned up-front so callers can correlate
@@ -115,6 +147,7 @@ pub struct Runtime {
     pub skills: Arc<SkillRegistry>,
     pub approval: Arc<dyn ApprovalChannel>,
     pub inference_config: InferenceConfig,
+    pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
 }
 
 impl Runtime {
@@ -137,7 +170,13 @@ impl Runtime {
             skills,
             approval,
             inference_config,
+            corpus_engine: None,
         }
+    }
+
+    pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
+        self.corpus_engine = Some(engine);
+        self
     }
 
     /// Build OICP requirements from active skills for non-Fast requests.
@@ -687,7 +726,7 @@ impl Runtime {
         })
     }
 
-    /// Handle KnowledgeQuery: search documents → inject into prompt → synthesize.
+    /// Handle KnowledgeQuery: search corpus-engine LanceDB indexes → inject into prompt → synthesize.
     async fn handle_knowledge_query(
         &self,
         message: &str,
@@ -696,21 +735,40 @@ impl Runtime {
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
     ) -> Result<Response> {
-        // 1. Try to embed the query for vector search.
+        use std::cmp::Ordering;
+
+        // 1. Embed once, reuse across all corpora.
         let embedding = self.inference.embed(message).await.unwrap_or_default();
 
-        // 2. Search documents (hybrid: FTS5 + vector if embedding available).
-        let chunks = self
-            .store
-            .search_documents(&embedding, message, 5)
-            .await
-            .unwrap_or_default();
+        // 2. Search corpus-engine LanceDB indexes, gated on per-corpus vector index readiness.
+        // If the IVF-PQ index is not built, pass an empty embedding to trigger FTS-only mode
+        // (fast Tantivy, avoids the 20-60 second O(n) full-scan fallback).
+        let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        if let Some(ref engine) = self.corpus_engine {
+            if let Ok(indexes) = engine.installed_indexes().await {
+                for info in &indexes {
+                    let ready = self
+                        .store
+                        .get_vector_index_ready(&info.corpus_id)
+                        .await
+                        .unwrap_or(false);
+                    let search_emb: &[f32] = if ready { &embedding } else { &[] };
 
-        // 3. Assess result quality. No results → honest not-found response.
-        let effectively_empty = chunks.is_empty();
+                    if let Ok(idx) = engine.open_index(&info.path).await {
+                        if let Ok(scored) = idx.search(search_emb, message, 5).await {
+                            chunks.extend(scored);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Sort by score, keep top 8.
+        chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        chunks.truncate(8);
 
         // 4a. Empty results path — Fast slot, honest not-found response.
-        if effectively_empty {
+        if chunks.is_empty() {
             let corpora = context.installed_corpora_display();
             let prompt = format!(
                 "The user asked: \"{message}\"\n\n\
@@ -755,15 +813,18 @@ impl Runtime {
             return Ok(Response { message: assistant_msg, task: None });
         }
 
-        // 4b. Build prompt with retrieved context.
-        let history = format_history_as_prompt(context, 6);
-        let doc_context = truncate_knowledge_context(&chunks, MAX_KNOWLEDGE_CHARS);
-
+        // 4b. Build prompt — retrieved content FIRST, question LAST.
+        // Putting retrieved passages before the question prevents the model from
+        // reasoning from training weights during its <think> phase.
+        let doc_context = format_scored_chunks(&chunks, MAX_KNOWLEDGE_CHARS);
+        let corpus_display = context.installed_corpora_display();
         let prompt = format!(
-            "{history}\n\nRelevant documents:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
+            "RETRIEVED FROM {corpus_display}:\n\n{doc_context}\n\n\
+             ════════════════════════════════════\n\n\
+             Question: {message}"
         );
 
-        let system = self.build_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
+        let system = self.build_primary_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
 
         let request = CompletionRequest {
             prompt,
@@ -780,23 +841,13 @@ impl Runtime {
 
         let completion = self.inference.complete(&request).await?;
 
-        let mut source_map: std::collections::HashMap<String, usize> =
-            std::collections::HashMap::new();
+        let mut source_map: HashMap<String, usize> = HashMap::new();
         for c in &chunks {
-            let origin = match &c.source_type {
-                SourceType::Corpus { corpus_id } => corpus_id.clone(),
-                SourceType::WebSearch { .. } => "web".to_string(),
-                SourceType::UserDocument => "user_document".to_string(),
-            };
-            *source_map.entry(origin).or_insert(0) += 1;
+            *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
         }
         let provenance = ResponseProvenance {
             intent: "KnowledgeQuery".to_string(),
-            search_method: Some(if chunks.is_empty() {
-                "NoResults".to_string()
-            } else {
-                "LocalOnly".to_string()
-            }),
+            search_method: Some("CorpusEngine".to_string()),
             sources: source_map
                 .into_iter()
                 .map(|(origin, count)| SourceSummary { origin, count })

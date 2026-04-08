@@ -119,6 +119,9 @@ pub struct CorpusEntry {
     pub embedding_model: Option<String>,
     /// Embedding vector dimensions. Null unless installed.
     pub embedding_dimensions: Option<usize>,
+    /// True when the IVF-PQ vector index is built and semantic search is available.
+    /// False means FTS-only search is used (fast but keyword-only).
+    pub vector_index_ready: bool,
 }
 
 /// Detailed health report for a single installed corpus, loaded on demand
@@ -1099,6 +1102,11 @@ pub async fn list_corpora(
 
     let installing = state.install_progress.read().await;
 
+    // Snapshot vector index readiness from the store for all installed corpora.
+    let store_guard = state.store.read().await;
+    let store_opt = store_guard.as_ref().map(Arc::clone);
+    drop(store_guard);
+
     let mut entries = Vec::new();
     for b in &builtins {
         let installed_info = installed.iter().find(|i| i.corpus_id == b.id && !i.is_shard);
@@ -1112,6 +1120,16 @@ pub async fn list_corpora(
             "installing"
         } else {
             "not_installed"
+        };
+
+        let vector_index_ready = if installed_info.is_some() {
+            if let Some(ref s) = store_opt {
+                s.get_vector_index_ready(&b.id).await.unwrap_or(false)
+            } else {
+                false
+            }
+        } else {
+            false
         };
 
         entries.push(CorpusEntry {
@@ -1128,10 +1146,89 @@ pub async fn list_corpora(
             indexed_at: installed_info.map(|i| i.created_at),
             embedding_model: installed_info.map(|i| i.embedding_model.clone()),
             embedding_dimensions: installed_info.map(|i| i.embedding_dimensions),
+            vector_index_ready,
         });
     }
 
     Ok(entries)
+}
+
+/// Build the IVF-PQ vector index for an installed corpus in the background.
+/// Emits `index-build-progress`, `index-build-complete`, or `index-build-error`
+/// events to the frontend. Sets `vector_index_ready` on the store when done.
+#[tauri::command]
+pub async fn build_corpus_index(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<(), String> {
+    let engine = {
+        let guard = state.corpus_engine.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Corpus engine not ready")?
+    };
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+
+    let cid = corpus_id.clone();
+    tokio::spawn(async move {
+        let indexes = match engine.installed_indexes().await {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = app_handle.emit(
+                    "index-build-error",
+                    serde_json::json!({"corpus_id": cid, "error": e.to_string()}),
+                );
+                return;
+            }
+        };
+        let Some(info) = indexes.iter().find(|i| i.corpus_id == cid) else {
+            let _ = app_handle.emit(
+                "index-build-error",
+                serde_json::json!({"corpus_id": cid, "error": "Corpus not found"}),
+            );
+            return;
+        };
+        let idx = match engine.open_index(&info.path).await {
+            Ok(i) => i,
+            Err(e) => {
+                let _ = app_handle.emit(
+                    "index-build-error",
+                    serde_json::json!({"corpus_id": cid, "error": e.to_string()}),
+                );
+                return;
+            }
+        };
+
+        let progress_handle = app_handle.clone();
+        let progress_cid = cid.clone();
+        let on_progress: Box<dyn Fn(u64, u64) + Send + Sync> = Box::new(move |done, total| {
+            let pct = if total > 0 { done * 100 / total } else { 0 };
+            let _ = progress_handle.emit(
+                "index-build-progress",
+                serde_json::json!({"corpus_id": &progress_cid, "phase": "building", "pct": pct}),
+            );
+        });
+
+        match idx.build_indexes(true, false, Some(&*on_progress)).await {
+            Ok(()) => {
+                let _ = store.set_vector_index_ready(&cid, true).await;
+                let _ = app_handle.emit(
+                    "index-build-complete",
+                    serde_json::json!({"corpus_id": cid}),
+                );
+            }
+            Err(e) => {
+                let _ = app_handle.emit(
+                    "index-build-error",
+                    serde_json::json!({"corpus_id": cid, "error": e.to_string()}),
+                );
+            }
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]

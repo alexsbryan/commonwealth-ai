@@ -217,3 +217,14 @@ pub fn run_metacognition_log_migrations(conn: &Connection) -> rusqlite::Result<(
     let _ = conn.execute_batch("ALTER TABLE routing_log ADD COLUMN self_assessment TEXT");
     Ok(())
 }
+
+/// Add vector index readiness tracking to corpus_state.
+/// `vector_index_ready = 1` means the IVF-PQ index is built and semantic
+/// search is available. Defaults to 0 so existing corpora start unverified;
+/// the startup verification pass sets the correct value on first run.
+pub fn run_index_readiness_migration(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch(
+        "ALTER TABLE corpus_state ADD COLUMN vector_index_ready INTEGER NOT NULL DEFAULT 0",
+    );
+    Ok(())
+}

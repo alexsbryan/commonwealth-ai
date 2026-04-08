@@ -264,6 +264,7 @@ impl TestHarness {
                 last_updated: 0,
                 version: 0,
                 deleted_at: None,
+                vector_index_ready: false,
             })
             .await
             .unwrap();

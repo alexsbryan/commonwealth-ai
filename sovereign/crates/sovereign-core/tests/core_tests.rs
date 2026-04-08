@@ -188,6 +188,12 @@ impl StateStore for MockStore {
     async fn set_permission(&self, _tool_id: &str, _scope: &str, _granted: bool) -> Result<()> {
         Ok(())
     }
+    async fn set_vector_index_ready(&self, _corpus_id: &str, _ready: bool) -> Result<()> {
+        Ok(())
+    }
+    async fn get_vector_index_ready(&self, _corpus_id: &str) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 // ─── ToolRegistry Tests ────────────────────────────────────────
