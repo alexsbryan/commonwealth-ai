@@ -666,8 +666,9 @@ impl EmbeddedLlamaCpp {
         let primary_quirks = primary_family.default_quirks();
         let embed_quirks = embed_family.default_quirks().embed;
 
-        let backend = LlamaBackend::init()
+        let mut backend = LlamaBackend::init()
             .map_err(|e| Error::Inference(format!("Failed to init llama backend: {e}")))?;
+        backend.void_logs(); // suppress llama.cpp/ggml C-level stderr noise
         let backend = Arc::new(backend);
 
         eprintln!("Loading fast slot ({fast_family:?})...");

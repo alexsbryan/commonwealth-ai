@@ -738,30 +738,77 @@ impl Runtime {
         use std::cmp::Ordering;
 
         // 1. Embed once, reuse across all corpora.
+        let t0 = std::time::Instant::now();
         let embedding = self.inference.embed(message).await.unwrap_or_default();
+        tracing::info!(
+            embedding_dims = embedding.len(),
+            embedding_ms = t0.elapsed().as_millis() as u64,
+            "KnowledgeQuery: embed complete"
+        );
 
         // 2. Search corpus-engine LanceDB indexes, gated on per-corpus vector index readiness.
         // If the IVF-PQ index is not built, pass an empty embedding to trigger FTS-only mode
         // (fast Tantivy, avoids the 20-60 second O(n) full-scan fallback).
+        let t_search = std::time::Instant::now();
         let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
-        if let Some(ref engine) = self.corpus_engine {
-            if let Ok(indexes) = engine.installed_indexes().await {
-                for info in &indexes {
-                    let ready = self
-                        .store
-                        .get_vector_index_ready(&info.corpus_id)
-                        .await
-                        .unwrap_or(false);
-                    let search_emb: &[f32] = if ready { &embedding } else { &[] };
-
-                    if let Ok(idx) = engine.open_index(&info.path).await {
-                        if let Ok(scored) = idx.search(search_emb, message, 5).await {
-                            chunks.extend(scored);
+        match &self.corpus_engine {
+            None => tracing::warn!("KnowledgeQuery: corpus_engine is None — no LanceDB search"),
+            Some(engine) => match engine.installed_indexes().await {
+                Err(e) => tracing::warn!(error = %e, "KnowledgeQuery: installed_indexes() failed"),
+                Ok(indexes) => {
+                    tracing::info!(count = indexes.len(), "KnowledgeQuery: indexes found");
+                    for info in &indexes {
+                        let ready = self
+                            .store
+                            .get_vector_index_ready(&info.corpus_id)
+                            .await
+                            .unwrap_or(false);
+                        let search_emb: &[f32] = if ready { &embedding } else { &[] };
+                        tracing::info!(
+                            corpus = %info.corpus_id,
+                            vector_index_ready = ready,
+                            query_dims = search_emb.len(),
+                            "KnowledgeQuery: opening index"
+                        );
+                        let t_open = std::time::Instant::now();
+                        match engine.open_index(&info.path).await {
+                            Err(e) => tracing::warn!(
+                                corpus = %info.corpus_id, error = %e,
+                                "KnowledgeQuery: open_index failed"
+                            ),
+                            Ok(idx) => {
+                                tracing::info!(
+                                    corpus = %info.corpus_id,
+                                    open_ms = t_open.elapsed().as_millis() as u64,
+                                    "KnowledgeQuery: searching"
+                                );
+                                let t_s = std::time::Instant::now();
+                                match idx.search(search_emb, message, 5).await {
+                                    Err(e) => tracing::warn!(
+                                        corpus = %info.corpus_id, error = %e,
+                                        "KnowledgeQuery: search() failed"
+                                    ),
+                                    Ok(scored) => {
+                                        tracing::info!(
+                                            corpus = %info.corpus_id,
+                                            results = scored.len(),
+                                            search_ms = t_s.elapsed().as_millis() as u64,
+                                            "KnowledgeQuery: search complete"
+                                        );
+                                        chunks.extend(scored);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-            }
+            },
         }
+        tracing::info!(
+            total_chunks = chunks.len(),
+            total_search_ms = t_search.elapsed().as_millis() as u64,
+            "KnowledgeQuery: search phase done"
+        );
 
         // 3. Sort by score, keep top 8.
         chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
@@ -769,6 +816,7 @@ impl Runtime {
 
         // 4a. Empty results path — Fast slot, honest not-found response.
         if chunks.is_empty() {
+            tracing::info!("KnowledgeQuery: no chunks — returning empty-results response");
             let corpora = context.installed_corpora_display();
             let prompt = format!(
                 "The user asked: \"{message}\"\n\n\
@@ -876,6 +924,7 @@ impl Runtime {
                 "latency_ms": completion.latency_ms,
                 "intent": "knowledge_query",
                 "documents_found": chunks.len(),
+                "search_ms": t_search.elapsed().as_millis() as u64,
                 "provenance": provenance,
             })),
             version: now(),
