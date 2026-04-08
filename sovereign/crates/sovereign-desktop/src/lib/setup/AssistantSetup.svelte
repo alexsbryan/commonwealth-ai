@@ -41,7 +41,7 @@
 </script>
 
 <div class="setup-form">
-  <button class="back-btn" onclick={onBack}>&larr; Back</button>
+  <button class="back-btn" onclick={onBack}>← Back</button>
   <h2>Personal Assistant</h2>
   <p class="desc">
     A general-purpose assistant. Pick a model, then choose capabilities.
@@ -85,64 +85,85 @@
   .setup-form {
     max-width: 500px;
     width: 100%;
-    max-height: 80vh;
-    overflow-y: auto;
   }
 
   .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: var(--text-muted);
-    margin-bottom: 16px;
-    font-size: 0.9rem;
+    margin-bottom: 20px;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    transition: color 0.15s;
   }
 
   .back-btn:hover {
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   h2 {
-    font-size: 1.4rem;
-    font-weight: 500;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
     margin-bottom: 8px;
+    letter-spacing: -0.01em;
   }
 
   .desc {
     color: var(--text-secondary);
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-    line-height: 1.5;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+    line-height: 1.55;
   }
 
   .toggles {
-    margin-top: 16px;
-    margin-bottom: 16px;
+    margin-top: 18px;
+    margin-bottom: 18px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
   }
 
   .toggles h3 {
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-size: 0.68rem;
+    font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 12px;
+    letter-spacing: 0.1em;
+    padding: 12px 16px 8px;
+    border-bottom: 1px solid var(--border);
   }
 
   .toggle-row {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
+    gap: 12px;
+    padding: 12px 16px;
     cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+
+  .toggle-row:last-child {
+    border-bottom: none;
+  }
+
+  .toggle-row:hover {
+    background: var(--bg-elevated);
   }
 
   .toggle-row input {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
     accent-color: var(--accent);
+    flex-shrink: 0;
   }
 
   .toggle-row span {
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     color: var(--text-primary);
   }
 
@@ -156,7 +177,7 @@
     width: 100%;
     padding: 12px;
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
     border-radius: var(--radius);
     font-weight: 500;
     font-size: 1rem;

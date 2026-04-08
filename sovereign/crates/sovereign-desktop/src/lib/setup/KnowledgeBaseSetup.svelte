@@ -121,19 +121,21 @@
   .tier-card {
     padding: 20px;
     background: var(--bg-secondary);
-    border: 2px solid var(--border);
+    border: 2px solid var(--border-mid);
     border-radius: var(--radius-lg);
     text-align: left;
-    transition: border-color 0.2s, transform 0.2s;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
     position: relative;
   }
   .tier-card:hover {
-    border-color: var(--accent);
-    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    background: var(--bg-surface);
+    box-shadow: 0 2px 16px rgba(212, 136, 42, 0.08);
   }
   .tier-card.selected {
     border-color: var(--accent);
-    background: var(--bg-surface);
+    background: var(--bg-elevated);
+    box-shadow: 0 2px 20px rgba(212, 136, 42, 0.12);
   }
   .tier-header {
     display: flex;
@@ -187,7 +189,7 @@
   .continue-btn {
     padding: 12px 40px;
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
     border-radius: var(--radius);
     font-weight: 500;
     font-size: 1rem;

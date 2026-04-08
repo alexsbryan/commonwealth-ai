@@ -105,17 +105,20 @@
   .provider-card {
     padding: 16px 20px;
     background: var(--bg-secondary);
-    border: 2px solid var(--border);
+    border: 2px solid var(--border-mid);
     border-radius: var(--radius-lg);
     text-align: left;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
   }
   .provider-card:hover {
-    border-color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    background: var(--bg-surface);
+    box-shadow: 0 2px 14px rgba(212, 136, 42, 0.07);
   }
   .provider-card.selected {
     border-color: var(--accent);
-    background: var(--bg-surface);
+    background: var(--bg-elevated);
+    box-shadow: 0 2px 18px rgba(212, 136, 42, 0.1);
   }
   .provider-card h2 {
     font-size: 1rem;
@@ -159,7 +162,7 @@
   .continue-btn {
     padding: 12px 40px;
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
     border-radius: var(--radius);
     font-weight: 500;
     font-size: 1rem;

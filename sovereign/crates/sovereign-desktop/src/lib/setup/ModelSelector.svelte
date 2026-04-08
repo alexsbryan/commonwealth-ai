@@ -128,6 +128,12 @@
     },
   ];
 
+  function modelTier(model: RecommendedModel): "basic" | "standard" | "premium" {
+    if (model.min_ram_gb <= 10) return "basic";
+    if (model.min_ram_gb <= 30) return "standard";
+    return "premium";
+  }
+
   // Active model list — embed models are all small enough to always show.
   let activeModels = $derived(embedMode ? EMBED_MODELS : RECOMMENDED_MODELS);
 
@@ -316,6 +322,16 @@
       >
         <div class="model-name">
           {model.name}
+          {#if !embedMode}
+            {@const tier = modelTier(model)}
+            {#if tier === "basic"}
+              <span class="tier-badge tier-basic">Basic</span>
+            {:else if tier === "standard"}
+              <span class="tier-badge tier-standard">Standard</span>
+            {:else}
+              <span class="tier-badge tier-premium"><span class="premium-star">✦</span> Premium</span>
+            {/if}
+          {/if}
           {#if isRecommended}
             <span class="badge">Recommended for your system</span>
           {/if}
@@ -454,7 +470,7 @@
 
   .model-card.selected {
     border-color: var(--accent);
-    background: rgba(233, 69, 96, 0.08);
+    background: rgba(212, 136, 42, 0.1);
   }
 
   .model-name {
@@ -486,7 +502,7 @@
 
   .download-card.recommended {
     border-color: var(--accent);
-    background: rgba(233, 69, 96, 0.05);
+    background: rgba(212, 136, 42, 0.07);
   }
 
   .badge {
@@ -495,7 +511,7 @@
     padding: 2px 8px;
     border-radius: 999px;
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
     font-size: 0.7rem;
     font-weight: 500;
     vertical-align: middle;
@@ -520,7 +536,7 @@
 
   .btn-download {
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
   }
 
   .btn-download:hover:not(:disabled) {
@@ -534,11 +550,11 @@
 
   .btn-select {
     background: var(--success);
-    color: white;
+    color: var(--text-on-accent);
   }
 
   .btn-select:hover:not(:disabled) {
-    background: #66bb6a;
+    background: #6ed876;
   }
 
   .btn-select:disabled {
@@ -646,6 +662,62 @@
     border-radius: 3px;
     font-size: 0.8rem;
     word-break: break-all;
+  }
+
+  /* ── Tier badges ── */
+  .tier-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 1px 7px;
+    border-radius: 10px;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+
+  .tier-basic {
+    background: rgba(110, 136, 86, 0.15);
+    color: var(--text-muted);
+    border: 1px solid rgba(110, 136, 86, 0.25);
+  }
+
+  .tier-standard {
+    background: rgba(74, 186, 216, 0.12);
+    color: var(--sky);
+    border: 1px solid rgba(74, 186, 216, 0.25);
+  }
+
+  .tier-premium {
+    background: linear-gradient(
+      90deg,
+      rgba(212, 136, 42, 0.12) 0%,
+      rgba(240, 168, 72, 0.30) 40%,
+      rgba(212, 136, 42, 0.12) 80%
+    );
+    background-size: 200% 100%;
+    animation: premium-glimmer 2.5s ease-in-out infinite;
+    border: 1px solid rgba(212, 136, 42, 0.4);
+    color: var(--accent-light);
+  }
+
+  @keyframes premium-glimmer {
+    0%   { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+
+  .premium-star {
+    display: inline-block;
+    animation: star-wobble 5s ease-in-out infinite;
+  }
+
+  @keyframes star-wobble {
+    0%, 70%, 100% { transform: rotate(0deg) scale(1); }
+    73%  { transform: rotate(-18deg) scale(1.3); }
+    77%  { transform: rotate(12deg) scale(0.85); }
+    81%  { transform: rotate(-8deg) scale(1.1); }
+    85%  { transform: rotate(4deg) scale(1); }
   }
 
   .spinner-small {

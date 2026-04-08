@@ -113,13 +113,23 @@
 
 {#if view === "loading"}
   <div class="loading-screen">
+    <div class="loading-ambient"></div>
     <div class="loading-content">
-      <h1>Sovereign</h1>
+      <div class="mark-wrap" aria-hidden="true">
+        <div class="ring ring-1"></div>
+        <div class="ring ring-2"></div>
+        <div class="ring ring-3"></div>
+        <div class="loading-mark">◈</div>
+      </div>
+      <h1>SOVEREIGN</h1>
+      <p class="loading-tagline">your ai · your data · your mesh</p>
       {#if backendError}
         <p class="error">{backendError}</p>
       {:else}
-        <p class="loading-text">Loading model...</p>
-        <div class="spinner"></div>
+        <div class="loading-progress">
+          <div class="loading-bar"></div>
+        </div>
+        <p class="loading-text">Initializing</p>
       {/if}
     </div>
   </div>
@@ -165,62 +175,144 @@
 {/if}
 
 <style>
+  /* ── Loading screen ── */
   .loading-screen {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100vh;
-    background: var(--bg-primary);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .loading-ambient {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(212, 136, 42, 0.08) 0%, transparent 65%),
+      radial-gradient(ellipse 30% 25% at 30% 65%, rgba(94, 201, 106, 0.05) 0%, transparent 60%);
+    pointer-events: none;
   }
 
   .loading-content {
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 1;
+  }
+
+  /* ── Expanding rings — mesh signal broadcast ── */
+  .mark-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 90px;
+    height: 90px;
+    margin-bottom: 22px;
+  }
+
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(212, 136, 42, 0.35);
+    width: 50px;
+    height: 50px;
+    animation: ring-expand 3s ease-out infinite;
+  }
+
+  .ring-2 { animation-delay: 1s; }
+  .ring-3 { animation-delay: 2s; }
+
+  @keyframes ring-expand {
+    0%   { transform: scale(1);   opacity: 0.55; }
+    100% { transform: scale(3.2); opacity: 0; }
+  }
+
+  .loading-mark {
+    font-size: 2.8rem;
+    color: var(--accent);
+    line-height: 1;
+    filter: drop-shadow(0 0 16px rgba(212, 136, 42, 0.55));
+    animation: mark-breathe 2.8s ease-in-out infinite;
+    position: relative;
+    z-index: 1;
   }
 
   .loading-content h1 {
-    font-size: 2rem;
-    font-weight: 300;
-    margin-bottom: 1rem;
-    color: var(--text-primary);
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .loading-tagline {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 30px;
+  }
+
+  .loading-progress {
+    width: 160px;
+    height: 1px;
+    background: var(--border-mid);
+    border-radius: 1px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+
+  .loading-bar {
+    width: 38%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent), var(--accent-light));
+    border-radius: 1px;
+    animation: sweep 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
 
   .loading-text {
-    color: var(--text-secondary);
-    margin-bottom: 1.5rem;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
   }
 
   .error {
     color: var(--error);
-    max-width: 400px;
-    margin: 0 auto;
+    font-size: 0.85rem;
+    max-width: 380px;
+    text-align: center;
+    line-height: 1.5;
   }
 
-  .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    margin: 0 auto;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
+  @keyframes mark-breathe {
+    0%, 100% {
+      transform: scale(1);
+      filter: drop-shadow(0 0 10px rgba(212, 136, 42, 0.4));
+    }
+    50% {
+      transform: scale(1.06);
+      filter: drop-shadow(0 0 26px rgba(212, 136, 42, 0.65));
     }
   }
 
+  @keyframes sweep {
+    0%   { transform: translateX(-200%); }
+    100% { transform: translateX(520%); }
+  }
+
+  /* ── App shell ── */
   .app-layout {
     display: flex;
     height: 100vh;
   }
 
   .sidebar {
-    width: 260px;
-    min-width: 260px;
+    width: 262px;
+    min-width: 262px;
     background: var(--bg-secondary);
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--border-mid);
     display: flex;
     flex-direction: column;
   }
@@ -230,5 +322,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background: var(--bg-primary);
   }
 </style>

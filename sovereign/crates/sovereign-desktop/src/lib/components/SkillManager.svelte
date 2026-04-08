@@ -115,8 +115,8 @@
     color: var(--success, #22c55e);
   }
   .trust-badge.signed {
-    background: rgba(59, 130, 246, 0.15);
-    color: #3b82f6;
+    background: var(--sky-dim);
+    color: var(--sky);
   }
   .trust-badge.unsigned {
     background: rgba(156, 163, 175, 0.15);
@@ -169,6 +169,6 @@
 
   .toggle input:checked + .slider::before {
     transform: translateX(18px);
-    background: white;
+    background: var(--text-on-accent);
   }
 </style>

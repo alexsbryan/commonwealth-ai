@@ -36,16 +36,15 @@
 </script>
 
 {#if running && state}
-  <button
-    class="indicator"
-    onclick={onOpen}
-    title="Open mesh settings"
-  >
-    <span class="dot online"></span>
-    <span class="name">{state.status.name}</span>
-    <span class="count">
-      {state.status.members_online}/{state.status.members_total}
+  <button class="indicator" onclick={onOpen} title="Open mesh settings">
+    <span class="dot online" aria-hidden="true"></span>
+    <span class="net-info">
+      <span class="net-name">{state.status.name}</span>
+      <span class="net-count">{state.status.members_online} / {state.status.members_total} nodes</span>
     </span>
+    <svg class="arrow" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+      <path d="M3.5 2l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
   </button>
 {/if}
 
@@ -53,21 +52,20 @@
   .indicator {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
     border-radius: var(--radius);
-    color: var(--text-secondary);
-    font-size: 0.78rem;
-    text-align: left;
     width: 100%;
-    transition: background 0.2s;
+    text-align: left;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
   }
 
   .indicator:hover {
-    background: var(--bg-input);
-    color: var(--text-primary);
+    background: var(--bg-elevated);
+    border-color: var(--growth);
+    box-shadow: 0 0 10px var(--growth-glow);
   }
 
   .dot {
@@ -79,18 +77,53 @@
   }
 
   .dot.online {
-    background: var(--success);
+    background: var(--growth);
+    box-shadow: 0 0 5px var(--growth);
+    animation: node-pulse 2.4s ease-in-out infinite;
   }
 
-  .name {
+  @keyframes node-pulse {
+    0%, 100% {
+      box-shadow: 0 0 4px var(--growth);
+      opacity: 1;
+    }
+    50% {
+      box-shadow: 0 0 12px var(--growth), 0 0 20px var(--growth-glow);
+      opacity: 0.8;
+    }
+  }
+
+  .net-info {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .net-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .count {
+  .net-count {
+    font-size: 0.67rem;
+    color: var(--growth);
+    font-family: 'Syne Mono', monospace;
+    letter-spacing: 0.03em;
+  }
+
+  .arrow {
     color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    transition: color 0.2s;
+  }
+
+  .indicator:hover .arrow {
+    color: var(--growth);
   }
 </style>

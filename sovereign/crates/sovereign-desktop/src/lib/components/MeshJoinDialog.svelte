@@ -223,7 +223,7 @@
   button.primary {
     padding: 9px 18px;
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
     border-radius: var(--radius);
     font-weight: 500;
   }

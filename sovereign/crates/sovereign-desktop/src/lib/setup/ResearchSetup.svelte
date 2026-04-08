@@ -27,7 +27,7 @@
 </script>
 
 <div class="setup-form">
-  <button class="back-btn" onclick={onBack}>&larr; Back</button>
+  <button class="back-btn" onclick={onBack}>← Back</button>
   <h2>Research & Analysis</h2>
   <p class="desc">
     Sovereign will activate the Research Analyst skill with web search
@@ -53,31 +53,36 @@
   .setup-form {
     max-width: 500px;
     width: 100%;
-    max-height: 80vh;
-    overflow-y: auto;
   }
 
   .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: var(--text-muted);
-    margin-bottom: 16px;
-    font-size: 0.9rem;
+    margin-bottom: 20px;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    transition: color 0.15s;
   }
 
   .back-btn:hover {
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   h2 {
-    font-size: 1.4rem;
-    font-weight: 500;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
     margin-bottom: 8px;
+    letter-spacing: -0.01em;
   }
 
   .desc {
     color: var(--text-secondary);
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-    line-height: 1.5;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+    line-height: 1.55;
   }
 
   .error {
@@ -90,7 +95,7 @@
     width: 100%;
     padding: 12px;
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
     border-radius: var(--radius);
     font-weight: 500;
     font-size: 1rem;

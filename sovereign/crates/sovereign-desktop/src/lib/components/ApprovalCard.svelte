@@ -196,16 +196,16 @@
 
   .approve {
     background: var(--success);
-    color: white;
+    color: var(--text-on-accent);
   }
 
   .approve:hover:not(:disabled) {
-    background: #66bb6a;
+    background: #6ed876;
   }
 
   .deny {
     background: var(--error);
-    color: white;
+    color: var(--text-on-accent);
   }
 
   .deny:hover:not(:disabled) {

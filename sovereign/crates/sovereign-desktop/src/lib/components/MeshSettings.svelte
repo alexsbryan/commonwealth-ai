@@ -412,7 +412,7 @@
   button.primary {
     padding: 9px 18px;
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
     border-radius: var(--radius);
     font-weight: 500;
     transition: background 0.2s;
@@ -442,7 +442,7 @@
   button.danger {
     padding: 9px 18px;
     background: var(--error);
-    color: white;
+    color: var(--text-on-accent);
     border-radius: var(--radius);
     font-weight: 500;
   }

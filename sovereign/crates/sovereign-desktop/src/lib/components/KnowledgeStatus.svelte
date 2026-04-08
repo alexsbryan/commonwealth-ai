@@ -294,7 +294,7 @@
     font-size: 0.8rem;
     font-weight: 500;
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
     border-radius: var(--radius);
   }
   .tier-btn:hover {
@@ -366,7 +366,7 @@
   }
   .action-btn.install {
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
   }
   .action-btn.install:hover {
     background: var(--accent-hover);
@@ -428,9 +428,9 @@
     white-space: nowrap;
   }
   .health-chip.enriched {
-    color: var(--accent);
-    background: rgba(99, 102, 241, 0.08);
-    border-color: rgba(99, 102, 241, 0.25);
+    color: var(--accent-light);
+    background: var(--accent-dim);
+    border-color: rgba(212, 136, 42, 0.3);
   }
   .health-chip.muted {
     color: var(--text-muted);
@@ -438,10 +438,10 @@
   .enrichment-pill {
     font-size: 0.65rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--accent);
-    background: rgba(99, 102, 241, 0.12);
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    letter-spacing: 0.05em;
+    color: var(--accent-light);
+    background: var(--accent-dim);
+    border: 1px solid rgba(212, 136, 42, 0.3);
     padding: 1px 6px;
     border-radius: 10px;
     margin-left: 6px;
