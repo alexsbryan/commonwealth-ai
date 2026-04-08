@@ -19,6 +19,8 @@ import type {
   JoinMeshResponse,
   JoinConfirmation,
   MeshStateResponse,
+  RecipeValidateResult,
+  RecipeTestResult,
 } from "./types";
 
 export async function sendMessage(
@@ -182,4 +184,19 @@ export async function meshIsRunning(): Promise<boolean> {
 
 export async function meshLeave(): Promise<void> {
   return invoke("mesh_leave");
+}
+
+export async function recipeValidate(
+  recipePath: string,
+  offline: boolean,
+): Promise<RecipeValidateResult> {
+  return invoke("recipe_validate", { recipePath, offline });
+}
+
+export async function recipeTest(
+  recipePath: string,
+  sampleSize: number,
+  offline: boolean,
+): Promise<RecipeTestResult> {
+  return invoke("recipe_test", { recipePath, sampleSize, offline });
 }

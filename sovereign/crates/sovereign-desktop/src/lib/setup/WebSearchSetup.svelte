@@ -113,12 +113,12 @@
   .provider-card:hover {
     border-color: color-mix(in srgb, var(--accent) 50%, transparent);
     background: var(--bg-surface);
-    box-shadow: 0 2px 14px rgba(212, 136, 42, 0.07);
+    box-shadow: 0 2px 14px rgba(201, 168, 76, 0.07);
   }
   .provider-card.selected {
     border-color: var(--accent);
     background: var(--bg-elevated);
-    box-shadow: 0 2px 18px rgba(212, 136, 42, 0.1);
+    box-shadow: 0 2px 18px rgba(201, 168, 76, 0.1);
   }
   .provider-card h2 {
     font-size: 1rem;

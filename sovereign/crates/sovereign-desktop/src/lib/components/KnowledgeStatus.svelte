@@ -430,7 +430,7 @@
   .health-chip.enriched {
     color: var(--accent-light);
     background: var(--accent-dim);
-    border-color: rgba(212, 136, 42, 0.3);
+    border-color: rgba(201, 168, 76, 0.3);
   }
   .health-chip.muted {
     color: var(--text-muted);
@@ -441,7 +441,7 @@
     letter-spacing: 0.05em;
     color: var(--accent-light);
     background: var(--accent-dim);
-    border: 1px solid rgba(212, 136, 42, 0.3);
+    border: 1px solid rgba(201, 168, 76, 0.3);
     padding: 1px 6px;
     border-radius: 10px;
     margin-left: 6px;

@@ -1275,6 +1275,142 @@ pub async fn get_corpus_health(
     }))
 }
 
+// ─── Recipe Testing ──────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct RecipeValidateResult {
+    pub passed: bool,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+    pub corpus_id: String,
+    pub corpus_name: String,
+    pub source_reachable: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub struct RecipeTestResult {
+    pub passed: bool,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+    pub recipe_id: String,
+    pub recipe_name: String,
+    pub records_attempted: usize,
+    pub records_succeeded: usize,
+    pub extraction_rate: f32,
+    pub total_chunks: usize,
+    pub avg_chars: f32,
+    pub report_path: String,
+    pub report_markdown: String,
+}
+
+/// Validate a recipe's fields without downloading any data.
+///
+/// Returns immediately — performs only static checks and an optional
+/// HTTP HEAD request to the source URL.
+#[tauri::command]
+pub async fn recipe_validate(
+    recipe_path: String,
+    offline: bool,
+) -> Result<RecipeValidateResult, String> {
+    let path = PathBuf::from(&recipe_path);
+    let engine = recipe_stub_engine();
+    let options = corpus_engine::TestOptions {
+        sample_size: 0,
+        embed: false,
+        offline,
+        ..Default::default()
+    };
+
+    let report = engine
+        .test_recipe(&path, &options)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(RecipeValidateResult {
+        passed: report.validation.errors.is_empty(),
+        errors: report.validation.errors.clone(),
+        warnings: report.warnings(),
+        corpus_id: report.recipe_id.clone(),
+        corpus_name: report.recipe_name.clone(),
+        source_reachable: report.validation.source_reachable,
+    })
+}
+
+/// Run the full recipe test harness: validate → acquire sample →
+/// extract → chunk → write TEST_REPORT.md.
+///
+/// Embedding is not available in this code path — the embed phase is
+/// always skipped. The report is written to `<recipe_dir>/TEST_REPORT.md`.
+#[tauri::command]
+pub async fn recipe_test(
+    recipe_path: String,
+    sample_size: usize,
+    offline: bool,
+) -> Result<RecipeTestResult, String> {
+    let path = PathBuf::from(&recipe_path);
+    let output_path = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("TEST_REPORT.md");
+
+    let engine = recipe_stub_engine();
+    let options = corpus_engine::TestOptions {
+        sample_size,
+        embed: false,
+        offline,
+        output: Some(output_path.clone()),
+        ..Default::default()
+    };
+
+    let report = engine
+        .test_recipe(&path, &options)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let markdown = report.to_markdown();
+
+    if let Err(e) = std::fs::write(&output_path, &markdown) {
+        tracing::warn!("Failed to write TEST_REPORT.md to {}: {e}", output_path.display());
+    }
+
+    let (records_attempted, records_succeeded, extraction_rate) = report
+        .extraction
+        .as_ref()
+        .map(|e| (e.records_attempted, e.records_succeeded, e.extraction_rate))
+        .unwrap_or((0, 0, 0.0));
+
+    let (total_chunks, avg_chars) = report
+        .chunking
+        .as_ref()
+        .map(|c| (c.total_chunks, c.avg_chars))
+        .unwrap_or((0, 0.0));
+
+    Ok(RecipeTestResult {
+        passed: report.passed(),
+        warnings: report.warnings(),
+        errors: report.validation.errors.clone(),
+        recipe_id: report.recipe_id.clone(),
+        recipe_name: report.recipe_name.clone(),
+        records_attempted,
+        records_succeeded,
+        extraction_rate,
+        total_chunks,
+        avg_chars,
+        report_path: output_path.to_string_lossy().into_owned(),
+        report_markdown: markdown,
+    })
+}
+
+/// Build a `CorpusEngine` with a stub embed function for recipe testing.
+/// The stub is never called because the embed phase is always disabled.
+fn recipe_stub_engine() -> corpus_engine::CorpusEngine {
+    let stub: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
+        Box::pin(async { Ok(vec![0f32; 768]) })
+    });
+    let tmp = std::env::temp_dir().join("sovereign-recipe-test");
+    corpus_engine::CorpusEngine::new(tmp.clone(), tmp, stub)
+}
+
 /// Kick off background installs for every corpus in the given tier.
 /// Used by the setup wizard's "install tier" affordance.
 async fn start_tier_installs(

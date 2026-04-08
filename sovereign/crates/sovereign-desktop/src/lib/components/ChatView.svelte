@@ -345,8 +345,8 @@
     border-radius: 50%;
     background: radial-gradient(
       ellipse at 50% 50%,
-      rgba(212, 136, 42, 0.07) 0%,
-      rgba(94, 201, 106, 0.03) 45%,
+      rgba(155, 135, 196, 0.09) 0%,
+      rgba(201, 168, 76,  0.04) 45%,
       transparent 70%
     );
     pointer-events: none;
@@ -356,7 +356,7 @@
     font-size: 2.8rem;
     color: var(--accent);
     line-height: 1;
-    filter: drop-shadow(0 0 14px rgba(212, 136, 42, 0.4));
+    filter: drop-shadow(0 0 14px rgba(201, 168, 76, 0.45));
     margin-bottom: 16px;
     animation: empty-breathe 3.5s ease-in-out infinite;
     position: relative;
@@ -400,10 +400,10 @@
 
   @keyframes empty-breathe {
     0%, 100% {
-      filter: drop-shadow(0 0 10px rgba(212, 136, 42, 0.35));
+      filter: drop-shadow(0 0 10px rgba(201, 168, 76, 0.38));
     }
     50% {
-      filter: drop-shadow(0 0 22px rgba(212, 136, 42, 0.6));
+      filter: drop-shadow(0 0 24px rgba(201, 168, 76, 0.65));
     }
   }
 
@@ -497,7 +497,7 @@
     gap: 5px;
     padding: 4px 0 4px 16px;
     align-self: flex-start;
-    border-left: 2px solid color-mix(in srgb, var(--growth) 30%, transparent);
+    border-left: 2px solid color-mix(in srgb, var(--lavender) 30%, transparent);
     margin-bottom: 12px;
   }
 
@@ -505,7 +505,7 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--growth);
+    background: var(--lavender);
     animation: typing-pulse 1.3s ease-in-out infinite;
   }
 

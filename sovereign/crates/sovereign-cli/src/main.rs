@@ -1,4 +1,5 @@
 mod mesh_cmd;
+mod recipe_cmd;
 
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -196,6 +197,10 @@ async fn main() {
             }
             "corpus" => {
                 let code = mesh_cmd::run_corpus(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "recipe" => {
+                let code = recipe_cmd::run_recipe(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             _ => {}

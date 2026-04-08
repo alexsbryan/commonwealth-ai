@@ -288,7 +288,7 @@
   .wizard-mark {
     color: var(--accent);
     font-size: 1.05rem;
-    filter: drop-shadow(0 0 5px rgba(212, 136, 42, 0.45));
+    filter: drop-shadow(0 0 5px rgba(201, 168, 76, 0.45));
   }
 
   .wizard-name {
@@ -318,7 +318,7 @@
 
   .step-dot.active {
     background: var(--accent);
-    box-shadow: 0 0 8px rgba(212, 136, 42, 0.5);
+    box-shadow: 0 0 8px rgba(201, 168, 76, 0.5);
     width: 20px;
     border-radius: 4px;
   }
@@ -381,7 +381,7 @@
     height: 260px;
     top: -60px;
     left: -60px;
-    background: radial-gradient(circle, rgba(94, 201, 106, 0.07) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(121, 196, 120, 0.07) 0%, transparent 70%);
   }
 
   .panel-bloom-b {
@@ -389,7 +389,7 @@
     height: 220px;
     bottom: 20px;
     right: -40px;
-    background: radial-gradient(circle, rgba(212, 136, 42, 0.07) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(201, 168, 76, 0.07) 0%, transparent 70%);
   }
 
   .panel-content {
@@ -403,7 +403,7 @@
     font-size: 3.2rem;
     color: var(--accent);
     line-height: 1;
-    filter: drop-shadow(0 0 18px rgba(212, 136, 42, 0.5));
+    filter: drop-shadow(0 0 18px rgba(201, 168, 76, 0.5));
     animation: wiz-breathe 2.8s ease-in-out infinite;
     margin-bottom: 22px;
     display: block;
@@ -438,7 +438,7 @@
   .p-ring {
     position: absolute;
     border-radius: 50%;
-    border: 1px solid rgba(212, 136, 42, 0.18);
+    border: 1px solid rgba(201, 168, 76, 0.18);
     width: 100px;
     height: 100px;
     top: -50px;
@@ -455,8 +455,8 @@
   }
 
   @keyframes wiz-breathe {
-    0%, 100% { filter: drop-shadow(0 0 12px rgba(212, 136, 42, 0.4)); }
-    50%       { filter: drop-shadow(0 0 28px rgba(212, 136, 42, 0.65)); }
+    0%, 100% { filter: drop-shadow(0 0 12px rgba(201, 168, 76, 0.4)); }
+    50%       { filter: drop-shadow(0 0 28px rgba(201, 168, 76, 0.65)); }
   }
 
   /* Right panel */
@@ -529,7 +529,7 @@
   .developer .card-stripe { background: var(--coral); }
 
   .research:hover  { border-color: var(--sky);    box-shadow: 0 2px 20px rgba(74, 186, 216, 0.1); }
-  .assistant:hover { border-color: var(--growth);  box-shadow: 0 2px 20px rgba(94, 201, 106, 0.1); }
+  .assistant:hover { border-color: var(--growth);  box-shadow: 0 2px 20px rgba(121, 196, 120, 0.1); }
   .developer:hover { border-color: var(--coral);   box-shadow: 0 2px 20px rgba(224, 112, 72, 0.1); }
 
   .card-body {
@@ -628,7 +628,7 @@
   .f-ring {
     position: absolute;
     border-radius: 50%;
-    border: 1px solid rgba(212, 136, 42, 0.3);
+    border: 1px solid rgba(201, 168, 76, 0.3);
     width: 48px;
     height: 48px;
     animation: wiz-ring-expand 3s ease-out infinite;
@@ -641,7 +641,7 @@
     font-size: 2.6rem;
     color: var(--accent);
     line-height: 1;
-    filter: drop-shadow(0 0 16px rgba(212, 136, 42, 0.55));
+    filter: drop-shadow(0 0 16px rgba(201, 168, 76, 0.55));
     animation: wiz-breathe 2.8s ease-in-out infinite;
     position: relative;
     z-index: 1;

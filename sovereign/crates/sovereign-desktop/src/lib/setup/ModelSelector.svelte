@@ -470,7 +470,7 @@
 
   .model-card.selected {
     border-color: var(--accent);
-    background: rgba(212, 136, 42, 0.1);
+    background: rgba(201, 168, 76, 0.1);
   }
 
   .model-name {
@@ -502,7 +502,7 @@
 
   .download-card.recommended {
     border-color: var(--accent);
-    background: rgba(212, 136, 42, 0.07);
+    background: rgba(201, 168, 76, 0.07);
   }
 
   .badge {
@@ -692,13 +692,13 @@
   .tier-premium {
     background: linear-gradient(
       90deg,
-      rgba(212, 136, 42, 0.12) 0%,
+      rgba(201, 168, 76, 0.12) 0%,
       rgba(240, 168, 72, 0.30) 40%,
-      rgba(212, 136, 42, 0.12) 80%
+      rgba(201, 168, 76, 0.12) 80%
     );
     background-size: 200% 100%;
     animation: premium-glimmer 2.5s ease-in-out infinite;
-    border: 1px solid rgba(212, 136, 42, 0.4);
+    border: 1px solid rgba(201, 168, 76, 0.4);
     color: var(--accent-light);
   }
 

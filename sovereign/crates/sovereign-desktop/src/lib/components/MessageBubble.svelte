@@ -108,7 +108,7 @@
   .assistant {
     align-self: flex-start;
     padding: 0 0 0 14px;
-    border-left: 2px solid color-mix(in srgb, var(--growth) 30%, transparent);
+    border-left: 2px solid color-mix(in srgb, var(--lavender) 35%, transparent);
   }
 
   .assistant .role-label {
@@ -118,7 +118,7 @@
     color: var(--accent);
     margin-bottom: 6px;
     text-transform: uppercase;
-    filter: drop-shadow(0 0 4px rgba(212, 136, 42, 0.25));
+    filter: drop-shadow(0 0 4px rgba(201, 168, 76, 0.30));
   }
 
   .content {

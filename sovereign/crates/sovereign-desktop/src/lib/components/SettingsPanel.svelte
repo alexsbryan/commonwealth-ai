@@ -6,6 +6,7 @@
   import MeshSettings from "./MeshSettings.svelte";
   import SkillManager from "./SkillManager.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
+  import RecipeTestingPanel from "./RecipeTestingPanel.svelte";
 
   interface Props {
     onClose: () => void;
@@ -13,7 +14,7 @@
 
   let { onClose }: Props = $props();
 
-  type Tab = "models" | "knowledge" | "mesh" | "tools" | "paths";
+  type Tab = "models" | "knowledge" | "mesh" | "tools" | "paths" | "recipes";
   let activeTab: Tab = $state("models");
 
   let config: DesktopConfig | null = $state(null);
@@ -77,6 +78,7 @@
     { id: "mesh",      label: "Mesh"      },
     { id: "tools",     label: "Tools"     },
     { id: "paths",     label: "Paths"     },
+    { id: "recipes",   label: "Recipes"   },
   ];
 </script>
 
@@ -126,6 +128,12 @@
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
               <circle cx="6" cy="6" r="3.5" stroke="currentColor" stroke-width="1.3"/>
               <path d="M8.5 8.5l4.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          {:else if tab.id === "recipes"}
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+              <path d="M5 2h5v2l1 1v7H4V5l1-1V2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+              <path d="M6 2v2h3V2" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>
+              <path d="M6 8h3M6 10.5h2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
             </svg>
           {:else}
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
@@ -408,6 +416,14 @@
           <p class="loading-msg">Loading…</p>
         {/if}
 
+        <!-- ──────────────── RECIPES ──────────────── -->
+        {#if activeTab === "recipes"}
+          <p class="tab-intro">
+            Validate and test corpus recipe files before submitting them. Testing downloads a small sample and runs the full extraction pipeline locally.
+          </p>
+          <RecipeTestingPanel />
+        {/if}
+
       </div><!-- /tab-body -->
 
       <!-- ── Save bar (only on tabs that need it) ── -->
@@ -618,7 +634,7 @@
 
   .slot-status-badge--req {
     color: var(--accent);
-    border-color: rgba(212, 136, 42, 0.3);
+    border-color: rgba(201, 168, 76, 0.3);
   }
 
   .slot-card-desc {
@@ -674,18 +690,18 @@
 
   .slot-btn--add {
     background: var(--accent-dim);
-    border-color: rgba(212, 136, 42, 0.35);
+    border-color: rgba(201, 168, 76, 0.35);
     color: var(--accent-light);
   }
 
   .slot-btn--add:hover {
-    background: rgba(212, 136, 42, 0.2);
+    background: rgba(201, 168, 76, 0.2);
     border-color: var(--accent);
   }
 
   .slot-btn--clear:hover {
-    border-color: var(--error, #D44848);
-    color: var(--error, #D44848);
+    border-color: var(--error);
+    color: var(--error);
   }
 
   /* ── Model picker row ── */
@@ -747,7 +763,7 @@
     margin-top: 10px;
     padding: 9px 12px;
     background: var(--accent-dim);
-    border: 1px solid rgba(212, 136, 42, 0.25);
+    border: 1px solid rgba(201, 168, 76, 0.25);
     border-radius: var(--radius);
     font-size: 0.76rem;
     color: var(--accent-light);

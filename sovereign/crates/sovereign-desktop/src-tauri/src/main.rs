@@ -119,6 +119,8 @@ fn main() {
             commands::remove_corpus,
             commands::get_corpus_progress,
             commands::get_corpus_health,
+            commands::recipe_validate,
+            commands::recipe_test,
             mesh_commands::mesh_create,
             mesh_commands::mesh_join,
             mesh_commands::mesh_preview_join_link,

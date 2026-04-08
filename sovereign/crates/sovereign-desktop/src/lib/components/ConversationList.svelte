@@ -154,7 +154,7 @@
     color: var(--accent);
     font-size: 1.1rem;
     line-height: 1;
-    filter: drop-shadow(0 0 6px rgba(212, 136, 42, 0.45));
+    filter: drop-shadow(0 0 6px rgba(201, 168, 76, 0.50));
     flex-shrink: 0;
   }
 

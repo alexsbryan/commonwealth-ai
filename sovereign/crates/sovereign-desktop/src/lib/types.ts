@@ -306,6 +306,32 @@ export interface MeshStateResponse {
   contribution: ContributionSummary | null;
 }
 
+// ─── Recipe Testing ──────────────────────────────────────────
+
+export interface RecipeValidateResult {
+  passed: boolean;
+  errors: string[];
+  warnings: string[];
+  corpus_id: string;
+  corpus_name: string;
+  source_reachable: boolean | null;
+}
+
+export interface RecipeTestResult {
+  passed: boolean;
+  warnings: string[];
+  errors: string[];
+  recipe_id: string;
+  recipe_name: string;
+  records_attempted: number;
+  records_succeeded: number;
+  extraction_rate: number;
+  total_chunks: number;
+  avg_chars: number;
+  report_path: string;
+  report_markdown: string;
+}
+
 // ─── UI State ────────────────────────────────────────────────
 
 export interface TaskStep {

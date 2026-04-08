@@ -189,8 +189,8 @@
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(212, 136, 42, 0.08) 0%, transparent 65%),
-      radial-gradient(ellipse 30% 25% at 30% 65%, rgba(94, 201, 106, 0.05) 0%, transparent 60%);
+      radial-gradient(ellipse 55% 45% at 50% 50%, rgba(155, 135, 196, 0.10) 0%, transparent 65%),
+      radial-gradient(ellipse 35% 30% at 25% 70%, rgba(201, 168, 76,  0.07) 0%, transparent 60%);
     pointer-events: none;
   }
 
@@ -212,10 +212,11 @@
     margin-bottom: 22px;
   }
 
+  /* Lavender rings expanding from the gold center mark */
   .ring {
     position: absolute;
     border-radius: 50%;
-    border: 1px solid rgba(212, 136, 42, 0.35);
+    border: 1px solid rgba(155, 135, 196, 0.40);
     width: 50px;
     height: 50px;
     animation: ring-expand 3s ease-out infinite;
@@ -233,7 +234,7 @@
     font-size: 2.8rem;
     color: var(--accent);
     line-height: 1;
-    filter: drop-shadow(0 0 16px rgba(212, 136, 42, 0.55));
+    filter: drop-shadow(0 0 16px rgba(201, 168, 76, 0.55));
     animation: mark-breathe 2.8s ease-in-out infinite;
     position: relative;
     z-index: 1;
@@ -289,11 +290,11 @@
   @keyframes mark-breathe {
     0%, 100% {
       transform: scale(1);
-      filter: drop-shadow(0 0 10px rgba(212, 136, 42, 0.4));
+      filter: drop-shadow(0 0 10px rgba(201, 168, 76, 0.42));
     }
     50% {
       transform: scale(1.06);
-      filter: drop-shadow(0 0 26px rgba(212, 136, 42, 0.65));
+      filter: drop-shadow(0 0 28px rgba(201, 168, 76, 0.68));
     }
   }
 

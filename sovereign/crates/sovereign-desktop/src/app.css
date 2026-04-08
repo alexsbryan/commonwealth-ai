@@ -1,58 +1,66 @@
-/* ─── Design tokens — Warm Dark Solarpunk ────────────────────── */
-/* Direction: golden hour through the canopy. Warm olive-earth    */
-/* darks, rich amber accent, vivid leaf green, bright sky blue.  */
-/* Bold coral as a spare surprise. All text passes WCAG AA.      */
+/* ─── Design tokens — The Lavender Court ─────────────────────── */
+/* Direction: English lavender field at dusk. Warm candlelight     */
+/* through amethyst stone. The authority of "Sovereign" read in   */
+/* the purple depth of the hall; the warmth of "Commonwealth"     */
+/* in the gold that crosses it. Grain of velvet. No green.        */
 :root {
-  /* Backgrounds — warm dark earth, golden-green undertones */
-  --bg-root:       #0B0E07;
-  --bg-primary:    #101408;
-  --bg-secondary:  #0D1006;
-  --bg-surface:    #181D0D;
-  --bg-elevated:   #202A12;
-  --bg-input:      #141708;
+  /* ── Backgrounds — warm plum-dark, amethyst undertone ── */
+  /* Key shift: no green tint in any dark. Warm purple-red base.   */
+  --bg-root:       #0E0B15;
+  --bg-primary:    #130F1B;
+  --bg-secondary:  #100D17;
+  --bg-surface:    #1C1729;
+  --bg-elevated:   #231D38;
+  --bg-input:      #150F1E;
 
-  /* Text — warm cream hierarchy, all WCAG AA+ on dark bg */
-  --text-primary:   #E8DFCA;   /* ~14.6:1 contrast */
-  --text-secondary: #9DBD82;   /* ~9.5:1 contrast  */
-  --text-muted:     #6E8856;   /* ~5.3:1 contrast  */
+  /* ── Text — lavender-cream hierarchy, WCAG AA+ ── */
+  --text-primary:   #EDE8F6;   /* ~15.2:1 on bg-primary */
+  --text-secondary: #AFA3CD;   /* ~7.8:1  */
+  --text-muted:     #6B6087;   /* ~4.6:1  */
 
-  /* Amber solar — primary accent (warmer, more marigold) */
-  --accent:        #D4882A;
-  --accent-light:  #E8A040;
-  --accent-hover:  #E89830;
-  --accent-dim:    rgba(212, 136, 42, 0.15);
-  --accent-glow:   rgba(212, 136, 42, 0.07);
+  /* ── Gold — sovereign light; sunlight on lavender stone ── */
+  --accent:        #C9A84C;
+  --accent-light:  #DFC068;
+  --accent-hover:  #D4B257;
+  --accent-dim:    rgba(201, 168, 76, 0.14);
+  --accent-glow:   rgba(201, 168, 76, 0.06);
 
-  /* Vivid leaf — secondary accent (brighter, more saturated) */
-  --growth:        #5EC96A;
-  --growth-dim:    rgba(94, 201, 106, 0.13);
-  --growth-glow:   rgba(94, 201, 106, 0.06);
+  /* ── Lavender — the court's signature; the crown color ── */
+  --lavender:      #9B87C4;
+  --lavender-light:#C4B8E8;
+  --lavender-dim:  rgba(155, 135, 196, 0.14);
+  --lavender-glow: rgba(155, 135, 196, 0.06);
 
-  /* Afternoon sky — tertiary / info */
-  --sky:           #4ABAD8;
-  --sky-dim:       rgba(74, 186, 216, 0.12);
+  /* ── Sage — botanical life, the solarpunk thread ── */
+  --growth:        #79C478;
+  --growth-dim:    rgba(121, 196, 120, 0.13);
+  --growth-glow:   rgba(121, 196, 120, 0.06);
 
-  /* Coral — bold spare accent, used sparingly */
-  --coral:         #E07048;
-  --coral-dim:     rgba(224, 112, 72, 0.12);
+  /* ── Periwinkle — afternoon sky over the fields ── */
+  --sky:           #8BAFD4;
+  --sky-dim:       rgba(139, 175, 212, 0.12);
 
-  /* Semantic */
-  --success:  #5EC96A;
-  --warning:  #D4882A;
-  --error:    #D44848;
+  /* ── Terracotta — warm spare accent (developer / builder role) ── */
+  --coral:     #C8714E;
+  --coral-dim: rgba(200, 113, 78, 0.13);
 
-  /* Borders — warm olive, not cold */
-  --border:        #171D0C;
-  --border-mid:    #20280F;
-  --border-bright: #2E3C18;
+  /* ── Semantic ── */
+  --success:  #79C478;
+  --warning:  #C9A84C;
+  --error:    #C95F78;   /* rose-plum: harmonizes vs. a jarring red */
 
-  /* Message bubbles */
-  --user-bubble:   #182710;
+  /* ── Borders — warm amethyst tint ── */
+  --border:        #1E1832;
+  --border-mid:    #2B2248;
+  --border-bright: #3D3364;
 
-  /* Text on accent backgrounds — dark for contrast (amber bg = ~7:1 on dark) */
-  --text-on-accent: #0E1108;
+  /* ── Message bubbles ── */
+  --user-bubble:   #1E1838;
 
-  /* Radii */
+  /* ── Text on accent backgrounds ── */
+  --text-on-accent: #0E0B15;
+
+  /* ── Radii ── */
   --radius:    6px;
   --radius-lg: 10px;
   --radius-xl: 18px;
@@ -73,20 +81,40 @@ html, body, #app {
 
 /* ─── Base ───────────────────────────────────────────────────── */
 body {
-  font-family: 'Syne', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--bg-root);
-  /* Warm organic blooms — amber & leaf, golden hour feel */
+
+  /* Lavender bloom upper-right (window light through stone),      */
+  /* gold pool lower-left (candlelight on the hearth),            */
+  /* faint purple breath at center.                               */
   background-image:
-    radial-gradient(ellipse 55% 38% at 18% 72%, rgba(94, 201, 106, 0.055) 0%, transparent 65%),
-    radial-gradient(ellipse 42% 32% at 82% 18%, rgba(212, 136, 42, 0.055) 0%, transparent 60%),
-    radial-gradient(ellipse 28% 28% at 55% 88%, rgba(212, 136, 42, 0.03) 0%, transparent 55%),
-    linear-gradient(rgba(46, 60, 24, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(46, 60, 24, 0.025) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+    radial-gradient(ellipse 62% 50% at 88% 6%,  rgba(155, 135, 196, 0.13) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 42% at 10% 90%, rgba(201, 168, 76,  0.10) 0%, transparent 65%),
+    radial-gradient(ellipse 40% 40% at 55% 52%, rgba(155, 135, 196, 0.04) 0%, transparent 65%),
+    radial-gradient(ellipse 28% 26% at 28% 16%, rgba(201, 168, 76,  0.04) 0%, transparent 55%);
+  background-size: 100% 100%;
   background-attachment: fixed;
+
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.55;
+}
+
+/* ── Velvet grain ─────────────────────────────────────────────── */
+/* A fixed noise overlay at 3% opacity gives the deep backgrounds */
+/* a cloth-like quality — the difference between a photograph of  */
+/* velvet and velvet itself.                                      */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.030;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.80' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 192px 192px;
+  mix-blend-mode: overlay;
 }
 
 /* ─── Form resets ────────────────────────────────────────────── */
@@ -98,7 +126,7 @@ button {
   font: inherit;
 }
 
-input, textarea {
+input, textarea, select {
   font: inherit;
   color: inherit;
 }
@@ -118,18 +146,18 @@ input, textarea {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--lavender);
 }
 
 /* ─── Focus ──────────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--lavender);
   outline-offset: 2px;
   border-radius: var(--radius);
 }
 
 /* ─── Selection ──────────────────────────────────────────────── */
 ::selection {
-  background: var(--accent-dim);
+  background: var(--lavender-dim);
   color: var(--text-primary);
 }
