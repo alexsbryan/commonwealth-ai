@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use crate::error::{Error, Result};
 use crate::progress::{IngestProgress, ProgressCallback};
 
-const HF_USER_AGENT: &str = "CorpusEngine/0.1 (+https://sovereign.dev/corpus-engine)";
+pub(crate) const HF_USER_AGENT: &str = "CorpusEngine/0.1 (+https://sovereign.dev/corpus-engine)";
 
 pub struct HuggingFaceDatasetAcquirer {
     pub repo: String,
@@ -155,7 +155,7 @@ impl HuggingFaceDatasetAcquirer {
     /// 1. Try the siblings API (works for flat repos like `manu/project_gutenberg`).
     /// 2. If no shards found, try the parquet conversion API (works for
     ///    config-based repos like `wikimedia/wikipedia`).
-    async fn list_shards(&self, client: &reqwest::Client) -> Result<Vec<(String, String)>> {
+    pub(crate) async fn list_shards(&self, client: &reqwest::Client) -> Result<Vec<(String, String)>> {
         // ── Pass 1: siblings API ──────────────────────────────────────
         let siblings_shards = self.list_from_siblings(client).await?;
         if !siblings_shards.is_empty() {

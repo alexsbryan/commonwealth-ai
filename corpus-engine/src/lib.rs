@@ -21,6 +21,7 @@ pub mod progress;
 pub mod recipe;
 pub mod safety;
 pub mod sharding;
+pub mod testing;
 pub mod types;
 pub mod update;
 
@@ -36,6 +37,11 @@ pub use error::{Error, Result};
 pub use index::{CorpusIndex, InsertChunk, StoredChunk, StoredChunkWithMetadata};
 pub use progress::{IngestProgress, ProgressCallback};
 pub use recipe::{EnrichmentConfig, Recipe};
+pub use testing::{
+    AcquisitionResult, ChunkingResult, CorpusEstimate, ExtractionResult,
+    FailedRecord, SampleChunk, TestOptions, TestQueryResult, TestReport,
+    ValidationResult,
+};
 pub use types::{
     BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
     InferenceFn, IngestResult, ScoredChunk, ScoredClaim, ShardInfo,

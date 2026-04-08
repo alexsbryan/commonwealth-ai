@@ -1,0 +1,35 @@
+[corpus]
+id = "openalex"
+name = "OpenAlex"
+description = "Open scholarly metadata from the OpenAlex catalogue."
+license = "CC0-1.0"
+mesh_sharing = true
+size_compressed_gb = 330.0
+size_indexed_gb = 500.0
+
+# OpenAlex distributes its works snapshot as a directory of gzip-compressed
+# JSONL files. The BulkDownload acquirer fetches the manifest at this URL
+# and downloads all listed files.
+[acquire]
+type = "bulk_download"
+url = "https://openalex.s3.amazonaws.com/data/works/"
+resume = true
+
+[extract]
+type = "jsonl"
+# abstract_inverted_index stores the abstract as an inverted word-position map.
+# The JSONL extractor reconstructs the abstract text from this field.
+content_field = "abstract_inverted_index"
+title_field = "title"
+decompress = "gzip"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+embedding_model = "nomic-embed-text-v2"
+embedding_dimensions = 768

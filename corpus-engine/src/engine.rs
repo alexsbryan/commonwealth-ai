@@ -800,7 +800,7 @@ impl CorpusEngine {
         }
     }
 
-    async fn acquire_source(
+    pub(crate) async fn acquire_source(
         &self,
         recipe: &Recipe,
         download_dir: &Path,
@@ -830,7 +830,7 @@ impl CorpusEngine {
         }
     }
 
-    fn make_extractor(&self, config: &ExtractorConfig) -> Box<dyn Extractor> {
+    pub(crate) fn make_extractor(&self, config: &ExtractorConfig) -> Box<dyn Extractor> {
         match config {
             ExtractorConfig::MediawikiXml {
                 namespace_filter,
@@ -916,7 +916,7 @@ impl CorpusEngine {
         }
     }
 
-    fn make_chunker(&self, config: &ChunkerConfig) -> Box<dyn Chunker> {
+    pub(crate) fn make_chunker(&self, config: &ChunkerConfig) -> Box<dyn Chunker> {
         match config {
             ChunkerConfig::Paragraph {
                 max_chars,
@@ -943,6 +943,19 @@ impl CorpusEngine {
                 })
             }
         }
+    }
+
+    /// Run the recipe test harness against a recipe file.
+    ///
+    /// Downloads a small sample, runs extract → chunk → (optionally embed+search),
+    /// and returns a structured report. The report can be serialized to Markdown
+    /// via `TestReport::to_markdown()` for inclusion in a PR.
+    pub async fn test_recipe(
+        &self,
+        recipe_path: &std::path::Path,
+        options: &crate::testing::TestOptions,
+    ) -> Result<crate::testing::TestReport> {
+        crate::testing::run_test(self, recipe_path, options).await
     }
 
     fn find_index_path(&self, corpus_id: &str) -> Result<PathBuf> {
@@ -989,7 +1002,7 @@ pub(crate) fn blake3_hex(s: &str) -> String {
 /// Strip model-generated artifacts from raw corpus text before chunking.
 /// Some HuggingFace datasets contain LLM-generated content with `<think>`
 /// blocks; storing those verbatim pollutes every chunk and breaks enrichment.
-fn normalize_content(s: &str) -> String {
+pub(crate) fn normalize_content(s: &str) -> String {
     if !s.contains("<think>") {
         return s.to_string();
     }
