@@ -297,8 +297,11 @@ impl WikipediaBatchIterator {
         let url_col = batch.column_by_name(&self.url_column);
         let abstract_col = batch.column_by_name("abstract");
 
-        // ── Maintenance tags from nested struct ─────────
-        let maintenance = extract_maintenance_tags(batch);
+        // ── Top-level page ID column ────────────────────
+        let identifier_col = batch.column_by_name("identifier");
+
+        // ── Per-article signals (maintenance tags + revision ID + QID) ──
+        let signals_arr = extract_article_signals(batch);
 
         // ── Sections list column ─────────────────────────
         let sections_col = batch.column_by_name("sections");
@@ -312,9 +315,11 @@ impl WikipediaBatchIterator {
 
             let url = get_string_opt(url_col, row).unwrap_or_default();
 
-            // Maintenance tags for this article (article-level signals,
-            // same for every chunk from this article).
-            let mt = maintenance.as_ref().map(|m| m.row(row)).unwrap_or_default();
+            // Article-level signals (same for every chunk from this article).
+            let signals = signals_arr.as_ref().map(|a| a.row(row)).unwrap_or_default();
+
+            // Page ID from top-level identifier column.
+            let page_id = get_i64_opt(identifier_col, row);
 
             // ── Lead / abstract chunk ───────────────────
             if let Some(abstract_text) = get_string_opt(abstract_col, row) {
@@ -325,12 +330,15 @@ impl WikipediaBatchIterator {
                         section_path: vec![],
                         section_depth: 0,
                         section_type: "lead".to_string(),
-                        citation_needed_count: mt.citation_needed,
-                        pov_count: mt.pov,
-                        clarification_needed_count: mt.clarification,
-                        update_count: mt.update,
-                        is_flagged_stable: mt.is_flagged_stable,
+                        citation_needed_count: signals.citation_needed,
+                        pov_count: signals.pov,
+                        clarification_needed_count: signals.clarification,
+                        update_count: signals.update,
+                        is_flagged_stable: signals.is_flagged_stable,
                         outgoing_links: vec![],
+                        revision_id: signals.revision_id,
+                        wikidata_qid: signals.wikidata_qid.clone(),
+                        page_id,
                     };
                     docs.push(ExtractedDoc {
                         title: Some(title.clone()),
@@ -349,7 +357,8 @@ impl WikipediaBatchIterator {
                     row,
                     &title,
                     &url,
-                    &mt,
+                    &signals,
+                    page_id,
                     &self.controversy_patterns,
                     &self.factual_patterns,
                     &[],  // parent path
@@ -363,28 +372,36 @@ impl WikipediaBatchIterator {
     }
 }
 
-// ─── Maintenance tag extraction ─────────────────────────
+// ─── Per-article signals extraction ─────────────────────
 
+/// Signals extracted per article row: maintenance tags + revision/entity IDs.
 #[derive(Default, Clone)]
-struct MaintenanceTags {
+struct PerArticleSignals {
     citation_needed: Option<i64>,
     pov: Option<i64>,
     clarification: Option<i64>,
     update: Option<i64>,
     is_flagged_stable: Option<bool>,
+    /// Wikipedia revision ID from `version.identifier`.
+    revision_id: Option<i64>,
+    /// Wikidata QID from `main_entity.identifier`.
+    wikidata_qid: Option<String>,
 }
 
-struct MaintenanceTagsArray {
+struct PerArticleSignalsArray {
     citation_needed: Option<arrow_array::PrimitiveArray<Int64Type>>,
     pov: Option<arrow_array::PrimitiveArray<Int64Type>>,
     clarification: Option<arrow_array::PrimitiveArray<Int64Type>>,
     update: Option<arrow_array::PrimitiveArray<Int64Type>>,
     is_flagged_stable: Option<arrow_array::BooleanArray>,
+    revision_id: Option<arrow_array::PrimitiveArray<Int64Type>>,
+    /// Pre-extracted per-row strings (handles both Utf8 and LargeUtf8).
+    wikidata_qid: Vec<Option<String>>,
 }
 
-impl MaintenanceTagsArray {
-    fn row(&self, i: usize) -> MaintenanceTags {
-        MaintenanceTags {
+impl PerArticleSignalsArray {
+    fn row(&self, i: usize) -> PerArticleSignals {
+        PerArticleSignals {
             citation_needed: self
                 .citation_needed
                 .as_ref()
@@ -410,17 +427,22 @@ impl MaintenanceTagsArray {
                 .as_ref()
                 .filter(|a| !a.is_null(i))
                 .map(|a| a.value(i)),
+            revision_id: self
+                .revision_id
+                .as_ref()
+                .filter(|a| !a.is_null(i))
+                .map(|a| a.value(i)),
+            wikidata_qid: self.wikidata_qid.get(i).and_then(|v| v.clone()),
         }
     }
 }
 
-fn extract_maintenance_tags(
+fn extract_article_signals(
     batch: &arrow::array::RecordBatch,
-) -> Option<MaintenanceTagsArray> {
+) -> Option<PerArticleSignalsArray> {
     let version_col = batch.column_by_name("version")?;
     let version = try_as_struct_ref(version_col)?;
 
-    // Try to get is_flagged_stable from version struct
     let is_flagged_stable = version
         .column_by_name("is_flagged_stable")
         .and_then(|c| {
@@ -428,6 +450,11 @@ fn extract_maintenance_tags(
                 .downcast_ref::<arrow_array::BooleanArray>()
                 .cloned()
         });
+
+    // Revision ID lives at version.identifier (Int64).
+    let revision_id = version
+        .column_by_name("identifier")
+        .and_then(|c| c.as_any().downcast_ref::<arrow_array::Int64Array>().cloned());
 
     let mt_col = version.column_by_name("maintenance_tags")?;
     let mt = try_as_struct_ref(mt_col)?;
@@ -437,12 +464,39 @@ fn extract_maintenance_tags(
             .and_then(|c| c.as_any().downcast_ref::<arrow_array::Int64Array>().cloned())
     };
 
-    Some(MaintenanceTagsArray {
+    // Wikidata QID lives at main_entity.identifier (Utf8 or LargeUtf8).
+    let num_rows = batch.num_rows();
+    let wikidata_qid: Vec<Option<String>> = batch
+        .column_by_name("main_entity")
+        .and_then(|c| try_as_struct_ref(c))
+        .and_then(|s| s.column_by_name("identifier").cloned())
+        .map(|col| {
+            (0..num_rows)
+                .map(|i| {
+                    if col.is_null(i) {
+                        return None;
+                    }
+                    col.as_any()
+                        .downcast_ref::<arrow_array::StringArray>()
+                        .map(|a| a.value(i).to_string())
+                        .or_else(|| {
+                            col.as_any()
+                                .downcast_ref::<arrow_array::LargeStringArray>()
+                                .map(|a| a.value(i).to_string())
+                        })
+                })
+                .collect()
+        })
+        .unwrap_or_else(|| vec![None; num_rows]);
+
+    Some(PerArticleSignalsArray {
         citation_needed: get_i64("citation_needed_count"),
         pov: get_i64("pov_count"),
         clarification: get_i64("clarification_needed_count"),
         update: get_i64("update_count"),
         is_flagged_stable,
+        revision_id,
+        wikidata_qid,
     })
 }
 
@@ -500,7 +554,8 @@ fn extract_sections_from_list(
     row: usize,
     article_title: &str,
     article_url: &str,
-    mt: &MaintenanceTags,
+    signals: &PerArticleSignals,
+    page_id: Option<i64>,
     controversy_patterns: &[String],
     factual_patterns: &[String],
     parent_path: &[String],
@@ -537,7 +592,8 @@ fn extract_sections_from_list(
         end,
         article_title,
         article_url,
-        mt,
+        signals,
+        page_id,
         controversy_patterns,
         factual_patterns,
         parent_path,
@@ -552,7 +608,8 @@ fn extract_sections_range(
     end: usize,
     article_title: &str,
     article_url: &str,
-    mt: &MaintenanceTags,
+    signals: &PerArticleSignals,
+    page_id: Option<i64>,
     controversy_patterns: &[String],
     factual_patterns: &[String],
     parent_path: &[String],
@@ -590,12 +647,15 @@ fn extract_sections_range(
                     section_path: path.clone(),
                     section_depth: depth,
                     section_type: section_type.clone(),
-                    citation_needed_count: mt.citation_needed,
-                    pov_count: mt.pov,
-                    clarification_needed_count: mt.clarification,
-                    update_count: mt.update,
-                    is_flagged_stable: mt.is_flagged_stable,
+                    citation_needed_count: signals.citation_needed,
+                    pov_count: signals.pov,
+                    clarification_needed_count: signals.clarification,
+                    update_count: signals.update,
+                    is_flagged_stable: signals.is_flagged_stable,
                     outgoing_links: outgoing_links.clone(),
+                    revision_id: signals.revision_id,
+                    wikidata_qid: signals.wikidata_qid.clone(),
+                    page_id,
                 };
 
                 out.push(ExtractedDoc {
@@ -619,7 +679,8 @@ fn extract_sections_range(
                 idx,
                 article_title,
                 article_url,
-                mt,
+                signals,
+                page_id,
                 controversy_patterns,
                 factual_patterns,
                 &path,
@@ -747,6 +808,16 @@ fn get_string_opt(col: Option<&ArrayRef>, row: usize) -> Option<String> {
         return Some(s.value(row).to_string());
     }
     None
+}
+
+fn get_i64_opt(col: Option<&ArrayRef>, row: usize) -> Option<i64> {
+    let col: &dyn Array = col?.as_ref();
+    if col.is_null(row) {
+        return None;
+    }
+    col.as_any()
+        .downcast_ref::<arrow_array::Int64Array>()
+        .map(|a| a.value(row))
 }
 
 /// Convert a section name to a URL fragment.

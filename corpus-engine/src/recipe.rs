@@ -411,38 +411,54 @@ pub fn builtin_recipes() -> Vec<Recipe> {
     vec![
         // 1. Wikipedia
         //
-        // Sourced from the wikimedia/wikipedia dataset on HuggingFace, which
-        // provides a clean pre-processed snapshot of English Wikipedia as 41
-        // parquet shards (~6.4M articles, 11.6 GB compressed). Uses the
-        // HuggingFaceDataset acquirer's parquet API fallback to enumerate shards
-        // for this config-based repo. The `url` column is passed through so each
-        // search result links back to the source Wikipedia article.
+        // Unified recipe using wikimedia/structured-wikipedia (September 2024).
+        // Replaces the old flat wikimedia/wikipedia (20231101.en) and the
+        // separate structured_wikipedia recipe. Uses WikipediaStructuredExtractor
+        // to capture section structure, editorial maintenance tags, Wikidata QIDs,
+        // revision IDs, and inter-article links. Delta updates driven by revision
+        // IDs via omarkamali/wikipedia-monthly manifest.
         Recipe {
             corpus: CorpusMeta {
                 id: "wikipedia".to_string(),
                 name: "Wikipedia (English)".to_string(),
-                description: "English Wikipedia articles from the November 2023 snapshot.".to_string(),
+                description: "English Wikipedia articles from the September 2024 structured \
+                    snapshot. Includes section structure, editorial maintenance tags \
+                    (citation_needed, pov, clarification), Wikidata QIDs, revision IDs, \
+                    and inter-article link graph. Delta updates via monthly refresh."
+                    .to_string(),
                 license: "CC-BY-SA-4.0".to_string(),
                 mesh_sharing: true,
-                size_compressed_gb: 11.6,
-                size_indexed_gb: 45.0,
+                size_compressed_gb: 18.0,
+                size_indexed_gb: 60.0,
             },
             acquire: AcquirerConfig::HuggingFaceDataset {
-                repo: "wikimedia/wikipedia".to_string(),
-                subset: Some("20231101.en".to_string()),
+                repo: "wikimedia/structured-wikipedia".to_string(),
+                subset: Some("20240916.en".to_string()),
             },
-            extract: ExtractorConfig::Parquet {
-                content_column: "text".to_string(),
-                label_column: Some("title".to_string()),
-                url_column: Some("url".to_string()),
+            extract: ExtractorConfig::WikipediaStructured {
+                title_column: "name".to_string(),
+                url_column: "url".to_string(),
+                controversy_patterns: default_controversy_patterns(),
+                factual_patterns: default_factual_patterns(),
+                structural_signals: true,
             },
             chunk: ChunkerConfig::Paragraph {
-                max_chars: 2048,
-                overlap_chars: 256,
+                max_chars: 1024,
+                overlap_chars: 128,
             },
             index: IndexConfig::default(),
-            enrichment: None,
-            update: None,
+            enrichment: Some(EnrichmentConfig {
+                enabled: true,
+                claim_extraction_prompt: WIKIPEDIA_CLAIM_PROMPT.to_string(),
+                extract_relationships: false,
+                relationship_extraction_prompt: None,
+                relationship_similarity_threshold: 0.55,
+                max_relationship_candidates: 50_000,
+            }),
+            update: Some(UpdateConfig {
+                manifest_url: "https://huggingface.co/datasets/omarkamali/wikipedia-monthly/resolve/main/manifest.json".to_string(),
+                auto_update: true,
+            }),
         },
         // 2. Stack Exchange
         Recipe {
@@ -580,49 +596,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             }),
             update: None,
         },
-        // 6. Wikipedia (Structured) — editorial-quality signals
-        //
-        // Sourced from wikimedia/structured-wikipedia on HuggingFace. Unlike
-        // the plain wikimedia/wikipedia dataset, this version includes nested
-        // section structure, per-article maintenance tags (citation_needed_count,
-        // pov_count, etc.), and per-section inter-article links. These editorial
-        // signals are stored as chunk metadata and used by the post-ingestion
-        // structural enrichment pipeline (Layers 1+2). No LLM is required for
-        // Layers 1+2; Layer 3 is activated separately via the [enrichment] block.
-        Recipe {
-            corpus: CorpusMeta {
-                id: "structured_wikipedia".to_string(),
-                name: "Wikipedia (English, Structured)".to_string(),
-                description: "English Wikipedia with editorial quality signals: \
-                    maintenance tags (citation_needed, pov, clarification), \
-                    section classification, and inter-article link graph. \
-                    Sourced from wikimedia/structured-wikipedia (September 2024 snapshot)."
-                    .to_string(),
-                license: "CC-BY-SA-4.0".to_string(),
-                mesh_sharing: true,
-                size_compressed_gb: 18.0,
-                size_indexed_gb: 60.0,
-            },
-            acquire: AcquirerConfig::HuggingFaceDataset {
-                repo: "wikimedia/structured-wikipedia".to_string(),
-                subset: Some("20240916.en".to_string()),
-            },
-            extract: ExtractorConfig::WikipediaStructured {
-                title_column: "name".to_string(),
-                url_column: "url".to_string(),
-                controversy_patterns: default_controversy_patterns(),
-                factual_patterns: default_factual_patterns(),
-                structural_signals: true,
-            },
-            chunk: ChunkerConfig::Paragraph {
-                max_chars: 1024,
-                overlap_chars: 128,
-            },
-            index: IndexConfig::default(),
-            enrichment: None,
-            update: None,
-        },
-        // 7. CRS Reports
+        // 6. CRS Reports
         Recipe {
             corpus: CorpusMeta {
                 id: "crs_reports".to_string(),
@@ -654,8 +628,18 @@ pub fn builtin_recipes() -> Vec<Recipe> {
 }
 
 // ---------------------------------------------------------------------------
-// Built-in enrichment prompts (SEP)
+// Built-in enrichment prompts
 // ---------------------------------------------------------------------------
+
+const WIKIPEDIA_CLAIM_PROMPT: &str = r#"Extract factual claims from this Wikipedia passage.
+
+Focus on verifiable, encyclopedic facts: dates, relationships, quantities, events,
+classifications, and biographical details. Emit only the core claim — do not include
+editorial signals ("according to", "may be", "is believed to") in the claim text itself.
+Skip purely navigational content, maintenance notices, and disambiguation text.
+
+Return one claim per line, each starting with '-'. Return an empty list if the
+passage contains no verifiable factual claims."#;
 
 const SEP_CLAIM_PROMPT: &str = r#"Extract propositional claims from this encyclopedia passage.
 
@@ -794,7 +778,7 @@ type = "paragraph"
     #[test]
     fn builtin_recipes_count() {
         let recipes = builtin_recipes();
-        assert_eq!(recipes.len(), 7);
+        assert_eq!(recipes.len(), 6);
     }
 
     #[test]
@@ -805,7 +789,6 @@ type = "paragraph"
             "openalex",
             "gutenberg",
             "sep",
-            "structured_wikipedia",
             "crs_reports",
         ];
         let recipes = builtin_recipes();
@@ -971,14 +954,20 @@ type = "paragraph"
     }
 
     #[test]
-    fn structured_wikipedia_builtin_recipe_parses() {
+    fn wikipedia_unified_recipe_uses_structured_dataset() {
         let recipes = builtin_recipes();
-        let sw = recipes
+        let wp = recipes
             .iter()
-            .find(|r| r.corpus.id == "structured_wikipedia")
-            .expect("structured_wikipedia recipe must exist");
+            .find(|r| r.corpus.id == "wikipedia")
+            .expect("wikipedia recipe must exist");
 
-        match &sw.acquire {
+        // No stale structured_wikipedia recipe should exist.
+        assert!(
+            recipes.iter().all(|r| r.corpus.id != "structured_wikipedia"),
+            "structured_wikipedia recipe should have been removed"
+        );
+
+        match &wp.acquire {
             AcquirerConfig::HuggingFaceDataset { repo, subset } => {
                 assert_eq!(repo, "wikimedia/structured-wikipedia");
                 assert_eq!(subset.as_deref(), Some("20240916.en"));
@@ -986,7 +975,7 @@ type = "paragraph"
             other => panic!("expected HuggingFaceDataset, got {other:?}"),
         }
 
-        match &sw.extract {
+        match &wp.extract {
             ExtractorConfig::WikipediaStructured {
                 title_column,
                 url_column,
@@ -995,12 +984,18 @@ type = "paragraph"
             } => {
                 assert_eq!(title_column, "name");
                 assert_eq!(url_column, "url");
-                assert!(*structural_signals, "structural_signals must be true by default");
+                assert!(*structural_signals, "structural_signals must be true");
             }
             other => panic!("expected WikipediaStructured extractor, got {other:?}"),
         }
 
-        assert!(sw.enrichment.is_none() || !sw.enrichment.as_ref().unwrap().enabled);
+        let enrichment = wp.enrichment.as_ref().expect("wikipedia must have enrichment");
+        assert!(enrichment.enabled);
+        assert!(!enrichment.claim_extraction_prompt.is_empty());
+
+        let update = wp.update.as_ref().expect("wikipedia must have update config");
+        assert!(update.auto_update);
+        assert!(update.manifest_url.contains("omarkamali"));
     }
 
     #[test]
@@ -1037,14 +1032,14 @@ type = "paragraph"
         }
     }
 
-    /// Recipes that don't request enrichment must explicitly opt out
-    /// (None or `enabled = false`). This catches recipes that pick up
-    /// stray enrichment configs by accident.
+    /// Only SEP and Wikipedia intentionally enable enrichment. All other
+    /// recipes must not activate it by default.
     #[test]
     fn non_sep_builtin_recipes_skip_enrichment_by_default() {
+        let enrichment_allowed = ["sep", "wikipedia"];
         let recipes = builtin_recipes();
         for recipe in &recipes {
-            if recipe.corpus.id == "sep" {
+            if enrichment_allowed.contains(&recipe.corpus.id.as_str()) {
                 continue;
             }
             let enrichment_active = recipe
@@ -1054,7 +1049,7 @@ type = "paragraph"
                 .unwrap_or(false);
             assert!(
                 !enrichment_active,
-                "Recipe '{}' has enrichment enabled by default — only SEP should",
+                "Recipe '{}' has enrichment enabled — only SEP and Wikipedia should",
                 recipe.corpus.id
             );
         }

@@ -29,6 +29,15 @@ pub struct WikipediaChunkMetadata {
     pub update_count: Option<i64>,
     pub is_flagged_stable: Option<bool>,
     pub outgoing_links: Vec<WikiLink>,
+    /// Wikipedia revision ID from `version.identifier` — used as delta key.
+    #[serde(default)]
+    pub revision_id: Option<i64>,
+    /// Wikidata entity QID from `main_entity.identifier` (e.g. "Q42").
+    #[serde(default)]
+    pub wikidata_qid: Option<String>,
+    /// Wikipedia page ID from the top-level `identifier` column.
+    #[serde(default)]
+    pub page_id: Option<i64>,
 }
 
 /// A directed link from a Wikipedia section to another article.
@@ -225,6 +234,9 @@ mod tests {
                 target_title: "Evidence-based medicine".to_string(),
                 link_text: "evidence-based medicine".to_string(),
             }],
+            revision_id: Some(1234567890),
+            wikidata_qid: Some("Q42".to_string()),
+            page_id: Some(9876),
         };
         let json = serde_json::to_string(&meta).unwrap();
         let back: WikipediaChunkMetadata = serde_json::from_str(&json).unwrap();
