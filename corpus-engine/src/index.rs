@@ -617,6 +617,28 @@ impl CorpusIndex {
         write_meta(dir, &meta)
     }
 
+    /// Returns `true` if the embedding column has a complete IVF-PQ vector index.
+    ///
+    /// Checks the local meta flag first (fast path), then verifies via
+    /// `list_indices()` — which only returns COMPLETE indices in the LanceDB
+    /// Rust SDK. Self-heals the meta flag if the index is found intact.
+    pub async fn is_vector_index_ready(&self) -> bool {
+        let dir = std::path::Path::new(self.db.uri()).to_path_buf();
+        let meta_says_done = read_meta(&dir)
+            .map(|m| m.vector_index_built)
+            .unwrap_or(false);
+
+        let indices = self.table.list_indices().await.unwrap_or_default();
+        let live_check = indices
+            .iter()
+            .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+
+        if live_check && !meta_says_done {
+            let _ = self.mark_vector_index_built();
+        }
+        live_check
+    }
+
     pub fn mark_content_fts_built(&self) -> Result<()> {
         let dir = Path::new(self.db.uri());
         let mut meta = read_meta(dir)?;
