@@ -158,6 +158,12 @@ export async function getCorpusHealth(
   return invoke("get_corpus_health", { corpusId });
 }
 
+export async function retryEnrichmentFailures(
+  corpusId: string,
+): Promise<number> {
+  return invoke("retry_enrichment_failures", { corpusId });
+}
+
 // ─── Community Mesh ─────────────────────────────────────────
 
 export async function meshCreate(meshName: string): Promise<CreateMeshResponse> {

@@ -132,6 +132,9 @@ pub struct CorpusHealthDetail {
     pub relationships_count: u64,
     /// True if an article_profiles table exists (structured Wikipedia only).
     pub has_article_profiles: bool,
+    /// Number of chunks whose enrichment parse failed and can be retried
+    /// without re-running inference (0 if no failures file exists).
+    pub parse_failure_count: u64,
 }
 
 /// Progress payload sent to the frontend during a corpus install.
@@ -1267,12 +1270,37 @@ pub async fn get_corpus_health(
         Err(_) => return Ok(None),
     };
 
+    let parse_failure_count = index.load_enrichment_failures().len() as u64;
     Ok(Some(CorpusHealthDetail {
         corpus_id: corpus_id.clone(),
         claims_count: index.claim_count().await,
         relationships_count: index.relationship_count().await,
         has_article_profiles: index.has_article_profiles().await,
+        parse_failure_count,
     }))
+}
+
+/// Re-parse stored enrichment failures using the truncation-repair parser.
+/// Does not re-run inference — only the saved raw responses are re-processed.
+/// Returns the number of newly recovered claims.
+#[tauri::command]
+pub async fn retry_enrichment_failures(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<u64, String> {
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    drop(engine_guard);
+
+    let recovered = engine
+        .retry_enrichment_failures(&corpus_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(recovered as u64)
 }
 
 // ─── Recipe Testing ──────────────────────────────────────────────────────────

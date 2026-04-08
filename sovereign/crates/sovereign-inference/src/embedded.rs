@@ -114,10 +114,17 @@ impl ModelSlot {
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
 
-        // Guard: only reject if the prompt won't fit in the context window at all.
-        // The old guard compared against n_batch=512, which was too strict for
-        // enrichment prompts. generate_stream_sync already uses a dynamic batch;
-        // align here.
+        // Guard: llama.cpp hard-asserts n_tokens_all <= cparams.n_batch inside
+        // ctx.decode(), so we must reject before reaching that call. Callers are
+        // responsible for truncating input to stay within this limit.
+        if tokens.len() > n_batch {
+            return Err(Error::Inference(format!(
+                "Prompt too long: {} tokens exceeds batch size of {}. \
+                 Shorten the input before calling inference.",
+                tokens.len(),
+                n_batch
+            )));
+        }
         if tokens.len() + max_tokens > n_ctx {
             return Err(Error::Inference(format!(
                 "Prompt too long: {} tokens + {} max response tokens exceeds \
@@ -128,8 +135,7 @@ impl ModelSlot {
             )));
         }
 
-        // Size the batch to fit the actual prompt (mirrors generate_stream_sync).
-        let mut batch = LlamaBatch::new(tokens.len().max(n_batch), 1);
+        let mut batch = LlamaBatch::new(n_batch, 1);
         let last_idx = tokens.len() - 1;
         for (i, &token) in tokens.iter().enumerate() {
             batch

@@ -210,6 +210,7 @@ export interface CorpusHealthDetail {
   claims_count: number;
   relationships_count: number;
   has_article_profiles: boolean;
+  parse_failure_count: number;
 }
 
 export type CorpusInstallPhase =

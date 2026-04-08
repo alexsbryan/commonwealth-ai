@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus, getCorpusHealth } from "../api";
+  import { listCorpora, installCorpus, removeCorpus, getCorpusHealth, retryEnrichmentFailures } from "../api";
   import type { CorpusEntry, CorpusProgressPayload, CorpusHealthDetail } from "../types";
 
   let corpora: CorpusEntry[] = $state([]);
   let progress: Record<string, CorpusProgressPayload> = $state({});
   let expanded: Set<string> = $state(new Set());
   let health: Record<string, CorpusHealthDetail> = $state({});
+  let repairing: Set<string> = $state(new Set());
   let unlisten: UnlistenFn | null = null;
 
   const tiers: { id: string; name: string; desc: string }[] = [
@@ -105,6 +106,20 @@
           console.error("Failed to load corpus health:", e);
         }
       }
+    }
+  }
+
+  async function handleRepair(id: string) {
+    repairing = new Set([...repairing, id]);
+    try {
+      await retryEnrichmentFailures(id);
+      // Refresh health so the failure count and claims count update.
+      const detail = await getCorpusHealth(id);
+      if (detail) health = { ...health, [id]: detail };
+    } catch (e) {
+      console.error("Repair failed:", e);
+    } finally {
+      repairing = new Set([...repairing].filter((x) => x !== id));
     }
   }
 
@@ -211,6 +226,18 @@
                     <span class="health-chip">✦ enriched (no claims yet)</span>
                   {:else}
                     <span class="health-chip muted">No enrichment</span>
+                  {/if}
+                  {#if health[corpus.id].parse_failure_count > 0}
+                    <button
+                      class="health-chip repair-btn"
+                      disabled={repairing.has(corpus.id)}
+                      onclick={() => handleRepair(corpus.id)}
+                      title="{health[corpus.id].parse_failure_count.toLocaleString()} chunks failed to parse during enrichment — click to retry with repair parser"
+                    >
+                      {repairing.has(corpus.id)
+                        ? "Repairing…"
+                        : `⚠ Repair ${health[corpus.id].parse_failure_count.toLocaleString()} claims`}
+                    </button>
                   {/if}
                   {#if health[corpus.id].has_article_profiles}
                     <span class="health-chip">Article profiles</span>
@@ -434,6 +461,21 @@
   }
   .health-chip.muted {
     color: var(--text-muted);
+  }
+  .health-chip.repair-btn {
+    cursor: pointer;
+    color: var(--warning, #e6a817);
+    background: transparent;
+    border-color: var(--warning, #e6a817);
+    font-family: inherit;
+    transition: opacity 0.15s;
+  }
+  .health-chip.repair-btn:hover:not(:disabled) {
+    opacity: 0.8;
+  }
+  .health-chip.repair-btn:disabled {
+    cursor: default;
+    opacity: 0.6;
   }
   .enrichment-pill {
     font-size: 0.65rem;

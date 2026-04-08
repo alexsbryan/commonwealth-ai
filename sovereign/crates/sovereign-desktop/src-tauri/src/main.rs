@@ -119,6 +119,7 @@ fn main() {
             commands::remove_corpus,
             commands::get_corpus_progress,
             commands::get_corpus_health,
+            commands::retry_enrichment_failures,
             commands::recipe_validate,
             commands::recipe_test,
             mesh_commands::mesh_create,
