@@ -655,7 +655,7 @@ pub(crate) async fn run_test(
             report.validation.warnings.push(format!("Index insert failed: {e}"));
             0u64
         } else {
-            let _ = index.build_indexes(None).await;
+            let _ = index.build_indexes(true, true, None).await;
             dir_size_bytes(&test_index_dir)
         };
 

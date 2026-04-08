@@ -376,9 +376,19 @@ impl CorpusEngine {
                 recipe.corpus.id,
             );
         } else {
+            let build_vector = recipe.index.vector;
+            let build_fts = recipe.index.fts;
+            let dims = recipe.index.embedding_dimensions;
+            // Estimate IVF-PQ partition count: LanceDB Auto ≈ sqrt(N), capped 2–512.
+            let est_partitions = (total_chunks as f64).sqrt().round() as u64;
+            let est_partitions = est_partitions.max(2).min(512);
             eprintln!(
-                "[{}] Building search indexes over {total_chunks} chunks (this may take several minutes)...",
-                recipe.corpus.id,
+                "[{id}] Index build starting — model: {model} ({dims}d), \
+                 chunks: {total_chunks}, \
+                 vector: {build_vector} (IVF-PQ auto ≈ {est_partitions} partitions), \
+                 fts: {build_fts}",
+                id = recipe.corpus.id,
+                model = self.expected_embedding_model,
             );
             if let Some(ref cb) = progress {
                 cb(IngestProgress::Indexing {
@@ -395,7 +405,7 @@ impl CorpusEngine {
                         });
                     })
                 });
-            index.build_indexes(sub_phase_cb.as_deref()).await?;
+            index.build_indexes(build_vector, build_fts, sub_phase_cb.as_deref()).await?;
             // Checkpoint: if killed after this point, resume can skip rebuild.
             let _ = index.mark_indexes_built();
         }

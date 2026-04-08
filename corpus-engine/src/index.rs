@@ -522,6 +522,8 @@ impl CorpusIndex {
     /// after each sub-phase finishes so callers can emit progress events.
     pub async fn build_indexes(
         &self,
+        build_vector: bool,
+        build_fts: bool,
         on_sub_phase_complete: Option<&(dyn Fn(u64, u64) + Send + Sync)>,
     ) -> Result<()> {
         let count = self.chunk_count().await?;
@@ -533,9 +535,11 @@ impl CorpusIndex {
         let id = &self.corpus_id;
 
         // (1/3) IVF-PQ vector index.
-        // Only build if we have enough data (LanceDB needs >= 256 rows for IVF).
         let vector_done = read_meta(&dir).map(|m| m.vector_index_built).unwrap_or(false);
-        if vector_done {
+        if !build_vector {
+            if !vector_done { let _ = self.mark_vector_index_built(); }
+            eprintln!("[{id}] Vector index disabled in recipe — skipping (1/3)");
+        } else if vector_done {
             eprintln!("[{id}] Vector index already built — skipping (1/3)");
         } else if count >= 256 {
             eprintln!("[{id}] Building vector index (1/3)...");
@@ -557,7 +561,10 @@ impl CorpusIndex {
 
         // (2/3) Tantivy FTS index on content.
         let content_done = read_meta(&dir).map(|m| m.content_fts_built).unwrap_or(false);
-        if content_done {
+        if !build_fts {
+            if !content_done { let _ = self.mark_content_fts_built(); }
+            eprintln!("[{id}] FTS indexes disabled in recipe — skipping (2/3)");
+        } else if content_done {
             eprintln!("[{id}] FTS content index already built — skipping (2/3)");
         } else {
             eprintln!("[{id}] Building FTS content index (2/3)...");
@@ -578,7 +585,10 @@ impl CorpusIndex {
 
         // (3/3) Tantivy FTS index on title.
         let title_done = read_meta(&dir).map(|m| m.title_fts_built).unwrap_or(false);
-        if title_done {
+        if !build_fts {
+            if !title_done { let _ = self.mark_title_fts_built(); }
+            eprintln!("[{id}] FTS indexes disabled in recipe — skipping (3/3)");
+        } else if title_done {
             eprintln!("[{id}] FTS title index already built — skipping (3/3)");
         } else {
             eprintln!("[{id}] Building FTS title index (3/3)...");
@@ -848,7 +858,7 @@ impl CorpusIndex {
             meta.title_fts_built = false;
             let _ = write_meta(dir, &meta);
         }
-        self.build_indexes(None).await
+        self.build_indexes(false, true, None).await
     }
 
     /// Re-embed the specified chunks with a fresh embedding call and update them in place.
@@ -1967,7 +1977,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let idx = create_test_index(dir.path()).await;
         idx.insert_batch(&sample_chunks()).await.unwrap();
-        idx.build_indexes(None).await.unwrap();
+        idx.build_indexes(true, true, None).await.unwrap();
 
         let results = idx.search(&[], "Rust programming", 10).await.unwrap();
         assert!(!results.is_empty(), "FTS search should return results");
@@ -2034,7 +2044,7 @@ mod tests {
             .await
             .unwrap();
             idx.insert_batch(&sample_chunks()).await.unwrap();
-            idx.build_indexes(None).await.unwrap();
+            idx.build_indexes(true, true, None).await.unwrap();
         }
 
         // Re-open and verify.
