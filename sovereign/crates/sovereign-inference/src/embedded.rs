@@ -61,7 +61,12 @@ impl ModelSlot {
 
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(NonZeroU32::new(context_size))
-            .with_n_batch(512)
+            // n_batch = context_size so the full context window is available
+            // for prompt processing. llama.cpp automatically splits the batch
+            // into n_ubatch=512 micro-batches for GPU/CPU kernel calls, so
+            // memory pressure is unchanged — only the Rust-side assertion limit
+            // is relaxed.
+            .with_n_batch(context_size)
             .with_n_ubatch(512);
 
         let ctx = unsafe {
@@ -114,17 +119,10 @@ impl ModelSlot {
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
 
-        // Guard: llama.cpp hard-asserts n_tokens_all <= cparams.n_batch inside
-        // ctx.decode(), so we must reject before reaching that call. Callers are
-        // responsible for truncating input to stay within this limit.
-        if tokens.len() > n_batch {
-            return Err(Error::Inference(format!(
-                "Prompt too long: {} tokens exceeds batch size of {}. \
-                 Shorten the input before calling inference.",
-                tokens.len(),
-                n_batch
-            )));
-        }
+        // Guard: reject only if the prompt + response won't fit in the context
+        // window at all. n_batch == context_size (set at load time) so the
+        // llama.cpp assertion n_tokens_all <= cparams.n_batch is automatically
+        // satisfied for any prompt that passes this check.
         if tokens.len() + max_tokens > n_ctx {
             return Err(Error::Inference(format!(
                 "Prompt too long: {} tokens + {} max response tokens exceeds \
