@@ -771,7 +771,13 @@ impl CorpusIndex {
     ) -> Result<Vec<ScoredChunk>> {
         let do_vector = !query_embedding.is_empty();
         let sanitized = sanitize_fts_query(query_text);
-        let do_fts = !sanitized.is_empty();
+        // Only attempt FTS if a content FTS index was actually built.
+        // Without the index, LanceDB falls back to a full-table text scan (~30s on large corpora).
+        let fts_built = {
+            let dir = std::path::Path::new(self.db.uri()).to_path_buf();
+            read_meta(&dir).map(|m| m.content_fts_built).unwrap_or(false)
+        };
+        let do_fts = !sanitized.is_empty() && fts_built;
 
         if !do_vector && !do_fts {
             return Ok(Vec::new());
