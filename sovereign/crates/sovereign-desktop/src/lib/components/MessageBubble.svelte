@@ -23,6 +23,8 @@
           oicp_match?: string;
           total_latency_ms: number;
           tokens_used: number;
+          coarse_intent?: string;
+          self_assessment?: string;
         }
       | undefined,
   );
@@ -55,6 +57,12 @@
       {#if provenanceExpanded}
         <div class="provenance-detail">
           <div><strong>Model:</strong> {provenance.inference_backend}</div>
+          {#if provenance.coarse_intent}
+            <div>
+              <strong>Routing:</strong>
+              {provenance.coarse_intent}{provenance.self_assessment ? ` (${provenance.self_assessment})` : ""} → {provenance.intent}
+            </div>
+          {/if}
           {#if provenance.search_method}
             <div><strong>Search:</strong> {provenance.search_method}</div>
           {/if}

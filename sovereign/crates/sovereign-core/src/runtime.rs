@@ -264,7 +264,7 @@ impl Runtime {
 
         // 3. Route.
         let tool_descriptors = self.tools.descriptors();
-        let intent = self
+        let RoutingOutcome { intent, coarse_intent, self_assessment } = self
             .router
             .classify(message, &context, &tool_descriptors)
             .await?;
@@ -281,6 +281,9 @@ impl Runtime {
             Intent::DeepQuery => Speed::Slow,
             _ => Speed::Medium,
         };
+
+        // Capture model ID before spawning — complete_stream returns no metadata.
+        let model_id = self.inference.model_id_for(speed);
 
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
@@ -428,10 +431,12 @@ impl Runtime {
                 intent: intent_label,
                 search_method,
                 sources,
-                inference_backend: "streaming".to_string(),
+                inference_backend: model_id,
                 oicp_match: None,
                 total_latency_ms: started.elapsed().as_millis() as u64,
                 tokens_used: 0,
+                coarse_intent,
+                self_assessment,
             };
             let assistant_msg = Message {
                 id: message_id_owned,
@@ -487,7 +492,7 @@ impl Runtime {
 
         // 3. Route.
         let tool_descriptors = self.tools.descriptors();
-        let intent = self
+        let RoutingOutcome { intent, coarse_intent, self_assessment } = self
             .router
             .classify(message, &context, &tool_descriptors)
             .await?;
@@ -499,12 +504,16 @@ impl Runtime {
                     .await
             }
             Intent::KnowledgeQuery => {
-                self.handle_knowledge_query(message, conversation_id, &context)
-                    .await
+                self.handle_knowledge_query(
+                    message, conversation_id, &context, coarse_intent, self_assessment,
+                )
+                .await
             }
             _ => {
-                self.handle_simple(message, conversation_id, &context, &intent)
-                    .await
+                self.handle_simple(
+                    message, conversation_id, &context, &intent, coarse_intent, self_assessment,
+                )
+                .await
             }
         }
     }
@@ -518,6 +527,8 @@ impl Runtime {
         conversation_id: &str,
         context: &ConversationContext,
         intent: &Intent,
+        coarse_intent: Option<String>,
+        self_assessment: Option<String>,
     ) -> Result<Response> {
         let speed = match intent {
             Intent::SimpleQuery => Speed::Fast,
@@ -650,6 +661,8 @@ impl Runtime {
                 .map(|q| format!("{q:?}")),
             total_latency_ms: completion.latency_ms,
             tokens_used: completion.tokens_used,
+            coarse_intent,
+            self_assessment,
         };
 
         let assistant_msg = Message {
@@ -680,6 +693,8 @@ impl Runtime {
         message: &str,
         conversation_id: &str,
         context: &ConversationContext,
+        coarse_intent: Option<String>,
+        self_assessment: Option<String>,
     ) -> Result<Response> {
         // 1. Try to embed the query for vector search.
         let embedding = self.inference.embed(message).await.unwrap_or_default();
@@ -794,6 +809,8 @@ impl Runtime {
                 .map(|q| format!("{q:?}")),
             total_latency_ms: completion.latency_ms,
             tokens_used: completion.tokens_used,
+            coarse_intent,
+            self_assessment,
         };
 
         let assistant_msg = Message {
@@ -1032,6 +1049,8 @@ impl Runtime {
                 .map(|q| format!("{q:?}")),
             total_latency_ms: synthesis.latency_ms,
             tokens_used: synthesis.tokens_used,
+            coarse_intent: None,
+            self_assessment: None,
         };
 
         let assistant_msg = Message {

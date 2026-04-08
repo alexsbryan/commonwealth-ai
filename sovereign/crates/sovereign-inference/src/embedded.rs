@@ -1016,6 +1016,21 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         .map_err(|e| Error::Inference(format!("Embed task failed: {e}")))?
     }
 
+    fn model_id_for(&self, speed: Speed) -> String {
+        let use_primary = matches!(speed, Speed::Slow | Speed::Medium);
+        if use_primary {
+            // Primary slot is lazy-loaded; derive from path without locking.
+            self.primary_path
+                .as_ref()
+                .and_then(|p| p.file_stem())
+                .and_then(|s| s.to_str())
+                .unwrap_or(&self.fast.model_id)
+                .to_string()
+        } else {
+            self.fast.model_id.clone()
+        }
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             max_context_tokens: 2048,

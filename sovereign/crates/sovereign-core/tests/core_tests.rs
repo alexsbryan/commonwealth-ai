@@ -488,8 +488,8 @@ async fn passthrough_router_always_simple_query() {
         installed_corpora: vec![],
     };
 
-    let intent = router.classify("anything", &ctx, &[]).await.unwrap();
-    assert!(matches!(intent, Intent::SimpleQuery));
+    let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
+    assert!(matches!(outcome.intent, Intent::SimpleQuery));
 }
 
 #[tokio::test]
@@ -964,8 +964,12 @@ impl Router for ComplexTaskRouter {
         _message: &str,
         _context: &ConversationContext,
         _available_tools: &[ToolDescriptor],
-    ) -> Result<Intent> {
-        Ok(Intent::ComplexTask)
+    ) -> Result<RoutingOutcome> {
+        Ok(RoutingOutcome {
+            intent: Intent::ComplexTask,
+            coarse_intent: None,
+            self_assessment: None,
+        })
     }
 }
 

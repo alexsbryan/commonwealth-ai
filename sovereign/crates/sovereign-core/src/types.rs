@@ -668,6 +668,19 @@ pub struct Response {
 
 // ─── Response Provenance ──────────────────────────────────────
 
+/// Returned by `Router::classify()`. Carries the final intent alongside
+/// the diagnostic routing detail that was previously only written to
+/// `routing_log` and invisible in the UI.
+#[derive(Debug, Clone)]
+pub struct RoutingOutcome {
+    pub intent: Intent,
+    /// Raw coarse-classification label: "SIMPLE", "LOOKUP", "REASONING", "ACTION".
+    pub coarse_intent: Option<String>,
+    /// Self-assessment result — populated only on SIMPLE paths that went
+    /// through the gate: "Confident", "Uncertain", "NeedsWebSearch".
+    pub self_assessment: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseProvenance {
     pub intent: String,
@@ -677,6 +690,14 @@ pub struct ResponseProvenance {
     pub oicp_match: Option<String>,
     pub total_latency_ms: u64,
     pub tokens_used: usize,
+    /// Coarse router classification ("SIMPLE", "LOOKUP", "REASONING", "ACTION").
+    /// `None` for old messages that predate this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coarse_intent: Option<String>,
+    /// Self-assessment gate result, set on SIMPLE paths only.
+    /// `None` when not applicable or for old messages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub self_assessment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

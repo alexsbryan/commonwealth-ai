@@ -29,6 +29,16 @@ pub trait InferenceProvider: Send + Sync {
         self.embed(query).await
     }
 
+    /// Return the model ID that will be selected for a request at the given
+    /// speed tier, without running inference. Used to populate provenance on
+    /// streaming responses (where `complete_stream` returns no metadata).
+    /// Default returns `"unknown"` — override in providers that know their
+    /// loaded model names without blocking on a lock.
+    fn model_id_for(&self, speed: Speed) -> String {
+        let _ = speed;
+        "unknown".to_string()
+    }
+
     fn capabilities(&self) -> ProviderCapabilities;
 }
 
@@ -41,7 +51,7 @@ pub trait Router: Send + Sync {
         message: &str,
         context: &ConversationContext,
         available_tools: &[ToolDescriptor],
-    ) -> Result<Intent>;
+    ) -> Result<RoutingOutcome>;
 }
 
 // ─── 3. Planning ───────────────────────────────────────────────

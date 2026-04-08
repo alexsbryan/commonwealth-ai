@@ -14,8 +14,12 @@ impl Router for PassthroughRouter {
         _message: &str,
         _context: &ConversationContext,
         _available_tools: &[ToolDescriptor],
-    ) -> Result<Intent> {
-        Ok(Intent::SimpleQuery)
+    ) -> Result<RoutingOutcome> {
+        Ok(RoutingOutcome {
+            intent: Intent::SimpleQuery,
+            coarse_intent: None,
+            self_assessment: None,
+        })
     }
 }
 

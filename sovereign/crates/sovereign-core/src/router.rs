@@ -613,7 +613,7 @@ impl Router for LlmRouter {
         message: &str,
         context: &ConversationContext,
         available_tools: &[ToolDescriptor],
-    ) -> Result<Intent> {
+    ) -> Result<RoutingOutcome> {
         let start = Instant::now();
 
         // Fetch recent routing corrections for few-shot self-correction.
@@ -692,7 +692,11 @@ impl Router for LlmRouter {
             coarse.confidence,
         );
 
-        Ok(intent)
+        Ok(RoutingOutcome {
+            intent,
+            coarse_intent: Some(coarse.intent),
+            self_assessment: self_assessment_outcome,
+        })
     }
 }
 
