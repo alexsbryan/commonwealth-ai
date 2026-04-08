@@ -99,13 +99,12 @@ impl EnrichmentEngine {
                 });
             }
 
-            // Truncate chunk content so the full prompt stays within the
-            // inference model's n_batch limit (~512 tokens). The template adds
-            // ~100 tokens of overhead, so cap the passage at 1600 chars
-            // (≈ 400 tokens at 4 chars/token) to leave safe headroom.
-            // We truncate at the last whitespace before the limit so we don't
-            // split a word mid-byte.
-            const MAX_PASSAGE_CHARS: usize = 1600;
+            // Hard ceiling — a safety net for pathologically long chunks, not
+            // an aggressive gate. The inference model's n_batch is now set to
+            // the full context window at load time, so typical well-chunked
+            // passages pass through untruncated. 6000 chars ≈ 1500 tokens,
+            // which fits in a 2048-token context with prompt overhead to spare.
+            const MAX_PASSAGE_CHARS: usize = 6000;
             let truncated_content;
             let passage = if chunk.content.len() > MAX_PASSAGE_CHARS {
                 // Find the last ASCII whitespace at or before the char limit.
