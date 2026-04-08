@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 commonwealth-core = { workspace = true }
 commonwealth-corpus = { workspace = true }
+corpus-engine = { workspace = true }
 commonwealth-discovery = { workspace = true }
 commonwealth-scheduler = { workspace = true }
 commonwealth-orchestrator = { workspace = true }

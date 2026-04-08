@@ -1,8 +1,10 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use corpus_engine::{CorpusEngine, EmbedFn, TestOptions};
 use tracing::info;
 
 use commonwealth_core::config::DaemonConfig;
@@ -72,6 +74,11 @@ enum Commands {
         #[command(subcommand)]
         command: DaemonCommands,
     },
+    /// Test or validate a community recipe file
+    Recipe {
+        #[command(subcommand)]
+        command: RecipeCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -124,6 +131,38 @@ enum DaemonCommands {
     Status,
 }
 
+#[derive(Subcommand)]
+enum RecipeCommands {
+    /// Run the full test harness against a recipe file
+    Test {
+        /// Path to the recipe.toml file
+        path: PathBuf,
+        /// Number of source records to sample
+        #[arg(long, default_value = "100")]
+        sample_size: usize,
+        /// Skip the embedding and search test
+        #[arg(long)]
+        no_embed: bool,
+        /// Where to write the report (default: <recipe_dir>/TEST_REPORT.md)
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Skip the source URL reachability check
+        #[arg(long)]
+        offline: bool,
+        /// Print per-record extraction outcome
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    /// Validate a recipe's fields without downloading data
+    Validate {
+        /// Path to the recipe.toml file
+        path: PathBuf,
+        /// Skip the source URL reachability check
+        #[arg(long)]
+        offline: bool,
+    },
+}
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -165,6 +204,14 @@ fn main() -> Result<()> {
             DaemonCommands::Start => cmd_daemon_start(&config),
             DaemonCommands::Stop => cmd_daemon_stop(&config),
             DaemonCommands::Status => cmd_daemon_status(&config),
+        },
+        Commands::Recipe { command } => match command {
+            RecipeCommands::Test { path, sample_size, no_embed, output, offline, verbose } => {
+                cmd_recipe_test(&path, sample_size, !no_embed, output.as_deref(), offline, verbose)
+            }
+            RecipeCommands::Validate { path, offline } => {
+                cmd_recipe_validate(&path, offline)
+            }
         },
     }
 }
@@ -410,4 +457,120 @@ fn cmd_daemon_stop(_config: &Option<DaemonConfig>) -> Result<()> {
 fn cmd_daemon_status(_config: &Option<DaemonConfig>) -> Result<()> {
     println!("(In production, this would check if the daemon process is running.)");
     Ok(())
+}
+
+// ── Recipe commands ─────────────────────────────────────────────────────────
+
+fn cmd_recipe_test(
+    path: &std::path::Path,
+    sample_size: usize,
+    embed: bool,
+    output: Option<&std::path::Path>,
+    offline: bool,
+    verbose: bool,
+) -> Result<()> {
+    let output = output
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            path.parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("TEST_REPORT.md")
+        });
+
+    eprintln!("Testing recipe: {}", path.display());
+    eprintln!("Sample size:    {sample_size}");
+    eprintln!("Output:         {}", output.display());
+
+    let engine = build_stub_engine();
+    let options = TestOptions {
+        sample_size,
+        embed,
+        queries: None,
+        output: Some(output.clone()),
+        offline,
+        verbose,
+    };
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to build async runtime")?;
+
+    let report = rt.block_on(engine.test_recipe(path, &options))
+        .context("recipe test failed")?;
+
+    let markdown = report.to_markdown();
+    std::fs::write(&output, &markdown)
+        .with_context(|| format!("failed to write report to {}", output.display()))?;
+
+    eprintln!();
+    eprintln!("Report written to: {}", output.display());
+
+    let warnings = report.warnings();
+    if !warnings.is_empty() {
+        eprintln!();
+        eprintln!("Warnings:");
+        for w in &warnings {
+            eprintln!("  ⚠  {w}");
+        }
+    }
+
+    if !report.validation.errors.is_empty() {
+        eprintln!();
+        eprintln!("Errors:");
+        for e in &report.validation.errors {
+            eprintln!("  ✗  {e}");
+        }
+    }
+
+    eprintln!();
+    if report.passed() {
+        eprintln!("Result: PASS");
+        Ok(())
+    } else {
+        eprintln!("Result: FAIL");
+        std::process::exit(1);
+    }
+}
+
+fn cmd_recipe_validate(path: &std::path::Path, offline: bool) -> Result<()> {
+    eprintln!("Validating recipe: {}", path.display());
+
+    let engine = build_stub_engine();
+    let options = TestOptions {
+        sample_size: 0,
+        embed: false,
+        offline,
+        ..Default::default()
+    };
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to build async runtime")?;
+
+    let report = rt.block_on(engine.test_recipe(path, &options))
+        .context("recipe validation failed")?;
+
+    if report.validation.errors.is_empty() {
+        eprintln!("✓ Validation passed");
+        for w in &report.validation.warnings {
+            eprintln!("  ⚠  {w}");
+        }
+        Ok(())
+    } else {
+        eprintln!("✗ Validation failed:");
+        for e in &report.validation.errors {
+            eprintln!("  - {e}");
+        }
+        std::process::exit(1);
+    }
+}
+
+fn build_stub_engine() -> CorpusEngine {
+    let stub_embed: EmbedFn = Arc::new(|_text| {
+        Box::pin(async { Ok(vec![0f32; 768]) })
+    });
+    let tmp = std::env::temp_dir().join("commonwealth-recipe-test");
+    CorpusEngine::new(tmp.clone(), tmp, stub_embed)
 }
