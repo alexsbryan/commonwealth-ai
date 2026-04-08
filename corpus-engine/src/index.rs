@@ -200,6 +200,123 @@ const CLAIMS_TABLE: &str = "claims";
 const RELATIONSHIPS_TABLE: &str = "relationships";
 const ARTICLE_PROFILES_TABLE: &str = "article_profiles";
 
+// ─── Vector index helpers ──────────────────────────────────
+
+/// Compute IVF partition count: sqrt(n), clamped 8–4096.
+/// LanceDB Auto uses the same heuristic; making it explicit lets us log it.
+fn optimal_partitions(num_chunks: u64) -> u32 {
+    ((num_chunks as f64).sqrt() as u32).max(8).min(4096)
+}
+
+/// Read the embedding column's fixed-list dimension from the table schema.
+async fn detect_vector_dims(table: &lancedb::Table) -> Result<usize> {
+    use arrow::datatypes::DataType;
+    let schema = table.schema().await
+        .map_err(|e| Error::Database(format!("schema: {e}")))?;
+    for field in schema.fields() {
+        if field.name() == "embedding" {
+            if let DataType::FixedSizeList(_, dims) = field.data_type() {
+                return Ok(*dims as usize);
+            }
+        }
+    }
+    Err(Error::Database("embedding column not found or not FixedSizeList".into()))
+}
+
+/// Sum file sizes in a directory (flat, non-recursive).
+/// Returns 0 if the directory doesn't exist yet.
+fn dir_size_bytes_sync(path: &Path) -> u64 {
+    std::fs::read_dir(path)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| e.metadata().ok())
+                .map(|m| m.len())
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+/// Build the IVF-PQ vector index with filesystem-polling phase-aware progress.
+///
+/// Spawns a background thread that polls `indices_dir` every 3 seconds.
+/// Before any files appear (Phase A: k-means training) it logs a heartbeat
+/// every 15 s so the user knows the process is alive. Once files start
+/// growing (Phase B: vector encoding) it logs a percentage estimate.
+///
+/// The build itself uses explicit `IvfPqIndexBuilder` so that partition count
+/// and distance type are logged rather than silently delegated to Auto.
+async fn build_vector_index_with_progress(
+    table: &lancedb::Table,
+    indices_dir: &Path,
+    num_chunks: u64,
+    num_partitions: u32,
+    dims: usize,
+    corpus_id: &str,
+) -> Result<()> {
+    // Each encoded vector occupies roughly (dims/16) PQ bytes + per-centroid
+    // overhead (~32 bytes). Use this to estimate when encoding is complete.
+    let num_sub_vectors = ((dims / 16) as u64).max(1);
+    let estimated_bytes = num_chunks * (num_sub_vectors + 32);
+    // LanceDB's default sample rate is 256 vectors per partition for k-means.
+    let sample_vectors = 256_u64.saturating_mul(num_partitions as u64);
+
+    eprintln!(
+        "[{corpus_id}] IVF-PQ params — chunks: {num_chunks}, dims: {dims}, \
+         partitions: {num_partitions}, sub_vectors: {num_sub_vectors}, \
+         training sample: ~{sample_vectors} vectors"
+    );
+
+    // Use spawn_blocking + std::thread::sleep so the poll loop doesn't
+    // compete with the Tokio executor during the CPU-bound k-means phase.
+    let indices_dir_owned = indices_dir.to_path_buf();
+    let id = corpus_id.to_string();
+    let poll_handle = tokio::task::spawn_blocking(move || {
+        let start = std::time::Instant::now();
+        let mut last_pct: i32 = -1;
+        let mut last_elapsed_logged: u64 = 0;
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            let dir_bytes = dir_size_bytes_sync(&indices_dir_owned);
+            let elapsed = start.elapsed().as_secs();
+            if dir_bytes < 16 * 1024 {
+                // Phase A: k-means training — no significant files yet.
+                if elapsed.saturating_sub(last_elapsed_logged) >= 15 {
+                    eprintln!(
+                        "[{id}] ↳ Training IVF centroids \
+                         (~{sample_vectors} vectors, {elapsed}s elapsed)..."
+                    );
+                    last_elapsed_logged = elapsed;
+                }
+            } else {
+                // Phase B: vector encoding — files are growing.
+                let pct = ((dir_bytes as f64 / estimated_bytes as f64) * 100.0)
+                    .clamp(0.0, 99.0) as i32;
+                if pct >= last_pct + 5 {
+                    eprintln!("[{id}] ↳ Encoding vectors → {pct}%");
+                    last_pct = pct;
+                }
+            }
+        }
+    });
+
+    let result = table
+        .create_index(
+            &["embedding"],
+            lancedb::index::Index::IvfPq(
+                lancedb::index::vector::IvfPqIndexBuilder::default()
+                    .num_partitions(num_partitions)
+                    .distance_type(lancedb::DistanceType::Cosine),
+            ),
+        )
+        .replace(true)
+        .execute()
+        .await;
+
+    poll_handle.abort();
+    result.map_err(|e| Error::Database(format!("vector index: {e}")))
+}
+
 impl CorpusIndex {
     // ── Construction ───────────────────────────────────────
 
@@ -542,17 +659,27 @@ impl CorpusIndex {
         } else if vector_done {
             eprintln!("[{id}] Vector index already built — skipping (1/3)");
         } else if count >= 256 {
-            eprintln!("[{id}] Building vector index (1/3)...");
-            self.table
-                .create_index(
-                    &["embedding"],
-                    lancedb::index::Index::Auto,
-                )
-                .execute()
-                .await
-                .map_err(|e| Error::Database(format!("vector index: {e}")))?;
-            let _ = self.mark_vector_index_built();
-            eprintln!("[{id}] Vector index done");
+            // Secondary runtime check: list_indices() only returns complete indexes.
+            // Catches the case where the meta-flag was lost but the index is intact.
+            let already_complete = self.table
+                .list_indices().await
+                .unwrap_or_default()
+                .iter()
+                .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+            if already_complete {
+                eprintln!("[{id}] Vector index already complete (list_indices) — skipping (1/3)");
+                let _ = self.mark_vector_index_built();
+            } else {
+                let dims = detect_vector_dims(&self.table).await.unwrap_or(1024);
+                let num_partitions = optimal_partitions(count);
+                let indices_dir = dir.join(format!("{CHUNKS_TABLE}.lance/_indices"));
+                eprintln!("[{id}] Building vector index (1/3)...");
+                build_vector_index_with_progress(
+                    &self.table, &indices_dir, count, num_partitions, dims, id,
+                ).await?;
+                let _ = self.mark_vector_index_built();
+                eprintln!("[{id}] Vector index done");
+            }
         } else {
             eprintln!("[{id}] Skipping vector index — fewer than 256 rows (1/3)");
             let _ = self.mark_vector_index_built();
