@@ -118,6 +118,17 @@ pub trait StateStore: Send + Sync {
         classified_as: &str,
         latency_ms: i64,
     ) -> Result<()>;
+    /// Attach metacognition fields to a routing_log row written by `log_routing`.
+    /// Default no-op so existing implementations compile without changes.
+    async fn log_routing_meta(
+        &self,
+        message_hash: &str,
+        coarse_intent: &str,
+        self_assessment: Option<&str>,
+    ) -> Result<()> {
+        let _ = (message_hash, coarse_intent, self_assessment);
+        Ok(())
+    }
     async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>>;
     async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()>;
 

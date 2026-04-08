@@ -206,3 +206,14 @@ pub fn run_sync_migrations(conn: &Connection) -> rusqlite::Result<()> {
     let _ = conn.execute_batch("ALTER TABLE search_budget ADD COLUMN version INTEGER DEFAULT 0");
     Ok(())
 }
+
+/// Add metacognition observability columns to routing_log.
+/// Records the coarse intent from Pass 1 and the self-assessment outcome
+/// (if triggered) so routing corrections have richer signal.
+pub fn run_metacognition_log_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    // coarse_intent: "SIMPLE" | "LOOKUP" | "REASONING" | "ACTION"
+    let _ = conn.execute_batch("ALTER TABLE routing_log ADD COLUMN coarse_intent TEXT");
+    // self_assessment: "Confident" | "Uncertain" | "NeedsWebSearch" | null (not triggered)
+    let _ = conn.execute_batch("ALTER TABLE routing_log ADD COLUMN self_assessment TEXT");
+    Ok(())
+}

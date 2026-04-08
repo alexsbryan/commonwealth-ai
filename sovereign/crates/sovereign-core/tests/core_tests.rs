@@ -386,6 +386,7 @@ fn format_history_empty() {
         },
         memories: Vec::new(),
         working_memory: None,
+        installed_corpora: vec![],
     };
     assert_eq!(format_history_as_prompt(&ctx, 10), "");
 }
@@ -423,6 +424,7 @@ fn format_history_multi_turn() {
         },
         memories: Vec::new(),
         working_memory: None,
+        installed_corpora: vec![],
     };
 
     let prompt = format_history_as_prompt(&ctx, 10);
@@ -456,6 +458,7 @@ fn format_history_truncates_to_max() {
         },
         memories: Vec::new(),
         working_memory: None,
+        installed_corpora: vec![],
     };
 
     let prompt = format_history_as_prompt(&ctx, 3);
@@ -482,6 +485,7 @@ async fn passthrough_router_always_simple_query() {
         },
         memories: Vec::new(),
         working_memory: None,
+        installed_corpora: vec![],
     };
 
     let intent = router.classify("anything", &ctx, &[]).await.unwrap();
@@ -503,6 +507,7 @@ async fn noop_planner_returns_not_implemented() {
         },
         memories: Vec::new(),
         working_memory: None,
+        installed_corpora: vec![],
     };
 
     let result = planner.plan("do something", &ctx, &[]).await;
@@ -911,6 +916,7 @@ async fn planner_generates_valid_plan() {
         },
         memories: vec![],
         working_memory: None,
+        installed_corpora: vec![],
     };
 
     let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
@@ -939,6 +945,7 @@ async fn planner_fallback_on_garbage() {
         },
         memories: vec![],
         working_memory: None,
+        installed_corpora: vec![],
     };
 
     // Should succeed with fallback plan (single step).

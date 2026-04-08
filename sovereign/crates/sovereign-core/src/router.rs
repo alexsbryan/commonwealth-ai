@@ -17,6 +17,92 @@ pub struct ClassificationResult {
     pub confidence: f64,
 }
 
+/// Structured output from Pass 1.
+#[derive(Debug, Default, serde::Deserialize)]
+struct CoarseClassification {
+    #[serde(default)]
+    intent: String,
+    #[serde(default)]
+    confidence: f32,
+}
+
+/// Outcome of the SimpleQuery self-assessment gate.
+#[derive(Debug)]
+enum SelfAssessment {
+    /// Answer directly from model weights — question is certain and not fact-specific.
+    Confident,
+    /// Check local corpora first — question involves specific names, lists, or statistics.
+    Uncertain,
+    /// Local corpus unlikely to help (current events, live data) — suggest web search.
+    NeedsWebSearch,
+}
+
+const SELF_ASSESSMENT_PROMPT: &str = r#"You are about to answer this question from memory:
+
+"{message}"
+
+Installed knowledge sources: {corpus_list}
+
+Before answering, assess your confidence honestly.
+
+Ask yourself:
+1. Does this question ask for a SPECIFIC LIST, ROSTER, or ENUMERATION of items?
+   (squad members, episode list, ingredients, rankings)
+2. Does this question ask for a SPECIFIC STATISTIC, RECORD, or DATE
+   that has a single correct answer?
+3. Might a reasonable person fact-check this answer?
+4. Could one of the installed knowledge sources have a more accurate
+   answer than your training data?
+
+Respond with exactly ONE word:
+
+CONFIDENT   — You are certain of the full, complete, accurate answer
+              and it does not involve specific lists or statistics
+              that might be wrong.
+
+UNCERTAIN   — The question involves specific facts, lists, names, or
+              statistics where you might be incomplete or wrong.
+              A local knowledge source should be checked first.
+
+WEB         — The question requires current information (today's news,
+              live scores, current prices) that no local corpus
+              could have.
+
+Answer:"#;
+
+/// Returns true when the message contains surface signals that the answer
+/// involves specific enumerable facts — names, rosters, lists, statistics —
+/// where weight-only answers commonly hallucinate.
+fn has_enumerable_markers(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    [
+        "who was", "who were", "who played", "who scored", "who won",
+        "which players", "starting lineup", "starting 11", "starting xi",
+        "full squad", "full cast", "full list", "list of",
+        "how many", "what year", "what date", "when was", "when did",
+        "how tall", "how far", "what is the population",
+        "what was the score", "what were the results",
+        "episodes in", "seasons of", "members of",
+        "ingredients in", "steps to", "requirements for",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+}
+
+fn parse_self_assessment(raw: &str) -> SelfAssessment {
+    let upper = raw.trim().to_uppercase();
+    if upper.contains("UNCERTAIN") {
+        SelfAssessment::Uncertain
+    } else if upper.contains("WEB") {
+        SelfAssessment::NeedsWebSearch
+    } else if upper.contains("CONFIDENT") {
+        SelfAssessment::Confident
+    } else {
+        // Safe fallback: assume uncertain, prefer local search.
+        SelfAssessment::Uncertain
+    }
+}
+
 /// LLM-based router that uses the Fast inference slot to classify messages.
 ///
 /// Uses a two-pass approach for reliability:
@@ -83,30 +169,75 @@ impl LlmRouter {
             )
         };
 
+        let corpus_list = context.installed_corpora_display();
+        let tool_list = if has_tools {
+            available_tools
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        } else {
+            "none".to_string()
+        };
+        let lookup_note = if context.installed_corpora.is_empty() {
+            "  Note: no local knowledge sources are installed, so LOOKUP is less useful."
+        } else {
+            ""
+        };
+
         format!(
-            r#"You are a message classifier. Given a user message, classify it into ONE category.
+            r#"Classify this message into exactly ONE category.
+
+Installed knowledge sources: {corpus_list}
+Other available tools: {tool_list}
 
 Categories:
-A) SIMPLE — Can be answered directly from general knowledge in a sentence or two (greetings, basic facts, brief questions). NOTE: yes/no questions about contested philosophical, ethical, or metaphysical topics (free will, consciousness, moral realism, God's existence, political philosophy) are NOT simple — classify these as B or follow skill hints below.
-B) REASONING — Requires analysis, explanation, comparison, creative work, or detailed thought
-C) ACTION — Requires doing something: searching the web, reading files, sending email, running code, or any multi-step task. IMPORTANT: Questions about recent events, current news, today's information, specific dates/years, prices, scores, or anything that may have changed since training data was collected are ACTION — they require a web search{tools_note}
+
+SIMPLE
+  Answerable from general world knowledge without needing to look
+  anything up. Pure reasoning, math, definitions, logic puzzles,
+  things that have exactly one universally known answer.
+  NOTE: contested philosophical, ethical, or metaphysical topics
+  (free will, consciousness, moral realism, God's existence,
+  political philosophy) are NOT SIMPLE — use REASONING.
+  Examples: "What is 12 × 14?", "What does 'ephemeral' mean?",
+            "If all A are B and all B are C, are all A C?"
+
+LOOKUP
+  A factual question where a specific, correct answer EXISTS and
+  could plausibly be wrong if answered from memory alone.
+  Includes: names, dates, statistics, records, lists, lineups,
+  specific events, anything that changes over time.
+  When installed knowledge sources are available, prefer LOOKUP
+  over SIMPLE for ANY factual question involving specific details.
+  When in doubt between SIMPLE and LOOKUP: choose LOOKUP.{lookup_note}
+  Examples: "Who was in the Arsenal Invincibles squad?",
+            "What year was the Eiffel Tower built?",
+            "How many episodes are in Breaking Bad season 3?"
+
+REASONING
+  Analysis, synthesis, comparison, creative work, or multi-step
+  thinking where no single lookup would answer it.
+  Examples: "Compare Wenger's 4-4-2 to his 4-2-3-1",
+            "Write a short poem about autumn",
+            "Explain why inflation causes interest rate rises"
+
+ACTION
+  Requires a tool with external reach or side-effects: web search,
+  email, calendar, file system, shell, or MCP tools.
+  Only use ACTION when no installed knowledge source could answer
+  the question — web search costs money per call.
+  IMPORTANT: Questions about current events, today's news, live
+  prices/scores, or anything time-sensitive are ACTION.
+  Examples: "Search the web for today's Arsenal news",
+            "Send an email to my team",
+            "What time is it in Tokyo right now?"
 
 Conversation context: {context_str}
 User message: "{message}"{corrections_note}{skill_hints}
 
-Reply with ONLY the letter: A, B, or C"#,
-            tools_note = if has_tools {
-                format!(
-                    "\n   Available tools: {}",
-                    available_tools
-                        .iter()
-                        .map(|t| t.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            } else {
-                String::new()
-            },
+Respond with JSON only:
+{{"intent": "SIMPLE|LOOKUP|REASONING|ACTION", "confidence": 0.0}}"#,
         )
     }
 
@@ -319,6 +450,104 @@ Reply with ONLY the letter: A, B, or C"#
         Ok(response.text)
     }
 
+    /// Call the fast model for a JSON-output classification prompt (Pass 1 + self-assessment).
+    async fn classify_call_json(&self, prompt: String, max_tokens: usize) -> Result<String> {
+        let request = CompletionRequest {
+            prompt,
+            system_message: Some(
+                "You are a message classifier. Respond with valid JSON only.".to_string(),
+            ),
+            preferred_speed: Speed::Fast,
+            max_tokens: Some(max_tokens),
+            temperature: Some(0.0),
+            structured_output: None,
+            think_budget: Some(0),
+            top_k: None,
+            top_p: None,
+            oicp: None,
+        };
+        let response = self.inference.complete(&request).await?;
+        eprintln!("[router] classify_json raw output: {:?}", response.text);
+        Ok(response.text)
+    }
+
+    /// Refine the ACTION coarse classification via Pass 2.
+    async fn pass2_refine(
+        &self,
+        message: &str,
+        context: &ConversationContext,
+        available_tools: &[ToolDescriptor],
+    ) -> Result<Intent> {
+        if available_tools.is_empty() {
+            return Ok(Intent::ComplexTask);
+        }
+        let pass2_prompt = Self::build_pass2_action_prompt(message, context, available_tools);
+        let pass2_response = self.classify_call(pass2_prompt).await?;
+        let refined = Self::parse_letter(&pass2_response);
+        Ok(match refined {
+            'A' => {
+                let tool = available_tools
+                    .first()
+                    .map(|t| t.id.clone())
+                    .unwrap_or_default();
+                Intent::SimpleAction { tool }
+            }
+            'C' => Intent::KnowledgeQuery,
+            _ => Intent::ComplexTask,
+        })
+    }
+
+    /// Called when Pass 1 returns SIMPLE. Runs a fast self-assessment to decide
+    /// whether to answer directly from weights or escalate to KnowledgeQuery.
+    async fn assess_simple_query(
+        &self,
+        message: &str,
+        context: &ConversationContext,
+        confidence: f32,
+    ) -> Result<(Intent, Option<String>)> {
+        // Fast path: high-confidence, no enumerable-fact markers → commit to SimpleQuery.
+        if confidence >= 0.92 && !has_enumerable_markers(message) {
+            return Ok((Intent::SimpleQuery, None));
+        }
+
+        // Slow path: run a self-assessment on the Fast slot (~100ms extra latency).
+        let assessment = self.self_assess(message, context).await?;
+        let label = format!("{assessment:?}");
+        let intent = match assessment {
+            SelfAssessment::Confident => Intent::SimpleQuery,
+            SelfAssessment::Uncertain => Intent::KnowledgeQuery,
+            SelfAssessment::NeedsWebSearch => Intent::SimpleAction {
+                tool: ToolId::from("web_search"),
+            },
+        };
+        Ok((intent, Some(label)))
+    }
+
+    async fn self_assess(
+        &self,
+        message: &str,
+        context: &ConversationContext,
+    ) -> Result<SelfAssessment> {
+        let corpus_list = context.installed_corpora_display();
+        let prompt = SELF_ASSESSMENT_PROMPT
+            .replace("{message}", message)
+            .replace("{corpus_list}", &corpus_list);
+        let raw = self.classify_call_json(prompt, 10).await?;
+        Ok(parse_self_assessment(&raw))
+    }
+
+    /// Parse a JSON coarse-classification response: `{"intent": "SIMPLE|...", "confidence": 0.9}`.
+    fn parse_coarse(raw: &str) -> CoarseClassification {
+        // Strip markdown code fences if present.
+        let cleaned = raw
+            .trim()
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim();
+        serde_json::from_str(cleaned).unwrap_or_default()
+    }
+
     /// Parse a letter response (A/B/C) from the model.
     /// Looks for a standalone A, B, or C — first as a single-char token,
     /// then as the first character of the response.
@@ -409,9 +638,9 @@ impl Router for LlmRouter {
 
         // Pass 1: Coarse classification (skipped for pre-checked cases).
         let coarse = if force_action {
-            'C'
+            CoarseClassification { intent: "ACTION".to_string(), confidence: 1.0 }
         } else if force_deep {
-            'B'
+            CoarseClassification { intent: "REASONING".to_string(), confidence: 1.0 }
         } else {
             let pass1_prompt = Self::build_pass1_prompt(
                 message,
@@ -420,36 +649,25 @@ impl Router for LlmRouter {
                 &corrections,
                 &routing_hints,
             );
-            let pass1_response = self.classify_call(pass1_prompt).await?;
-            Self::parse_letter(&pass1_response)
+            let pass1_response = self.classify_call_json(pass1_prompt, 40).await?;
+            Self::parse_coarse(&pass1_response)
         };
 
-        let intent = match coarse {
-            'A' => Intent::SimpleQuery,
-            'B' => Intent::DeepQuery,
-            'C' => {
-                // Pass 2: Refine the ACTION branch.
-                if available_tools.is_empty() {
-                    Intent::ComplexTask
-                } else {
-                    let pass2_prompt =
-                        Self::build_pass2_action_prompt(message, context, available_tools);
-                    let pass2_response = self.classify_call(pass2_prompt).await?;
-                    let refined = Self::parse_letter(&pass2_response);
-                    match refined {
-                        'A' => {
-                            let tool = available_tools
-                                .first()
-                                .map(|t| t.id.clone())
-                                .unwrap_or_default();
-                            Intent::SimpleAction { tool }
-                        }
-                        'C' => Intent::KnowledgeQuery,
-                        _ => Intent::ComplexTask,
-                    }
-                }
+        let (intent, self_assessment_outcome) = match coarse.intent.as_str() {
+            "LOOKUP" => (Intent::KnowledgeQuery, None),
+            "REASONING" => (Intent::DeepQuery, None),
+            "ACTION" => (self.pass2_refine(message, context, available_tools).await?, None),
+            "SIMPLE" => {
+                self.assess_simple_query(message, context, coarse.confidence).await?
             }
-            _ => Intent::SimpleQuery,
+            _ => {
+                // Parse failure or unknown intent — default to local search (never confabulate).
+                tracing::warn!(
+                    raw = %coarse.intent,
+                    "Router Pass 1 parse failed; defaulting to KnowledgeQuery"
+                );
+                (Intent::KnowledgeQuery, None)
+            }
         };
 
         let latency_ms = start.elapsed().as_millis() as i64;
@@ -460,11 +678,18 @@ impl Router for LlmRouter {
         let hash = format!("{:x}", hasher.finish());
         let intent_str = format!("{intent:?}");
         let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+        let _ = self.store.log_routing_meta(
+            &hash,
+            &coarse.intent,
+            self_assessment_outcome.as_deref(),
+        ).await;
 
         eprintln!(
-            "[router] \"{}\" → {:?} (pass1={coarse})",
+            "[router] \"{}\" → {:?} (coarse={}, confidence={:.2})",
             &message[..message.len().min(50)],
             intent,
+            coarse.intent,
+            coarse.confidence,
         );
 
         Ok(intent)
@@ -561,6 +786,7 @@ mod tests {
                 facts: vec!["User is a policy analyst".to_string()],
                 active_documents: vec![],
             }),
+            installed_corpora: vec![],
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -590,6 +816,7 @@ mod tests {
             },
             memories: vec![],
             working_memory: None,
+            installed_corpora: vec![],
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -625,5 +852,80 @@ mod tests {
         assert!(!LlmRouter::needs_current_info("Explain photosynthesis"));
         assert!(!LlmRouter::needs_current_info("Hello, how are you?"));
         assert!(!LlmRouter::needs_current_info("Write a poem about the ocean"));
+    }
+
+    // ── has_enumerable_markers ──────────────────────────────────
+
+    #[test]
+    fn enumerable_markers_arsenal_invincibles() {
+        assert!(has_enumerable_markers(
+            "Who was in the starting 11 for the Arsenal Invincibles?"
+        ));
+    }
+
+    #[test]
+    fn enumerable_markers_math_question() {
+        assert!(!has_enumerable_markers("What is 12 × 14?"));
+    }
+
+    #[test]
+    fn enumerable_markers_definition() {
+        assert!(!has_enumerable_markers("What does ephemeral mean?"));
+    }
+
+    #[test]
+    fn enumerable_markers_various_positives() {
+        assert!(has_enumerable_markers("Who won the Premier League in 2004?"));
+        assert!(has_enumerable_markers("List of countries in the EU"));
+        assert!(has_enumerable_markers("How many seasons of Breaking Bad are there?"));
+        assert!(has_enumerable_markers("What year was the Eiffel Tower built?"));
+        assert!(has_enumerable_markers("Members of the Beatles"));
+    }
+
+    // ── parse_coarse ────────────────────────────────────────────
+
+    #[test]
+    fn parse_coarse_valid_json() {
+        let c = LlmRouter::parse_coarse(r#"{"intent":"LOOKUP","confidence":0.9}"#);
+        assert_eq!(c.intent, "LOOKUP");
+        assert!((c.confidence - 0.9).abs() < 0.01);
+    }
+
+    #[test]
+    fn parse_coarse_with_markdown_fences() {
+        let c = LlmRouter::parse_coarse("```json\n{\"intent\":\"SIMPLE\",\"confidence\":0.95}\n```");
+        assert_eq!(c.intent, "SIMPLE");
+    }
+
+    #[test]
+    fn parse_coarse_garbage_returns_default() {
+        let c = LlmRouter::parse_coarse("I cannot classify this message.");
+        assert_eq!(c.intent, "");
+        assert_eq!(c.confidence, 0.0);
+    }
+
+    // ── parse_self_assessment ───────────────────────────────────
+
+    #[test]
+    fn parse_self_assessment_uncertain() {
+        assert!(matches!(parse_self_assessment("UNCERTAIN"), SelfAssessment::Uncertain));
+        assert!(matches!(parse_self_assessment("uncertain"), SelfAssessment::Uncertain));
+    }
+
+    #[test]
+    fn parse_self_assessment_web() {
+        assert!(matches!(parse_self_assessment("WEB"), SelfAssessment::NeedsWebSearch));
+    }
+
+    #[test]
+    fn parse_self_assessment_confident() {
+        assert!(matches!(parse_self_assessment("CONFIDENT"), SelfAssessment::Confident));
+    }
+
+    #[test]
+    fn parse_self_assessment_garbage_defaults_to_uncertain() {
+        // Safe fallback — prefer local search over confabulation.
+        assert!(matches!(parse_self_assessment("???"), SelfAssessment::Uncertain));
+        assert!(matches!(parse_self_assessment(""), SelfAssessment::Uncertain));
     }
 }

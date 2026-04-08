@@ -404,6 +404,22 @@ pub struct ConversationContext {
     pub conversation: Conversation,
     pub memories: Vec<Memory>,
     pub working_memory: Option<WorkingMemory>,
+    /// Corpus IDs of installed corpora at context-assembly time.
+    /// Used by the router to inform classification and by prompts
+    /// to tell the model what local knowledge is available.
+    #[serde(default)]
+    pub installed_corpora: Vec<String>,
+}
+
+impl ConversationContext {
+    /// Comma-separated display string for the installed corpora.
+    pub fn installed_corpora_display(&self) -> String {
+        if self.installed_corpora.is_empty() {
+            "none installed".to_string()
+        } else {
+            self.installed_corpora.join(", ")
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

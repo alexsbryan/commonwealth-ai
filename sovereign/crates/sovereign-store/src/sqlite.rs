@@ -38,6 +38,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Column migration failed: {e}")))?;
         migrations::run_sync_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Sync migration failed: {e}")))?;
+        migrations::run_metacognition_log_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Metacognition log migration failed: {e}")))?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -71,6 +73,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Column migration failed: {e}")))?;
         migrations::run_sync_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Sync migration failed: {e}")))?;
+        migrations::run_metacognition_log_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Metacognition log migration failed: {e}")))?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -500,6 +504,25 @@ impl StateStore for SqliteStateStore {
             "INSERT INTO routing_log (message_hash, classified_as, latency_ms, created_at)
              VALUES (?1, ?2, ?3, ?4)",
             rusqlite::params![message_hash, classified_as, latency_ms, now()],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn log_routing_meta(
+        &self,
+        message_hash: &str,
+        coarse_intent: &str,
+        self_assessment: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE routing_log SET coarse_intent = ?1, self_assessment = ?2
+             WHERE id = (
+                 SELECT id FROM routing_log WHERE message_hash = ?3
+                 ORDER BY created_at DESC LIMIT 1
+             )",
+            rusqlite::params![coarse_intent, self_assessment, message_hash],
         )
         .map_err(map_db)?;
         Ok(())

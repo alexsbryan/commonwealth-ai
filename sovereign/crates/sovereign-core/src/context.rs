@@ -37,10 +37,20 @@ pub async fn build_context(
         .await
         .unwrap_or_default();
 
+    let installed_corpora = store
+        .list_corpus_states()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|s| s.deleted_at.is_none())
+        .map(|s| s.corpus_id)
+        .collect();
+
     Ok(ConversationContext {
         conversation,
         memories,
         working_memory: None,
+        installed_corpora,
     })
 }
 

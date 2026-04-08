@@ -22,6 +22,41 @@ const MAX_KNOWLEDGE_CHARS: usize = 4000;
 /// Truncate per-chunk content to produce a budget for the total knowledge context.
 const MAX_CHUNK_CHARS: usize = 600;
 
+/// Prepended to all Primary-slot (Speed::Slow) completions.
+/// Sets the epistemic contract for fact-based and synthesis responses.
+const PRIMARY_BASE_SYSTEM_PROMPT: &str = "You are a precise local assistant with access to \
+installed knowledge bases. Accuracy is your highest priority.\n\n\
+On factual questions:\n\
+- If you are not certain of a specific name, number, date, or list item, say so explicitly. \
+\"I am not certain of the complete roster\" is a correct and useful answer. \
+A confident but incomplete list is not.\n\
+- Never complete a list you do not fully know. A partial list labelled as partial is more \
+useful than a fabricated full list.\n\
+- If a knowledge base search has been provided, prefer it over memory. \
+If the search contradicts your training data, trust the search.\n\n\
+On uncertainty:\n\
+- \"I don't know\" is an acceptable answer. \"I'm not certain, but...\" followed by \
+clearly-labelled general knowledge is acceptable.\n\
+- Fabricating specific facts (names, statistics, dates, roster members) to fill a gap \
+is never acceptable, even if it would make the response sound more complete.";
+
+/// System prompt for KnowledgeQuery synthesis — anchors the response to retrieved content.
+const KNOWLEDGE_SYNTHESIS_SYSTEM: &str = "Answer the following question using the retrieved \
+content provided in the prompt.\n\n\
+Rules:\n\
+1. Base your answer on the retrieved content. If the content answers the question clearly, \
+use it and cite the source.\n\
+2. If the content is PARTIAL — for example, it names some but not all members of a list — \
+say exactly that: \"The [source] article lists [what you found] but I cannot confirm the \
+complete [list/roster/record] from what was retrieved.\"\n\
+3. If the retrieved content contains NOTHING relevant to the question, do not answer from \
+memory. Say: \"I searched the available sources and didn't find a specific answer to this.\" \
+If you have confident general knowledge that directly answers the question, you may share it \
+but label it: \"From general knowledge, not from the search results:\"\n\
+4. NEVER present information from your training weights as if it came from the retrieved content.\n\
+5. NEVER invent or complete a list, roster, or statistic. A partial answer labelled as partial \
+is correct. A fabricated complete answer is wrong.";
+
 fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -140,6 +175,16 @@ impl Runtime {
         }
 
         parts.join("\n\n")
+    }
+
+    /// Build a system message for Primary-slot (Speed::Slow) completions.
+    /// Prepends `PRIMARY_BASE_SYSTEM_PROMPT` before the caller-supplied base text
+    /// so all Primary calls carry the epistemic accuracy contract.
+    fn build_primary_system_message(&self, base: &str, context: &ConversationContext) -> String {
+        self.build_system_message(
+            &format!("{PRIMARY_BASE_SYSTEM_PROMPT}\n\n{base}"),
+            context,
+        )
     }
 
     /// Extract long-term memories from a conversation and save them.
@@ -541,19 +586,22 @@ impl Runtime {
             format!("{history}\n\nAssistant:")
         };
 
-        let system = self.build_system_message(
-            if !chunks.is_empty() {
-                "You are a helpful AI assistant. Answer based on the provided knowledge sources when relevant. \
+        // Use the epistemic base prompt when retrieval results are present
+        // (which also triggers Speed::Slow). Plain system prompt for Fast-slot answers.
+        let system = if !chunks.is_empty() {
+            self.build_primary_system_message(
+                "Answer based on the provided knowledge sources when relevant. \
                  Cite sources when referencing them using [Source: name] notation. \
-                 IMPORTANT: If you make a claim that is NOT directly supported by the provided sources, \
-                 mark it with [unverified] so the user knows it comes from your general knowledge rather \
-                 than a retrieved source. Only omit [unverified] when a claim is directly supported by \
-                 a provided source that you cite."
-            } else {
-                "You are a helpful AI assistant. Respond concisely and accurately."
-            },
-            context,
-        );
+                 If you make a claim NOT directly supported by the provided sources, \
+                 mark it with [unverified].",
+                context,
+            )
+        } else {
+            self.build_system_message(
+                "You are a helpful AI assistant. Respond concisely and accurately.",
+                context,
+            )
+        };
 
         let request = CompletionRequest {
             prompt,
@@ -643,25 +691,64 @@ impl Runtime {
             .await
             .unwrap_or_default();
 
-        // 3. Build prompt with retrieved context.
-        let history = format_history_as_prompt(context, 6);
+        // 3. Assess result quality. No results → honest not-found response.
+        let effectively_empty = chunks.is_empty();
 
-        let doc_context = if chunks.is_empty() {
-            "No relevant documents found.".to_string()
-        } else {
-            truncate_knowledge_context(&chunks, MAX_KNOWLEDGE_CHARS)
-        };
+        // 4a. Empty results path — Fast slot, honest not-found response.
+        if effectively_empty {
+            let corpora = context.installed_corpora_display();
+            let prompt = format!(
+                "The user asked: \"{message}\"\n\n\
+                 You searched these installed knowledge sources: {corpora}\n\
+                 The search returned no relevant results.\n\n\
+                 Respond briefly and helpfully:\n\
+                 - Tell the user you searched but didn't find a specific answer\n\
+                 - If you have confident general knowledge about this topic, share it \
+                   briefly but clearly label it as general knowledge, not from the search\n\
+                 - If web search or installing an additional corpus might help, suggest it"
+            );
+            let request = CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Fast,
+                max_tokens: Some(300),
+                temperature: Some(0.3),
+                think_budget: Some(0),
+                structured_output: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+            };
+            let completion = self.inference.complete(&request).await?;
+            let assistant_msg = Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id: conversation_id.to_string(),
+                role: Role::Assistant,
+                content: completion.text.clone(),
+                created_at: now(),
+                metadata: Some(serde_json::json!({
+                    "model": completion.model_id,
+                    "tokens": completion.tokens_used,
+                    "latency_ms": completion.latency_ms,
+                    "intent": "knowledge_query",
+                    "documents_found": 0,
+                    "result_quality": "empty",
+                })),
+                version: now(),
+            };
+            self.store.save_message(&assistant_msg).await?;
+            return Ok(Response { message: assistant_msg, task: None });
+        }
+
+        // 4b. Build prompt with retrieved context.
+        let history = format_history_as_prompt(context, 6);
+        let doc_context = truncate_knowledge_context(&chunks, MAX_KNOWLEDGE_CHARS);
 
         let prompt = format!(
             "{history}\n\nRelevant documents:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
         );
 
-        let system = self.build_system_message(
-            "You are a helpful assistant. Answer the user's question based on the provided documents. \
-             Cite the source when referencing document content. If the documents don't contain \
-             relevant information, say so and answer from general knowledge.",
-            context,
-        );
+        let system = self.build_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
 
         let request = CompletionRequest {
             prompt,
@@ -854,8 +941,8 @@ impl Runtime {
             step_summaries.join("\n\n")
         );
 
-        let synthesis_system = self.build_system_message(
-            "You are a helpful assistant. Synthesize the given step results into a clear, comprehensive answer.",
+        let synthesis_system = self.build_primary_system_message(
+            "Synthesize the given step results into a clear, comprehensive answer.",
             context,
         );
 
