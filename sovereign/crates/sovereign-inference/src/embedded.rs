@@ -96,6 +96,13 @@ impl ModelSlot {
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize)> {
+        // Clear KV cache before each new inference sequence.
+        // `clear_kv_cache()` is also called at the end of a successful run, but
+        // if a prior call failed mid-decode the cache is left dirty. Pre-clearing
+        // guarantees a clean slate regardless of the prior exit path, preventing
+        // M-RoPE position mismatch errors ("X = 830, Y = 0: X < Y required").
+        ctx.clear_kv_cache();
+
         let full_prompt = format_prompt(model, request, quirks)?;
 
         let tokens = model
@@ -107,15 +114,10 @@ impl ModelSlot {
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
 
-        // Guard: reject prompts that exceed the model's context or batch limits.
-        if tokens.len() > n_batch {
-            return Err(Error::Inference(format!(
-                "Prompt too long: {} tokens exceeds batch size of {}. \
-                 Try a shorter message or reduce conversation history.",
-                tokens.len(),
-                n_batch
-            )));
-        }
+        // Guard: only reject if the prompt won't fit in the context window at all.
+        // The old guard compared against n_batch=512, which was too strict for
+        // enrichment prompts. generate_stream_sync already uses a dynamic batch;
+        // align here.
         if tokens.len() + max_tokens > n_ctx {
             return Err(Error::Inference(format!(
                 "Prompt too long: {} tokens + {} max response tokens exceeds \
@@ -126,7 +128,8 @@ impl ModelSlot {
             )));
         }
 
-        let mut batch = LlamaBatch::new(n_batch, 1);
+        // Size the batch to fit the actual prompt (mirrors generate_stream_sync).
+        let mut batch = LlamaBatch::new(tokens.len().max(n_batch), 1);
         let last_idx = tokens.len() - 1;
         for (i, &token) in tokens.iter().enumerate() {
             batch
@@ -222,6 +225,10 @@ impl ModelSlot {
         tx: &tokio::sync::mpsc::Sender<Result<String>>,
         quirks: &ModelQuirks,
     ) -> Result<()> {
+        // Pre-clear for the same reason as generate_sync: a prior failed decode
+        // leaves the cache dirty, causing M-RoPE position errors on the next call.
+        ctx.clear_kv_cache();
+
         let full_prompt = format_prompt(model, request, quirks)?;
 
         let tokens = model
