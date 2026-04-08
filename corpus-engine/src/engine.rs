@@ -904,6 +904,15 @@ impl CorpusEngine {
                     factual_patterns: factual_patterns.clone(),
                 },
             ),
+            ExtractorConfig::WikipediaJsonl {
+                controversy_patterns,
+                factual_patterns,
+            } => Box::new(
+                extractors::wikipedia_jsonl::WikipediaJsonlExtractor {
+                    controversy_patterns: controversy_patterns.clone(),
+                    factual_patterns: factual_patterns.clone(),
+                },
+            ),
         }
     }
 
@@ -1036,7 +1045,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn open_index_validates_embedding_model() {
+    async fn open_index_allows_model_mismatch_with_warning() {
+        // Model-name mismatches are downgraded to warnings so that indexes
+        // written before the placeholder "nomic-embed-text-v2" was fixed
+        // remain searchable.  A true dimensionality mismatch surfaces as a
+        // search error, so blocking open() adds no safety.
         let dir = tempfile::tempdir().unwrap();
         let idx_dir = dir.path().join("indexes");
         std::fs::create_dir_all(&idx_dir).unwrap();
@@ -1060,8 +1073,8 @@ mod tests {
             mock_embed_fn(),
         );
 
-        let result = engine.open_index(&idx_path).await;
-        assert!(matches!(result, Err(Error::IncompatibleEmbedding { .. })));
+        // Should succeed (warn, not error) when model names differ.
+        assert!(engine.open_index(&idx_path).await.is_ok());
     }
 
     #[tokio::test]

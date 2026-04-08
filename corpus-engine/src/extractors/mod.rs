@@ -5,6 +5,7 @@ pub mod csv;
 pub mod parquet;
 pub mod plaintext;
 pub mod wikipedia_structured;
+pub mod wikipedia_jsonl;
 
 use crate::error::Result;
 

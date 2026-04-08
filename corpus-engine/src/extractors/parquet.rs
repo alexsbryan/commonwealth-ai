@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use arrow::array::{AsArray, RecordBatch};
-use arrow::datatypes::DataType;
+use arrow::array::{Array, AsArray, RecordBatch};
+use arrow::datatypes::{DataType, Int8Type, Int16Type, Int32Type, Int64Type, UInt8Type, UInt16Type, UInt32Type, UInt64Type};
 use arrow::error::ArrowError;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
@@ -258,6 +258,9 @@ impl Iterator for ParquetIterator {
 }
 
 /// Extract a string value from a column, handling different Arrow data types.
+///
+/// Handles `Utf8`, `LargeUtf8`, and `Dictionary` (common in HuggingFace parquets).
+/// Returns an empty string for null values or unrecognised types.
 fn get_string_value(batch: &RecordBatch, col_idx: usize, row: usize) -> String {
     let col = batch.column(col_idx);
     if col.is_null(row) {
@@ -265,17 +268,28 @@ fn get_string_value(batch: &RecordBatch, col_idx: usize, row: usize) -> String {
     }
 
     match col.data_type() {
-        DataType::Utf8 => {
-            let arr = col.as_string::<i32>();
-            arr.value(row).to_string()
+        DataType::Utf8 => col.as_string::<i32>().value(row).to_string(),
+        DataType::LargeUtf8 => col.as_string::<i64>().value(row).to_string(),
+        DataType::Dictionary(key_type, value_type) => {
+            // HuggingFace parquets commonly encode string columns as
+            // Dictionary<Int8/16/32/64, Utf8/LargeUtf8>.
+            match (key_type.as_ref(), value_type.as_ref()) {
+                (DataType::Int8,  DataType::Utf8)      => col.as_dictionary::<Int8Type>() .values().as_string::<i32>().value(col.as_dictionary::<Int8Type>() .keys().value(row) as usize).to_string(),
+                (DataType::Int16, DataType::Utf8)      => col.as_dictionary::<Int16Type>().values().as_string::<i32>().value(col.as_dictionary::<Int16Type>().keys().value(row) as usize).to_string(),
+                (DataType::Int32, DataType::Utf8)      => col.as_dictionary::<Int32Type>().values().as_string::<i32>().value(col.as_dictionary::<Int32Type>().keys().value(row) as usize).to_string(),
+                (DataType::Int64, DataType::Utf8)      => col.as_dictionary::<Int64Type>().values().as_string::<i32>().value(col.as_dictionary::<Int64Type>().keys().value(row) as usize).to_string(),
+                (DataType::UInt8, DataType::Utf8)      => col.as_dictionary::<UInt8Type>() .values().as_string::<i32>().value(col.as_dictionary::<UInt8Type>() .keys().value(row) as usize).to_string(),
+                (DataType::UInt16,DataType::Utf8)      => col.as_dictionary::<UInt16Type>().values().as_string::<i32>().value(col.as_dictionary::<UInt16Type>().keys().value(row) as usize).to_string(),
+                (DataType::UInt32,DataType::Utf8)      => col.as_dictionary::<UInt32Type>().values().as_string::<i32>().value(col.as_dictionary::<UInt32Type>().keys().value(row) as usize).to_string(),
+                (DataType::UInt64,DataType::Utf8)      => col.as_dictionary::<UInt64Type>().values().as_string::<i32>().value(col.as_dictionary::<UInt64Type>().keys().value(row) as usize).to_string(),
+                (DataType::Int8,  DataType::LargeUtf8) => col.as_dictionary::<Int8Type>() .values().as_string::<i64>().value(col.as_dictionary::<Int8Type>() .keys().value(row) as usize).to_string(),
+                (DataType::Int16, DataType::LargeUtf8) => col.as_dictionary::<Int16Type>().values().as_string::<i64>().value(col.as_dictionary::<Int16Type>().keys().value(row) as usize).to_string(),
+                (DataType::Int32, DataType::LargeUtf8) => col.as_dictionary::<Int32Type>().values().as_string::<i64>().value(col.as_dictionary::<Int32Type>().keys().value(row) as usize).to_string(),
+                (DataType::Int64, DataType::LargeUtf8) => col.as_dictionary::<Int64Type>().values().as_string::<i64>().value(col.as_dictionary::<Int64Type>().keys().value(row) as usize).to_string(),
+                _ => String::new(),
+            }
         }
-        DataType::LargeUtf8 => {
-            let arr = col.as_string::<i64>();
-            arr.value(row).to_string()
-        }
-        _ => {
-            format!("{:?}", col)
-        }
+        _ => String::new(),
     }
 }
 

@@ -299,29 +299,32 @@ pub enum ExtractorConfig {
         #[serde(default)]
         strip_boilerplate: Option<String>,
     },
-    /// Extractor for the `wikimedia/structured-wikipedia` HuggingFace dataset.
-    /// Produces one `ExtractedDoc` per section, carrying editorial metadata
-    /// (maintenance tags, section type, outgoing links) in the `metadata` JSON.
+    /// Extractor for the `wikimedia/structured-wikipedia` HuggingFace dataset
+    /// in its parquet form. For the ZIP+JSONL form (the default distribution),
+    /// use `WikipediaJsonl` instead.
     #[serde(rename = "wikipedia_structured")]
     WikipediaStructured {
-        /// Parquet column for the article title (default: "name").
         #[serde(default = "default_title_column")]
         title_column: String,
-        /// Parquet column for the article URL (default: "url").
         #[serde(default = "default_url_column")]
         url_column: String,
-        /// Section names (case-insensitive substrings) that classify as
-        /// controversy/criticism. Default: see `DEFAULT_CONTROVERSY_PATTERNS`.
         #[serde(default = "default_controversy_patterns")]
         controversy_patterns: Vec<String>,
-        /// Section names (case-insensitive substrings) that classify as
-        /// factual/biographical. Default: see `DEFAULT_FACTUAL_PATTERNS`.
         #[serde(default = "default_factual_patterns")]
         factual_patterns: Vec<String>,
-        /// Whether to run the post-ingestion structural enrichment pipeline
-        /// (link graph + article profiles). Enabled by default.
         #[serde(default = "default_true")]
         structural_signals: bool,
+    },
+    /// Extractor for the `wikimedia/structured-wikipedia` dataset in its
+    /// actual distribution format: a ZIP archive containing a JSONL file.
+    /// Produces one `ExtractedDoc` per section with full `WikipediaChunkMetadata`
+    /// (section type, revision ID, Wikidata QID, page ID, outgoing links).
+    #[serde(rename = "wikipedia_jsonl")]
+    WikipediaJsonl {
+        #[serde(default = "default_controversy_patterns")]
+        controversy_patterns: Vec<String>,
+        #[serde(default = "default_factual_patterns")]
+        factual_patterns: Vec<String>,
     },
 }
 
@@ -411,36 +414,44 @@ pub fn builtin_recipes() -> Vec<Recipe> {
     vec![
         // 1. Wikipedia
         //
-        // Unified recipe using wikimedia/structured-wikipedia (September 2024).
-        // Replaces the old flat wikimedia/wikipedia (20231101.en) and the
-        // separate structured_wikipedia recipe. Uses WikipediaStructuredExtractor
-        // to capture section structure, editorial maintenance tags, Wikidata QIDs,
-        // revision IDs, and inter-article links. Delta updates driven by revision
-        // IDs via omarkamali/wikipedia-monthly manifest.
+        // 1. Wikipedia (English, Structured)
+        //
+        // Source: wikimedia/structured-wikipedia, September 2024 snapshot.
+        // Downloaded as a single ZIP+JSONL file (~13 GB compressed) via BulkDownload.
+        // The HuggingFaceDataset acquirer cannot be used because the dataset ships
+        // as ZIP+JSONL rather than parquet shards, and HuggingFace's own parquet
+        // conversion API fails on this dataset (schema casting error).
+        //
+        // The WikipediaJsonlExtractor streams articles from inside the ZIP,
+        // emitting one ExtractedDoc per section with full WikipediaChunkMetadata:
+        // section type, revision ID (version.identifier), Wikidata QID
+        // (main_entity.identifier), page ID, and inter-article links.
+        //
+        // Delta updates: the manifest at manifest_url maps article URL →
+        // revision_id. A manifest-generation job (not in this crate) reads
+        // omarkamali/wikipedia-monthly (latest.en, ~7M articles) and publishes
+        // the manifest. CorpusUpdater consumes it to add/update/delete articles.
         Recipe {
             corpus: CorpusMeta {
                 id: "wikipedia".to_string(),
                 name: "Wikipedia (English)".to_string(),
                 description: "English Wikipedia articles from the September 2024 structured \
-                    snapshot. Includes section structure, editorial maintenance tags \
-                    (citation_needed, pov, clarification), Wikidata QIDs, revision IDs, \
-                    and inter-article link graph. Delta updates via monthly refresh."
+                    snapshot (~6.7M articles). Includes section structure, Wikidata QIDs, \
+                    revision IDs, and inter-article links. Wikipedia-specific claim \
+                    enrichment. Delta updates via monthly revision manifest."
                     .to_string(),
                 license: "CC-BY-SA-4.0".to_string(),
                 mesh_sharing: true,
-                size_compressed_gb: 18.0,
+                size_compressed_gb: 13.0,
                 size_indexed_gb: 60.0,
             },
-            acquire: AcquirerConfig::HuggingFaceDataset {
-                repo: "wikimedia/structured-wikipedia".to_string(),
-                subset: Some("20240916.en".to_string()),
+            acquire: AcquirerConfig::BulkDownload {
+                url: "https://huggingface.co/datasets/wikimedia/structured-wikipedia/resolve/main/20240916.en/enwiki_namespace_0.zip".to_string(),
+                resume: true,
             },
-            extract: ExtractorConfig::WikipediaStructured {
-                title_column: "name".to_string(),
-                url_column: "url".to_string(),
+            extract: ExtractorConfig::WikipediaJsonl {
                 controversy_patterns: default_controversy_patterns(),
                 factual_patterns: default_factual_patterns(),
-                structural_signals: true,
             },
             chunk: ChunkerConfig::Paragraph {
                 max_chars: 1024,
@@ -456,7 +467,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
                 max_relationship_candidates: 50_000,
             }),
             update: Some(UpdateConfig {
-                manifest_url: "https://huggingface.co/datasets/omarkamali/wikipedia-monthly/resolve/main/manifest.json".to_string(),
+                manifest_url: "https://updates.sovereign.dev/manifests/wikipedia-en.json".to_string(),
                 auto_update: true,
             }),
         },
@@ -577,7 +588,7 @@ pub fn builtin_recipes() -> Vec<Recipe> {
             extract: ExtractorConfig::Parquet {
                 content_column: "text".to_string(),
                 label_column: Some("title".to_string()),
-                url_column: None,
+                url_column: Some("url".to_string()),
             },
             chunk: ChunkerConfig::Paragraph {
                 max_chars: 2048,
@@ -954,39 +965,33 @@ type = "paragraph"
     }
 
     #[test]
-    fn wikipedia_unified_recipe_uses_structured_dataset() {
+    fn wikipedia_recipe_uses_structured_jsonl() {
         let recipes = builtin_recipes();
         let wp = recipes
             .iter()
             .find(|r| r.corpus.id == "wikipedia")
             .expect("wikipedia recipe must exist");
 
-        // No stale structured_wikipedia recipe should exist.
+        // structured_wikipedia was removed in favour of the single wikipedia recipe.
         assert!(
             recipes.iter().all(|r| r.corpus.id != "structured_wikipedia"),
             "structured_wikipedia recipe should have been removed"
         );
 
         match &wp.acquire {
-            AcquirerConfig::HuggingFaceDataset { repo, subset } => {
-                assert_eq!(repo, "wikimedia/structured-wikipedia");
-                assert_eq!(subset.as_deref(), Some("20240916.en"));
+            AcquirerConfig::BulkDownload { url, .. } => {
+                assert!(
+                    url.contains("structured-wikipedia"),
+                    "wikipedia recipe must download from structured-wikipedia"
+                );
+                assert!(url.ends_with(".zip"), "download URL must be a ZIP file");
             }
-            other => panic!("expected HuggingFaceDataset, got {other:?}"),
+            other => panic!("expected BulkDownload, got {other:?}"),
         }
 
         match &wp.extract {
-            ExtractorConfig::WikipediaStructured {
-                title_column,
-                url_column,
-                structural_signals,
-                ..
-            } => {
-                assert_eq!(title_column, "name");
-                assert_eq!(url_column, "url");
-                assert!(*structural_signals, "structural_signals must be true");
-            }
-            other => panic!("expected WikipediaStructured extractor, got {other:?}"),
+            ExtractorConfig::WikipediaJsonl { .. } => {}
+            other => panic!("expected WikipediaJsonl extractor, got {other:?}"),
         }
 
         let enrichment = wp.enrichment.as_ref().expect("wikipedia must have enrichment");
@@ -995,7 +1000,7 @@ type = "paragraph"
 
         let update = wp.update.as_ref().expect("wikipedia must have update config");
         assert!(update.auto_update);
-        assert!(update.manifest_url.contains("omarkamali"));
+        assert!(!update.manifest_url.is_empty());
     }
 
     #[test]

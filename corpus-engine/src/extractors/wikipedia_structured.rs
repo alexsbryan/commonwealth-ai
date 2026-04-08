@@ -44,14 +44,14 @@ use crate::error::{Error, Result};
 use super::{ExtractedDoc, Extractor, slug};
 
 /// Maximum recursion depth for `has_parts` traversal.
-const MAX_SECTION_DEPTH: u32 = 5;
+pub const MAX_SECTION_DEPTH: u32 = 5;
 
 /// Minimum section text length to emit as a chunk (very short sections
 /// — e.g. stubs, navigation blurbs — are not worth indexing).
-const MIN_SECTION_TEXT: usize = 50;
+pub const MIN_SECTION_TEXT: usize = 50;
 
 /// Section names that are purely navigational; skip them entirely.
-const SKIP_SECTIONS: &[&str] = &[
+pub const SKIP_SECTIONS: &[&str] = &[
     "references",
     "external links",
     "see also",
@@ -743,12 +743,12 @@ fn extract_links(sections: &StructArray, section_idx: usize) -> Vec<WikiLink> {
 
 // ─── Classification ──────────────────────────────────────
 
-fn should_skip_section(name: &str) -> bool {
+pub fn should_skip_section(name: &str) -> bool {
     let lower = name.to_lowercase();
     SKIP_SECTIONS.iter().any(|s| lower == *s)
 }
 
-fn classify_section(
+pub fn classify_section(
     name: &str,
     controversy_patterns: &[String],
     factual_patterns: &[String],
