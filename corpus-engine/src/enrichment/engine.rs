@@ -465,8 +465,99 @@ struct RawRelationship {
     confidence: f32,
 }
 
+// ─── Lenient field extraction helpers ────────────────────────────────────────
+
+/// Extract `epistemic_status` from a JSON object with case-insensitive key
+/// matching and tolerance for common model typos. Tries exact match first,
+/// then any key whose lowercase form starts with `"epistemic"` that holds
+/// a non-empty string value (booleans and nulls are skipped).
+fn extract_epistemic_status(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Option<String> {
+    // Exact match (fast path — the well-behaved case).
+    if let Some(v) = obj.get("epistemic_status") {
+        if let Some(s) = v.as_str() {
+            if !s.is_empty() {
+                return Some(s.to_string());
+            }
+        }
+    }
+    // Case-insensitive fallback: first key starting with "epistemic" whose
+    // value is a non-empty string.  Covers:
+    //   epistemic_statuS, epistemic_state, epistemic_statment, epistemic_staus,
+    //   epistemic_statement (when the value is a string, not a bool)
+    for (k, v) in obj {
+        if k.to_lowercase().starts_with("epistemic") {
+            if let Some(s) = v.as_str() {
+                if !s.is_empty() {
+                    return Some(s.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Case-insensitive lookup for an optional string field.
+/// Returns `None` for null, missing, or non-string values.
+fn extract_opt_string(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Option<String> {
+    let field_lc = field.to_lowercase();
+    for (k, v) in obj {
+        if k.to_lowercase() == field_lc {
+            return v.as_str().filter(|s| !s.is_empty()).map(str::to_string);
+        }
+    }
+    None
+}
+
+/// Case-insensitive lookup for `attributed_to`, coercing an array of strings
+/// into a single comma-joined string.
+fn extract_attributed_to(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Option<String> {
+    for (k, v) in obj {
+        if k.to_lowercase() == "attributed_to" {
+            return match v {
+                serde_json::Value::String(s) if !s.is_empty() => Some(s.clone()),
+                serde_json::Value::Array(arr) => {
+                    let parts: Vec<&str> = arr
+                        .iter()
+                        .filter_map(|x| x.as_str())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    if parts.is_empty() { None } else { Some(parts.join(", ")) }
+                }
+                _ => None,
+            };
+        }
+    }
+    None
+}
+
+/// Convert a `serde_json::Value` to a `RawExtractedClaim` using lenient field
+/// extraction.  Only `"claim"` must be present and non-empty; all other fields
+/// fall back gracefully.
+fn lenient_claim_from_value(v: &serde_json::Value) -> Option<RawExtractedClaim> {
+    let obj = v.as_object()?;
+    let claim = obj.get("claim")?.as_str()?.trim().to_string();
+    if claim.is_empty() {
+        return None;
+    }
+    Some(RawExtractedClaim {
+        claim,
+        epistemic_status: extract_epistemic_status(obj)
+            .unwrap_or_else(|| "unclear".to_string()),
+        hedging_language: extract_opt_string(obj, "hedging_language"),
+        attributed_to: extract_attributed_to(obj),
+    })
+}
+
 /// Parse a JSON array of claims out of an inference response, tolerating
-/// markdown code fences and `<think>` blocks.
+/// markdown code fences, `<think>` blocks, field name typos/casing issues,
+/// and `attributed_to` values that are arrays instead of strings.
 ///
 /// Returns `Some(claims)` on success (including empty arrays — the model
 /// legitimately found no claims). Returns `None` only when JSON extraction
@@ -478,14 +569,33 @@ fn parse_extracted_claims(response: &str) -> Option<Vec<RawExtractedClaim>> {
     if s.is_empty() {
         return Some(Vec::new());
     }
+
+    // Fast path: strict serde on the response as-is.
     if let Ok(claims) = serde_json::from_str::<Vec<RawExtractedClaim>>(s) {
         return Some(claims);
     }
-    if let Some(json) = extract_json_from_response(s) {
-        if let Ok(claims) = serde_json::from_str::<Vec<RawExtractedClaim>>(&json) {
-            return Some(claims);
-        }
+
+    // Strip markdown fences / surrounding prose.
+    let json = extract_json_from_response(s)
+        .unwrap_or_else(|| s.to_string());
+
+    // Strict serde on extracted JSON.
+    if let Ok(claims) = serde_json::from_str::<Vec<RawExtractedClaim>>(&json) {
+        return Some(claims);
     }
+
+    // Lenient path: parse as generic Value array, then extract fields with
+    // case-insensitive key matching and coercion for common model quirks:
+    //   - epistemic_status typos/casing (epistemic_statuS, epistemic_statment, …)
+    //   - attributed_to as array-of-strings instead of a single string
+    if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&json) {
+        let claims: Vec<RawExtractedClaim> = arr
+            .iter()
+            .filter_map(lenient_claim_from_value)
+            .collect();
+        return Some(claims);
+    }
+
     None
 }
 
@@ -662,6 +772,99 @@ mod tests {
     fn parse_fails_on_truly_unparseable() {
         let resp = "Sorry, I cannot help with that.";
         assert!(parse_extracted_claims(resp).is_none());
+    }
+
+    // ── Lenient parser regression tests (real failure samples) ───────────────
+
+    /// Chunk 5 / 13 pattern: one element uses `epistemic_statement` or
+    /// `epistemic_state` instead of `epistemic_status`.
+    #[test]
+    fn lenient_handles_epistemic_statement_variant() {
+        let resp = "<think>\n</think>\n\n```json\n[\
+            {\"claim\": \"A\", \"epistemic_status\": \"unclear\", \"hedging_language\": null, \"attributed_to\": null},\
+            {\"claim\": \"B\", \"epistemic_statement\": \"unclear\", \"hedging_language\": null, \"attributed_to\": null}\
+        ]\n```";
+        let claims = parse_extracted_claims(resp).unwrap();
+        assert_eq!(claims.len(), 2);
+        assert_eq!(claims[1].claim, "B");
+        assert_eq!(claims[1].epistemic_status, "unclear");
+    }
+
+    /// Chunk 29 pattern: wrong case on key names (`epistemic_statuS`,
+    /// `hedging_Language`, `Attributed_To`).
+    #[test]
+    fn lenient_handles_wrong_case_keys() {
+        let resp = "<think>\n</think>\n\n```json\n[\
+            {\"claim\": \"A\", \"epistemic_status\": \"minority\", \"hedging_language\": null, \"attributed_to\": null},\
+            {\"claim\": \"B\", \"epistemic_statuS\": \"minority\", \"hedging_Language\": null, \"Attributed_To\": null}\
+        ]\n```";
+        let claims = parse_extracted_claims(resp).unwrap();
+        assert_eq!(claims.len(), 2);
+        assert_eq!(claims[1].epistemic_status, "minority");
+        assert!(claims[1].hedging_language.is_none());
+    }
+
+    /// Chunk 18 / 35 pattern: `attributed_to` is a JSON array of strings
+    /// rather than a single string.
+    #[test]
+    fn lenient_handles_attributed_to_array() {
+        let resp = r#"<think>
+</think>
+
+```json
+[
+  {
+    "claim": "Adams and Leverrier suggested an eighth planet.",
+    "epistemic_status": "established",
+    "hedging_language": null,
+    "attributed_to": ["John Couch Adams", "Urbain Leverrier"]
+  }
+]
+```"#;
+        let claims = parse_extracted_claims(resp).unwrap();
+        assert_eq!(claims.len(), 1);
+        assert_eq!(
+            claims[0].attributed_to.as_deref(),
+            Some("John Couch Adams, Urbain Leverrier")
+        );
+    }
+
+    /// Chunk 36 pattern: mixed issues — one element has both a bool
+    /// `epistemic_statement` field and a correct `epistemic_status`, another
+    /// has only the typo `epistemic_staus`.
+    #[test]
+    fn lenient_handles_mixed_typo_and_bool_fields() {
+        let resp = r#"<think>
+</think>
+
+```json
+[
+  {
+    "claim": "ABD2 needs supplementing.",
+    "epistemic_status": "consensus",
+    "hedging_language": null,
+    "attributed_to": null
+  },
+  {
+    "claim": "A satisfactory explanation requires a criterion.",
+    "epistemic_statement": true,
+    "epistemic_status": "established",
+    "hedging_language": null,
+    "attributed_to": null
+  },
+  {
+    "claim": "We lack a criterion for satisfactoriness.",
+    "epistemic_statment": true,
+    "epistemic_staus": "contested",
+    "hedging_language": null,
+    "attributed_to": null
+  }
+]
+```"#;
+        let claims = parse_extracted_claims(resp).unwrap();
+        assert_eq!(claims.len(), 3);
+        assert_eq!(claims[1].epistemic_status, "established");
+        assert_eq!(claims[2].epistemic_status, "contested");
     }
 
     #[test]
