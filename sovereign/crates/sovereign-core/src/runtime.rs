@@ -313,7 +313,7 @@ impl Runtime {
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(self.inference_config.think_budget),
             structured_output: None,
-            top_k: None,
+            top_k: self.inference_config.top_k,
             top_p: None,
             oicp,
         };
@@ -563,7 +563,7 @@ impl Runtime {
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(self.inference_config.think_budget),
             structured_output: None,
-            top_k: None,
+            top_k: self.inference_config.top_k,
             top_p: None,
             oicp,
         };
@@ -671,7 +671,7 @@ impl Runtime {
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(self.inference_config.think_budget),
             structured_output: None,
-            top_k: None,
+            top_k: self.inference_config.top_k,
             top_p: None,
             oicp: self.build_oicp(LatencyPreference::BestEffort),
         };
@@ -869,7 +869,7 @@ impl Runtime {
                 temperature: Some(self.inference_config.temperature),
                 think_budget: Some(self.inference_config.think_budget),
                 structured_output: None,
-                top_k: None,
+                top_k: self.inference_config.top_k,
                 top_p: None,
                 oicp: self.build_oicp(LatencyPreference::Throughput),
             })

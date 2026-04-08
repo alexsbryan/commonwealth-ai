@@ -63,6 +63,10 @@ pub struct DesktopConfig {
     /// force-closed, preventing the model from spiralling indefinitely.
     #[serde(default = "default_think_budget")]
     pub think_budget: u32,
+    /// Top-k sampling. `None` defers to the model family default.
+    /// Bundled with `temperature` in the Creativity preset selector.
+    #[serde(default)]
+    pub top_k: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -132,6 +136,7 @@ impl Default for DesktopConfig {
             temperature: default_temperature(),
             max_tokens: default_max_tokens(),
             think_budget: default_think_budget(),
+            top_k: None,
         }
     }
 }
@@ -503,6 +508,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             temperature: cfg.temperature,
             max_tokens: cfg.max_tokens as usize,
             think_budget: cfg.think_budget as usize,
+            top_k: cfg.top_k,
         }
     };
 

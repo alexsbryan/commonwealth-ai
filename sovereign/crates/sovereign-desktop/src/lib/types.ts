@@ -72,6 +72,7 @@ export interface DesktopConfig {
   temperature: number;
   max_tokens: number;
   think_budget: number;
+  top_k: number | null;
 }
 
 export interface SearchBackendConfig {

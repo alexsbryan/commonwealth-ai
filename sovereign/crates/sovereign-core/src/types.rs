@@ -37,6 +37,9 @@ pub struct InferenceConfig {
     /// Maximum tokens allowed inside a `<think>` block before the
     /// generation loop force-closes it.
     pub think_budget: usize,
+    /// Top-k sampling parameter. `None` defers to the model family default
+    /// in `ModelQuirks::default_top_k` (or the sampler's hard fallback of 40).
+    pub top_k: Option<u32>,
 }
 
 impl Default for InferenceConfig {
@@ -45,6 +48,7 @@ impl Default for InferenceConfig {
             temperature: 0.7,
             max_tokens: 2048,
             think_budget: 512,
+            top_k: None,
         }
     }
 }

@@ -51,6 +51,86 @@
 
   let needsSave = $derived(activeTab === "models" || activeTab === "paths");
 
+  // ── Semantic preset detection ──────────────────────────────────
+
+  type CreativityPreset  = "precise" | "balanced" | "exploratory" | "custom";
+  type ReasoningPreset   = "quick" | "balanced" | "thorough" | "exhaustive" | "custom";
+  type LengthPreset      = "concise" | "standard" | "detailed" | "exhaustive" | "custom";
+
+  let creativityPreset = $derived.by((): CreativityPreset => {
+    if (!config) return "balanced";
+    const { temperature: t, top_k: k } = config;
+    if (t === 0.3 && k === 10)  return "precise";
+    if (t === 0.6 && k === 20)  return "balanced";
+    if (t === 1.0 && k === 40)  return "exploratory";
+    return "custom";
+  });
+
+  let reasoningPreset = $derived.by((): ReasoningPreset => {
+    if (!config) return "balanced";
+    const b = config.think_budget;
+    if (b === 0)     return "quick";
+    if (b === 4096)  return "balanced";
+    if (b === 16384) return "thorough";
+    if (b === 38000) return "exhaustive";
+    return "custom";
+  });
+
+  let lengthPreset = $derived.by((): LengthPreset => {
+    if (!config) return "standard";
+    const m = config.max_tokens;
+    if (m === 512)   return "concise";
+    if (m === 2048)  return "standard";
+    if (m === 6144)  return "detailed";
+    if (m === 16384) return "exhaustive";
+    return "custom";
+  });
+
+  function setCreativity(preset: Exclude<CreativityPreset, "custom">) {
+    if (!config) return;
+    const map = {
+      precise:     [0.3,  10 ] as [number, number],
+      balanced:    [0.6,  20 ] as [number, number],
+      exploratory: [1.0,  40 ] as [number, number],
+    };
+    [config.temperature, config.top_k] = map[preset];
+    markDirty();
+  }
+
+  function setReasoning(preset: Exclude<ReasoningPreset, "custom">) {
+    if (!config) return;
+    const map = { quick: 0, balanced: 4096, thorough: 16384, exhaustive: 38000 };
+    config.think_budget = map[preset];
+    markDirty();
+  }
+
+  function setLength(preset: Exclude<LengthPreset, "custom">) {
+    if (!config) return;
+    const map = { concise: 512, standard: 2048, detailed: 6144, exhaustive: 16384 };
+    config.max_tokens = map[preset];
+    markDirty();
+  }
+
+  const CREATIVITY_OPTS = [
+    { id: "precise"     as const, label: "Precise",     desc: "Consistent, deterministic. Best for facts, code, structured output.", tech: "temp 0.3 · top_k 10" },
+    { id: "balanced"    as const, label: "Balanced",    desc: "Coherent but not mechanical. Natural variation in phrasing.",          tech: "temp 0.6 · top_k 20" },
+    { id: "exploratory" as const, label: "Exploratory", desc: "More surprising angles. Higher hallucination risk on factual tasks.",  tech: "temp 1.0 · top_k 40" },
+  ];
+
+  const REASONING_OPTS = [
+    { id: "quick"      as const, label: "Quick",      desc: "Direct answer. No extended thinking. Lowest latency.",        tech: "budget 0 (disabled)" },
+    { id: "balanced"   as const, label: "Balanced",   desc: "Brief reasoning on hard questions, direct on simple ones.",   tech: "budget 4 096 tok" },
+    { id: "thorough"   as const, label: "Thorough",   desc: "Extended deliberation before answering. Noticeably slower.",  tech: "budget 16 384 tok" },
+    { id: "exhaustive" as const, label: "Exhaustive", desc: "Maximum reasoning. For genuinely hard problems.",             tech: "budget 38 000 tok" },
+  ];
+
+  const LENGTH_OPTS = [
+    { id: "concise"   as const, label: "Concise",   desc: "Gets to the point. Best for quick questions.",              tech: "max 512 tok" },
+    { id: "standard"  as const, label: "Standard",  desc: "Full answers without padding.",                             tech: "max 2 048 tok" },
+    { id: "detailed"  as const, label: "Detailed",  desc: "Room for nuance, examples, caveats.",                       tech: "max 6 144 tok" },
+    { id: "exhaustive" as const, label: "Exhaustive", desc: "No length constraints. Writes as much as needed.",        tech: "max 16 384 tok" },
+  ];
+
   let activeSlot: "fast" | "reasoning" | "embed" | null = $state(null);
 
   function modelFileName(path: string): string {
@@ -247,12 +327,87 @@
             </div>
           {/if}
 
-          <p class="section-label">Generation</p>
-          <div class="param-card">
+          <!-- ── Creativity ── -->
+          <p class="section-label">Creativity</p>
+          <p class="axis-question">How predictable should responses be?</p>
+          <div class="preset-row">
+            {#each CREATIVITY_OPTS as opt}
+              <button
+                class="preset-btn"
+                class:preset-btn--active={creativityPreset === opt.id}
+                onclick={() => setCreativity(opt.id)}
+              >{opt.label}</button>
+            {/each}
+            {#if creativityPreset === "custom"}
+              <span class="preset-custom">Custom</span>
+            {/if}
+          </div>
+          {#each CREATIVITY_OPTS as opt}
+            {#if creativityPreset === opt.id}
+              <p class="preset-desc">{opt.desc}</p>
+              <p class="preset-tech">{opt.tech}</p>
+            {/if}
+          {/each}
+          {#if creativityPreset === "exploratory"}
+            <div class="inline-notice" style="margin-top: 8px;">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M6.5 4v3.5M6.5 9.5v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              More creative, but more likely to confidently say wrong things. Not recommended for research.
+            </div>
+          {/if}
 
+          <!-- ── Reasoning Effort ── -->
+          <p class="section-label" style="margin-top: 22px;">Reasoning Effort</p>
+          <p class="axis-question">How carefully should the model think before answering? <span class="axis-scope">Complex questions only.</span></p>
+          <div class="preset-row">
+            {#each REASONING_OPTS as opt}
+              <button
+                class="preset-btn"
+                class:preset-btn--active={reasoningPreset === opt.id}
+                onclick={() => setReasoning(opt.id)}
+              >{opt.label}</button>
+            {/each}
+            {#if reasoningPreset === "custom"}
+              <span class="preset-custom">Custom</span>
+            {/if}
+          </div>
+          {#each REASONING_OPTS as opt}
+            {#if reasoningPreset === opt.id}
+              <p class="preset-desc">{opt.desc}</p>
+              <p class="preset-tech">{opt.tech}</p>
+            {/if}
+          {/each}
+
+          <!-- ── Response Length ── -->
+          <p class="section-label" style="margin-top: 22px;">Response Length</p>
+          <p class="axis-question">How thorough vs. concise should responses be? <span class="axis-scope">Complex questions only.</span></p>
+          <div class="preset-row">
+            {#each LENGTH_OPTS as opt}
+              <button
+                class="preset-btn"
+                class:preset-btn--active={lengthPreset === opt.id}
+                onclick={() => setLength(opt.id)}
+              >{opt.label}</button>
+            {/each}
+            {#if lengthPreset === "custom"}
+              <span class="preset-custom">Custom</span>
+            {/if}
+          </div>
+          {#each LENGTH_OPTS as opt}
+            {#if lengthPreset === opt.id}
+              <p class="preset-desc">{opt.desc}</p>
+              <p class="preset-tech">{opt.tech}</p>
+            {/if}
+          {/each}
+
+          <!-- ── Context Window (infrastructure setting, no preset) ── -->
+          <p class="section-label" style="margin-top: 22px;">Context Window</p>
+          <div class="param-card">
             <div class="param-row">
               <div class="param-top">
-                <span class="param-name">Context window</span>
+                <span class="param-name">Size</span>
                 <input
                   class="param-input"
                   type="number"
@@ -260,51 +415,8 @@
                   oninput={markDirty}
                 />
               </div>
-              <p class="param-hint">Tokens the model reads per session. Higher values let it remember more context.</p>
+              <p class="param-hint">How far back the model reads in a long conversation. Higher values improve coherence in long sessions at the cost of memory.</p>
             </div>
-
-            <div class="param-row">
-              <div class="param-top">
-                <span class="param-name">Temperature</span>
-                <input
-                  class="param-input"
-                  type="number"
-                  min="0" max="1" step="0.05"
-                  bind:value={config.temperature}
-                  oninput={markDirty}
-                />
-              </div>
-              <p class="param-hint">Variety in responses. Lower is more precise; higher is more inventive. 0.7 is a good balance.</p>
-            </div>
-
-            <div class="param-row">
-              <div class="param-top">
-                <span class="param-name">Max response length</span>
-                <input
-                  class="param-input"
-                  type="number"
-                  min="256" max="8192" step="128"
-                  bind:value={config.max_tokens}
-                  oninput={markDirty}
-                />
-              </div>
-              <p class="param-hint">Hard ceiling on tokens generated per response. 2048 handles most answers; raise it for long documents or code.</p>
-            </div>
-
-            <div class="param-row">
-              <div class="param-top">
-                <span class="param-name">Thinking budget</span>
-                <input
-                  class="param-input"
-                  type="number"
-                  min="0" max="4096" step="64"
-                  bind:value={config.think_budget}
-                  oninput={markDirty}
-                />
-              </div>
-              <p class="param-hint">Tokens a reasoning model may spend reflecting before answering. Set to 0 to remove the limit.</p>
-            </div>
-
           </div>
 
         {:else if activeTab === "models"}
@@ -916,5 +1028,80 @@
   .save-msg--pending {
     color: var(--text-muted);
     font-style: italic;
+  }
+
+  /* ── Semantic preset selectors ── */
+  .axis-question {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+    margin-bottom: 10px;
+  }
+
+  .axis-scope {
+    color: var(--lavender);
+    font-style: italic;
+    opacity: 0.85;
+  }
+
+  .preset-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+
+  .preset-btn {
+    padding: 5px 14px;
+    border-radius: 100px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    border: 1px solid var(--border-mid);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+
+  .preset-btn:hover {
+    border-color: var(--lavender);
+    color: var(--lavender-light);
+    background: var(--lavender-glow);
+  }
+
+  .preset-btn--active {
+    background: var(--lavender-dim);
+    border-color: var(--lavender);
+    color: var(--lavender-light);
+    font-weight: 600;
+  }
+
+  .preset-custom {
+    font-size: 0.68rem;
+    font-family: 'Syne Mono', monospace;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    opacity: 0.7;
+    padding: 3px 8px;
+    border: 1px dashed var(--border-mid);
+    border-radius: 100px;
+  }
+
+  .preset-desc {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+    margin-bottom: 3px;
+  }
+
+  .preset-tech {
+    font-size: 0.67rem;
+    font-family: 'Syne Mono', monospace;
+    color: var(--text-muted);
+    opacity: 0.55;
+    letter-spacing: 0.04em;
+    margin-bottom: 0;
   }
 </style>
