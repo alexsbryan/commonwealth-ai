@@ -625,6 +625,40 @@ impl CorpusEngine {
         self.open_index(&path).await
     }
 
+    /// Retry claim extraction on previously-failed chunks using the
+    /// truncation-repair parser, without re-running inference.
+    ///
+    /// Loads `_enrichment_failures.ndjson`, recovers what it can, embeds the
+    /// new claims, stores them, and rewrites the failures file with only the
+    /// still-unresolved records.
+    ///
+    /// Returns the number of newly recovered claims (0 if nothing to retry).
+    pub async fn retry_enrichment_failures(&self, corpus_id: &str) -> Result<usize> {
+        let index = self.open_index_for_corpus(corpus_id).await?;
+
+        // retry_parse_failures only calls self.embed, never self.inference.
+        // Supply a dummy InferenceFn so EnrichmentEngine can be constructed.
+        let dummy: crate::types::InferenceFn = std::sync::Arc::new(|_| {
+            Box::pin(async {
+                Err(crate::error::Error::Embed(
+                    "inference not available in retry mode".into(),
+                ))
+            })
+        });
+        let enricher =
+            crate::enrichment::EnrichmentEngine::new(self.embed_fn(), dummy);
+
+        let new_claims = enricher.retry_parse_failures(&index).await?;
+        let recovered = new_claims.len();
+
+        if recovered > 0 {
+            index.store_claims(&new_claims).await?;
+            index.build_claims_index().await?;
+        }
+
+        Ok(recovered)
+    }
+
     /// Return the IDs of all installed corpora that have an enriched
     /// `claims` table. Used by the `ClaimSearchTool` and
     /// `EpistemicLandscapeTool` to know which corpora to consult.

@@ -1,7 +1,7 @@
 //! `EnrichmentEngine` — runs claim and relationship extraction prompts
 //! against an existing `CorpusIndex`.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 use crate::index::CorpusIndex;
@@ -11,6 +11,26 @@ use crate::types::{EmbedFn, InferenceFn};
 
 use super::claims::{EpistemicStatus, ExtractedClaim};
 use super::relationships::{ClaimRelationship, RelationshipType};
+
+/// Persisted record of a chunk whose enrichment failed at the parse stage.
+///
+/// Written to `_enrichment_failures.ndjson` inside the corpus directory.
+/// Because only the raw inference response is stored (not re-generated),
+/// retries are cheap: reload the file, run a better parser, embed, store.
+/// Backwards-compatible: old indices have no failures file → empty list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnrichmentFailure {
+    pub chunk_id: u64,
+    pub corpus_id: String,
+    /// Chunk title, needed to reconstruct `ExtractedClaim.source_entry` on retry.
+    pub source_entry: Option<String>,
+    /// `"parse"` — inference succeeded but JSON could not be extracted.
+    pub error_kind: String,
+    /// The raw inference response that failed to parse.
+    pub raw_response: String,
+    /// Unix timestamp (seconds) of the failed attempt.
+    pub attempted_at: u64,
+}
 
 /// Runs the optional enrichment phase of the ingest pipeline.
 ///
@@ -79,9 +99,28 @@ impl EnrichmentEngine {
                 });
             }
 
+            // Truncate chunk content so the full prompt stays within the
+            // inference model's n_batch limit (~512 tokens). The template adds
+            // ~100 tokens of overhead, so cap the passage at 1600 chars
+            // (≈ 400 tokens at 4 chars/token) to leave safe headroom.
+            // We truncate at the last whitespace before the limit so we don't
+            // split a word mid-byte.
+            const MAX_PASSAGE_CHARS: usize = 1600;
+            let truncated_content;
+            let passage = if chunk.content.len() > MAX_PASSAGE_CHARS {
+                // Find the last ASCII whitespace at or before the char limit.
+                let cutoff = chunk.content[..MAX_PASSAGE_CHARS]
+                    .rfind(|c: char| c.is_ascii_whitespace())
+                    .unwrap_or(MAX_PASSAGE_CHARS);
+                truncated_content = format!("{}…", &chunk.content[..cutoff]);
+                &truncated_content
+            } else {
+                &chunk.content
+            };
+
             let prompt = format!(
                 "{}\n\n---\nPassage:\n{}\n---",
-                config.claim_extraction_prompt, chunk.content,
+                config.claim_extraction_prompt, passage,
             );
 
             let response = match (self.inference)(&prompt).await {
@@ -98,9 +137,25 @@ impl EnrichmentEngine {
                 None => {
                     parse_errors += 1;
                     eprintln!(
-                        "[{corpus_id}] chunk {i}/{total}: parse failed — {:?}",
+                        "[{corpus_id}] chunk {}/{total}: parse failed — {:?}",
+                        i + 1,
                         &response[..response.len().min(120)],
                     );
+                    // Persist the raw response so it can be retried later with
+                    // a better parser (e.g. truncation repair) without re-running
+                    // inference.
+                    let failure = EnrichmentFailure {
+                        chunk_id: chunk.id,
+                        corpus_id: corpus_id.clone(),
+                        source_entry: chunk.title.clone(),
+                        error_kind: "parse".to_string(),
+                        raw_response: response,
+                        attempted_at: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                    };
+                    let _ = index.append_enrichment_failure(&failure);
                     continue;
                 }
             };
@@ -138,6 +193,94 @@ impl EnrichmentEngine {
         );
 
         Ok(claims)
+    }
+
+    /// Re-run claim extraction on previously-failed chunks using improved parsers.
+    ///
+    /// Loads `_enrichment_failures.ndjson`, attempts to parse each stored
+    /// `raw_response` with `try_repair_truncated_claims()` (which handles
+    /// truncated JSON arrays), embeds successfully-parsed claims, and removes
+    /// resolved records from the file.
+    ///
+    /// Returns the new `ExtractedClaim`s; callers should pass them to
+    /// `index.store_claims()`. Backwards-compatible: returns `Ok([])` if no
+    /// failures file exists.
+    pub async fn retry_parse_failures(
+        &self,
+        index: &CorpusIndex,
+    ) -> Result<Vec<ExtractedClaim>> {
+        let failures = index.load_enrichment_failures();
+        // Clone parse failures so `failures` remains owned for the final filter.
+        let parse_failures: Vec<EnrichmentFailure> = failures
+            .iter()
+            .filter(|f| f.error_kind == "parse")
+            .cloned()
+            .collect();
+
+        if parse_failures.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let corpus_id = index.corpus_id();
+        eprintln!(
+            "[{corpus_id}] Retrying {} parse failures with repair parser…",
+            parse_failures.len(),
+        );
+
+        let mut resolved_chunk_ids: Vec<u64> = Vec::new();
+        let mut new_claims: Vec<ExtractedClaim> = Vec::new();
+        let mut next_id: u64 = 0;
+
+        for failure in &parse_failures {
+            let raw_claims = match try_repair_truncated_claims(&failure.raw_response) {
+                Some(v) if !v.is_empty() => v,
+                _ => continue,
+            };
+
+            for raw in raw_claims {
+                let status = EpistemicStatus::parse(&raw.epistemic_status);
+                let embedding = match (self.embed)(&raw.claim).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Embedding failed during retry for chunk {}: {e}",
+                            failure.chunk_id
+                        );
+                        continue;
+                    }
+                };
+                new_claims.push(ExtractedClaim {
+                    id: next_id,
+                    claim: raw.claim,
+                    source_chunk_id: failure.chunk_id,
+                    source_chunk_hash: None,
+                    corpus_id: failure.corpus_id.clone(),
+                    epistemic_status: status,
+                    hedging_language: raw.hedging_language,
+                    attributed_to: raw.attributed_to,
+                    source_entry: failure.source_entry.clone(),
+                    embedding,
+                });
+                next_id += 1;
+            }
+            resolved_chunk_ids.push(failure.chunk_id);
+        }
+
+        if !resolved_chunk_ids.is_empty() {
+            let remaining: Vec<EnrichmentFailure> = failures
+                .into_iter()
+                .filter(|f| !resolved_chunk_ids.contains(&f.chunk_id))
+                .collect();
+            let _ = index.save_enrichment_failures(&remaining);
+            eprintln!(
+                "[{corpus_id}] Retry resolved {}/{} parse failures → {} new claims",
+                resolved_chunk_ids.len(),
+                parse_failures.len(),
+                new_claims.len(),
+            );
+        }
+
+        Ok(new_claims)
     }
 
     /// Phase 2: extract relationships between claims from different entries.
@@ -344,6 +487,35 @@ fn parse_extracted_claims(response: &str) -> Option<Vec<RawExtractedClaim>> {
             return Some(claims);
         }
     }
+    None
+}
+
+/// Like `parse_extracted_claims` but additionally attempts to repair a
+/// truncated JSON array (model ran out of `max_tokens` mid-generation).
+///
+/// Strategy: find the last complete `}` in the fragment and close the array
+/// with `]`. This recovers all fully-generated claims even when the last one
+/// was cut off. Falls back to the standard parser first; this function is only
+/// invoked during retry so it never affects the hot ingest path.
+fn try_repair_truncated_claims(response: &str) -> Option<Vec<RawExtractedClaim>> {
+    // Standard parser first — handles normal and fenced responses.
+    if let Some(claims) = parse_extracted_claims(response) {
+        return Some(claims);
+    }
+
+    // Extract the JSON fragment (strips think tags and markdown fences).
+    let cleaned = strip_think_tags(response);
+    let fragment = extract_json_from_response(cleaned.trim())
+        .unwrap_or_else(|| cleaned.trim().to_string());
+
+    // Close the truncated array at the last complete object boundary.
+    if let Some(last_brace) = fragment.rfind('}') {
+        let repaired = format!("{}]", &fragment[..=last_brace]);
+        if let Ok(claims) = serde_json::from_str::<Vec<RawExtractedClaim>>(&repaired) {
+            return Some(claims);
+        }
+    }
+
     None
 }
 

@@ -19,6 +19,7 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 
 use crate::enrichment::article_profile::ArticleEpistemicProfile;
 use crate::enrichment::claims::{EpistemicStatus, ExtractedClaim};
+use crate::enrichment::engine::EnrichmentFailure;
 use crate::enrichment::landscape::EpistemicLandscape;
 use crate::enrichment::relationships::{ClaimRelationship, RelationshipType};
 use crate::enrichment::schema::{article_profiles_schema, claims_schema, relationships_schema};
@@ -1852,6 +1853,69 @@ impl CorpusIndex {
             &all_rels,
         );
         Ok(landscape)
+    }
+
+    // ─── Enrichment failure persistence ──────────────────────────────────────
+
+    /// Path to the NDJSON file that accumulates parse failures during
+    /// enrichment. One JSON object per line; new records are appended.
+    pub fn enrichment_failures_path(&self) -> std::path::PathBuf {
+        std::path::Path::new(self.db.uri()).join("_enrichment_failures.ndjson")
+    }
+
+    /// Append one failure record (creates the file if absent).
+    /// Calling this multiple times for the same chunk_id is safe;
+    /// `load_enrichment_failures` deduplicates by chunk_id, keeping the latest.
+    pub fn append_enrichment_failure(&self, failure: &EnrichmentFailure) -> Result<()> {
+        use std::io::Write as _;
+        let path = self.enrichment_failures_path();
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
+        let line = serde_json::to_string(failure)
+            .map_err(|e| Error::Serialization(e.to_string()))?;
+        writeln!(file, "{line}")?;
+        Ok(())
+    }
+
+    /// Load all unresolved failure records. Returns `[]` if the file doesn't
+    /// exist (old indices without enrichment failures are unaffected).
+    /// Deduplicates by `chunk_id`, keeping the record with the latest
+    /// `attempted_at` so re-runs don't produce phantom duplicates.
+    pub fn load_enrichment_failures(&self) -> Vec<EnrichmentFailure> {
+        let path = self.enrichment_failures_path();
+        let content = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let mut by_id: std::collections::HashMap<u64, EnrichmentFailure> =
+            std::collections::HashMap::new();
+        for line in content.lines() {
+            if let Ok(f) = serde_json::from_str::<EnrichmentFailure>(line) {
+                let is_newer = by_id
+                    .get(&f.chunk_id)
+                    .map_or(true, |existing| f.attempted_at >= existing.attempted_at);
+                if is_newer {
+                    by_id.insert(f.chunk_id, f);
+                }
+            }
+        }
+        by_id.into_values().collect()
+    }
+
+    /// Overwrite the failures file with the given slice.
+    /// Used after a successful retry to remove resolved records.
+    pub fn save_enrichment_failures(&self, failures: &[EnrichmentFailure]) -> Result<()> {
+        use std::io::Write as _;
+        let path = self.enrichment_failures_path();
+        let mut file = std::fs::File::create(&path)?;
+        for f in failures {
+            let line = serde_json::to_string(f)
+                .map_err(|e| Error::Serialization(e.to_string()))?;
+            writeln!(file, "{line}")?;
+        }
+        Ok(())
     }
 }
 

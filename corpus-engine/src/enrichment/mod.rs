@@ -23,7 +23,7 @@ pub use article_profile::{
     ArticleEpistemicProfile, WikiLink, WikipediaChunkMetadata, compute_article_profiles,
 };
 pub use claims::{ExtractedClaim, EpistemicStatus};
-pub use engine::EnrichmentEngine;
+pub use engine::{EnrichmentEngine, EnrichmentFailure};
 pub use landscape::{ContestedCluster, EpistemicLandscape, Position};
 pub use link_graph::LinkGraphBuilder;
 pub use relationships::{ClaimRelationship, RelationshipType};
