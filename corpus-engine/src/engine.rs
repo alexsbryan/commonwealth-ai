@@ -386,15 +386,18 @@ impl CorpusEngine {
                     total: total_chunks,
                 });
             }
-            index.build_indexes().await?;
+            let sub_phase_cb: Option<Box<dyn Fn(u64, u64) + Send + Sync>> =
+                progress.as_ref().map(|cb| -> Box<dyn Fn(u64, u64) + Send + Sync> {
+                    Box::new(move |done, total_phases| {
+                        cb(IngestProgress::Indexing {
+                            chunks_indexed: total_chunks * done / total_phases,
+                            total: total_chunks,
+                        });
+                    })
+                });
+            index.build_indexes(sub_phase_cb.as_deref()).await?;
             // Checkpoint: if killed after this point, resume can skip rebuild.
             let _ = index.mark_indexes_built();
-            if let Some(ref cb) = progress {
-                cb(IngestProgress::Indexing {
-                    chunks_indexed: total_chunks,
-                    total: total_chunks,
-                });
-            }
         }
 
         // Optional enrichment phase: extract claims and relationships.

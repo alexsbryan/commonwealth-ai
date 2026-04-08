@@ -140,6 +140,15 @@ struct IndexMeta {
     /// mark_ingestion_complete). Defaults to false.
     #[serde(default)]
     indexes_built: bool,
+    /// Per-sub-phase checkpoints within build_indexes(). Allow a resume to skip
+    /// whichever sub-indexes were already built before a kill/crash, avoiding
+    /// multi-hour rebuilds of completed work.
+    #[serde(default)]
+    vector_index_built: bool,
+    #[serde(default)]
+    content_fts_built: bool,
+    #[serde(default)]
+    title_fts_built: bool,
 
     // ── Health-check fields ──────────────────────────────────
     /// Expected total chunks, written at ingest start.
@@ -234,6 +243,9 @@ impl CorpusIndex {
             ingestion_in_progress: true,
             committed_iter_pos: 0,
             indexes_built: false,
+            vector_index_built: false,
+            content_fts_built: false,
+            title_fts_built: false,
             chunks_expected: None,
             resume_from: None,
             enrichment_enabled: false,
@@ -480,17 +492,53 @@ impl CorpusIndex {
         write_meta(index_dir, &meta)
     }
 
+    pub fn mark_vector_index_built(&self) -> Result<()> {
+        let dir = Path::new(self.db.uri());
+        let mut meta = read_meta(dir)?;
+        meta.vector_index_built = true;
+        write_meta(dir, &meta)
+    }
+
+    pub fn mark_content_fts_built(&self) -> Result<()> {
+        let dir = Path::new(self.db.uri());
+        let mut meta = read_meta(dir)?;
+        meta.content_fts_built = true;
+        write_meta(dir, &meta)
+    }
+
+    pub fn mark_title_fts_built(&self) -> Result<()> {
+        let dir = Path::new(self.db.uri());
+        let mut meta = read_meta(dir)?;
+        meta.title_fts_built = true;
+        write_meta(dir, &meta)
+    }
+
     /// Build vector + FTS indexes for efficient search.
     /// Should be called after all data is inserted.
-    pub async fn build_indexes(&self) -> Result<()> {
+    ///
+    /// Each sub-phase (vector, content FTS, title FTS) is checkpointed
+    /// individually so a resume after a kill skips already-built indexes.
+    /// `on_sub_phase_complete` is called with `(completed, total_sub_phases)`
+    /// after each sub-phase finishes so callers can emit progress events.
+    pub async fn build_indexes(
+        &self,
+        on_sub_phase_complete: Option<&(dyn Fn(u64, u64) + Send + Sync)>,
+    ) -> Result<()> {
         let count = self.chunk_count().await?;
         if count == 0 {
             return Ok(());
         }
 
-        // Build IVF-PQ vector index.
+        let dir = Path::new(self.db.uri()).to_path_buf();
+        let id = &self.corpus_id;
+
+        // (1/3) IVF-PQ vector index.
         // Only build if we have enough data (LanceDB needs >= 256 rows for IVF).
-        if count >= 256 {
+        let vector_done = read_meta(&dir).map(|m| m.vector_index_built).unwrap_or(false);
+        if vector_done {
+            eprintln!("[{id}] Vector index already built — skipping (1/3)");
+        } else if count >= 256 {
+            eprintln!("[{id}] Building vector index (1/3)...");
             self.table
                 .create_index(
                     &["embedding"],
@@ -499,31 +547,55 @@ impl CorpusIndex {
                 .execute()
                 .await
                 .map_err(|e| Error::Database(format!("vector index: {e}")))?;
+            let _ = self.mark_vector_index_built();
+            eprintln!("[{id}] Vector index done");
+        } else {
+            eprintln!("[{id}] Skipping vector index — fewer than 256 rows (1/3)");
+            let _ = self.mark_vector_index_built();
         }
+        if let Some(cb) = on_sub_phase_complete { cb(1, 3); }
 
-        // Build Tantivy FTS indexes on content and title separately
-        // (composite multi-column FTS is not supported in LanceDB).
-        self.table
-            .create_index(
-                &["content"],
-                lancedb::index::Index::FTS(
-                    lancedb::index::scalar::FtsIndexBuilder::default(),
-                ),
-            )
-            .execute()
-            .await
-            .map_err(|e| Error::Database(format!("FTS content index: {e}")))?;
+        // (2/3) Tantivy FTS index on content.
+        let content_done = read_meta(&dir).map(|m| m.content_fts_built).unwrap_or(false);
+        if content_done {
+            eprintln!("[{id}] FTS content index already built — skipping (2/3)");
+        } else {
+            eprintln!("[{id}] Building FTS content index (2/3)...");
+            self.table
+                .create_index(
+                    &["content"],
+                    lancedb::index::Index::FTS(
+                        lancedb::index::scalar::FtsIndexBuilder::default(),
+                    ),
+                )
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("FTS content index: {e}")))?;
+            let _ = self.mark_content_fts_built();
+            eprintln!("[{id}] FTS content index done");
+        }
+        if let Some(cb) = on_sub_phase_complete { cb(2, 3); }
 
-        self.table
-            .create_index(
-                &["title"],
-                lancedb::index::Index::FTS(
-                    lancedb::index::scalar::FtsIndexBuilder::default(),
-                ),
-            )
-            .execute()
-            .await
-            .map_err(|e| Error::Database(format!("FTS title index: {e}")))?;
+        // (3/3) Tantivy FTS index on title.
+        let title_done = read_meta(&dir).map(|m| m.title_fts_built).unwrap_or(false);
+        if title_done {
+            eprintln!("[{id}] FTS title index already built — skipping (3/3)");
+        } else {
+            eprintln!("[{id}] Building FTS title index (3/3)...");
+            self.table
+                .create_index(
+                    &["title"],
+                    lancedb::index::Index::FTS(
+                        lancedb::index::scalar::FtsIndexBuilder::default(),
+                    ),
+                )
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("FTS title index: {e}")))?;
+            let _ = self.mark_title_fts_built();
+            eprintln!("[{id}] FTS title index done");
+        }
+        if let Some(cb) = on_sub_phase_complete { cb(3, 3); }
 
         Ok(())
     }
@@ -769,9 +841,14 @@ impl CorpusIndex {
     /// Rebuild both FTS indexes (content + title) from current data.
     /// This drops the existing indexes and recreates them.
     pub async fn rebuild_fts(&self) -> Result<()> {
-        // Drop existing FTS indexes — LanceDB recreates on `create_index` if needed.
-        // We call build_indexes() which is idempotent for existing indexes.
-        self.build_indexes().await
+        // Clear sub-phase flags so build_indexes() actually rebuilds the FTS indexes.
+        let dir = Path::new(self.db.uri());
+        if let Ok(mut meta) = read_meta(dir) {
+            meta.content_fts_built = false;
+            meta.title_fts_built = false;
+            let _ = write_meta(dir, &meta);
+        }
+        self.build_indexes(None).await
     }
 
     /// Re-embed the specified chunks with a fresh embedding call and update them in place.
@@ -1890,7 +1967,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let idx = create_test_index(dir.path()).await;
         idx.insert_batch(&sample_chunks()).await.unwrap();
-        idx.build_indexes().await.unwrap();
+        idx.build_indexes(None).await.unwrap();
 
         let results = idx.search(&[], "Rust programming", 10).await.unwrap();
         assert!(!results.is_empty(), "FTS search should return results");
@@ -1957,7 +2034,7 @@ mod tests {
             .await
             .unwrap();
             idx.insert_batch(&sample_chunks()).await.unwrap();
-            idx.build_indexes().await.unwrap();
+            idx.build_indexes(None).await.unwrap();
         }
 
         // Re-open and verify.
