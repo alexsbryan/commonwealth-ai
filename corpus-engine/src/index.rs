@@ -779,9 +779,20 @@ impl CorpusIndex {
         };
         let do_fts = !sanitized.is_empty() && fts_built;
 
+        tracing::debug!(
+            do_vector,
+            do_fts,
+            fts_built,
+            query_dims = query_embedding.len(),
+            "CorpusIndex::search"
+        );
+
         if !do_vector && !do_fts {
+            tracing::debug!("CorpusIndex::search: nothing to search, returning empty");
             return Ok(Vec::new());
         }
+
+        let t_search = std::time::Instant::now();
 
         let results = if do_vector && do_fts {
             // Hybrid: vector + FTS combined via reranking.
@@ -889,6 +900,11 @@ impl CorpusIndex {
 
         scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         scored.truncate(limit);
+        tracing::debug!(
+            results = scored.len(),
+            elapsed_ms = t_search.elapsed().as_millis() as u64,
+            "CorpusIndex::search complete"
+        );
         Ok(scored)
     }
 
