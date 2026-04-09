@@ -758,16 +758,9 @@ impl Runtime {
                 Ok(indexes) => {
                     tracing::info!(count = indexes.len(), "KnowledgeQuery: indexes found");
                     for info in &indexes {
-                        let ready = self
-                            .store
-                            .get_vector_index_ready(&info.corpus_id)
-                            .await
-                            .unwrap_or(false);
-                        let search_emb: &[f32] = if ready { &embedding } else { &[] };
                         tracing::info!(
                             corpus = %info.corpus_id,
-                            vector_index_ready = ready,
-                            query_dims = search_emb.len(),
+                            embedding_dims = embedding.len(),
                             "KnowledgeQuery: opening index"
                         );
                         let t_open = std::time::Instant::now();
@@ -783,7 +776,7 @@ impl Runtime {
                                     "KnowledgeQuery: searching"
                                 );
                                 let t_s = std::time::Instant::now();
-                                match idx.search(search_emb, message, 5).await {
+                                match idx.search(&embedding, message, 5).await {
                                     Err(e) => tracing::warn!(
                                         corpus = %info.corpus_id, error = %e,
                                         "KnowledgeQuery: search() failed"
