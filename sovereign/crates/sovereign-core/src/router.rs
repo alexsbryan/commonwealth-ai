@@ -538,8 +538,18 @@ Reply with ONLY the letter: A, B, or C"#
 
     /// Parse a JSON coarse-classification response: `{"intent": "SIMPLE|...", "confidence": 0.9}`.
     fn parse_coarse(raw: &str) -> CoarseClassification {
+        // Strip <think>...</think> blocks that Qwen3 emits even with think_budget=0.
+        let after_think = if let (Some(start), Some(end)) = (raw.find("<think>"), raw.find("</think>")) {
+            if end > start {
+                &raw[end + "</think>".len()..]
+            } else {
+                raw
+            }
+        } else {
+            raw
+        };
         // Strip markdown code fences if present.
-        let cleaned = raw
+        let cleaned = after_think
             .trim()
             .trim_start_matches("```json")
             .trim_start_matches("```")

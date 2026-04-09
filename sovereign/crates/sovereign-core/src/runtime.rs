@@ -737,9 +737,10 @@ impl Runtime {
     ) -> Result<Response> {
         use std::cmp::Ordering;
 
-        // 1. Embed once, reuse across all corpora.
+        // 1. Embed the query using the query-side function (applies instruction prefix
+        //    for asymmetric models like Qwen3-Embedding).
         let t0 = std::time::Instant::now();
-        let embedding = self.inference.embed(message).await.unwrap_or_default();
+        let embedding = self.inference.embed_query(message).await.unwrap_or_default();
         tracing::info!(
             embedding_dims = embedding.len(),
             embedding_ms = t0.elapsed().as_millis() as u64,
