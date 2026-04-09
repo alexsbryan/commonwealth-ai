@@ -771,11 +771,20 @@ impl CorpusIndex {
     ) -> Result<Vec<ScoredChunk>> {
         let do_vector = !query_embedding.is_empty();
         let sanitized = sanitize_fts_query(query_text);
-        // Only attempt FTS if a content FTS index was actually built.
-        // Without the index, LanceDB falls back to a full-table text scan (~30s on large corpora).
-        let fts_built = {
-            let dir = std::path::Path::new(self.db.uri()).to_path_buf();
-            read_meta(&dir).map(|m| m.content_fts_built).unwrap_or(false)
+        // Check whether a real Tantivy FTS index exists via list_indices().
+        // We cannot rely on the `content_fts_built` meta flag because
+        // build_indexes(..., build_fts=false, ...) marks the flag "done" (meaning
+        // "not needed") even when no Tantivy index was actually created — leaving
+        // do_fts=true would trigger a 30-second full-table text scan.
+        let fts_built = if !sanitized.is_empty() {
+            self.table
+                .list_indices()
+                .await
+                .unwrap_or_default()
+                .iter()
+                .any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"))
+        } else {
+            false
         };
         let do_fts = !sanitized.is_empty() && fts_built;
 
@@ -803,6 +812,7 @@ impl CorpusIndex {
                 .full_text_search(
                     FullTextSearchQuery::new(sanitized),
                 )
+                .nprobes(50)
                 .limit(limit)
                 .execute()
                 .await
@@ -816,6 +826,7 @@ impl CorpusIndex {
                 .query()
                 .nearest_to(query_embedding.to_vec())
                 .map_err(|e| Error::Database(format!("vector query: {e}")))?
+                .nprobes(50)
                 .limit(limit)
                 .execute()
                 .await
@@ -899,6 +910,18 @@ impl CorpusIndex {
         }
 
         scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        // Drop results below minimum relevance threshold.
+        // score = 1/(1+distance); distance=1.0 → score=0.5, distance=1.22 → score≈0.45.
+        // Anything below 0.45 is semantically too distant to be useful.
+        let before_threshold = scored.len();
+        scored.retain(|c| c.score >= 0.45);
+        if before_threshold != scored.len() {
+            tracing::debug!(
+                dropped = before_threshold - scored.len(),
+                remaining = scored.len(),
+                "CorpusIndex::search: dropped low-score results"
+            );
+        }
         scored.truncate(limit);
         tracing::debug!(
             results = scored.len(),
