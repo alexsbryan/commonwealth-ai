@@ -224,7 +224,6 @@ struct ZipEntryReader {
 
 impl ZipEntryReader {
     fn new(mut archive: zip::ZipArchive<File>, zip_path: &Path) -> Result<Self> {
-        // Find the first JSONL-like entry (any entry with content, preferring .jsonl).
         let n = archive.len();
         if n == 0 {
             return Err(Error::Extraction(format!(
@@ -232,29 +231,45 @@ impl ZipEntryReader {
             )));
         }
 
-        // Prefer an entry named *.jsonl; fall back to index 0.
-        let entry_index = (0..n)
-            .find(|&i| {
+        // Collect all JSONL entries. If none have the .jsonl extension, fall back to index 0.
+        // The wikimedia/structured-wikipedia ZIP contains multiple JSONL shards; we must
+        // process ALL of them. Previously only the first was read, causing 99%+ data loss.
+        let jsonl_indices: Vec<usize> = (0..n)
+            .filter(|&i| {
                 archive.name_for_index(i)
                     .map(|name| name.ends_with(".jsonl"))
                     .unwrap_or(false)
             })
-            .unwrap_or(0);
+            .collect();
+        let indices = if jsonl_indices.is_empty() { vec![0] } else { jsonl_indices };
 
-        let mut zip_entry = archive.by_index(entry_index).map_err(|e| {
-            Error::Extraction(format!(
-                "Failed to open ZIP entry {} in {}: {e}",
-                entry_index, zip_path.display()
-            ))
-        })?;
+        eprintln!(
+            "[corpus-engine] ZIP {} has {} total entries, {} JSONL shards — extracting all",
+            zip_path.display(), n, indices.len()
+        );
 
-        // Stream into a named temp file so we can BufRead without lifetime issues.
+        // Concatenate all JSONL shards into a single temp file. Each shard is
+        // newline-delimited JSON, so concatenation is valid: each line is a
+        // complete JSON object and shards end with a newline.
         let mut tmp = tempfile::NamedTempFile::new().map_err(|e| {
             Error::Extraction(format!("Failed to create temp file: {e}"))
         })?;
-        std::io::copy(&mut zip_entry, &mut tmp).map_err(|e| {
-            Error::Extraction(format!("Failed to extract ZIP entry: {e}"))
-        })?;
+        for (pos, entry_index) in indices.iter().enumerate() {
+            let name = archive.name_for_index(*entry_index).unwrap_or("?").to_string();
+            eprintln!(
+                "[corpus-engine] Extracting shard {}/{}: {}",
+                pos + 1, indices.len(), name
+            );
+            let mut zip_entry = archive.by_index(*entry_index).map_err(|e| {
+                Error::Extraction(format!(
+                    "Failed to open ZIP entry {} in {}: {e}",
+                    entry_index, zip_path.display()
+                ))
+            })?;
+            std::io::copy(&mut zip_entry, &mut tmp).map_err(|e| {
+                Error::Extraction(format!("Failed to extract ZIP entry {entry_index}: {e}"))
+            })?;
+        }
 
         // Reopen temp file for reading.
         let (_, tmp_path) = tmp.keep().map_err(|e| {
@@ -263,8 +278,7 @@ impl ZipEntryReader {
         let file = File::open(&tmp_path).map_err(|e| {
             Error::Extraction(format!("Failed to reopen temp file: {e}"))
         })?;
-        // Schedule deletion: we leak the path here; temp files are cleaned on process exit.
-        // For a production system, wrap in a struct that deletes on Drop.
+        // Schedule deletion: leaked here; cleaned on process exit.
 
         Ok(Self { inner: BufReader::new(file) })
     }
