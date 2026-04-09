@@ -784,7 +784,9 @@ impl CorpusIndex {
             do_vector,
             do_fts,
             fts_built,
+            stored_dims = self.embedding_dimensions,
             query_dims = query_embedding.len(),
+            dims_match = (query_embedding.is_empty() || query_embedding.len() == self.embedding_dimensions),
             sanitized_query = %sanitized,
             "CorpusIndex::search"
         );
