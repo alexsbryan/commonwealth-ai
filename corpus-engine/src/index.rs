@@ -785,6 +785,7 @@ impl CorpusIndex {
             do_fts,
             fts_built,
             query_dims = query_embedding.len(),
+            sanitized_query = %sanitized,
             "CorpusIndex::search"
         );
 
@@ -842,6 +843,16 @@ impl CorpusIndex {
                 .map_err(|e| Error::Database(format!("collect: {e}")))?
         };
 
+        // Log the result schema once so we can see what score columns LanceDB returns.
+        // Hybrid search may return _relevance_score or _score instead of _distance.
+        if let Some(first) = results.first() {
+            let schema = first.schema();
+            let col_names: Vec<&str> = schema.fields().iter()
+                .map(|f| f.name().as_str())
+                .collect();
+            tracing::debug!(columns = ?col_names, "CorpusIndex::search result schema");
+        }
+
         // Convert Arrow RecordBatches to ScoredChunks.
         let mut scored = Vec::new();
         for batch in &results {
@@ -857,8 +868,16 @@ impl CorpusIndex {
             let metadata_col = batch
                 .column_by_name("metadata")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            // LanceDB vector-only → _distance; hybrid → _relevance_score or _score.
+            // Try all known column names so we can log which one is actually present.
             let distance_col = batch
                 .column_by_name("_distance")
+                .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+            let relevance_col = batch
+                .column_by_name("_relevance_score")
+                .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+            let score_col = batch
+                .column_by_name("_score")
                 .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
 
             let num_rows = batch.num_rows();
@@ -882,13 +901,28 @@ impl CorpusIndex {
                     })
                     .unwrap_or_default();
 
-                // Convert distance to score (lower distance = higher score).
-                let score = distance_col
-                    .map(|d| {
-                        let dist = d.value(i);
-                        1.0 / (1.0 + dist)
-                    })
-                    .unwrap_or(1.0); // FTS-only results get score 1.0
+                // Convert distance/relevance to a [0,1] score.
+                // _distance: lower = better → score = 1/(1+d)
+                // _relevance_score / _score: higher = better → use directly (already [0,1])
+                let (score, score_source) = if let Some(d) = distance_col {
+                    let dist = d.value(i);
+                    (1.0_f32 / (1.0 + dist), "_distance")
+                } else if let Some(r) = relevance_col {
+                    (r.value(i), "_relevance_score")
+                } else if let Some(s) = score_col {
+                    (s.value(i), "_score")
+                } else {
+                    (1.0_f32, "none")
+                };
+
+                tracing::debug!(
+                    rank = i + 1,
+                    score,
+                    score_source,
+                    title = title.as_deref().unwrap_or(""),
+                    content_preview = &content[..content.len().min(120)],
+                    "CorpusIndex::search result"
+                );
 
                 scored.push(ScoredChunk {
                     content,
@@ -907,13 +941,12 @@ impl CorpusIndex {
         // Anything below 0.45 is semantically too distant to be useful.
         let before_threshold = scored.len();
         scored.retain(|c| c.score >= 0.45);
-        if before_threshold != scored.len() {
-            tracing::debug!(
-                dropped = before_threshold - scored.len(),
-                remaining = scored.len(),
-                "CorpusIndex::search: dropped low-score results"
-            );
-        }
+        tracing::debug!(
+            before = before_threshold,
+            after = scored.len(),
+            dropped = before_threshold - scored.len(),
+            "CorpusIndex::search: threshold(0.45) applied"
+        );
         scored.truncate(limit);
         tracing::debug!(
             results = scored.len(),
