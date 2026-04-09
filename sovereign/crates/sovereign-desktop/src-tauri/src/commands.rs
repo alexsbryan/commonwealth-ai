@@ -122,6 +122,10 @@ pub struct CorpusEntry {
     /// True when the IVF-PQ vector index is built and semantic search is available.
     /// False means FTS-only search is used (fast but keyword-only).
     pub vector_index_ready: bool,
+    /// URL of the recipe TOML in the public registry. Null for user-added corpora.
+    pub registry_url: Option<String>,
+    /// Recipe schema version (1 = initial). Used for compatibility checks.
+    pub schema_version: Option<u32>,
 }
 
 /// Detailed health report for a single installed corpus, loaded on demand
@@ -914,9 +918,9 @@ pub async fn download_model(
 //
 // All corpus operations route through the shared `CorpusEngine` stored
 // in `AppState::corpus_engine`. The catalog of available corpora comes
-// from `corpus_engine::recipe::builtin_recipes()` (Rust source — no
-// sidecar TOML), and installed state comes from `installed_indexes()`
-// scanning `~/.sovereign/indexes`. The legacy `CorpusManager` /
+// from the `RecipeRegistry` bundled snapshot (registry_snapshot.toml),
+// and installed state comes from `installed_indexes()` scanning
+// `~/.sovereign/indexes`. The legacy `CorpusManager` /
 // `CorpusRegistry` / `data/corpora.toml` path has been removed.
 
 /// Map a `corpus_engine::IngestProgress` variant to a frontend-friendly
@@ -1081,24 +1085,12 @@ pub async fn list_corpora(
     };
     drop(engine_guard);
 
-    // Pull built-in catalog (always available — it's source code).
+    // Pull built-in catalog from registry snapshot (no network required).
     let builtins = engine.builtin_corpora();
 
     // Look up live install status. Failure here is non-fatal — we still
     // want to render the catalog so the user can choose what to install.
     let installed = engine.installed_indexes().await.unwrap_or_default();
-
-    // Recipes ship with their full enrichment config; consult the recipe
-    // list to see which corpora will run claim extraction.
-    let recipes = corpus_engine::recipe::builtin_recipes();
-    let enrichment_for = |id: &str| -> bool {
-        recipes
-            .iter()
-            .find(|r| r.corpus.id == id)
-            .and_then(|r| r.enrichment.as_ref())
-            .map(|e| e.enabled)
-            .unwrap_or(false)
-    };
 
     let installing = state.install_progress.read().await;
 
@@ -1109,6 +1101,7 @@ pub async fn list_corpora(
 
     let mut entries = Vec::new();
     for b in &builtins {
+        let registry_entry = engine.registry().find_entry(&b.id);
         let installed_info = installed.iter().find(|i| i.corpus_id == b.id && !i.is_shard);
         let is_installing = installing
             .get(&b.id)
@@ -1142,11 +1135,13 @@ pub async fn list_corpora(
             tiers: tiers_for(&b.id),
             status: status.to_string(),
             chunks_count: installed_info.map(|i| i.chunk_count),
-            enrichment_enabled: enrichment_for(&b.id),
+            enrichment_enabled: registry_entry.map(|e| e.enrichment_enabled).unwrap_or(false),
             indexed_at: installed_info.map(|i| i.created_at),
             embedding_model: installed_info.map(|i| i.embedding_model.clone()),
             embedding_dimensions: installed_info.map(|i| i.embedding_dimensions),
             vector_index_ready,
+            registry_url: registry_entry.map(|e| e.toml_url.clone()),
+            schema_version: Some(1),
         });
     }
 

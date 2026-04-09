@@ -15,7 +15,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, EmbedFn, TestOptions};
+use corpus_engine::{CorpusEngine, EmbedFn, RecipeRegistry, TestOptions};
 
 // ── Public entry points ─────────────────────────────────────────────────────
 
@@ -29,6 +29,7 @@ pub async fn run_recipe(args: &[String]) -> i32 {
     match args[0].as_str() {
         "test" => cmd_test(&args[1..]).await,
         "validate" => cmd_validate(&args[1..]).await,
+        "list" => cmd_list(&args[1..]).await,
         "help" | "--help" | "-h" => {
             print_usage();
             0
@@ -219,6 +220,57 @@ async fn cmd_validate(args: &[String]) -> i32 {
     }
 }
 
+// ── `recipe list` ───────────────────────────────────────────────────────────
+
+async fn cmd_list(args: &[String]) -> i32 {
+    let mut offline = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--offline" => offline = true,
+            flag if flag.starts_with('-') => {
+                eprintln!("warning: unknown flag '{flag}' — ignored");
+            }
+            _ => {}
+        }
+    }
+
+    let mut registry = RecipeRegistry::from_bundled(None);
+
+    if !offline {
+        registry.refresh().await;
+    }
+
+    let entries = registry.list_entries();
+    if entries.is_empty() {
+        eprintln!("No corpora found in registry.");
+        return 0;
+    }
+
+    // Header
+    println!("{:<16} {:<40} {:<14} {:>8} {:>8}",
+        "ID", "Name", "License", "Compressed", "Indexed");
+    println!("{}", "-".repeat(90));
+
+    for entry in &entries {
+        println!("{:<16} {:<40} {:<14} {:>7.0}GB {:>7.0}GB",
+            entry.id,
+            if entry.name.len() > 39 { &entry.name[..39] } else { &entry.name },
+            if entry.license.len() > 13 { &entry.license[..13] } else { &entry.license },
+            entry.size_compressed_gb,
+            entry.size_indexed_gb,
+        );
+    }
+
+    println!();
+    println!("{} corpus/corpora in registry", entries.len());
+    if offline {
+        println!("(offline mode — showing bundled snapshot)");
+    }
+
+    0
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /// Build a `CorpusEngine` with a stub embed function.
@@ -239,8 +291,12 @@ fn print_usage() {
     eprintln!("Usage: sovereign recipe <subcommand> [options]");
     eprintln!();
     eprintln!("Subcommands:");
+    eprintln!("  list             List all corpora available in the registry");
     eprintln!("  test <path>      Run the full test harness against a recipe file");
     eprintln!("  validate <path>  Validate recipe fields without downloading data");
+    eprintln!();
+    eprintln!("Options for 'list':");
+    eprintln!("  --offline        Use bundled snapshot; skip live registry refresh");
     eprintln!();
     eprintln!("Options for 'test':");
     eprintln!("  --sample-size N  Number of records to sample (default: 100)");
