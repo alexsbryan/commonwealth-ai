@@ -169,7 +169,13 @@ impl ModelSlot {
                 // Update sliding tail for tag detection.
                 tail.push_str(&piece);
                 if tail.len() > 32 {
-                    tail.drain(..tail.len() - 32);
+                    // Walk back from len-32 to the nearest char boundary so we
+                    // never slice through a multi-byte UTF-8 sequence (Qwen3).
+                    let mut drain_to = tail.len() - 32;
+                    while drain_to > 0 && !tail.is_char_boundary(drain_to) {
+                        drain_to -= 1;
+                    }
+                    tail.drain(..drain_to);
                 }
                 if !in_think && tail.contains("<think>") {
                     in_think = true;
@@ -272,7 +278,13 @@ impl ModelSlot {
             if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
                 tail.push_str(&piece);
                 if tail.len() > 32 {
-                    tail.drain(..tail.len() - 32);
+                    // Walk back from len-32 to the nearest char boundary so we
+                    // never slice through a multi-byte UTF-8 sequence (Qwen3).
+                    let mut drain_to = tail.len() - 32;
+                    while drain_to > 0 && !tail.is_char_boundary(drain_to) {
+                        drain_to -= 1;
+                    }
+                    tail.drain(..drain_to);
                 }
                 if !in_think && tail.contains("<think>") {
                     in_think = true;

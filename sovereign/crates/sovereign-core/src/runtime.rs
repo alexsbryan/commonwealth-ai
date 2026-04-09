@@ -308,9 +308,9 @@ impl Runtime {
             .classify(message, &context, &tool_descriptors)
             .await?;
 
-        if matches!(intent, Intent::ComplexTask) {
+        if matches!(intent, Intent::ComplexTask | Intent::KnowledgeQuery) {
             return Err(Error::NotImplemented(
-                "Streaming not supported for complex tasks".into(),
+                "Streaming not supported for this intent".into(),
             ));
         }
 
