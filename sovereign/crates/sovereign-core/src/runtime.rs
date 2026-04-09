@@ -761,7 +761,12 @@ impl Runtime {
                     for info in &indexes {
                         tracing::info!(
                             corpus = %info.corpus_id,
-                            embedding_dims = embedding.len(),
+                            embedding_model = %info.embedding_model,
+                            stored_dims = info.embedding_dimensions,
+                            query_dims = embedding.len(),
+                            dims_match = (embedding.is_empty() || embedding.len() == info.embedding_dimensions),
+                            chunk_count = info.chunk_count,
+                            chunks_expected = ?info.chunks_expected,
                             "KnowledgeQuery: opening index"
                         );
                         let t_open = std::time::Instant::now();
