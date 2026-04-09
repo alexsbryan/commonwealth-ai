@@ -50,6 +50,10 @@ fn default_factual_patterns() -> Vec<String> {
         .collect()
 }
 
+fn default_schema_version() -> u32 {
+    1
+}
+
 fn default_max_chunk_chars() -> usize {
     2048
 }
@@ -78,6 +82,21 @@ fn default_max_relationship_candidates() -> usize {
 // Top-level Recipe
 // ---------------------------------------------------------------------------
 
+/// Optional pre-built index block. When present, the engine can download a
+/// pre-built LanceDB archive from HuggingFace instead of running a full ingest.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrebuiltConfig {
+    /// HuggingFace repo in `org/name` format, e.g. `"sovereign-foundation/wikipedia-index"`.
+    pub hf_repo: String,
+    /// Filename within the HF repo, e.g. `"wikipedia-nomic-embed-text-v2.tar.zst"`.
+    pub hf_filename: String,
+    /// Hex-encoded SHA-256 of the archive. Empty string skips verification.
+    pub sha256: String,
+    /// Embedding model name the pre-built index was built with. Used to verify
+    /// compatibility with the currently loaded model before downloading.
+    pub compatible_embedding_model: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recipe {
     pub corpus: CorpusMeta,
@@ -96,6 +115,11 @@ pub struct Recipe {
     /// monitor can check for new versions and apply delta updates.
     #[serde(default)]
     pub update: Option<UpdateConfig>,
+
+    /// Optional pre-built index. When present, users can skip full ingest
+    /// by downloading a pre-built LanceDB archive from HuggingFace.
+    #[serde(default)]
+    pub prebuilt: Option<PrebuiltConfig>,
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +213,10 @@ pub struct CorpusMeta {
     pub size_compressed_gb: f64,
     #[serde(default)]
     pub size_indexed_gb: f64,
+    /// Schema version for this recipe format. Defaults to 1.
+    /// Increment when making breaking changes to the TOML schema.
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -412,9 +440,14 @@ impl Recipe {
 /// Returns `Recipe` definitions for well-known corpora, loaded from the
 /// `recipes/` directory at compile time via `include_str!`.
 ///
+/// **For tests only.** Not compiled into production binaries.
+/// Production code uses `RecipeRegistry::fetch_recipe()` which checks
+/// local overrides and fetches from the registry URL.
+///
 /// To add a new corpus, create `recipes/<id>/recipe.toml` following the
 /// pattern of the existing files, then add an `include_str!` line below.
-pub fn builtin_recipes() -> Vec<Recipe> {
+#[cfg(test)]
+pub(crate) fn builtin_recipes() -> Vec<Recipe> {
     const SOURCES: &[&str] = &[
         include_str!("../recipes/wikipedia/recipe.toml"),
         include_str!("../recipes/stackexchange/recipe.toml"),

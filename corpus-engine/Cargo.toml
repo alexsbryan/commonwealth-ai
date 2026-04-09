@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "xtask"]
+
 [package]
 name = "corpus-engine"
 version = "0.1.0"
@@ -59,6 +62,7 @@ tempfile = "3"
 
 # Hashing
 blake3 = "1"
+sha2 = "0.10"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

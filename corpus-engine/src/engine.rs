@@ -15,6 +15,7 @@ use crate::extractors::{self, Extractor};
 use crate::index::{CorpusIndex, InsertChunk};
 use crate::progress::{IngestProgress, ProgressCallback};
 use crate::recipe::{AcquirerConfig, ChunkerConfig, ExtractorConfig, Recipe};
+use crate::registry::RecipeRegistry;
 use crate::types::{
     BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
     IngestResult, ShardInfo,
@@ -23,6 +24,7 @@ use crate::types::{
 const EMBED_BATCH_SIZE: usize = 64;
 
 pub struct CorpusEngine {
+    registry: RecipeRegistry,
     recipes_dir: PathBuf,
     index_dir: PathBuf,
     embed: EmbedFn,
@@ -37,7 +39,12 @@ impl CorpusEngine {
         index_dir: PathBuf,
         embed: EmbedFn,
     ) -> Self {
+        // Use recipes_dir as local overrides: checked before fetching URLs.
+        // During development, local recipe.toml files in recipes/<id>/ are found here.
+        // After install, cached recipe TOMLs are found here for delta updates.
+        let registry = RecipeRegistry::from_bundled(Some(recipes_dir.clone()));
         Self {
+            registry,
             recipes_dir,
             index_dir,
             embed,
@@ -78,20 +85,23 @@ impl CorpusEngine {
 
     // ── Ingestion ───────────────────────────────────────
 
-    /// List built-in corpus definitions.
+    /// List built-in corpus definitions from the registry snapshot.
+    ///
+    /// Uses the bundled registry snapshot — no network required.
+    /// Call `registry_mut().refresh().await` on startup to pick up
+    /// any live updates from the public registry.
     pub fn builtin_corpora(&self) -> Vec<BuiltinCorpus> {
-        crate::recipe::builtin_recipes()
-            .into_iter()
-            .map(|r| BuiltinCorpus {
-                id: r.corpus.id,
-                name: r.corpus.name,
-                description: r.corpus.description,
-                size_compressed_gb: r.corpus.size_compressed_gb,
-                size_indexed_gb: r.corpus.size_indexed_gb,
-                license: r.corpus.license,
-                mesh_sharing: r.corpus.mesh_sharing,
-            })
-            .collect()
+        self.registry.catalog()
+    }
+
+    /// Access the registry for catalog queries or background refresh.
+    pub fn registry(&self) -> &RecipeRegistry {
+        &self.registry
+    }
+
+    /// Mutable access to the registry — used to call `refresh()` on startup.
+    pub fn registry_mut(&mut self) -> &mut RecipeRegistry {
+        &mut self.registry
     }
 
     /// Discover community recipes in the recipes directory.
@@ -137,7 +147,7 @@ impl CorpusEngine {
         corpus: &CorpusSpec,
         progress: Option<ProgressCallback>,
     ) -> Result<IngestResult> {
-        let mut recipe = self.resolve_recipe(corpus)?;
+        let mut recipe = self.resolve_recipe(corpus).await?;
 
         // Ensure parent directory exists so `_downloads` and the
         // per-corpus index dir can be created underneath.
@@ -709,31 +719,11 @@ impl CorpusEngine {
     // ── CorpusUpdater / health helpers ──────────────────
 
     /// Find and parse the recipe for `corpus_id`.
-    /// Checks builtin recipes first, then scans the recipes directory.
-    pub fn load_recipe(&self, corpus_id: &str) -> Result<Recipe> {
-        // Check builtins first.
-        if let Some(r) = crate::recipe::builtin_recipes()
-            .into_iter()
-            .find(|r| r.corpus.id == corpus_id)
-        {
-            return Ok(r);
-        }
-        // Scan recipes directory for a .toml whose corpus.id matches.
-        let dir = &self.recipes_dir;
-        if dir.exists() {
-            for entry in std::fs::read_dir(dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("toml") {
-                    if let Ok(recipe) = Recipe::from_file(&path) {
-                        if recipe.corpus.id == corpus_id {
-                            return Ok(recipe);
-                        }
-                    }
-                }
-            }
-        }
-        Err(Error::Recipe(format!("No recipe found for corpus_id: {corpus_id}")))
+    ///
+    /// Delegates to `RecipeRegistry::fetch_recipe()`:
+    /// checks local overrides first, then fetches from the registry URL.
+    pub async fn load_recipe(&self, corpus_id: &str) -> Result<Recipe> {
+        self.registry.fetch_recipe(corpus_id).await
     }
 
     /// Chunk a document's text content using the recipe's chunker config.
@@ -836,14 +826,9 @@ impl CorpusEngine {
 
     // ── Private helpers ────────────────────────────────
 
-    fn resolve_recipe(&self, corpus: &CorpusSpec) -> Result<Recipe> {
+    async fn resolve_recipe(&self, corpus: &CorpusSpec) -> Result<Recipe> {
         match corpus {
-            CorpusSpec::Builtin(id) => {
-                crate::recipe::builtin_recipes()
-                    .into_iter()
-                    .find(|r| r.corpus.id == *id)
-                    .ok_or_else(|| Error::Recipe(format!("Unknown builtin corpus: {id}")))
-            }
+            CorpusSpec::Builtin(id) => self.registry.fetch_recipe(id).await,
             CorpusSpec::RecipePath(path) => Recipe::from_file(path),
         }
     }

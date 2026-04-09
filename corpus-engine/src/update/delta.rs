@@ -219,7 +219,7 @@ impl CorpusUpdater {
         fetch_content: &impl Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>,
     ) -> Result<()> {
         let total = diff.updated_documents.len();
-        let recipe = self.engine.load_recipe(corpus_id)?;
+        let recipe = self.engine.load_recipe(corpus_id).await?;
         let index = self.engine.open_index_for_corpus(corpus_id).await?;
 
         for (i, doc_id) in diff.updated_documents.iter().enumerate() {
@@ -255,7 +255,7 @@ impl CorpusUpdater {
         fetch_content: &impl Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>,
     ) -> Result<()> {
         let total = diff.new_documents.len();
-        let recipe = self.engine.load_recipe(corpus_id)?;
+        let recipe = self.engine.load_recipe(corpus_id).await?;
         let index = self.engine.open_index_for_corpus(corpus_id).await?;
 
         for (i, doc_id) in diff.new_documents.iter().enumerate() {

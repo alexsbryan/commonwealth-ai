@@ -19,6 +19,7 @@ pub mod extractors;
 pub mod index;
 pub mod progress;
 pub mod recipe;
+pub mod registry;
 pub mod safety;
 pub mod sharding;
 pub mod testing;
@@ -36,7 +37,8 @@ pub use enrichment::{
 pub use error::{Error, Result};
 pub use index::{CorpusIndex, InsertChunk, StoredChunk, StoredChunkWithMetadata};
 pub use progress::{IngestProgress, ProgressCallback};
-pub use recipe::{EnrichmentConfig, Recipe};
+pub use recipe::{EnrichmentConfig, PrebuiltConfig, Recipe};
+pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use testing::{
     AcquisitionResult, ChunkingResult, CorpusEstimate, ExtractionResult,
     FailedRecord, SampleChunk, TestOptions, TestQueryResult, TestReport,
