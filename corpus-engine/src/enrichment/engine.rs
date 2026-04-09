@@ -61,6 +61,10 @@ impl EnrichmentEngine {
         let total = chunks.len() as u64;
         let mut claims = Vec::new();
         let mut next_id: u64 = 0;
+        // Offset into `claims` up to which we've already flushed to disk.
+        // Lets us append only new claims on each flush without duplicates.
+        let mut flush_offset: usize = 0;
+        const FLUSH_EVERY: usize = 100; // flush to disk every N chunks
         let corpus_id = index.corpus_id().to_string();
 
         // Observability counters.
@@ -97,6 +101,22 @@ impl EnrichmentEngine {
                     parse_errors,
                     chunks_per_sec,
                 });
+            }
+
+            // Flush new claims to disk every FLUSH_EVERY chunks for crash durability.
+            // Uses flush_offset to append only claims extracted since the last flush.
+            if i > 0 && i % FLUSH_EVERY == 0 && claims.len() > flush_offset {
+                let new_claims = &claims[flush_offset..];
+                match index.store_claims(new_claims).await {
+                    Ok(()) => {
+                        eprintln!(
+                            "[{corpus_id}] Flushed {} new claims to disk (total so far: {})",
+                            new_claims.len(), claims.len()
+                        );
+                        flush_offset = claims.len();
+                    }
+                    Err(e) => eprintln!("[{corpus_id}] Warning: claim flush failed: {e}"),
+                }
             }
 
             // Hard ceiling — a safety net for pathologically long chunks, not
@@ -183,6 +203,20 @@ impl EnrichmentEngine {
                 });
                 next_id += 1;
                 claims_found += 1;
+            }
+        }
+
+        // Final flush for any claims accumulated since the last periodic flush.
+        if claims.len() > flush_offset {
+            let new_claims = &claims[flush_offset..];
+            match index.store_claims(new_claims).await {
+                Ok(()) => {
+                    eprintln!(
+                        "[{corpus_id}] Final flush: {} new claims to disk (total: {})",
+                        new_claims.len(), claims.len()
+                    );
+                }
+                Err(e) => eprintln!("[{corpus_id}] Warning: final claim flush failed: {e}"),
             }
         }
 

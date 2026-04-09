@@ -419,10 +419,11 @@ impl CorpusEngine {
                             self.embed.clone(),
                             inference.clone(),
                         );
+                        // extract_claims now flushes to disk incrementally every 100 chunks.
+                        // The returned Vec is kept only for relationship extraction below.
                         let claims = enricher
                             .extract_claims(&index, enrichment_config, progress)
                             .await?;
-                        index.store_claims(&claims).await?;
 
                         if enrichment_config.extract_relationships {
                             let rels = enricher
