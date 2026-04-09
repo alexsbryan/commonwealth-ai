@@ -1,10 +1,12 @@
 use std::net::SocketAddr;
 
-use axum::routing::{get, post};
+use axum::routing::{any, delete, get, post};
 use axum::Router;
 use tokio::net::TcpListener;
 use tracing::info;
 
+use crate::routes_app_internal;
+use crate::routes_apps;
 use crate::routes_inference;
 use crate::routes_internal;
 use crate::routes_knowledge;
@@ -30,6 +32,13 @@ pub fn client_router(state: AppState) -> Router {
         .route("/status", get(routes_status::status))
         // OICP capability manifest.
         .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
+        // App management endpoints.
+        .route("/v1/apps", get(routes_apps::list_apps))
+        .route("/v1/apps/{app_id}/install", post(routes_apps::install_app))
+        .route("/v1/apps/{app_id}/status", get(routes_apps::app_status))
+        .route("/v1/apps/{app_id}", delete(routes_apps::uninstall_app))
+        // Reverse proxy to locally running apps.
+        .route("/app/{app_id}/{*path}", any(routes_apps::proxy_app))
         .with_state(state)
 }
 
@@ -61,6 +70,9 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/latency/probe",
             get(routes_internal::latency_probe),
         )
+        // App gossip endpoints.
+        .route("/internal/app/state", post(routes_app_internal::recv_app_state))
+        .route("/internal/app/registry", post(routes_app_internal::recv_app_registry))
         .with_state(state)
 }
 

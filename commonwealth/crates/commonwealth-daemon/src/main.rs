@@ -1,14 +1,17 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use corpus_engine::{CorpusEngine, EmbedFn, TestOptions};
 use tracing::info;
 
+use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::config::DaemonConfig;
 use commonwealth_discovery::membership;
+use commonwealth_state::{MeshStore, RetentionGc};
 
 #[derive(Parser)]
 #[command(
@@ -436,16 +439,98 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         .as_ref()
         .map(|c| c.node.internal_port)
         .unwrap_or(9742);
+    let data_dir = config
+        .as_ref()
+        .map(|c| c.node.data_dir.clone())
+        .unwrap_or_else(|| "~/.commonwealth".into())
+        .replace('~', &std::env::var("HOME").unwrap_or_default());
 
     println!("Starting Commonwealth daemon...");
     println!("  Client API:   http://127.0.0.1:{api_port}");
     println!("  Internal API: http://127.0.0.1:{internal_port}");
     println!();
-    println!(
-        "(In production, this would fork a background process or be managed by systemd/launchd.)"
-    );
 
-    Ok(())
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to build async runtime")?;
+
+    rt.block_on(async move {
+        // 1. Ensure data directory exists.
+        std::fs::create_dir_all(&data_dir)
+            .with_context(|| format!("failed to create data dir: {data_dir}"))?;
+
+        // 2. Open the mesh store.
+        let store_path = PathBuf::from(&data_dir).join("store.db");
+        let mesh_store = Arc::new(
+            MeshStore::open(&store_path)
+                .with_context(|| format!("failed to open MeshStore at {}", store_path.display()))?,
+        );
+        info!(path = %store_path.display(), "MeshStore opened");
+
+        // 3. Init the app registry.
+        let app_registry = Arc::new(AppRegistry::new());
+        info!("AppRegistry initialized");
+
+        // 4. Shutdown channel for background tasks.
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+        // 5. Start RetentionGc (7-day TTL, hourly GC).
+        let gc = RetentionGc::new(
+            mesh_store.clone(),
+            86_400 * 7,          // 7 days
+            Duration::from_secs(3_600), // run every hour
+        );
+        tokio::spawn(gc.run(shutdown_rx));
+        info!("RetentionGc started");
+
+        // 6. Build AppState with platform components.
+        // (Mesh state is loaded from disk in a full implementation;
+        //  here we construct a minimal mesh for the daemon to serve.)
+        use commonwealth_core::ids::{MeshId, NodeId};
+        use commonwealth_core::mesh::Mesh;
+        use std::collections::HashMap;
+
+        let self_node_id = NodeId::generate();
+        let mesh = Mesh {
+            id: MeshId::from_u128(0),
+            name: "commonwealth".into(),
+            join_key_hash: [0u8; 32],
+            members: HashMap::new(),
+            peers: vec![],
+        };
+
+        let state = commonwealth_api::state::AppState::new_with_platform(
+            self_node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+        );
+
+        // 7. Start both API servers.
+        let client_addr: SocketAddr = format!("0.0.0.0:{api_port}").parse()?;
+        let internal_addr: SocketAddr = format!("0.0.0.0:{internal_port}").parse()?;
+
+        info!(
+            client = %client_addr,
+            internal = %internal_addr,
+            "Commonwealth daemon starting"
+        );
+
+        // Handle SIGTERM/Ctrl-C.
+        let shutdown_tx_clone = shutdown_tx.clone();
+        tokio::spawn(async move {
+            let _ = tokio::signal::ctrl_c().await;
+            info!("Shutdown signal received");
+            let _ = shutdown_tx_clone.send(true);
+        });
+
+        commonwealth_api::server::serve(state, client_addr, internal_addr)
+            .await
+            .map_err(|e| anyhow::anyhow!("daemon exited with error: {e}"))?;
+
+        Ok::<_, anyhow::Error>(())
+    })
 }
 
 fn cmd_daemon_stop(_config: &Option<DaemonConfig>) -> Result<()> {

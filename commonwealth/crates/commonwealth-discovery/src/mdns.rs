@@ -182,6 +182,98 @@ impl MdnsDiscovery {
         info!("mDNS service unregistered");
         Ok(())
     }
+
+    /// Advertise a mesh app on the local network.
+    ///
+    /// The service type is `_cwapp-{sanitized_app_id}._tcp.local.`
+    /// where the app_id is lowercased with dots replaced by dashes.
+    pub fn advertise_app(&self, app_id: &str, app_port: u16) -> Result<()> {
+        let service_type = app_service_type(app_id);
+        let instance = format!("{}-{}", self.instance_name, sanitize_app_id(app_id));
+        let host = format!("{}.local.", hostname());
+
+        let mut properties = HashMap::new();
+        properties.insert("app_id".to_string(), app_id.to_string());
+        properties.insert("node_id".to_string(), self.instance_name.clone());
+
+        let service = ServiceInfo::new(&service_type, &instance, &host, (), app_port, properties)
+            .map_err(|e| Error::Discovery(format!("failed to create app service info: {e}")))?;
+
+        self.daemon
+            .register(service)
+            .map_err(|e| Error::Discovery(format!("failed to advertise app: {e}")))?;
+
+        info!(app_id, app_port, "app advertised via mDNS");
+        Ok(())
+    }
+
+    /// Withdraw a previously advertised app from mDNS.
+    pub fn withdraw_app(&self, app_id: &str) -> Result<()> {
+        let service_type = app_service_type(app_id);
+        let instance = format!("{}-{}", self.instance_name, sanitize_app_id(app_id));
+        let full_name = format!("{}.{}", instance, service_type);
+        self.daemon
+            .unregister(&full_name)
+            .map_err(|e| Error::Discovery(format!("failed to withdraw app: {e}")))?;
+        info!(app_id, "app withdrawn from mDNS");
+        Ok(())
+    }
+
+    /// Browse for mesh apps of a specific app_id across the network.
+    pub fn browse_apps(&self, app_id: &str, tx: mpsc::Sender<DiscoveredApp>) -> Result<BrowseHandle> {
+        let service_type = app_service_type(app_id);
+        let receiver = self
+            .daemon
+            .browse(&service_type)
+            .map_err(|e| Error::Discovery(format!("failed to browse apps: {e}")))?;
+
+        let own_instance = self.instance_name.clone();
+        let app_id_owned = app_id.to_string();
+
+        let handle = tokio::spawn(async move {
+            loop {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    tokio::task::spawn_blocking({
+                        let receiver = receiver.clone();
+                        move || receiver.recv_timeout(std::time::Duration::from_secs(5))
+                    }),
+                )
+                .await
+                {
+                    Ok(Ok(Ok(event))) => {
+                        if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
+                            let full_name = info.get_fullname().to_string();
+                            if full_name.contains(&own_instance) {
+                                continue;
+                            }
+
+                            let props = info.get_properties();
+                            let node_id_str =
+                                props.get_property_val_str("node_id").unwrap_or_default();
+                            let _ = node_id_str; // node_id comes from gossip handshake
+
+                            let port = info.get_port();
+                            if let Some(ip) = info.get_addresses().iter().next().copied() {
+                                let app = DiscoveredApp {
+                                    app_id: app_id_owned.clone(),
+                                    node_id: commonwealth_core::ids::NodeId::generate(),
+                                    address: std::net::SocketAddr::new(ip, port),
+                                    port,
+                                };
+                                if tx.send(app).await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Ok(Ok(Err(_))) | Ok(Err(_)) | Err(_) => {}
+                }
+            }
+        });
+
+        Ok(BrowseHandle { _task: handle })
+    }
 }
 
 impl Drop for MdnsDiscovery {
@@ -191,6 +283,15 @@ impl Drop for MdnsDiscovery {
             warn!("mDNS daemon shutdown error: {e}");
         }
     }
+}
+
+/// A mesh app discovered via mDNS.
+#[derive(Debug, Clone)]
+pub struct DiscoveredApp {
+    pub app_id: String,
+    pub node_id: NodeId,
+    pub address: std::net::SocketAddr,
+    pub port: u16,
 }
 
 /// Handle for a running mDNS browse task. Dropping it cancels browsing.
@@ -209,6 +310,16 @@ fn hostname() -> String {
     std::env::var("HOSTNAME")
         .or_else(|_| std::env::var("COMPUTERNAME"))
         .unwrap_or_else(|_| "commonwealth-node".to_string())
+}
+
+/// Convert an app_id to a valid mDNS label (lowercase, dots → dashes).
+fn sanitize_app_id(app_id: &str) -> String {
+    app_id.to_lowercase().replace('.', "-")
+}
+
+/// Build the mDNS service type for a mesh app.
+fn app_service_type(app_id: &str) -> String {
+    format!("_cwapp-{}._tcp.local.", sanitize_app_id(app_id))
 }
 
 #[cfg(test)]

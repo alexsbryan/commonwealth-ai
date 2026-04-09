@@ -1,4 +1,6 @@
 pub mod openai_types;
+pub mod routes_app_internal;
+pub mod routes_apps;
 pub mod routes_inference;
 pub mod routes_internal;
 pub mod routes_knowledge;

@@ -33,6 +33,10 @@ pub enum GossipKey {
     LedgerEntry { entry_id: String },
     /// Mesh-wide configuration.
     MeshConfig,
+    /// A key-value entry stored by a mesh app. Scoped to app_id + key.
+    AppState { app_id: String, key: String },
+    /// An app manifest entry in the mesh app registry.
+    AppRegistry { app_id: String },
 }
 
 /// The payload of a gossip entry.
@@ -54,6 +58,14 @@ pub enum GossipValue {
     },
     MeshConfig {
         config_json: String,
+    },
+    /// An app's KV store value (JSON-encoded bytes).
+    AppState {
+        value_json: String,
+    },
+    /// A serialized MeshAppManifest.
+    AppRegistry {
+        manifest_json: String,
     },
 }
 

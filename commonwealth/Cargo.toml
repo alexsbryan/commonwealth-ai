@@ -9,6 +9,8 @@ members = [
     "crates/commonwealth-corpus",
     "crates/commonwealth-daemon",
     "crates/commonwealth-test-harness",
+    "crates/commonwealth-app",
+    "crates/commonwealth-state",
 ]
 
 [workspace.package]
@@ -50,3 +52,9 @@ commonwealth-scheduler = { path = "crates/commonwealth-scheduler" }
 commonwealth-orchestrator = { path = "crates/commonwealth-orchestrator" }
 commonwealth-api = { path = "crates/commonwealth-api" }
 commonwealth-corpus = { path = "crates/commonwealth-corpus" }
+commonwealth-app = { path = "crates/commonwealth-app" }
+commonwealth-state = { path = "crates/commonwealth-state" }
+
+# Platform layer dependencies
+bytes = "1.0"
+rusqlite = { version = "0.32", features = ["bundled"] }

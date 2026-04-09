@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
+use bytes::Bytes;
+use commonwealth_app::manifest::MeshAppManifest;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::latency::{LatencyMatrix, LatencyRecord};
 use commonwealth_core::mesh::Mesh;
@@ -109,6 +112,78 @@ impl SimulatedMesh {
     pub fn shutdown_all(&mut self) {
         for node in &mut self.nodes {
             node.shutdown();
+        }
+    }
+
+    // ── Platform helpers ──────────────────────────────────────────────────────
+
+    /// Register a mock app manifest on the given node's AppRegistry.
+    pub async fn register_mock_app(&mut self, node_idx: usize, manifest: MeshAppManifest) {
+        self.nodes[node_idx]
+            .state
+            .inner
+            .app_registry
+            .register(manifest)
+            .await;
+    }
+
+    /// Write a value into the MeshStore on the given node.
+    pub fn store_set(
+        &self,
+        node_idx: usize,
+        app_id: &str,
+        key: &str,
+        value: &[u8],
+    ) {
+        let origin = self.nodes[node_idx].node_id;
+        self.nodes[node_idx]
+            .state
+            .inner
+            .mesh_store
+            .set(app_id, key, Bytes::copy_from_slice(value), origin)
+            .expect("store_set failed");
+    }
+
+    /// Read a value from the MeshStore on the given node.
+    pub fn store_get(&self, node_idx: usize, app_id: &str, key: &str) -> Option<Vec<u8>> {
+        self.nodes[node_idx]
+            .state
+            .inner
+            .mesh_store
+            .get(app_id, key)
+            .expect("store_get failed")
+            .map(|e| e.value.to_vec())
+    }
+
+    /// Poll until every node has the expected key/value, or until timeout expires.
+    ///
+    /// Returns `true` if all nodes converged, `false` if timed out.
+    pub async fn wait_store_converged(
+        &self,
+        app_id: &str,
+        key: &str,
+        expected: &[u8],
+        timeout: Duration,
+    ) -> bool {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let all_match = self.nodes.iter().all(|node| {
+                node.state
+                    .inner
+                    .mesh_store
+                    .get(app_id, key)
+                    .ok()
+                    .flatten()
+                    .map(|e| e.value.as_ref() == expected)
+                    .unwrap_or(false)
+            });
+            if all_match {
+                return true;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 }

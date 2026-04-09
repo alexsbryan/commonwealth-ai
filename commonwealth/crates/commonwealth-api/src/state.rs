@@ -3,12 +3,15 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use commonwealth_app::registry::AppRegistry;
+use commonwealth_app::proxy::AppPortMap;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::knowledge::KnowledgeShardPlan;
 use commonwealth_core::mesh::{Mesh, NodeStatus};
 use commonwealth_core::model::ModelInfo;
 use commonwealth_core::model_aliases::ModelAliasTable;
 use commonwealth_core::scheduler::InferencePlan;
+use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 
 /// Shared application state for all API handlers.
@@ -27,10 +30,29 @@ pub struct AppStateInner {
     pub knowledge_plan: RwLock<KnowledgeShardPlan>,
     pub model_aliases: ModelAliasTable,
     pub corpus_engine: Option<Arc<CorpusEngine>>,
+    /// Distributed KV store for mesh apps.
+    pub mesh_store: Arc<MeshStore>,
+    /// Registry of known mesh apps (gossiped).
+    pub app_registry: Arc<AppRegistry>,
+    /// Map of locally running app ports for the proxy layer.
+    pub app_port_map: AppPortMap,
 }
 
 impl AppState {
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
+        let mesh_store = Arc::new(
+            MeshStore::in_memory().expect("in-memory MeshStore failed"),
+        );
+        Self::new_with_platform(self_node_id, mesh, mesh_store, Arc::new(AppRegistry::new()))
+    }
+
+    /// Create state with explicit platform components (used by the daemon).
+    pub fn new_with_platform(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        mesh_store: Arc<MeshStore>,
+        app_registry: Arc<AppRegistry>,
+    ) -> Self {
         Self {
             inner: Arc::new(AppStateInner {
                 self_node_id,
@@ -46,6 +68,9 @@ impl AppState {
                 }),
                 model_aliases: ModelAliasTable::default_table(),
                 corpus_engine: None,
+                mesh_store,
+                app_registry,
+                app_port_map: AppPortMap::new(),
             }),
         }
     }
