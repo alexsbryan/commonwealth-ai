@@ -57,7 +57,7 @@ fn cmd_update_registry_snapshot() -> i32 {
         .get("registry_url")
         .and_then(|v| v.as_str())
         .unwrap_or(
-            "https://raw.githubusercontent.com/sovereign-foundation/sovereign-recipes/main/registry.toml",
+            "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/registry.toml",
         );
 
     eprintln!("Fetching live registry from: {registry_url}");

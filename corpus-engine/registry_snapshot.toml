@@ -1,17 +1,10 @@
 # Registry snapshot — bundled at compile time.
 # This file is the ONLY compile-time corpus catalog artifact.
-# It contains registry index metadata (URLs, sizes, licenses) but NOT
-# the full recipe TOML content. Recipe TOMLs are fetched on demand.
+# Keep up to date by running: cargo xtask update-registry-snapshot
 #
-# Keep this file up to date by running:
-#   cargo xtask update-registry-snapshot
-#
-# The sha256 fields will be populated once the public GitHub repo is live.
-# Empty sha256 = skip verification (acceptable for initial bootstrap).
-
 schema_version = 1
-generated_at = "2026-04-08T00:00:00Z"
-registry_url = "https://raw.githubusercontent.com/sovereign-foundation/sovereign-recipes/main/registry.toml"
+generated_at = "2026-04-09T00:00:00Z"
+registry_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/registry.toml"
 
 [[recipes]]
 id = "wikipedia"
@@ -22,7 +15,7 @@ size_compressed_gb = 13.0
 size_indexed_gb = 60.0
 enrichment_enabled = true
 mesh_sharing = true
-toml_url = "https://raw.githubusercontent.com/sovereign-foundation/sovereign-recipes/main/wikipedia/recipe.toml"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia/recipe.toml"
 sha256 = ""
 
 [[recipes]]
@@ -34,7 +27,7 @@ size_compressed_gb = 1.4
 size_indexed_gb = 6.0
 enrichment_enabled = true
 mesh_sharing = false
-toml_url = "https://raw.githubusercontent.com/sovereign-foundation/sovereign-recipes/main/sep/recipe.toml"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sep/recipe.toml"
 sha256 = ""
 
 [[recipes]]
@@ -46,7 +39,7 @@ size_compressed_gb = 85.0
 size_indexed_gb = 120.0
 enrichment_enabled = false
 mesh_sharing = true
-toml_url = "https://raw.githubusercontent.com/sovereign-foundation/sovereign-recipes/main/stackexchange/recipe.toml"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange/recipe.toml"
 sha256 = ""
 
 [[recipes]]
@@ -58,7 +51,7 @@ size_compressed_gb = 330.0
 size_indexed_gb = 500.0
 enrichment_enabled = false
 mesh_sharing = true
-toml_url = "https://raw.githubusercontent.com/sovereign-foundation/sovereign-recipes/main/openalex/recipe.toml"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/openalex/recipe.toml"
 sha256 = ""
 
 [[recipes]]
@@ -70,7 +63,7 @@ size_compressed_gb = 9.0
 size_indexed_gb = 25.0
 enrichment_enabled = false
 mesh_sharing = true
-toml_url = "https://raw.githubusercontent.com/sovereign-foundation/sovereign-recipes/main/gutenberg/recipe.toml"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg/recipe.toml"
 sha256 = ""
 
 [[recipes]]
@@ -82,5 +75,5 @@ size_compressed_gb = 2.0
 size_indexed_gb = 5.0
 enrichment_enabled = false
 mesh_sharing = true
-toml_url = "https://raw.githubusercontent.com/sovereign-foundation/sovereign-recipes/main/crs_reports/recipe.toml"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/crs_reports/recipe.toml"
 sha256 = ""
