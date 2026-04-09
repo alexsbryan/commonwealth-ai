@@ -49,30 +49,27 @@ relationship_similarity_threshold = 0.55
 max_relationship_candidates = 50000
 
 claim_extraction_prompt = '''
-Extract propositional claims from this encyclopedia passage.
+You are extracting philosophical claims from Stanford Encyclopedia of Philosophy passages.
 
-For each claim, provide:
-1. "claim": A single declarative statement capturing the position.
-2. "epistemic_status": One of: "consensus", "majority", "contested",
-   "minority", "established", "unclear".
-3. "hedging_language": The source text's exact words indicating
-   epistemic status (e.g., "it is widely accepted that").
-   Null if the text doesn't hedge.
-4. "attributed_to": Who holds this position — a philosopher name,
-   a school of thought, or null if it's the article's own framing.
+JSON ONLY. No explanation, no preamble, no chain-of-thought.
 
-SEP articles use distinctive hedging patterns:
-- "It is widely accepted..." / "There is broad agreement..." → consensus
-- "Most philosophers hold..." / "The standard view..." → majority
-- "This remains controversial..." / "There is ongoing debate..." → contested
-- "Some philosophers argue..." / "Critics maintain..." → minority
-- "It is uncontroversial that..." / "It has been established..." → established
+RULES:
+- Extract AT MOST 3 claims per passage.
+- Return [] if the passage lacks 2+ substantive philosophical claims. Do not pad.
+- DO NOT extract from: thought experiments or illustrative examples with fictional agents
+  (Tim, Harry, Mary, Jones, Smith, or any "suppose"/"imagine"/"consider a case"/"assume that"
+  framing), purely historical or biographical statements, logical formalizations, or statements
+  about the article itself.
+- A claim must be falsifiable or debatable. "Aristotle was a philosopher" fails.
+  "Aristotle's virtue ethics grounds moral evaluation in character rather than consequences" passes.
 
-Extract 3-8 claims per passage. Focus on substantive philosophical
-positions, not bibliographic or historical facts. If a passage is
-purely biographical or administrative, return an empty array.
-
-Return ONLY a JSON array of claim objects. No other text.
+For each claim provide:
+- "claim": a single declarative statement capturing the position.
+- "epistemic_status": one of "consensus", "majority", "contested", "minority", "established",
+  "unclear". SEP hedging cues: "widely accepted"→consensus, "most philosophers"→majority,
+  "remains controversial"→contested, "some argue"→minority, "it is uncontroversial"→established.
+- "hedging_language": exact words from the text signalling epistemic status, or null.
+- "attributed_to": philosopher name, school of thought, or null if the article's own framing.
 '''
 
 relationship_extraction_prompt = '''

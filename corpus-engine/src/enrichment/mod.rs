@@ -14,11 +14,13 @@
 pub mod article_profile;
 pub mod claims;
 pub mod engine;
+pub mod filter;
 pub mod landscape;
 pub mod link_graph;
 pub mod relationships;
 pub mod schema;
 
+pub use filter::is_chunk_eligible;
 pub use article_profile::{
     ArticleEpistemicProfile, WikiLink, WikipediaChunkMetadata, compute_article_profiles,
 };

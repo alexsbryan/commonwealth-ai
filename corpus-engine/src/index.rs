@@ -26,6 +26,27 @@ use crate::enrichment::schema::{article_profiles_schema, claims_schema, relation
 use crate::error::{Error, Result};
 use crate::types::{ChunkRange, IndexInfo, ScoredChunk, ScoredClaim};
 
+// ─── Enrichment checkpoint ─────────────────────────────────
+
+/// Persisted enrichment progress checkpoint stored in `_corpus_meta.json`.
+///
+/// Enables resuming Phase 1 (claim extraction) or Phase 2 (relationship
+/// extraction) after a crash or interruption without re-processing
+/// already-completed chunks.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct EnrichmentState {
+    /// `"not_started"` | `"in_progress"` | `"complete"`
+    pub status: String,
+    /// Last chunk `id` written during Phase 1.  `None` means start from the
+    /// beginning.
+    pub last_chunk_id: Option<u64>,
+    /// Current enrichment phase: `"claims"` or `"relationships"`.
+    pub phase: String,
+    /// Phase 2 resume cursor: the last `source_entry` (article title) whose
+    /// relationships were fully extracted.
+    pub relationships_last_article: Option<String>,
+}
+
 // ─── Helper types ──────────────────────────────────────────
 
 /// A chunk to be inserted into the index.
@@ -166,6 +187,13 @@ struct IndexMeta {
     /// Count of chunks that have at least one extracted claim.
     #[serde(default)]
     enriched_chunks: Option<u64>,
+    /// Fine-grained enrichment phase checkpoint for resume support.
+    #[serde(default)]
+    enrichment_state: Option<EnrichmentState>,
+    /// The claim extraction prompt version that produced the current claims.
+    /// Used to detect stale claims when the prompt changes.
+    #[serde(default)]
+    extraction_prompt_version: Option<String>,
     /// Source version token (date stamp or manifest hash).
     #[serde(default)]
     source_version: Option<String>,
@@ -368,6 +396,8 @@ impl CorpusIndex {
             resume_from: None,
             enrichment_enabled: false,
             enriched_chunks: None,
+            enrichment_state: None,
+            extraction_prompt_version: None,
             source_version: None,
             update_manifest_url: None,
         };
@@ -2014,6 +2044,140 @@ impl CorpusIndex {
             writeln!(file, "{line}")?;
         }
         Ok(())
+    }
+
+    // ── Load all claims (with embeddings) ─────────────────────
+
+    /// Load every claim from the `claims` table, including their embeddings.
+    ///
+    /// Used by Phase 2 (`enrich_relationships`) which needs the full embedding
+    /// vectors to compute similarity between claim pairs.  For search queries
+    /// use `search_claims` instead — it is much more efficient.
+    pub async fn load_enriched_claims(&self) -> Result<Vec<ExtractedClaim>> {
+        if !self.has_claims_table().await {
+            return Ok(Vec::new());
+        }
+        let table = self.open_table(CLAIMS_TABLE).await?;
+        let batches: Vec<RecordBatch> = table
+            .query()
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("load_enriched_claims query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("load_enriched_claims collect: {e}")))?;
+
+        let mut out = Vec::new();
+        for batch in &batches {
+            let ids = match batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<UInt64Array>())
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let claim_texts = match batch
+                .column_by_name("claim")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let source_chunk_ids = match batch
+                .column_by_name("source_chunk_id")
+                .and_then(|c| c.as_any().downcast_ref::<UInt64Array>())
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let corpus_ids = match batch
+                .column_by_name("corpus_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let statuses = match batch
+                .column_by_name("epistemic_status")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let hedges = batch
+                .column_by_name("hedging_language")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let attributions = batch
+                .column_by_name("attributed_to")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let entries = batch
+                .column_by_name("source_entry")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let hashes = batch
+                .column_by_name("source_chunk_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let embeddings = batch
+                .column_by_name("embedding")
+                .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>());
+
+            for i in 0..batch.num_rows() {
+                let embedding = embeddings
+                    .map(|emb| {
+                        let values = emb.value(i);
+                        values
+                            .as_any()
+                            .downcast_ref::<Float32Array>()
+                            .map(|a| (0..a.len()).map(|j| a.value(j)).collect::<Vec<_>>())
+                            .unwrap_or_default()
+                    })
+                    .unwrap_or_default();
+
+                out.push(ExtractedClaim {
+                    id: ids.value(i),
+                    claim: claim_texts.value(i).to_string(),
+                    source_chunk_id: source_chunk_ids.value(i),
+                    source_chunk_hash: hashes.and_then(|h| {
+                        if h.is_null(i) { None } else { Some(h.value(i).to_string()) }
+                    }),
+                    corpus_id: corpus_ids.value(i).to_string(),
+                    epistemic_status: EpistemicStatus::parse(statuses.value(i)),
+                    hedging_language: hedges.and_then(|h| {
+                        if h.is_null(i) { None } else { Some(h.value(i).to_string()) }
+                    }),
+                    attributed_to: attributions.and_then(|a| {
+                        if a.is_null(i) { None } else { Some(a.value(i).to_string()) }
+                    }),
+                    source_entry: entries.and_then(|e| {
+                        if e.is_null(i) { None } else { Some(e.value(i).to_string()) }
+                    }),
+                    embedding,
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    // ── Enrichment checkpoint ─────────────────────────────────
+
+    /// Read the current enrichment checkpoint from `_corpus_meta.json`.
+    /// Returns `None` if no checkpoint has been written yet.
+    pub fn load_enrichment_state(&self) -> Option<EnrichmentState> {
+        let dir = std::path::Path::new(self.db.uri());
+        read_meta(dir).ok()?.enrichment_state
+    }
+
+    /// Persist the enrichment checkpoint and prompt version into
+    /// `_corpus_meta.json`.  Other metadata fields are left unchanged.
+    pub fn save_enrichment_state(
+        &self,
+        state: &EnrichmentState,
+        prompt_version: &str,
+    ) -> Result<()> {
+        let dir = std::path::Path::new(self.db.uri());
+        let mut meta = read_meta(dir)?;
+        meta.enrichment_state = Some(state.clone());
+        meta.extraction_prompt_version = Some(prompt_version.to_string());
+        write_meta(dir, &meta)
     }
 }
 

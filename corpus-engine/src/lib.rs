@@ -35,9 +35,9 @@ pub use enrichment::{
     RelationshipType, WikiLink, WikipediaChunkMetadata,
 };
 pub use error::{Error, Result};
-pub use index::{CorpusIndex, InsertChunk, StoredChunk, StoredChunkWithMetadata};
+pub use index::{CorpusIndex, EnrichmentState, InsertChunk, StoredChunk, StoredChunkWithMetadata};
 pub use progress::{IngestProgress, ProgressCallback};
-pub use recipe::{EnrichmentConfig, PrebuiltConfig, Recipe};
+pub use recipe::{EnrichmentConfig, PrebuiltConfig, Recipe, RelationshipScope};
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use testing::{
     AcquisitionResult, ChunkingResult, CorpusEstimate, ExtractionResult,

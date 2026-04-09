@@ -1,16 +1,27 @@
 //! `EnrichmentEngine` — runs claim and relationship extraction prompts
 //! against an existing `CorpusIndex`.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
-use crate::index::CorpusIndex;
+use crate::index::{CorpusIndex, EnrichmentState};
 use crate::progress::{IngestProgress, ProgressCallback};
 use crate::recipe::EnrichmentConfig;
 use crate::types::{EmbedFn, InferenceFn};
 
 use super::claims::{EpistemicStatus, ExtractedClaim};
+use super::filter::is_chunk_eligible;
 use super::relationships::{ClaimRelationship, RelationshipType};
+
+/// Prompt version tag. When the prompt changes this string must be bumped so
+/// that `save_enrichment_state` records the new version and future tooling can
+/// detect stale claims.
+const EXTRACTION_PROMPT_VERSION: &str = "v2";
+
+/// Number of passages bundled into a single inference call.
+const BATCH_SIZE: usize = 4;
 
 /// Persisted record of a chunk whose enrichment failed at the parse stage.
 ///
@@ -37,64 +48,146 @@ pub struct EnrichmentFailure {
 /// Phase 1: walk every chunk in the index, ask the inference model to
 /// extract propositional claims, embed each claim, return the list.
 ///
-/// Phase 2 (optional): for each claim pair from different entries that
+/// Phase 2 (optional): for each claim pair from the *same* source entry that
 /// scores above a similarity threshold, ask the inference model whether
 /// they are in any epistemic relationship.
 pub struct EnrichmentEngine {
     embed: EmbedFn,
+    /// Primary slot — used for relationship extraction and as fallback.
     inference: InferenceFn,
+    /// Fast slot (e.g. Qwen3-1.7B) — used for claim extraction.
+    /// Falls back to `inference` when `None`.
+    fast_inference: Option<InferenceFn>,
 }
 
 impl EnrichmentEngine {
+    /// Create an engine with only the primary inference slot.
     pub fn new(embed: EmbedFn, inference: InferenceFn) -> Self {
-        Self { embed, inference }
+        Self { embed, inference, fast_inference: None }
     }
 
-    /// Phase 1: extract claims from every chunk in the index.
+    /// Create an engine with both a primary and a fast inference slot.
+    ///
+    /// Claim extraction is routed through `fast_inference` (typically a
+    /// small, fast model like Qwen3-1.7B).  Relationship extraction and
+    /// everything else uses `inference` (the primary/large slot).
+    pub fn new_with_fast(
+        embed: EmbedFn,
+        inference: InferenceFn,
+        fast_inference: Option<InferenceFn>,
+    ) -> Self {
+        Self { embed, inference, fast_inference }
+    }
+
+    /// Return the fast slot if set, otherwise fall back to the primary slot.
+    fn effective_fast(&self) -> &InferenceFn {
+        self.fast_inference.as_ref().unwrap_or(&self.inference)
+    }
+
+    /// Phase 1: extract claims from every eligible chunk in the index.
+    ///
+    /// Changes from the original single-chunk loop:
+    /// - Pre-filters chunks with `is_chunk_eligible()` (zero inference cost).
+    /// - Batches `BATCH_SIZE` passages into a single inference call.
+    /// - Routes to the fast slot via `effective_fast()`.
+    /// - Checkpoints after every batch; resumes from `last_chunk_id` on restart.
     pub async fn extract_claims(
         &self,
         index: &CorpusIndex,
         config: &EnrichmentConfig,
         progress: &Option<ProgressCallback>,
     ) -> Result<Vec<ExtractedClaim>> {
-        let chunks = index.all_chunks().await?;
-        let total = chunks.len() as u64;
+        let corpus_id = index.corpus_id().to_string();
+
+        // ── Checkpoint / resume ────────────────────────────────────────────────
+        let checkpoint = index.load_enrichment_state();
+        let resume_chunk_id: Option<u64> = checkpoint
+            .as_ref()
+            .filter(|s| s.status == "in_progress" && s.phase == "claims")
+            .and_then(|s| s.last_chunk_id);
+
+        if let Some(ref s) = checkpoint {
+            if s.status == "complete" && s.phase == "claims" {
+                eprintln!("[{corpus_id}] Phase 1 already complete — skipping claim extraction");
+                // Claims are already stored in LanceDB; Phase 2 loads them directly.
+                return Ok(Vec::new());
+            }
+        }
+
+        // ── Load all chunks ────────────────────────────────────────────────────
+        let all_chunks = index.all_chunks().await?;
+        let total_all = all_chunks.len() as u64;
+
+        // ── Filter eligible chunks ─────────────────────────────────────────────
+        // Step A: skip already-processed chunks (resume path).
+        // Step B: eligibility heuristic (zero inference cost).
+        let eligible_chunks: Vec<_> = all_chunks
+            .iter()
+            .filter(|c| {
+                if let Some(resume_id) = resume_chunk_id {
+                    if c.id <= resume_id {
+                        return false;
+                    }
+                }
+                is_chunk_eligible(&c.content, c.title.as_deref())
+            })
+            .collect();
+
+        let filtered_count = total_all.saturating_sub(eligible_chunks.len() as u64);
+        eprintln!(
+            "[{corpus_id}] {total_all} total chunks, {} eligible after filter \
+             ({filtered_count} skipped)",
+            eligible_chunks.len(),
+        );
+
+        // ── Write initial checkpoint ───────────────────────────────────────────
+        let _ = index.save_enrichment_state(
+            &EnrichmentState {
+                status: "in_progress".to_string(),
+                last_chunk_id: resume_chunk_id,
+                phase: "claims".to_string(),
+                relationships_last_article: None,
+            },
+            EXTRACTION_PROMPT_VERSION,
+        );
+
+        let total = eligible_chunks.len() as u64;
         let mut claims = Vec::new();
         let mut next_id: u64 = 0;
-        // Offset into `claims` up to which we've already flushed to disk.
-        // Lets us append only new claims on each flush without duplicates.
         let mut flush_offset: usize = 0;
-        const FLUSH_EVERY: usize = 100; // flush to disk every N chunks
-        let corpus_id = index.corpus_id().to_string();
+        const FLUSH_EVERY: usize = 50; // flush every N claims (not chunks)
 
         // Observability counters.
         let mut claims_found: u64 = 0;
         let mut inference_errors: u64 = 0;
         let mut parse_errors: u64 = 0;
         let mut window_start = std::time::Instant::now();
-        let mut window_chunks: u64 = 0;
+        let mut window_batches: u64 = 0;
         let mut chunks_per_sec: f32 = 0.0;
-        const REPORT_EVERY: usize = 50;
+        const REPORT_EVERY: usize = 10; // batches (= BATCH_SIZE * 10 chunks)
 
-        for (i, chunk) in chunks.iter().enumerate() {
-            window_chunks += 1;
+        // Retry queue for chunks whose batch slot failed to parse.
+        let mut retry_queue: Vec<&crate::index::StoredChunk> = Vec::new();
 
-            // Recompute throughput and emit terminal summary every REPORT_EVERY chunks.
-            if i > 0 && i % REPORT_EVERY == 0 {
+        // ── Batch loop ─────────────────────────────────────────────────────────
+        for (batch_idx, batch) in eligible_chunks.chunks(BATCH_SIZE).enumerate() {
+            window_batches += 1;
+
+            if batch_idx > 0 && batch_idx % REPORT_EVERY == 0 {
                 let secs = window_start.elapsed().as_secs_f32().max(0.001);
-                chunks_per_sec = window_chunks as f32 / secs;
+                chunks_per_sec = (window_batches * BATCH_SIZE as u64) as f32 / secs;
                 window_start = std::time::Instant::now();
-                window_chunks = 0;
+                window_batches = 0;
+                let processed = batch_idx * BATCH_SIZE;
                 eprintln!(
-                    "[{corpus_id}] claims {}/{total} | {claims_found} found | \
+                    "[{corpus_id}] claims {processed}/{total} | {claims_found} found | \
                      {inference_errors} inf-err | {parse_errors} parse-err | {chunks_per_sec:.1} chunks/s",
-                    i + 1,
                 );
             }
 
             if let Some(ref cb) = progress {
                 cb(IngestProgress::ExtractingClaims {
-                    current: i as u64 + 1,
+                    current: (batch_idx * BATCH_SIZE) as u64 + 1,
                     total,
                     claims_found,
                     inference_errors,
@@ -103,14 +196,67 @@ impl EnrichmentEngine {
                 });
             }
 
-            // Flush new claims to disk every FLUSH_EVERY chunks for crash durability.
-            // Uses flush_offset to append only claims extracted since the last flush.
-            if i > 0 && i % FLUSH_EVERY == 0 && claims.len() > flush_offset {
+            // ── Build batched prompt ───────────────────────────────────────────
+            let prompt = build_batch_prompt(&config.claim_extraction_prompt, batch);
+
+            let response = match (self.effective_fast())(&prompt).await {
+                Ok(r) => r,
+                Err(e) => {
+                    inference_errors += 1;
+                    eprintln!("[{corpus_id}] batch {batch_idx}: inference error — {e}");
+                    // Queue all chunks in this batch for individual retry.
+                    retry_queue.extend(batch.iter().copied());
+                    continue;
+                }
+            };
+
+            // ── Parse batch response ───────────────────────────────────────────
+            let parsed = parse_batch_response(&response);
+
+            for (slot_idx, chunk) in batch.iter().enumerate() {
+                let slot_key = format!("{}", slot_idx + 1);
+                let raw_claims = match parsed.get(&slot_key) {
+                    Some(v) => v.as_slice(),
+                    None => {
+                        // This slot was missing or malformed — queue for retry.
+                        retry_queue.push(chunk);
+                        continue;
+                    }
+                };
+
+                for raw in raw_claims {
+                    let status = EpistemicStatus::parse(&raw.epistemic_status);
+                    let embedding = match (self.embed)(&raw.claim).await {
+                        Ok(v) => v,
+                        Err(e) => {
+                            tracing::warn!("Embedding failed for claim '{}': {e}", raw.claim);
+                            continue;
+                        }
+                    };
+                    claims.push(ExtractedClaim {
+                        id: next_id,
+                        claim: raw.claim.clone(),
+                        source_chunk_id: chunk.id,
+                        source_chunk_hash: Some(crate::engine::blake3_hex(&chunk.content)),
+                        corpus_id: corpus_id.clone(),
+                        epistemic_status: status,
+                        hedging_language: raw.hedging_language.clone(),
+                        attributed_to: raw.attributed_to.clone(),
+                        source_entry: chunk.title.clone(),
+                        embedding,
+                    });
+                    next_id += 1;
+                    claims_found += 1;
+                }
+            }
+
+            // ── Incremental flush ──────────────────────────────────────────────
+            if claims.len() >= flush_offset + FLUSH_EVERY {
                 let new_claims = &claims[flush_offset..];
                 match index.store_claims(new_claims).await {
                     Ok(()) => {
                         eprintln!(
-                            "[{corpus_id}] Flushed {} new claims to disk (total so far: {})",
+                            "[{corpus_id}] Flushed {} new claims (total: {})",
                             new_claims.len(), claims.len()
                         );
                         flush_offset = claims.len();
@@ -119,34 +265,33 @@ impl EnrichmentEngine {
                 }
             }
 
-            // Hard ceiling — a safety net for pathologically long chunks, not
-            // an aggressive gate. The inference model's n_batch is now set to
-            // the full context window at load time, so typical well-chunked
-            // passages pass through untruncated. 6000 chars ≈ 1500 tokens,
-            // which fits in a 2048-token context with prompt overhead to spare.
-            const MAX_PASSAGE_CHARS: usize = 6000;
-            let truncated_content;
-            let passage = if chunk.content.len() > MAX_PASSAGE_CHARS {
-                // Find the last ASCII whitespace at or before the char limit.
-                let cutoff = chunk.content[..MAX_PASSAGE_CHARS]
-                    .rfind(|c: char| c.is_ascii_whitespace())
-                    .unwrap_or(MAX_PASSAGE_CHARS);
-                truncated_content = format!("{}…", &chunk.content[..cutoff]);
-                &truncated_content
-            } else {
-                &chunk.content
-            };
+            // ── Write batch checkpoint ─────────────────────────────────────────
+            if let Some(last_chunk) = batch.last() {
+                let _ = index.save_enrichment_state(
+                    &EnrichmentState {
+                        status: "in_progress".to_string(),
+                        last_chunk_id: Some(last_chunk.id),
+                        phase: "claims".to_string(),
+                        relationships_last_article: None,
+                    },
+                    EXTRACTION_PROMPT_VERSION,
+                );
+            }
+        }
 
+        // ── Individual retry queue ─────────────────────────────────────────────
+        for chunk in &retry_queue {
+            let passage = truncate_passage(&chunk.content);
             let prompt = format!(
                 "{}\n\n---\nPassage:\n{}\n---",
                 config.claim_extraction_prompt, passage,
             );
 
-            let response = match (self.inference)(&prompt).await {
+            let response = match (self.effective_fast())(&prompt).await {
                 Ok(r) => r,
                 Err(e) => {
                     inference_errors += 1;
-                    eprintln!("[{corpus_id}] chunk {i}/{total}: inference error — {e}");
+                    eprintln!("[{corpus_id}] retry chunk {}: inference error — {e}", chunk.id);
                     continue;
                 }
             };
@@ -156,13 +301,10 @@ impl EnrichmentEngine {
                 None => {
                     parse_errors += 1;
                     eprintln!(
-                        "[{corpus_id}] chunk {}/{total}: parse failed — {:?}",
-                        i + 1,
+                        "[{corpus_id}] retry chunk {}: parse failed — {:?}",
+                        chunk.id,
                         &response[..response.len().min(120)],
                     );
-                    // Persist the raw response so it can be retried later with
-                    // a better parser (e.g. truncation repair) without re-running
-                    // inference.
                     let failure = EnrichmentFailure {
                         chunk_id: chunk.id,
                         corpus_id: corpus_id.clone(),
@@ -184,11 +326,12 @@ impl EnrichmentEngine {
                 let embedding = match (self.embed)(&raw.claim).await {
                     Ok(v) => v,
                     Err(e) => {
-                        tracing::warn!("Embedding failed for claim '{}': {e}", raw.claim);
+                        tracing::warn!(
+                            "Embedding failed during retry for chunk {}: {e}", chunk.id
+                        );
                         continue;
                     }
                 };
-
                 claims.push(ExtractedClaim {
                     id: next_id,
                     claim: raw.claim,
@@ -206,7 +349,7 @@ impl EnrichmentEngine {
             }
         }
 
-        // Final flush for any claims accumulated since the last periodic flush.
+        // ── Final flush ────────────────────────────────────────────────────────
         if claims.len() > flush_offset {
             let new_claims = &claims[flush_offset..];
             match index.store_claims(new_claims).await {
@@ -220,9 +363,20 @@ impl EnrichmentEngine {
             }
         }
 
+        // ── Mark Phase 1 complete ──────────────────────────────────────────────
+        let _ = index.save_enrichment_state(
+            &EnrichmentState {
+                status: "complete".to_string(),
+                last_chunk_id: eligible_chunks.last().map(|c| c.id),
+                phase: "claims".to_string(),
+                relationships_last_article: None,
+            },
+            EXTRACTION_PROMPT_VERSION,
+        );
+
         eprintln!(
-            "[{corpus_id}] claims extraction complete — {claims_found} claims from {total} chunks \
-             ({inference_errors} inf-err, {parse_errors} parse-err)",
+            "[{corpus_id}] Phase 1 complete — {claims_found} claims from {total} eligible \
+             chunks ({filtered_count} filtered, {inference_errors} inf-err, {parse_errors} parse-err)",
         );
 
         Ok(claims)
@@ -316,25 +470,33 @@ impl EnrichmentEngine {
         Ok(new_claims)
     }
 
-    /// Phase 2: extract relationships between claims from different entries.
+    /// Phase 2: extract relationships between claims *within* the same source entry.
     ///
     /// Candidate pairs are found by vector-similarity search on the claim
-    /// embeddings. Pairs from the same source entry are skipped (they would
-    /// describe the same position from the same author). Each candidate pair
-    /// is sent to the inference model with the relationship extraction prompt.
-    pub async fn extract_relationships(
+    /// embeddings.  Only pairs from the same source entry (article) are
+    /// considered.  Processing is grouped by source_entry so that the
+    /// checkpoint cursor (`relationships_last_article`) can be written after
+    /// each article completes, enabling crash-safe resume.
+    pub async fn extract_relationships_within_article(
         &self,
         claims: &[ExtractedClaim],
         config: &EnrichmentConfig,
         progress: &Option<ProgressCallback>,
+        index: &CorpusIndex,
     ) -> Result<Vec<ClaimRelationship>> {
         let prompt_template = match config.relationship_extraction_prompt.as_deref() {
             Some(t) => t,
             None => {
-                tracing::warn!("extract_relationships called but no prompt configured");
+                tracing::warn!("extract_relationships_within_article called but no prompt configured");
                 return Ok(Vec::new());
             }
         };
+
+        // ── Phase 2 checkpoint / resume ────────────────────────────────────────
+        let resume_article: Option<String> = index
+            .load_enrichment_state()
+            .filter(|s| s.phase == "relationships")
+            .and_then(|s| s.relationships_last_article);
 
         let candidates = find_candidate_pairs(
             claims,
@@ -348,77 +510,123 @@ impl EnrichmentEngine {
             });
         }
 
+        // ── Group candidates by source_entry for per-article checkpoint ────────
+        // Map: article_title → Vec<(a_idx, b_idx)>
+        let mut by_article: Vec<(String, Vec<(usize, usize)>)> = {
+            let mut map: HashMap<String, Vec<(usize, usize)>> = HashMap::new();
+            for &(a_idx, b_idx) in &candidates {
+                let key = claims[a_idx]
+                    .source_entry
+                    .clone()
+                    .unwrap_or_default();
+                map.entry(key).or_default().push((a_idx, b_idx));
+            }
+            let mut v: Vec<_> = map.into_iter().collect();
+            v.sort_by(|a, b| a.0.cmp(&b.0)); // deterministic order
+            v
+        };
+
+        // Skip articles already processed in a prior run.
+        if let Some(ref last) = resume_article {
+            by_article.retain(|(article, _)| article > last);
+            eprintln!(
+                "[{}] Phase 2 resume: skipping articles up to {:?}, {} remaining",
+                index.corpus_id(), last, by_article.len()
+            );
+        }
+
         let total = candidates.len() as u64;
         let mut relationships = Vec::new();
         let mut next_id: u64 = 0;
+        let mut processed_pairs: u64 = 0;
 
-        for (i, (a_idx, b_idx)) in candidates.iter().enumerate() {
-            if i.is_multiple_of(100) {
-                if let Some(ref cb) = progress {
-                    cb(IngestProgress::ExtractingRelationships {
-                        current: i as u64,
-                        total,
-                    });
+        for (article, pairs) in &by_article {
+            for (i, &(a_idx, b_idx)) in pairs.iter().enumerate() {
+                if processed_pairs.is_multiple_of(100) {
+                    if let Some(ref cb) = progress {
+                        cb(IngestProgress::ExtractingRelationships {
+                            current: processed_pairs,
+                            total,
+                        });
+                    }
                 }
-            }
 
-            let claim_a = &claims[*a_idx];
-            let claim_b = &claims[*b_idx];
+                let claim_a = &claims[a_idx];
+                let claim_b = &claims[b_idx];
 
-            let prompt = prompt_template
-                .replace("{claim_a}", &claim_a.claim)
-                .replace(
-                    "{source_a}",
-                    claim_a.source_entry.as_deref().unwrap_or("unknown"),
-                )
-                .replace(
-                    "{attributed_a}",
-                    claim_a.attributed_to.as_deref().unwrap_or("the article"),
-                )
-                .replace("{claim_b}", &claim_b.claim)
-                .replace(
-                    "{source_b}",
-                    claim_b.source_entry.as_deref().unwrap_or("unknown"),
-                )
-                .replace(
-                    "{attributed_b}",
-                    claim_b.attributed_to.as_deref().unwrap_or("the article"),
-                );
+                let prompt = prompt_template
+                    .replace("{claim_a}", &claim_a.claim)
+                    .replace(
+                        "{source_a}",
+                        claim_a.source_entry.as_deref().unwrap_or("unknown"),
+                    )
+                    .replace(
+                        "{attributed_a}",
+                        claim_a.attributed_to.as_deref().unwrap_or("the article"),
+                    )
+                    .replace("{claim_b}", &claim_b.claim)
+                    .replace(
+                        "{source_b}",
+                        claim_b.source_entry.as_deref().unwrap_or("unknown"),
+                    )
+                    .replace(
+                        "{attributed_b}",
+                        claim_b.attributed_to.as_deref().unwrap_or("the article"),
+                    );
 
-            let response = match (self.inference)(&prompt).await {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::warn!("Inference failed for pair ({},{}): {e}", claim_a.id, claim_b.id);
+                let response = match (self.inference)(&prompt).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Inference failed for pair ({},{}): {e}",
+                            claim_a.id, claim_b.id
+                        );
+                        processed_pairs += 1;
+                        continue;
+                    }
+                };
+
+                let raw = match parse_raw_relationship(&response) {
+                    Some(r) => r,
+                    None => { processed_pairs += 1; continue; }
+                };
+
+                let rel_type = match RelationshipType::parse(&raw.relationship) {
+                    Some(t) => t,
+                    None => { processed_pairs += 1; continue; }
+                };
+
+                if raw.confidence < 0.5 {
+                    processed_pairs += 1;
                     continue;
                 }
-            };
 
-            let raw = match parse_raw_relationship(&response) {
-                Some(r) => r,
-                None => continue,
-            };
+                relationships.push(ClaimRelationship {
+                    id: next_id,
+                    claim_a_id: claim_a.id,
+                    claim_b_id: claim_b.id,
+                    relationship: rel_type,
+                    connecting_issue: raw.connecting_issue,
+                    evidence_chunk_ids: vec![claim_a.source_chunk_id, claim_b.source_chunk_id],
+                    confidence: raw.confidence,
+                });
 
-            // The model can return "none" to indicate no relationship.
-            let rel_type = match RelationshipType::parse(&raw.relationship) {
-                Some(t) => t,
-                None => continue, // includes "none"
-            };
+                next_id += 1;
+                let _ = i;
+                processed_pairs += 1;
+            } // end pair loop
 
-            if raw.confidence < 0.5 {
-                continue;
-            }
-
-            relationships.push(ClaimRelationship {
-                id: next_id,
-                claim_a_id: claim_a.id,
-                claim_b_id: claim_b.id,
-                relationship: rel_type,
-                connecting_issue: raw.connecting_issue,
-                evidence_chunk_ids: vec![claim_a.source_chunk_id, claim_b.source_chunk_id],
-                confidence: raw.confidence,
-            });
-            next_id += 1;
-        }
+            // Write per-article checkpoint after all pairs for this article are done.
+            let _ = index.save_enrichment_state(
+                &EnrichmentState {
+                    status: "in_progress".to_string(),
+                    last_chunk_id: None,
+                    phase: "relationships".to_string(),
+                    relationships_last_article: Some(article.clone()),
+                },
+                EXTRACTION_PROMPT_VERSION,
+            );
+        } // end article loop
 
         Ok(relationships)
     }
@@ -427,15 +635,11 @@ impl EnrichmentEngine {
 // ─── Candidate pair finding ─────────────────────────────────
 
 /// Find pairs of claims (a, b) where:
-/// - They come from different source entries.
+/// - They come from the **same** source entry (within-article).
 /// - Their embedding cosine similarity is above `threshold`.
-/// - We only include each unordered pair once (a.id < b.id).
+/// - We only include each unordered pair once (i < j).
 ///
 /// Stops once `max_candidates` pairs have been found.
-///
-/// Uses brute-force similarity rather than LanceDB ANN because the claim
-/// set is typically much smaller than the chunk set, and brute-force
-/// over a few thousand claims is fast and deterministic.
 fn find_candidate_pairs(
     claims: &[ExtractedClaim],
     threshold: f32,
@@ -444,7 +648,8 @@ fn find_candidate_pairs(
     let mut out = Vec::new();
     for i in 0..claims.len() {
         for j in (i + 1)..claims.len() {
-            if claims[i].source_entry == claims[j].source_entry {
+            // Skip pairs from *different* entries — we only want within-article.
+            if claims[i].source_entry != claims[j].source_entry {
                 continue;
             }
             if claims[i].embedding.is_empty() || claims[j].embedding.is_empty() {
@@ -460,6 +665,106 @@ fn find_candidate_pairs(
         }
     }
     out
+}
+
+// ─── Batch prompt / response helpers ──────────────────────────────────────────
+
+/// Build a numbered multi-passage prompt from a preamble and a slice of chunks.
+///
+/// Output format:
+/// ```text
+/// {preamble}
+///
+/// PASSAGES:
+/// 1. {chunk1.content}
+///
+/// 2. {chunk2.content}
+///
+/// Respond with exactly:
+/// {"1": [...], "2": [...]}
+/// Each array: [{"claim": "...", "epistemic_status": "...", "hedging_language": "...", "attributed_to": "..."}]
+/// Max 3 items per array. Empty array [] if no qualifying claims.
+/// ```
+fn build_batch_prompt(preamble: &str, chunks: &[&crate::index::StoredChunk]) -> String {
+    let mut buf = String::with_capacity(4096);
+    buf.push_str(preamble);
+    buf.push_str("\n\nPASSAGES:\n");
+    for (i, chunk) in chunks.iter().enumerate() {
+        let passage = truncate_passage(&chunk.content);
+        buf.push_str(&format!("{}. {}\n\n", i + 1, passage));
+    }
+    // Build expected keys.
+    let keys: Vec<String> = (1..=chunks.len()).map(|n| format!("\"{n}\": [...]")).collect();
+    buf.push_str(&format!(
+        "Respond with exactly:\n{{{}}}\n\
+         Each array: [{{\"claim\": \"...\", \"epistemic_status\": \"...\", \
+         \"hedging_language\": \"...\", \"attributed_to\": \"...\"}}]\n\
+         Max 3 items per array. Empty array [] if no qualifying claims.",
+        keys.join(", ")
+    ));
+    buf
+}
+
+/// Parse a batch inference response into a map of slot key → claims.
+///
+/// Slot keys are `"1"` through `"4"` (or however many were in the batch).
+/// Missing or malformed keys are omitted so callers can queue those chunks
+/// for individual retry.
+fn parse_batch_response(response: &str) -> HashMap<String, Vec<RawExtractedClaim>> {
+    let cleaned = strip_think_tags(response);
+    let s = cleaned.trim();
+
+    // Try to extract a JSON object from the response.
+    let json = extract_json_object_from_response(s).unwrap_or_else(|| s.to_string());
+
+    let map: serde_json::Map<String, serde_json::Value> =
+        match serde_json::from_str(&json) {
+            Ok(m) => m,
+            Err(_) => return HashMap::new(),
+        };
+
+    let mut out: HashMap<String, Vec<RawExtractedClaim>> = HashMap::new();
+    for (k, v) in &map {
+        // Each value should be an array of claim objects.
+        if let Some(arr) = v.as_array() {
+            let claims: Vec<RawExtractedClaim> = arr
+                .iter()
+                .filter_map(lenient_claim_from_value)
+                .collect();
+            out.insert(k.clone(), claims);
+        }
+    }
+    out
+}
+
+/// Truncate a passage to 6000 chars at the last whitespace boundary.
+fn truncate_passage(content: &str) -> &str {
+    const MAX_PASSAGE_CHARS: usize = 6000;
+    if content.len() <= MAX_PASSAGE_CHARS {
+        return content;
+    }
+    let cutoff = content[..MAX_PASSAGE_CHARS]
+        .rfind(|c: char| c.is_ascii_whitespace())
+        .unwrap_or(MAX_PASSAGE_CHARS);
+    &content[..cutoff]
+}
+
+/// Like `extract_json_from_response` but looks for a JSON *object* (`{…}`)
+/// as the outermost structure (used by `parse_batch_response`).
+fn extract_json_object_from_response(response: &str) -> Option<String> {
+    // Fenced code block first.
+    if let Some(start) = response.find("```") {
+        let after = &response[start + 3..];
+        let body_start = after.find('\n').map(|i| i + 1).unwrap_or(0);
+        let body = &after[body_start..];
+        if let Some(end) = body.find("```") {
+            return Some(body[..end].trim().to_string());
+        }
+    }
+    let first = response.find('{')?;
+    let last = response.rfind('}')?;
+    if last < first { return None; }
+    Some(response[first..=last].trim().to_string())
 }
 
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
@@ -920,7 +1225,9 @@ mod tests {
     }
 
     #[test]
-    fn find_candidates_skips_same_entry() {
+    fn find_candidates_within_article_only() {
+        // entry1 has 2 claims; entry2 has 1 claim.
+        // Within-article filter: only the (entry1, entry1) pair should appear.
         let claims = vec![
             ExtractedClaim {
                 id: 1,
@@ -943,7 +1250,7 @@ mod tests {
                 epistemic_status: EpistemicStatus::Contested,
                 hedging_language: None,
                 attributed_to: None,
-                source_entry: Some("entry1".into()), // same entry
+                source_entry: Some("entry1".into()), // same entry — should be a candidate
                 embedding: vec![1.0, 0.0],
             },
             ExtractedClaim {
@@ -955,21 +1262,21 @@ mod tests {
                 epistemic_status: EpistemicStatus::Contested,
                 hedging_language: None,
                 attributed_to: None,
-                source_entry: Some("entry2".into()),
+                source_entry: Some("entry2".into()), // different entry — skipped
                 embedding: vec![1.0, 0.0],
             },
         ];
         let pairs = find_candidate_pairs(&claims, 0.5, 100);
-        // Only (entry1, entry2) pairs, not (entry1, entry1).
-        assert_eq!(pairs.len(), 2);
-        // Each pair must straddle the entry boundary.
-        for (a, b) in &pairs {
-            assert_ne!(claims[*a].source_entry, claims[*b].source_entry);
-        }
+        // Only the within-article pair (entry1[0], entry1[1]) should appear.
+        assert_eq!(pairs.len(), 1);
+        let (a, b) = pairs[0];
+        assert_eq!(claims[a].source_entry, claims[b].source_entry);
     }
 
     #[test]
     fn find_candidates_respects_max() {
+        // All 10 claims from the same entry so there are C(10,2)=45 candidate pairs.
+        // max_candidates=5 must cap the output.
         let claims: Vec<_> = (0..10)
             .map(|i| ExtractedClaim {
                 id: i,
@@ -980,7 +1287,7 @@ mod tests {
                 epistemic_status: EpistemicStatus::Contested,
                 hedging_language: None,
                 attributed_to: None,
-                source_entry: Some(format!("entry{i}")),
+                source_entry: Some("same_entry".to_string()),
                 embedding: vec![1.0, 0.0],
             })
             .collect();

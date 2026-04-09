@@ -28,8 +28,11 @@ pub struct CorpusEngine {
     recipes_dir: PathBuf,
     index_dir: PathBuf,
     embed: EmbedFn,
-    /// Optional inference function. Required only for the enrichment phase.
+    /// Optional primary inference function. Required for the enrichment phase.
     inference: Option<crate::types::InferenceFn>,
+    /// Optional fast inference function (e.g. Qwen3-1.7B).
+    /// Used for claim extraction; falls back to `inference` when `None`.
+    fast_inference: Option<crate::types::InferenceFn>,
     expected_embedding_model: String,
 }
 
@@ -49,6 +52,7 @@ impl CorpusEngine {
             index_dir,
             embed,
             inference: None,
+            fast_inference: None,
             expected_embedding_model: "nomic-embed-text-v2".to_string(),
         }
     }
@@ -63,6 +67,13 @@ impl CorpusEngine {
     /// will log a warning and skip enrichment.
     pub fn with_inference_fn(mut self, inference: crate::types::InferenceFn) -> Self {
         self.inference = Some(inference);
+        self
+    }
+
+    /// Provide a fast inference function used exclusively for claim extraction.
+    /// Falls back to the primary `inference` function if not set.
+    pub fn with_fast_inference_fn(mut self, f: crate::types::InferenceFn) -> Self {
+        self.fast_inference = Some(f);
         self
     }
 
@@ -425,22 +436,17 @@ impl CorpusEngine {
             if enrichment_config.enabled {
                 match self.inference.as_ref() {
                     Some(inference) => {
-                        let enricher = crate::enrichment::EnrichmentEngine::new(
+                        let enricher = crate::enrichment::EnrichmentEngine::new_with_fast(
                             self.embed.clone(),
                             inference.clone(),
+                            self.fast_inference.clone(),
                         );
-                        // extract_claims now flushes to disk incrementally every 100 chunks.
-                        // The returned Vec is kept only for relationship extraction below.
-                        let claims = enricher
+                        // Phase 1: claim extraction (checkpointed; resumes on restart).
+                        // Relationship extraction (Phase 2) is a separate command and
+                        // is no longer called here so the corpus is searchable sooner.
+                        enricher
                             .extract_claims(&index, enrichment_config, progress)
                             .await?;
-
-                        if enrichment_config.extract_relationships {
-                            let rels = enricher
-                                .extract_relationships(&claims, enrichment_config, progress)
-                                .await?;
-                            index.store_relationships(&rels).await?;
-                        }
 
                         index.build_claims_index().await?;
                     }
@@ -668,6 +674,61 @@ impl CorpusEngine {
         }
 
         Ok(recovered)
+    }
+
+    /// Phase 2: extract within-article relationships for a corpus.
+    ///
+    /// Decoupled from `ingest()` so the corpus is searchable while Phase 2
+    /// runs.  Safe to re-run: resumes from the last processed article if
+    /// interrupted.  Requires the primary `inference` function to be set.
+    pub async fn enrich_relationships(&self, corpus_id: &str) -> Result<()> {
+        let inference = match self.inference.as_ref() {
+            Some(f) => f.clone(),
+            None => {
+                return Err(crate::error::Error::Embed(
+                    "enrich_relationships requires an InferenceFn".into(),
+                ));
+            }
+        };
+
+        let index = self.open_index_for_corpus(corpus_id).await?;
+        let recipe = self.load_recipe(corpus_id).await?;
+        let enrichment_config = match recipe.enrichment.as_ref() {
+            Some(c) => c.clone(),
+            None => {
+                tracing::warn!("[{corpus_id}] no enrichment config in recipe — skipping Phase 2");
+                return Ok(());
+            }
+        };
+
+        if enrichment_config.relationship_extraction_prompt.is_none() {
+            tracing::warn!(
+                "[{corpus_id}] relationship_extraction_prompt not set — skipping Phase 2"
+            );
+            return Ok(());
+        }
+
+        let enricher = crate::enrichment::EnrichmentEngine::new_with_fast(
+            self.embed.clone(),
+            inference,
+            self.fast_inference.clone(),
+        );
+
+        // Load all claims from LanceDB.
+        let claims = index.load_enriched_claims().await?;
+        eprintln!("[{corpus_id}] Phase 2: {} claims loaded", claims.len());
+
+        let rels = enricher
+            .extract_relationships_within_article(&claims, &enrichment_config, &None, &index)
+            .await?;
+
+        if !rels.is_empty() {
+            index.store_relationships(&rels).await?;
+            index.build_claims_index().await?;
+        }
+
+        eprintln!("[{corpus_id}] Phase 2 complete: {} relationships extracted", rels.len());
+        Ok(())
     }
 
     /// Return the IDs of all installed corpora that have an enriched

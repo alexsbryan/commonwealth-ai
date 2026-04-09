@@ -140,6 +140,23 @@ pub struct UpdateConfig {
 }
 
 // ---------------------------------------------------------------------------
+// RelationshipScope
+// ---------------------------------------------------------------------------
+
+/// Controls which claim pairs are evaluated for relationships.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub enum RelationshipScope {
+    /// Only consider pairs of claims from the *same* source entry (article).
+    /// This is the default — it is faster and avoids spurious cross-article
+    /// false positives.
+    #[default]
+    WithinArticle,
+    /// Evaluate all cross-article claim pairs (original behaviour, reserved
+    /// for future use on small corpora).
+    CrossArticle,
+}
+
+// ---------------------------------------------------------------------------
 // EnrichmentConfig
 // ---------------------------------------------------------------------------
 
@@ -180,6 +197,11 @@ pub struct EnrichmentConfig {
     /// of relationship extraction on large corpora.
     #[serde(default = "default_max_relationship_candidates")]
     pub max_relationship_candidates: usize,
+
+    /// Which claim pairs to evaluate when extracting relationships.
+    /// Defaults to `WithinArticle`.
+    #[serde(default)]
+    pub relationship_scope: RelationshipScope,
 }
 
 impl Default for EnrichmentConfig {
@@ -191,6 +213,7 @@ impl Default for EnrichmentConfig {
             relationship_extraction_prompt: None,
             relationship_similarity_threshold: default_similarity_threshold(),
             max_relationship_candidates: default_max_relationship_candidates(),
+            relationship_scope: RelationshipScope::default(),
         }
     }
 }
