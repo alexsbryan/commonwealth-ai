@@ -1,0 +1,75 @@
+schema_version = 1
+generated_at = "2026-04-09T00:00:00Z"
+registry_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/registry.toml"
+
+[[recipes]]
+id = "wikipedia"
+name = "Wikipedia (English)"
+description = "6.7 million English Wikipedia articles (September 2024 snapshot) with section-level chunking and full epistemic enrichment."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 13.0
+size_indexed_gb = 60.0
+enrichment_enabled = true
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "sep"
+name = "Stanford Encyclopedia of Philosophy"
+description = "Comprehensive philosophical reference covering 1,800+ entries with claim-level epistemic enrichment and relationship extraction."
+license = "Copyright Stanford University (educational/research use)"
+size_compressed_gb = 1.4
+size_indexed_gb = 6.0
+enrichment_enabled = true
+mesh_sharing = false
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sep/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "stackexchange"
+name = "Stack Exchange"
+description = "Q&A archive across all Stack Exchange sites (scored answers only). Updated quarterly."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 85.0
+size_indexed_gb = 120.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "openalex"
+name = "OpenAlex"
+description = "330 GB scholarly paper metadata snapshot with abstract text from the OpenAlex S3 snapshot."
+license = "CC0-1.0"
+size_compressed_gb = 330.0
+size_indexed_gb = 500.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/openalex/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "gutenberg"
+name = "Project Gutenberg"
+description = "61,000 English-language public domain books from the manu/project_gutenberg HuggingFace dataset."
+license = "Public Domain"
+size_compressed_gb = 9.0
+size_indexed_gb = 25.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "crs_reports"
+name = "CRS Reports"
+description = "Congressional Research Service reports from EveryCRSReport.com — non-partisan policy analysis in the public domain."
+license = "Public Domain"
+size_compressed_gb = 2.0
+size_indexed_gb = 5.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/crs_reports/recipe.toml"
+sha256 = ""

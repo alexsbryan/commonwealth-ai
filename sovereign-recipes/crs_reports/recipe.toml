@@ -1,0 +1,32 @@
+[corpus]
+id = "crs_reports"
+name = "CRS Reports"
+description = "Congressional Research Service reports from EveryCRSReport.com."
+license = "Public Domain"
+mesh_sharing = true
+size_compressed_gb = 2.0
+size_indexed_gb = 5.0
+
+# EveryCRSReport.com publishes the full text of all CRS reports as HTML.
+# The BulkDownload acquirer fetches the report index page; the HTML extractor
+# follows links and extracts the body of each report.
+[acquire]
+type = "bulk_download"
+url = "https://www.everycrsreport.com/reports.html"
+resume = true
+
+[extract]
+type = "html"
+title_selector = "h1"
+# content_selector defaults to the full body when omitted.
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+embedding_model = "nomic-embed-text-v2"
+embedding_dimensions = 768

@@ -1,0 +1,32 @@
+[corpus]
+id = "stackexchange"
+name = "Stack Exchange"
+description = "Questions and answers from the Stack Exchange network."
+license = "CC-BY-SA-4.0"
+mesh_sharing = true
+size_compressed_gb = 85.0
+size_indexed_gb = 120.0
+
+# Full Stack Exchange data dump from the Internet Archive.
+# The dump is updated quarterly and contains XML files for each site.
+[acquire]
+type = "bulk_download"
+url = "https://archive.org/download/stackexchange"
+resume = true
+
+[extract]
+type = "stackexchange_xml"
+# min_score filters out low-quality answers. The default (3) keeps answers
+# with meaningful community validation while trimming spam and noise.
+min_score = 3
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+embedding_model = "nomic-embed-text-v2"
+embedding_dimensions = 768

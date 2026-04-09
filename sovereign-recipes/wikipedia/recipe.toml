@@ -1,0 +1,63 @@
+[corpus]
+id = "wikipedia"
+name = "Wikipedia (English)"
+description = """
+English Wikipedia articles from the September 2024 structured snapshot (~6.7M articles). \
+Includes section structure, Wikidata QIDs, revision IDs, and inter-article links. \
+Wikipedia-specific claim enrichment. Delta updates via monthly revision manifest.\
+"""
+license = "CC-BY-SA-4.0"
+mesh_sharing = true
+size_compressed_gb = 13.0
+size_indexed_gb = 60.0
+
+# The wikimedia/structured-wikipedia dataset ships as ZIP+JSONL rather than parquet
+# shards. HuggingFace's parquet conversion API fails on this dataset (schema casting
+# error), so we use BulkDownload directly to the September 2024 English snapshot.
+[acquire]
+type = "bulk_download"
+url = "https://huggingface.co/datasets/wikimedia/structured-wikipedia/resolve/main/20240916.en/enwiki_namespace_0.zip"
+resume = true
+
+# WikipediaJsonlExtractor streams articles from inside the ZIP, emitting one
+# ExtractedDoc per section with full WikipediaChunkMetadata (section type,
+# revision ID, Wikidata QID, page ID, outgoing links).
+[extract]
+type = "wikipedia_jsonl"
+# controversy_patterns and factual_patterns default to the built-in pattern lists.
+
+[chunk]
+type = "paragraph"
+max_chars = 1024
+overlap_chars = 128
+
+[index]
+fts = true
+vector = true
+embedding_model = "nomic-embed-text-v2"
+embedding_dimensions = 768
+
+# Delta updates: the manifest at manifest_url maps article URL → revision_id.
+# A manifest-generation job reads omarkamali/wikipedia-monthly (latest.en,
+# ~7M articles) and publishes the manifest. CorpusUpdater uses it to
+# add/update/delete articles incrementally.
+[update]
+manifest_url = "https://updates.sovereign.dev/manifests/wikipedia-en.json"
+auto_update = true
+
+[enrichment]
+enabled = true
+extract_relationships = false
+relationship_similarity_threshold = 0.55
+max_relationship_candidates = 50000
+claim_extraction_prompt = '''
+Extract factual claims from this Wikipedia passage.
+
+Focus on verifiable, encyclopedic facts: dates, relationships, quantities, events,
+classifications, and biographical details. Emit only the core claim — do not include
+editorial signals ("according to", "may be", "is believed to") in the claim text itself.
+Skip purely navigational content, maintenance notices, and disambiguation text.
+
+Return one claim per line, each starting with '-'. Return an empty list if the
+passage contains no verifiable factual claims.
+'''

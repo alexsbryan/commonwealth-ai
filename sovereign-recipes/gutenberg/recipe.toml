@@ -1,0 +1,36 @@
+[corpus]
+id = "gutenberg"
+name = "Project Gutenberg"
+description = "Public-domain books from Project Gutenberg."
+license = "Public Domain"
+mesh_sharing = true
+size_compressed_gb = 9.0
+size_indexed_gb = 25.0
+
+# Sourced from the manu/project_gutenberg dataset on HuggingFace, which mirrors
+# ~61k English Gutenberg books across 52 parquet shards. The HuggingFaceDataset
+# acquirer enumerates shards via the HF API and downloads them into a local
+# directory; the parquet extractor chains across all shards.
+#
+# subset = "en" filters to filenames beginning with data/en- so that only the
+# English-language shards are fetched.
+[acquire]
+type = "huggingface_dataset"
+repo = "manu/project_gutenberg"
+subset = "en"
+
+[extract]
+type = "parquet"
+content_column = "text"
+label_column = "id"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+embedding_model = "nomic-embed-text-v2"
+embedding_dimensions = 768

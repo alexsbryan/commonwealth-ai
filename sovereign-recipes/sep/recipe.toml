@@ -1,0 +1,104 @@
+[corpus]
+id = "sep"
+name = "Stanford Encyclopedia of Philosophy"
+description = """
+Peer-reviewed encyclopedia entries from the Stanford Encyclopedia of Philosophy. \
+Includes claim and relationship enrichment for the epistemic-research skill.\
+"""
+# SEP entries are authored under Stanford copyright. Use is permitted for
+# educational and research purposes. Do NOT redistribute raw text commercially.
+license = "Copyright Stanford University (educational/research use)"
+# mesh_sharing is disabled because SEP's license does not permit redistribution.
+mesh_sharing = false
+size_compressed_gb = 1.4
+size_indexed_gb = 6.0
+
+# Sourced from AiresPucrs/stanford-encyclopedia-philosophy on HuggingFace,
+# which mirrors SEP entries as a single parquet file. This avoids scraping
+# plato.stanford.edu directly (slow, fragile, and impolite to Stanford's servers).
+# The parquet has columns: title, text, url.
+[acquire]
+type = "bulk_download"
+url = "https://huggingface.co/datasets/AiresPucrs/stanford-encyclopedia-philosophy/resolve/main/data/train-00000-of-00001.parquet"
+resume = true
+
+[extract]
+type = "parquet"
+content_column = "text"
+label_column = "title"
+url_column = "url"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+embedding_model = "nomic-embed-text-v2"
+embedding_dimensions = 768
+
+# SEP's distinctive hedging vocabulary ("it is widely accepted", "there is ongoing
+# debate") makes it ideal for epistemic enrichment. Claim + relationship extraction
+# powers the epistemic-research skill's stance graph.
+[enrichment]
+enabled = true
+extract_relationships = true
+relationship_similarity_threshold = 0.55
+max_relationship_candidates = 50000
+
+claim_extraction_prompt = '''
+Extract propositional claims from this encyclopedia passage.
+
+For each claim, provide:
+1. "claim": A single declarative statement capturing the position.
+2. "epistemic_status": One of: "consensus", "majority", "contested",
+   "minority", "established", "unclear".
+3. "hedging_language": The source text's exact words indicating
+   epistemic status (e.g., "it is widely accepted that").
+   Null if the text doesn't hedge.
+4. "attributed_to": Who holds this position — a philosopher name,
+   a school of thought, or null if it's the article's own framing.
+
+SEP articles use distinctive hedging patterns:
+- "It is widely accepted..." / "There is broad agreement..." → consensus
+- "Most philosophers hold..." / "The standard view..." → majority
+- "This remains controversial..." / "There is ongoing debate..." → contested
+- "Some philosophers argue..." / "Critics maintain..." → minority
+- "It is uncontroversial that..." / "It has been established..." → established
+
+Extract 3-8 claims per passage. Focus on substantive philosophical
+positions, not bibliographic or historical facts. If a passage is
+purely biographical or administrative, return an empty array.
+
+Return ONLY a JSON array of claim objects. No other text.
+'''
+
+relationship_extraction_prompt = '''
+Given two claims from different encyclopedia entries, determine
+their epistemic relationship.
+
+Claim A: {claim_a}
+  From: {source_a}
+  Attributed to: {attributed_a}
+
+Claim B: {claim_b}
+  From: {source_b}
+  Attributed to: {attributed_b}
+
+What is the relationship?
+- "contradicts": Claim A directly opposes Claim B.
+- "supports": Claim A provides evidence or argument for Claim B.
+- "refines": Claim A qualifies or adds nuance to Claim B.
+- "competing_answers": Both claims answer the same question differently.
+- "presupposes": Claim A depends on or assumes Claim B.
+- "none": No meaningful epistemic relationship.
+
+Also provide:
+- "connecting_issue": The question or topic that connects them.
+  Null if the relationship is "none".
+- "confidence": 0.0 to 1.0, how confident you are in this classification.
+
+Return ONLY a JSON object. No other text.
+'''
