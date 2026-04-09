@@ -802,10 +802,16 @@ impl CorpusIndex {
         let sanitized = sanitize_fts_query(query_text);
         // Single live check — list_indices() only returns COMPLETE indices.
         // Gates both vector (IVF-PQ on "embedding") and FTS (Tantivy on "content"/"title").
-        // Avoids 30-second flat scans when either index is absent or stale.
+        // Avoids 30-second flat scans when either index is absent or stale on large tables.
+        // Exception: tables below FLAT_SCAN_THRESHOLD rows use brute-force scans
+        // unconditionally — they're too small to warrant an IVF-PQ index and a flat
+        // scan completes in milliseconds.
+        const FLAT_SCAN_THRESHOLD: usize = 10_000;
+        let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
         let indices = self.table.list_indices().await.unwrap_or_default();
+        let ivf_built = indices.iter().any(|idx| idx.columns.iter().any(|c| c == "embedding"));
         let do_vector = !query_embedding.is_empty()
-            && indices.iter().any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+            && (ivf_built || row_count < FLAT_SCAN_THRESHOLD);
         let fts_built = !sanitized.is_empty()
             && indices.iter().any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
         let do_fts = fts_built;
@@ -813,7 +819,9 @@ impl CorpusIndex {
         tracing::debug!(
             do_vector,
             do_fts,
+            ivf_built,
             fts_built,
+            row_count = row_count as u64,
             stored_dims = self.embedding_dimensions,
             query_dims = query_embedding.len(),
             dims_match = (query_embedding.is_empty() || query_embedding.len() == self.embedding_dimensions),

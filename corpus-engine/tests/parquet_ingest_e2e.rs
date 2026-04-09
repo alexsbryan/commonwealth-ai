@@ -36,15 +36,47 @@ fn make_sep_like_parquet(path: &Path) {
         "Hard Incompatibilism",
         "Hard Incompatibilism",
     ]);
+    // Each passage must be ≥80 words so the eligibility filter passes.
     let texts = StringArray::from(vec![
         "Compatibilists hold that free will is consistent with determinism. \
-         Most contemporary philosophers accept some form of compatibilism.",
+         The central compatibilist thesis is that freedom of action requires only that \
+         agents act in accordance with their own desires and values, without external \
+         constraint or compulsion. Contemporary compatibilists have developed sophisticated \
+         accounts that distinguish between the ability to act otherwise and the kind of \
+         freedom required for moral responsibility. The hierarchical account holds that \
+         an agent acts freely when their effective will aligns with higher-order desires. \
+         Critics argue that this analysis fails to capture intuitions about origination, \
+         but compatibilists respond that such intuitions reflect confused thinking about \
+         what freedom actually requires for genuine agency.",
         "Frankfurt cases are widely cited as support for the compatibilist view \
-         that moral responsibility does not require alternative possibilities.",
-        "Hard incompatibilists argue that determinism is incompatible with \
-         the kind of free will required for moral responsibility.",
+         that moral responsibility does not require alternative possibilities. \
+         In these cases an agent is unable to do otherwise due to a counterfactual \
+         intervener, yet we standardly judge the agent responsible for their action. \
+         Compatibilists argue this shows that the ability to do otherwise is not \
+         a necessary condition for moral responsibility. The deeper question is whether \
+         such cases successfully isolate the relevant condition or whether they smuggle \
+         in assumptions about the causal history of action that beg the question \
+         against incompatibilist intuitions about what responsibility ultimately requires.",
+        "Hard incompatibilists maintain that neither determinism nor indeterminism \
+         is compatible with the sort of free will required for moral responsibility. \
+         Even if our actions are causally undetermined at the quantum level, this \
+         randomness cannot underwrite the kind of control that genuine responsibility \
+         demands. The hard incompatibilist position challenges both libertarianism and \
+         compatibilism, holding that our practices of reactive attitudes and retributive \
+         punishment are founded on a kind of agency that agents do not possess. \
+         This conclusion has significant implications for criminal justice and moral \
+         psychology, though some argue that forward-looking responsibility practices can \
+         be preserved even if backward-looking retributivism cannot be justified.",
         "Pereboom maintains that even if our actions are determined, we lack \
-         the control necessary for genuine moral responsibility.",
+         the control necessary for genuine moral responsibility of the basic desert kind. \
+         His four-case argument proceeds by introducing a series of cases beginning with \
+         direct neuroscientific manipulation and moving toward ordinary causal determinism, \
+         arguing that the relevant differences between cases do not ground a principled \
+         distinction in attributions of responsibility. The argument concludes that since \
+         we would not hold agents responsible in the manipulation cases, we should not \
+         hold them responsible in the ordinary case either. Compatibilists dispute whether \
+         the cases are genuinely analogous, particularly regarding the role of the \
+         agent's own character and values in producing the action.",
     ]);
 
     let batch =
@@ -75,20 +107,24 @@ fn mock_embed_fn() -> EmbedFn {
 /// readable.
 fn mock_inference_fn() -> InferenceFn {
     Arc::new(|prompt: &str| {
-        let response = if prompt.contains("two claims") || prompt.contains("Claim A") {
-            // Relationship extraction prompt — keep things deterministic
-            // by always declaring no relationship. Avoids combinatorial
-            // blow-up if the test fixture grows.
+        let claim = r#"{"claim":"Free will is compatible with determinism.","epistemic_status":"majority","hedging_language":"Most contemporary philosophers accept","attributed_to":"Compatibilists"}"#;
+        let response = if prompt.contains("Claim A:") || prompt.contains("two claims") {
+            // Relationship extraction prompt.
             r#"{"relationship": "none", "confidence": 0.0}"#.to_string()
+        } else if prompt.contains("PASSAGES:") {
+            // Batch claim extraction prompt — return one claim per slot.
+            // Count how many numbered passages appear (lines starting with "1.", "2.", ...).
+            let slot_count = (1..=4)
+                .filter(|n| prompt.contains(&format!("\n{n}. ")))
+                .count()
+                .max(1);
+            let slots: Vec<String> = (1..=slot_count)
+                .map(|n| format!("\"{n}\": [{claim}]"))
+                .collect();
+            format!("{{{}}}", slots.join(", "))
         } else {
-            // Claim extraction prompt — return one claim per chunk.
-            r#"[{
-                "claim": "Free will is compatible with determinism.",
-                "epistemic_status": "majority",
-                "hedging_language": "Most contemporary philosophers accept",
-                "attributed_to": "Compatibilists"
-            }]"#
-                .to_string()
+            // Single-chunk fallback (retry path).
+            format!("[{claim}]")
         };
         Box::pin(async move { Ok(response) })
     })
@@ -333,10 +369,8 @@ async fn ingest_progress_callback_fires_for_enrichment_phases() {
         observed.contains(&"extracting_claims"),
         "progress callback should fire for the claim-extraction phase, got {observed:?}"
     );
-    assert!(
-        observed.contains(&"found_pairs"),
-        "progress callback should fire when candidate pairs are found, got {observed:?}"
-    );
+    // Relationship extraction (found_pairs / extracting_relationships) is now
+    // Phase 2 and runs via enrich_relationships(), not ingest().
     assert!(
         observed.contains(&"complete"),
         "progress callback should fire on completion, got {observed:?}"
