@@ -936,16 +936,20 @@ impl CorpusIndex {
         }
 
         scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        // Drop results below minimum relevance threshold.
-        // score = 1/(1+distance); distance=1.0 → score=0.5, distance=1.22 → score≈0.45.
-        // Anything below 0.45 is semantically too distant to be useful.
+        // Apply score threshold only in vector-only mode, where score = 1/(1+cosine_distance)
+        // and 0.45 corresponds to cosine_distance ≈ 1.22 (weak semantic match).
+        // In hybrid mode, scores are RRF (_relevance_score ≈ 0.016) — incompatible scale,
+        // so we let all results through and trust the model to judge relevance.
         let before_threshold = scored.len();
-        scored.retain(|c| c.score >= 0.45);
+        if do_vector && !do_fts {
+            scored.retain(|c| c.score >= 0.45);
+        }
         tracing::debug!(
             before = before_threshold,
             after = scored.len(),
             dropped = before_threshold - scored.len(),
-            "CorpusIndex::search: threshold(0.45) applied"
+            threshold_applied = do_vector && !do_fts,
+            "CorpusIndex::search: threshold check"
         );
         scored.truncate(limit);
         tracing::debug!(
