@@ -769,24 +769,16 @@ impl CorpusIndex {
         query_text: &str,
         limit: usize,
     ) -> Result<Vec<ScoredChunk>> {
-        let do_vector = !query_embedding.is_empty();
         let sanitized = sanitize_fts_query(query_text);
-        // Check whether a real Tantivy FTS index exists via list_indices().
-        // We cannot rely on the `content_fts_built` meta flag because
-        // build_indexes(..., build_fts=false, ...) marks the flag "done" (meaning
-        // "not needed") even when no Tantivy index was actually created — leaving
-        // do_fts=true would trigger a 30-second full-table text scan.
-        let fts_built = if !sanitized.is_empty() {
-            self.table
-                .list_indices()
-                .await
-                .unwrap_or_default()
-                .iter()
-                .any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"))
-        } else {
-            false
-        };
-        let do_fts = !sanitized.is_empty() && fts_built;
+        // Single live check — list_indices() only returns COMPLETE indices.
+        // Gates both vector (IVF-PQ on "embedding") and FTS (Tantivy on "content"/"title").
+        // Avoids 30-second flat scans when either index is absent or stale.
+        let indices = self.table.list_indices().await.unwrap_or_default();
+        let do_vector = !query_embedding.is_empty()
+            && indices.iter().any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+        let fts_built = !sanitized.is_empty()
+            && indices.iter().any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
+        let do_fts = fts_built;
 
         tracing::debug!(
             do_vector,
