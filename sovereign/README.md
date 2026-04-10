@@ -242,17 +242,20 @@ See `docs/specs/oicp.md` for the full protocol specification.
 
 ## Architecture
 
-Seven crates with five trait boundaries. Every component is swappable.
+Eight crates with five trait boundaries. Every component is swappable.
 
 ```
 sovereign-core          Runtime, Executor, Planner, Router, Memory, Skills, Types, Traits
 sovereign-inference     llama.cpp FFI, dual-slot model management, backend selection, health tracking
 sovereign-store         SQLite + PostgreSQL StateStore, FTS5 search, soft deletes, sync-ready schema
 sovereign-tools         Search pipeline, corpus parsers (Parquet, XML, JSONL, HTML), web, shell, RAG
+sovereign-mesh          In-process Commonwealth daemon embed (sovereign:// deep links)
 sovereign-cli           Interactive terminal REPL
 sovereign-server        Axum REST API + WebSocket
 sovereign-desktop       Tauri 2 + Svelte 5 native desktop app
 ```
+
+OICP types are defined in the shared `oicp-types` crate at the workspace root and re-exported through `sovereign_core::oicp`.
 
 ### Data Flow
 
@@ -302,7 +305,7 @@ cargo tauri dev
 ### Testing
 
 ```sh
-cargo test --workspace                              # All 260 tests
+cargo test --workspace                              # All 309 tests
 cargo test -p sovereign-core --test functional      # 18 functional tests (provenance, FTS5, knowledge bases)
 cargo test -p sovereign-tools --test smoke_tests    # 7 smoke tests (Parquet ingestion, full pipeline)
 ```

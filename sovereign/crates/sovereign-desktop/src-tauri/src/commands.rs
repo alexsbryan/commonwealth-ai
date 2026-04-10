@@ -1590,6 +1590,8 @@ mod tests {
             &IngestProgress::Embedding {
                 chunks_embedded: 250,
                 total: 1000,
+                docs_processed: 10,
+                chunks_per_sec: 50.0,
             },
         );
         assert_eq!(payload.phase, "embedding");
@@ -1606,60 +1608,11 @@ mod tests {
             &IngestProgress::Embedding {
                 chunks_embedded: 0,
                 total: 0,
+                docs_processed: 0,
+                chunks_per_sec: 0.0,
             },
         );
         assert_eq!(payload.percent, 0.0);
-    }
-
-    #[test]
-    fn payload_for_extracting_claims_uses_friendly_phase_name() {
-        // The desktop UI distinguishes the standard ingest phases
-        // (downloading/embedding/indexing) from the enrichment phases
-        // (extracting_claims, finding_relationships, …) so it can show
-        // a calibrated status line. Verify the phase string matches
-        // what the frontend `phaseLabel()` function expects.
-        let payload = ingest_progress_to_payload(
-            "sep",
-            &IngestProgress::ExtractingClaims {
-                current: 50,
-                total: 200,
-                claims_found: 312,
-                inference_errors: 0,
-                parse_errors: 2,
-                chunks_per_sec: 4.2,
-            },
-        );
-        assert_eq!(payload.phase, "extracting_claims");
-        assert!((payload.percent - 25.0).abs() < 1e-3);
-        assert_eq!(payload.chunks_processed, 50);
-        let message = payload.message.expect("should include a status message");
-        assert!(message.contains("50/200"));
-    }
-
-    #[test]
-    fn payload_for_found_candidate_pairs_emits_count() {
-        let payload = ingest_progress_to_payload(
-            "sep",
-            &IngestProgress::FoundCandidatePairs { count: 1234 },
-        );
-        assert_eq!(payload.phase, "finding_relationships");
-        let message = payload.message.expect("should include a count message");
-        assert!(message.contains("1234"));
-    }
-
-    #[test]
-    fn payload_for_extracting_relationships_includes_progress() {
-        let payload = ingest_progress_to_payload(
-            "sep",
-            &IngestProgress::ExtractingRelationships {
-                current: 7,
-                total: 14,
-            },
-        );
-        assert_eq!(payload.phase, "extracting_relationships");
-        assert!((payload.percent - 50.0).abs() < 1e-3);
-        let message = payload.message.expect("should describe pair progress");
-        assert!(message.contains("7/14"));
     }
 
     #[test]
@@ -1698,22 +1651,11 @@ mod tests {
             IngestProgress::Embedding {
                 chunks_embedded: 1,
                 total: 1,
+                docs_processed: 1,
+                chunks_per_sec: 1.0,
             },
             IngestProgress::Indexing {
                 chunks_indexed: 1,
-                total: 1,
-            },
-            IngestProgress::ExtractingClaims {
-                current: 1,
-                total: 1,
-                claims_found: 0,
-                inference_errors: 0,
-                parse_errors: 0,
-                chunks_per_sec: 0.0,
-            },
-            IngestProgress::FoundCandidatePairs { count: 1 },
-            IngestProgress::ExtractingRelationships {
-                current: 1,
                 total: 1,
             },
             IngestProgress::Complete {

@@ -316,6 +316,7 @@ async fn full_pipeline_query_finds_corpus_and_records_provenance() {
             last_updated: 0,
             version: 0,
             deleted_at: None,
+            vector_index_ready: false,
         })
         .await
         .unwrap();
@@ -400,6 +401,7 @@ async fn full_pipeline_multi_topic_queries_find_different_sources() {
             last_updated: 0,
             version: 0,
             deleted_at: None,
+            vector_index_ready: false,
         })
         .await
         .unwrap();
@@ -466,6 +468,7 @@ async fn full_pipeline_provenance_persists_across_store_roundtrip() {
             last_updated: 0,
             version: 0,
             deleted_at: None,
+            vector_index_ready: false,
         })
         .await
         .unwrap();

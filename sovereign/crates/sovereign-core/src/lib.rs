@@ -5,7 +5,7 @@ pub mod health;
 pub mod health_monitor;
 pub mod memory;
 pub mod model_family;
-pub mod oicp;
+pub use oicp_types as oicp;
 pub mod planner;
 pub mod registry;
 pub mod router;

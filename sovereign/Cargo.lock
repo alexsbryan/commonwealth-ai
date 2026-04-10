@@ -1181,6 +1181,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.3.4",
  "hex",
+ "oicp-types",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -5639,6 +5640,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oicp-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7833,6 +7842,7 @@ dependencies = [
  "corpus-engine",
  "dashmap",
  "futures",
+ "oicp-types",
  "serde",
  "serde_json",
  "sovereign-store",
