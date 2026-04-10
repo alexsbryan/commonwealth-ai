@@ -182,12 +182,15 @@ impl CorpusEngine {
                     .to_string(),
             ));
         }
-        // Auto-adapt: use the model's actual output dimensionality rather
-        // than rejecting it. Recipe defaults (768 for nomic) are just
-        // hints — the real schema is determined by what the model returns.
-        if probe.len() != recipe.index.embedding_dimensions {
+        // Auto-adapt: use the model's actual output dimensionality.
+        // embedding_dimensions = 0 means auto-detect (the default when
+        // the recipe omits the field). Only log if the recipe explicitly
+        // specified a different value.
+        if recipe.index.embedding_dimensions == 0 {
+            recipe.index.embedding_dimensions = probe.len();
+        } else if probe.len() != recipe.index.embedding_dimensions {
             tracing::info!(
-                "Embedding model returns {} dimensions; recipe default was {}. \
+                "Embedding model returns {} dimensions; recipe specified {}. \
                  Using actual model dimensions.",
                 probe.len(),
                 recipe.index.embedding_dimensions,

@@ -67,7 +67,7 @@ fn default_embedding_model() -> String {
 }
 
 fn default_embedding_dimensions() -> usize {
-    768
+    0 // 0 = auto-detect from the loaded model
 }
 
 // ---------------------------------------------------------------------------
@@ -566,7 +566,7 @@ type = "paragraph"
         assert!(recipe.index.fts);
         assert!(recipe.index.vector);
         assert_eq!(recipe.index.embedding_model, "nomic-embed-text-v2");
-        assert_eq!(recipe.index.embedding_dimensions, 768);
+        assert_eq!(recipe.index.embedding_dimensions, 0); // 0 = auto-detect
     }
 
     #[test]
