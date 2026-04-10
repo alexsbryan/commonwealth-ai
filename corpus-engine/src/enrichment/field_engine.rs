@@ -136,6 +136,14 @@ impl FieldModelEngine {
                 })
                 .unwrap_or_else(|| PartialSkeleton::new(self.domain.id()))
         } else {
+            if checkpoint.phase_1_batches_done > 0 {
+                progress(EnrichmentProgress::Resuming {
+                    from_phase: format!(
+                        "Skeleton extraction (batch {})",
+                        checkpoint.phase_1_batches_done
+                    ),
+                });
+            }
             progress(EnrichmentProgress::Phase {
                 phase: 1,
                 name: "Skeleton extraction",
@@ -143,9 +151,10 @@ impl FieldModelEngine {
             });
             let overview = self.get_overview_chunks(index).await?;
             let skeleton = self
-                .extract_skeleton_phase(&overview, index, progress)
+                .extract_skeleton_phase(&overview, index, &mut checkpoint, progress)
                 .await?;
             checkpoint.phase_1_complete = true;
+            checkpoint.phase_1_batches_done = 0; // clear for cleanliness
             checkpoint.last_updated = chrono::Utc::now().to_rfc3339();
             checkpoint.save(&index_dir)?;
             skeleton
@@ -354,6 +363,7 @@ impl FieldModelEngine {
         &self,
         overview_chunks: &[crate::index::StoredChunk],
         index: &CorpusIndex,
+        checkpoint: &mut EnrichmentCheckpoint,
         progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
     ) -> Result<PartialSkeleton> {
         use futures::stream::{FuturesUnordered, StreamExt};
@@ -363,21 +373,52 @@ impl FieldModelEngine {
 
         type InferenceFuture = Pin<Box<dyn futures::Future<Output = (usize, crate::error::Result<String>)> + Send>>;
 
-        let mut skeleton = PartialSkeleton::new(self.domain.id());
+        // Resume from partial skeleton if we have checkpoint progress.
+        let resume_from = checkpoint.phase_1_batches_done;
+        let mut skeleton = if resume_from > 0 {
+            // Load the partial skeleton that was flushed to disk.
+            let existing = index.load_field_skeleton()?;
+            let loaded = existing
+                .map(|fs| {
+                    let mut ps = PartialSkeleton::new(self.domain.id());
+                    for q in fs.canonical_questions {
+                        ps.questions.push(SkeletonQuestion {
+                            id: q.id,
+                            question: q.question,
+                            question_type: q.question_type,
+                            status: q.status,
+                            primary_article_ids: q.primary_entries,
+                            positions: q.positions,
+                        });
+                    }
+                    ps
+                })
+                .unwrap_or_else(|| PartialSkeleton::new(self.domain.id()));
+            tracing::info!(
+                resume_from_batch = resume_from,
+                existing_questions = loaded.questions.len(),
+                "Resuming skeleton extraction from batch {resume_from}"
+            );
+            loaded
+        } else {
+            PartialSkeleton::new(self.domain.id())
+        };
+
         let batches: Vec<_> = overview_chunks.chunks(4).collect();
         let total_batches = batches.len();
         let mut questions_found: usize = 0;
         let mut positions_found: usize = 0;
         let mut inference_errors: usize = 0;
         let mut parse_errors: usize = 0;
-        let mut batches_done: usize = 0;
+        let mut batches_done: usize = resume_from;
 
         let failures_path = index.path().join("_skeleton_failures.ndjson");
 
-        // Build all prompts upfront.
+        // Build prompts only for batches we haven't processed yet.
         let prompts: Vec<(usize, String)> = batches
             .iter()
             .enumerate()
+            .skip(resume_from)
             .map(|(i, batch)| {
                 let refs: Vec<&crate::index::StoredChunk> = batch.iter().collect();
                 (i, self.domain.skeleton_extraction_prompt(&refs))
@@ -454,11 +495,14 @@ impl FieldModelEngine {
                 });
             }
 
-            // Flush skeleton to disk every 50 batches for resume support.
+            // Flush skeleton + checkpoint every 50 batches for resume support.
             if batches_done % 50 == 0 {
                 if let Err(e) = self.write_partial_skeleton(index, &skeleton) {
                     tracing::warn!(error = %e, "Failed to flush partial skeleton");
                 }
+                checkpoint.phase_1_batches_done = batches_done;
+                checkpoint.last_updated = chrono::Utc::now().to_rfc3339();
+                let _ = checkpoint.save(&index.path());
             }
         }
 

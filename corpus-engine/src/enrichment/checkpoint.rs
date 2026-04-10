@@ -21,6 +21,11 @@ pub struct EnrichmentCheckpoint {
     pub last_updated: String,
 
     pub phase_1_complete: bool,
+    /// Number of skeleton extraction batches completed so far.
+    /// Saved every 50 batches alongside the partial skeleton flush.
+    /// Used to skip already-processed batches on resume.
+    #[serde(default)]
+    pub phase_1_batches_done: usize,
     pub phase_2_complete: bool,  // clustering done
     pub phase_2b_complete: bool, // labeling done
     pub phase_3_complete: bool,  // alignment done
