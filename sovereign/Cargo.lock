@@ -7810,6 +7810,8 @@ dependencies = [
  "async-trait",
  "corpus-engine",
  "dirs 5.0.1",
+ "libc",
+ "serde",
  "serde_json",
  "sovereign-core",
  "sovereign-inference",
@@ -7817,6 +7819,8 @@ dependencies = [
  "sovereign-store",
  "sovereign-tools",
  "tokio",
+ "toml 0.8.2",
+ "tracing",
  "uuid",
 ]
 
@@ -7967,6 +7971,7 @@ dependencies = [
  "sovereign-core",
  "sovereign-store",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "toml 0.8.2",
  "tracing",

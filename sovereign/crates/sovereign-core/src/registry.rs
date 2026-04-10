@@ -30,6 +30,12 @@ impl ToolRegistry {
     pub fn count(&self) -> usize {
         self.tools.len()
     }
+
+    /// Remove all tools whose ID starts with the given prefix.
+    /// Used when reconnecting an MCP server to replace old tool registrations.
+    pub fn remove_by_prefix(&mut self, prefix: &str) {
+        self.tools.retain(|t| !t.descriptor().id.starts_with(prefix));
+    }
 }
 
 impl Default for ToolRegistry {

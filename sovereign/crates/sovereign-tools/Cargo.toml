@@ -19,6 +19,7 @@ bzip2 = "0.5"
 parquet = { version = "55", default-features = false, features = ["arrow"] }
 arrow = { version = "55", default-features = false, features = ["json"] }
 toml = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport"], optional = true }

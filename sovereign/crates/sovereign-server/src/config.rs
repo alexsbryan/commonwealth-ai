@@ -86,15 +86,7 @@ pub struct SkillsSection {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct McpSection {
     #[serde(default)]
-    pub servers: Vec<McpServerConfig>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct McpServerConfig {
-    pub name: String,
-    pub command: String,
-    #[serde(default)]
-    pub args: Vec<String>,
+    pub servers: Vec<sovereign_tools::mcp::McpServerConfig>,
 }
 
 fn default_bind() -> String {

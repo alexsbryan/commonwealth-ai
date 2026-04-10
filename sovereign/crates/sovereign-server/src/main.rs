@@ -225,28 +225,12 @@ async fn main() {
         Arc::clone(&corpus_engine),
     )));
 
-    // Connect MCP servers.
-    for mcp_config in &config.mcp.servers {
-        let args: Vec<&str> = mcp_config.args.iter().map(|s| s.as_str()).collect();
-        match sovereign_tools::mcp::connect_mcp_server(
-            &mcp_config.command,
-            &args,
-            &mcp_config.name,
-        )
-        .await
-        {
-            Ok(mcp_tools) => {
-                let count = mcp_tools.len();
-                for tool in mcp_tools {
-                    tools.register(tool);
-                }
-                tracing::info!("MCP {}: {} tools connected", mcp_config.name, count);
-            }
-            Err(e) => {
-                tracing::warn!("MCP {} failed: {e}", mcp_config.name);
-            }
-        }
-    }
+    // Connect MCP servers (stdio and HTTP+SSE).
+    let _mcp_manager = sovereign_tools::mcp::McpServerManager::from_config(
+        &config.mcp.servers,
+        &mut tools,
+    )
+    .await;
 
     tracing::info!("Tools: {} registered", tools.count());
 
