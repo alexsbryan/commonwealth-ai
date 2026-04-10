@@ -394,7 +394,13 @@ impl FieldModelEngine {
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(batch = i, error = %e, "Skeleton extraction parse failed");
+                    let snippet: String = json_str.chars().take(200).collect();
+                    tracing::warn!(
+                        batch = i,
+                        error = %e,
+                        response_snippet = %snippet,
+                        "Skeleton extraction parse failed"
+                    );
                 }
             }
 
@@ -506,31 +512,72 @@ impl FieldModelEngine {
     }
 }
 
-/// Extract JSON from a model response, stripping markdown code fences.
+/// Extract JSON from a model response.
+///
+/// Handles common LLM output patterns:
+/// - `<think>...</think>` reasoning blocks before the JSON
+/// - Markdown code fences (```json, ```JSON, ```)
+/// - Preamble prose before the JSON array/object
+/// - Trailing prose after the closing bracket
 fn extract_json_from_response(response: &str) -> &str {
-    let trimmed = response.trim();
+    let mut text = response.trim();
 
-    // Try to extract from ```json ... ```
-    if let Some(start) = trimmed.find("```json") {
-        let start = start + 7;
-        if let Some(end) = trimmed[start..].find("```") {
-            return trimmed[start..start + end].trim();
+    // Strip <think>...</think> blocks (common with reasoning models).
+    if let Some(think_end) = text.find("</think>") {
+        text = text[think_end + 8..].trim();
+    }
+
+    // Try to extract from ```json ... ``` (case-insensitive).
+    let lower = text.to_lowercase();
+    if let Some(fence_start) = lower.find("```json") {
+        let content_start = fence_start + 7;
+        // Skip optional newline after ```json
+        let content_start = if text[content_start..].starts_with('\n') {
+            content_start + 1
+        } else {
+            content_start
+        };
+        if let Some(fence_end) = text[content_start..].find("```") {
+            return text[content_start..content_start + fence_end].trim();
         }
     }
 
     // Try to extract from ``` ... ```
-    if let Some(start) = trimmed.find("```") {
-        let start = start + 3;
-        if let Some(end) = trimmed[start..].find("```") {
-            let block = trimmed[start..start + end].trim();
+    if let Some(fence_start) = text.find("```") {
+        let content_start = fence_start + 3;
+        // Skip optional language tag + newline (e.g. ```\n or ```text\n)
+        let after_fence = &text[content_start..];
+        let content_start = if let Some(nl) = after_fence.find('\n') {
+            content_start + nl + 1
+        } else {
+            content_start
+        };
+        if let Some(fence_end) = text[content_start..].find("```") {
+            let block = text[content_start..content_start + fence_end].trim();
             if block.starts_with('[') || block.starts_with('{') {
                 return block;
             }
         }
     }
 
-    // Assume the whole response is JSON
-    trimmed
+    // No code fence — find the first [ or { and last ] or }.
+    if let Some(start) = text.find('[') {
+        if let Some(end) = text.rfind(']') {
+            if end > start {
+                return text[start..=end].trim();
+            }
+        }
+    }
+    if let Some(start) = text.find('{') {
+        if let Some(end) = text.rfind('}') {
+            if end > start {
+                return text[start..=end].trim();
+            }
+        }
+    }
+
+    // Last resort — return the whole thing and let the caller handle the error.
+    text
 }
 
 /// Deduplicate questions by merging those with similar text.
@@ -683,22 +730,53 @@ domain = "{domain}"
     }
 
     #[test]
-    fn extract_json_ignores_non_json_code_fence() {
-        let response = "```python\nprint('hello')\n```";
-        // Should return the whole trimmed response since the code fence
-        // content doesn't start with { or [
-        assert_eq!(
-            extract_json_from_response(response),
-            "```python\nprint('hello')\n```"
-        );
-    }
-
-    #[test]
     fn extract_json_with_surrounding_prose() {
         let response = "Here is the JSON:\n```json\n[{\"a\": 1}, {\"b\": 2}]\n```\nAll done!";
         let json = extract_json_from_response(response);
         let parsed: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.len(), 2);
+    }
+
+    #[test]
+    fn extract_json_strips_think_block() {
+        let response = "<think>\nLet me analyze these passages...\n</think>\n[{\"a\": 1}]";
+        let json = extract_json_from_response(response);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.len(), 1);
+    }
+
+    #[test]
+    fn extract_json_case_insensitive_fence() {
+        let response = "```JSON\n{\"key\": \"value\"}\n```";
+        assert_eq!(
+            extract_json_from_response(response),
+            "{\"key\": \"value\"}"
+        );
+    }
+
+    #[test]
+    fn extract_json_from_prose_with_array() {
+        let response =
+            "Here are the results:\n\n[{\"a\": 1}, {\"b\": 2}]\n\nThat's all.";
+        let json = extract_json_from_response(response);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.len(), 2);
+    }
+
+    #[test]
+    fn extract_json_from_prose_with_object() {
+        let response = "The answer is: {\"crux\": \"test\", \"confidence\": 0.9} done.";
+        let json = extract_json_from_response(response);
+        let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed["crux"], "test");
+    }
+
+    #[test]
+    fn extract_json_think_block_then_fence() {
+        let response = "<think>\nreasoning here\n</think>\n```json\n[{\"x\": 1}]\n```";
+        let json = extract_json_from_response(response);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.len(), 1);
     }
 
     #[test]

@@ -34,8 +34,8 @@ overlap_chars = 128
 [index]
 fts = true
 vector = true
-embedding_model = "nomic-embed-text-v2"
-embedding_dimensions = 768
+# embedding_model and embedding_dimensions are auto-detected from the
+# loaded model at ingest time.
 
 # Delta updates: the manifest at manifest_url maps article URL → revision_id.
 # A manifest-generation job reads omarkamali/wikipedia-monthly (latest.en,
