@@ -8,12 +8,14 @@ pub mod alignment;
 pub mod checkpoint;
 pub mod clustering;
 pub mod domain;
+pub mod domain_registry;
 pub mod domains;
 pub mod fault_lines;
 pub mod field_engine;
 pub mod filter;
 pub mod open_questions;
 pub mod skeleton;
+pub(crate) mod skeleton_parse;
 
 pub use filter::is_chunk_eligible;
 pub use field_engine::{FieldModelEngine, reprocess_skeleton_failures};

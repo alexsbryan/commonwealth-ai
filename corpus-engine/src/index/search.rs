@@ -1,0 +1,224 @@
+//! Hybrid search (vector + FTS) logic for CorpusIndex.
+
+use std::collections::HashMap;
+
+use arrow_array::{Array, Float32Array, StringArray};
+use futures::TryStreamExt;
+use lancedb::index::scalar::FullTextSearchQuery;
+use lancedb::query::{ExecutableQuery, QueryBase};
+
+use super::sanitize_fts_query;
+use crate::error::{Error, Result};
+use crate::types::ScoredChunk;
+
+use super::CorpusIndex;
+
+impl CorpusIndex {
+    /// Hybrid search combining vector similarity and FTS keyword matching.
+    pub async fn search(
+        &self,
+        query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+    ) -> Result<Vec<ScoredChunk>> {
+        let sanitized = sanitize_fts_query(query_text);
+        // Single live check — list_indices() only returns COMPLETE indices.
+        // Gates both vector (IVF-PQ on "embedding") and FTS (Tantivy on "content"/"title").
+        // Avoids 30-second flat scans when either index is absent or stale on large tables.
+        // Exception: tables below FLAT_SCAN_THRESHOLD rows use brute-force scans
+        // unconditionally — they're too small to warrant an IVF-PQ index and a flat
+        // scan completes in milliseconds.
+        const FLAT_SCAN_THRESHOLD: usize = 10_000;
+        let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
+        let indices = self.table.list_indices().await.unwrap_or_default();
+        let ivf_built = indices.iter().any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+        let do_vector = !query_embedding.is_empty()
+            && (ivf_built || row_count < FLAT_SCAN_THRESHOLD);
+        let fts_built = !sanitized.is_empty()
+            && indices.iter().any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
+        let do_fts = fts_built;
+
+        tracing::debug!(
+            do_vector,
+            do_fts,
+            ivf_built,
+            fts_built,
+            row_count = row_count as u64,
+            stored_dims = self.embedding_dimensions,
+            query_dims = query_embedding.len(),
+            dims_match = (query_embedding.is_empty() || query_embedding.len() == self.embedding_dimensions),
+            sanitized_query = %sanitized,
+            "CorpusIndex::search"
+        );
+
+        if !do_vector && !do_fts {
+            tracing::debug!("CorpusIndex::search: nothing to search, returning empty");
+            return Ok(Vec::new());
+        }
+
+        let t_search = std::time::Instant::now();
+
+        let results = if do_vector && do_fts {
+            // Hybrid: vector + FTS combined via reranking.
+            self.table
+                .query()
+                .nearest_to(query_embedding.to_vec())
+                .map_err(|e| Error::Database(format!("vector query: {e}")))?
+                .full_text_search(
+                    FullTextSearchQuery::new(sanitized),
+                )
+                .nprobes(50)
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("hybrid search: {e}")))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
+        } else if do_vector {
+            // Vector-only search.
+            self.table
+                .query()
+                .nearest_to(query_embedding.to_vec())
+                .map_err(|e| Error::Database(format!("vector query: {e}")))?
+                .nprobes(50)
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("vector search: {e}")))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
+        } else {
+            // FTS-only search.
+            self.table
+                .query()
+                .full_text_search(
+                    FullTextSearchQuery::new(sanitized),
+                )
+                .limit(limit)
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("FTS search: {e}")))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|e| Error::Database(format!("collect: {e}")))?
+        };
+
+        // Log the result schema once so we can see what score columns LanceDB returns.
+        // Hybrid search may return _relevance_score or _score instead of _distance.
+        if let Some(first) = results.first() {
+            let schema = first.schema();
+            let col_names: Vec<&str> = schema.fields().iter()
+                .map(|f| f.name().as_str())
+                .collect();
+            tracing::debug!(columns = ?col_names, "CorpusIndex::search result schema");
+        }
+
+        // Convert Arrow RecordBatches to ScoredChunks.
+        let mut scored = Vec::new();
+        for batch in &results {
+            let contents = batch
+                .column_by_name("content")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let titles = batch
+                .column_by_name("title")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let urls = batch
+                .column_by_name("url")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let metadata_col = batch
+                .column_by_name("metadata")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            // LanceDB vector-only → _distance; hybrid → _relevance_score or _score.
+            // Try all known column names so we can log which one is actually present.
+            let distance_col = batch
+                .column_by_name("_distance")
+                .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+            let relevance_col = batch
+                .column_by_name("_relevance_score")
+                .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+            let score_col = batch
+                .column_by_name("_score")
+                .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+
+            let num_rows = batch.num_rows();
+            for i in 0..num_rows {
+                let content = contents
+                    .map(|c| c.value(i).to_string())
+                    .unwrap_or_default();
+                let title = titles.and_then(|t| {
+                    if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                });
+                let url = urls.and_then(|u| {
+                    if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                });
+                let metadata: HashMap<String, String> = metadata_col
+                    .and_then(|m| {
+                        if m.is_null(i) {
+                            None
+                        } else {
+                            serde_json::from_str(m.value(i)).ok()
+                        }
+                    })
+                    .unwrap_or_default();
+
+                // Convert distance/relevance to a [0,1] score.
+                // _distance: lower = better → score = 1/(1+d)
+                // _relevance_score / _score: higher = better → use directly (already [0,1])
+                let (score, score_source) = if let Some(d) = distance_col {
+                    let dist = d.value(i);
+                    (1.0_f32 / (1.0 + dist), "_distance")
+                } else if let Some(r) = relevance_col {
+                    (r.value(i), "_relevance_score")
+                } else if let Some(s) = score_col {
+                    (s.value(i), "_score")
+                } else {
+                    (1.0_f32, "none")
+                };
+
+                tracing::debug!(
+                    rank = i + 1,
+                    score,
+                    score_source,
+                    title = title.as_deref().unwrap_or(""),
+                    content_preview = &content[..content.len().min(120)],
+                    "CorpusIndex::search result"
+                );
+
+                scored.push(ScoredChunk {
+                    content,
+                    title,
+                    url,
+                    corpus_id: self.corpus_id.clone(),
+                    score,
+                    metadata,
+                });
+            }
+        }
+
+        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        // Apply score threshold only in vector-only mode, where score = 1/(1+cosine_distance)
+        // and 0.45 corresponds to cosine_distance ≈ 1.22 (weak semantic match).
+        // In hybrid mode, scores are RRF (_relevance_score ≈ 0.016) — incompatible scale,
+        // so we let all results through and trust the model to judge relevance.
+        let before_threshold = scored.len();
+        if do_vector && !do_fts {
+            scored.retain(|c| c.score >= 0.45);
+        }
+        tracing::debug!(
+            before = before_threshold,
+            after = scored.len(),
+            dropped = before_threshold - scored.len(),
+            threshold_applied = do_vector && !do_fts,
+            "CorpusIndex::search: threshold check"
+        );
+        scored.truncate(limit);
+        tracing::debug!(
+            results = scored.len(),
+            elapsed_ms = t_search.elapsed().as_millis() as u64,
+            "CorpusIndex::search complete"
+        );
+        Ok(scored)
+    }
+}

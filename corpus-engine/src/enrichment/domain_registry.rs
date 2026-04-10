@@ -1,0 +1,86 @@
+//! Domain registry — maps domain ID strings to factory functions.
+//!
+//! Replaces the match statement in `FieldModelEngine::from_recipe()` so
+//! new domains can be registered without modifying the engine.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use super::domain::Domain;
+
+/// Registry mapping domain ID strings to factory functions that produce
+/// `Arc<dyn Domain>` instances.
+pub struct DomainRegistry {
+    domains: HashMap<String, fn() -> Arc<dyn Domain>>,
+}
+
+impl DomainRegistry {
+    /// Create a registry pre-loaded with all built-in domains.
+    pub fn builtin() -> Self {
+        let mut registry = Self {
+            domains: HashMap::new(),
+        };
+        registry.register("philosophy", || {
+            Arc::new(super::domains::philosophy::PhilosophyDomain)
+        });
+        registry.register("science", || {
+            Arc::new(super::domains::science::ScienceDomain)
+        });
+        registry.register("policy", || {
+            Arc::new(super::domains::policy::PolicyDomain)
+        });
+        registry.register("legal", || {
+            Arc::new(super::domains::legal::LegalDomain)
+        });
+        registry.register("community", || {
+            Arc::new(super::domains::community::CommunityKnowledgeDomain)
+        });
+        registry.register("multi", || {
+            Arc::new(super::domains::multi::MultiDomain::wikipedia_default())
+        });
+        registry
+    }
+
+    /// Register a new domain factory.
+    pub fn register(&mut self, id: &str, factory: fn() -> Arc<dyn Domain>) {
+        self.domains.insert(id.to_string(), factory);
+    }
+
+    /// Look up a domain by ID. Returns `None` if unregistered.
+    pub fn get(&self, id: &str) -> Option<Arc<dyn Domain>> {
+        self.domains.get(id).map(|f| f())
+    }
+
+    /// List all registered domain IDs.
+    pub fn domain_ids(&self) -> Vec<&str> {
+        self.domains.keys().map(|s| s.as_str()).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtin_has_all_six_domains() {
+        let reg = DomainRegistry::builtin();
+        for id in ["philosophy", "science", "policy", "legal", "community", "multi"] {
+            assert!(reg.get(id).is_some(), "missing domain: {id}");
+        }
+    }
+
+    #[test]
+    fn unknown_domain_returns_none() {
+        let reg = DomainRegistry::builtin();
+        assert!(reg.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn register_custom_domain() {
+        let mut reg = DomainRegistry::builtin();
+        reg.register("custom", || {
+            Arc::new(super::super::domains::philosophy::PhilosophyDomain)
+        });
+        assert!(reg.get("custom").is_some());
+    }
+}
