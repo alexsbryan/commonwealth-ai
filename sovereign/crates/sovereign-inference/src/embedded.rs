@@ -424,7 +424,7 @@ impl EmbedSlot {
             _                           => "mean",
         };
         eprintln!(
-            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}",
+            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}, n_ctx={max_tokens} (batch-capable)",
             n_embd,
             model.n_layer(),
             model.size() / (1024 * 1024),
@@ -569,6 +569,8 @@ impl EmbedSlot {
             return Ok(vec![]);
         }
 
+        let batch_start = std::time::Instant::now();
+
         // Prepare all texts (apply instruction prefix + EOS if needed).
         let prepared: Vec<String> = inputs
             .iter()
@@ -591,25 +593,43 @@ impl EmbedSlot {
         // generous for 1024-char chunks).
         let per_seq_limit = max_tokens.min(512);
         let mut all_tokens: Vec<Vec<llama_cpp_2::token::LlamaToken>> = Vec::with_capacity(prepared.len());
+        let mut total_token_count = 0usize;
         for text in &prepared {
             let mut tokens = model
                 .str_to_token(text, AddBos::Always)
                 .map_err(|e| Error::Inference(format!("Embed tokenization failed: {e}")))?;
             if tokens.len() > per_seq_limit {
+                tracing::debug!(
+                    original_len = tokens.len(),
+                    truncated_to = per_seq_limit,
+                    "Truncating long sequence in batch embed"
+                );
                 tokens.truncate(per_seq_limit);
             }
+            total_token_count += tokens.len();
             all_tokens.push(tokens);
         }
+
+        let tokenize_ms = batch_start.elapsed().as_millis();
+        tracing::debug!(
+            sequences = inputs.len(),
+            total_tokens = total_token_count,
+            avg_tokens = total_token_count / inputs.len().max(1),
+            n_ctx = max_tokens,
+            tokenize_ms,
+            "Batch embed: tokenized"
+        );
 
         let mut results: Vec<Vec<f32>> = Vec::with_capacity(inputs.len());
 
         // Process in sub-batches that fit within max_tokens.
         let mut cursor = 0;
+        let mut sub_batch_idx = 0u32;
         while cursor < all_tokens.len() {
             ctx.clear_kv_cache();
 
             // Figure out how many sequences fit in this sub-batch.
-            let mut total_toks = 0usize;
+            let mut sub_batch_tokens = 0usize;
             let mut end = cursor;
             while end < all_tokens.len() {
                 let seq_len = all_tokens[end].len();
@@ -618,23 +638,23 @@ impl EmbedSlot {
                     end += 1;
                     continue;
                 }
-                if total_toks + seq_len > max_tokens {
+                if sub_batch_tokens + seq_len > max_tokens {
                     break;
                 }
-                total_toks += seq_len;
+                sub_batch_tokens += seq_len;
                 end += 1;
             }
             // Ensure progress even if a single sequence fills the context.
             if end == cursor {
                 end = cursor + 1;
-                total_toks = all_tokens[cursor].len().min(max_tokens);
             }
 
-            let sub_batch_count = end - cursor;
-            let mut batch = LlamaBatch::new(max_tokens, sub_batch_count as i32);
+            let sub_batch_seqs = end - cursor;
+            let mut batch = LlamaBatch::new(max_tokens, sub_batch_seqs as i32);
             let mut seq_map: Vec<usize> = Vec::new(); // maps batch seq_id → original index
 
             let mut seq_id = 0i32;
+            let mut tokens_in_decode = 0usize;
             for idx in cursor..end {
                 let tokens = &all_tokens[idx];
                 if tokens.is_empty() {
@@ -645,14 +665,25 @@ impl EmbedSlot {
                         .add(token, pos as i32, &[seq_id], true)
                         .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
                 }
+                tokens_in_decode += tokens.len();
                 seq_map.push(idx);
                 seq_id += 1;
             }
 
+            let decode_start = std::time::Instant::now();
             if seq_id > 0 {
                 ctx.decode(&mut batch)
                     .map_err(|e| Error::Inference(format!("Batch decode failed: {e}")))?;
             }
+            let decode_ms = decode_start.elapsed().as_millis();
+
+            tracing::debug!(
+                sub_batch = sub_batch_idx,
+                sequences = seq_id,
+                tokens = tokens_in_decode,
+                decode_ms,
+                "Batch embed: sub-batch decoded"
+            );
 
             // Extract and normalize embeddings for each sequence.
             let mut batch_results: Vec<(usize, Vec<f32>)> = Vec::new();
@@ -680,7 +711,23 @@ impl EmbedSlot {
             }
 
             cursor = end;
+            sub_batch_idx += 1;
         }
+
+        let total_ms = batch_start.elapsed().as_millis();
+        let seqs_per_sec = if total_ms > 0 {
+            (inputs.len() as f64 / total_ms as f64) * 1000.0
+        } else {
+            0.0
+        };
+        tracing::info!(
+            sequences = inputs.len(),
+            total_tokens = total_token_count,
+            sub_batches = sub_batch_idx,
+            total_ms,
+            seqs_per_sec = format!("{seqs_per_sec:.1}"),
+            "Batch embed complete"
+        );
 
         Ok(results)
     }
