@@ -270,24 +270,51 @@ impl FieldModelEngine {
         &self,
         index: &CorpusIndex,
     ) -> Result<Vec<crate::index::StoredChunk>> {
-        // Load all chunks and filter by overview criteria.
-        // A future optimization would push this filter down to LanceDB.
         let filter = self.domain.overview_filter();
         let all = index.all_chunks().await?;
+        let total = all.len();
+
+        // Group chunks by title (source entry) to identify first-in-entry.
+        let mut seen_titles: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         let filtered: Vec<_> = all
             .into_iter()
             .filter(|chunk| {
-                // Check min_token_count
+                // Check is_first_in_entry: only keep the first chunk per title.
+                if filter.is_first_in_entry == Some(true) {
+                    let title_key = chunk
+                        .title
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase();
+                    if !seen_titles.insert(title_key) {
+                        return false; // Already seen this title.
+                    }
+                }
+
+                // Check min_token_count.
                 if let Some(min_tokens) = filter.min_token_count {
                     let word_count = chunk.content.split_whitespace().count();
                     if word_count < min_tokens {
                         return false;
                     }
                 }
+
+                // Check section_name_in — requires metadata parsing.
+                // For now we skip this filter since SEP chunks don't carry
+                // section_name in the StoredChunk type. The is_first_in_entry
+                // filter is the main reducer.
+
                 true
             })
             .collect();
+
+        tracing::info!(
+            total_chunks = total,
+            overview_chunks = filtered.len(),
+            "Overview chunk selection complete"
+        );
 
         Ok(filtered)
     }
@@ -298,6 +325,13 @@ impl FieldModelEngine {
         index: &CorpusIndex,
         progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
     ) -> Result<PartialSkeleton> {
+        use futures::stream::{FuturesUnordered, StreamExt};
+        use std::pin::Pin;
+
+        const CONCURRENCY: usize = 4;
+
+        type InferenceFuture = Pin<Box<dyn futures::Future<Output = (usize, crate::error::Result<String>)> + Send>>;
+
         let mut skeleton = PartialSkeleton::new(self.domain.id());
         let batches: Vec<_> = overview_chunks.chunks(4).collect();
         let total_batches = batches.len();
@@ -305,196 +339,92 @@ impl FieldModelEngine {
         let mut positions_found: usize = 0;
         let mut inference_errors: usize = 0;
         let mut parse_errors: usize = 0;
+        let mut batches_done: usize = 0;
 
-        // Failure log for reprocessing later.
         let failures_path = index.path().join("_skeleton_failures.ndjson");
 
-        for (i, batch) in batches.iter().enumerate() {
-            let refs: Vec<&crate::index::StoredChunk> = batch.iter().collect();
-            let prompt = self.domain.skeleton_extraction_prompt(&refs);
-            let response = match (self.inference)(&prompt).await {
+        // Build all prompts upfront.
+        let prompts: Vec<(usize, String)> = batches
+            .iter()
+            .enumerate()
+            .map(|(i, batch)| {
+                let refs: Vec<&crate::index::StoredChunk> = batch.iter().collect();
+                (i, self.domain.skeleton_extraction_prompt(&refs))
+            })
+            .collect();
+
+        let spawn_inference = |inference: InferenceFn, batch_idx: usize, prompt: String| -> InferenceFuture {
+            Box::pin(async move {
+                let result = (inference)(&prompt).await;
+                (batch_idx, result)
+            })
+        };
+
+        // Process in concurrent windows.
+        let mut prompt_iter = prompts.into_iter();
+        let mut in_flight: FuturesUnordered<InferenceFuture> = FuturesUnordered::new();
+
+        // Seed the initial window.
+        for _ in 0..CONCURRENCY {
+            if let Some((batch_idx, prompt)) = prompt_iter.next() {
+                in_flight.push(spawn_inference(self.inference.clone(), batch_idx, prompt));
+            }
+        }
+
+        // Process results as they arrive, refilling the window.
+        while let Some((batch_idx, result)) = in_flight.next().await {
+            // Refill: start the next batch immediately.
+            if let Some((next_idx, next_prompt)) = prompt_iter.next() {
+                in_flight.push(spawn_inference(self.inference.clone(), next_idx, next_prompt));
+            }
+
+            batches_done += 1;
+
+            let response = match result {
                 Ok(r) => r,
                 Err(e) => {
                     inference_errors += 1;
-                    tracing::warn!(batch = i, error = %e, "Skeleton extraction inference failed");
+                    tracing::warn!(batch = batch_idx, error = %e, "Skeleton extraction inference failed");
                     continue;
                 }
             };
 
-            // Parse JSON response — tolerate markdown fences, <think> blocks,
-            // and truncated output (try repair before giving up).
-            let json_str = extract_json_from_response(&response);
-            let passages = match serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
-                Ok(p) => p,
-                Err(_) => {
-                    // The extractor may have mangled a truncated array (e.g.
-                    // found the last } instead of preserving the [ start).
-                    // Try repair on the original response too.
-                    let repair_source = if json_str.starts_with('[') {
-                        json_str.to_string()
-                    } else {
-                        // Re-extract from the raw response, looking for the first [
-                        let raw = extract_json_from_response(&response);
-                        // Find the outermost [ in the original response
-                        response.find('[')
-                            .map(|start| response[start..].to_string())
-                            .unwrap_or_else(|| raw.to_string())
-                    };
-                    match try_repair_truncated_json(&repair_source) {
-                        Some(repaired) => {
-                            match serde_json::from_str::<Vec<serde_json::Value>>(&repaired) {
-                                Ok(p) => {
-                                    tracing::info!(
-                                        batch = i,
-                                        "Repaired truncated JSON — salvaged {} passages",
-                                        p.len()
-                                    );
-                                    p
-                                }
-                                Err(e) => {
-                                    parse_errors += 1;
-                                    log_skeleton_failure(
-                                        &failures_path, i, json_str, &format!("{e}"),
-                                    );
-                                    tracing::warn!(
-                                        batch = i,
-                                        error = %e,
-                                        "Skeleton parse failed even after repair"
-                                    );
-                                    continue;
-                                }
-                            }
-                        }
-                        None => {
-                            parse_errors += 1;
-                            let snippet: String = json_str.chars().take(200).collect();
-                            log_skeleton_failure(
-                                &failures_path, i, json_str, "not repairable",
-                            );
-                            tracing::warn!(
-                                batch = i,
-                                response_snippet = %snippet,
-                                "Skeleton parse failed — not valid or repairable JSON"
-                            );
-                            continue;
-                        }
+            // Parse response.
+            let extracted = parse_skeleton_response(batch_idx, &response, &failures_path);
+            match extracted {
+                ParseResult::Ok(passages) => {
+                    for passage in passages {
+                        positions_found += passage.positions.len();
+                        questions_found += 1;
+                        skeleton.questions.push(passage);
                     }
                 }
-            };
-
-            for passage in passages {
-                if let Some(question) = passage["canonical_question"].as_str() {
-                    // Skip empty, null, or placeholder questions.
-                    if question.is_empty()
-                        || question == "..."
-                        || question == "null"
-                        || question.len() < 10
-                    {
-                        continue;
-                    }
-                    let question_type = passage["question_type"]
-                        .as_str()
-                        .unwrap_or("conceptual")
-                        .to_string();
-                    let positions: Vec<SkeletonPosition> = passage["positions"]
-                        .as_array()
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|p| {
-                                    let name = p["name"].as_str()?;
-                                    // Skip placeholder or empty position names.
-                                    if name.is_empty()
-                                        || name == "..."
-                                        || name == "null"
-                                        || name.len() < 2
-                                    {
-                                        return None;
-                                    }
-                                    Some(SkeletonPosition {
-                                        id: format!(
-                                            "p_{}",
-                                            name.to_lowercase().replace(' ', "_")
-                                        ),
-                                        name: name.to_string(),
-                                        claim: {
-                                            let c = p["claim"]
-                                                .as_str()
-                                                .unwrap_or_default();
-                                            if c == "..." || c.is_empty() {
-                                                return None;
-                                            }
-                                            c.to_string()
-                                        },
-                                        status: {
-                                            let s = p["status"]
-                                                .as_str()
-                                                .unwrap_or("contested");
-                                            // Normalize compound statuses like "minority|contested"
-                                            if s.contains('|') {
-                                                s.split('|').next().unwrap_or("contested").to_string()
-                                            } else if s == "..." || s.is_empty() {
-                                                "contested".to_string()
-                                            } else {
-                                                s.to_string()
-                                            }
-                                        },
-                                        proponents: p["proponents"]
-                                            .as_array()
-                                            .map(|a| {
-                                                a.iter()
-                                                    .filter_map(|v| {
-                                                        v.as_str().map(|s| s.to_string())
-                                                    })
-                                                    .collect()
-                                            })
-                                            .unwrap_or_default(),
-                                        source: "skeleton".into(),
-                                        cluster_ids: Vec::new(),
-                                        centroid_chunk_ids: Vec::new(),
-                                        discovery_confidence: None,
-                                    })
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default();
-
-                    let q_id = format!(
-                        "q_{}",
-                        question
-                            .to_lowercase()
-                            .chars()
-                            .filter(|c| c.is_alphanumeric() || *c == ' ')
-                            .collect::<String>()
-                            .replace(' ', "_")
-                            .chars()
-                            .take(50)
-                            .collect::<String>()
+                ParseResult::Repaired(passages, salvaged) => {
+                    tracing::info!(
+                        batch = batch_idx,
+                        "Repaired truncated JSON — salvaged {salvaged} passages"
                     );
-
-                    positions_found += positions.len();
-                    questions_found += 1;
-
-                    skeleton.questions.push(SkeletonQuestion {
-                        id: q_id,
-                        question: question.to_string(),
-                        question_type,
-                        status: "contested".into(),
-                        primary_article_ids: Vec::new(),
-                        positions,
-                    });
+                    for passage in passages {
+                        positions_found += passage.positions.len();
+                        questions_found += 1;
+                        skeleton.questions.push(passage);
+                    }
+                }
+                ParseResult::Failed => {
+                    parse_errors += 1;
                 }
             }
 
             // Progress every 10 batches or at the end.
-            if i % 10 == 0 || i == total_batches - 1 {
+            if batches_done % 10 == 0 || batches_done == total_batches {
                 progress(EnrichmentProgress::Phase1Progress {
-                    batches_done: i + 1,
+                    batches_done,
                     batches_total: total_batches,
                 });
             }
 
             // Flush skeleton to disk every 50 batches for resume support.
-            if (i + 1) % 50 == 0 {
+            if batches_done % 50 == 0 {
                 if let Err(e) = self.write_partial_skeleton(index, &skeleton) {
                     tracing::warn!(error = %e, "Failed to flush partial skeleton");
                 }
@@ -512,7 +442,6 @@ impl FieldModelEngine {
             "Skeleton extraction complete"
         );
 
-        // Deduplicate questions by similarity
         deduplicate_questions(&mut skeleton);
 
         Ok(skeleton)
@@ -641,6 +570,141 @@ impl FieldModelEngine {
         index.write_field_skeleton(&field_skeleton)?;
         Ok(())
     }
+}
+
+enum ParseResult {
+    Ok(Vec<SkeletonQuestion>),
+    Repaired(Vec<SkeletonQuestion>, usize),
+    Failed,
+}
+
+/// Parse a skeleton extraction response into questions.
+fn parse_skeleton_response(
+    batch_idx: usize,
+    response: &str,
+    failures_path: &std::path::Path,
+) -> ParseResult {
+    let json_str = extract_json_from_response(response);
+    let passages = match serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
+        Ok(p) => p,
+        Err(_) => {
+            let repair_source = if json_str.starts_with('[') {
+                json_str.to_string()
+            } else {
+                response
+                    .find('[')
+                    .map(|start| response[start..].to_string())
+                    .unwrap_or_else(|| json_str.to_string())
+            };
+            match try_repair_truncated_json(&repair_source) {
+                Some(repaired) => {
+                    match serde_json::from_str::<Vec<serde_json::Value>>(&repaired) {
+                        Ok(p) => {
+                            let count = p.len();
+                            let questions = extract_questions_from_passages(&p);
+                            return ParseResult::Repaired(questions, count);
+                        }
+                        Err(e) => {
+                            log_skeleton_failure(failures_path, batch_idx, json_str, &format!("{e}"));
+                            tracing::warn!(batch = batch_idx, error = %e, "Skeleton parse failed even after repair");
+                            return ParseResult::Failed;
+                        }
+                    }
+                }
+                None => {
+                    let snippet: String = json_str.chars().take(200).collect();
+                    log_skeleton_failure(failures_path, batch_idx, json_str, "not repairable");
+                    tracing::warn!(batch = batch_idx, response_snippet = %snippet, "Skeleton parse failed — not valid or repairable JSON");
+                    return ParseResult::Failed;
+                }
+            }
+        }
+    };
+    ParseResult::Ok(extract_questions_from_passages(&passages))
+}
+
+/// Extract questions and positions from parsed JSON passages.
+fn extract_questions_from_passages(passages: &[serde_json::Value]) -> Vec<SkeletonQuestion> {
+    let mut questions = Vec::new();
+    for passage in passages {
+        if let Some(question) = passage["canonical_question"].as_str() {
+            if question.is_empty() || question == "..." || question == "null" || question.len() < 10
+            {
+                continue;
+            }
+            let question_type = passage["question_type"]
+                .as_str()
+                .unwrap_or("conceptual")
+                .to_string();
+            let positions: Vec<SkeletonPosition> = passage["positions"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|p| {
+                            let name = p["name"].as_str()?;
+                            if name.is_empty() || name == "..." || name == "null" || name.len() < 2
+                            {
+                                return None;
+                            }
+                            let claim = p["claim"].as_str().unwrap_or_default();
+                            if claim == "..." || claim.is_empty() {
+                                return None;
+                            }
+                            let status = p["status"].as_str().unwrap_or("contested");
+                            let status = if status.contains('|') {
+                                status.split('|').next().unwrap_or("contested").to_string()
+                            } else if status == "..." || status.is_empty() {
+                                "contested".to_string()
+                            } else {
+                                status.to_string()
+                            };
+                            Some(SkeletonPosition {
+                                id: format!("p_{}", name.to_lowercase().replace(' ', "_")),
+                                name: name.to_string(),
+                                claim: claim.to_string(),
+                                status,
+                                proponents: p["proponents"]
+                                    .as_array()
+                                    .map(|a| {
+                                        a.iter()
+                                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default(),
+                                source: "skeleton".into(),
+                                cluster_ids: Vec::new(),
+                                centroid_chunk_ids: Vec::new(),
+                                discovery_confidence: None,
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let q_id = format!(
+                "q_{}",
+                question
+                    .to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == ' ')
+                    .collect::<String>()
+                    .replace(' ', "_")
+                    .chars()
+                    .take(50)
+                    .collect::<String>()
+            );
+
+            questions.push(SkeletonQuestion {
+                id: q_id,
+                question: question.to_string(),
+                question_type,
+                status: "contested".into(),
+                primary_article_ids: Vec::new(),
+                positions,
+            });
+        }
+    }
+    questions
 }
 
 /// Extract JSON from a model response.
