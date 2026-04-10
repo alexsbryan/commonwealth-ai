@@ -9,8 +9,7 @@ publish = false
 [dependencies]
 commonwealth-core = { workspace = true }
 commonwealth-discovery = { workspace = true }
-commonwealth-scheduler = { workspace = true }
-commonwealth-orchestrator = { workspace = true }
+commonwealth-inference = { workspace = true }
 commonwealth-api = { workspace = true }
 commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }

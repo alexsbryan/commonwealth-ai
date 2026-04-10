@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 
-use commonwealth_core::oicp::{
+use commonwealth_inference::oicp::{
     KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse,
 };
 
@@ -19,7 +19,11 @@ pub async fn knowledge_search(
     State(state): State<AppState>,
     Json(request): Json<KnowledgeSearchRequest>,
 ) -> impl IntoResponse {
-    let knowledge_plan = state.inner.knowledge_plan.read().await;
+    let knowledge_plan = state
+        .inner
+        .knowledge_store
+        .get_shard_plan()
+        .unwrap_or_default();
     let limit = request.effective_limit() as usize;
 
     if knowledge_plan.assignments.is_empty() {

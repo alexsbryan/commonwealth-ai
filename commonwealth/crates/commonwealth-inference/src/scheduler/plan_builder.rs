@@ -6,10 +6,10 @@ use commonwealth_core::capabilities::NodeCapabilities;
 use commonwealth_core::config::DaemonConfig;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::latency::LatencyMatrix;
-use commonwealth_core::model::ModelInfo;
-use commonwealth_core::scheduler::{InferencePlan, ShardPlan};
+use crate::model::ModelInfo;
+use crate::inference_plan::{InferencePlan, ShardPlan};
 
-use crate::layer_assignment::{assign_layers, AssignmentError, EligibleNode};
+use super::layer_assignment::{assign_layers, AssignmentError, EligibleNode};
 
 /// Build a complete inference plan for a single model.
 ///
@@ -161,8 +161,8 @@ mod tests {
     use super::*;
     use commonwealth_core::capabilities::*;
     use commonwealth_core::ids::ModelId;
-    use commonwealth_core::model::*;
-    use commonwealth_core::oicp::CapabilityProfile;
+    use crate::model::*;
+    use crate::oicp::CapabilityProfile;
 
     fn test_model(id: u128, layers: u32, size_gb: u64) -> ModelInfo {
         ModelInfo {

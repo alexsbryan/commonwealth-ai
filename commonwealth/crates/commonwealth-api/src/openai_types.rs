@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::oicp::InferenceRequirements;
+use commonwealth_inference::oicp::InferenceRequirements;
 
 /// OpenAI-compatible chat completion request.
 #[derive(Debug, Clone, Serialize, Deserialize)]

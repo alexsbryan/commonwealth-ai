@@ -5,25 +5,17 @@ use axum::Json;
 use tracing::{debug, warn};
 
 use commonwealth_core::ids::ModelId;
-use commonwealth_core::oicp::{self, CapabilityRequirements, ShardingPrivacy};
+use commonwealth_inference::oicp::{self, CapabilityRequirements, ShardingPrivacy};
 
 use crate::openai_types::*;
 use crate::state::AppState;
 
 /// POST /v1/chat/completions — OpenAI-compatible chat completions.
-///
-/// Routing priority:
-/// 1. Explicit OICP requirements → route via OICP scoring
-/// 2. Model name matches a loaded model by name → serve directly
-/// 3. Model name matches an alias → synthesize OICP, route via scoring
-/// 4. No match → default model
 pub async fn chat_completions(
     State(state): State<AppState>,
     Json(request): Json<ChatCompletionRequest>,
 ) -> Response {
     // Privacy enforcement: reject local_only requests.
-    // ShardingPrivacy defaults to LocalOnly per spec §3.1, so absent
-    // privacy fields are treated as if explicitly local.
     if let Some(ref oicp_req) = request.oicp {
         if oicp_req.sharding() == ShardingPrivacy::LocalOnly {
             return (
@@ -45,7 +37,7 @@ pub async fn chat_completions(
     // --- Priority 1: Explicit OICP capability requirements ---
     if let Some(ref oicp_req) = request.oicp {
         if let Some(ref caps) = oicp_req.capabilities {
-            let model_id = match route_with_oicp(&state, caps).await {
+            let model_id = match route_with_oicp(&state, caps) {
                 Some(id) => id,
                 None => {
                     return (
@@ -67,7 +59,7 @@ pub async fn chat_completions(
 
     // --- Priority 2: Model name matches a loaded model by name ---
     if let Some(ref requested_model) = request.model {
-        if let Some(model_id) = find_model_by_name(&state, requested_model).await {
+        if let Some(model_id) = find_model_by_name(&state, requested_model) {
             debug!(
                 model_name = requested_model,
                 "routing to model by exact name match"
@@ -81,16 +73,14 @@ pub async fn chat_completions(
                 model_name = requested_model,
                 "model name matched alias, synthesizing OICP requirements"
             );
-            if let Some(model_id) = route_with_oicp(&state, &resolution.requirements).await {
+            if let Some(model_id) = route_with_oicp(&state, &resolution.requirements) {
                 return forward_to_model(&state, model_id, &request).await;
             }
-            // Alias matched but no model satisfies even preferred requirements.
-            // Fall through to default rather than failing.
         }
     }
 
     // --- Priority 4: Default model ---
-    match state.default_model_id().await {
+    match state.default_model_id() {
         Some(model_id) => forward_to_model(&state, model_id, &request).await,
         None => (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -106,27 +96,18 @@ pub async fn chat_completions(
     }
 }
 
-/// Score loaded models against OICP requirements and return the best match.
-async fn route_with_oicp(
-    state: &AppState,
-    requirements: &CapabilityRequirements,
-) -> Option<ModelId> {
-    let models = state.inner.models.read().await;
-    let plan = state.inner.inference_plan.read().await;
+fn route_with_oicp(state: &AppState, requirements: &CapabilityRequirements) -> Option<ModelId> {
+    let models = state.inner.inference_store.list_models();
+    let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
     let mut best_model = None;
     let mut best_score = -1.0f32;
 
     for shard_plan in &plan.model_plans {
         if let Some(model_info) = models.get(&shard_plan.model) {
-            if oicp::satisfies_required(
-                &model_info.oicp_capabilities,
-                &requirements.required,
-            ) {
-                let score = oicp::score_preferred(
-                    &model_info.oicp_capabilities,
-                    &requirements.preferred,
-                );
+            if oicp::satisfies_required(&model_info.oicp_capabilities, &requirements.required) {
+                let score =
+                    oicp::score_preferred(&model_info.oicp_capabilities, &requirements.preferred);
                 if score > best_score {
                     best_score = score;
                     best_model = Some(shard_plan.model);
@@ -138,9 +119,8 @@ async fn route_with_oicp(
     best_model
 }
 
-/// Check if a model name matches any loaded model by its human-readable name.
-async fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
-    let models = state.inner.models.read().await;
+fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
+    let models = state.inner.inference_store.list_models();
     let name_lower = name.to_lowercase();
     models
         .values()
@@ -148,13 +128,12 @@ async fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
         .map(|m| m.id)
 }
 
-/// Forward a request to the llama-server hosting a specific model.
 async fn forward_to_model(
     state: &AppState,
     model_id: ModelId,
     request: &ChatCompletionRequest,
 ) -> Response {
-    let llama_addr = match state.get_llama_server_address(model_id).await {
+    let llama_addr = match state.get_llama_server_address(model_id) {
         Some(addr) => addr,
         None => {
             return (
@@ -209,7 +188,6 @@ async fn forward_to_model(
     }
 }
 
-/// Forward a request to a llama-server instance via raw HTTP.
 async fn forward_to_llama_server(
     address: &str,
     body: &str,
@@ -252,15 +230,18 @@ async fn forward_to_llama_server(
 
 /// GET /v1/models — list available models.
 pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
-    let models = state.inner.models.read().await;
-    let plan = state.inner.inference_plan.read().await;
-    let addresses = state.inner.llama_server_addresses.read().await;
+    let models = state.inner.inference_store.list_models();
+    let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
     let data: Vec<ModelObject> = models
         .values()
         .map(|model| {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
-            let loaded = addresses.contains_key(&model.id);
+            let loaded = state
+                .inner
+                .inference_store
+                .get_llama_address(model.id)
+                .is_some();
 
             ModelObject {
                 id: model.name.clone(),

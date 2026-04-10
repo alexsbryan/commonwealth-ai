@@ -120,6 +120,23 @@ impl MeshStore {
         self.backend.list_keys(app_id)
     }
 
+    /// Return all entries whose key starts with `prefix` for the given app.
+    pub fn scan(&self, app_id: &str, prefix: &str) -> Result<Vec<StoreEntry>> {
+        let rows = self.backend.scan_with_prefix(app_id, prefix)?;
+        let mut entries = Vec::with_capacity(rows.len());
+        for row in rows {
+            let origin = node_id_from_bytes(&row.origin)?;
+            entries.push(StoreEntry {
+                app_id: row.app_id,
+                key: row.key,
+                value: Bytes::from(row.value),
+                timestamp: row.timestamp,
+                origin,
+            });
+        }
+        Ok(entries)
+    }
+
     /// Return all entries for gossip broadcast.
     pub fn all_entries_for_gossip(&self) -> Result<Vec<StoreEntry>> {
         let rows = self.backend.all_rows()?;
@@ -258,5 +275,30 @@ mod tests {
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"k1".to_string()));
         assert!(keys.contains(&"k2".to_string()));
+    }
+
+    #[test]
+    fn scan_filters_by_prefix() {
+        let store = MeshStore::in_memory().unwrap();
+        store.set("inf", "model:abc", Bytes::from("a"), node(1)).unwrap();
+        store.set("inf", "model:def", Bytes::from("b"), node(1)).unwrap();
+        store.set("inf", "ledger:xyz", Bytes::from("c"), node(1)).unwrap();
+        store.set("other", "model:abc", Bytes::from("d"), node(1)).unwrap();
+
+        let model_entries = store.scan("inf", "model:").unwrap();
+        assert_eq!(model_entries.len(), 2);
+        assert!(model_entries.iter().all(|e| e.key.starts_with("model:")));
+
+        let ledger_entries = store.scan("inf", "ledger:").unwrap();
+        assert_eq!(ledger_entries.len(), 1);
+        assert_eq!(ledger_entries[0].key, "ledger:xyz");
+
+        // Prefix not present for app returns empty.
+        let empty = store.scan("inf", "nope:").unwrap();
+        assert!(empty.is_empty());
+
+        // Scan is scoped to app_id.
+        let scoped = store.scan("other", "model:").unwrap();
+        assert_eq!(scoped.len(), 1);
     }
 }

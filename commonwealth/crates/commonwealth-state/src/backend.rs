@@ -123,6 +123,37 @@ impl SqliteBackend {
         Ok(keys)
     }
 
+    /// Return all rows whose key starts with `prefix` for the given app.
+    pub fn scan_with_prefix(&self, app_id: &str, prefix: &str) -> Result<Vec<AllRow>> {
+        // Escape LIKE special chars in prefix so they are treated literally.
+        let escaped = prefix.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+        let pattern = format!("{escaped}%");
+
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare_cached(
+                "SELECT app_id, key, value, timestamp, origin \
+                 FROM store WHERE app_id = ?1 AND key LIKE ?2 ESCAPE '\\'",
+            )
+            .map_err(|e| Error::Backend(format!("prepare failed: {e}")))?;
+
+        let rows = stmt
+            .query_map(rusqlite::params![app_id, pattern], |row| {
+                Ok(AllRow {
+                    app_id: row.get(0)?,
+                    key: row.get(1)?,
+                    value: row.get(2)?,
+                    timestamp: row.get(3)?,
+                    origin: row.get(4)?,
+                })
+            })
+            .map_err(|e| Error::Backend(format!("query failed: {e}")))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| Error::Backend(format!("row error: {e}")))?;
+
+        Ok(rows)
+    }
+
     /// Return all rows for gossip replication.
     pub fn all_rows(&self) -> Result<Vec<AllRow>> {
         let conn = self.conn.lock().unwrap();

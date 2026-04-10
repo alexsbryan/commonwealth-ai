@@ -4,7 +4,7 @@ use tracing::debug;
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::latency::LatencyMatrix;
-use commonwealth_core::scheduler::{LayerRange, ShardAssignment};
+use crate::inference_plan::{LayerRange, ShardAssignment};
 
 /// A node that is eligible to participate in a shard plan.
 #[derive(Debug, Clone)]

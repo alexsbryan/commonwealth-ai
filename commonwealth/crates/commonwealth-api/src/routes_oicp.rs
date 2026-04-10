@@ -1,7 +1,7 @@
 use axum::extract::State;
 use axum::Json;
 
-use commonwealth_core::oicp::{
+use commonwealth_inference::oicp::{
     CorpusDescriptor, FederationManifest, KnowledgeManifest, ModelStatus, OICP_VERSION,
     PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel, ProviderType,
 };
@@ -11,15 +11,18 @@ use crate::state::AppState;
 /// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
 pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifest> {
     let mesh = state.inner.mesh.read().await;
-    let models = state.inner.models.read().await;
-    let plan = state.inner.inference_plan.read().await;
-    let addresses = state.inner.llama_server_addresses.read().await;
+    let models = state.inner.inference_store.list_models();
+    let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
     let model_entries: Vec<ProviderModel> = models
         .values()
         .map(|model| {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
-            let loaded = addresses.contains_key(&model.id);
+            let loaded = state
+                .inner
+                .inference_store
+                .get_llama_address(model.id)
+                .is_some();
 
             ProviderModel {
                 id: model.name.clone(),
@@ -30,7 +33,7 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
                     Some(model.quantization.clone())
                 },
                 capabilities: model.oicp_capabilities.clone(),
-                context_tokens: 32_768, // TODO: derive from model metadata
+                context_tokens: 32_768,
                 status: ModelStatus {
                     available: true,
                     loaded,
@@ -70,7 +73,7 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
         }),
         models: model_entries,
         knowledge: Some(KnowledgeManifest {
-            corpora: Vec::<CorpusDescriptor>::new(), // Populated when knowledge fan-out lands.
+            corpora: Vec::<CorpusDescriptor>::new(),
             search_endpoint: "/v1/knowledge/search".into(),
         }),
         federation,

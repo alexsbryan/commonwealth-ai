@@ -3,10 +3,9 @@ resolver = "2"
 members = [
     "crates/commonwealth-core",
     "crates/commonwealth-discovery",
-    "crates/commonwealth-scheduler",
-    "crates/commonwealth-orchestrator",
+    "crates/commonwealth-inference",
     "crates/commonwealth-api",
-    "crates/commonwealth-corpus",
+    "crates/commonwealth-knowledge",
     "crates/commonwealth-daemon",
     "crates/commonwealth-test-harness",
     "crates/commonwealth-app",
@@ -48,13 +47,12 @@ corpus-engine = { path = "../corpus-engine" }
 # Internal crates
 commonwealth-core = { path = "crates/commonwealth-core" }
 commonwealth-discovery = { path = "crates/commonwealth-discovery" }
-commonwealth-scheduler = { path = "crates/commonwealth-scheduler" }
-commonwealth-orchestrator = { path = "crates/commonwealth-orchestrator" }
+commonwealth-inference = { path = "crates/commonwealth-inference" }
 commonwealth-api = { path = "crates/commonwealth-api" }
-commonwealth-corpus = { path = "crates/commonwealth-corpus" }
+commonwealth-knowledge = { path = "crates/commonwealth-knowledge" }
 commonwealth-app = { path = "crates/commonwealth-app" }
 commonwealth-state = { path = "crates/commonwealth-state" }
 
 # Platform layer dependencies
 bytes = "1.0"
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.35", features = ["bundled"] }

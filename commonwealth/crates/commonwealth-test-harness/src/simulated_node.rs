@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use commonwealth_core::capabilities::*;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::*;
-use commonwealth_core::model::*;
-use commonwealth_core::scheduler::InferencePlan;
+use commonwealth_inference::model::ModelInfo;
+use commonwealth_inference::inference_plan::InferencePlan;
 
 use commonwealth_api::server::{client_router, internal_router};
 use commonwealth_api::state::AppState;
@@ -177,23 +177,23 @@ impl SimulatedNode {
     }
 
     /// Register a model on this node.
-    pub async fn register_model(&self, model: ModelInfo) {
-        self.state.register_model(model).await;
+    pub fn register_model(&self, model: ModelInfo) {
+        self.state.register_model(model);
     }
 
     /// Set the inference plan for this node.
-    pub async fn set_inference_plan(&self, plan: InferencePlan) {
-        *self.state.inner.inference_plan.write().await = plan;
+    pub fn set_inference_plan(&self, plan: InferencePlan) {
+        self.state.inner.inference_store.set_plan(&plan);
     }
 
     /// Set the llama-server address for a model.
-    pub async fn set_llama_server_address(&self, model_id: ModelId, address: String) {
-        self.state.set_llama_server_address(model_id, address).await;
+    pub fn set_llama_server_address(&self, model_id: ModelId, address: String) {
+        self.state.set_llama_server_address(model_id, address);
     }
 
     /// Set the knowledge shard plan for this node.
-    pub async fn set_knowledge_plan(&self, plan: commonwealth_core::knowledge::KnowledgeShardPlan) {
-        *self.state.inner.knowledge_plan.write().await = plan;
+    pub fn set_knowledge_plan(&self, plan: commonwealth_core::knowledge::KnowledgeShardPlan) {
+        self.state.inner.knowledge_store.set_shard_plan(&plan);
     }
 
     /// Shutdown the node's servers.

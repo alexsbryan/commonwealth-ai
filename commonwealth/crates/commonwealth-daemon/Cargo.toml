@@ -11,11 +11,10 @@ path = "src/main.rs"
 
 [dependencies]
 commonwealth-core = { workspace = true }
-commonwealth-corpus = { workspace = true }
+commonwealth-inference = { workspace = true }
+commonwealth-knowledge = { workspace = true }
 corpus-engine = { workspace = true }
 commonwealth-discovery = { workspace = true }
-commonwealth-scheduler = { workspace = true }
-commonwealth-orchestrator = { workspace = true }
 commonwealth-api = { workspace = true }
 commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }

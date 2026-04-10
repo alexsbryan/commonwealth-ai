@@ -5,5 +5,3 @@ pub mod oicp_cache;
 pub mod plan_builder;
 pub mod portfolio;
 pub mod usage_predictor;
-
-pub use commonwealth_core::{Error, Result};

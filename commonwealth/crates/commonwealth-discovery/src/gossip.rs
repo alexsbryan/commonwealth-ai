@@ -25,15 +25,11 @@ pub struct GossipEntry {
 pub enum GossipKey {
     /// A node's current status and capabilities.
     MemberState { node_id: NodeId },
-    /// The current inference shard plan (mesh-wide, single key).
-    InferencePlan,
-    /// The current knowledge shard plan (mesh-wide, single key).
-    KnowledgePlan,
-    /// A contribution ledger entry.
-    LedgerEntry { entry_id: String },
     /// Mesh-wide configuration.
     MeshConfig,
     /// A key-value entry stored by a mesh app. Scoped to app_id + key.
+    /// Inference plan, knowledge plan, and ledger entries all flow through
+    /// this variant (app_id = "inference" or "knowledge").
     AppState { app_id: String, key: String },
     /// An app manifest entry in the mesh app registry.
     AppRegistry { app_id: String },
@@ -46,15 +42,6 @@ pub enum GossipValue {
     MemberState {
         status: NodeStatus,
         capabilities: Box<NodeCapabilities>,
-    },
-    InferencePlan {
-        plan_json: String,
-    },
-    KnowledgePlan {
-        plan_json: String,
-    },
-    LedgerEntry {
-        entry_json: String,
     },
     MeshConfig {
         config_json: String,

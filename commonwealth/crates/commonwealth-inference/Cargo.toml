@@ -1,0 +1,20 @@
+[package]
+name = "commonwealth-inference"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { path = "../commonwealth-core" }
+commonwealth-state = { path = "../commonwealth-state" }
+commonwealth-app = { path = "../commonwealth-app" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tracing = { workspace = true }
+bytes = { workspace = true }

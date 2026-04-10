@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::ids::NodeId;
 
 /// The complete knowledge shard plan for the mesh.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct KnowledgeShardPlan {
     pub assignments: Vec<KnowledgeShardAssignment>,
     /// corpus_id -> replica count achieved.

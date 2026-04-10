@@ -7,8 +7,7 @@ use crate::state::AppState;
 /// GET /status — mesh and node status summary.
 pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     let mesh = state.inner.mesh.read().await;
-    let plan = state.inner.inference_plan.read().await;
-    let addresses = state.inner.llama_server_addresses.read().await;
+    let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
     let members_online = mesh
         .members
@@ -40,7 +39,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             model: format!("{}", p.model),
             nodes: p.assignments.len(),
             tps: p.estimated_tokens_per_sec,
-            loaded: addresses.contains_key(&p.model),
+            loaded: state.inner.inference_store.get_llama_address(p.model).is_some(),
         })
         .collect();
 

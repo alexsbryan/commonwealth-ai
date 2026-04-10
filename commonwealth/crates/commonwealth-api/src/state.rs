@@ -1,16 +1,14 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
 use commonwealth_app::registry::AppRegistry;
 use commonwealth_app::proxy::AppPortMap;
-use commonwealth_core::ids::{ModelId, NodeId};
-use commonwealth_core::knowledge::KnowledgeShardPlan;
+use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{Mesh, NodeStatus};
-use commonwealth_core::model::ModelInfo;
-use commonwealth_core::model_aliases::ModelAliasTable;
-use commonwealth_core::scheduler::InferencePlan;
+use commonwealth_inference::model_aliases::ModelAliasTable;
+use commonwealth_inference::store_adapter::InferenceStateStore;
+use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
 use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 
@@ -23,11 +21,10 @@ pub struct AppState {
 pub struct AppStateInner {
     pub self_node_id: NodeId,
     pub mesh: RwLock<Mesh>,
-    pub models: RwLock<HashMap<ModelId, ModelInfo>>,
-    pub inference_plan: RwLock<InferencePlan>,
-    /// Maps model_id → llama-server address (host:port) on this node.
-    pub llama_server_addresses: RwLock<HashMap<ModelId, String>>,
-    pub knowledge_plan: RwLock<KnowledgeShardPlan>,
+    /// Inference plan, model info, ledger, and llama addresses — all via MeshStore.
+    pub inference_store: InferenceStateStore,
+    /// Knowledge shard plan — via MeshStore.
+    pub knowledge_store: KnowledgeStateStore,
     pub model_aliases: ModelAliasTable,
     pub corpus_engine: Option<Arc<CorpusEngine>>,
     /// Distributed KV store for mesh apps.
@@ -53,19 +50,14 @@ impl AppState {
         mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
     ) -> Self {
+        let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
+        let knowledge_store = KnowledgeStateStore::new(Arc::clone(&mesh_store), self_node_id);
         Self {
             inner: Arc::new(AppStateInner {
                 self_node_id,
                 mesh: RwLock::new(mesh),
-                models: RwLock::new(HashMap::new()),
-                inference_plan: RwLock::new(InferencePlan {
-                    model_plans: vec![],
-                }),
-                llama_server_addresses: RwLock::new(HashMap::new()),
-                knowledge_plan: RwLock::new(KnowledgeShardPlan {
-                    assignments: vec![],
-                    redundancy_achieved: HashMap::new(),
-                }),
+                inference_store,
+                knowledge_store,
                 model_aliases: ModelAliasTable::default_table(),
                 corpus_engine: None,
                 mesh_store,
@@ -76,34 +68,33 @@ impl AppState {
     }
 
     /// Register a model as available on the mesh.
-    pub async fn register_model(&self, model: ModelInfo) {
-        let id = model.id;
-        self.inner.models.write().await.insert(id, model);
+    pub fn register_model(&self, model: commonwealth_inference::model::ModelInfo) {
+        self.inner.inference_store.set_model_info(&model);
     }
 
     /// Set the address of a llama-server for a model (after orchestrator spawns it).
-    pub async fn set_llama_server_address(&self, model_id: ModelId, address: String) {
-        self.inner
-            .llama_server_addresses
-            .write()
-            .await
-            .insert(model_id, address);
+    pub fn set_llama_server_address(
+        &self,
+        model_id: commonwealth_core::ids::ModelId,
+        address: String,
+    ) {
+        self.inner.inference_store.set_llama_address(model_id, &address);
     }
 
     /// Get the llama-server address for a model.
-    pub async fn get_llama_server_address(&self, model_id: ModelId) -> Option<String> {
-        self.inner
-            .llama_server_addresses
-            .read()
-            .await
-            .get(&model_id)
-            .cloned()
+    pub fn get_llama_server_address(
+        &self,
+        model_id: commonwealth_core::ids::ModelId,
+    ) -> Option<String> {
+        self.inner.inference_store.get_llama_address(model_id)
     }
 
     /// Get the default model (first in the inference plan).
-    pub async fn default_model_id(&self) -> Option<ModelId> {
-        let plan = self.inner.inference_plan.read().await;
-        plan.model_plans.first().map(|p| p.model)
+    pub fn default_model_id(&self) -> Option<commonwealth_core::ids::ModelId> {
+        self.inner
+            .inference_store
+            .get_plan()
+            .and_then(|p| p.model_plans.first().map(|mp| mp.model))
     }
 
     /// Count online members.
@@ -126,6 +117,7 @@ impl AppState {
 pub fn test_app_state() -> AppState {
     use commonwealth_core::ids::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use std::collections::HashMap;
     let mesh = Mesh {
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),

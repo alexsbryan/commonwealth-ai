@@ -7,8 +7,8 @@ license.workspace = true
 
 [dependencies]
 commonwealth-core = { workspace = true }
-commonwealth-scheduler = { workspace = true }
-commonwealth-orchestrator = { workspace = true }
+commonwealth-inference = { workspace = true }
+commonwealth-knowledge = { workspace = true }
 commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }
 corpus-engine = { workspace = true }

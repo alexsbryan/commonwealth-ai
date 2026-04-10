@@ -1,0 +1,179 @@
+//! MeshStore adapter for inference state.
+//!
+//! Serializes/deserializes `InferencePlan`, `ModelInfo`, `LedgerEntry`, and
+//! llama-server addresses into the distributed KV store so that state
+//! survives restarts and propagates to peers via gossip.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use bytes::Bytes;
+use commonwealth_core::ids::{ModelId, NodeId};
+use commonwealth_state::MeshStore;
+
+use crate::inference_plan::InferencePlan;
+use crate::ledger::LedgerEntry;
+use crate::model::ModelInfo;
+
+const APP_ID: &str = "inference";
+
+/// Encode a ModelId as a 32-character lowercase hex string using all 16 bytes.
+///
+/// `ModelId::Display` only shows the first 8 bytes, which causes key collisions
+/// for small test IDs (e.g. from_u128(1) and from_u128(2) both display as
+/// "model-0000000000000000"). The full 16-byte hex avoids this.
+fn model_id_hex(id: ModelId) -> String {
+    id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Thin wrapper over `MeshStore` for inference-domain state.
+/// All methods are synchronous (SQLite is sync).
+#[derive(Clone)]
+pub struct InferenceStateStore {
+    store: Arc<MeshStore>,
+    node_id: NodeId,
+}
+
+impl InferenceStateStore {
+    pub fn new(store: Arc<MeshStore>, node_id: NodeId) -> Self {
+        Self { store, node_id }
+    }
+
+    // ── Inference plan ──────────────────────────────────────────────
+
+    pub fn get_plan(&self) -> Option<InferencePlan> {
+        self.store
+            .get(APP_ID, "plan")
+            .ok()
+            .flatten()
+            .and_then(|e| serde_json::from_slice(&e.value).ok())
+    }
+
+    pub fn set_plan(&self, plan: &InferencePlan) {
+        if let Ok(bytes) = serde_json::to_vec(plan) {
+            let _ = self.store.set(APP_ID, "plan", Bytes::from(bytes), self.node_id);
+        }
+    }
+
+    // ── Model info ──────────────────────────────────────────────────
+
+    pub fn get_model_info(&self, model_id: ModelId) -> Option<ModelInfo> {
+        let key = format!("model:{}", model_id_hex(model_id));
+        self.store
+            .get(APP_ID, &key)
+            .ok()
+            .flatten()
+            .and_then(|e| serde_json::from_slice(&e.value).ok())
+    }
+
+    pub fn set_model_info(&self, info: &ModelInfo) {
+        let key = format!("model:{}", model_id_hex(info.id));
+        if let Ok(bytes) = serde_json::to_vec(info) {
+            let _ = self.store.set(APP_ID, &key, Bytes::from(bytes), self.node_id);
+        }
+    }
+
+    pub fn list_models(&self) -> HashMap<ModelId, ModelInfo> {
+        self.store
+            .scan(APP_ID, "model:")
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|e| serde_json::from_slice::<ModelInfo>(&e.value).ok())
+            .map(|m| (m.id, m))
+            .collect()
+    }
+
+    // ── Ledger entries ──────────────────────────────────────────────
+
+    pub fn append_ledger_entry(&self, entry_id: &str, entry: &LedgerEntry) {
+        let key = format!("ledger:{entry_id}");
+        if let Ok(bytes) = serde_json::to_vec(entry) {
+            let _ = self.store.set(APP_ID, &key, Bytes::from(bytes), self.node_id);
+        }
+    }
+
+    pub fn list_ledger_entries(&self) -> Vec<LedgerEntry> {
+        self.store
+            .scan(APP_ID, "ledger:")
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|e| serde_json::from_slice::<LedgerEntry>(&e.value).ok())
+            .collect()
+    }
+
+    // ── llama-server addresses ───────────────────────────────────────
+
+    pub fn get_llama_address(&self, model_id: ModelId) -> Option<String> {
+        let key = format!("llama_addr:{}", model_id_hex(model_id));
+        self.store
+            .get(APP_ID, &key)
+            .ok()
+            .flatten()
+            .and_then(|e| String::from_utf8(e.value.to_vec()).ok())
+    }
+
+    pub fn set_llama_address(&self, model_id: ModelId, addr: &str) {
+        let key = format!("llama_addr:{}", model_id_hex(model_id));
+        let _ = self.store.set(
+            APP_ID,
+            &key,
+            Bytes::from(addr.to_string()),
+            self.node_id,
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use commonwealth_core::ids::{ModelId, NodeId};
+    use crate::model::{ModelArchitecture, ModelInfo};
+    use crate::oicp::{Capability, CapabilityProfile};
+
+    fn make_store() -> InferenceStateStore {
+        let mesh_store = Arc::new(
+            commonwealth_state::MeshStore::in_memory().expect("in-memory store"),
+        );
+        InferenceStateStore::new(mesh_store, NodeId::from_u128(1))
+    }
+
+    fn test_model(id: u128, name: &str, caps: CapabilityProfile) -> ModelInfo {
+        ModelInfo {
+            id: ModelId::from_u128(id),
+            name: name.into(),
+            repo: format!("test/{name}"),
+            file: format!("{name}.gguf"),
+            size_bytes: 1_000_000,
+            total_layers: 32,
+            architecture: ModelArchitecture::Qwen,
+            available_on: HashMap::new(),
+            oicp_capabilities: caps,
+            quantization: "Q4_K_M".into(),
+        }
+    }
+
+    #[test]
+    fn list_models_returns_all_registered() {
+        let store = make_store();
+
+        let mut coder_caps = CapabilityProfile::default();
+        coder_caps.insert(Capability::Code, 4);
+        coder_caps.insert(Capability::General, 2);
+
+        let mut general_caps = CapabilityProfile::default();
+        general_caps.insert(Capability::General, 3);
+        general_caps.insert(Capability::Analysis, 3);
+
+        let coder = test_model(1, "coder-30b", coder_caps);
+        let general = test_model(2, "general-30b", general_caps);
+
+        store.set_model_info(&coder);
+        store.set_model_info(&general);
+
+        let models = store.list_models();
+        assert_eq!(models.len(), 2, "both models should be in the store");
+        assert!(models.contains_key(&ModelId::from_u128(1)));
+        assert!(models.contains_key(&ModelId::from_u128(2)));
+    }
+}

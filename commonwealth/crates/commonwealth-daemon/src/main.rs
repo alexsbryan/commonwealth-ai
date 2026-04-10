@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 use corpus_engine::{CorpusEngine, EmbedFn, TestOptions};
 use tracing::info;
 
+use commonwealth_app::manifest::{AppPermissions, MeshAppManifest, RequiredCapabilities};
 use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::config::DaemonConfig;
 use commonwealth_discovery::membership;
@@ -468,9 +469,38 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         );
         info!(path = %store_path.display(), "MeshStore opened");
 
-        // 3. Init the app registry.
+        // 3. Init the app registry and register built-in apps.
         let app_registry = Arc::new(AppRegistry::new());
-        info!("AppRegistry initialized");
+
+        app_registry.register(MeshAppManifest {
+            app_id: "inference".into(),
+            name: "Inference Engine".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            entrypoint: "embedded".into(),
+            permissions: AppPermissions {
+                mesh_store_read: true,
+                mesh_store_write: true,
+                inference_access: true,
+                knowledge_access: false,
+            },
+            required_capabilities: RequiredCapabilities::default(),
+        }).await;
+
+        app_registry.register(MeshAppManifest {
+            app_id: "knowledge".into(),
+            name: "Knowledge Engine".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            entrypoint: "embedded".into(),
+            permissions: AppPermissions {
+                mesh_store_read: true,
+                mesh_store_write: true,
+                inference_access: false,
+                knowledge_access: true,
+            },
+            required_capabilities: RequiredCapabilities::default(),
+        }).await;
+
+        info!("AppRegistry initialized with inference and knowledge apps");
 
         // 4. Shutdown channel for background tasks.
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);

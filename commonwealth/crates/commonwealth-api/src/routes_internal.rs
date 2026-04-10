@@ -3,6 +3,9 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use commonwealth_inference::inference_plan::InferencePlan;
+use commonwealth_inference::oicp::KnowledgeSearchRequest;
+
 use crate::state::AppState;
 
 /// POST /internal/gossip — member state exchange.
@@ -33,11 +36,14 @@ pub async fn scheduling_intent(
 }
 
 /// POST /internal/scheduling/plan — shard plan broadcast.
+///
+/// Peer nodes call this when they compute a new inference plan.
+/// The plan is stored in MeshStore and propagated via gossip.
 pub async fn scheduling_plan(
-    State(_state): State<AppState>,
-    Json(_payload): Json<serde_json::Value>,
+    State(state): State<AppState>,
+    Json(plan): Json<InferencePlan>,
 ) -> StatusCode {
-    // Plan broadcast will be applied by the local orchestrator.
+    state.inner.inference_store.set_plan(&plan);
     StatusCode::OK
 }
 
@@ -46,7 +52,6 @@ pub async fn model_transfer(
     State(_state): State<AppState>,
     Json(_payload): Json<serde_json::Value>,
 ) -> StatusCode {
-    // Model transfer is implemented in Phase 13 (Mesh Peering).
     StatusCode::NOT_IMPLEMENTED
 }
 
@@ -55,26 +60,82 @@ pub async fn index_transfer(
     State(_state): State<AppState>,
     Json(_payload): Json<serde_json::Value>,
 ) -> StatusCode {
-    // Index transfer is implemented in Phase 11 (Knowledge Subsystem).
     StatusCode::NOT_IMPLEMENTED
 }
 
 /// POST /internal/knowledge/search — inter-node shard query (fan-out target).
+///
+/// Peer nodes call this to search corpus shards hosted on this node.
 pub async fn knowledge_search(
-    State(_state): State<AppState>,
-    Json(_payload): Json<serde_json::Value>,
+    State(state): State<AppState>,
+    Json(request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    // Knowledge search is implemented in Phase 11.
+    let engine = match &state.inner.corpus_engine {
+        Some(e) => e.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({ "error": "no corpus engine on this node" })),
+            );
+        }
+    };
+
+    // Fan-out: search local corpus index for each requested corpus.
+    let corpora = request.corpora.as_deref().unwrap_or(&[]);
+    let limit = request.effective_limit() as usize;
+    let mut all_results = Vec::new();
+
+    let search_corpora: Vec<String> = if corpora.is_empty() {
+        engine
+            .installed_indexes()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|i| i.corpus_id)
+            .collect()
+    } else {
+        corpora.to_vec()
+    };
+
+    for corpus_id in &search_corpora {
+        if let Ok(index) = engine.open_index_for_corpus(corpus_id).await {
+            if let Ok(results) = index
+                .search(&request.query_embedding, &request.query_text, limit)
+                .await
+            {
+                all_results.extend(results.into_iter().map(|r| {
+                    serde_json::json!({
+                        "content": r.content,
+                        "title": r.title,
+                        "corpus_id": corpus_id,
+                        "url": r.url,
+                        "score": r.score,
+                    })
+                }));
+            }
+        }
+    }
+
+    all_results.sort_by(|a, b| {
+        b["score"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .partial_cmp(&a["score"].as_f64().unwrap_or(0.0))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    all_results.truncate(limit);
+
     (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(serde_json::json!({ "error": "knowledge search not yet implemented" })),
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "results": all_results,
+            "corpora_searched": search_corpora,
+        })),
     )
 }
 
 /// GET /internal/latency/probe — RTT measurement endpoint.
 pub async fn latency_probe() -> StatusCode {
-    // Simply responding proves the node is reachable.
-    // The real latency measurement uses UDP (in latency_probe module).
     StatusCode::OK
 }
 

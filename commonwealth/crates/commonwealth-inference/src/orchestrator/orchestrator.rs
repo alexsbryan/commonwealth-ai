@@ -4,11 +4,11 @@ use tracing::{info, warn};
 
 use commonwealth_core::capabilities::ProcessKind;
 use commonwealth_core::ids::{ModelId, ProcessId};
-use commonwealth_core::scheduler::{InferencePlan, ShardPlan};
+use crate::inference_plan::{InferencePlan, ShardPlan};
 use commonwealth_core::Error;
 
-use crate::health::{HealthCheckConfig, HealthStatus, HealthTracker};
-use crate::process::{ManagedProcess, ProcessState, SpawnConfig};
+use super::health::{HealthCheckConfig, HealthStatus, HealthTracker};
+use super::process::{ManagedProcess, ProcessState, SpawnConfig};
 
 /// Events emitted by the orchestrator when process state changes.
 #[derive(Debug, Clone)]
@@ -87,7 +87,7 @@ impl Orchestrator {
         let mut config = self.spawn_config.clone();
         config.model_path = model_path.to_string();
 
-        match crate::process::spawn_llama_server(plan, port, model_path, &config).await {
+        match super::process::spawn_llama_server(plan, port, model_path, &config).await {
             Ok(proc) => {
                 let proc_id = proc.id;
                 let addr = proc.listen_address;
@@ -284,7 +284,7 @@ impl Orchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::process::mock_process;
+    use crate::orchestrator::process::mock_process;
     use commonwealth_core::capabilities::ProcessKind;
 
     fn test_spawn_config() -> SpawnConfig {
@@ -378,9 +378,9 @@ mod tests {
         let plan = ShardPlan {
             model: ModelId::from_u128(1),
             entry_node: commonwealth_core::NodeId::from_u128(1),
-            assignments: vec![commonwealth_core::scheduler::ShardAssignment {
+            assignments: vec![crate::inference_plan::ShardAssignment {
                 node_id: commonwealth_core::NodeId::from_u128(1),
-                layers: commonwealth_core::scheduler::LayerRange::new(0, 64),
+                layers: crate::inference_plan::LayerRange::new(0, 64),
                 gpu_index: 0,
                 rpc_address: "127.0.0.1:50051".parse().unwrap(),
             }],

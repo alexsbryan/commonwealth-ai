@@ -270,8 +270,8 @@ mod tests {
         let state = test_app_state();
 
         // Register a model.
-        use commonwealth_core::model::*;
-        use commonwealth_core::oicp::{Capability, CapabilityProfile};
+        use commonwealth_inference::model::{ModelArchitecture, ModelInfo};
+        use commonwealth_inference::oicp::{Capability, CapabilityProfile};
         use std::collections::HashMap;
 
         let mut caps = CapabilityProfile::default();
@@ -289,7 +289,7 @@ mod tests {
             oicp_capabilities: caps,
             quantization: "Q4_K_M".into(),
         };
-        state.register_model(model).await;
+        state.register_model(model);
 
         let app = client_router(state);
         let response = app

@@ -6,7 +6,7 @@ use tracing::{info, warn};
 
 use commonwealth_core::capabilities::ProcessKind;
 use commonwealth_core::ids::ProcessId;
-use commonwealth_core::scheduler::{ShardAssignment, ShardPlan};
+use crate::inference_plan::{ShardAssignment, ShardPlan};
 use commonwealth_core::Error;
 
 /// A process managed by the orchestrator.
@@ -264,7 +264,7 @@ fn now_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::scheduler::LayerRange;
+    use crate::inference_plan::LayerRange;
 
     #[test]
     fn process_state_serde_roundtrip() {

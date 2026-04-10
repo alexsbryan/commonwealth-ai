@@ -5,23 +5,23 @@ use commonwealth_core::capabilities::*;
 use commonwealth_core::ids::*;
 use commonwealth_core::knowledge::*;
 use commonwealth_core::mesh::*;
-use commonwealth_core::oicp::*;
-use commonwealth_core::scheduler::*;
+use commonwealth_inference::inference_plan::*;
+use commonwealth_inference::oicp::*;
 
 use commonwealth_discovery::gossip::*;
 use commonwealth_discovery::membership;
 use commonwealth_discovery::threshold::SignificanceThresholds;
 
-use commonwealth_orchestrator::departure::{DepartureState, GracefulDeparture};
-use commonwealth_orchestrator::fault::{
+use commonwealth_inference::orchestrator::departure::{DepartureState, GracefulDeparture};
+use commonwealth_inference::orchestrator::fault::{
     FaultDetector, FaultDetectorConfig, FaultEvent, FaultStatus,
 };
 
-use commonwealth_scheduler::knowledge_assignment::{self, CorpusInfo, NodeWithCapacity};
-use commonwealth_scheduler::leader;
-use commonwealth_scheduler::oicp_cache::OicpModelCache;
-use commonwealth_scheduler::plan_builder;
-use commonwealth_scheduler::portfolio::ModelPortfolio;
+use commonwealth_inference::scheduler::knowledge_assignment::{self, CorpusInfo, NodeWithCapacity};
+use commonwealth_inference::scheduler::leader;
+use commonwealth_inference::scheduler::oicp_cache::OicpModelCache;
+use commonwealth_inference::scheduler::plan_builder;
+use commonwealth_inference::scheduler::portfolio::ModelPortfolio;
 
 use commonwealth_test_harness::fixtures::*;
 use commonwealth_test_harness::mock_llama::MockLlamaServer;
@@ -435,10 +435,9 @@ async fn inference_e2e_with_mock_llama_server() {
     // Register model and point to mock llama-server.
     let model = coding_model(1);
     let model_id = model.id;
-    mesh.nodes[0].register_model(model.clone()).await;
+    mesh.nodes[0].register_model(model.clone());
     mesh.nodes[0]
-        .set_llama_server_address(model_id, mock_addr)
-        .await;
+        .set_llama_server_address(model_id, mock_addr);
 
     // Set an inference plan so the model is "loaded".
     mesh.nodes[0]
@@ -455,8 +454,7 @@ async fn inference_e2e_with_mock_llama_server() {
                 estimated_tokens_per_sec: 45.0,
                 estimated_ttft_ms: 1100,
             }],
-        })
-        .await;
+        });
 
     // Give server a moment to start.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -527,7 +525,7 @@ async fn oicp_capabilities_returns_registered_models() {
     let client_addr = addrs[0].0;
 
     // Register a model.
-    mesh.nodes[0].register_model(coding_model(1)).await;
+    mesh.nodes[0].register_model(coding_model(1));
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
@@ -545,8 +543,8 @@ async fn models_endpoint_lists_registered_models() {
     let addrs = mesh.start_all().await;
     let client_addr = addrs[0].0;
 
-    mesh.nodes[0].register_model(coding_model(1)).await;
-    mesh.nodes[0].register_model(general_model(2)).await;
+    mesh.nodes[0].register_model(coding_model(1));
+    mesh.nodes[0].register_model(general_model(2));
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
@@ -702,10 +700,9 @@ async fn inference_503_retry_after_on_backend_failure() {
     // Register model pointing to a non-existent llama-server address.
     let model = coding_model(1);
     let model_id = model.id;
-    mesh.nodes[0].register_model(model).await;
+    mesh.nodes[0].register_model(model);
     mesh.nodes[0]
-        .set_llama_server_address(model_id, "127.0.0.1:1".into()) // Nothing listening.
-        .await;
+        .set_llama_server_address(model_id, "127.0.0.1:1".into()); // Nothing listening.
     mesh.nodes[0]
         .set_inference_plan(InferencePlan {
             model_plans: vec![ShardPlan {
@@ -720,8 +717,7 @@ async fn inference_503_retry_after_on_backend_failure() {
                 estimated_tokens_per_sec: 40.0,
                 estimated_ttft_ms: 1000,
             }],
-        })
-        .await;
+        });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -763,16 +759,14 @@ async fn oicp_routing_selects_correct_model() {
     let coder_id = coder.id;
     let general_id = general.id;
 
-    mesh.nodes[0].register_model(coder).await;
-    mesh.nodes[0].register_model(general).await;
+    mesh.nodes[0].register_model(coder);
+    mesh.nodes[0].register_model(general);
 
     // Point each to its own mock server.
     mesh.nodes[0]
-        .set_llama_server_address(coder_id, mock_coder.address_string())
-        .await;
+        .set_llama_server_address(coder_id, mock_coder.address_string());
     mesh.nodes[0]
-        .set_llama_server_address(general_id, mock_general.address_string())
-        .await;
+        .set_llama_server_address(general_id, mock_general.address_string());
 
     // Set inference plan with both models.
     mesh.nodes[0]
@@ -803,8 +797,7 @@ async fn oicp_routing_selects_correct_model() {
                     estimated_ttft_ms: 1300,
                 },
             ],
-        })
-        .await;
+        });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -1090,7 +1083,7 @@ async fn knowledge_search_returns_results_for_assigned_corpora() {
             .into_iter()
             .collect(),
     };
-    mesh.nodes[0].set_knowledge_plan(knowledge_plan).await;
+    mesh.nodes[0].set_knowledge_plan(knowledge_plan);
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -1223,14 +1216,12 @@ async fn omo_model_alias_routes_to_coding_model() {
     let coder_id = coder.id;
     let general_id = general.id;
 
-    mesh.nodes[0].register_model(coder).await;
-    mesh.nodes[0].register_model(general).await;
+    mesh.nodes[0].register_model(coder);
+    mesh.nodes[0].register_model(general);
     mesh.nodes[0]
-        .set_llama_server_address(coder_id, mock_coder.address_string())
-        .await;
+        .set_llama_server_address(coder_id, mock_coder.address_string());
     mesh.nodes[0]
-        .set_llama_server_address(general_id, mock_general.address_string())
-        .await;
+        .set_llama_server_address(general_id, mock_general.address_string());
 
     // Set inference plan with both models.
     mesh.nodes[0]
@@ -1261,8 +1252,7 @@ async fn omo_model_alias_routes_to_coding_model() {
                     estimated_ttft_ms: 1300,
                 },
             ],
-        })
-        .await;
+        });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -1321,10 +1311,9 @@ async fn unknown_model_name_falls_through_to_default() {
 
     let model = general_model(1);
     let model_id = model.id;
-    mesh.nodes[0].register_model(model).await;
+    mesh.nodes[0].register_model(model);
     mesh.nodes[0]
-        .set_llama_server_address(model_id, mock.address_string())
-        .await;
+        .set_llama_server_address(model_id, mock.address_string());
     mesh.nodes[0]
         .set_inference_plan(InferencePlan {
             model_plans: vec![ShardPlan {
@@ -1339,8 +1328,7 @@ async fn unknown_model_name_falls_through_to_default() {
                 estimated_tokens_per_sec: 38.0,
                 estimated_ttft_ms: 1300,
             }],
-        })
-        .await;
+        });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 

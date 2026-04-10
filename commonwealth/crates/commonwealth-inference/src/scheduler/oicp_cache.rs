@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use commonwealth_core::ids::ModelId;
-use commonwealth_core::model::ModelInfo;
-use commonwealth_core::oicp::{self, CapabilityRequirements};
+use crate::model::ModelInfo;
+use crate::oicp::{self, CapabilityRequirements};
 
 /// Cached resolution from OICP requirements to the best matching model.
 /// Recomputed only when the model portfolio changes.
@@ -114,8 +114,8 @@ fn compute_best_model(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::model::ModelArchitecture;
-    use commonwealth_core::oicp::{Capability, CapabilityProfile};
+    use crate::model::ModelArchitecture;
+    use crate::oicp::{Capability, CapabilityProfile};
 
     fn make_model(id: u128, caps: &[(Capability, u8)]) -> ModelInfo {
         let mut profile = CapabilityProfile::new();
