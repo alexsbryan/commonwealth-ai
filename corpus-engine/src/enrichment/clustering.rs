@@ -25,11 +25,25 @@ pub async fn cluster_embeddings(
     });
 
     // ── Stream embeddings from LanceDB ────────────────────────────────
+    let t0 = std::time::Instant::now();
+    tracing::info!("Loading embeddings from index...");
     let (chunk_ids, embeddings) = index.stream_embedding_column().await?;
 
     let total = chunk_ids.len();
+    let dims = embeddings.first().map(|e| e.len()).unwrap_or(0);
+    let load_secs = t0.elapsed().as_secs();
+    tracing::info!(
+        chunks = total,
+        dims = dims,
+        elapsed_secs = load_secs,
+        "Embeddings loaded"
+    );
     progress(EnrichmentProgress::ClusteringStarted {
         total_chunks: total,
+    });
+    progress(EnrichmentProgress::ClusteringStep {
+        step: "Loaded embeddings",
+        detail: format!("{total} chunks x {dims} dims in {load_secs}s"),
     });
 
     // ── Guard: need enough points for clustering ────────────────────
@@ -51,13 +65,31 @@ pub async fn cluster_embeddings(
     }
 
     // ── Convert f32 → f64 for hdbscan crate ───────────────────────────
+    tracing::info!("Converting {total} x {dims} embeddings to f64...");
+    let t1 = std::time::Instant::now();
     let embeddings_f64: Vec<Vec<f64>> = embeddings
         .iter()
         .map(|v| v.iter().map(|&x| x as f64).collect())
         .collect();
+    tracing::info!(elapsed_secs = t1.elapsed().as_secs(), "f64 conversion done");
 
     // ── Run HDBSCAN ───────────────────────────────────────────────────
     let min_samples = (config.min_cluster_size / 5).max(2);
+    tracing::info!(
+        min_cluster_size = config.min_cluster_size,
+        min_samples = min_samples,
+        epsilon = config.epsilon,
+        "Starting HDBSCAN — this may take a while for large corpora"
+    );
+    progress(EnrichmentProgress::ClusteringStep {
+        step: "Running HDBSCAN",
+        detail: format!(
+            "{total} points, min_cluster={}, min_samples={min_samples}, eps={}",
+            config.min_cluster_size, config.epsilon
+        ),
+    });
+    let t2 = std::time::Instant::now();
+
     let hyper_params = hdbscan::HdbscanHyperParams::builder()
         .min_cluster_size(config.min_cluster_size)
         .min_samples(min_samples)
@@ -68,6 +100,13 @@ pub async fn cluster_embeddings(
     let labels: Vec<i32> = clusterer
         .cluster()
         .map_err(|e| Error::Extraction(format!("HDBSCAN clustering failed: {e:?}")))?;
+
+    let hdbscan_secs = t2.elapsed().as_secs();
+    tracing::info!(elapsed_secs = hdbscan_secs, "HDBSCAN complete");
+    progress(EnrichmentProgress::ClusteringStep {
+        step: "HDBSCAN complete",
+        detail: format!("Finished in {hdbscan_secs}s — computing cluster statistics"),
+    });
 
     // ── Compute cluster statistics ────────────────────────────────────
     let mut cluster_map: HashMap<i32, Vec<usize>> = HashMap::new();
@@ -94,6 +133,13 @@ pub async fn cluster_embeddings(
         .collect();
 
     let noise_count = labels.iter().filter(|&&l| l == -1).count();
+    let total_secs = t0.elapsed().as_secs();
+    tracing::info!(
+        clusters = clusters.len(),
+        noise = noise_count,
+        total_elapsed_secs = total_secs,
+        "Clustering statistics computed"
+    );
 
     progress(EnrichmentProgress::ClusteringComplete {
         cluster_count: clusters.len(),
@@ -209,6 +255,11 @@ pub enum EnrichmentProgress {
     },
     ClusteringStarted {
         total_chunks: usize,
+    },
+    /// Sub-phase within clustering (loading embeddings, running HDBSCAN, etc.)
+    ClusteringStep {
+        step: &'static str,
+        detail: String,
     },
     ClusteringComplete {
         cluster_count: usize,

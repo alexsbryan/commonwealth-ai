@@ -460,6 +460,8 @@ impl CorpusEngine {
                                     eprintln!("[{id}] Resuming enrichment from {from_phase}"),
                                 EP::ClusteringStarted { total_chunks } =>
                                     eprintln!("[{id}] Clustering {total_chunks} chunks..."),
+                                EP::ClusteringStep { step, detail } =>
+                                    eprintln!("[{id}] ↳ {step}: {detail}"),
                                 EP::ClusteringComplete { cluster_count, noise_chunks } =>
                                     eprintln!("[{id}] Clustering complete: {cluster_count} clusters, {noise_chunks} noise"),
                                 EP::Phase1Progress { batches_done, batches_total } =>
@@ -541,10 +543,9 @@ impl CorpusEngine {
             }
             // Skip indexes where ingestion was interrupted (process killed mid-embed).
             if !CorpusIndex::is_ingestion_complete(&path) {
-                eprintln!(
-                    "[corpus-engine] Skipping partial index at '{}' — ingestion was not completed. \
-                     Re-install the corpus to build a complete index.",
-                    name
+                tracing::debug!(
+                    corpus = name,
+                    "Skipping partial index — ingestion was not completed"
                 );
                 continue;
             }
