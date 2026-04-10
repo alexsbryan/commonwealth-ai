@@ -649,41 +649,51 @@ impl EmbedSlot {
                 end = cursor + 1;
             }
 
-            let sub_batch_seqs = end - cursor;
-            let mut batch = LlamaBatch::new(max_tokens, sub_batch_seqs as i32);
+            // Count non-empty sequences to size the batch correctly.
+            let non_empty_count = (cursor..end)
+                .filter(|&idx| !all_tokens[idx].is_empty())
+                .count();
+
             let mut seq_map: Vec<usize> = Vec::new(); // maps batch seq_id → original index
-
-            let mut seq_id = 0i32;
             let mut tokens_in_decode = 0usize;
-            for idx in cursor..end {
-                let tokens = &all_tokens[idx];
-                if tokens.is_empty() {
-                    continue;
-                }
-                for (pos, &token) in tokens.iter().enumerate() {
-                    batch
-                        .add(token, pos as i32, &[seq_id], true)
-                        .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-                }
-                tokens_in_decode += tokens.len();
-                seq_map.push(idx);
-                seq_id += 1;
-            }
 
-            let decode_start = std::time::Instant::now();
-            if seq_id > 0 {
+            if non_empty_count > 0 {
+                let mut batch = LlamaBatch::new(max_tokens, non_empty_count.max(1) as i32);
+                let mut seq_id = 0i32;
+                for idx in cursor..end {
+                    let tokens = &all_tokens[idx];
+                    if tokens.is_empty() {
+                        continue;
+                    }
+                    for (pos, &token) in tokens.iter().enumerate() {
+                        batch
+                            .add(token, pos as i32, &[seq_id], true)
+                            .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+                    }
+                    tokens_in_decode += tokens.len();
+                    seq_map.push(idx);
+                    seq_id += 1;
+                }
+
+                let decode_start = std::time::Instant::now();
                 ctx.decode(&mut batch)
                     .map_err(|e| Error::Inference(format!("Batch decode failed: {e}")))?;
-            }
-            let decode_ms = decode_start.elapsed().as_millis();
+                let decode_ms = decode_start.elapsed().as_millis();
 
-            tracing::debug!(
-                sub_batch = sub_batch_idx,
-                sequences = seq_id,
-                tokens = tokens_in_decode,
-                decode_ms,
-                "Batch embed: sub-batch decoded"
-            );
+                tracing::debug!(
+                    sub_batch = sub_batch_idx,
+                    sequences = seq_id,
+                    tokens = tokens_in_decode,
+                    decode_ms,
+                    "Batch embed: sub-batch decoded"
+                );
+            } else {
+                tracing::debug!(
+                    sub_batch = sub_batch_idx,
+                    skipped_empty = end - cursor,
+                    "Batch embed: sub-batch skipped (all empty sequences)"
+                );
+            }
 
             // Extract and normalize embeddings for each sequence.
             let mut batch_results: Vec<(usize, Vec<f32>)> = Vec::new();
