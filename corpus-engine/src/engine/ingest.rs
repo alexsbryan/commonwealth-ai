@@ -162,8 +162,25 @@ impl CorpusEngine {
         let mut batch: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
         let mut batch_start = Instant::now();
 
+        let use_batch_embed = self.batch_embed.is_some();
         if resume_iter_pos == 0 {
-            eprintln!("[{}] Starting embed+index pipeline", recipe.corpus.id);
+            if use_batch_embed {
+                tracing::info!(
+                    corpus = %recipe.corpus.id,
+                    batch_size = EMBED_BATCH_SIZE,
+                    "Starting embed+index pipeline (batch embedding enabled)"
+                );
+                eprintln!(
+                    "[{}] Starting embed+index pipeline (batch embed, batch_size={})",
+                    recipe.corpus.id, EMBED_BATCH_SIZE,
+                );
+            } else {
+                tracing::info!(
+                    corpus = %recipe.corpus.id,
+                    "Starting embed+index pipeline (sequential embedding)"
+                );
+                eprintln!("[{}] Starting embed+index pipeline (sequential embed)", recipe.corpus.id);
+            }
         }
 
         // Pending chunks awaiting embedding. When batch_embed is available,
@@ -217,6 +234,8 @@ impl CorpusEngine {
 
                 if pending_chunks.len() >= EMBED_BATCH_SIZE {
                     // Embed the accumulated batch.
+                    let embed_start = Instant::now();
+                    let embed_count = pending_texts.len();
                     let embeddings = if let Some(ref batch_embed) = self.batch_embed {
                         (batch_embed)(&pending_texts).await?
                     } else {
@@ -226,6 +245,14 @@ impl CorpusEngine {
                         }
                         embs
                     };
+                    let embed_ms = embed_start.elapsed().as_millis();
+
+                    tracing::debug!(
+                        chunks = embed_count,
+                        embed_ms,
+                        mode = if use_batch_embed { "batch" } else { "sequential" },
+                        "Embed batch completed"
+                    );
 
                     for (chunk, embedding) in pending_chunks.drain(..).zip(embeddings) {
                         batch.push((chunk, embedding));
