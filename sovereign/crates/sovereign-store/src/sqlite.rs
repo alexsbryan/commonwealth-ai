@@ -6,7 +6,10 @@ use rusqlite::Connection;
 use tokio::sync::Mutex;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::StateStore;
+use sovereign_core::traits::{
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentStore, HealthStore,
+    MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
+};
 use sovereign_core::types::*;
 
 use crate::migrations;
@@ -95,7 +98,7 @@ fn map_json(e: serde_json::Error) -> Error {
 }
 
 #[async_trait]
-impl StateStore for SqliteStateStore {
+impl ConversationStore for SqliteStateStore {
     async fn save_message(&self, msg: &Message) -> Result<()> {
         let conn = self.conn.lock().await;
 
@@ -280,7 +283,10 @@ impl StateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+}
 
+#[async_trait]
+impl TaskStore for SqliteStateStore {
     async fn save_task(&self, task: &Task) -> Result<()> {
         let conn = self.conn.lock().await;
         let plan_json =
@@ -353,7 +359,10 @@ impl StateStore for SqliteStateStore {
             other => map_db(other),
         })
     }
+}
 
+#[async_trait]
+impl MemoryStore for SqliteStateStore {
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
         let conn = self.conn.lock().await;
         conn.execute(
@@ -496,7 +505,10 @@ impl StateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+}
 
+#[async_trait]
+impl RoutingStore for SqliteStateStore {
     async fn log_routing(
         &self,
         message_hash: &str,
@@ -567,7 +579,10 @@ impl StateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+}
 
+#[async_trait]
+impl DocumentStore for SqliteStateStore {
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {
         let conn = self.conn.lock().await;
         for chunk in chunks {
@@ -926,7 +941,10 @@ impl StateStore for SqliteStateStore {
 
         Ok(sources)
     }
+}
 
+#[async_trait]
+impl CorpusStateStore for SqliteStateStore {
     async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
         let conn = self.conn.lock().await;
         conn.execute(
@@ -1038,7 +1056,10 @@ impl StateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+}
 
+#[async_trait]
+impl BudgetStore for SqliteStateStore {
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {
         let conn = self.conn.lock().await;
         let result = conn.query_row(
@@ -1078,7 +1099,10 @@ impl StateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+}
 
+#[async_trait]
+impl PermissionStore for SqliteStateStore {
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {
         let conn = self.conn.lock().await;
         let result = conn.query_row(
@@ -1104,9 +1128,10 @@ impl StateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+}
 
-    // ── Health ────────────────────────────────────────────────────────────────
-
+#[async_trait]
+impl HealthStore for SqliteStateStore {
     async fn save_health_report(
         &self,
         report: &sovereign_core::health::HealthReport,
@@ -1223,6 +1248,8 @@ impl StateStore for SqliteStateStore {
         Ok(())
     }
 }
+
+impl StateStore for SqliteStateStore {}
 
 /// Sanitize a natural language query into FTS5-safe keywords.
 /// Strips punctuation, stopwords, and joins remaining terms with OR

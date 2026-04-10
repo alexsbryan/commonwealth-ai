@@ -3,7 +3,10 @@ use deadpool_postgres::{Config, Pool, Runtime};
 use tokio_postgres::NoTls;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::StateStore;
+use sovereign_core::traits::{
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentStore, HealthStore,
+    MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
+};
 use sovereign_core::types::*;
 
 pub struct PostgresStateStore {
@@ -135,9 +138,7 @@ impl PostgresStateStore {
 }
 
 #[async_trait]
-impl StateStore for PostgresStateStore {
-    // ─── Conversations ───────────────────────────────────────
-
+impl ConversationStore for PostgresStateStore {
     async fn save_message(&self, msg: &Message) -> Result<()> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let now = Self::now();
@@ -277,9 +278,10 @@ impl StateStore for PostgresStateStore {
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
+}
 
-    // ─── Tasks ───────────────────────────────────────────────
-
+#[async_trait]
+impl TaskStore for PostgresStateStore {
     async fn save_task(&self, task: &Task) -> Result<()> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let plan = serde_json::to_string(&task.plan).unwrap_or_default();
@@ -327,9 +329,10 @@ impl StateStore for PostgresStateStore {
             updated_at: row.get("updated_at"),
         })
     }
+}
 
-    // ─── Memory ──────────────────────────────────────────────
-
+#[async_trait]
+impl MemoryStore for PostgresStateStore {
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         client
@@ -401,9 +404,10 @@ impl StateStore for PostgresStateStore {
         client.execute("UPDATE memories SET last_used = $1 WHERE id = $2", &[&timestamp, &id]).await.map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
+}
 
-    // ─── Routing Log ─────────────────────────────────────────
-
+#[async_trait]
+impl RoutingStore for PostgresStateStore {
     async fn log_routing(&self, message_hash: &str, classified_as: &str, latency_ms: i64) -> Result<()> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let now = Self::now();
@@ -446,9 +450,10 @@ impl StateStore for PostgresStateStore {
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
+}
 
-    // ─── Documents (RAG) ─────────────────────────────────────
-
+#[async_trait]
+impl DocumentStore for PostgresStateStore {
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let now = Self::now();
@@ -537,9 +542,10 @@ impl StateStore for PostgresStateStore {
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(rows.iter().map(|r| r.get("source")).collect())
     }
+}
 
-    // ─── Corpus State + Search Budget ─────────────────────────
-
+#[async_trait]
+impl CorpusStateStore for PostgresStateStore {
     async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         client
@@ -632,7 +638,10 @@ impl StateStore for PostgresStateStore {
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(row.map(|r| r.get::<_, i64>(0) != 0).unwrap_or(false))
     }
+}
 
+#[async_trait]
+impl BudgetStore for PostgresStateStore {
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
@@ -664,9 +673,10 @@ impl StateStore for PostgresStateStore {
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
+}
 
-    // ─── Permissions ─────────────────────────────────────────
-
+#[async_trait]
+impl PermissionStore for PostgresStateStore {
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
@@ -693,3 +703,8 @@ impl StateStore for PostgresStateStore {
         Ok(())
     }
 }
+
+#[async_trait]
+impl HealthStore for PostgresStateStore {}
+
+impl StateStore for PostgresStateStore {}

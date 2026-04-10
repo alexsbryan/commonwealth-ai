@@ -5,7 +5,10 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::StateStore;
+use sovereign_core::traits::{
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentStore, HealthStore,
+    MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
+};
 use sovereign_core::types::*;
 
 fn now() -> i64 {
@@ -57,7 +60,7 @@ impl Default for InMemoryStateStore {
 }
 
 #[async_trait]
-impl StateStore for InMemoryStateStore {
+impl ConversationStore for InMemoryStateStore {
     async fn save_message(&self, msg: &Message) -> Result<()> {
         // Ensure conversation exists.
         let mut convos = self.conversations.write().await;
@@ -115,7 +118,10 @@ impl StateStore for InMemoryStateStore {
             .retain(|m| m.conversation_id != id);
         Ok(())
     }
+}
 
+#[async_trait]
+impl TaskStore for InMemoryStateStore {
     async fn save_task(&self, task: &Task) -> Result<()> {
         self.tasks
             .write()
@@ -131,7 +137,10 @@ impl StateStore for InMemoryStateStore {
             .cloned()
             .ok_or_else(|| Error::NotFound(format!("Task {id}")))
     }
+}
 
+#[async_trait]
+impl MemoryStore for InMemoryStateStore {
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
         let mut mems = self.memories.write().await;
         mems.retain(|m| m.id != memory.id);
@@ -190,7 +199,10 @@ impl StateStore for InMemoryStateStore {
         }
         Ok(())
     }
+}
 
+#[async_trait]
+impl RoutingStore for InMemoryStateStore {
     async fn log_routing(
         &self,
         message_hash: &str,
@@ -234,7 +246,10 @@ impl StateStore for InMemoryStateStore {
         }
         Ok(())
     }
+}
 
+#[async_trait]
+impl DocumentStore for InMemoryStateStore {
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {
         let mut docs = self.documents.write().await;
         for chunk in chunks {
@@ -285,7 +300,10 @@ impl StateStore for InMemoryStateStore {
         sources.sort();
         Ok(sources)
     }
+}
 
+#[async_trait]
+impl CorpusStateStore for InMemoryStateStore {
     async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
         self.corpus_states
             .write()
@@ -328,7 +346,10 @@ impl StateStore for InMemoryStateStore {
             .map(|cs| cs.vector_index_ready)
             .unwrap_or(false))
     }
+}
 
+#[async_trait]
+impl BudgetStore for InMemoryStateStore {
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {
         Ok(self.search_budgets.read().await.get(backend).cloned())
     }
@@ -340,7 +361,10 @@ impl StateStore for InMemoryStateStore {
             .insert(budget.backend.clone(), budget.clone());
         Ok(())
     }
+}
 
+#[async_trait]
+impl PermissionStore for InMemoryStateStore {
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {
         let perms = self.permissions.read().await;
         Ok(perms.get(&(tool_id.to_string(), scope.to_string())).copied())
@@ -354,3 +378,8 @@ impl StateStore for InMemoryStateStore {
         Ok(())
     }
 }
+
+#[async_trait]
+impl HealthStore for InMemoryStateStore {}
+
+impl StateStore for InMemoryStateStore {}

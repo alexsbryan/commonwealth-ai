@@ -98,30 +98,35 @@ pub trait Tool: Send + Sync {
     }
 }
 
-// ─── 5. Storage ────────────────────────────────────────────────
+// ─── 5. Storage (sub-traits) ──────────────────────────────────
 
 #[async_trait]
-pub trait StateStore: Send + Sync {
-    // Conversations
+pub trait ConversationStore: Send + Sync {
     async fn save_message(&self, msg: &Message) -> Result<()>;
     async fn get_conversation(&self, id: &str) -> Result<Conversation>;
     async fn list_conversations(&self, limit: usize, offset: usize) -> Result<Vec<Conversation>>;
     async fn search_messages(&self, query: &str) -> Result<Vec<Message>>;
     async fn delete_conversation(&self, id: &str) -> Result<()>;
+}
 
-    // Tasks
+#[async_trait]
+pub trait TaskStore: Send + Sync {
     async fn save_task(&self, task: &Task) -> Result<()>;
     async fn get_task(&self, id: &str) -> Result<Task>;
+}
 
-    // Memory
+#[async_trait]
+pub trait MemoryStore: Send + Sync {
     async fn save_memory(&self, memory: &Memory) -> Result<()>;
     async fn get_relevant_memories(&self, context: &str, limit: usize) -> Result<Vec<Memory>>;
     async fn get_all_memories(&self) -> Result<Vec<Memory>>;
     async fn delete_memory(&self, id: &str) -> Result<()>;
     async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()>;
     async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()>;
+}
 
-    // Routing log
+#[async_trait]
+pub trait RoutingStore: Send + Sync {
     async fn log_routing(
         &self,
         message_hash: &str,
@@ -141,8 +146,10 @@ pub trait StateStore: Send + Sync {
     }
     async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>>;
     async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()>;
+}
 
-    // Documents (RAG)
+#[async_trait]
+pub trait DocumentStore: Send + Sync {
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()>;
     async fn search_documents(
         &self,
@@ -167,26 +174,32 @@ pub trait StateStore: Send + Sync {
     async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>>;
     async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64>;
     async fn list_sources(&self) -> Result<Vec<String>>;
+}
 
-    // Corpus state
+#[async_trait]
+pub trait CorpusStateStore: Send + Sync {
     async fn save_corpus_state(&self, state: &CorpusState) -> Result<()>;
     async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState>;
     async fn list_corpus_states(&self) -> Result<Vec<CorpusState>>;
     async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()>;
-
-    // Vector index readiness
     async fn set_vector_index_ready(&self, corpus_id: &str, ready: bool) -> Result<()>;
     async fn get_vector_index_ready(&self, corpus_id: &str) -> Result<bool>;
+}
 
-    // Search budget
+#[async_trait]
+pub trait BudgetStore: Send + Sync {
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>>;
     async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()>;
+}
 
-    // Permissions
+#[async_trait]
+pub trait PermissionStore: Send + Sync {
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>>;
     async fn set_permission(&self, tool_id: &str, scope: &str, granted: bool) -> Result<()>;
+}
 
-    // Health
+#[async_trait]
+pub trait HealthStore: Send + Sync {
     async fn save_health_report(
         &self,
         report: &crate::health::HealthReport,
@@ -215,6 +228,15 @@ pub trait StateStore: Send + Sync {
         Ok(())
     }
 }
+
+// ─── 6. Storage (supertrait) ──────────────────────────────────
+
+#[async_trait]
+pub trait StateStore:
+    ConversationStore + TaskStore + MemoryStore + RoutingStore
+    + DocumentStore + CorpusStateStore + BudgetStore + PermissionStore
+    + HealthStore
+{}
 
 // ─── Approval Channel ─────────────────────────────────────────
 

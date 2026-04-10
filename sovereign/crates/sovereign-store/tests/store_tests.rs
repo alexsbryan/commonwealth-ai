@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use sovereign_core::traits::StateStore;
+use sovereign_core::traits::*;
 use sovereign_core::types::*;
 
 use sovereign_store::memory::InMemoryStateStore;

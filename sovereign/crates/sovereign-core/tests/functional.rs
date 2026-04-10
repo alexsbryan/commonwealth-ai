@@ -2,7 +2,7 @@ mod harness;
 
 use harness::TestHarness;
 use sovereign_core::skills::parse_skill_toml;
-use sovereign_core::traits::StateStore;
+use sovereign_core::traits::*;
 use sovereign_core::types::*;
 
 // ─── Knowledge Base Search Integration ───────────────────────

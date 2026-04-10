@@ -86,7 +86,7 @@ fn now() -> i64 {
 }
 
 #[async_trait]
-impl StateStore for MockStore {
+impl ConversationStore for MockStore {
     async fn save_message(&self, msg: &Message) -> Result<()> {
         self.messages.write().await.push(msg.clone());
         Ok(())
@@ -116,12 +116,20 @@ impl StateStore for MockStore {
     async fn delete_conversation(&self, _id: &str) -> Result<()> {
         Ok(())
     }
+}
+
+#[async_trait]
+impl TaskStore for MockStore {
     async fn save_task(&self, _task: &Task) -> Result<()> {
         Ok(())
     }
     async fn get_task(&self, _id: &str) -> Result<Task> {
         Err(Error::NotFound("task".to_string()))
     }
+}
+
+#[async_trait]
+impl MemoryStore for MockStore {
     async fn save_memory(&self, _memory: &Memory) -> Result<()> {
         Ok(())
     }
@@ -140,6 +148,10 @@ impl StateStore for MockStore {
     async fn touch_memory(&self, _id: &str, _timestamp: i64) -> Result<()> {
         Ok(())
     }
+}
+
+#[async_trait]
+impl RoutingStore for MockStore {
     async fn log_routing(&self, _hash: &str, _classified: &str, _latency: i64) -> Result<()> {
         Ok(())
     }
@@ -149,6 +161,10 @@ impl StateStore for MockStore {
     async fn mark_routing_correct(&self, _hash: &str, _correct: bool) -> Result<()> {
         Ok(())
     }
+}
+
+#[async_trait]
+impl DocumentStore for MockStore {
     async fn store_chunks(&self, _chunks: &[DocumentChunk]) -> Result<()> {
         Ok(())
     }
@@ -164,6 +180,10 @@ impl StateStore for MockStore {
     async fn list_sources(&self) -> Result<Vec<String>> {
         Ok(Vec::new())
     }
+}
+
+#[async_trait]
+impl CorpusStateStore for MockStore {
     async fn save_corpus_state(&self, _state: &CorpusState) -> Result<()> {
         Ok(())
     }
@@ -176,18 +196,6 @@ impl StateStore for MockStore {
     async fn delete_corpus_state(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    async fn get_search_budget(&self, _backend: &str) -> Result<Option<SearchBudget>> {
-        Ok(None)
-    }
-    async fn update_search_budget(&self, _budget: &SearchBudget) -> Result<()> {
-        Ok(())
-    }
-    async fn get_permission(&self, _tool_id: &str, _scope: &str) -> Result<Option<bool>> {
-        Ok(None)
-    }
-    async fn set_permission(&self, _tool_id: &str, _scope: &str, _granted: bool) -> Result<()> {
-        Ok(())
-    }
     async fn set_vector_index_ready(&self, _corpus_id: &str, _ready: bool) -> Result<()> {
         Ok(())
     }
@@ -195,6 +203,31 @@ impl StateStore for MockStore {
         Ok(false)
     }
 }
+
+#[async_trait]
+impl BudgetStore for MockStore {
+    async fn get_search_budget(&self, _backend: &str) -> Result<Option<SearchBudget>> {
+        Ok(None)
+    }
+    async fn update_search_budget(&self, _budget: &SearchBudget) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl PermissionStore for MockStore {
+    async fn get_permission(&self, _tool_id: &str, _scope: &str) -> Result<Option<bool>> {
+        Ok(None)
+    }
+    async fn set_permission(&self, _tool_id: &str, _scope: &str, _granted: bool) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl HealthStore for MockStore {}
+
+impl StateStore for MockStore {}
 
 // ─── ToolRegistry Tests ────────────────────────────────────────
 

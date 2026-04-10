@@ -9,7 +9,7 @@ use sovereign_core::executor::AutoApprovalChannel;
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::stubs::PassthroughRouter;
-use sovereign_core::traits::{InferenceProvider, StateStore};
+use sovereign_core::traits::*;
 use sovereign_core::types::*;
 use sovereign_core::SkillRegistry;
 use sovereign_core::ToolRegistry;
