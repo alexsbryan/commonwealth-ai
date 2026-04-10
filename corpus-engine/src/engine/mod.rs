@@ -10,7 +10,7 @@ use crate::index::CorpusIndex;
 use crate::recipe::Recipe;
 use crate::registry::RecipeRegistry;
 use crate::types::{
-    BuiltinCorpus, ChunkRange, EmbedFn, IndexInfo, IndexStats, ShardInfo,
+    BatchEmbedFn, BuiltinCorpus, ChunkRange, EmbedFn, IndexInfo, IndexStats, ShardInfo,
 };
 
 const EMBED_BATCH_SIZE: usize = 64;
@@ -20,6 +20,10 @@ pub struct CorpusEngine {
     recipes_dir: PathBuf,
     index_dir: PathBuf,
     embed: EmbedFn,
+    /// Optional batch embedding function. When available, the ingest
+    /// pipeline embeds chunks in batches for significantly higher throughput.
+    /// Falls back to sequential `embed` calls when `None`.
+    batch_embed: Option<BatchEmbedFn>,
     /// Optional primary inference function. Required for the enrichment phase.
     inference: Option<crate::types::InferenceFn>,
     /// Optional fast inference function (e.g. Qwen3-1.7B).
@@ -43,6 +47,7 @@ impl CorpusEngine {
             recipes_dir,
             index_dir,
             embed,
+            batch_embed: None,
             inference: None,
             fast_inference: None,
             expected_embedding_model: "nomic-embed-text-v2".to_string(),
@@ -66,6 +71,14 @@ impl CorpusEngine {
     /// Falls back to the primary `inference` function if not set.
     pub fn with_fast_inference_fn(mut self, f: crate::types::InferenceFn) -> Self {
         self.fast_inference = Some(f);
+        self
+    }
+
+    /// Provide a batch embedding function for high-throughput corpus ingest.
+    /// When set, the ingest pipeline embeds chunks in batches rather than
+    /// one-at-a-time, yielding 5-10x throughput improvement.
+    pub fn with_batch_embed_fn(mut self, f: BatchEmbedFn) -> Self {
+        self.batch_embed = Some(f);
         self
     }
 

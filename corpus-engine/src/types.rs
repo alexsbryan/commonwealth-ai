@@ -20,6 +20,16 @@ pub type EmbedFn = Arc<
         + Sync,
 >;
 
+/// Batch embedding function — embeds multiple texts in a single call.
+/// When available, this is significantly faster than calling `EmbedFn`
+/// in a loop because the backend can process multiple sequences in
+/// one forward pass on the GPU.
+pub type BatchEmbedFn = Arc<
+    dyn Fn(&[String]) -> Pin<Box<dyn Future<Output = Result<Vec<Vec<f32>>>> + Send>>
+        + Send
+        + Sync,
+>;
+
 // ─── Inference Function ─────────────────────────────────
 
 /// Inference function injected by the caller — used by the optional

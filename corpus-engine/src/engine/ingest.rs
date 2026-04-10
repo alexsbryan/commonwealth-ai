@@ -166,6 +166,11 @@ impl CorpusEngine {
             eprintln!("[{}] Starting embed+index pipeline", recipe.corpus.id);
         }
 
+        // Pending chunks awaiting embedding. When batch_embed is available,
+        // we accumulate chunks and embed them all at once.
+        let mut pending_chunks: Vec<InsertChunk> = Vec::new();
+        let mut pending_texts: Vec<String> = Vec::new();
+
         for doc_result in doc_iter {
             iter_pos += 1;
 
@@ -198,23 +203,35 @@ impl CorpusEngine {
                     tc.content
                 };
 
-                let embedding = (self.embed)(&content).await?;
-
                 let content_hash = blake3_hex(&content);
-                batch.push((
-                    InsertChunk {
-                        content,
-                        title: doc.title.clone(),
-                        url: doc.url.clone(),
-                        metadata: doc.metadata.as_ref().map(|m| m.to_string()),
-                        content_hash: Some(content_hash),
-                        source_doc_id: doc.url.clone()
-                            .or_else(|| Some(doc.source_id.clone())),
-                    },
-                    embedding,
-                ));
+                pending_texts.push(content.clone());
+                pending_chunks.push(InsertChunk {
+                    content,
+                    title: doc.title.clone(),
+                    url: doc.url.clone(),
+                    metadata: doc.metadata.as_ref().map(|m| m.to_string()),
+                    content_hash: Some(content_hash),
+                    source_doc_id: doc.url.clone()
+                        .or_else(|| Some(doc.source_id.clone())),
+                });
 
-                if batch.len() >= EMBED_BATCH_SIZE {
+                if pending_chunks.len() >= EMBED_BATCH_SIZE {
+                    // Embed the accumulated batch.
+                    let embeddings = if let Some(ref batch_embed) = self.batch_embed {
+                        (batch_embed)(&pending_texts).await?
+                    } else {
+                        let mut embs = Vec::with_capacity(pending_texts.len());
+                        for text in &pending_texts {
+                            embs.push((self.embed)(text).await?);
+                        }
+                        embs
+                    };
+
+                    for (chunk, embedding) in pending_chunks.drain(..).zip(embeddings) {
+                        batch.push((chunk, embedding));
+                    }
+                    pending_texts.clear();
+
                     let batch_secs = batch_start.elapsed().as_secs_f32().max(0.001);
                     let chunks_per_sec = batch.len() as f32 / batch_secs;
                     total_chunks += batch.len() as u64;
@@ -243,6 +260,22 @@ impl CorpusEngine {
 
                     batch_start = Instant::now();
                 }
+            }
+        }
+
+        // Flush remaining pending chunks.
+        if !pending_chunks.is_empty() {
+            let embeddings = if let Some(ref batch_embed) = self.batch_embed {
+                (batch_embed)(&pending_texts).await?
+            } else {
+                let mut embs = Vec::with_capacity(pending_texts.len());
+                for text in &pending_texts {
+                    embs.push((self.embed)(text).await?);
+                }
+                embs
+            };
+            for (chunk, embedding) in pending_chunks.drain(..).zip(embeddings) {
+                batch.push((chunk, embedding));
             }
         }
 

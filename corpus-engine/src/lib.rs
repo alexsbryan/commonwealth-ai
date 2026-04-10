@@ -45,6 +45,6 @@ pub use testing::{
     ValidationResult,
 };
 pub use types::{
-    BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
+    BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
     InferenceFn, IngestResult, ScoredChunk, ShardInfo,
 };
