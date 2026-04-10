@@ -3,7 +3,7 @@ pub mod ledger;
 pub mod ledger_store;
 pub mod model;
 pub mod model_aliases;
-pub mod oicp;
+pub use commonwealth_core::oicp;
 pub mod oicp_registry;
 pub mod store_adapter;
 

@@ -200,17 +200,23 @@ The mesh routes this to a coding model if one is loaded, or the best available a
 
 ## Architecture
 
-Commonwealth is a Cargo workspace with seven crates:
+Commonwealth is a Cargo workspace with nine crates:
 
 | Crate | Purpose |
 |-------|---------|
-| `commonwealth-core` | Shared types, mesh state, shard plans, ledger, OICP |
+| `commonwealth-core` | Shared types, mesh state, shard plans, ledger. Re-exports `oicp-types` as `oicp` |
 | `commonwealth-discovery` | mDNS, gossip protocol, latency probing, hardware detection, TLS, mesh peering |
-| `commonwealth-scheduler` | Layer assignment, knowledge sharding, model portfolio, OICP caching, leader election |
-| `commonwealth-orchestrator` | llama.cpp process lifecycle, health monitoring, fault detection, graceful departure |
+| `commonwealth-inference` | Scheduling (layer assignment, model portfolio, OICP caching, leader election) and orchestration (llama.cpp process lifecycle, health monitoring, fault detection, graceful departure) |
 | `commonwealth-api` | Axum HTTP server, OpenAI-compatible + OICP endpoints, knowledge search |
+| `commonwealth-knowledge` | corpus-engine integration: install, shard, search corpora across mesh nodes |
+| `commonwealth-app` | Mesh application platform: manifests, lifecycle, registry, reverse-proxy |
+| `commonwealth-state` | Distributed KV store: SQLite + LWW conflict resolution, gossip-replicated |
 | `commonwealth-daemon` | CLI entry point, config loading, signal handling |
 | `commonwealth-test-harness` | Simulated multi-node meshes, mock llama-server, integration tests |
+
+OICP types are defined in the shared `oicp-types` crate at the workspace root and re-exported through `commonwealth-core::oicp`.
+
+The `contrib/` directory contains platform service files: `install.sh` (curl installer), `systemd/commonwealth.service`, and `launchd/com.commonwealth.daemon.plist`.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the complete technical design.
 
@@ -240,7 +246,7 @@ The daemon itself is pure Rust with no GPU dependencies — it manages processes
 Commonwealth is Apache 2.0 licensed. Contributions welcome.
 
 ```bash
-cargo test --workspace          # Run all 239 tests
+cargo test --workspace          # Run all 283 tests
 cargo clippy --workspace -- -D warnings  # Lint
 cargo fmt --all --check         # Format check
 ```

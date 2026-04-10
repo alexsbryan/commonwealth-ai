@@ -848,6 +848,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.3.4",
  "hex",
+ "oicp-types",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -4099,6 +4100,14 @@ dependencies = [
  "walkdir",
  "wasm-bindgen-futures",
  "web-time",
+]
+
+[[package]]
+name = "oicp-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
