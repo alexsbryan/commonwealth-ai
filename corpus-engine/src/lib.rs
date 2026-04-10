@@ -31,6 +31,7 @@ pub mod update;
 pub use engine::CorpusEngine;
 pub use enrichment::{
     Domain, EnrichmentProgress, FieldModelEngine, FieldModelStats, FieldSkeleton,
+    reprocess_skeleton_failures,
 };
 pub use extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
 pub use error::{Error, Result};

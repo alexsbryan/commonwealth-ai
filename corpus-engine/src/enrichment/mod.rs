@@ -16,7 +16,7 @@ pub mod open_questions;
 pub mod skeleton;
 
 pub use filter::is_chunk_eligible;
-pub use field_engine::FieldModelEngine;
+pub use field_engine::{FieldModelEngine, reprocess_skeleton_failures};
 pub use clustering::{EnrichmentProgress, FieldModelStats};
 pub use domain::Domain;
 pub use skeleton::FieldSkeleton;

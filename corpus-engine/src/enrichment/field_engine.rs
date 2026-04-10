@@ -603,6 +603,115 @@ impl FieldModelEngine {
     }
 }
 
+/// Reprocess `_skeleton_failures.ndjson` with the improved parser and merge
+/// any salvaged questions into the existing skeleton.
+///
+/// Returns `(salvaged_count, still_failed_count)`.
+///
+/// Usage from any frontend:
+/// ```ignore
+/// let (salvaged, failed) = reprocess_skeleton_failures(index)?;
+/// println!("Recovered {salvaged} questions, {failed} still unrecoverable");
+/// ```
+pub fn reprocess_skeleton_failures(
+    index: &CorpusIndex,
+) -> Result<(usize, usize)> {
+    let failures_path = index.path().join("_skeleton_failures.ndjson");
+    if !failures_path.exists() {
+        return Ok((0, 0));
+    }
+
+    let contents = std::fs::read_to_string(&failures_path)?;
+
+    let mut salvaged_questions: Vec<SkeletonQuestion> = Vec::new();
+    let mut still_failed = 0_usize;
+    let mut still_failed_entries: Vec<String> = Vec::new();
+
+    for line in contents.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => {
+                still_failed += 1;
+                still_failed_entries.push(line.to_string());
+                continue;
+            }
+        };
+
+        let batch_idx = entry["batch"].as_u64().unwrap_or(0) as usize;
+        let raw = entry["raw_response_truncated"].as_str().unwrap_or("");
+
+        // Run through the improved parse pipeline (with unquoted-string repair).
+        let dummy_path = std::path::PathBuf::from("/dev/null");
+        match parse_skeleton_response(batch_idx, raw, &dummy_path) {
+            ParseResult::Ok(questions) | ParseResult::Repaired(questions, _) => {
+                if questions.is_empty() {
+                    still_failed += 1;
+                    still_failed_entries.push(line.to_string());
+                } else {
+                    tracing::info!(
+                        batch = batch_idx,
+                        count = questions.len(),
+                        "Reprocessed failure — salvaged questions"
+                    );
+                    salvaged_questions.extend(questions);
+                }
+            }
+            ParseResult::Failed => {
+                still_failed += 1;
+                still_failed_entries.push(line.to_string());
+            }
+        }
+    }
+
+    let salvaged_count = salvaged_questions.len();
+
+    if salvaged_count > 0 {
+        // Load existing skeleton and merge.
+        if let Some(mut existing) = index.load_field_skeleton()? {
+            for q in &salvaged_questions {
+                // Check for duplicate question IDs before merging.
+                if let Some(existing_q) = existing.canonical_questions.iter_mut().find(|eq| eq.id == q.id) {
+                    // Merge positions.
+                    for pos in &q.positions {
+                        if !existing_q.positions.iter().any(|p| p.id == pos.id) {
+                            existing_q.positions.push(pos.clone());
+                        }
+                    }
+                } else {
+                    existing.canonical_questions.push(crate::enrichment::skeleton::CanonicalQuestion {
+                        id: q.id.clone(),
+                        question: q.question.clone(),
+                        status: q.status.clone(),
+                        question_type: q.question_type.clone(),
+                        primary_entries: q.primary_article_ids.clone(),
+                        positions: q.positions.clone(),
+                        fault_lines: Vec::new(),
+                    });
+                }
+            }
+            existing.generated_at = chrono::Utc::now().to_rfc3339();
+            index.write_field_skeleton(&existing)?;
+            tracing::info!(
+                salvaged = salvaged_count,
+                total_questions = existing.canonical_questions.len(),
+                "Merged reprocessed questions into skeleton"
+            );
+        }
+
+        // Rewrite the failures file with only the entries that still failed.
+        if still_failed_entries.is_empty() {
+            let _ = std::fs::remove_file(&failures_path);
+        } else {
+            std::fs::write(&failures_path, still_failed_entries.join("\n") + "\n")?;
+        }
+    }
+
+    Ok((salvaged_count, still_failed))
+}
+
 enum ParseResult {
     Ok(Vec<SkeletonQuestion>),
     Repaired(Vec<SkeletonQuestion>, usize),
@@ -616,42 +725,106 @@ fn parse_skeleton_response(
     failures_path: &std::path::Path,
 ) -> ParseResult {
     let json_str = extract_json_from_response(response);
-    let passages = match serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
-        Ok(p) => p,
-        Err(_) => {
-            let repair_source = if json_str.starts_with('[') {
-                json_str.to_string()
-            } else {
-                response
-                    .find('[')
-                    .map(|start| response[start..].to_string())
-                    .unwrap_or_else(|| json_str.to_string())
-            };
-            match try_repair_truncated_json(&repair_source) {
-                Some(repaired) => {
-                    match serde_json::from_str::<Vec<serde_json::Value>>(&repaired) {
-                        Ok(p) => {
-                            let count = p.len();
-                            let questions = extract_questions_from_passages(&p);
-                            return ParseResult::Repaired(questions, count);
-                        }
-                        Err(e) => {
-                            log_skeleton_failure(failures_path, batch_idx, json_str, &format!("{e}"));
-                            tracing::warn!(batch = batch_idx, error = %e, "Skeleton parse failed even after repair");
-                            return ParseResult::Failed;
-                        }
-                    }
-                }
-                None => {
-                    let snippet: String = json_str.chars().take(200).collect();
-                    log_skeleton_failure(failures_path, batch_idx, json_str, "not repairable");
-                    tracing::warn!(batch = batch_idx, response_snippet = %snippet, "Skeleton parse failed — not valid or repairable JSON");
-                    return ParseResult::Failed;
-                }
+
+    // Try parsing as-is first.
+    if let Ok(passages) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
+        return ParseResult::Ok(extract_questions_from_passages(&passages));
+    }
+
+    // Repair pipeline: try each strategy in order of increasing aggressiveness.
+    let repair_source = if json_str.starts_with('[') {
+        json_str.to_string()
+    } else {
+        response
+            .find('[')
+            .map(|start| response[start..].to_string())
+            .unwrap_or_else(|| json_str.to_string())
+    };
+
+    // Strategy 1: fix unquoted string values (e.g., "claim": autonomy is...)
+    let with_quotes = repair_unquoted_strings(&repair_source);
+    if let Ok(passages) = serde_json::from_str::<Vec<serde_json::Value>>(&with_quotes) {
+        let count = passages.len();
+        let questions = extract_questions_from_passages(&passages);
+        tracing::info!(batch = batch_idx, "Repaired unquoted strings — salvaged {count} passages");
+        return ParseResult::Repaired(questions, count);
+    }
+
+    // Strategy 2: fix unquoted strings + truncation repair
+    if let Some(repaired) = try_repair_truncated_json(&with_quotes) {
+        if let Ok(passages) = serde_json::from_str::<Vec<serde_json::Value>>(&repaired) {
+            let count = passages.len();
+            let questions = extract_questions_from_passages(&passages);
+            tracing::info!(batch = batch_idx, "Repaired unquoted strings + truncation — salvaged {count} passages");
+            return ParseResult::Repaired(questions, count);
+        }
+    }
+
+    // Strategy 3: truncation repair only (original string, no quote fix)
+    if let Some(repaired) = try_repair_truncated_json(&repair_source) {
+        if let Ok(passages) = serde_json::from_str::<Vec<serde_json::Value>>(&repaired) {
+            let count = passages.len();
+            let questions = extract_questions_from_passages(&passages);
+            return ParseResult::Repaired(questions, count);
+        }
+    }
+
+    let snippet: String = json_str.chars().take(200).collect();
+    log_skeleton_failure(failures_path, batch_idx, json_str, "not repairable");
+    tracing::warn!(batch = batch_idx, response_snippet = %snippet, "Skeleton parse failed — not valid or repairable JSON");
+    ParseResult::Failed
+}
+
+/// Repair unquoted string values in JSON.
+///
+/// Handles the common LLM failure where string values after a colon are
+/// missing their opening quote:
+///   `"claim": autonomy is a central value"`  →  `"claim": "autonomy is a central value"`
+///
+/// The pattern: `": ` followed by a non-quote, non-bracket, non-digit char,
+/// ending at the next `"` (which the LLM did output as the closing quote).
+fn repair_unquoted_strings(s: &str) -> String {
+    // Match: `"<key>": <unquoted-value>"` where value starts with a letter
+    // The LLM outputs the closing quote but forgets the opening one.
+    let mut result = String::with_capacity(s.len() + 64);
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        // Look for pattern: `": ` followed by a letter (not `"`, `[`, `{`, digit, `n` for null, `t`/`f` for true/false)
+        if i + 3 < len
+            && bytes[i] == b'"'
+            && bytes[i + 1] == b':'
+            && bytes[i + 2] == b' '
+            && i + 3 < len
+        {
+            let next = bytes[i + 3];
+            // Check if the next char starts an unquoted string value:
+            // - It's a letter (but not the start of null/true/false)
+            // - It's not a quote, bracket, brace, or digit
+            let is_json_keyword = i + 3 + 4 <= len && (
+                &s[i+3..i+3+4] == "null" || &s[i+3..i+3+4] == "true"
+            ) || (i + 3 + 5 <= len && &s[i+3..i+3+5] == "false");
+
+            if next.is_ascii_alphabetic() && !is_json_keyword
+                && next != b'"' && next != b'[' && next != b'{' && next != b']' && next != b'}'
+            {
+                // Found an unquoted value — insert the missing opening quote
+                result.push('"'); // the key's closing quote
+                result.push(':');
+                result.push(' ');
+                result.push('"'); // the missing opening quote for the value
+                i += 3;
+                continue;
             }
         }
-    };
-    ParseResult::Ok(extract_questions_from_passages(&passages))
+
+        result.push(s[i..].chars().next().unwrap());
+        i += s[i..].chars().next().unwrap().len_utf8();
+    }
+
+    result
 }
 
 /// Parse positions from a JSON positions array value.
@@ -719,9 +892,65 @@ fn make_question_id(question: &str) -> String {
 
 /// Synthesize a question from a position's claim when the LLM didn't provide one.
 fn synthesize_question_from_position(position: &SkeletonPosition) -> String {
-    // Turn "Autonomy is a central value..." into "What is the role of autonomy?"
-    // Keep it simple — the alignment phase will match by embedding similarity anyway.
     format!("What is the status of the view: {}?", position.name)
+}
+
+/// Minimum claim length to keep a position. Short claims like "the pathos of
+/// things" or "cutting" are definitional labels, not substantive philosophical
+/// claims that the alignment phase can usefully match.
+const MIN_CLAIM_LENGTH: usize = 20;
+
+/// Filter out low-quality positions and questions after extraction.
+///
+/// Removes:
+/// - Positions with claims shorter than MIN_CLAIM_LENGTH chars
+/// - Questions where all remaining positions have status "majority"
+///   (signals a definitional/survey passage, not a genuine debate)
+/// - Questions left with zero positions after filtering (unless they
+///   had an explicit canonical question from the LLM)
+fn filter_low_quality(questions: &mut Vec<SkeletonQuestion>, had_explicit_question: &[bool]) {
+    let mut filtered_positions = 0_usize;
+    let mut filtered_questions = 0_usize;
+
+    for q in questions.iter_mut() {
+        let before = q.positions.len();
+        q.positions.retain(|p| p.claim.len() >= MIN_CLAIM_LENGTH);
+        filtered_positions += before - q.positions.len();
+    }
+
+    // Remove questions that are purely definitional (all positions "majority")
+    // or that lost all positions and were synthesized (not explicit).
+    let mut i = 0;
+    questions.retain(|q| {
+        let idx = i;
+        i += 1;
+        let is_explicit = had_explicit_question.get(idx).copied().unwrap_or(false);
+
+        // Keep explicit questions even if they have no positions
+        if q.positions.is_empty() && !is_explicit {
+            filtered_questions += 1;
+            return false;
+        }
+
+        // Drop if all positions are "majority" (definitional, not contested)
+        if !q.positions.is_empty()
+            && q.positions.iter().all(|p| p.status == "majority")
+            && !is_explicit
+        {
+            filtered_questions += 1;
+            return false;
+        }
+
+        true
+    });
+
+    if filtered_positions > 0 || filtered_questions > 0 {
+        tracing::info!(
+            positions_dropped = filtered_positions,
+            questions_dropped = filtered_questions,
+            "Quality filter applied"
+        );
+    }
 }
 
 /// Extract questions and positions from parsed JSON passages.
@@ -732,6 +961,7 @@ fn synthesize_question_from_position(position: &SkeletonPosition) -> String {
 /// identified positions but couldn't frame them under a single question.
 fn extract_questions_from_passages(passages: &[serde_json::Value]) -> Vec<SkeletonQuestion> {
     let mut questions = Vec::new();
+    let mut had_explicit = Vec::new();
     let mut null_question_with_positions = 0_usize;
 
     for passage in passages {
@@ -756,6 +986,7 @@ fn extract_questions_from_passages(passages: &[serde_json::Value]) -> Vec<Skelet
                 primary_article_ids: Vec::new(),
                 positions,
             });
+            had_explicit.push(true);
         } else if !positions.is_empty() {
             // The LLM found positions but didn't frame a canonical question.
             // Synthesize a question so the positions aren't lost.
@@ -769,6 +1000,7 @@ fn extract_questions_from_passages(passages: &[serde_json::Value]) -> Vec<Skelet
                 primary_article_ids: Vec::new(),
                 positions,
             });
+            had_explicit.push(false);
         }
     }
 
@@ -778,6 +1010,9 @@ fn extract_questions_from_passages(passages: &[serde_json::Value]) -> Vec<Skelet
             "Synthesized questions for passages with positions but no canonical question"
         );
     }
+
+    // Apply quality filter to remove definitional/low-quality entries.
+    filter_low_quality(&mut questions, &had_explicit);
 
     questions
 }
@@ -1268,8 +1503,8 @@ domain = "{domain}"
                 "positions": [
                     {
                         "name": "Kantian autonomy",
-                        "claim": "Autonomy is a central value and capacity",
-                        "status": "majority",
+                        "claim": "Autonomy is a central value and capacity to be one's own person",
+                        "status": "contested",
                         "proponents": ["Immanuel Kant"]
                     }
                 ]
@@ -1316,6 +1551,158 @@ domain = "{domain}"
         let questions = extract_questions_from_passages(&passages);
         assert_eq!(questions.len(), 1);
         assert_eq!(questions[0].question, "Is free will compatible with determinism?");
+    }
+
+    // ── Unquoted string repair tests ────────────────────────
+
+    #[test]
+    fn repair_unquoted_claim_value() {
+        let broken = r#"{"name": "Kantian autonomy", "claim": autonomy is a central value", "status": "majority"}"#;
+        let fixed = repair_unquoted_strings(broken);
+        let parsed: serde_json::Value = serde_json::from_str(&fixed).unwrap();
+        assert_eq!(parsed["claim"], "autonomy is a central value");
+    }
+
+    #[test]
+    fn repair_unquoted_preserves_valid_json() {
+        let valid = r#"{"name": "test", "claim": "already quoted", "status": "majority"}"#;
+        let result = repair_unquoted_strings(valid);
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["claim"], "already quoted");
+    }
+
+    #[test]
+    fn repair_unquoted_preserves_null_and_booleans() {
+        let valid = r#"{"canonical_question": null, "active": true, "count": false}"#;
+        let result = repair_unquoted_strings(valid);
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed["canonical_question"].is_null());
+        assert_eq!(parsed["active"], true);
+        assert_eq!(parsed["count"], false);
+    }
+
+    #[test]
+    fn repair_unquoted_handles_batch_45_pattern() {
+        // Real failure from SEP batch 45
+        let broken = r#"[
+  {
+    "passage_index": 0,
+    "canonical_question": null,
+    "question_type": "conceptual",
+    "positions": [
+      {
+        "name": "Kantian tradition of moral philosophy",
+        "claim": autonomy is a central value and capacity to be one's own person independent from external forces",
+        "status": "majority",
+        "proponents": ["Immanuel Kant"]
+      }
+    ]
+  }
+]"#;
+        let fixed = repair_unquoted_strings(broken);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&fixed).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(
+            parsed[0]["positions"][0]["claim"],
+            "autonomy is a central value and capacity to be one's own person independent from external forces"
+        );
+    }
+
+    // ── Quality filter tests ──────────────────────────────────
+
+    #[test]
+    fn filter_drops_short_claims() {
+        let mut questions = vec![SkeletonQuestion {
+            id: "q_test".into(),
+            question: "What is the status of the view: mono no aware?".into(),
+            question_type: "conceptual".into(),
+            status: "contested".into(),
+            primary_article_ids: vec![],
+            positions: vec![
+                SkeletonPosition {
+                    id: "p_mono".into(),
+                    name: "mono no aware".into(),
+                    claim: "the pathos of things".into(), // 20 chars, borderline
+                    status: "majority".into(),
+                    proponents: vec![],
+                    source: "skeleton".into(),
+                    cluster_ids: vec![],
+                    centroid_chunk_ids: vec![],
+                    discovery_confidence: None,
+                },
+                SkeletonPosition {
+                    id: "p_wabi".into(),
+                    name: "wabi".into(),
+                    claim: "austere beauty".into(), // 14 chars, too short
+                    status: "majority".into(),
+                    proponents: vec![],
+                    source: "skeleton".into(),
+                    cluster_ids: vec![],
+                    centroid_chunk_ids: vec![],
+                    discovery_confidence: None,
+                },
+            ],
+        }];
+        let explicit = vec![false];
+        filter_low_quality(&mut questions, &explicit);
+        // Both should be dropped: wabi for short claim, mono survives the length
+        // check but since it's the only remaining position with "majority" status,
+        // the all-majority filter removes the question entirely.
+        assert_eq!(questions.len(), 0);
+    }
+
+    #[test]
+    fn filter_keeps_contested_with_good_claims() {
+        let mut questions = vec![SkeletonQuestion {
+            id: "q_test".into(),
+            question: "What is the nature of knowledge?".into(),
+            question_type: "conceptual".into(),
+            status: "contested".into(),
+            primary_article_ids: vec![],
+            positions: vec![
+                SkeletonPosition {
+                    id: "p_a".into(),
+                    name: "Rationalism".into(),
+                    claim: "Knowledge is primarily derived from reason and innate ideas".into(),
+                    status: "contested".into(),
+                    proponents: vec![],
+                    source: "skeleton".into(),
+                    cluster_ids: vec![],
+                    centroid_chunk_ids: vec![],
+                    discovery_confidence: None,
+                },
+                SkeletonPosition {
+                    id: "p_b".into(),
+                    name: "Empiricism".into(),
+                    claim: "Knowledge is primarily derived from sensory experience".into(),
+                    status: "contested".into(),
+                    proponents: vec![],
+                    source: "skeleton".into(),
+                    cluster_ids: vec![],
+                    centroid_chunk_ids: vec![],
+                    discovery_confidence: None,
+                },
+            ],
+        }];
+        let explicit = vec![true];
+        filter_low_quality(&mut questions, &explicit);
+        assert_eq!(questions.len(), 1);
+        assert_eq!(questions[0].positions.len(), 2);
+    }
+
+    #[test]
+    fn filter_keeps_explicit_question_even_with_no_positions() {
+        let mut questions = vec![SkeletonQuestion {
+            id: "q_test".into(),
+            question: "Whether machines can think".into(),
+            question_type: "conceptual".into(),
+            status: "contested".into(),
+            primary_article_ids: vec![],
+            positions: vec![],
+        }];
+        let explicit = vec![true];
+        filter_low_quality(&mut questions, &explicit);
+        assert_eq!(questions.len(), 1, "explicit questions survive even with no positions");
     }
 
     // ── Truncated JSON repair tests ─────────────────────────
