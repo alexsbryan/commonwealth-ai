@@ -440,8 +440,30 @@ impl CorpusEngine {
                                 self.embed.clone(),
                                 inference.clone(),
                             )?;
-                        let progress_fn = |_p: crate::enrichment::clustering::EnrichmentProgress| {
-                            // TODO: Convert to IngestProgress and forward to callback
+                        let id = recipe.corpus.id.clone();
+                        let progress_fn = move |p: crate::enrichment::clustering::EnrichmentProgress| {
+                            use crate::enrichment::clustering::EnrichmentProgress as EP;
+                            match &p {
+                                EP::Phase { phase, name, note } => {
+                                    if note.is_empty() {
+                                        eprintln!("[{id}] Phase {phase}: {name}");
+                                    } else {
+                                        eprintln!("[{id}] Phase {phase}: {name} ({note})");
+                                    }
+                                }
+                                EP::PhaseSkipped { phase, name } =>
+                                    eprintln!("[{id}] Phase {phase}: {name} — skipped (checkpoint)"),
+                                EP::Resuming { from_phase } =>
+                                    eprintln!("[{id}] Resuming enrichment from {from_phase}"),
+                                EP::ClusteringStarted { total_chunks } =>
+                                    eprintln!("[{id}] Clustering {total_chunks} chunks..."),
+                                EP::ClusteringComplete { cluster_count, noise_chunks } =>
+                                    eprintln!("[{id}] Clustering complete: {cluster_count} clusters, {noise_chunks} noise"),
+                                EP::Phase1Progress { batches_done, batches_total } =>
+                                    eprintln!("[{id}] Skeleton extraction: {batches_done}/{batches_total} batches"),
+                                EP::Phase2bComplete { labeled_count } =>
+                                    eprintln!("[{id}] Cluster labeling complete: {labeled_count} clusters labeled"),
+                            }
                         };
                         field_engine.enrich(&index, &progress_fn).await?;
                     }

@@ -295,12 +295,19 @@ impl FieldModelEngine {
     async fn extract_skeleton_phase(
         &self,
         overview_chunks: &[crate::index::StoredChunk],
-        _index: &CorpusIndex,
+        index: &CorpusIndex,
         progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
     ) -> Result<PartialSkeleton> {
         let mut skeleton = PartialSkeleton::new(self.domain.id());
         let batches: Vec<_> = overview_chunks.chunks(4).collect();
         let total_batches = batches.len();
+        let mut questions_found: usize = 0;
+        let mut positions_found: usize = 0;
+        let mut inference_errors: usize = 0;
+        let mut parse_errors: usize = 0;
+
+        // Failure log for reprocessing later.
+        let failures_path = index.path().join("_skeleton_failures.ndjson");
 
         for (i, batch) in batches.iter().enumerate() {
             let refs: Vec<&crate::index::StoredChunk> = batch.iter().collect();
@@ -308,114 +315,201 @@ impl FieldModelEngine {
             let response = match (self.inference)(&prompt).await {
                 Ok(r) => r,
                 Err(e) => {
+                    inference_errors += 1;
                     tracing::warn!(batch = i, error = %e, "Skeleton extraction inference failed");
                     continue;
                 }
             };
 
-            // Parse JSON response — tolerate markdown code fences
+            // Parse JSON response — tolerate markdown fences, <think> blocks,
+            // and truncated output (try repair before giving up).
             let json_str = extract_json_from_response(&response);
-            match serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
-                Ok(passages) => {
-                    for passage in passages {
-                        if let Some(question) = passage["canonical_question"].as_str() {
-                            if question.is_empty() {
-                                continue;
+            let passages = match serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
+                Ok(p) => p,
+                Err(_) => {
+                    // Try repairing truncated JSON by closing open brackets.
+                    match try_repair_truncated_json(json_str) {
+                        Some(repaired) => {
+                            match serde_json::from_str::<Vec<serde_json::Value>>(&repaired) {
+                                Ok(p) => {
+                                    tracing::info!(
+                                        batch = i,
+                                        "Repaired truncated JSON — salvaged {} passages",
+                                        p.len()
+                                    );
+                                    p
+                                }
+                                Err(e) => {
+                                    parse_errors += 1;
+                                    log_skeleton_failure(
+                                        &failures_path, i, json_str, &format!("{e}"),
+                                    );
+                                    tracing::warn!(
+                                        batch = i,
+                                        error = %e,
+                                        "Skeleton parse failed even after repair"
+                                    );
+                                    continue;
+                                }
                             }
-                            let question_type = passage["question_type"]
-                                .as_str()
-                                .unwrap_or("conceptual")
-                                .to_string();
-                            let positions: Vec<SkeletonPosition> = passage["positions"]
-                                .as_array()
-                                .map(|arr| {
-                                    arr.iter()
-                                        .filter_map(|p| {
-                                            Some(SkeletonPosition {
-                                                id: format!(
-                                                    "p_{}",
-                                                    p["name"]
-                                                        .as_str()?
-                                                        .to_lowercase()
-                                                        .replace(' ', "_")
-                                                ),
-                                                name: p["name"].as_str()?.to_string(),
-                                                claim: p["claim"]
-                                                    .as_str()
-                                                    .unwrap_or_default()
-                                                    .to_string(),
-                                                status: p["status"]
-                                                    .as_str()
-                                                    .unwrap_or("contested")
-                                                    .to_string(),
-                                                proponents: p["proponents"]
-                                                    .as_array()
-                                                    .map(|a| {
-                                                        a.iter()
-                                                            .filter_map(|v| {
-                                                                v.as_str()
-                                                                    .map(|s| s.to_string())
-                                                            })
-                                                            .collect()
-                                                    })
-                                                    .unwrap_or_default(),
-                                                source: "skeleton".into(),
-                                                cluster_ids: Vec::new(),
-                                                centroid_chunk_ids: Vec::new(),
-                                                discovery_confidence: None,
-                                            })
-                                        })
-                                        .collect()
-                                })
-                                .unwrap_or_default();
-
-                            let q_id = format!(
-                                "q_{}",
-                                question
-                                    .to_lowercase()
-                                    .chars()
-                                    .filter(|c| c.is_alphanumeric() || *c == ' ')
-                                    .collect::<String>()
-                                    .replace(' ', "_")
-                                    .chars()
-                                    .take(50)
-                                    .collect::<String>()
+                        }
+                        None => {
+                            parse_errors += 1;
+                            let snippet: String = json_str.chars().take(200).collect();
+                            log_skeleton_failure(
+                                &failures_path, i, json_str, "not repairable",
                             );
-
-                            skeleton.questions.push(SkeletonQuestion {
-                                id: q_id,
-                                question: question.to_string(),
-                                question_type,
-                                status: "contested".into(),
-                                primary_article_ids: Vec::new(),
-                                positions,
-                            });
+                            tracing::warn!(
+                                batch = i,
+                                response_snippet = %snippet,
+                                "Skeleton parse failed — not valid or repairable JSON"
+                            );
+                            continue;
                         }
                     }
                 }
-                Err(e) => {
-                    let snippet: String = json_str.chars().take(200).collect();
-                    tracing::warn!(
-                        batch = i,
-                        error = %e,
-                        response_snippet = %snippet,
-                        "Skeleton extraction parse failed"
+            };
+
+            for passage in passages {
+                if let Some(question) = passage["canonical_question"].as_str() {
+                    if question.is_empty() {
+                        continue;
+                    }
+                    let question_type = passage["question_type"]
+                        .as_str()
+                        .unwrap_or("conceptual")
+                        .to_string();
+                    let positions: Vec<SkeletonPosition> = passage["positions"]
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|p| {
+                                    Some(SkeletonPosition {
+                                        id: format!(
+                                            "p_{}",
+                                            p["name"]
+                                                .as_str()?
+                                                .to_lowercase()
+                                                .replace(' ', "_")
+                                        ),
+                                        name: p["name"].as_str()?.to_string(),
+                                        claim: p["claim"]
+                                            .as_str()
+                                            .unwrap_or_default()
+                                            .to_string(),
+                                        status: p["status"]
+                                            .as_str()
+                                            .unwrap_or("contested")
+                                            .to_string(),
+                                        proponents: p["proponents"]
+                                            .as_array()
+                                            .map(|a| {
+                                                a.iter()
+                                                    .filter_map(|v| {
+                                                        v.as_str().map(|s| s.to_string())
+                                                    })
+                                                    .collect()
+                                            })
+                                            .unwrap_or_default(),
+                                        source: "skeleton".into(),
+                                        cluster_ids: Vec::new(),
+                                        centroid_chunk_ids: Vec::new(),
+                                        discovery_confidence: None,
+                                    })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    let q_id = format!(
+                        "q_{}",
+                        question
+                            .to_lowercase()
+                            .chars()
+                            .filter(|c| c.is_alphanumeric() || *c == ' ')
+                            .collect::<String>()
+                            .replace(' ', "_")
+                            .chars()
+                            .take(50)
+                            .collect::<String>()
                     );
+
+                    positions_found += positions.len();
+                    questions_found += 1;
+
+                    skeleton.questions.push(SkeletonQuestion {
+                        id: q_id,
+                        question: question.to_string(),
+                        question_type,
+                        status: "contested".into(),
+                        primary_article_ids: Vec::new(),
+                        positions,
+                    });
                 }
             }
 
-            if i % 25 == 0 || i == total_batches - 1 {
+            // Progress every 10 batches or at the end.
+            if i % 10 == 0 || i == total_batches - 1 {
                 progress(EnrichmentProgress::Phase1Progress {
                     batches_done: i + 1,
                     batches_total: total_batches,
                 });
             }
+
+            // Flush skeleton to disk every 50 batches for resume support.
+            if (i + 1) % 50 == 0 {
+                if let Err(e) = self.write_partial_skeleton(index, &skeleton) {
+                    tracing::warn!(error = %e, "Failed to flush partial skeleton");
+                }
+            }
         }
+
+        // Final flush.
+        self.write_partial_skeleton(index, &skeleton)?;
+
+        tracing::info!(
+            questions = questions_found,
+            positions = positions_found,
+            inference_errors = inference_errors,
+            parse_errors = parse_errors,
+            "Skeleton extraction complete"
+        );
 
         // Deduplicate questions by similarity
         deduplicate_questions(&mut skeleton);
 
         Ok(skeleton)
+    }
+
+    fn write_partial_skeleton(
+        &self,
+        index: &CorpusIndex,
+        skeleton: &PartialSkeleton,
+    ) -> Result<()> {
+        let field_skeleton = FieldSkeleton {
+            schema_version: 1,
+            corpus_id: index.corpus_id().to_string(),
+            generated_at: chrono::Utc::now().to_rfc3339(),
+            extraction_method: "dual_pass_v1".into(),
+            prompt_version: "1.0.0".into(),
+            domain_id: self.domain.id().to_string(),
+            canonical_questions: skeleton
+                .questions
+                .iter()
+                .map(|q| CanonicalQuestion {
+                    id: q.id.clone(),
+                    question: q.question.clone(),
+                    status: q.status.clone(),
+                    question_type: q.question_type.clone(),
+                    primary_entries: q.primary_article_ids.clone(),
+                    positions: q.positions.clone(),
+                    fault_lines: Vec::new(),
+                })
+                .collect(),
+            open_questions: Vec::new(),
+            field_stats: FieldModelStats::default(),
+        };
+        index.write_field_skeleton(&field_skeleton)
     }
 
     async fn label_clusters_phase(
@@ -578,6 +672,96 @@ fn extract_json_from_response(response: &str) -> &str {
 
     // Last resort — return the whole thing and let the caller handle the error.
     text
+}
+
+/// Try to repair truncated JSON by closing open brackets/braces.
+///
+/// LLMs often hit the token limit mid-response, producing valid JSON
+/// that's cut off. We try to close the structure so at least the
+/// complete elements parse. Returns `None` if the input doesn't look
+/// like truncated JSON.
+fn try_repair_truncated_json(s: &str) -> Option<String> {
+    let trimmed = s.trim();
+    if !trimmed.starts_with('[') && !trimmed.starts_with('{') {
+        return None;
+    }
+
+    // Find the last complete JSON element by walking brackets.
+    let mut depth_brace = 0i32;
+    let mut depth_bracket = 0i32;
+    let mut in_string = false;
+    let mut escape_next = false;
+    let mut last_complete_element_end = 0;
+
+    for (i, ch) in trimmed.char_indices() {
+        if escape_next {
+            escape_next = false;
+            continue;
+        }
+        if ch == '\\' && in_string {
+            escape_next = true;
+            continue;
+        }
+        if ch == '"' {
+            in_string = !in_string;
+            continue;
+        }
+        if in_string {
+            continue;
+        }
+        match ch {
+            '{' => depth_brace += 1,
+            '}' => {
+                depth_brace -= 1;
+                // A complete top-level element: either a standalone object
+                // (depth 0/0) or a direct child of the top-level array (brace 0, bracket 1).
+                if depth_brace == 0 && depth_bracket <= 1 {
+                    last_complete_element_end = i + 1;
+                }
+            }
+            '[' => depth_bracket += 1,
+            ']' => {
+                depth_bracket -= 1;
+                if depth_bracket == 0 && depth_brace == 0 {
+                    // Already complete — no repair needed.
+                    return None;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if last_complete_element_end == 0 {
+        return None; // No complete elements found.
+    }
+
+    // Truncate to the last complete element.
+    let mut repaired = trimmed[..last_complete_element_end].to_string();
+
+    // Close the top-level array if the input started with one.
+    if trimmed.starts_with('[') {
+        repaired.push(']');
+    }
+
+    Some(repaired)
+}
+
+/// Append a failed skeleton extraction batch to the failure log.
+fn log_skeleton_failure(path: &std::path::Path, batch: usize, raw: &str, error: &str) {
+    use std::io::Write;
+    let entry = serde_json::json!({
+        "batch": batch,
+        "error": error,
+        "raw_response_truncated": &raw[..raw.len().min(2000)],
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(f, "{}", entry);
+    }
 }
 
 /// Deduplicate questions by merging those with similar text.
@@ -894,5 +1078,57 @@ domain = "{domain}"
             2,
             "distinct IDs should not be merged"
         );
+    }
+
+    // ── Truncated JSON repair tests ─────────────────────────
+
+    #[test]
+    fn repair_truncated_array_with_complete_first_element() {
+        // Array with one complete object and a second cut off.
+        let truncated = r#"[{"passage_index": 0, "canonical_question": "Is free will real?", "positions": []}, {"passage_index": 1, "canonical_ques"#;
+        let repaired = try_repair_truncated_json(truncated).unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&repaired).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0]["canonical_question"], "Is free will real?");
+    }
+
+    #[test]
+    fn repair_already_complete_returns_none() {
+        let complete = r#"[{"a": 1}]"#;
+        assert!(
+            try_repair_truncated_json(complete).is_none(),
+            "already-complete JSON should return None"
+        );
+    }
+
+    #[test]
+    fn repair_not_json_returns_none() {
+        assert!(try_repair_truncated_json("not json").is_none());
+        assert!(try_repair_truncated_json("").is_none());
+    }
+
+    #[test]
+    fn repair_truncated_mid_string() {
+        // Truncated inside a string value — the complete first element should survive.
+        let truncated = r#"[{"question": "What is X?", "type": "conceptual"}, {"question": "Is Y compat"#;
+        let repaired = try_repair_truncated_json(truncated).unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&repaired).unwrap();
+        assert_eq!(parsed.len(), 1);
+    }
+
+    #[test]
+    fn repair_truncated_with_nested_objects() {
+        let truncated = r#"[{"q": "test", "positions": [{"name": "A"}]}, {"q": "other", "positions": [{"name": "B"#;
+        let repaired = try_repair_truncated_json(truncated).unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&repaired).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0]["positions"][0]["name"], "A");
+    }
+
+    #[test]
+    fn repair_no_complete_elements_returns_none() {
+        // Only a partial first element — nothing to salvage.
+        let truncated = r#"[{"passage_in"#;
+        assert!(try_repair_truncated_json(truncated).is_none());
     }
 }
