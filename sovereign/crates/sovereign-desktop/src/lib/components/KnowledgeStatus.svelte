@@ -266,9 +266,9 @@
                 {/if}
                 {#if health[corpus.id]}
                   {#if health[corpus.id].claims_count > 0}
-                    <span class="health-chip enriched">✦ {health[corpus.id].claims_count.toLocaleString()} claims · {health[corpus.id].relationships_count.toLocaleString()} relationships</span>
+                    <span class="health-chip enriched">✦ {health[corpus.id].claims_count.toLocaleString()} questions</span>
                   {:else if corpus.enrichment_enabled}
-                    <span class="health-chip">✦ enriched (no claims yet)</span>
+                    <span class="health-chip">✦ enriched (no questions yet)</span>
                   {:else}
                     <span class="health-chip muted">No enrichment</span>
                   {/if}
@@ -277,15 +277,15 @@
                       class="health-chip repair-btn"
                       disabled={repairing.has(corpus.id)}
                       onclick={() => handleRepair(corpus.id)}
-                      title="{health[corpus.id].parse_failure_count.toLocaleString()} chunks failed to parse during enrichment — click to retry with repair parser"
+                      title="{health[corpus.id].parse_failure_count.toLocaleString()} batches failed to parse during skeleton extraction — click to reprocess with improved parser"
                     >
                       {repairing.has(corpus.id)
-                        ? "Repairing…"
-                        : `⚠ Repair ${health[corpus.id].parse_failure_count.toLocaleString()} claims`}
+                        ? "Reprocessing…"
+                        : `Reprocess ${health[corpus.id].parse_failure_count.toLocaleString()} failures`}
                     </button>
                   {/if}
                   {#if health[corpus.id].has_article_profiles}
-                    <span class="health-chip">Article profiles</span>
+                    <span class="health-chip">Field skeleton</span>
                   {/if}
                 {:else}
                   <span class="health-chip muted">Loading…</span>

@@ -1299,31 +1299,71 @@ pub async fn get_corpus_health(
         Err(_) => return Ok(None),
     };
 
-    // Enrichment details (claims, relationships, article profiles, parse
-    // failures) were removed in the field-model refactor. Return zeroed
-    // defaults so the frontend still gets a valid response.
-    let _ = index;
+    // Count skeleton parse failures from the NDJSON log file.
+    let failures_path = index.path().join("_skeleton_failures.ndjson");
+    let parse_failure_count = if failures_path.exists() {
+        std::fs::read_to_string(&failures_path)
+            .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count() as u64)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    // Check if a field skeleton exists (indicates enrichment ran).
+    let has_skeleton = index.load_field_skeleton().ok().flatten().is_some();
+    let skeleton_questions = if has_skeleton {
+        index
+            .load_field_skeleton()
+            .ok()
+            .flatten()
+            .map(|s| s.canonical_questions.len() as u64)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
     Ok(Some(CorpusHealthDetail {
         corpus_id: corpus_id.clone(),
-        claims_count: 0,
+        claims_count: skeleton_questions,
         relationships_count: 0,
-        has_article_profiles: false,
-        parse_failure_count: 0,
+        has_article_profiles: has_skeleton,
+        parse_failure_count,
     }))
 }
 
-/// Re-parse stored enrichment failures using the truncation-repair parser.
+/// Re-parse stored skeleton extraction failures using the improved repair
+/// parser (unquoted-string fix, truncation repair, quality filter).
 /// Does not re-run inference — only the saved raw responses are re-processed.
-/// Returns the number of newly recovered claims.
-///
-/// NOTE: The underlying engine method was removed in the field-model refactor.
-/// This stub is kept so the Tauri command handler registration stays valid.
+/// Salvaged questions are merged into the existing field_skeleton.json.
+/// Returns the number of newly recovered questions.
 #[tauri::command]
 pub async fn retry_enrichment_failures(
-    _state: State<'_, Arc<AppState>>,
-    _corpus_id: String,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
 ) -> Result<u64, String> {
-    Ok(0)
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    drop(engine_guard);
+
+    let index = engine
+        .open_index_for_corpus(&corpus_id)
+        .await
+        .map_err(|e| format!("Failed to open index for '{corpus_id}': {e}"))?;
+
+    let (salvaged, still_failed) = corpus_engine::reprocess_skeleton_failures(&index)
+        .map_err(|e| format!("Reprocessing failed: {e}"))?;
+
+    tracing::info!(
+        corpus_id = %corpus_id,
+        salvaged = salvaged,
+        still_failed = still_failed,
+        "Skeleton failure reprocessing complete"
+    );
+
+    Ok(salvaged as u64)
 }
 
 // ─── Recipe Testing ──────────────────────────────────────────────────────────
