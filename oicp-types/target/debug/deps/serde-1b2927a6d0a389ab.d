@@ -1,0 +1,14 @@
+/Users/alexbryan/dev/commonwealth-ai/oicp-types/target/debug/deps/serde-1b2927a6d0a389ab.d: /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/alexbryan/dev/commonwealth-ai/oicp-types/target/debug/build/serde-31c9bc0da452145f/out/private.rs
+
+/Users/alexbryan/dev/commonwealth-ai/oicp-types/target/debug/deps/libserde-1b2927a6d0a389ab.rlib: /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/alexbryan/dev/commonwealth-ai/oicp-types/target/debug/build/serde-31c9bc0da452145f/out/private.rs
+
+/Users/alexbryan/dev/commonwealth-ai/oicp-types/target/debug/deps/libserde-1b2927a6d0a389ab.rmeta: /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/alexbryan/dev/commonwealth-ai/oicp-types/target/debug/build/serde-31c9bc0da452145f/out/private.rs
+
+/Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/alexbryan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/Users/alexbryan/dev/commonwealth-ai/oicp-types/target/debug/build/serde-31c9bc0da452145f/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/alexbryan/dev/commonwealth-ai/oicp-types/target/debug/build/serde-31c9bc0da452145f/out
