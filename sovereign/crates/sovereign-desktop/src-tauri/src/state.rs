@@ -395,6 +395,8 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     let recipes_dir = home.join(".sovereign").join("recipes");
     let indexes_dir = home.join(".sovereign").join("indexes");
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
+    let batch_embed_fn =
+        sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&inference));
     let inference_fn =
         sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
     // Derive the embedding model identifier from the configured file path so
@@ -411,6 +413,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     let corpus_engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
             .with_embedding_model(&embed_model_name)
+            .with_batch_embed_fn(batch_embed_fn)
             .with_inference_fn(inference_fn),
     );
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));

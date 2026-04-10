@@ -19,6 +19,18 @@ pub trait InferenceProvider: Send + Sync {
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>>;
 
+    /// Embed a batch of texts in a single forward pass when the backend supports it.
+    /// The default implementation falls back to sequential single-text embedding.
+    /// Override in providers that can batch (e.g. `EmbeddedLlamaCpp` with llama.cpp
+    /// multi-sequence decoding) for significantly higher throughput on corpus ingest.
+    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        let mut results = Vec::with_capacity(texts.len());
+        for text in texts {
+            results.push(self.embed(text).await?);
+        }
+        Ok(results)
+    }
+
     /// Embed a query string, applying any model-specific query instruction prefix.
     ///
     /// Default implementation calls `embed()` — override in providers that support

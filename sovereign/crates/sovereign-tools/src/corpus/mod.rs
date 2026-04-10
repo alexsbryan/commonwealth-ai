@@ -33,6 +33,24 @@ pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_en
     })
 }
 
+/// Create a corpus-engine `BatchEmbedFn` from Sovereign's `InferenceProvider`.
+/// Uses the provider's `embed_batch` method which, on `EmbeddedLlamaCpp`,
+/// packs multiple sequences into a single llama.cpp decode call for
+/// significantly higher throughput.
+pub fn inference_to_batch_embed_fn(
+    inference: Arc<dyn InferenceProvider>,
+) -> corpus_engine::BatchEmbedFn {
+    Arc::new(move |texts: &[String]| {
+        let inf = Arc::clone(&inference);
+        let texts = texts.to_vec();
+        Box::pin(async move {
+            inf.embed_batch(&texts)
+                .await
+                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+        })
+    })
+}
+
 /// Create a corpus-engine `InferenceFn` from Sovereign's `InferenceProvider`.
 /// Used by the optional enrichment pipeline to run claim and relationship
 /// extraction prompts.

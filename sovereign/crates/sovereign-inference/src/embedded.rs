@@ -388,9 +388,10 @@ impl EmbedSlot {
 
         let n_embd = model.n_embd() as usize;
         // Embedding models are bidirectional encoders — the whole input
-        // gets packed into a single batch. 2048 tokens is enough for
-        // any chunk we produce (paragraph chunker maxes around 512).
-        let max_tokens = 2048;
+        // gets packed into a single batch. 8192 tokens allows batching
+        // ~50 corpus chunks (avg ~150 tokens each) in a single decode
+        // call for significantly higher ingest throughput.
+        let max_tokens = 8192;
 
         let model = Arc::new(model);
 
@@ -545,6 +546,143 @@ impl EmbedSlot {
             }
         }
         Ok(out)
+    }
+
+    /// Batch-embed multiple texts in a single decode pass.
+    ///
+    /// Each text gets its own sequence ID. All tokens are packed into one
+    /// `LlamaBatch` and decoded together — llama.cpp processes them in
+    /// parallel on the GPU. This amortises the decode overhead and can
+    /// yield 5-10x throughput over sequential single-text embedding.
+    ///
+    /// If the combined token count exceeds `max_tokens`, the batch is
+    /// split into sub-batches that each fit within the context window.
+    fn run_embed_batch_sync(
+        model: &LlamaModel,
+        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        inputs: &[String],
+        n_embd: usize,
+        max_tokens: usize,
+        embed_quirks: Option<&EmbedQuirks>,
+    ) -> Result<Vec<Vec<f32>>> {
+        if inputs.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Prepare all texts (apply instruction prefix + EOS if needed).
+        let prepared: Vec<String> = inputs
+            .iter()
+            .map(|text| {
+                if let Some(eq) = embed_quirks {
+                    let prefixed = format!("{}{text}", eq.document_instruction);
+                    if eq.append_eos_token {
+                        format!("{prefixed}<|endoftext|>")
+                    } else {
+                        prefixed
+                    }
+                } else {
+                    text.clone()
+                }
+            })
+            .collect();
+
+        // Tokenize all texts and compute their token counts.
+        // Truncate any that exceed a per-sequence limit (512 tokens is
+        // generous for 1024-char chunks).
+        let per_seq_limit = max_tokens.min(512);
+        let mut all_tokens: Vec<Vec<llama_cpp_2::token::LlamaToken>> = Vec::with_capacity(prepared.len());
+        for text in &prepared {
+            let mut tokens = model
+                .str_to_token(text, AddBos::Always)
+                .map_err(|e| Error::Inference(format!("Embed tokenization failed: {e}")))?;
+            if tokens.len() > per_seq_limit {
+                tokens.truncate(per_seq_limit);
+            }
+            all_tokens.push(tokens);
+        }
+
+        let mut results: Vec<Vec<f32>> = Vec::with_capacity(inputs.len());
+
+        // Process in sub-batches that fit within max_tokens.
+        let mut cursor = 0;
+        while cursor < all_tokens.len() {
+            ctx.clear_kv_cache();
+
+            // Figure out how many sequences fit in this sub-batch.
+            let mut total_toks = 0usize;
+            let mut end = cursor;
+            while end < all_tokens.len() {
+                let seq_len = all_tokens[end].len();
+                if seq_len == 0 {
+                    // Empty text — will be a zero vector, skip in batch.
+                    end += 1;
+                    continue;
+                }
+                if total_toks + seq_len > max_tokens {
+                    break;
+                }
+                total_toks += seq_len;
+                end += 1;
+            }
+            // Ensure progress even if a single sequence fills the context.
+            if end == cursor {
+                end = cursor + 1;
+                total_toks = all_tokens[cursor].len().min(max_tokens);
+            }
+
+            let sub_batch_count = end - cursor;
+            let mut batch = LlamaBatch::new(max_tokens, sub_batch_count as i32);
+            let mut seq_map: Vec<usize> = Vec::new(); // maps batch seq_id → original index
+
+            let mut seq_id = 0i32;
+            for idx in cursor..end {
+                let tokens = &all_tokens[idx];
+                if tokens.is_empty() {
+                    continue;
+                }
+                for (pos, &token) in tokens.iter().enumerate() {
+                    batch
+                        .add(token, pos as i32, &[seq_id], true)
+                        .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+                }
+                seq_map.push(idx);
+                seq_id += 1;
+            }
+
+            if seq_id > 0 {
+                ctx.decode(&mut batch)
+                    .map_err(|e| Error::Inference(format!("Batch decode failed: {e}")))?;
+            }
+
+            // Extract and normalize embeddings for each sequence.
+            let mut batch_results: Vec<(usize, Vec<f32>)> = Vec::new();
+            for (batch_seq, &original_idx) in seq_map.iter().enumerate() {
+                let raw = ctx
+                    .embeddings_seq_ith(batch_seq as i32)
+                    .map_err(|e| Error::Inference(format!("Failed to read embedding seq {batch_seq}: {e}")))?;
+                let mut out = raw.to_vec();
+                let norm: f32 = out.iter().map(|x| x * x).sum::<f32>().sqrt();
+                if norm > 0.0 {
+                    for v in out.iter_mut() {
+                        *v /= norm;
+                    }
+                }
+                batch_results.push((original_idx, out));
+            }
+
+            // Fill in results (including zero vectors for empty inputs).
+            for idx in cursor..end {
+                if all_tokens[idx].is_empty() {
+                    results.push(vec![0.0; n_embd]);
+                } else if let Some(pos) = batch_results.iter().position(|(i, _)| *i == idx) {
+                    results.push(batch_results.remove(pos).1);
+                }
+            }
+
+            cursor = end;
+        }
+
+        Ok(results)
     }
 }
 
@@ -1027,6 +1165,42 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         })
         .await
         .map_err(|e| Error::Inference(format!("Embed task failed: {e}")))?
+    }
+
+    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        let slot = self.embed_slot.as_ref().ok_or_else(|| {
+            Error::Inference(
+                "No embedding model is configured. Open Settings → Embedding model and \
+                 select a GGUF embedding model (e.g. nomic-embed-text-v1.5.Q4_K_M.gguf), \
+                 then retry.".to_string(),
+            )
+        })?;
+        let slot = Arc::clone(slot);
+        let texts = texts.to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            let mut ctx_lock = slot.context.blocking_lock();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                EmbedSlot::run_embed_batch_sync(
+                    &slot.model,
+                    &mut ctx_lock.ctx,
+                    &texts,
+                    slot.n_embd,
+                    slot.max_tokens,
+                    slot.embed_quirks.as_ref(),
+                )
+            }));
+            match result {
+                Ok(Ok(v)) => Ok(v),
+                Ok(Err(e)) => Err(e),
+                Err(_) => Err(Error::Inference(
+                    "Batch embedding inference panicked — one or more inputs may be \
+                     malformed or the embed model is incompatible.".to_string(),
+                )),
+            }
+        })
+        .await
+        .map_err(|e| Error::Inference(format!("Embed batch task failed: {e}")))?
     }
 
     fn model_id_for(&self, speed: Speed) -> String {
