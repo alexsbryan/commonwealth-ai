@@ -286,16 +286,107 @@ async fn parquet_ingest_with_enrichment_creates_field_model() {
 
     assert!(result.chunks_created >= 4);
 
-    // The field skeleton should exist.
+    // The field skeleton should exist and contain the mock-extracted data.
     let index = engine.open_index_for_corpus("test_corpus").await.unwrap();
-    let skeleton = index.load_field_skeleton();
+    let skeleton = index
+        .load_field_skeleton()
+        .expect("load_field_skeleton should not error")
+        .expect("field_skeleton.json should exist after enrichment");
+
+    assert_eq!(skeleton.schema_version, 1);
+    assert_eq!(skeleton.corpus_id, "test_corpus");
+    assert_eq!(skeleton.domain_id, "philosophy");
+    assert!(!skeleton.generated_at.is_empty());
+
+    // The mock inference returns a question about free will with a
+    // Compatibilism position for every batch of overview chunks.
+    // With 4 chunks batched by 4, we get 1 batch → 1 question.
     assert!(
-        skeleton.is_ok(),
-        "field skeleton should load without error"
+        !skeleton.canonical_questions.is_empty(),
+        "skeleton should have at least one canonical question"
     );
-    // The skeleton may be None if the enrichment pipeline produced no
-    // questions from the tiny fixture — that's acceptable for this test.
-    // The key assertion is that the pipeline ran without error.
+
+    let q = &skeleton.canonical_questions[0];
+    assert!(
+        q.question.contains("free will"),
+        "question should mention free will, got: {}",
+        q.question
+    );
+
+    assert!(
+        !q.positions.is_empty(),
+        "question should have at least one position"
+    );
+    let pos = &q.positions[0];
+    assert_eq!(pos.name, "Compatibilism");
+    assert_eq!(pos.status, "majority");
+    assert_eq!(pos.source, "skeleton");
+    assert!(pos.proponents.contains(&"Frankfurt".to_string()));
+
+    // The skeleton JSON should be valid — round-trip test.
+    let json = serde_json::to_string_pretty(&skeleton).unwrap();
+    let reparsed: corpus_engine::FieldSkeleton = serde_json::from_str(&json).unwrap();
+    assert_eq!(reparsed.canonical_questions.len(), skeleton.canonical_questions.len());
+}
+
+/// Verify that the enrichment checkpoint is cleared after successful completion.
+/// A leftover checkpoint would trigger the health checker's "interrupted enrichment" warning.
+#[tokio::test]
+async fn enrichment_clears_checkpoint_on_success() {
+    let dir = tempfile::tempdir().unwrap();
+    let recipes_dir = dir.path().join("recipes");
+    let indexes_dir = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+
+    let parquet_path = dir.path().join("sep-mini.parquet");
+    make_sep_like_parquet(&parquet_path);
+
+    let recipe_path = write_recipe_toml(&recipes_dir, &parquet_path, true);
+    let engine = build_engine(recipes_dir, indexes_dir.clone());
+
+    engine
+        .ingest(&CorpusSpec::RecipePath(recipe_path), None)
+        .await
+        .expect("ingest should succeed");
+
+    // The checkpoint file should NOT exist after successful completion.
+    let index = engine.open_index_for_corpus("test_corpus").await.unwrap();
+    let checkpoint_path = index.path().join("_enrichment_checkpoint.json");
+    assert!(
+        !checkpoint_path.exists(),
+        "checkpoint file should be cleared after successful enrichment"
+    );
+}
+
+/// Verify that non-enriched corpora don't produce field model artifacts.
+#[tokio::test]
+async fn non_enriched_corpus_has_no_field_model() {
+    let dir = tempfile::tempdir().unwrap();
+    let recipes_dir = dir.path().join("recipes");
+    let indexes_dir = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+
+    let parquet_path = dir.path().join("plain.parquet");
+    make_sep_like_parquet(&parquet_path);
+
+    let recipe_path = write_recipe_toml(&recipes_dir, &parquet_path, false);
+    let engine = build_engine(recipes_dir, indexes_dir);
+
+    engine
+        .ingest(&CorpusSpec::RecipePath(recipe_path), None)
+        .await
+        .expect("non-enriched ingest should succeed");
+
+    let index = engine.open_index_for_corpus("test_corpus").await.unwrap();
+    let skeleton = index.load_field_skeleton().unwrap();
+    assert!(
+        skeleton.is_none(),
+        "non-enriched corpus should not have field_skeleton.json"
+    );
+    assert!(
+        !index.has_field_model_tables().await,
+        "non-enriched corpus should not have field model tables"
+    );
 }
 
 /// Progress callbacks must fire for every phase.

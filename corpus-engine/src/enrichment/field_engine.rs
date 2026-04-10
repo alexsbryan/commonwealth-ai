@@ -635,4 +635,186 @@ enabled = true
         let engine = FieldModelEngine::from_recipe(&recipe, embed, inference).unwrap();
         assert_eq!(engine.domain.id(), "philosophy");
     }
+
+    #[test]
+    fn from_recipe_all_known_domains() {
+        let domains = ["philosophy", "science", "policy", "legal", "community", "multi"];
+        for domain in &domains {
+            let toml = format!(
+                r#"
+[corpus]
+id = "test"
+name = "Test"
+
+[acquire]
+type = "local_file"
+path = "/tmp/test"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+
+[enrichment]
+enabled = true
+domain = "{domain}"
+"#
+            );
+            let recipe = crate::recipe::Recipe::from_toml(&toml).unwrap();
+            let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
+            let inference: InferenceFn = Arc::new(|_| Box::pin(async { Ok(String::new()) }));
+            let engine = FieldModelEngine::from_recipe(&recipe, embed, inference);
+            assert!(
+                engine.is_ok(),
+                "from_recipe should succeed for domain '{domain}'"
+            );
+            assert_eq!(engine.unwrap().domain.id(), *domain);
+        }
+    }
+
+    #[test]
+    fn extract_json_from_generic_code_fence() {
+        let response = "Result:\n```\n{\"key\": \"value\"}\n```";
+        assert_eq!(
+            extract_json_from_response(response),
+            "{\"key\": \"value\"}"
+        );
+    }
+
+    #[test]
+    fn extract_json_ignores_non_json_code_fence() {
+        let response = "```python\nprint('hello')\n```";
+        // Should return the whole trimmed response since the code fence
+        // content doesn't start with { or [
+        assert_eq!(
+            extract_json_from_response(response),
+            "```python\nprint('hello')\n```"
+        );
+    }
+
+    #[test]
+    fn extract_json_with_surrounding_prose() {
+        let response = "Here is the JSON:\n```json\n[{\"a\": 1}, {\"b\": 2}]\n```\nAll done!";
+        let json = extract_json_from_response(response);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.len(), 2);
+    }
+
+    #[test]
+    fn deduplicate_questions_merges_same_id() {
+        let mut skeleton = PartialSkeleton::new("philosophy");
+        skeleton.questions.push(SkeletonQuestion {
+            id: "q_free_will".into(),
+            question: "Is free will compatible?".into(),
+            question_type: "conceptual".into(),
+            status: "contested".into(),
+            primary_article_ids: vec![],
+            positions: vec![SkeletonPosition {
+                id: "p_compat".into(),
+                name: "Compatibilism".into(),
+                claim: "Yes".into(),
+                status: "majority".into(),
+                proponents: vec![],
+                source: "skeleton".into(),
+                cluster_ids: vec![],
+                centroid_chunk_ids: vec![],
+                discovery_confidence: None,
+            }],
+        });
+        skeleton.questions.push(SkeletonQuestion {
+            id: "q_free_will".into(), // same ID
+            question: "Is free will compatible?".into(),
+            question_type: "conceptual".into(),
+            status: "contested".into(),
+            primary_article_ids: vec![],
+            positions: vec![SkeletonPosition {
+                id: "p_hard_incompat".into(), // different position
+                name: "Hard Incompatibilism".into(),
+                claim: "No".into(),
+                status: "minority".into(),
+                proponents: vec![],
+                source: "skeleton".into(),
+                cluster_ids: vec![],
+                centroid_chunk_ids: vec![],
+                discovery_confidence: None,
+            }],
+        });
+
+        deduplicate_questions(&mut skeleton);
+        assert_eq!(skeleton.questions.len(), 1, "duplicate IDs should merge");
+        assert_eq!(
+            skeleton.questions[0].positions.len(),
+            2,
+            "positions from both duplicates should be merged"
+        );
+    }
+
+    #[test]
+    fn deduplicate_questions_skips_duplicate_positions() {
+        let mut skeleton = PartialSkeleton::new("philosophy");
+        let pos = SkeletonPosition {
+            id: "p_compat".into(),
+            name: "Compatibilism".into(),
+            claim: "Yes".into(),
+            status: "majority".into(),
+            proponents: vec![],
+            source: "skeleton".into(),
+            cluster_ids: vec![],
+            centroid_chunk_ids: vec![],
+            discovery_confidence: None,
+        };
+        skeleton.questions.push(SkeletonQuestion {
+            id: "q_1".into(),
+            question: "Q".into(),
+            question_type: "conceptual".into(),
+            status: "contested".into(),
+            primary_article_ids: vec![],
+            positions: vec![pos.clone()],
+        });
+        skeleton.questions.push(SkeletonQuestion {
+            id: "q_1".into(),
+            question: "Q".into(),
+            question_type: "conceptual".into(),
+            status: "contested".into(),
+            primary_article_ids: vec![],
+            positions: vec![pos], // same position ID
+        });
+
+        deduplicate_questions(&mut skeleton);
+        assert_eq!(skeleton.questions.len(), 1);
+        assert_eq!(
+            skeleton.questions[0].positions.len(),
+            1,
+            "same position ID should not be duplicated"
+        );
+    }
+
+    #[test]
+    fn deduplicate_questions_keeps_distinct() {
+        let mut skeleton = PartialSkeleton::new("philosophy");
+        skeleton.questions.push(SkeletonQuestion {
+            id: "q_1".into(),
+            question: "Q1".into(),
+            question_type: "conceptual".into(),
+            status: "contested".into(),
+            primary_article_ids: vec![],
+            positions: vec![],
+        });
+        skeleton.questions.push(SkeletonQuestion {
+            id: "q_2".into(), // different ID
+            question: "Q2".into(),
+            question_type: "factual".into(),
+            status: "settled".into(),
+            primary_article_ids: vec![],
+            positions: vec![],
+        });
+
+        deduplicate_questions(&mut skeleton);
+        assert_eq!(
+            skeleton.questions.len(),
+            2,
+            "distinct IDs should not be merged"
+        );
+    }
 }

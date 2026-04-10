@@ -164,7 +164,8 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if denom < 1e-12 { 0.0 } else { (dot / denom) as f32 }
 }
 
-fn extract_json_block(text: &str) -> Option<&str> {
+/// Extract a JSON block from model output that may be wrapped in markdown fences.
+pub(crate) fn extract_json_block(text: &str) -> Option<&str> {
     if let Some(start) = text.find("```json") {
         let start = start + 7;
         if let Some(end) = text[start..].find("```") {
@@ -181,4 +182,177 @@ fn extract_json_block(text: &str) -> Option<&str> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::enrichment::clustering::ClusterInfo;
+
+    #[test]
+    fn extract_json_block_from_json_fence() {
+        let text = "Here:\n```json\n{\"crux\": \"test\"}\n```\nDone.";
+        assert_eq!(
+            extract_json_block(text),
+            Some("{\"crux\": \"test\"}")
+        );
+    }
+
+    #[test]
+    fn extract_json_block_from_plain_fence() {
+        let text = "```\n{\"a\": 1}\n```";
+        assert_eq!(extract_json_block(text), Some("{\"a\": 1}"));
+    }
+
+    #[test]
+    fn extract_json_block_non_json_content() {
+        let text = "```\nsome text that is not json\n```";
+        assert!(extract_json_block(text).is_none());
+    }
+
+    #[test]
+    fn extract_json_block_no_fences() {
+        let text = "just plain text";
+        assert!(extract_json_block(text).is_none());
+    }
+
+    #[test]
+    fn cosine_similarity_identical() {
+        let a = vec![1.0, 2.0, 3.0];
+        let sim = cosine_similarity(&a, &a);
+        assert!((sim - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn cosine_similarity_orthogonal() {
+        let a = vec![1.0, 0.0];
+        let b = vec![0.0, 1.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!(sim.abs() < 1e-5);
+    }
+
+    #[test]
+    fn find_adjacent_cross_position_clusters_basic() {
+        // Two clusters assigned to different positions with similar centroids.
+        let clusters = ClusterResult {
+            assignments: [(1u64, 0i32), (2, 1)].into_iter().collect(),
+            clusters: vec![
+                ClusterInfo {
+                    id: 0,
+                    size: 10,
+                    centroid: vec![1.0, 0.0, 0.0],
+                    central_chunks: vec![1],
+                    label: None,
+                },
+                ClusterInfo {
+                    id: 1,
+                    size: 10,
+                    centroid: vec![0.9, 0.1, 0.0], // very similar to cluster 0
+                    central_chunks: vec![2],
+                    label: None,
+                },
+            ],
+            noise_count: 0,
+        };
+        let aligned: HashMap<i32, String> = [
+            (0, "p_compat".to_string()),
+            (1, "p_hard_incompat".to_string()),
+        ]
+        .into_iter()
+        .collect();
+
+        let pairs = find_adjacent_cross_position_clusters(&clusters, &aligned, 0.5);
+        assert_eq!(pairs.len(), 1, "should find one cross-position pair");
+    }
+
+    #[test]
+    fn find_adjacent_skips_same_position() {
+        let clusters = ClusterResult {
+            assignments: [(1u64, 0i32), (2, 1)].into_iter().collect(),
+            clusters: vec![
+                ClusterInfo {
+                    id: 0,
+                    size: 10,
+                    centroid: vec![1.0, 0.0],
+                    central_chunks: vec![1],
+                    label: None,
+                },
+                ClusterInfo {
+                    id: 1,
+                    size: 10,
+                    centroid: vec![0.99, 0.01],
+                    central_chunks: vec![2],
+                    label: None,
+                },
+            ],
+            noise_count: 0,
+        };
+        // Both clusters assigned to the SAME position.
+        let aligned: HashMap<i32, String> = [
+            (0, "p_compat".to_string()),
+            (1, "p_compat".to_string()),
+        ]
+        .into_iter()
+        .collect();
+
+        let pairs = find_adjacent_cross_position_clusters(&clusters, &aligned, 0.5);
+        assert!(pairs.is_empty(), "same-position pairs should be excluded");
+    }
+
+    #[test]
+    fn find_adjacent_respects_threshold() {
+        let clusters = ClusterResult {
+            assignments: [(1u64, 0i32), (2, 1)].into_iter().collect(),
+            clusters: vec![
+                ClusterInfo {
+                    id: 0,
+                    size: 10,
+                    centroid: vec![1.0, 0.0, 0.0],
+                    central_chunks: vec![1],
+                    label: None,
+                },
+                ClusterInfo {
+                    id: 1,
+                    size: 10,
+                    centroid: vec![0.0, 1.0, 0.0], // orthogonal — similarity ~0
+                    central_chunks: vec![2],
+                    label: None,
+                },
+            ],
+            noise_count: 0,
+        };
+        let aligned: HashMap<i32, String> = [
+            (0, "p_a".to_string()),
+            (1, "p_b".to_string()),
+        ]
+        .into_iter()
+        .collect();
+
+        let pairs = find_adjacent_cross_position_clusters(&clusters, &aligned, 0.5);
+        assert!(
+            pairs.is_empty(),
+            "orthogonal clusters should not meet the 0.5 threshold"
+        );
+    }
+
+    #[test]
+    fn fault_line_serde_round_trip() {
+        let fl = FaultLine {
+            id: "fl_0".into(),
+            question_id: "q_1".into(),
+            domain_id: "philosophy".into(),
+            position_a_id: "p_compat".into(),
+            position_b_id: "p_hard".into(),
+            crux: "Whether alternative possibilities are required".into(),
+            confidence: 0.91,
+            key_chunk_ids: vec![100, 200],
+            source: "detected".into(),
+            resolution_condition: Some("Frankfurt case resolution".into()),
+        };
+        let json = serde_json::to_string(&fl).unwrap();
+        let parsed: FaultLine = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.crux, fl.crux);
+        assert_eq!(parsed.confidence, fl.confidence);
+        assert_eq!(parsed.resolution_condition, fl.resolution_condition);
+    }
 }

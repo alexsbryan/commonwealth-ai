@@ -290,4 +290,134 @@ mod tests {
         assert!(prompt.contains("Free Will"));
         assert!(prompt.contains("canonical question"));
     }
+
+    #[test]
+    fn skeleton_extraction_prompt_contains_instructions() {
+        let chunk = Chunk {
+            id: 1,
+            content: "Compatibilists hold that free will is consistent with determinism.".into(),
+            title: Some("Compatibilism".into()),
+        };
+        let prompt = PhilosophyDomain.skeleton_extraction_prompt(&[&chunk]);
+        // Must include key instructions
+        assert!(prompt.contains("IMPORTANT EXCLUSIONS"));
+        assert!(prompt.contains("thought experiments"));
+        assert!(prompt.contains("JSON array"));
+        assert!(prompt.contains("passage_index"));
+        assert!(prompt.contains("proponents"));
+    }
+
+    #[test]
+    fn skeleton_extraction_prompt_handles_multiple_chunks() {
+        let chunks = vec![
+            Chunk {
+                id: 1,
+                content: "First passage about free will.".into(),
+                title: Some("Free Will".into()),
+            },
+            Chunk {
+                id: 2,
+                content: "Second passage about determinism.".into(),
+                title: Some("Determinism".into()),
+            },
+            Chunk {
+                id: 3,
+                content: "Third passage about moral responsibility.".into(),
+                title: None,
+            },
+        ];
+        let refs: Vec<&Chunk> = chunks.iter().collect();
+        let prompt = PhilosophyDomain.skeleton_extraction_prompt(&refs);
+        assert!(prompt.contains("[Passage 1 — Free Will]"));
+        assert!(prompt.contains("[Passage 2 — Determinism]"));
+        assert!(prompt.contains("[Passage 3 — ]")); // no title
+    }
+
+    #[test]
+    fn cluster_labeling_prompt_structure() {
+        let chunk = Chunk {
+            id: 1,
+            content: "Frankfurt cases show that moral responsibility does not require alternative possibilities.".into(),
+            title: None,
+        };
+        let prompt = PhilosophyDomain.cluster_labeling_prompt(&[&chunk]);
+        assert!(prompt.contains("semantically similar"));
+        assert!(prompt.contains("position_name"));
+        assert!(prompt.contains("is_argumentative"));
+        assert!(prompt.contains("is_objection"));
+        assert!(prompt.contains("is_open_question"));
+        assert!(prompt.contains("is_coherent"));
+        assert!(prompt.contains("Frankfurt cases"));
+    }
+
+    #[test]
+    fn fault_line_detection_prompt_includes_both_positions() {
+        let chunk_a = Chunk {
+            id: 1,
+            content: "Compatibilism argues that free will is consistent with determinism.".into(),
+            title: None,
+        };
+        let chunk_b = Chunk {
+            id: 2,
+            content: "Hard incompatibilism denies free will under both determinism and indeterminism.".into(),
+            title: None,
+        };
+        let prompt = PhilosophyDomain.fault_line_detection_prompt(
+            &[&chunk_a],
+            &[&chunk_b],
+            "Compatibilism",
+            "Hard Incompatibilism",
+        );
+        assert!(prompt.contains("Position A: Compatibilism"));
+        assert!(prompt.contains("Position B: Hard Incompatibilism"));
+        assert!(prompt.contains("crux"));
+        assert!(prompt.contains("confidence"));
+        assert!(prompt.contains("resolution_condition"));
+    }
+
+    #[test]
+    fn open_question_prompt_structure() {
+        let chunk = Chunk {
+            id: 1,
+            content: "It remains unclear whether manipulation arguments undermine compatibilism.".into(),
+            title: None,
+        };
+        let prompt = PhilosophyDomain.open_question_prompt(&[&chunk]);
+        assert!(prompt.contains("unresolved inquiry"));
+        assert!(prompt.contains("question"));
+        assert!(prompt.contains("why_unresolved"));
+        assert!(prompt.contains("manipulation arguments"));
+    }
+
+    #[test]
+    fn alignment_config_values() {
+        let config = PhilosophyDomain.alignment_config();
+        assert!((config.alignment_threshold - 0.65).abs() < f32::EPSILON);
+        assert_eq!(config.min_chunks_for_discovery, 80);
+    }
+
+    #[test]
+    fn fault_line_config_values() {
+        let config = PhilosophyDomain.fault_line_config();
+        assert!((config.proximity_threshold - 0.60).abs() < f32::EPSILON);
+        assert!((config.min_confidence - 0.70).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn position_statuses_vocabulary() {
+        let vocab = PhilosophyDomain.position_statuses();
+        assert_eq!(vocab.dominant, "Majority view");
+        assert_eq!(vocab.minority, "Minority position");
+        assert_eq!(vocab.contested, "Contested");
+        assert_eq!(vocab.settled, "Established");
+    }
+
+    #[test]
+    fn question_types_include_core_three() {
+        let types = PhilosophyDomain.question_types();
+        assert_eq!(types.len(), 3);
+        assert!(types.contains(&super::super::super::domain::QuestionType::Factual));
+        assert!(types.contains(&super::super::super::domain::QuestionType::Normative));
+        assert!(types.contains(&super::super::super::domain::QuestionType::Conceptual));
+    }
 }

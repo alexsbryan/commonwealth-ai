@@ -136,3 +136,165 @@ impl FieldSkeleton {
         self.canonical_questions.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_skeleton() -> FieldSkeleton {
+        FieldSkeleton {
+            schema_version: 1,
+            corpus_id: "sep".into(),
+            generated_at: "2026-04-09T00:00:00Z".into(),
+            extraction_method: "dual_pass_v1".into(),
+            prompt_version: "1.0.0".into(),
+            domain_id: "philosophy".into(),
+            canonical_questions: vec![
+                CanonicalQuestion {
+                    id: "q_free_will".into(),
+                    question: "Is free will compatible with determinism?".into(),
+                    status: "contested".into(),
+                    question_type: "conceptual".into(),
+                    primary_entries: vec!["Free Will".into()],
+                    positions: vec![
+                        SkeletonPosition {
+                            id: "p_compatibilism".into(),
+                            name: "Compatibilism".into(),
+                            claim: "Free will is compatible with determinism".into(),
+                            status: "majority".into(),
+                            proponents: vec!["Frankfurt".into(), "Dennett".into()],
+                            source: "skeleton".into(),
+                            cluster_ids: vec![1, 2],
+                            centroid_chunk_ids: vec![100, 200],
+                            discovery_confidence: None,
+                        },
+                        SkeletonPosition {
+                            id: "p_hard_incompatibilism".into(),
+                            name: "Hard Incompatibilism".into(),
+                            claim: "Moral responsibility is impossible".into(),
+                            status: "minority".into(),
+                            proponents: vec!["Pereboom".into()],
+                            source: "skeleton".into(),
+                            cluster_ids: vec![3],
+                            centroid_chunk_ids: vec![300],
+                            discovery_confidence: None,
+                        },
+                    ],
+                    fault_lines: vec![SkeletonFaultLine {
+                        id: "fl_1".into(),
+                        between_positions: vec![
+                            "p_compatibilism".into(),
+                            "p_hard_incompatibilism".into(),
+                        ],
+                        crux: "Whether alternative possibilities are required".into(),
+                        key_chunk_ids: vec![100, 300],
+                        confidence: 0.91,
+                        source: "detected".into(),
+                        resolution_condition: None,
+                    }],
+                },
+                CanonicalQuestion {
+                    id: "q_personal_identity".into(),
+                    question: "What constitutes personal identity over time?".into(),
+                    status: "contested".into(),
+                    question_type: "conceptual".into(),
+                    primary_entries: vec!["Personal Identity".into()],
+                    positions: vec![],
+                    fault_lines: vec![],
+                },
+            ],
+            open_questions: vec![SkeletonOpenQuestion {
+                id: "oq_1".into(),
+                question: "What explains manipulation arguments?".into(),
+                status: "active_research".into(),
+                related_question_id: Some("q_free_will".into()),
+                representative_chunk_ids: vec![500],
+            }],
+            field_stats: FieldModelStats::default(),
+        }
+    }
+
+    #[test]
+    fn find_question_by_text_matches() {
+        let skeleton = test_skeleton();
+        let q = skeleton.find_question_by_text("free will").unwrap();
+        assert_eq!(q.id, "q_free_will");
+    }
+
+    #[test]
+    fn find_question_by_text_case_insensitive() {
+        let skeleton = test_skeleton();
+        let q = skeleton.find_question_by_text("FREE WILL").unwrap();
+        assert_eq!(q.id, "q_free_will");
+    }
+
+    #[test]
+    fn find_question_by_text_no_match() {
+        let skeleton = test_skeleton();
+        assert!(skeleton.find_question_by_text("quantum mechanics").is_none());
+    }
+
+    #[test]
+    fn position_name_lookup() {
+        let skeleton = test_skeleton();
+        assert_eq!(
+            skeleton.position_name("p_compatibilism"),
+            Some("Compatibilism")
+        );
+        assert_eq!(
+            skeleton.position_name("p_hard_incompatibilism"),
+            Some("Hard Incompatibilism")
+        );
+        assert!(skeleton.position_name("p_nonexistent").is_none());
+    }
+
+    #[test]
+    fn open_questions_for_question_filters() {
+        let skeleton = test_skeleton();
+        let oqs = skeleton.open_questions_for_question("q_free_will");
+        assert_eq!(oqs.len(), 1);
+        assert_eq!(oqs[0].question, "What explains manipulation arguments?");
+
+        let oqs_empty = skeleton.open_questions_for_question("q_personal_identity");
+        assert!(oqs_empty.is_empty());
+    }
+
+    #[test]
+    fn is_empty_checks_questions() {
+        let skeleton = test_skeleton();
+        assert!(!skeleton.is_empty());
+
+        let empty = FieldSkeleton {
+            canonical_questions: vec![],
+            ..test_skeleton()
+        };
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn skeleton_json_round_trip() {
+        let skeleton = test_skeleton();
+        let json = serde_json::to_string_pretty(&skeleton).unwrap();
+        let parsed: FieldSkeleton = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.corpus_id, "sep");
+        assert_eq!(parsed.domain_id, "philosophy");
+        assert_eq!(parsed.canonical_questions.len(), 2);
+        assert_eq!(parsed.canonical_questions[0].positions.len(), 2);
+        assert_eq!(parsed.canonical_questions[0].fault_lines.len(), 1);
+        assert_eq!(parsed.open_questions.len(), 1);
+
+        let pos = &parsed.canonical_questions[0].positions[0];
+        assert_eq!(pos.name, "Compatibilism");
+        assert_eq!(pos.proponents, vec!["Frankfurt", "Dennett"]);
+        assert_eq!(pos.source, "skeleton");
+        assert!(pos.discovery_confidence.is_none());
+    }
+
+    #[test]
+    fn partial_skeleton_new() {
+        let ps = PartialSkeleton::new("philosophy");
+        assert_eq!(ps.domain_id, "philosophy");
+        assert!(ps.questions.is_empty());
+    }
+}

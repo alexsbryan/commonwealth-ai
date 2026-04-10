@@ -172,3 +172,123 @@ pub struct ClusterLabel {
     #[serde(default)]
     pub domain_id: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chunk_role_as_str_round_trip() {
+        let roles = [
+            (ChunkRole::Argument, "argument"),
+            (ChunkRole::Objection, "objection"),
+            (ChunkRole::Evidence, "evidence"),
+            (ChunkRole::Historical, "historical"),
+            (ChunkRole::Illustrative, "illustrative"),
+            (ChunkRole::Definition, "definition"),
+            (ChunkRole::OpenQuestion, "open_question"),
+            (ChunkRole::NonArgumentative, "non_argumentative"),
+        ];
+        for (role, expected) in &roles {
+            assert_eq!(role.as_str(), *expected);
+        }
+    }
+
+    #[test]
+    fn classify_chunk_role_argumentative() {
+        // Use PhilosophyDomain to test the default classify_chunk_role.
+        let domain = crate::enrichment::domains::philosophy::PhilosophyDomain;
+        let label = ClusterLabel {
+            topic: "compatibilism".into(),
+            position_name: Some("Compatibilism".into()),
+            is_argumentative: true,
+            is_objection: false,
+            is_open_question: false,
+            is_coherent: true,
+            domain_id: None,
+        };
+        assert_eq!(domain.classify_chunk_role(&label), ChunkRole::Argument);
+    }
+
+    #[test]
+    fn classify_chunk_role_objection() {
+        let domain = crate::enrichment::domains::philosophy::PhilosophyDomain;
+        let label = ClusterLabel {
+            topic: "critique".into(),
+            position_name: None,
+            is_argumentative: true,
+            is_objection: true,
+            is_open_question: false,
+            is_coherent: true,
+            domain_id: None,
+        };
+        assert_eq!(domain.classify_chunk_role(&label), ChunkRole::Objection);
+    }
+
+    #[test]
+    fn classify_chunk_role_open_question() {
+        let domain = crate::enrichment::domains::philosophy::PhilosophyDomain;
+        let label = ClusterLabel {
+            topic: "unresolved".into(),
+            position_name: None,
+            is_argumentative: true,
+            is_objection: false,
+            is_open_question: true,
+            is_coherent: true,
+            domain_id: None,
+        };
+        assert_eq!(domain.classify_chunk_role(&label), ChunkRole::OpenQuestion);
+    }
+
+    #[test]
+    fn classify_chunk_role_non_argumentative() {
+        let domain = crate::enrichment::domains::philosophy::PhilosophyDomain;
+        let label = ClusterLabel {
+            topic: "definitions".into(),
+            position_name: None,
+            is_argumentative: false,
+            is_objection: false,
+            is_open_question: false,
+            is_coherent: true,
+            domain_id: None,
+        };
+        assert_eq!(
+            domain.classify_chunk_role(&label),
+            ChunkRole::NonArgumentative
+        );
+    }
+
+    #[test]
+    fn cluster_label_json_round_trip() {
+        let label = ClusterLabel {
+            topic: "free will".into(),
+            position_name: Some("Compatibilism".into()),
+            is_argumentative: true,
+            is_objection: false,
+            is_open_question: false,
+            is_coherent: true,
+            domain_id: Some("philosophy".into()),
+        };
+        let json = serde_json::to_string(&label).unwrap();
+        let parsed: ClusterLabel = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.topic, "free will");
+        assert_eq!(parsed.position_name.as_deref(), Some("Compatibilism"));
+        assert!(parsed.is_argumentative);
+        assert_eq!(parsed.domain_id.as_deref(), Some("philosophy"));
+    }
+
+    #[test]
+    fn cluster_label_missing_domain_defaults_to_none() {
+        let json = r#"{"topic":"test","position_name":null,"is_argumentative":true,"is_objection":false,"is_open_question":false,"is_coherent":true}"#;
+        let label: ClusterLabel = serde_json::from_str(json).unwrap();
+        assert!(label.domain_id.is_none());
+    }
+
+    #[test]
+    fn chunk_role_serde_round_trip() {
+        let role = ChunkRole::Argument;
+        let json = serde_json::to_string(&role).unwrap();
+        let parsed: ChunkRole = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, role);
+    }
+}

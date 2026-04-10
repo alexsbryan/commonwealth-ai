@@ -234,3 +234,114 @@ pub struct FieldModelStats {
     pub positions_count: usize,
     pub fault_lines_count: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mean_embedding_basic() {
+        let embeddings = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![3.0, 4.0, 5.0],
+            vec![5.0, 6.0, 7.0],
+        ];
+        let mean = mean_embedding(&embeddings, &[0, 1, 2]);
+        assert!((mean[0] - 3.0).abs() < 1e-5);
+        assert!((mean[1] - 4.0).abs() < 1e-5);
+        assert!((mean[2] - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn mean_embedding_single() {
+        let embeddings = vec![vec![1.0, 2.0]];
+        let mean = mean_embedding(&embeddings, &[0]);
+        assert!((mean[0] - 1.0).abs() < 1e-5);
+        assert!((mean[1] - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn mean_embedding_empty_indices() {
+        let embeddings = vec![vec![1.0, 2.0]];
+        let mean = mean_embedding(&embeddings, &[]);
+        assert!(mean.is_empty());
+    }
+
+    #[test]
+    fn cosine_distance_identical_vectors() {
+        let a = vec![1.0, 0.0, 0.0];
+        let dist = cosine_distance(&a, &a);
+        assert!(dist.abs() < 1e-5, "identical vectors should have distance ~0");
+    }
+
+    #[test]
+    fn cosine_distance_orthogonal_vectors() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0];
+        let dist = cosine_distance(&a, &b);
+        assert!(
+            (dist - 1.0).abs() < 1e-5,
+            "orthogonal vectors should have distance ~1"
+        );
+    }
+
+    #[test]
+    fn cosine_distance_opposite_vectors() {
+        let a = vec![1.0, 0.0];
+        let b = vec![-1.0, 0.0];
+        let dist = cosine_distance(&a, &b);
+        assert!(
+            (dist - 2.0).abs() < 1e-5,
+            "opposite vectors should have distance ~2"
+        );
+    }
+
+    #[test]
+    fn indices_nearest_to_centroid_returns_n_results() {
+        let embeddings = vec![
+            vec![1.0, 0.0],
+            vec![0.9, 0.1],
+            vec![0.8, 0.2],
+            vec![0.0, 1.0],
+        ];
+        let chunk_ids: Vec<u64> = vec![100, 200, 300, 400];
+        let nearest =
+            indices_nearest_to_centroid(&embeddings, &[0, 1, 2, 3], &chunk_ids, 2);
+        assert_eq!(nearest.len(), 2, "should return exactly n results");
+    }
+
+    #[test]
+    fn indices_nearest_to_centroid_single_element() {
+        let embeddings = vec![vec![1.0, 0.0]];
+        let chunk_ids: Vec<u64> = vec![42];
+        let nearest =
+            indices_nearest_to_centroid(&embeddings, &[0], &chunk_ids, 5);
+        assert_eq!(nearest.len(), 1, "can't return more than available");
+        assert_eq!(nearest[0], 42);
+    }
+
+    #[test]
+    fn field_model_stats_default() {
+        let stats = FieldModelStats::default();
+        assert_eq!(stats.total_chunks, 0);
+        assert_eq!(stats.cluster_count, 0);
+        assert_eq!(stats.questions_count, 0);
+    }
+
+    #[test]
+    fn field_model_stats_json_round_trip() {
+        let stats = FieldModelStats {
+            total_chunks: 187967,
+            classified_chunks: 141823,
+            unclassified_chunks: 46144,
+            cluster_count: 347,
+            questions_count: 18,
+            positions_count: 67,
+            fault_lines_count: 43,
+        };
+        let json = serde_json::to_string(&stats).unwrap();
+        let parsed: FieldModelStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.total_chunks, 187967);
+        assert_eq!(parsed.cluster_count, 347);
+    }
+}
