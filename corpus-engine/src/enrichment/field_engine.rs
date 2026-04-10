@@ -275,14 +275,31 @@ impl FieldModelEngine {
         let total = all.len();
 
         // Sort by ID so we process chunks in ingestion order.
-        // This ensures the "first chunk per title" is actually the first
-        // chunk of the article, not a random chunk from the middle.
         all.sort_by_key(|c| c.id);
 
         let min_words = filter.min_token_count.unwrap_or(0);
 
-        let filtered: Vec<_> = if filter.is_first_in_entry == Some(true) {
-            // Keep the first chunk per title that meets the word count.
+        // Count distinct titles to decide if title-based dedup is viable.
+        let distinct_titles = {
+            let mut titles: std::collections::HashSet<&str> = std::collections::HashSet::new();
+            for chunk in &all {
+                titles.insert(chunk.title.as_deref().unwrap_or(""));
+            }
+            titles.len()
+        };
+
+        tracing::info!(
+            total_chunks = total,
+            distinct_titles = distinct_titles,
+            "Overview chunk title analysis"
+        );
+
+        // Count how many chunks have non-empty titles.
+        let titled_count = all.iter().filter(|c| c.title.as_ref().map_or(false, |t| !t.is_empty())).count();
+
+        let filtered: Vec<_> = if filter.is_first_in_entry == Some(true) && titled_count > 10 {
+            // Titles are available — keep the first chunk per distinct title.
+            tracing::info!(titled_count, "Using title-based overview selection");
             let mut seen_titles: std::collections::HashSet<String> =
                 std::collections::HashSet::new();
             all.into_iter()
@@ -292,16 +309,35 @@ impl FieldModelEngine {
                         return false;
                     }
                     let title_key = chunk.title.as_deref().unwrap_or("").to_lowercase();
-                    seen_titles.insert(title_key) // true on first insert
+                    if title_key.is_empty() {
+                        return false;
+                    }
+                    seen_titles.insert(title_key)
                 })
                 .collect()
         } else {
-            // No first-in-entry filter — just apply word count.
+            // No usable titles — take the lowest-ID chunk per source_doc_id
+            // window. Since chunks are sorted by ID, we sample one per N
+            // to approximate "first chunk of each article".
+            // Target ~1,800 overview samples for SEP-scale corpora.
+            let target_overviews = 1800usize;
+            let sample_rate = (total / target_overviews).max(1);
+            eprintln!(
+                "[enrichment] No chunk titles available — sampling every {}th chunk ({} of {} as overview candidates)",
+                sample_rate,
+                total / sample_rate,
+                total,
+            );
             all.into_iter()
-                .filter(|chunk| {
+                .enumerate()
+                .filter(|(i, chunk)| {
+                    if i % sample_rate != 0 {
+                        return false;
+                    }
                     let word_count = chunk.content.split_whitespace().count();
                     word_count >= min_words
                 })
+                .map(|(_, chunk)| chunk)
                 .collect()
         };
 
