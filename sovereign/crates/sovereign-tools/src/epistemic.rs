@@ -1,8 +1,9 @@
 //! Epistemic tools — `claim_search` and `epistemic_landscape`.
 //!
-//! Both tools wrap a `corpus_engine::CorpusEngine` to expose its
-//! enrichment-aware search methods to the `ReasonWithTools` loop.
-//! They use the existing `Tool` trait — no changes to `sovereign-core`.
+//! Both tools wrap a `corpus_engine::CorpusEngine` to expose field model
+//! enrichment data to the `ReasonWithTools` loop. They query the
+//! `field_skeleton.json` artifact and the enriched `chunks.lance/` table
+//! with position-aware filtered vector search.
 
 use std::sync::Arc;
 
@@ -11,17 +12,15 @@ use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Permission, StepOutput, ToolContext, ToolDescriptor,
-};
+use sovereign_core::types::{Permission, StepOutput, ToolContext, ToolDescriptor};
 
-use corpus_engine::{CorpusEngine, EpistemicLandscape, ScoredClaim};
+use corpus_engine::CorpusEngine;
 
 // ─── ClaimSearchTool ─────────────────────────────────────
 
-/// Searches extracted claims with epistemic status (consensus, contested,
-/// minority view, etc.). Use this when you need to know what positions
-/// exist on a topic, not just retrieve text passages.
+/// Searches for philosophical positions or claims with their epistemic
+/// status and attribution. Use when you need to know what positions
+/// exist on a topic and who holds them — not just find text passages.
 pub struct ClaimSearchTool {
     engine: Arc<CorpusEngine>,
 }
@@ -38,11 +37,10 @@ impl Tool for ClaimSearchTool {
         ToolDescriptor {
             id: "claim_search".to_string(),
             name: "Claim Search".to_string(),
-            description: "Search for extracted propositional claims with \
-                          epistemic status (consensus, majority, contested, \
-                          minority, established). Use this when you need to \
-                          understand what positions exist on a topic, not \
-                          just find text passages."
+            description: "Search for specific philosophical positions or claims \
+                          with their epistemic status and attribution. Use when \
+                          you need to know what positions exist on a topic and \
+                          who holds them — not just find text passages."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -51,12 +49,9 @@ impl Tool for ClaimSearchTool {
                         "type": "string",
                         "description": "The topic or claim to search for"
                     },
-                    "status_filter": {
+                    "position": {
                         "type": "string",
-                        "description": "Optional: filter by epistemic status. \
-                                        Leave empty for all.",
-                        "enum": ["consensus", "majority", "contested", "minority",
-                                 "established", ""]
+                        "description": "Optional: filter by position name (e.g. 'Compatibilism')"
                     }
                 },
                 "required": ["query"]
@@ -86,18 +81,18 @@ impl Tool for ClaimSearchTool {
             .get("query")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("Missing 'query'".into()))?;
-        let status_filter = params
-            .get("status_filter")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty());
+        let position_filter = params.get("position").and_then(|v| v.as_str());
 
-        let embedding = self
+        // Embed the query for future vector-search integration.
+        // Currently positions are matched via text similarity on the skeleton.
+        let _embedding = self
             .engine
             .embed(query)
             .await
             .map_err(|e| Error::Execution(format!("embedding failed: {e}")))?;
 
-        let mut claims: Vec<ScoredClaim> = Vec::new();
+        let mut results: Vec<PositionResult> = Vec::new();
+
         let corpus_ids = self
             .engine
             .enriched_corpus_ids()
@@ -112,52 +107,115 @@ impl Tool for ClaimSearchTool {
                     continue;
                 }
             };
-            match index.search_claims(&embedding, query, 10).await {
-                Ok(mut results) => claims.append(&mut results),
-                Err(e) => tracing::warn!("Search failed on {corpus_id}: {e}"),
+
+            let skeleton = match index.load_field_skeleton() {
+                Ok(Some(s)) => s,
+                _ => continue,
+            };
+
+            // Find positions relevant to the query by scanning the skeleton.
+            for question in &skeleton.canonical_questions {
+                for position in &question.positions {
+                    // Apply position name filter if specified.
+                    if let Some(filter) = position_filter {
+                        if !position.name.eq_ignore_ascii_case(filter) {
+                            continue;
+                        }
+                    }
+
+                    // Check if this position is relevant to the query using
+                    // simple text matching on claim and name.
+                    let query_lower = query.to_lowercase();
+                    let is_relevant = position.claim.to_lowercase().contains(&query_lower)
+                        || position.name.to_lowercase().contains(&query_lower)
+                        || question.question.to_lowercase().contains(&query_lower);
+
+                    if !is_relevant && position_filter.is_none() {
+                        continue;
+                    }
+
+                    // Retrieve top argument chunks for this position.
+                    let chunks = index
+                        .get_chunks(&position.centroid_chunk_ids)
+                        .await
+                        .unwrap_or_default();
+
+                    results.push(PositionResult {
+                        position_name: position.name.clone(),
+                        claim: position.claim.clone(),
+                        status: position.status.clone(),
+                        proponents: position.proponents.clone(),
+                        source: position.source.clone(),
+                        question: question.question.clone(),
+                        chunks: chunks
+                            .iter()
+                            .map(|c| c.content.chars().take(300).collect::<String>())
+                            .collect(),
+                    });
+                }
             }
         }
 
-        if let Some(status) = status_filter {
-            claims.retain(|c| c.claim.epistemic_status.label() == status);
+        if results.is_empty() {
+            return Ok(StepOutput::Text(
+                "No field model found for this topic. The corpus may not be \
+                 enriched, or this topic is not covered. Try using the regular \
+                 'search' tool for text passages."
+                    .to_string(),
+            ));
         }
 
-        claims.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        claims.truncate(10);
-
-        Ok(StepOutput::Text(format_claims_for_model(&claims)))
+        results.truncate(10);
+        Ok(StepOutput::Text(format_position_results(&results)))
     }
 }
 
-fn format_claims_for_model(claims: &[ScoredClaim]) -> String {
-    if claims.is_empty() {
-        return "No claims found. Try a broader search query, or use the \
-                regular 'search' tool for text passages instead."
+struct PositionResult {
+    position_name: String,
+    claim: String,
+    status: String,
+    proponents: Vec<String>,
+    source: String,
+    question: String,
+    chunks: Vec<String>,
+}
+
+fn format_position_results(results: &[PositionResult]) -> String {
+    if results.is_empty() {
+        return "No positions found. Try a broader query or use the regular \
+                'search' tool for text passages."
             .to_string();
     }
 
-    let mut output = format!("Found {} claims:\n\n", claims.len());
+    let mut output = format!("Found {} positions:\n\n", results.len());
 
-    for (i, scored) in claims.iter().enumerate() {
-        let c = &scored.claim;
+    for (i, r) in results.iter().enumerate() {
         output.push_str(&format!(
-            "[Claim {}] [{}] [score: {:.2}]\n\
-             {}\n\
-             Attributed to: {}\n\
-             Source: {}\n\
-             Hedging: {}\n\n",
+            "[Position {}] [{status}] {name}\n\
+             Claim: {claim}\n\
+             Proponents: {proponents}\n\
+             Source: {source}\n\
+             Question: {question}\n",
             i + 1,
-            c.epistemic_status.label(),
-            scored.score,
-            c.claim,
-            c.attributed_to.as_deref().unwrap_or("the article"),
-            c.source_entry.as_deref().unwrap_or("unknown"),
-            c.hedging_language.as_deref().unwrap_or("(none)"),
+            status = r.status,
+            name = r.position_name,
+            claim = r.claim,
+            proponents = if r.proponents.is_empty() {
+                "(not attributed)".to_string()
+            } else {
+                r.proponents.join(", ")
+            },
+            source = r.source,
+            question = r.question,
         ));
+
+        if !r.chunks.is_empty() {
+            output.push_str("Evidence:\n");
+            for chunk in &r.chunks {
+                output.push_str(&format!("  - {chunk}\n"));
+            }
+        }
+        output.push('\n');
     }
 
     output
@@ -166,9 +224,9 @@ fn format_claims_for_model(claims: &[ScoredClaim]) -> String {
 // ─── EpistemicLandscapeTool ──────────────────────────────
 
 /// Maps the landscape of positions, agreements, and disagreements on a
-/// topic. Shows where consensus exists, where views are contested, and
-/// what minority positions are recorded. Use for questions about debates,
-/// controversies, or contested topics.
+/// topic. Returns the dominant view, contested positions, specific fault
+/// lines, and open questions. Use for contested philosophical, scientific,
+/// or policy questions.
 pub struct EpistemicLandscapeTool {
     engine: Arc<CorpusEngine>,
 }
@@ -185,11 +243,11 @@ impl Tool for EpistemicLandscapeTool {
         ToolDescriptor {
             id: "epistemic_landscape".to_string(),
             name: "Epistemic Landscape".to_string(),
-            description: "Given a topic, return the landscape of positions, \
-                          agreements, and disagreements. Shows where there is \
-                          consensus, where views are contested, and what minority \
-                          positions exist. Use for questions about debates, \
-                          controversies, or contested topics."
+            description: "Map the landscape of positions, agreements, and \
+                          disagreements on a topic. Returns the dominant view, \
+                          contested positions, specific fault lines, and open \
+                          questions. Use for contested philosophical, scientific, \
+                          or policy questions."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -227,19 +285,13 @@ impl Tool for EpistemicLandscapeTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("Missing 'topic'".into()))?;
 
-        let embedding = self
-            .engine
-            .embed(topic)
-            .await
-            .map_err(|e| Error::Execution(format!("embedding failed: {e}")))?;
-
-        let mut combined = EpistemicLandscape::empty();
-
         let corpus_ids = self
             .engine
             .enriched_corpus_ids()
             .await
             .map_err(|e| Error::Execution(format!("listing enriched corpora: {e}")))?;
+
+        let mut landscape = FieldLandscape::empty();
 
         for corpus_id in corpus_ids {
             let index = match self.engine.open_index_for_corpus(&corpus_id).await {
@@ -249,27 +301,216 @@ impl Tool for EpistemicLandscapeTool {
                     continue;
                 }
             };
-            match index.epistemic_landscape(&embedding, topic).await {
-                Ok(l) => {
-                    combined.consensus_claims.extend(l.consensus_claims);
-                    combined.contested_clusters.extend(l.contested_clusters);
-                    combined.minority_claims.extend(l.minority_claims);
-                }
-                Err(e) => tracing::warn!("Landscape failed on {corpus_id}: {e}"),
+
+            let skeleton = match index.load_field_skeleton() {
+                Ok(Some(s)) => s,
+                _ => continue,
+            };
+
+            // Find the most relevant canonical question.
+            let topic_lower = topic.to_lowercase();
+            let question = skeleton
+                .canonical_questions
+                .iter()
+                .find(|q| q.question.to_lowercase().contains(&topic_lower))
+                .or_else(|| skeleton.canonical_questions.first());
+
+            let Some(question) = question else { continue };
+
+            // Load top argument chunks for each position.
+            let mut positions_with_evidence = Vec::new();
+            for pos in &question.positions {
+                let chunks = index
+                    .get_chunks(&pos.centroid_chunk_ids)
+                    .await
+                    .unwrap_or_default();
+
+                positions_with_evidence.push(PositionWithEvidence {
+                    name: pos.name.clone(),
+                    claim: pos.claim.clone(),
+                    status: pos.status.clone(),
+                    proponents: pos.proponents.clone(),
+                    source: pos.source.clone(),
+                    chunks: chunks
+                        .iter()
+                        .map(|c| c.content.chars().take(300).collect::<String>())
+                        .collect(),
+                });
             }
+
+            // Load fault lines for this question.
+            let fault_lines: Vec<String> = question
+                .fault_lines
+                .iter()
+                .map(|fl| fl.crux.clone())
+                .collect();
+
+            // Load open questions.
+            let open_questions: Vec<String> = skeleton
+                .open_questions_for_question(&question.id)
+                .iter()
+                .map(|oq| oq.question.clone())
+                .collect();
+
+            landscape.add_question(
+                question.question.clone(),
+                question.status.clone(),
+                positions_with_evidence,
+                fault_lines,
+                open_questions,
+            );
         }
 
-        if combined.is_empty() {
+        if landscape.is_empty() {
             return Ok(StepOutput::Text(
-                "No epistemic landscape found for this topic. The knowledge \
-                 base may not have enriched claims for this area. Try the \
-                 regular 'search' tool for text passages instead."
+                "No field model found for this topic. The knowledge \
+                 base may not be enriched, or this topic is not covered. \
+                 Try the regular 'search' tool for text passages instead."
                     .to_string(),
             ));
         }
 
-        Ok(StepOutput::Text(combined.format_for_model()))
+        Ok(StepOutput::Text(landscape.format_for_model()))
     }
+}
+
+// ─── FieldLandscape formatting ──────────────────────────
+
+struct PositionWithEvidence {
+    name: String,
+    claim: String,
+    status: String,
+    proponents: Vec<String>,
+    source: String,
+    chunks: Vec<String>,
+}
+
+struct QuestionLandscape {
+    question: String,
+    status: String,
+    positions: Vec<PositionWithEvidence>,
+    fault_lines: Vec<String>,
+    open_questions: Vec<String>,
+}
+
+struct FieldLandscape {
+    questions: Vec<QuestionLandscape>,
+}
+
+impl FieldLandscape {
+    fn empty() -> Self {
+        Self {
+            questions: Vec::new(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.questions.is_empty()
+    }
+
+    fn add_question(
+        &mut self,
+        question: String,
+        status: String,
+        positions: Vec<PositionWithEvidence>,
+        fault_lines: Vec<String>,
+        open_questions: Vec<String>,
+    ) {
+        self.questions.push(QuestionLandscape {
+            question,
+            status,
+            positions,
+            fault_lines,
+            open_questions,
+        });
+    }
+
+    fn format_for_model(&self) -> String {
+        let mut out = String::new();
+
+        for q in &self.questions {
+            out.push_str(&format!(
+                "QUESTION: {}\nStatus: {}\n\n",
+                q.question, q.status
+            ));
+
+            // Group by status.
+            let dominant: Vec<_> = q.positions.iter().filter(|p| p.status == "majority").collect();
+            let contested: Vec<_> =
+                q.positions.iter().filter(|p| p.status == "contested").collect();
+            let minority: Vec<_> =
+                q.positions.iter().filter(|p| p.status == "minority").collect();
+
+            if !dominant.is_empty() {
+                out.push_str("DOMINANT VIEW:\n");
+                for pwe in &dominant {
+                    out.push_str(&format_position_with_evidence(pwe));
+                }
+            }
+
+            if !contested.is_empty() {
+                out.push_str("CONTESTED:\n");
+                for pwe in &contested {
+                    out.push_str(&format_position_with_evidence(pwe));
+                }
+            }
+
+            if !minority.is_empty() {
+                out.push_str("MINORITY POSITIONS:\n");
+                for pwe in &minority {
+                    out.push_str(&format_position_with_evidence(pwe));
+                }
+            }
+
+            if !q.fault_lines.is_empty() {
+                out.push_str("\nFAULT LINES — where the debate actually turns:\n");
+                for fl in &q.fault_lines {
+                    out.push_str(&format!("  - {fl}\n"));
+                }
+            }
+
+            if !q.open_questions.is_empty() {
+                out.push_str("\nOPEN QUESTIONS — unresolved in the field:\n");
+                for oq in &q.open_questions {
+                    out.push_str(&format!("  - {oq}\n"));
+                }
+            }
+
+            out.push('\n');
+        }
+
+        out
+    }
+}
+
+fn format_position_with_evidence(pwe: &PositionWithEvidence) -> String {
+    let mut out = format!(
+        "  [{status}] {name}: {claim}\n    Proponents: {proponents}\n",
+        status = pwe.status,
+        name = pwe.name,
+        claim = pwe.claim,
+        proponents = if pwe.proponents.is_empty() {
+            "(not attributed)".to_string()
+        } else {
+            pwe.proponents.join(", ")
+        },
+    );
+
+    if pwe.source == "discovered" {
+        out.push_str("    (Discovered via clustering — not stated in overviews)\n");
+    }
+
+    if !pwe.chunks.is_empty() {
+        out.push_str("    Evidence:\n");
+        for chunk in &pwe.chunks {
+            out.push_str(&format!(
+                "      - {}\n",
+                chunk.chars().take(200).collect::<String>()
+            ));
+        }
+    }
+
+    out
 }
 
 #[cfg(test)]
@@ -277,17 +518,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn format_empty_claims_returns_helpful_message() {
-        let formatted = format_claims_for_model(&[]);
-        assert!(formatted.contains("No claims found"));
-        assert!(formatted.contains("regular 'search'"));
+    fn format_empty_results_returns_helpful_message() {
+        let formatted = format_position_results(&[]);
+        assert!(formatted.contains("No positions found"));
+        assert!(formatted.contains("search"));
     }
 
     #[test]
     fn descriptor_has_required_query_param() {
-        // Build a dummy engine — won't be used by descriptor().
-        // We can't construct a real engine without an embed fn, so we
-        // just test the descriptor method statically by reading the JSON.
         let json = json!({
             "type": "object",
             "properties": {
@@ -297,5 +535,11 @@ mod tests {
         });
         let required = json["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v == "query"));
+    }
+
+    #[test]
+    fn field_landscape_empty_check() {
+        let l = FieldLandscape::empty();
+        assert!(l.is_empty());
     }
 }

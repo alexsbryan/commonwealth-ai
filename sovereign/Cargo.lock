@@ -1145,10 +1145,29 @@ name = "commonwealth-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "bytes",
+ "commonwealth-app",
  "commonwealth-core",
- "commonwealth-orchestrator",
- "commonwealth-scheduler",
+ "commonwealth-inference",
+ "commonwealth-knowledge",
+ "commonwealth-state",
  "corpus-engine",
+ "hex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "commonwealth-app"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "commonwealth-core",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1166,20 +1185,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "toml 0.8.2",
-]
-
-[[package]]
-name = "commonwealth-corpus"
-version = "0.1.0"
-dependencies = [
- "commonwealth-core",
- "corpus-engine",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -1201,23 +1206,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "commonwealth-orchestrator"
+name = "commonwealth-inference"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "axum",
+ "bytes",
+ "commonwealth-app",
  "commonwealth-core",
- "commonwealth-scheduler",
+ "commonwealth-state",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
+]
+
+[[package]]
+name = "commonwealth-knowledge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "commonwealth-app",
+ "commonwealth-core",
+ "commonwealth-state",
+ "corpus-engine",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]
 
 [[package]]
-name = "commonwealth-scheduler"
+name = "commonwealth-state"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "commonwealth-core",
+ "rusqlite",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1359,10 +1388,12 @@ dependencies = [
  "arrow-schema 57.3.0",
  "blake3",
  "bzip2",
+ "chrono",
  "csv",
  "flate2",
  "futures",
  "glob",
+ "hdbscan",
  "jsonpath-rust",
  "lancedb",
  "parquet 57.3.0",
@@ -3382,6 +3413,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hdbscan"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "466aa8bfaa22c81efcf67c84e6ad046de13a05c6cc9d41a5094361bff464247a"
+dependencies = [
+ "kdtree",
+ "num-traits",
+]
+
+[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4055,6 +4096,16 @@ checksum = "5dea2b27dd239b2556ed7a25ba842fe47fd602e7fc7433c2a8d6106d4d9edd70"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "kdtree"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f0a0e9f770b65bac9aad00f97a67ab5c5319effed07f6da385da3c2115e47ba"
+dependencies = [
+ "num-traits",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -7846,10 +7897,7 @@ dependencies = [
  "axum",
  "commonwealth-api",
  "commonwealth-core",
- "commonwealth-corpus",
  "commonwealth-discovery",
- "commonwealth-orchestrator",
- "commonwealth-scheduler",
  "corpus-engine",
  "serde",
  "serde_json",

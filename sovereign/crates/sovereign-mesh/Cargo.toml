@@ -8,10 +8,7 @@ description = "Commonwealth mesh integration layer for Sovereign"
 # Commonwealth crates (embedded as library)
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
-commonwealth-scheduler = { path = "../../../commonwealth/crates/commonwealth-scheduler" }
-commonwealth-orchestrator = { path = "../../../commonwealth/crates/commonwealth-orchestrator" }
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
-commonwealth-corpus = { path = "../../../commonwealth/crates/commonwealth-corpus" }
 corpus-engine = { workspace = true }
 
 # Sovereign core (for InferenceProvider trait)

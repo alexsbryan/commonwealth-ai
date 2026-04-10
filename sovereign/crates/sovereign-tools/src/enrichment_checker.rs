@@ -1,18 +1,15 @@
-//! `EnrichmentChecker` — health-checks enrichment coverage for every corpus.
+//! `EnrichmentChecker` — health-checks field model enrichment for every corpus.
 //!
-//! Only fires for corpora where `enrichment_enabled = true` in the index meta.
+//! Checks for enrichment completeness based on the `field_skeleton.json`
+//! artifact and the `_enrichment_checkpoint.json` resume state.
 
 use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::health::{
-    Component, HealthCheckable, HealthIssue, HealthReport, RepairKind,
-    RepairOutcome,
+    Component, HealthCheckable, HealthIssue, HealthReport, RepairKind, RepairOutcome,
 };
-
-/// Coverage below this fraction triggers `LowEnrichmentCoverage`.
-const COVERAGE_THRESHOLD: f32 = 0.80;
 
 // ─── EnrichmentChecker ───────────────────────────────────────────────────────
 
@@ -51,48 +48,29 @@ impl HealthCheckable for EnrichmentChecker {
                     continue;
                 }
                 let corpus_id = info.corpus_id.clone();
-                let total = info.chunk_count;
-                if total == 0 {
-                    continue;
-                }
 
-                // ── Stale enrichment ────────────────────────────────────────
                 if let Ok(index) = self.engine.open_index_for_corpus(&corpus_id).await {
-                    let stale = index
-                        .stale_claim_count()
-                        .await
-                        .map_err(|e| Error::Other(Box::new(e)))?;
-                    if stale > 0 {
-                        issues.push(HealthIssue::StaleEnrichment {
-                            corpus_id: corpus_id.clone(),
-                            stale_claim_count: stale,
-                        });
-                    }
+                    // Check if field model tables exist.
+                    let has_field_model = index.has_field_model_tables().await;
 
-                    // ── Orphaned enrichment ──────────────────────────────────
-                    let orphans = index
-                        .find_stale_claims(usize::MAX)
-                        .await
-                        .map_err(|e| Error::Other(Box::new(e)))?;
-                    let orphan_count = orphans.len() as u64;
-                    if orphan_count > 0 {
-                        issues.push(HealthIssue::OrphanedEnrichment {
-                            corpus_id: corpus_id.clone(),
-                            orphan_claim_count: orphan_count,
-                        });
-                    }
-                }
-
-                // ── Coverage ────────────────────────────────────────────────
-                if let Some(enriched) = info.enriched_chunks {
-                    let coverage = enriched as f32 / total as f32;
-                    if coverage < COVERAGE_THRESHOLD && enriched > 0 {
+                    if !has_field_model {
+                        // No field model — enrichment was enabled but never completed.
                         issues.push(HealthIssue::LowEnrichmentCoverage {
                             corpus_id: corpus_id.clone(),
-                            enriched_chunks: enriched,
-                            total_chunks: total,
-                            coverage_pct: coverage * 100.0,
-                            threshold_pct: COVERAGE_THRESHOLD * 100.0,
+                            enriched_chunks: 0,
+                            total_chunks: info.chunk_count,
+                            coverage_pct: 0.0,
+                            threshold_pct: 80.0,
+                        });
+                        continue;
+                    }
+
+                    // Check for interrupted enrichment (checkpoint file exists).
+                    let checkpoint_path = index.path().join("_enrichment_checkpoint.json");
+                    if checkpoint_path.exists() {
+                        issues.push(HealthIssue::StaleEnrichment {
+                            corpus_id: corpus_id.clone(),
+                            stale_claim_count: 1, // Indicates incomplete enrichment
                         });
                     }
                 }
@@ -115,46 +93,50 @@ impl HealthCheckable for EnrichmentChecker {
         let issue = issue.clone();
         Box::pin(async move {
             match &issue {
-                HealthIssue::StaleEnrichment { corpus_id, .. } | HealthIssue::OrphanedEnrichment { corpus_id, .. } => {
+                HealthIssue::StaleEnrichment { corpus_id, .. } => {
                     Ok(RepairOutcome::NeedsUserDecision {
                         question: format!(
-                            "Corpus `{corpus_id}` has stale/orphaned enrichment data. \
-                             Delete and re-extract claims for affected chunks?"
+                            "Corpus `{corpus_id}` has an interrupted enrichment run. \
+                             Resume field model enrichment?"
                         ),
                         options: vec![
                             sovereign_core::health::UserOption {
                                 kind: RepairKind::RefreshEnrichment,
-                                label: "Refresh enrichment".into(),
-                                description: "Delete stale claims and re-run extraction.".into(),
+                                label: "Resume enrichment".into(),
+                                description: "Resume from the last completed phase.".into(),
                             },
                             sovereign_core::health::UserOption {
                                 kind: RepairKind::Dismiss,
                                 label: "Dismiss".into(),
-                                description: "Ignore — stale claims may degrade search quality.".into(),
+                                description: "Ignore — partial enrichment may affect search quality."
+                                    .into(),
                             },
                         ],
-                        consequence: "Re-extraction will use inference credits.".into(),
+                        consequence: "Resuming will use inference credits for remaining phases."
+                            .into(),
                     })
                 }
                 HealthIssue::LowEnrichmentCoverage { corpus_id, .. } => {
                     Ok(RepairOutcome::NeedsUserDecision {
                         question: format!(
-                            "Corpus `{corpus_id}` has low enrichment coverage. \
-                             Run full enrichment now?"
+                            "Corpus `{corpus_id}` has no field model enrichment. \
+                             Run enrichment now?"
                         ),
                         options: vec![
                             sovereign_core::health::UserOption {
                                 kind: RepairKind::RefreshEnrichment,
-                                label: "Run full enrichment".into(),
-                                description: "Extract claims for all un-enriched chunks.".into(),
+                                label: "Run field model enrichment".into(),
+                                description: "Build the field model (HDBSCAN clustering + LLM analysis)."
+                                    .into(),
                             },
                             sovereign_core::health::UserOption {
                                 kind: RepairKind::Dismiss,
                                 label: "Dismiss".into(),
-                                description: "Ignore — epistemic search will be partial.".into(),
+                                description: "Ignore — epistemic search will be unavailable.".into(),
                             },
                         ],
-                        consequence: "Full enrichment may take a long time and use inference credits.".into(),
+                        consequence: "Enrichment uses ~860 inference calls for SEP (~52 minutes)."
+                            .into(),
                     })
                 }
                 _ => Err(Error::RepairNotSupported),
@@ -163,7 +145,6 @@ impl HealthCheckable for EnrichmentChecker {
     }
 
     fn can_repair_autonomously(&self, _issue: &HealthIssue) -> bool {
-        // All enrichment repairs require user authorisation (inference cost).
         false
     }
 }
@@ -172,10 +153,9 @@ impl HealthCheckable for EnrichmentChecker {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn coverage_threshold_constant() {
-        assert!(COVERAGE_THRESHOLD > 0.0 && COVERAGE_THRESHOLD < 1.0);
+    fn checker_exists() {
+        // Basic compilation test — the checker struct compiles.
+        // Integration tests require a real CorpusEngine.
     }
 }
