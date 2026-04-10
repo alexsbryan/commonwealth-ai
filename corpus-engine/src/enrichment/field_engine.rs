@@ -271,44 +271,39 @@ impl FieldModelEngine {
         index: &CorpusIndex,
     ) -> Result<Vec<crate::index::StoredChunk>> {
         let filter = self.domain.overview_filter();
-        let all = index.all_chunks().await?;
+        let mut all = index.all_chunks().await?;
         let total = all.len();
 
-        // Group chunks by title (source entry) to identify first-in-entry.
-        let mut seen_titles: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        // Sort by ID so we process chunks in ingestion order.
+        // This ensures the "first chunk per title" is actually the first
+        // chunk of the article, not a random chunk from the middle.
+        all.sort_by_key(|c| c.id);
 
-        let filtered: Vec<_> = all
-            .into_iter()
-            .filter(|chunk| {
-                // Check is_first_in_entry: only keep the first chunk per title.
-                if filter.is_first_in_entry == Some(true) {
-                    let title_key = chunk
-                        .title
-                        .as_deref()
-                        .unwrap_or("")
-                        .to_lowercase();
-                    if !seen_titles.insert(title_key) {
-                        return false; // Already seen this title.
-                    }
-                }
+        let min_words = filter.min_token_count.unwrap_or(0);
 
-                // Check min_token_count.
-                if let Some(min_tokens) = filter.min_token_count {
+        let filtered: Vec<_> = if filter.is_first_in_entry == Some(true) {
+            // Keep the first chunk per title that meets the word count.
+            let mut seen_titles: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            all.into_iter()
+                .filter(|chunk| {
                     let word_count = chunk.content.split_whitespace().count();
-                    if word_count < min_tokens {
+                    if word_count < min_words {
                         return false;
                     }
-                }
-
-                // Check section_name_in — requires metadata parsing.
-                // For now we skip this filter since SEP chunks don't carry
-                // section_name in the StoredChunk type. The is_first_in_entry
-                // filter is the main reducer.
-
-                true
-            })
-            .collect();
+                    let title_key = chunk.title.as_deref().unwrap_or("").to_lowercase();
+                    seen_titles.insert(title_key) // true on first insert
+                })
+                .collect()
+        } else {
+            // No first-in-entry filter — just apply word count.
+            all.into_iter()
+                .filter(|chunk| {
+                    let word_count = chunk.content.split_whitespace().count();
+                    word_count >= min_words
+                })
+                .collect()
+        };
 
         tracing::info!(
             total_chunks = total,
