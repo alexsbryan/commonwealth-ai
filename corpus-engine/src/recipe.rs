@@ -632,7 +632,7 @@ type = "paragraph"
                 ..
             } => {
                 assert_eq!(content_column, "text");
-                assert_eq!(label_column.as_deref(), Some("title"));
+                assert_eq!(label_column.as_deref(), Some("category"));
             }
             other => panic!("SEP must use Parquet extractor, got {other:?}"),
         }
