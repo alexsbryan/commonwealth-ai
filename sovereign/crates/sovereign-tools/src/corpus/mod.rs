@@ -51,7 +51,7 @@ pub fn inference_to_inference_fn(
             prompt: prompt.to_string(),
             system_message: None,
             preferred_speed: Speed::Fast,  // fast model — structured extraction doesn't need 27B
-            max_tokens: Some(768),         // 8 claims × ~80 tokens; 768 is ample
+            max_tokens: Some(2048),        // skeleton extraction returns structured JSON for 4 passages
             temperature: Some(0.1),        // low temperature for consistent JSON output
             think_budget: Some(0),         // suppress thinking — hurts JSON, wastes tokens
             structured_output: None,
