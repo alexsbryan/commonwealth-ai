@@ -233,7 +233,6 @@ impl CorpusUpdater {
             // Delete-last: insert new → delete old.
             index.insert_chunks(&embedded).await?;
             index.delete_chunks_by_source_doc(doc_id).await?;
-            index.mark_claims_stale_for_doc(doc_id).await?;
 
             log.updated_ids.push(doc_id.clone());
             self.engine.save_update_progress(corpus_id, log)?;

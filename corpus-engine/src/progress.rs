@@ -25,37 +25,6 @@ pub enum IngestProgress {
         chunks_indexed: u64,
         total: u64,
     },
-    /// Enrichment phase 1: extracting claims from chunks.
-    ExtractingClaims {
-        current: u64,
-        total: u64,
-        /// Cumulative number of claims successfully extracted so far.
-        claims_found: u64,
-        /// Chunks where the inference call failed entirely.
-        inference_errors: u64,
-        /// Chunks where inference succeeded but JSON parsing produced nothing.
-        parse_errors: u64,
-        /// Throughput over the last reporting window (chunks per second).
-        chunks_per_sec: f32,
-    },
-    /// Enrichment phase 2 (preliminary): candidate pairs identified.
-    FoundCandidatePairs {
-        count: usize,
-    },
-    /// Enrichment phase 2: extracting relationships between claim pairs.
-    ExtractingRelationships {
-        current: u64,
-        total: u64,
-    },
-    /// Structural enrichment (Wikipedia): building link-based relationship graph.
-    BuildingLinkGraph {
-        current: usize,
-        total: usize,
-    },
-    /// Structural enrichment (Wikipedia): computing per-article epistemic profiles.
-    ComputingArticleProfiles {
-        article_count: usize,
-    },
     Complete {
         total_chunks: u64,
         duration_secs: u64,

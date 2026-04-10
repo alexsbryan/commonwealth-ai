@@ -32,8 +32,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::enrichment::article_profile::{WikiLink, WikipediaChunkMetadata};
-use crate::enrichment::link_graph::wiki_title_from_url;
+use super::wikipedia_types::{WikiLink, WikipediaChunkMetadata, wiki_title_from_url};
 use crate::error::{Error, Result};
 use super::{ExtractedDoc, Extractor, slug};
 use super::wikipedia_structured::{
@@ -509,7 +508,6 @@ fn extract_sections_json(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::article_profile::WikipediaChunkMetadata;
 
     fn article_json(
         name: &str,

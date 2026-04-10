@@ -6,6 +6,7 @@ pub mod parquet;
 pub mod plaintext;
 pub mod wikipedia_structured;
 pub mod wikipedia_jsonl;
+pub mod wikipedia_types;
 
 use crate::error::Result;
 

@@ -45,19 +45,24 @@ embedding_dimensions = 768
 manifest_url = "https://updates.sovereign.dev/manifests/wikipedia-en.json"
 auto_update = true
 
+# Field model enrichment: multi-domain classification + clustering.
+# Wikipedia spans philosophy, science, policy, history, and more.
+# The MultiDomain implementation classifies each cluster into its domain.
 [enrichment]
 enabled = true
-extract_relationships = false
-relationship_similarity_threshold = 0.55
-max_relationship_candidates = 50000
-claim_extraction_prompt = '''
-Extract factual claims from this Wikipedia passage.
+type = "field_model"
+domain = "multi"
+prompt_version = "1.0.0"
 
-Focus on verifiable, encyclopedic facts: dates, relationships, quantities, events,
-classifications, and biographical details. Emit only the core claim — do not include
-editorial signals ("according to", "may be", "is believed to") in the claim text itself.
-Skip purely navigational content, maintenance notices, and disambiguation text.
+[enrichment.clustering]
+min_cluster_size = 100
+epsilon = 0.08
+label_sample_size = 5
 
-Return one claim per line, each starting with '-'. Return an empty list if the
-passage contains no verifiable factual claims.
-'''
+[enrichment.alignment]
+alignment_threshold = 0.58
+min_chunks_for_discovery = 150
+
+[enrichment.fault_lines]
+proximity_threshold = 0.55
+min_confidence = 0.65

@@ -158,34 +158,3 @@ pub enum CorpusSpec {
     RecipePath(PathBuf),
 }
 
-// ─── Scored Claim (claim search result) ─────────────────
-
-/// A claim returned from a claim search, with its similarity score.
-/// Used by `CorpusIndex::search_claims()` and the `ClaimSearchTool`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScoredClaim {
-    pub claim: crate::enrichment::ExtractedClaim,
-    pub score: f32,
-}
-
-impl ScoredClaim {
-    /// Wrap a chunk-search result as a ScoredClaim with `Unclear` epistemic status.
-    /// Used for graceful degradation when a corpus has no enrichment data.
-    pub fn from_chunk(chunk: ScoredChunk, claim_id: u64) -> Self {
-        Self {
-            claim: crate::enrichment::ExtractedClaim {
-                id: claim_id,
-                claim: chunk.content.clone(),
-                source_chunk_id: 0,
-                source_chunk_hash: None,
-                corpus_id: chunk.corpus_id.clone(),
-                epistemic_status: crate::enrichment::EpistemicStatus::Unclear,
-                hedging_language: None,
-                attributed_to: None,
-                source_entry: chunk.title.clone(),
-                embedding: Vec::new(),
-            },
-            score: chunk.score,
-        }
-    }
-}

@@ -43,4 +43,7 @@ pub enum Error {
 
     #[error("Safety violation: {0}")]
     Safety(String),
+
+    #[error("Unknown enrichment domain: {0}")]
+    UnknownEnrichmentDomain(String),
 }

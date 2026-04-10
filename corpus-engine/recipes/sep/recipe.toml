@@ -39,63 +39,24 @@ vector = true
 embedding_model = "nomic-embed-text-v2"
 embedding_dimensions = 768
 
-# SEP's distinctive hedging vocabulary ("it is widely accepted", "there is ongoing
-# debate") makes it ideal for epistemic enrichment. Claim + relationship extraction
-# powers the epistemic-research skill's stance graph.
+# Field model enrichment: clusters chunk embeddings via HDBSCAN, extracts a
+# field skeleton from overview passages, aligns clusters to named positions,
+# detects fault lines and open questions. Powers the epistemic-research skill.
 [enrichment]
 enabled = true
-extract_relationships = true
-relationship_similarity_threshold = 0.55
-max_relationship_candidates = 50000
+type = "field_model"
+domain = "philosophy"
+prompt_version = "1.0.0"
 
-claim_extraction_prompt = '''
-You are extracting philosophical claims from Stanford Encyclopedia of Philosophy passages.
+[enrichment.clustering]
+min_cluster_size = 50
+epsilon = 0.10
+label_sample_size = 5
 
-JSON ONLY. No explanation, no preamble, no chain-of-thought.
+[enrichment.alignment]
+alignment_threshold = 0.65
+min_chunks_for_discovery = 80
 
-RULES:
-- Extract AT MOST 3 claims per passage.
-- Return [] if the passage lacks 2+ substantive philosophical claims. Do not pad.
-- DO NOT extract from: thought experiments or illustrative examples with fictional agents
-  (Tim, Harry, Mary, Jones, Smith, or any "suppose"/"imagine"/"consider a case"/"assume that"
-  framing), purely historical or biographical statements, logical formalizations, or statements
-  about the article itself.
-- A claim must be falsifiable or debatable. "Aristotle was a philosopher" fails.
-  "Aristotle's virtue ethics grounds moral evaluation in character rather than consequences" passes.
-
-For each claim provide:
-- "claim": a single declarative statement capturing the position.
-- "epistemic_status": one of "consensus", "majority", "contested", "minority", "established",
-  "unclear". SEP hedging cues: "widely accepted"→consensus, "most philosophers"→majority,
-  "remains controversial"→contested, "some argue"→minority, "it is uncontroversial"→established.
-- "hedging_language": exact words from the text signalling epistemic status, or null.
-- "attributed_to": philosopher name, school of thought, or null if the article's own framing.
-'''
-
-relationship_extraction_prompt = '''
-Given two claims from different encyclopedia entries, determine
-their epistemic relationship.
-
-Claim A: {claim_a}
-  From: {source_a}
-  Attributed to: {attributed_a}
-
-Claim B: {claim_b}
-  From: {source_b}
-  Attributed to: {attributed_b}
-
-What is the relationship?
-- "contradicts": Claim A directly opposes Claim B.
-- "supports": Claim A provides evidence or argument for Claim B.
-- "refines": Claim A qualifies or adds nuance to Claim B.
-- "competing_answers": Both claims answer the same question differently.
-- "presupposes": Claim A depends on or assumes Claim B.
-- "none": No meaningful epistemic relationship.
-
-Also provide:
-- "connecting_issue": The question or topic that connects them.
-  Null if the relationship is "none".
-- "confidence": 0.0 to 1.0, how confident you are in this classification.
-
-Return ONLY a JSON object. No other text.
-'''
+[enrichment.fault_lines]
+proximity_threshold = 0.60
+min_confidence = 0.70

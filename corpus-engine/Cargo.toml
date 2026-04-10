@@ -64,6 +64,12 @@ tempfile = "3"
 blake3 = "1"
 sha2 = "0.10"
 
+# Clustering
+hdbscan = "0.12"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
 tempfile = "3"

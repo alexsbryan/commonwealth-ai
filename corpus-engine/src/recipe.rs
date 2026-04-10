@@ -70,14 +70,6 @@ fn default_embedding_dimensions() -> usize {
     768
 }
 
-fn default_similarity_threshold() -> f32 {
-    0.55
-}
-
-fn default_max_relationship_candidates() -> usize {
-    50_000
-}
-
 // ---------------------------------------------------------------------------
 // Top-level Recipe
 // ---------------------------------------------------------------------------
@@ -140,80 +132,91 @@ pub struct UpdateConfig {
 }
 
 // ---------------------------------------------------------------------------
-// RelationshipScope
-// ---------------------------------------------------------------------------
-
-/// Controls which claim pairs are evaluated for relationships.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-pub enum RelationshipScope {
-    /// Only consider pairs of claims from the *same* source entry (article).
-    /// This is the default — it is faster and avoids spurious cross-article
-    /// false positives.
-    #[default]
-    WithinArticle,
-    /// Evaluate all cross-article claim pairs (original behaviour, reserved
-    /// for future use on small corpora).
-    CrossArticle,
-}
-
-// ---------------------------------------------------------------------------
 // EnrichmentConfig
 // ---------------------------------------------------------------------------
 
-/// Configures the optional epistemic enrichment pipeline.
+/// Configures the optional enrichment pipeline.
 ///
-/// The two prompts are domain-specific — SEP's hedging patterns differ
-/// from legal opinions or medical literature. The recipe author writes
-/// the prompt that fits their corpus's conventions.
+/// The new field model enrichment uses domain-specific prompts and
+/// HDBSCAN clustering. Set `type = "field_model"` and `domain = "philosophy"`
+/// (or another domain) to use the new pipeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnrichmentConfig {
     #[serde(default)]
     pub enabled: bool,
 
-    /// Prompt that teaches the model to extract claims from a passage.
-    /// Should ask for a JSON array; the engine tolerates surrounding
-    /// prose and markdown code fences.
-    pub claim_extraction_prompt: String,
+    // ── New field model fields ──────────────────────────────
 
-    /// Whether to also extract relationships between claims.
+    /// Enrichment type: "field_model" (default).
+    #[serde(default = "default_enrichment_type", rename = "type")]
+    pub enrichment_type: String,
+
+    /// Domain identifier: "philosophy", "science", "policy", "legal",
+    /// "community", "multi".
     #[serde(default)]
-    pub extract_relationships: bool,
+    pub domain: Option<String>,
 
-    /// Prompt for relationship classification. Required if
-    /// `extract_relationships` is true. Supports placeholders:
-    /// `{claim_a}`, `{claim_b}`, `{source_a}`, `{source_b}`,
-    /// `{attributed_a}`, `{attributed_b}`.
+    /// Prompt version tag. Recorded in `_corpus_meta.json` so the health
+    /// checker can detect stale enrichment when prompts change.
     #[serde(default)]
-    pub relationship_extraction_prompt: Option<String>,
+    pub prompt_version: Option<String>,
 
-    /// Minimum cosine similarity between two claims (from different
-    /// entries) for them to be considered as candidate pairs. Lower
-    /// values surface more potential relationships at the cost of more
-    /// inference calls.
-    #[serde(default = "default_similarity_threshold")]
-    pub relationship_similarity_threshold: f32,
-
-    /// Maximum number of candidate pairs to evaluate. Caps the cost
-    /// of relationship extraction on large corpora.
-    #[serde(default = "default_max_relationship_candidates")]
-    pub max_relationship_candidates: usize,
-
-    /// Which claim pairs to evaluate when extracting relationships.
-    /// Defaults to `WithinArticle`.
+    /// HDBSCAN clustering parameters.
     #[serde(default)]
-    pub relationship_scope: RelationshipScope,
+    pub clustering: Option<ClusteringToml>,
+
+    /// Alignment parameters.
+    #[serde(default)]
+    pub alignment: Option<AlignmentToml>,
+
+    /// Fault line detection parameters.
+    #[serde(default)]
+    pub fault_lines: Option<FaultLinesToml>,
+}
+
+fn default_enrichment_type() -> String {
+    "field_model".to_string()
+}
+
+/// HDBSCAN clustering parameters (TOML representation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusteringToml {
+    #[serde(default)]
+    pub min_cluster_size: Option<usize>,
+    #[serde(default)]
+    pub epsilon: Option<f32>,
+    #[serde(default)]
+    pub label_sample_size: Option<usize>,
+}
+
+/// Alignment parameters (TOML representation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlignmentToml {
+    #[serde(default)]
+    pub alignment_threshold: Option<f32>,
+    #[serde(default)]
+    pub min_chunks_for_discovery: Option<usize>,
+}
+
+/// Fault line detection parameters (TOML representation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FaultLinesToml {
+    #[serde(default)]
+    pub proximity_threshold: Option<f32>,
+    #[serde(default)]
+    pub min_confidence: Option<f32>,
 }
 
 impl Default for EnrichmentConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            claim_extraction_prompt: String::new(),
-            extract_relationships: false,
-            relationship_extraction_prompt: None,
-            relationship_similarity_threshold: default_similarity_threshold(),
-            max_relationship_candidates: default_max_relationship_candidates(),
-            relationship_scope: RelationshipScope::default(),
+            enrichment_type: default_enrichment_type(),
+            domain: None,
+            prompt_version: None,
+            clustering: None,
+            alignment: None,
+            fault_lines: None,
         }
     }
 }
@@ -649,26 +652,40 @@ type = "paragraph"
             .expect("SEP must have an enrichment block");
 
         assert!(enrichment.enabled, "SEP enrichment must be enabled");
-        assert!(
-            !enrichment.claim_extraction_prompt.is_empty(),
-            "SEP claim extraction prompt must not be empty"
+        assert_eq!(
+            enrichment.enrichment_type, "field_model",
+            "SEP enrichment type must be field_model"
+        );
+        assert_eq!(
+            enrichment.domain.as_deref(),
+            Some("philosophy"),
+            "SEP enrichment domain must be philosophy"
         );
         assert!(
-            enrichment.claim_extraction_prompt.contains("epistemic_status"),
-            "SEP claim prompt should ask for epistemic_status"
+            enrichment.prompt_version.is_some(),
+            "SEP must have a prompt_version"
         );
 
-        assert!(
-            enrichment.extract_relationships,
-            "SEP must extract relationships"
-        );
-        let rel_prompt = enrichment
-            .relationship_extraction_prompt
+        // Clustering config
+        let clustering = enrichment
+            .clustering
             .as_ref()
-            .expect("SEP must have a relationship extraction prompt");
-        assert!(rel_prompt.contains("{claim_a}"));
-        assert!(rel_prompt.contains("{claim_b}"));
-        assert!(rel_prompt.contains("contradicts"));
+            .expect("SEP must have clustering config");
+        assert_eq!(clustering.min_cluster_size, Some(50));
+
+        // Alignment config
+        let alignment = enrichment
+            .alignment
+            .as_ref()
+            .expect("SEP must have alignment config");
+        assert!(alignment.alignment_threshold.is_some());
+
+        // Fault lines config
+        let fault_lines = enrichment
+            .fault_lines
+            .as_ref()
+            .expect("SEP must have fault_lines config");
+        assert!(fault_lines.min_confidence.is_some());
     }
 
     #[test]
@@ -776,7 +793,8 @@ type = "paragraph"
 
         let enrichment = wp.enrichment.as_ref().expect("wikipedia must have enrichment");
         assert!(enrichment.enabled);
-        assert!(!enrichment.claim_extraction_prompt.is_empty());
+        assert_eq!(enrichment.enrichment_type, "field_model");
+        assert_eq!(enrichment.domain.as_deref(), Some("multi"));
 
         let update = wp.update.as_ref().expect("wikipedia must have update config");
         assert!(update.auto_update);

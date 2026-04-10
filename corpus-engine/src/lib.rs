@@ -30,14 +30,13 @@ pub mod update;
 
 pub use engine::CorpusEngine;
 pub use enrichment::{
-    ArticleEpistemicProfile, ClaimRelationship, ContestedCluster, EnrichmentEngine,
-    EpistemicLandscape, EpistemicStatus, ExtractedClaim, LinkGraphBuilder, Position,
-    RelationshipType, WikiLink, WikipediaChunkMetadata,
+    Domain, EnrichmentProgress, FieldModelEngine, FieldModelStats, FieldSkeleton,
 };
+pub use extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
 pub use error::{Error, Result};
-pub use index::{CorpusIndex, EnrichmentState, InsertChunk, StoredChunk, StoredChunkWithMetadata};
+pub use index::{CorpusIndex, InsertChunk, StoredChunk, StoredChunkWithMetadata};
 pub use progress::{IngestProgress, ProgressCallback};
-pub use recipe::{EnrichmentConfig, PrebuiltConfig, Recipe, RelationshipScope};
+pub use recipe::{EnrichmentConfig, PrebuiltConfig, Recipe};
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use testing::{
     AcquisitionResult, ChunkingResult, CorpusEstimate, ExtractionResult,
@@ -46,5 +45,5 @@ pub use testing::{
 };
 pub use types::{
     BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
-    InferenceFn, IngestResult, ScoredChunk, ScoredClaim, ShardInfo,
+    InferenceFn, IngestResult, ScoredChunk, ShardInfo,
 };

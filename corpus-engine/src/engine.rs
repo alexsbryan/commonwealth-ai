@@ -8,8 +8,6 @@ use crate::acquirers::bulk_download::BulkDownloader;
 use crate::acquirers::huggingface::HuggingFaceDatasetAcquirer;
 use crate::acquirers::local_file::LocalFileAcquirer;
 use crate::chunkers::{self, Chunker};
-use crate::enrichment::article_profile::compute_article_profiles;
-use crate::enrichment::link_graph::LinkGraphBuilder;
 use crate::error::{Error, Result};
 use crate::extractors::{self, Extractor};
 use crate::index::{CorpusIndex, InsertChunk};
@@ -431,24 +429,21 @@ impl CorpusEngine {
             let _ = index.mark_indexes_built();
         }
 
-        // Optional enrichment phase: extract claims and relationships.
+        // Optional enrichment phase: field model enrichment.
         if let Some(enrichment_config) = recipe.enrichment.as_ref() {
             if enrichment_config.enabled {
                 match self.inference.as_ref() {
                     Some(inference) => {
-                        let enricher = crate::enrichment::EnrichmentEngine::new_with_fast(
-                            self.embed.clone(),
-                            inference.clone(),
-                            self.fast_inference.clone(),
-                        );
-                        // Phase 1: claim extraction (checkpointed; resumes on restart).
-                        // Relationship extraction (Phase 2) is a separate command and
-                        // is no longer called here so the corpus is searchable sooner.
-                        enricher
-                            .extract_claims(&index, enrichment_config, progress)
-                            .await?;
-
-                        index.build_claims_index().await?;
+                        let field_engine =
+                            crate::enrichment::field_engine::FieldModelEngine::from_recipe(
+                                &recipe,
+                                self.embed.clone(),
+                                inference.clone(),
+                            )?;
+                        let progress_fn = |_p: crate::enrichment::clustering::EnrichmentProgress| {
+                            // TODO: Convert to IngestProgress and forward to callback
+                        };
+                        field_engine.enrich(&index, &progress_fn).await?;
                     }
                     None => {
                         tracing::warn!(
@@ -457,42 +452,6 @@ impl CorpusEngine {
                         );
                     }
                 }
-            }
-        }
-
-        // Structural enrichment phase: link graph + article profiles.
-        // Runs when the recipe uses a WikipediaStructured extractor with
-        // structural_signals = true. No LLM required.
-        if structural_signals_enabled(&recipe.extract) {
-            let controversy_patterns =
-                controversy_patterns_from_config(&recipe.extract);
-
-            if let Some(ref cb) = progress {
-                cb(IngestProgress::BuildingLinkGraph {
-                    current: 0,
-                    total: 0,
-                });
-            }
-
-            let builder = LinkGraphBuilder {
-                controversy_section_types: vec!["controversy".to_string()],
-            };
-            let link_rels = builder.build(&index, &progress).await?;
-
-            if !link_rels.is_empty() {
-                index.store_relationships(&link_rels).await?;
-            }
-
-            let profiles = compute_article_profiles(&index, &link_rels).await?;
-
-            if let Some(ref cb) = progress {
-                cb(IngestProgress::ComputingArticleProfiles {
-                    article_count: profiles.len(),
-                });
-            }
-
-            if !profiles.is_empty() {
-                index.store_article_profiles(&profiles).await?;
             }
         }
 
@@ -642,106 +601,14 @@ impl CorpusEngine {
         self.open_index(&path).await
     }
 
-    /// Retry claim extraction on previously-failed chunks using the
-    /// truncation-repair parser, without re-running inference.
-    ///
-    /// Loads `_enrichment_failures.ndjson`, recovers what it can, embeds the
-    /// new claims, stores them, and rewrites the failures file with only the
-    /// still-unresolved records.
-    ///
-    /// Returns the number of newly recovered claims (0 if nothing to retry).
-    pub async fn retry_enrichment_failures(&self, corpus_id: &str) -> Result<usize> {
-        let index = self.open_index_for_corpus(corpus_id).await?;
-
-        // retry_parse_failures only calls self.embed, never self.inference.
-        // Supply a dummy InferenceFn so EnrichmentEngine can be constructed.
-        let dummy: crate::types::InferenceFn = std::sync::Arc::new(|_| {
-            Box::pin(async {
-                Err(crate::error::Error::Embed(
-                    "inference not available in retry mode".into(),
-                ))
-            })
-        });
-        let enricher =
-            crate::enrichment::EnrichmentEngine::new(self.embed_fn(), dummy);
-
-        let new_claims = enricher.retry_parse_failures(&index).await?;
-        let recovered = new_claims.len();
-
-        if recovered > 0 {
-            index.store_claims(&new_claims).await?;
-            index.build_claims_index().await?;
-        }
-
-        Ok(recovered)
-    }
-
-    /// Phase 2: extract within-article relationships for a corpus.
-    ///
-    /// Decoupled from `ingest()` so the corpus is searchable while Phase 2
-    /// runs.  Safe to re-run: resumes from the last processed article if
-    /// interrupted.  Requires the primary `inference` function to be set.
-    pub async fn enrich_relationships(&self, corpus_id: &str) -> Result<()> {
-        let inference = match self.inference.as_ref() {
-            Some(f) => f.clone(),
-            None => {
-                return Err(crate::error::Error::Embed(
-                    "enrich_relationships requires an InferenceFn".into(),
-                ));
-            }
-        };
-
-        let index = self.open_index_for_corpus(corpus_id).await?;
-        let recipe = self.load_recipe(corpus_id).await?;
-        let enrichment_config = match recipe.enrichment.as_ref() {
-            Some(c) => c.clone(),
-            None => {
-                tracing::warn!("[{corpus_id}] no enrichment config in recipe — skipping Phase 2");
-                return Ok(());
-            }
-        };
-
-        if enrichment_config.relationship_extraction_prompt.is_none() {
-            tracing::warn!(
-                "[{corpus_id}] relationship_extraction_prompt not set — skipping Phase 2"
-            );
-            return Ok(());
-        }
-
-        let enricher = crate::enrichment::EnrichmentEngine::new_with_fast(
-            self.embed.clone(),
-            inference,
-            self.fast_inference.clone(),
-        );
-
-        // Load all claims from LanceDB.
-        let claims = index.load_enriched_claims().await?;
-        eprintln!("[{corpus_id}] Phase 2: {} claims loaded", claims.len());
-
-        let rels = enricher
-            .extract_relationships_within_article(&claims, &enrichment_config, &None, &index)
-            .await?;
-
-        if !rels.is_empty() {
-            index.store_relationships(&rels).await?;
-            index.build_claims_index().await?;
-        }
-
-        eprintln!("[{corpus_id}] Phase 2 complete: {} relationships extracted", rels.len());
-        Ok(())
-    }
-
-    /// Return the IDs of all installed corpora that have an enriched
-    /// `claims` table. Used by the `ClaimSearchTool` and
-    /// `EpistemicLandscapeTool` to know which corpora to consult.
+    /// Return the IDs of all installed corpora that have field model
+    /// enrichment data. Used by epistemic tools to know which corpora
+    /// to consult.
     pub async fn enriched_corpus_ids(&self) -> Result<Vec<String>> {
         let mut out = Vec::new();
         for info in self.installed_indexes().await? {
-            // Try to open the index and check for a claims table.
-            // We swallow open errors here so a single broken index
-            // doesn't prevent the rest from being listed.
             if let Ok(index) = CorpusIndex::open(&info.path).await {
-                if index.has_claims_table().await {
+                if index.has_field_model_tables().await {
                     out.push(info.corpus_id);
                 }
             }
@@ -1061,30 +928,6 @@ impl CorpusEngine {
             "No index found for corpus '{corpus_id}' in {}",
             self.index_dir.display()
         )))
-    }
-}
-
-/// Returns true if the extractor config requests structural signal extraction
-/// (i.e., is a WikipediaStructured extractor with structural_signals = true).
-fn structural_signals_enabled(config: &ExtractorConfig) -> bool {
-    matches!(
-        config,
-        ExtractorConfig::WikipediaStructured {
-            structural_signals: true,
-            ..
-        }
-    )
-}
-
-/// Extract the controversy patterns from a WikipediaStructured extractor config.
-/// Returns an empty vec for all other extractor types.
-fn controversy_patterns_from_config(config: &ExtractorConfig) -> Vec<String> {
-    match config {
-        ExtractorConfig::WikipediaStructured {
-            controversy_patterns,
-            ..
-        } => controversy_patterns.clone(),
-        _ => vec![],
     }
 }
 

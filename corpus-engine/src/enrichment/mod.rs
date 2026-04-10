@@ -1,31 +1,22 @@
-//! Optional epistemic enrichment layer.
+//! Field model enrichment layer.
 //!
-//! Extracts propositional claims from corpus chunks and tags each with
-//! an epistemic status (consensus, majority, contested, minority,
-//! established) drawn from the source text's own hedging language.
-//! Optionally extracts relationships between claims across entries
-//! (contradicts, supports, refines, competing answers, presupposes).
-//!
-//! Enrichment is opt-in per recipe. The standard `chunks` table is always
-//! built; the `claims` and `relationships` tables only exist if the
-//! recipe sets `[enrichment] enabled = true` and the engine has been
-//! given an `InferenceFn` via `CorpusEngine::with_inference_fn()`.
+//! Clusters chunk embeddings via HDBSCAN, extracts a field skeleton from
+//! overview passages using domain-specific prompts, aligns clusters to
+//! named positions, detects fault lines and open questions.
 
-pub mod article_profile;
-pub mod claims;
-pub mod engine;
+pub mod alignment;
+pub mod checkpoint;
+pub mod clustering;
+pub mod domain;
+pub mod domains;
+pub mod fault_lines;
+pub mod field_engine;
 pub mod filter;
-pub mod landscape;
-pub mod link_graph;
-pub mod relationships;
-pub mod schema;
+pub mod open_questions;
+pub mod skeleton;
 
 pub use filter::is_chunk_eligible;
-pub use article_profile::{
-    ArticleEpistemicProfile, WikiLink, WikipediaChunkMetadata, compute_article_profiles,
-};
-pub use claims::{ExtractedClaim, EpistemicStatus};
-pub use engine::{EnrichmentEngine, EnrichmentFailure};
-pub use landscape::{ContestedCluster, EpistemicLandscape, Position};
-pub use link_graph::LinkGraphBuilder;
-pub use relationships::{ClaimRelationship, RelationshipType};
+pub use field_engine::FieldModelEngine;
+pub use clustering::{EnrichmentProgress, FieldModelStats};
+pub use domain::Domain;
+pub use skeleton::FieldSkeleton;

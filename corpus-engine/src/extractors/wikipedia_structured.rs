@@ -38,8 +38,7 @@ use arrow::array::{Array, ArrayRef, ListArray, LargeListArray, StructArray};
 use arrow::datatypes::Int64Type;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
-use crate::enrichment::article_profile::{WikiLink, WikipediaChunkMetadata};
-use crate::enrichment::link_graph::wiki_title_from_url;
+use super::wikipedia_types::{WikiLink, WikipediaChunkMetadata, wiki_title_from_url};
 use crate::error::{Error, Result};
 use super::{ExtractedDoc, Extractor, slug};
 
