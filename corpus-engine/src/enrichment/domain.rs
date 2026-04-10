@@ -117,6 +117,13 @@ pub struct ClusteringConfig {
     pub min_cluster_size: usize,
     pub epsilon: f32,
     pub label_sample_size: usize,
+    /// Maximum points to cluster directly. If the corpus has more chunks,
+    /// a random sample of this size is clustered and the remaining points
+    /// are assigned to their nearest cluster centroid. 0 = no limit.
+    pub max_cluster_points: usize,
+    /// Target dimensionality for random projection before HDBSCAN.
+    /// Reduces O(n²·d) distance computation cost. 0 = no reduction.
+    pub reduced_dims: usize,
 }
 
 #[derive(Debug, Clone)]

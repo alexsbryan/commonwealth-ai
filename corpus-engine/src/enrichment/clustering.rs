@@ -64,27 +64,66 @@ pub async fn cluster_embeddings(
         });
     }
 
-    // ── Convert f32 → f64 for hdbscan crate ───────────────────────────
-    tracing::info!("Converting {total} x {dims} embeddings to f64...");
-    let t1 = std::time::Instant::now();
-    let embeddings_f64: Vec<Vec<f64>> = embeddings
-        .iter()
-        .map(|v| v.iter().map(|&x| x as f64).collect())
-        .collect();
-    tracing::info!(elapsed_secs = t1.elapsed().as_secs(), "f64 conversion done");
+    // ── Optional: random projection for dimensionality reduction ────
+    let work_embeddings = if config.reduced_dims > 0 && dims > config.reduced_dims {
+        let target = config.reduced_dims;
+        tracing::info!(from = dims, to = target, "Applying random projection");
+        progress(EnrichmentProgress::ClusteringStep {
+            step: "Random projection",
+            detail: format!("{dims}d → {target}d"),
+        });
+        let t_rp = std::time::Instant::now();
+        let projected = random_projection(&embeddings, target);
+        tracing::info!(elapsed_secs = t_rp.elapsed().as_secs(), "Projection done");
+        projected
+    } else {
+        embeddings.clone()
+    };
+
+    let work_dims = work_embeddings.first().map(|e| e.len()).unwrap_or(0);
+
+    // ── Optional: sample-then-assign for large corpora ────────────────
+    let use_sampling = config.max_cluster_points > 0 && total > config.max_cluster_points;
+    let (sample_indices, sample_embeddings_f64) = if use_sampling {
+        let sample_size = config.max_cluster_points;
+        tracing::info!(
+            sample = sample_size,
+            total = total,
+            "Sampling {sample_size} of {total} points for HDBSCAN"
+        );
+        progress(EnrichmentProgress::ClusteringStep {
+            step: "Sampling",
+            detail: format!("{sample_size} of {total} points"),
+        });
+        let indices = deterministic_sample(total, sample_size);
+        let sampled: Vec<Vec<f64>> = indices
+            .iter()
+            .map(|&i| work_embeddings[i].iter().map(|&x| x as f64).collect())
+            .collect();
+        (Some(indices), sampled)
+    } else {
+        let all: Vec<Vec<f64>> = work_embeddings
+            .iter()
+            .map(|v| v.iter().map(|&x| x as f64).collect())
+            .collect();
+        (None, all)
+    };
 
     // ── Run HDBSCAN ───────────────────────────────────────────────────
     let min_samples = (config.min_cluster_size / 5).max(2);
+    let cluster_point_count = sample_embeddings_f64.len();
     tracing::info!(
+        points = cluster_point_count,
+        dims = work_dims,
         min_cluster_size = config.min_cluster_size,
         min_samples = min_samples,
         epsilon = config.epsilon,
-        "Starting HDBSCAN — this may take a while for large corpora"
+        "Starting HDBSCAN"
     );
     progress(EnrichmentProgress::ClusteringStep {
         step: "Running HDBSCAN",
         detail: format!(
-            "{total} points, min_cluster={}, min_samples={min_samples}, eps={}",
+            "{cluster_point_count} points x {work_dims}d, min_cluster={}, eps={}",
             config.min_cluster_size, config.epsilon
         ),
     });
@@ -96,8 +135,8 @@ pub async fn cluster_embeddings(
         .epsilon(config.epsilon as f64)
         .build();
 
-    let clusterer = hdbscan::Hdbscan::new(&embeddings_f64, hyper_params);
-    let labels: Vec<i32> = clusterer
+    let clusterer = hdbscan::Hdbscan::new(&sample_embeddings_f64, hyper_params);
+    let sample_labels: Vec<i32> = clusterer
         .cluster()
         .map_err(|e| Error::Extraction(format!("HDBSCAN clustering failed: {e:?}")))?;
 
@@ -105,23 +144,78 @@ pub async fn cluster_embeddings(
     tracing::info!(elapsed_secs = hdbscan_secs, "HDBSCAN complete");
     progress(EnrichmentProgress::ClusteringStep {
         step: "HDBSCAN complete",
-        detail: format!("Finished in {hdbscan_secs}s — computing cluster statistics"),
+        detail: format!("Finished in {hdbscan_secs}s"),
     });
 
-    // ── Compute cluster statistics ────────────────────────────────────
+    // ── Build cluster centroids from HDBSCAN results ──────────────────
     let mut cluster_map: HashMap<i32, Vec<usize>> = HashMap::new();
-    for (i, &label) in labels.iter().enumerate() {
+    for (i, &label) in sample_labels.iter().enumerate() {
         if label >= 0 {
-            cluster_map.entry(label).or_default().push(i);
+            // Map back to original indices if sampling was used.
+            let original_idx = sample_indices.as_ref().map_or(i, |si| si[i]);
+            cluster_map.entry(label).or_default().push(original_idx);
         }
     }
 
+    // Compute centroids using original (full-dim) embeddings for quality.
+    let centroids: HashMap<i32, Vec<f32>> = cluster_map
+        .iter()
+        .map(|(&id, indices)| (id, mean_embedding(&embeddings, indices)))
+        .collect();
+
+    // ── Assign non-sampled points to nearest centroid ─────────────────
+    let labels: Vec<i32> = if use_sampling {
+        let sampled_set: std::collections::HashSet<usize> = sample_indices
+            .as_ref()
+            .unwrap()
+            .iter()
+            .copied()
+            .collect();
+        let mut full_labels = vec![-1i32; total];
+
+        // Copy sample labels.
+        for (i, &label) in sample_labels.iter().enumerate() {
+            let original_idx = sample_indices.as_ref().unwrap()[i];
+            full_labels[original_idx] = label;
+        }
+
+        // Assign remaining points by nearest centroid.
+        let mut assigned = 0_usize;
+        for i in 0..total {
+            if sampled_set.contains(&i) {
+                continue;
+            }
+            let (best_id, _) = nearest_centroid(&embeddings[i], &centroids);
+            full_labels[i] = best_id;
+            assigned += 1;
+        }
+
+        tracing::info!(assigned = assigned, "Assigned non-sampled points to nearest centroid");
+        progress(EnrichmentProgress::ClusteringStep {
+            step: "Assignment complete",
+            detail: format!("Assigned {assigned} remaining points to nearest cluster"),
+        });
+
+        // Rebuild cluster_map with all points.
+        cluster_map.clear();
+        for (i, &label) in full_labels.iter().enumerate() {
+            if label >= 0 {
+                cluster_map.entry(label).or_default().push(i);
+            }
+        }
+
+        full_labels
+    } else {
+        sample_labels
+    };
+
+    // ── Compute final cluster statistics ──────────────────────────────
     let clusters: Vec<ClusterInfo> = cluster_map
-        .into_iter()
-        .map(|(id, indices)| {
-            let centroid = mean_embedding(&embeddings, &indices);
+        .iter()
+        .map(|(&id, indices)| {
+            let centroid = centroids.get(&id).cloned().unwrap_or_default();
             let central_chunks =
-                indices_nearest_to_centroid(&embeddings, &indices, &chunk_ids, config.label_sample_size);
+                indices_nearest_to_centroid(&embeddings, indices, &chunk_ids, config.label_sample_size);
             ClusterInfo {
                 id,
                 size: indices.len(),
@@ -199,6 +293,63 @@ fn indices_nearest_to_centroid(
         .take(n)
         .map(|(idx, _)| chunk_ids[*idx])
         .collect()
+}
+
+/// Random projection from `d` dimensions to `target_dims` using a sparse
+/// random matrix (Achlioptas, 2003). Preserves pairwise distances by the
+/// Johnson-Lindenstrauss lemma with high probability.
+///
+/// Uses a deterministic seed so results are reproducible.
+fn random_projection(embeddings: &[Vec<f32>], target_dims: usize) -> Vec<Vec<f32>> {
+    let d = embeddings[0].len();
+    // Generate a d × target_dims projection matrix using a simple LCG PRNG.
+    // Each entry is ±1/sqrt(target_dims) with equal probability.
+    let scale = 1.0 / (target_dims as f32).sqrt();
+    let mut rng_state: u64 = 0xDEAD_BEEF_CAFE_1234; // fixed seed
+    let mut projection = vec![vec![0.0f32; target_dims]; d];
+    for row in projection.iter_mut() {
+        for val in row.iter_mut() {
+            // LCG: x_{n+1} = (a*x_n + c) mod m
+            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            *val = if (rng_state >> 33) & 1 == 0 { scale } else { -scale };
+        }
+    }
+
+    // Matrix multiply: result[i][j] = sum_k(embedding[i][k] * projection[k][j])
+    embeddings
+        .iter()
+        .map(|emb| {
+            let mut projected = vec![0.0f32; target_dims];
+            for (k, &val) in emb.iter().enumerate() {
+                if val.abs() < 1e-10 {
+                    continue; // skip near-zero for speed
+                }
+                for (j, p) in projection[k].iter().enumerate() {
+                    projected[j] += val * p;
+                }
+            }
+            projected
+        })
+        .collect()
+}
+
+/// Deterministic sampling: select `n` indices from `total` using stride.
+/// Produces a reproducible, evenly-spaced sample.
+fn deterministic_sample(total: usize, n: usize) -> Vec<usize> {
+    if n >= total {
+        return (0..total).collect();
+    }
+    let step = total as f64 / n as f64;
+    (0..n).map(|i| (i as f64 * step) as usize).collect()
+}
+
+/// Find the cluster ID of the nearest centroid to a point.
+fn nearest_centroid(point: &[f32], centroids: &HashMap<i32, Vec<f32>>) -> (i32, f32) {
+    centroids
+        .iter()
+        .map(|(&id, centroid)| (id, cosine_distance(point, centroid)))
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or((-1, f32::MAX))
 }
 
 fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {

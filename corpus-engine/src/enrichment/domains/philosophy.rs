@@ -221,6 +221,8 @@ Return JSON:
             min_cluster_size: CLUSTERING_MIN_CLUSTER_SIZE,
             epsilon: CLUSTERING_EPSILON,
             label_sample_size: CLUSTERING_LABEL_SAMPLE_SIZE,
+            max_cluster_points: 30_000,
+            reduced_dims: 128,
         }
     }
 
