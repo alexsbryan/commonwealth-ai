@@ -247,9 +247,30 @@ impl ZipEntryReader {
             zip_path.display(), n, indices.len()
         );
 
-        // Concatenate all JSONL shards into a single temp file. Each shard is
+        // Concatenate all JSONL shards into a single file. Each shard is
         // newline-delimited JSON, so concatenation is valid: each line is a
         // complete JSON object and shards end with a newline.
+        //
+        // Use a deterministic path next to the ZIP so resume runs can skip
+        // the 30+ minute extraction step entirely. The marker file name is
+        // derived from the ZIP file name.
+        let cache_path = zip_path.with_extension("extracted.jsonl");
+        if cache_path.exists() && cache_path.metadata().map(|m| m.len() > 0).unwrap_or(false) {
+            eprintln!(
+                "[corpus-engine] Reusing cached extraction: {} ({:.1} GB)",
+                cache_path.display(),
+                cache_path.metadata().map(|m| m.len()).unwrap_or(0) as f64 / 1_073_741_824.0,
+            );
+            let file = File::open(&cache_path).map_err(|e| {
+                Error::Extraction(format!("Failed to open cached extraction: {e}"))
+            })?;
+            return Ok(Self { inner: BufReader::new(file) });
+        }
+
+        eprintln!(
+            "[corpus-engine] Extracting {} JSONL shards (this is slow; cached for future runs)",
+            indices.len()
+        );
         let mut tmp = tempfile::NamedTempFile::new().map_err(|e| {
             Error::Extraction(format!("Failed to create temp file: {e}"))
         })?;
@@ -270,14 +291,26 @@ impl ZipEntryReader {
             })?;
         }
 
-        // Reopen temp file for reading.
+        // Move temp file to the deterministic cache path.
         let (_, tmp_path) = tmp.keep().map_err(|e| {
             Error::Extraction(format!("Failed to persist temp file: {e}"))
         })?;
-        let file = File::open(&tmp_path).map_err(|e| {
-            Error::Extraction(format!("Failed to reopen temp file: {e}"))
+        if let Err(e) = std::fs::rename(&tmp_path, &cache_path) {
+            // rename fails across filesystems; fall back to copy+delete.
+            if let Err(e2) = std::fs::copy(&tmp_path, &cache_path) {
+                tracing::warn!("Failed to cache extracted JSONL: rename={e}, copy={e2}");
+            } else {
+                let _ = std::fs::remove_file(&tmp_path);
+            }
+        }
+        eprintln!(
+            "[corpus-engine] Extraction cached at: {}",
+            cache_path.display()
+        );
+
+        let file = File::open(&cache_path).map_err(|e| {
+            Error::Extraction(format!("Failed to open cached extraction: {e}"))
         })?;
-        // Schedule deletion: leaked here; cleaned on process exit.
 
         Ok(Self { inner: BufReader::new(file) })
     }
