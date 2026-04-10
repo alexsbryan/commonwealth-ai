@@ -83,7 +83,7 @@ impl FieldModelEngine {
     pub async fn enrich(
         &self,
         index: &CorpusIndex,
-        progress: &dyn Fn(EnrichmentProgress),
+        progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
     ) -> Result<FieldModelStats> {
         let index_dir = index.path();
 
@@ -296,7 +296,7 @@ impl FieldModelEngine {
         &self,
         overview_chunks: &[crate::index::StoredChunk],
         _index: &CorpusIndex,
-        progress: &dyn Fn(EnrichmentProgress),
+        progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
     ) -> Result<PartialSkeleton> {
         let mut skeleton = PartialSkeleton::new(self.domain.id());
         let batches: Vec<_> = overview_chunks.chunks(4).collect();
@@ -416,7 +416,7 @@ impl FieldModelEngine {
         &self,
         index: &CorpusIndex,
         mut clusters: ClusterResult,
-        progress: &dyn Fn(EnrichmentProgress),
+        progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
     ) -> Result<ClusterResult> {
         let total = clusters.clusters.len();
 

@@ -28,7 +28,7 @@ pub async fn detect_open_questions(
     clusters: &ClusterResult,
     inference: &InferenceFn,
     domain: &dyn Domain,
-    progress: &dyn Fn(EnrichmentProgress),
+    progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
 ) -> Result<Vec<OpenQuestion>> {
     progress(EnrichmentProgress::Phase {
         phase: 6,

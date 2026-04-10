@@ -11,7 +11,7 @@ use crate::index::CorpusIndex;
 use crate::types::{EmbedFn, InferenceFn};
 
 use super::clustering::{ClusterResult, EnrichmentProgress};
-use super::domain::{AlignmentConfig, Domain};
+use super::domain::AlignmentConfig;
 use super::skeleton::PartialSkeleton;
 
 /// Result of the alignment phase.
@@ -32,7 +32,7 @@ pub async fn align_clusters(
     embed: &EmbedFn,
     inference: &InferenceFn,
     config: &AlignmentConfig,
-    progress: &dyn Fn(EnrichmentProgress),
+    progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
 ) -> Result<AlignmentResult> {
     progress(EnrichmentProgress::Phase {
         phase: 4,

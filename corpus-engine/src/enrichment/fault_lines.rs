@@ -37,7 +37,7 @@ pub async fn detect_fault_lines(
     inference: &InferenceFn,
     config: &FaultLineConfig,
     domain: &dyn Domain,
-    progress: &dyn Fn(EnrichmentProgress),
+    progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
 ) -> Result<Vec<FaultLine>> {
     progress(EnrichmentProgress::Phase {
         phase: 5,

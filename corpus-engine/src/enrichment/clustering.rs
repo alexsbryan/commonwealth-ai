@@ -16,7 +16,7 @@ use super::domain::ClusteringConfig;
 pub async fn cluster_embeddings(
     index: &CorpusIndex,
     config: &ClusteringConfig,
-    progress: &dyn Fn(EnrichmentProgress),
+    progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
 ) -> Result<ClusterResult> {
     progress(EnrichmentProgress::Phase {
         phase: 2,
