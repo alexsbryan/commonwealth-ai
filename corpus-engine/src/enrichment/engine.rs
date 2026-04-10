@@ -140,6 +140,17 @@ impl EnrichmentEngine {
             eligible_chunks.len(),
         );
 
+        // ── Fresh start: drop any stale claims from a prior run ───────────────
+        // If there is no in-progress checkpoint we are starting from scratch,
+        // not resuming.  Appending to an existing table would create duplicates.
+        if resume_chunk_id.is_none() {
+            if let Err(e) = index.drop_claims_tables().await {
+                eprintln!("[{corpus_id}] Warning: could not clear old claims table: {e}");
+            } else {
+                eprintln!("[{corpus_id}] Cleared existing claims/relationships tables for fresh run");
+            }
+        }
+
         // ── Write initial checkpoint ───────────────────────────────────────────
         let _ = index.save_enrichment_state(
             &EnrichmentState {

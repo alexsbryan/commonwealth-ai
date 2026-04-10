@@ -1593,6 +1593,20 @@ impl CorpusIndex {
 
     // ── Enrichment: storage ──────────────────────────────
 
+    /// Drop the claims and relationships tables so a fresh Phase 1 run starts
+    /// with a clean slate.  Silently succeeds when the tables do not exist.
+    pub async fn drop_claims_tables(&self) -> Result<()> {
+        for name in [CLAIMS_TABLE, RELATIONSHIPS_TABLE] {
+            if self.open_table(name).await.is_ok() {
+                self.db
+                    .drop_table(name, &[])
+                    .await
+                    .map_err(|e| Error::Database(format!("drop {name}: {e}")))?;
+            }
+        }
+        Ok(())
+    }
+
     /// Store extracted claims into the index's `claims` table.
     /// Creates the table if it doesn't already exist.
     pub async fn store_claims(&self, claims: &[ExtractedClaim]) -> Result<()> {
