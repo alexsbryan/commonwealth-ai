@@ -19,7 +19,11 @@ impl MeshState {
     /// Build a UI-friendly mesh state from the Commonwealth AppState.
     pub async fn from_app_state(app_state: &AppState) -> Self {
         let mesh = app_state.inner.mesh.read().await;
-        let knowledge_plan = app_state.inner.knowledge_plan.read().await;
+        let knowledge_plan = app_state
+            .inner
+            .knowledge_store
+            .get_shard_plan()
+            .unwrap_or_default();
 
         let self_node_id = app_state.inner.self_node_id;
 

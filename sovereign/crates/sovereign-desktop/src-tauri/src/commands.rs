@@ -992,69 +992,6 @@ fn ingest_progress_to_payload(
             chunks_processed: *chunks_indexed,
             message: None,
         },
-        IngestProgress::ExtractingClaims {
-            current,
-            total,
-            claims_found,
-            inference_errors,
-            parse_errors,
-            chunks_per_sec,
-        } => CorpusProgressPayload {
-            corpus_id: corpus_id.into(),
-            phase: "extracting_claims".into(),
-            percent: if *total > 0 {
-                (*current as f32 / *total as f32) * 100.0
-            } else {
-                0.0
-            },
-            chunks_processed: *current,
-            message: Some(format!(
-                "{current}/{total} chunks · {claims_found} claims · {chunks_per_sec:.1}/s{}",
-                if *inference_errors + *parse_errors > 0 {
-                    format!(" · {} errors", inference_errors + parse_errors)
-                } else {
-                    String::new()
-                }
-            )),
-        },
-        IngestProgress::FoundCandidatePairs { count } => CorpusProgressPayload {
-            corpus_id: corpus_id.into(),
-            phase: "finding_relationships".into(),
-            percent: 0.0,
-            chunks_processed: 0,
-            message: Some(format!("Found {count} candidate claim pairs")),
-        },
-        IngestProgress::ExtractingRelationships { current, total } => {
-            CorpusProgressPayload {
-                corpus_id: corpus_id.into(),
-                phase: "extracting_relationships".into(),
-                percent: if *total > 0 {
-                    (*current as f32 / *total as f32) * 100.0
-                } else {
-                    0.0
-                },
-                chunks_processed: *current,
-                message: Some(format!("Extracting relationships ({current}/{total})")),
-            }
-        }
-        IngestProgress::BuildingLinkGraph { current, total } => CorpusProgressPayload {
-            corpus_id: corpus_id.into(),
-            phase: "building_link_graph".into(),
-            percent: if *total > 0 {
-                (*current as f32 / *total as f32) * 100.0
-            } else {
-                0.0
-            },
-            chunks_processed: *current as u64,
-            message: Some(format!("Building link graph ({current}/{total})")),
-        },
-        IngestProgress::ComputingArticleProfiles { article_count } => CorpusProgressPayload {
-            corpus_id: corpus_id.into(),
-            phase: "computing_profiles".into(),
-            percent: 0.0,
-            chunks_processed: *article_count as u64,
-            message: Some(format!("Computing profiles for {article_count} articles")),
-        },
         IngestProgress::Complete {
             total_chunks,
             duration_secs,
@@ -1362,37 +1299,31 @@ pub async fn get_corpus_health(
         Err(_) => return Ok(None),
     };
 
-    let parse_failure_count = index.load_enrichment_failures().len() as u64;
+    // Enrichment details (claims, relationships, article profiles, parse
+    // failures) were removed in the field-model refactor. Return zeroed
+    // defaults so the frontend still gets a valid response.
+    let _ = index;
     Ok(Some(CorpusHealthDetail {
         corpus_id: corpus_id.clone(),
-        claims_count: index.claim_count().await,
-        relationships_count: index.relationship_count().await,
-        has_article_profiles: index.has_article_profiles().await,
-        parse_failure_count,
+        claims_count: 0,
+        relationships_count: 0,
+        has_article_profiles: false,
+        parse_failure_count: 0,
     }))
 }
 
 /// Re-parse stored enrichment failures using the truncation-repair parser.
 /// Does not re-run inference — only the saved raw responses are re-processed.
 /// Returns the number of newly recovered claims.
+///
+/// NOTE: The underlying engine method was removed in the field-model refactor.
+/// This stub is kept so the Tauri command handler registration stays valid.
 #[tauri::command]
 pub async fn retry_enrichment_failures(
-    state: State<'_, Arc<AppState>>,
-    corpus_id: String,
+    _state: State<'_, Arc<AppState>>,
+    _corpus_id: String,
 ) -> Result<u64, String> {
-    let engine_guard = state.corpus_engine.read().await;
-    let engine = match engine_guard.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    drop(engine_guard);
-
-    let recovered = engine
-        .retry_enrichment_failures(&corpus_id)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(recovered as u64)
+    Ok(0)
 }
 
 // ─── Recipe Testing ──────────────────────────────────────────────────────────
