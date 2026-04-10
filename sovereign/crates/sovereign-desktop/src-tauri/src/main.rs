@@ -1,5 +1,6 @@
 mod approval;
 mod commands;
+mod insight_commands;
 mod mesh_commands;
 mod state;
 mod tray;
@@ -129,6 +130,12 @@ fn main() {
             mesh_commands::mesh_get_state,
             mesh_commands::mesh_is_running,
             mesh_commands::mesh_leave,
+            insight_commands::clip_insight,
+            insight_commands::list_insights,
+            insight_commands::search_insights,
+            insight_commands::delete_insight,
+            insight_commands::get_sink_status,
+            insight_commands::explore_insights,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");

@@ -11,6 +11,7 @@
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
+  import InsightsPanel from "./lib/components/InsightsPanel.svelte";
   import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
   import SetupWizard from "./lib/setup/SetupWizard.svelte";
 
@@ -21,6 +22,7 @@
   let backendError: string | null = $state(null);
   let selectedConversationId: string | null = $state(null);
   let showSettings = $state(false);
+  let showInsights = $state(false);
 
   // Deep-link join dialog state.
   let pendingJoinLink: string | null = $state(null);
@@ -157,9 +159,20 @@
           onApprovalHandled={() => (pendingApproval = null)}
           onInputHandled={() => (pendingInput = null)}
           onOpenSettings={() => (showSettings = true)}
+          onToggleInsights={() => (showInsights = !showInsights)}
         />
       {/if}
     </main>
+    {#if showInsights && !showSettings}
+      <InsightsPanel
+        conversationId={selectedConversationId}
+        onNavigate={(id) => {
+          selectedConversationId = id;
+          showInsights = false;
+        }}
+        onClose={() => (showInsights = false)}
+      />
+    {/if}
   </div>
 {/if}
 

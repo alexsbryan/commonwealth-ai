@@ -1,3 +1,4 @@
+pub mod insight_store;
 pub mod memory;
 pub mod migrations;
 #[cfg(feature = "postgres")]

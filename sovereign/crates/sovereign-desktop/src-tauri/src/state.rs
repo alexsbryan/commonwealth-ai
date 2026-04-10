@@ -8,13 +8,15 @@ use tokio::sync::RwLock;
 use corpus_engine::CorpusEngine;
 
 use sovereign_core::health_monitor::{HealthMonitor, MonitorConfig};
+use sovereign_core::insight::{InsightService, InsightSinkRegistry};
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{InferenceProvider, StateStore};
+use sovereign_core::traits::{InferenceProvider, InsightStore, StateStore};
 use sovereign_core::types::InferenceConfig;
 use sovereign_core::{SkillRegistry, ToolRegistry};
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
+use sovereign_store::insight_store::SqliteInsightStore;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::index_validator::EmbedSlotConfig;
 use sovereign_tools::shell::ShellTool;
@@ -199,6 +201,9 @@ pub struct AppState {
     pub health_monitor: RwLock<Option<Arc<HealthMonitor>>>,
     /// CancellationToken to shut down the health monitor on exit.
     pub health_shutdown: CancellationToken,
+    /// Insight capture service. Created during bootstrap from the same
+    /// SQLite connection as the state store.
+    pub insight_service: RwLock<Option<Arc<InsightService>>>,
 }
 
 impl AppState {
@@ -215,6 +220,7 @@ impl AppState {
             mesh: Arc::new(sovereign_mesh::EmbeddedDaemon::new()),
             health_monitor: RwLock::new(None),
             health_shutdown: CancellationToken::new(),
+            insight_service: RwLock::new(None),
         }
     }
 }
@@ -282,10 +288,20 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                     .map_err(|e| format!("Failed to create data dir: {e}"))?;
             }
             tracing::info!("Database: {}", db_path.display());
-            let s: Arc<dyn StateStore> = Arc::new(
-                SqliteStateStore::open(&db_path)
-                    .map_err(|e| format!("Failed to open database: {e}"))?,
-            );
+            let sqlite_store = SqliteStateStore::open(&db_path)
+                .map_err(|e| format!("Failed to open database: {e}"))?;
+
+            // Create insight store sharing the same connection.
+            let insight_store: Arc<dyn InsightStore> =
+                Arc::new(SqliteInsightStore::new(sqlite_store.connection()));
+            let insight_service = Arc::new(InsightService::new(
+                insight_store,
+                Arc::new(InsightSinkRegistry::new()),
+                Arc::clone(&inference),
+            ));
+            *state.insight_service.write().await = Some(insight_service);
+
+            let s: Arc<dyn StateStore> = Arc::new(sqlite_store);
             *state.store.write().await = Some(Arc::clone(&s));
             s
         }

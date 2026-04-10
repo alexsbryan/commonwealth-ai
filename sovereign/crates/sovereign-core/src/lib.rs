@@ -3,6 +3,7 @@ pub mod error;
 pub mod executor;
 pub mod health;
 pub mod health_monitor;
+pub mod insight;
 pub mod memory;
 pub mod model_family;
 pub use oicp_types as oicp;

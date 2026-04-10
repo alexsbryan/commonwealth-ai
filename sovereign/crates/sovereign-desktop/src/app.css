@@ -64,6 +64,27 @@
   --radius:    6px;
   --radius-lg: 10px;
   --radius-xl: 18px;
+
+  /* ── Typography stacks ── */
+  --font-sans:  'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-serif: Georgia, 'Cambria', 'Times New Roman', serif;
+  --font-mono:  'Syne Mono', monospace;
+
+  /* ── Amber — insight capture / clip mark ── */
+  --amber:            #BA7517;
+  --amber-flash:      rgba(186, 117, 23, 0.12);
+  --amber-settled:    rgba(186, 117, 23, 0.05);
+
+  /* ── Position badges ── */
+  --pos-compat-bg:      #EAF3DE;
+  --pos-compat-text:    #3B6D11;
+  --pos-compat-border:  #C0DD97;
+  --pos-incompat-bg:    #FAECE7;
+  --pos-incompat-text:  #993C1D;
+  --pos-incompat-border:#F5C4B3;
+  --pos-libert-bg:      #E6F1FB;
+  --pos-libert-text:    #185FA5;
+  --pos-libert-border:  #B5D4F4;
 }
 
 /* ─── Reset ──────────────────────────────────────────────────── */

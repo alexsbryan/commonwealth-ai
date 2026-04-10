@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -22,7 +23,7 @@ fn now() -> i64 {
 }
 
 pub struct SqliteStateStore {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl SqliteStateStore {
@@ -45,10 +46,18 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Metacognition log migration failed: {e}")))?;
         migrations::run_index_readiness_migration(&conn)
             .map_err(|e| Error::Storage(format!("Index readiness migration failed: {e}")))?;
+        migrations::run_insight_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Insight migration failed: {e}")))?;
 
         Ok(Self {
-            conn: Mutex::new(conn),
+            conn: Arc::new(Mutex::new(conn)),
         })
+    }
+
+    /// Return a shared handle to the underlying connection.
+    /// Used by `SqliteInsightStore` to share the same database connection.
+    pub fn connection(&self) -> Arc<Mutex<Connection>> {
+        Arc::clone(&self.conn)
     }
 
     /// Run `PRAGMA integrity_check` and return the first result row.
@@ -82,9 +91,11 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Metacognition log migration failed: {e}")))?;
         migrations::run_index_readiness_migration(&conn)
             .map_err(|e| Error::Storage(format!("Index readiness migration failed: {e}")))?;
+        migrations::run_insight_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Insight migration failed: {e}")))?;
 
         Ok(Self {
-            conn: Mutex::new(conn),
+            conn: Arc::new(Mutex::new(conn)),
         })
     }
 }

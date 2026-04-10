@@ -218,6 +218,55 @@ pub fn run_metacognition_log_migrations(conn: &Connection) -> rusqlite::Result<(
     Ok(())
 }
 
+/// Create insight_nodes table and FTS5 virtual table for insight capture.
+pub fn run_insight_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS insight_nodes (
+            id               TEXT    PRIMARY KEY,
+            clipped_text     TEXT    NOT NULL,
+            message_id       TEXT    NOT NULL,
+            paragraph_index  INTEGER NOT NULL,
+            source_json      TEXT    NOT NULL,
+            position_json    TEXT,
+            adjacent_json    TEXT    NOT NULL,
+            embedding        BLOB,
+            created_at       INTEGER NOT NULL,
+            sink_state_json  TEXT    NOT NULL,
+            deleted_at       INTEGER
+        );
+
+        CREATE INDEX IF NOT EXISTS insight_nodes_created
+            ON insight_nodes (created_at DESC)
+            WHERE deleted_at IS NULL;
+
+        CREATE INDEX IF NOT EXISTS insight_nodes_message
+            ON insight_nodes (message_id)
+            WHERE deleted_at IS NULL;
+
+        CREATE VIRTUAL TABLE IF NOT EXISTS insight_nodes_fts
+            USING fts5(id, clipped_text, content='insight_nodes', content_rowid='rowid');
+
+        CREATE TRIGGER IF NOT EXISTS insight_nodes_ai AFTER INSERT ON insight_nodes BEGIN
+            INSERT INTO insight_nodes_fts(rowid, id, clipped_text)
+                VALUES (new.rowid, new.id, new.clipped_text);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS insight_nodes_ad AFTER DELETE ON insight_nodes BEGIN
+            INSERT INTO insight_nodes_fts(insight_nodes_fts, rowid, id, clipped_text)
+                VALUES('delete', old.rowid, old.id, old.clipped_text);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS insight_nodes_au AFTER UPDATE ON insight_nodes BEGIN
+            INSERT INTO insight_nodes_fts(insight_nodes_fts, rowid, id, clipped_text)
+                VALUES('delete', old.rowid, old.id, old.clipped_text);
+            INSERT INTO insight_nodes_fts(rowid, id, clipped_text)
+                VALUES (new.rowid, new.id, new.clipped_text);
+        END;
+        ",
+    )
+}
+
 /// Add vector index readiness tracking to corpus_state.
 /// `vector_index_ready = 1` means the IVF-PQ index is built and semantic
 /// search is available. Defaults to 0 so existing corpora start unverified;

@@ -718,3 +718,76 @@ pub struct ActionPreview {
     pub description: String,
     pub params: serde_json::Value,
 }
+
+// ─── Insight Types ────────────────────────────────────────────
+
+/// A captured insight node — the output of a clip action.
+/// Created when the user clips a paragraph from a conversation response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsightNode {
+    pub id: uuid::Uuid,
+    /// The clipped paragraph text (verbatim).
+    pub clipped_text: String,
+    /// The conversation message this was clipped from.
+    pub message_id: uuid::Uuid,
+    /// The paragraph index within the message (for re-highlighting on revisit).
+    pub paragraph_index: usize,
+    /// Provenance: corpus and article.
+    pub source: InsightSource,
+    /// Field model position, if the paragraph carried position attribution.
+    pub position: Option<InsightPosition>,
+    /// System-inferred adjacent concepts (from embedding similarity).
+    pub adjacent: Vec<String>,
+    /// Embedding of the clipped text (for semantic search across the collection).
+    pub embedding: Option<Vec<f32>>,
+    /// When the clip was made.
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Sink state: where this node lives / has been synced.
+    pub sink_state: InsightSinkState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsightSource {
+    pub corpus_id: Option<String>,
+    pub article_title: Option<String>,
+    pub conversation_id: uuid::Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsightPosition {
+    pub name: String,
+    pub style: PositionStyle,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PositionStyle {
+    Compatibilism,
+    HardIncompatibilism,
+    Libertarianism,
+    /// For future field model positions not in the pre-defined set.
+    /// Rendered with a neutral gray badge.
+    Custom {
+        bg: String,
+        text: String,
+        border: String,
+    },
+}
+
+/// Where an insight currently lives.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum InsightSinkState {
+    /// Stored in Sovereign's native SQLite insight store only.
+    Local,
+    /// Pending sync to a configured external sink (e.g. Obsidian vault).
+    PendingSync,
+    /// Successfully synced to an external sink.
+    Synced {
+        sink_id: String,
+        synced_at: chrono::DateTime<chrono::Utc>,
+    },
+    /// Sync attempted but failed.
+    SyncFailed {
+        sink_id: String,
+        error: String,
+    },
+}

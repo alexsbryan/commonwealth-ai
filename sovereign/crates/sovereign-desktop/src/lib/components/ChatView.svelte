@@ -18,6 +18,8 @@
     MessageCompletePayload,
     ErrorPayload,
   } from "../types";
+  import { WordBufferedStream } from "../stream-buffer";
+  import { insightStore } from "../stores/insights.svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import TaskProgress from "./TaskProgress.svelte";
   import ApprovalCard from "./ApprovalCard.svelte";
@@ -32,6 +34,7 @@
     onApprovalHandled: () => void;
     onInputHandled: () => void;
     onOpenSettings?: () => void;
+    onToggleInsights?: () => void;
   }
 
   let {
@@ -43,6 +46,7 @@
     onApprovalHandled,
     onInputHandled,
     onOpenSettings,
+    onToggleInsights,
   }: Props = $props();
 
   let messages: MessageEntry[] = $state([]);
@@ -51,6 +55,7 @@
   let messagesContainer: HTMLDivElement;
   let activeConversationId: string | null = $state(null);
   let streamingMessageId: string | null = null;
+  let wordBuffer = new WordBufferedStream();
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenComplete: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
@@ -68,10 +73,14 @@
       (event) => {
         const p = event.payload;
         if (p.message_id !== streamingMessageId) return;
-        const idx = messages.findIndex((m) => m.id === p.message_id);
-        if (idx === -1) return;
-        messages[idx].content += p.chunk;
-        scrollToBottom();
+        const flushed = wordBuffer.push(p.chunk);
+        if (flushed !== null) {
+          const idx = messages.findIndex((m) => m.id === p.message_id);
+          if (idx !== -1) {
+            messages[idx].content += flushed;
+          }
+          scrollToBottom();
+        }
       },
     );
 
@@ -82,6 +91,11 @@
         if (p.message_id !== streamingMessageId) return;
         const idx = messages.findIndex((m) => m.id === p.message_id);
         if (idx !== -1) {
+          // Flush remaining buffered text.
+          const remaining = wordBuffer.flush();
+          if (remaining) {
+            messages[idx].content += remaining;
+          }
           // For non-streaming fallback, the placeholder may be empty.
           if (messages[idx].content.length === 0) {
             messages[idx].content = p.full_text;
@@ -153,6 +167,7 @@
     try {
       const started = await sendMessageStream(text, convoId);
       streamingMessageId = started.message_id;
+      wordBuffer.reset();
       // Add empty placeholder; chunks will append to it.
       const placeholder: MessageEntry = {
         id: started.message_id,
@@ -261,7 +276,14 @@
       </div>
     {:else}
       {#each messages as msg (msg.id)}
-        <MessageBubble role={msg.role} content={msg.content} metadata={msg.metadata} />
+        <MessageBubble
+          role={msg.role}
+          content={msg.content}
+          metadata={msg.metadata}
+          messageId={msg.id}
+          conversationId={activeConversationId ?? ""}
+          isStreaming={msg.id === streamingMessageId}
+        />
       {/each}
 
       <TaskProgress steps={taskSteps} />
@@ -300,6 +322,18 @@
         <line x1="11" y1="11" x2="14.5" y2="14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
     </button>
+    {#if onToggleInsights}
+      <button
+        class="insights-toggle-btn"
+        onclick={onToggleInsights}
+        title="Toggle insights panel"
+      >
+        &#x25C8;
+        {#if insightStore.count > 0}
+          <span class="insights-badge">{insightStore.count}</span>
+        {/if}
+      </button>
+    {/if}
     <button
       class="send-btn"
       onclick={handleSend}
@@ -462,6 +496,37 @@
   .search-btn:disabled {
     opacity: 0.35;
     cursor: not-allowed;
+  }
+
+  .insights-toggle-btn {
+    padding: 10px;
+    background: var(--bg-surface);
+    color: var(--amber);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    align-self: flex-end;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .insights-toggle-btn:hover {
+    border-color: var(--amber);
+    background: rgba(186, 117, 23, 0.06);
+  }
+
+  .insights-badge {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    background: var(--accent-glow);
+    border: 0.5px solid color-mix(in srgb, var(--amber) 40%, transparent);
+    border-radius: 999px;
+    padding: 0 4px;
+    color: var(--amber);
   }
 
   .send-btn {

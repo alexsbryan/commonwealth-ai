@@ -343,3 +343,51 @@ export interface TaskStep {
   description: string;
   status: "pending" | "running" | "done" | "skipped";
 }
+
+// ─── Insights ───────────────────────────────────────────────
+
+export interface InsightSource {
+  corpus_id: string | null;
+  article_title: string | null;
+  conversation_id: string;
+}
+
+export interface InsightPosition {
+  name: string;
+  style: PositionStyle;
+}
+
+export type PositionStyle =
+  | "Compatibilism"
+  | "HardIncompatibilism"
+  | "Libertarianism"
+  | { Custom: { bg: string; text: string; border: string } };
+
+export type InsightSinkState =
+  | "Local"
+  | "PendingSync"
+  | { Synced: { sink_id: string; synced_at: string } }
+  | { SyncFailed: { sink_id: string; error: string } };
+
+export interface InsightNodeDto {
+  id: string;
+  clipped_text: string;
+  message_id: string;
+  paragraph_index: number;
+  source: InsightSource;
+  position: InsightPosition | null;
+  adjacent: string[];
+  created_at: string;
+  sink_state: InsightSinkState;
+}
+
+export interface SinkStatusDto {
+  any_connected: boolean;
+  sinks: SinkInfoDto[];
+}
+
+export interface SinkInfoDto {
+  id: string;
+  display_name: string;
+  connected: boolean;
+}

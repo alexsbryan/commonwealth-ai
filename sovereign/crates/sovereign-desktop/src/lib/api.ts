@@ -21,6 +21,8 @@ import type {
   MeshStateResponse,
   RecipeValidateResult,
   RecipeTestResult,
+  InsightNodeDto,
+  SinkStatusDto,
 } from "./types";
 
 export async function sendMessage(
@@ -209,4 +211,48 @@ export async function recipeTest(
   offline: boolean,
 ): Promise<RecipeTestResult> {
   return invoke("recipe_test", { recipePath, sampleSize, offline });
+}
+
+// ─── Insights ──────────────────────────────────────────────
+
+export async function clipInsight(
+  clippedText: string,
+  messageId: string,
+  paragraphIndex: number,
+  sourceJson: string,
+  positionJson?: string,
+): Promise<InsightNodeDto> {
+  return invoke("clip_insight", {
+    clippedText,
+    messageId,
+    paragraphIndex,
+    sourceJson,
+    positionJson: positionJson ?? null,
+  });
+}
+
+export async function listInsights(
+  limit?: number,
+): Promise<InsightNodeDto[]> {
+  return invoke("list_insights", { limit: limit ?? null });
+}
+
+export async function searchInsights(
+  query: string,
+): Promise<InsightNodeDto[]> {
+  return invoke("search_insights", { query });
+}
+
+export async function deleteInsight(id: string): Promise<void> {
+  return invoke("delete_insight", { id });
+}
+
+export async function getSinkStatus(): Promise<SinkStatusDto> {
+  return invoke("get_sink_status");
+}
+
+export async function exploreInsights(
+  nodeIds: string[],
+): Promise<string> {
+  return invoke("explore_insights", { nodeIds });
 }

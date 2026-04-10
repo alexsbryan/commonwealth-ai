@@ -246,3 +246,59 @@ pub trait ApprovalChannel: Send + Sync {
     async fn ask_user(&self, question: &str) -> Result<String>;
     fn emit_progress(&self, step: &Step, output: &StepOutput);
 }
+
+// ─── 7. Insight Storage ──────────────────────────────────────
+
+/// Persistence for insight nodes. Implemented by SqliteInsightStore.
+/// Standalone trait — not part of StateStore — to avoid cascading changes.
+#[async_trait]
+pub trait InsightStore: Send + Sync {
+    /// Save a new insight node.
+    async fn save(&self, node: &InsightNode) -> Result<()>;
+
+    /// Retrieve a single node by ID.
+    async fn get(&self, id: uuid::Uuid) -> Result<InsightNode>;
+
+    /// Retrieve all nodes, newest first.
+    async fn list(&self, limit: usize) -> Result<Vec<InsightNode>>;
+
+    /// Retrieve nodes by a list of IDs.
+    async fn list_by_ids(&self, ids: &[uuid::Uuid]) -> Result<Vec<InsightNode>>;
+
+    /// Full-text search over clipped text.
+    async fn search_text(&self, query: &str, limit: usize) -> Result<Vec<InsightNode>>;
+
+    /// Retrieve nodes most similar to a given embedding (cosine similarity).
+    async fn adjacent_by_embedding(
+        &self,
+        embedding: &[f32],
+        limit: usize,
+    ) -> Result<Vec<InsightNode>>;
+
+    /// Update the sink state of a node (called by sync machinery).
+    async fn update_sink_state(
+        &self,
+        node_id: uuid::Uuid,
+        sink_state: InsightSinkState,
+    ) -> Result<()>;
+
+    /// Soft-delete a node by ID.
+    async fn delete(&self, node_id: uuid::Uuid) -> Result<()>;
+}
+
+// ─── 8. Insight Sink ─────────────────────────────────────────
+
+/// An external destination for insight nodes.
+/// The native SQLite store is not a sink — it's always present.
+/// Sinks are optional additional destinations.
+///
+/// Currently: zero implementations. The trait is defined now so
+/// the sync architecture is in place when Obsidian sync is built.
+#[async_trait]
+pub trait InsightSink: Send + Sync {
+    fn id(&self) -> &str;
+    fn display_name(&self) -> &str;
+    async fn is_connected(&self) -> bool;
+    async fn push(&self, node: &InsightNode) -> Result<()>;
+    async fn push_batch(&self, nodes: &[InsightNode]) -> Result<()>;
+}
