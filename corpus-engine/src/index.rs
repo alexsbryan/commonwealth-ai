@@ -261,14 +261,21 @@ async fn build_vector_index_with_progress(
 
     // Use spawn_blocking + std::thread::sleep so the poll loop doesn't
     // compete with the Tokio executor during the CPU-bound k-means phase.
+    // An AtomicBool signals the thread to stop — spawn_blocking tasks cannot
+    // be aborted via JoinHandle::abort() once they are running.
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let done_clone = done.clone();
     let indices_dir_owned = indices_dir.to_path_buf();
     let id = corpus_id.to_string();
     let poll_handle = tokio::task::spawn_blocking(move || {
         let start = std::time::Instant::now();
         let mut last_pct: i32 = -1;
         let mut last_elapsed_logged: u64 = 0;
-        loop {
+        while !done_clone.load(std::sync::atomic::Ordering::Relaxed) {
             std::thread::sleep(std::time::Duration::from_secs(3));
+            if done_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
             let dir_bytes = dir_size_bytes_sync(&indices_dir_owned);
             let elapsed = start.elapsed().as_secs();
             if dir_bytes < 16 * 1024 {
@@ -305,7 +312,8 @@ async fn build_vector_index_with_progress(
         .execute()
         .await;
 
-    poll_handle.abort();
+    done.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _ = poll_handle.await;
     result.map_err(|e| Error::Database(format!("vector index: {e}")))
 }
 

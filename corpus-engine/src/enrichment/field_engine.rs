@@ -654,80 +654,116 @@ fn parse_skeleton_response(
     ParseResult::Ok(extract_questions_from_passages(&passages))
 }
 
+/// Parse positions from a JSON positions array value.
+fn parse_positions(positions_val: &serde_json::Value) -> Vec<SkeletonPosition> {
+    positions_val
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|p| {
+                    let name = p["name"].as_str()?;
+                    if name.is_empty() || name == "..." || name == "null" || name.len() < 2 {
+                        return None;
+                    }
+                    let claim = p["claim"].as_str().unwrap_or_default();
+                    if claim == "..." || claim.is_empty() {
+                        return None;
+                    }
+                    let status = p["status"].as_str().unwrap_or("contested");
+                    let status = if status.contains('|') {
+                        status.split('|').next().unwrap_or("contested").to_string()
+                    } else if status == "..." || status.is_empty() {
+                        "contested".to_string()
+                    } else {
+                        status.to_string()
+                    };
+                    Some(SkeletonPosition {
+                        id: format!("p_{}", name.to_lowercase().replace(' ', "_")),
+                        name: name.to_string(),
+                        claim: claim.to_string(),
+                        status,
+                        proponents: p["proponents"]
+                            .as_array()
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                        source: "skeleton".into(),
+                        cluster_ids: Vec::new(),
+                        centroid_chunk_ids: Vec::new(),
+                        discovery_confidence: None,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Build a question ID slug from a question string.
+fn make_question_id(question: &str) -> String {
+    format!(
+        "q_{}",
+        question
+            .to_lowercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == ' ')
+            .collect::<String>()
+            .replace(' ', "_")
+            .chars()
+            .take(50)
+            .collect::<String>()
+    )
+}
+
+/// Synthesize a question from a position's claim when the LLM didn't provide one.
+fn synthesize_question_from_position(position: &SkeletonPosition) -> String {
+    // Turn "Autonomy is a central value..." into "What is the role of autonomy?"
+    // Keep it simple — the alignment phase will match by embedding similarity anyway.
+    format!("What is the status of the view: {}?", position.name)
+}
+
 /// Extract questions and positions from parsed JSON passages.
+///
+/// When a passage has `canonical_question: null` but contains valid positions,
+/// the positions are preserved under a synthesized question derived from the
+/// first position's name. This prevents data loss from passages where the LLM
+/// identified positions but couldn't frame them under a single question.
 fn extract_questions_from_passages(passages: &[serde_json::Value]) -> Vec<SkeletonQuestion> {
     let mut questions = Vec::new();
+    let mut null_question_with_positions = 0_usize;
+
     for passage in passages {
-        if let Some(question) = passage["canonical_question"].as_str() {
-            if question.is_empty() || question == "..." || question == "null" || question.len() < 10
-            {
-                continue;
-            }
-            let question_type = passage["question_type"]
-                .as_str()
-                .unwrap_or("conceptual")
-                .to_string();
-            let positions: Vec<SkeletonPosition> = passage["positions"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|p| {
-                            let name = p["name"].as_str()?;
-                            if name.is_empty() || name == "..." || name == "null" || name.len() < 2
-                            {
-                                return None;
-                            }
-                            let claim = p["claim"].as_str().unwrap_or_default();
-                            if claim == "..." || claim.is_empty() {
-                                return None;
-                            }
-                            let status = p["status"].as_str().unwrap_or("contested");
-                            let status = if status.contains('|') {
-                                status.split('|').next().unwrap_or("contested").to_string()
-                            } else if status == "..." || status.is_empty() {
-                                "contested".to_string()
-                            } else {
-                                status.to_string()
-                            };
-                            Some(SkeletonPosition {
-                                id: format!("p_{}", name.to_lowercase().replace(' ', "_")),
-                                name: name.to_string(),
-                                claim: claim.to_string(),
-                                status,
-                                proponents: p["proponents"]
-                                    .as_array()
-                                    .map(|a| {
-                                        a.iter()
-                                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                            .collect()
-                                    })
-                                    .unwrap_or_default(),
-                                source: "skeleton".into(),
-                                cluster_ids: Vec::new(),
-                                centroid_chunk_ids: Vec::new(),
-                                discovery_confidence: None,
-                            })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
+        let raw_question = passage["canonical_question"].as_str();
+        let has_explicit_question = raw_question
+            .map(|q| !q.is_empty() && q != "..." && q != "null" && q.len() >= 10)
+            .unwrap_or(false);
 
-            let q_id = format!(
-                "q_{}",
-                question
-                    .to_lowercase()
-                    .chars()
-                    .filter(|c| c.is_alphanumeric() || *c == ' ')
-                    .collect::<String>()
-                    .replace(' ', "_")
-                    .chars()
-                    .take(50)
-                    .collect::<String>()
-            );
+        let question_type = passage["question_type"]
+            .as_str()
+            .unwrap_or("conceptual")
+            .to_string();
+        let positions = parse_positions(&passage["positions"]);
 
+        if has_explicit_question {
+            let question = raw_question.unwrap();
             questions.push(SkeletonQuestion {
-                id: q_id,
+                id: make_question_id(question),
                 question: question.to_string(),
+                question_type,
+                status: "contested".into(),
+                primary_article_ids: Vec::new(),
+                positions,
+            });
+        } else if !positions.is_empty() {
+            // The LLM found positions but didn't frame a canonical question.
+            // Synthesize a question so the positions aren't lost.
+            null_question_with_positions += 1;
+            let question = synthesize_question_from_position(&positions[0]);
+            questions.push(SkeletonQuestion {
+                id: make_question_id(&question),
+                question,
                 question_type,
                 status: "contested".into(),
                 primary_article_ids: Vec::new(),
@@ -735,6 +771,14 @@ fn extract_questions_from_passages(passages: &[serde_json::Value]) -> Vec<Skelet
             });
         }
     }
+
+    if null_question_with_positions > 0 {
+        tracing::info!(
+            count = null_question_with_positions,
+            "Synthesized questions for passages with positions but no canonical question"
+        );
+    }
+
     questions
 }
 
@@ -1210,6 +1254,68 @@ domain = "{domain}"
             2,
             "distinct IDs should not be merged"
         );
+    }
+
+    // ── Null-question extraction tests ──────────────────────
+
+    #[test]
+    fn extract_questions_from_null_canonical_question_with_positions() {
+        let passages: Vec<serde_json::Value> = serde_json::from_str(r#"[
+            {
+                "passage_index": 0,
+                "canonical_question": null,
+                "question_type": "conceptual",
+                "positions": [
+                    {
+                        "name": "Kantian autonomy",
+                        "claim": "Autonomy is a central value and capacity",
+                        "status": "majority",
+                        "proponents": ["Immanuel Kant"]
+                    }
+                ]
+            }
+        ]"#).unwrap();
+        let questions = extract_questions_from_passages(&passages);
+        assert_eq!(questions.len(), 1, "should synthesize a question for null canonical_question with positions");
+        assert!(questions[0].question.contains("Kantian autonomy"));
+        assert_eq!(questions[0].positions.len(), 1);
+        assert_eq!(questions[0].positions[0].name, "Kantian autonomy");
+    }
+
+    #[test]
+    fn extract_questions_skips_null_canonical_question_without_positions() {
+        let passages: Vec<serde_json::Value> = serde_json::from_str(r#"[
+            {
+                "passage_index": 0,
+                "canonical_question": null,
+                "question_type": "factual",
+                "positions": []
+            }
+        ]"#).unwrap();
+        let questions = extract_questions_from_passages(&passages);
+        assert_eq!(questions.len(), 0, "should skip passages with no question and no positions");
+    }
+
+    #[test]
+    fn extract_questions_prefers_explicit_canonical_question() {
+        let passages: Vec<serde_json::Value> = serde_json::from_str(r#"[
+            {
+                "passage_index": 0,
+                "canonical_question": "Is free will compatible with determinism?",
+                "question_type": "conceptual",
+                "positions": [
+                    {
+                        "name": "Compatibilism",
+                        "claim": "Free will is compatible with determinism",
+                        "status": "majority",
+                        "proponents": []
+                    }
+                ]
+            }
+        ]"#).unwrap();
+        let questions = extract_questions_from_passages(&passages);
+        assert_eq!(questions.len(), 1);
+        assert_eq!(questions[0].question, "Is free will compatible with determinism?");
     }
 
     // ── Truncated JSON repair tests ─────────────────────────

@@ -38,9 +38,10 @@ It's embedded, Rust-native, disk-based by design, and the Lance 1.0 storage form
      ▲                    ▲                    ▲                    ▲
      │                    │                    │                    │
  bulk_download        mediawiki_xml        paragraph            EmbedFn
- local_file           stackexchange        sentence              (injected
- web_crawl            jsonl (openalex)     fixed                  by caller)
- api_paginated        html                 semantic
+ huggingface          stackexchange        sentence              (injected
+ local_file           wikipedia_jsonl      fixed                  by caller)
+                      jsonl (openalex)     semantic
+                      html
                       csv
                       parquet
                       plaintext
@@ -54,11 +55,12 @@ It's embedded, Rust-native, disk-based by design, and the Lance 1.0 storage form
                                     │   Tantivy FTS    │
                                     └──────────────────┘
                                               │
-                                              ▼
-                                    ~/.sovereign/indexes/
-                                    ├── wikipedia/
-                                    ├── openalex/
-                                    └── stackexchange-shard-0-6200000/
+                              ┌───────────────┼───────────────┐
+                              ▼               ▼               ▼
+                    ~/.sovereign/indexes/   Enrichment     Delta Updates
+                    ├── wikipedia/         (field model,  (version manifests,
+                    ├── openalex/           opt-in)        incremental)
+                    └── …-shard-0-…/
 ```
 
 Each stage is a trait implementation the engine dispatches to based on a **Recipe** — a TOML file describing the pipeline for a specific corpus.
@@ -158,13 +160,51 @@ embedding_model = "nomic-embed-text-v2"
 embedding_dimensions = 768
 ```
 
-Built-in recipes ship for Wikipedia, OpenAlex, Stack Exchange, Project Gutenberg, the Stanford Encyclopedia of Philosophy, and CRS Reports. Users can drop custom recipe TOML files into the recipes directory and they get picked up by `engine.discover_recipes()`.
+Built-in recipes ship for Wikipedia, OpenAlex, Stack Exchange, Project Gutenberg, the Stanford Encyclopedia of Philosophy, and CRS Reports. Recipe TOML files live in the [`sovereign-recipes`](../sovereign-recipes) repository and are consumed via `RecipeRegistry`.
+
+### Recipe Registry
+
+`RecipeRegistry` (`src/registry.rs`) manages the catalog of available corpora:
+
+- **Bundled snapshot** — `registry_snapshot.toml` is compiled into the crate via `include_str!` so the engine works fully offline.
+- **Live refresh** — `RecipeRegistry::refresh()` fetches the latest `registry.toml` from GitHub. Each entry has a `toml_url` pointing to the raw recipe file.
+- **Resolution order** — local override on disk → fetch from `toml_url` → error.
+- **SHA-256 verification** — when the registry entry's `sha256` field is non-empty, the fetched recipe is verified.
+- **Update the snapshot** — `cargo xtask update-registry-snapshot` refreshes the bundled snapshot from the live registry.
+
+Users can drop custom recipe TOML files into the local recipes directory and they get picked up by `engine.discover_recipes()`.
+
+## Field Model Enrichment
+
+An optional LLM-driven post-indexing pass that analyzes a corpus holistically. Enabled per recipe with `[enrichment] enabled = true, domain = "philosophy"`.
+
+Five phases:
+
+1. **Skeleton extraction** — identifies canonical questions and positions from overview chunks using domain-specific LLM prompts
+2. **HDBSCAN clustering** — clusters chunk embeddings (no inference required), then labels clusters via LLM
+3. **Alignment** — maps clusters to skeleton positions using embedding similarity + LLM verification
+4. **Fault line detection** — identifies substantive disagreements between aligned positions
+5. **Open question detection** — surfaces questions where the corpus has gaps
+
+The `Domain` trait (`src/enrichment/domain.rs`) is the single extension point. It defines epistemic vocabulary, overview filters, all LLM prompts, and configuration parameters. Six domain implementations exist in `src/enrichment/domains/`: `philosophy` (fully implemented), `multi` (Wikipedia), and `science`, `policy`, `legal`, `community` (stubs).
+
+`FieldModelEngine` orchestrates all phases with checkpoint-based resumability. Without an `InferenceFn`, enrichment is skipped with a warning — ingestion still succeeds.
+
+## Delta Updates
+
+`update/delta.rs` supports incremental index updates via version manifests:
+
+- `VersionManifest` tracks per-document revision IDs
+- `ManifestDiff` computes additions, updates, and deletions between two manifests
+- Updates apply in three phases: deletions → updates (delete-then-re-add) → additions
+- Resumability via `_update_progress.json` so interrupted updates continue where they left off
 
 ## Supported source formats
 
 | Extractor | Source format | Notes |
 |---|---|---|
 | `mediawiki_xml` | MediaWiki dump (XML, optionally bz2) | Strips templates, wikilinks, refs, and bold/italic markup; splits by section headers |
+| `wikipedia_jsonl` | Wikipedia JSONL (ZIP+JSONL from HuggingFace) | Section-level extraction with Wikidata QIDs, revision IDs, and link metadata |
 | `stackexchange_xml` | Stack Exchange Posts.xml | Pairs questions with answers above a configurable score threshold |
 | `jsonl` | Newline-delimited JSON | Supports OpenAlex inverted-index abstract reconstruction; optional gzip |
 | `html` | Directory of .html/.htm files | Extracts `<title>`, strips tags, decodes entities, collapses whitespace |
@@ -367,7 +407,7 @@ For HuggingFace datasets (`acquire.type = "huggingface_dataset"`), the harness a
 cargo test
 ```
 
-95 tests cover:
+222 tests cover:
 - Index create/insert/search round-trip (FTS only, vector only, hybrid)
 - Shard extract/merge round-trip (3 shards → merge → results match original)
 - Embedding model compatibility check
@@ -383,6 +423,7 @@ Notable dependencies, all pinned via workspace versions in consumers:
 
 - `lancedb` — embedded vector database
 - `arrow`, `parquet` — columnar data and Parquet reading
+- `hdbscan` — clustering for field model enrichment
 - `quick-xml` — streaming XML parsing
 - `scraper` — HTML parsing
 - `bzip2`, `flate2` — decompression
