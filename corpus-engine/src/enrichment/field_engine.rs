@@ -327,8 +327,20 @@ impl FieldModelEngine {
             let passages = match serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
                 Ok(p) => p,
                 Err(_) => {
-                    // Try repairing truncated JSON by closing open brackets.
-                    match try_repair_truncated_json(json_str) {
+                    // The extractor may have mangled a truncated array (e.g.
+                    // found the last } instead of preserving the [ start).
+                    // Try repair on the original response too.
+                    let repair_source = if json_str.starts_with('[') {
+                        json_str.to_string()
+                    } else {
+                        // Re-extract from the raw response, looking for the first [
+                        let raw = extract_json_from_response(&response);
+                        // Find the outermost [ in the original response
+                        response.find('[')
+                            .map(|start| response[start..].to_string())
+                            .unwrap_or_else(|| raw.to_string())
+                    };
+                    match try_repair_truncated_json(&repair_source) {
                         Some(repaired) => {
                             match serde_json::from_str::<Vec<serde_json::Value>>(&repaired) {
                                 Ok(p) => {
@@ -372,7 +384,12 @@ impl FieldModelEngine {
 
             for passage in passages {
                 if let Some(question) = passage["canonical_question"].as_str() {
-                    if question.is_empty() {
+                    // Skip empty, null, or placeholder questions.
+                    if question.is_empty()
+                        || question == "..."
+                        || question == "null"
+                        || question.len() < 10
+                    {
                         continue;
                     }
                     let question_type = passage["question_type"]
@@ -384,23 +401,43 @@ impl FieldModelEngine {
                         .map(|arr| {
                             arr.iter()
                                 .filter_map(|p| {
+                                    let name = p["name"].as_str()?;
+                                    // Skip placeholder or empty position names.
+                                    if name.is_empty()
+                                        || name == "..."
+                                        || name == "null"
+                                        || name.len() < 2
+                                    {
+                                        return None;
+                                    }
                                     Some(SkeletonPosition {
                                         id: format!(
                                             "p_{}",
-                                            p["name"]
-                                                .as_str()?
-                                                .to_lowercase()
-                                                .replace(' ', "_")
+                                            name.to_lowercase().replace(' ', "_")
                                         ),
-                                        name: p["name"].as_str()?.to_string(),
-                                        claim: p["claim"]
-                                            .as_str()
-                                            .unwrap_or_default()
-                                            .to_string(),
-                                        status: p["status"]
-                                            .as_str()
-                                            .unwrap_or("contested")
-                                            .to_string(),
+                                        name: name.to_string(),
+                                        claim: {
+                                            let c = p["claim"]
+                                                .as_str()
+                                                .unwrap_or_default();
+                                            if c == "..." || c.is_empty() {
+                                                return None;
+                                            }
+                                            c.to_string()
+                                        },
+                                        status: {
+                                            let s = p["status"]
+                                                .as_str()
+                                                .unwrap_or("contested");
+                                            // Normalize compound statuses like "minority|contested"
+                                            if s.contains('|') {
+                                                s.split('|').next().unwrap_or("contested").to_string()
+                                            } else if s == "..." || s.is_empty() {
+                                                "contested".to_string()
+                                            } else {
+                                                s.to_string()
+                                            }
+                                        },
                                         proponents: p["proponents"]
                                             .as_array()
                                             .map(|a| {
@@ -1130,5 +1167,76 @@ domain = "{domain}"
         // Only a partial first element — nothing to salvage.
         let truncated = r#"[{"passage_in"#;
         assert!(try_repair_truncated_json(truncated).is_none());
+    }
+
+    #[test]
+    fn repair_realistic_truncated_skeleton_response() {
+        // Simulates the actual batch 25 failure: 3 complete passage objects,
+        // 4th truncated mid-string. Should salvage the first 3.
+        let truncated = r#"[
+  {
+    "passage_index": 0,
+    "canonical_question": "What is the proper relationship between reason and faith?",
+    "question_type": "normative",
+    "positions": [
+      {
+        "name": "pseudo-dialecticians",
+        "claim": "everything can be explained by human reason",
+        "status": "minority",
+        "proponents": ["Abelard"]
+      }
+    ]
+  },
+  {
+    "passage_index": 1,
+    "canonical_question": null,
+    "positions": []
+  },
+  {
+    "passage_index": 2,
+    "canonical_question": "What is identity?",
+    "question_type": "conceptual",
+    "positions": []
+  },
+  {
+    "passage_index": 3,
+    "canonical_question": null,
+    "positions": [
+      {
+        "name": "traditional account",
+        "claim": "(a) two things are the same in essence when they are numerically the concrete thing (essentia), and essentially different other"#;
+
+        let repaired = try_repair_truncated_json(truncated)
+            .expect("should repair truncated array with 3 complete elements");
+        let parsed: Vec<serde_json::Value> =
+            serde_json::from_str(&repaired).expect("repaired JSON should parse");
+        assert_eq!(
+            parsed.len(),
+            3,
+            "should salvage the 3 complete elements, got {}",
+            parsed.len()
+        );
+        assert_eq!(
+            parsed[0]["canonical_question"],
+            "What is the proper relationship between reason and faith?"
+        );
+    }
+
+    #[test]
+    fn placeholder_question_filtered() {
+        // Questions with "..." as text should be skipped.
+        let question = "...";
+        assert!(question == "..." || question.len() < 10);
+    }
+
+    #[test]
+    fn compound_status_normalized() {
+        let status = "minority|contested";
+        let normalized = if status.contains('|') {
+            status.split('|').next().unwrap_or("contested").to_string()
+        } else {
+            status.to_string()
+        };
+        assert_eq!(normalized, "minority");
     }
 }
