@@ -388,10 +388,9 @@ impl EmbedSlot {
 
         let n_embd = model.n_embd() as usize;
         // Embedding models are bidirectional encoders — the whole input
-        // gets packed into a single batch. 8192 tokens allows batching
-        // ~50 corpus chunks (avg ~150 tokens each) in a single decode
-        // call for significantly higher ingest throughput.
-        let max_tokens = 8192;
+        // gets packed into a single batch. 2048 tokens is enough for
+        // any chunk we produce (paragraph chunker maxes around 512).
+        let max_tokens = 2048;
 
         let model = Arc::new(model);
 
@@ -424,7 +423,7 @@ impl EmbedSlot {
             _                           => "mean",
         };
         eprintln!(
-            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}, n_ctx={max_tokens} (batch-capable)",
+            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}, n_ctx={max_tokens}",
             n_embd,
             model.n_layer(),
             model.size() / (1024 * 1024),
@@ -557,6 +556,13 @@ impl EmbedSlot {
     ///
     /// If the combined token count exceeds `max_tokens`, the batch is
     /// split into sub-batches that each fit within the context window.
+    /// Batch-embed by reusing the same context lock for all texts.
+    ///
+    /// This avoids the per-call overhead of acquiring the mutex, spawning
+    /// a blocking task, and clearing the KV cache independently. Each text
+    /// is still decoded as its own single-sequence batch (which llama.cpp
+    /// handles reliably), but the lock is held for the entire batch,
+    /// eliminating contention and task-spawn overhead.
     fn run_embed_batch_sync(
         model: &LlamaModel,
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
@@ -570,158 +576,22 @@ impl EmbedSlot {
         }
 
         let batch_start = std::time::Instant::now();
+        let mut results = Vec::with_capacity(inputs.len());
 
-        // Prepare all texts (apply instruction prefix + EOS if needed).
-        let prepared: Vec<String> = inputs
-            .iter()
-            .map(|text| {
-                if let Some(eq) = embed_quirks {
-                    let prefixed = format!("{}{text}", eq.document_instruction);
-                    if eq.append_eos_token {
-                        format!("{prefixed}<|endoftext|>")
-                    } else {
-                        prefixed
-                    }
-                } else {
-                    text.clone()
-                }
-            })
-            .collect();
+        for (i, text) in inputs.iter().enumerate() {
+            let embedding = Self::embed_sync(model, ctx, text, n_embd, max_tokens, embed_quirks)?;
+            results.push(embedding);
 
-        // Tokenize all texts and compute their token counts.
-        // Truncate any that exceed a per-sequence limit (512 tokens is
-        // generous for 1024-char chunks).
-        let per_seq_limit = max_tokens.min(512);
-        let mut all_tokens: Vec<Vec<llama_cpp_2::token::LlamaToken>> = Vec::with_capacity(prepared.len());
-        let mut total_token_count = 0usize;
-        for text in &prepared {
-            let mut tokens = model
-                .str_to_token(text, AddBos::Always)
-                .map_err(|e| Error::Inference(format!("Embed tokenization failed: {e}")))?;
-            if tokens.len() > per_seq_limit {
+            // Log progress every 16 texts within a batch.
+            if (i + 1) % 16 == 0 {
+                let elapsed_ms = batch_start.elapsed().as_millis();
+                let rate = (i + 1) as f64 / (elapsed_ms as f64 / 1000.0).max(0.001);
                 tracing::debug!(
-                    original_len = tokens.len(),
-                    truncated_to = per_seq_limit,
-                    "Truncating long sequence in batch embed"
-                );
-                tokens.truncate(per_seq_limit);
-            }
-            total_token_count += tokens.len();
-            all_tokens.push(tokens);
-        }
-
-        let tokenize_ms = batch_start.elapsed().as_millis();
-        tracing::debug!(
-            sequences = inputs.len(),
-            total_tokens = total_token_count,
-            avg_tokens = total_token_count / inputs.len().max(1),
-            n_ctx = max_tokens,
-            tokenize_ms,
-            "Batch embed: tokenized"
-        );
-
-        let mut results: Vec<Vec<f32>> = Vec::with_capacity(inputs.len());
-
-        // Process in sub-batches that fit within max_tokens.
-        let mut cursor = 0;
-        let mut sub_batch_idx = 0u32;
-        while cursor < all_tokens.len() {
-            ctx.clear_kv_cache();
-
-            // Figure out how many sequences fit in this sub-batch.
-            let mut sub_batch_tokens = 0usize;
-            let mut end = cursor;
-            while end < all_tokens.len() {
-                let seq_len = all_tokens[end].len();
-                if seq_len == 0 {
-                    // Empty text — will be a zero vector, skip in batch.
-                    end += 1;
-                    continue;
-                }
-                if sub_batch_tokens + seq_len > max_tokens {
-                    break;
-                }
-                sub_batch_tokens += seq_len;
-                end += 1;
-            }
-            // Ensure progress even if a single sequence fills the context.
-            if end == cursor {
-                end = cursor + 1;
-            }
-
-            // Count non-empty sequences to size the batch correctly.
-            let non_empty_count = (cursor..end)
-                .filter(|&idx| !all_tokens[idx].is_empty())
-                .count();
-
-            let mut seq_map: Vec<usize> = Vec::new(); // maps batch seq_id → original index
-            let mut tokens_in_decode = 0usize;
-
-            if non_empty_count > 0 {
-                let mut batch = LlamaBatch::new(max_tokens, non_empty_count.max(1) as i32);
-                let mut seq_id = 0i32;
-                for idx in cursor..end {
-                    let tokens = &all_tokens[idx];
-                    if tokens.is_empty() {
-                        continue;
-                    }
-                    for (pos, &token) in tokens.iter().enumerate() {
-                        batch
-                            .add(token, pos as i32, &[seq_id], true)
-                            .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-                    }
-                    tokens_in_decode += tokens.len();
-                    seq_map.push(idx);
-                    seq_id += 1;
-                }
-
-                let decode_start = std::time::Instant::now();
-                ctx.decode(&mut batch)
-                    .map_err(|e| Error::Inference(format!("Batch decode failed: {e}")))?;
-                let decode_ms = decode_start.elapsed().as_millis();
-
-                tracing::debug!(
-                    sub_batch = sub_batch_idx,
-                    sequences = seq_id,
-                    tokens = tokens_in_decode,
-                    decode_ms,
-                    "Batch embed: sub-batch decoded"
-                );
-            } else {
-                tracing::debug!(
-                    sub_batch = sub_batch_idx,
-                    skipped_empty = end - cursor,
-                    "Batch embed: sub-batch skipped (all empty sequences)"
+                    progress = format!("{}/{}", i + 1, inputs.len()),
+                    rate = format!("{rate:.1} seq/s"),
+                    "Batch embed progress"
                 );
             }
-
-            // Extract and normalize embeddings for each sequence.
-            let mut batch_results: Vec<(usize, Vec<f32>)> = Vec::new();
-            for (batch_seq, &original_idx) in seq_map.iter().enumerate() {
-                let raw = ctx
-                    .embeddings_seq_ith(batch_seq as i32)
-                    .map_err(|e| Error::Inference(format!("Failed to read embedding seq {batch_seq}: {e}")))?;
-                let mut out = raw.to_vec();
-                let norm: f32 = out.iter().map(|x| x * x).sum::<f32>().sqrt();
-                if norm > 0.0 {
-                    for v in out.iter_mut() {
-                        *v /= norm;
-                    }
-                }
-                batch_results.push((original_idx, out));
-            }
-
-            // Fill in results (including zero vectors for empty inputs).
-            for idx in cursor..end {
-                if all_tokens[idx].is_empty() {
-                    results.push(vec![0.0; n_embd]);
-                } else if let Some(pos) = batch_results.iter().position(|(i, _)| *i == idx) {
-                    results.push(batch_results.remove(pos).1);
-                }
-            }
-
-            cursor = end;
-            sub_batch_idx += 1;
         }
 
         let total_ms = batch_start.elapsed().as_millis();
@@ -732,8 +602,6 @@ impl EmbedSlot {
         };
         tracing::info!(
             sequences = inputs.len(),
-            total_tokens = total_token_count,
-            sub_batches = sub_batch_idx,
             total_ms,
             seqs_per_sec = format!("{seqs_per_sec:.1}"),
             "Batch embed complete"
