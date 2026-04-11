@@ -190,14 +190,7 @@ impl CorpusIndex {
             db,
             table,
             corpus_id: corpus_id.to_string(),
-            corpus_name: corpus_name.to_string(),
-            embedding_model: embedding_model.to_string(),
             embedding_dimensions: embedding_dim,
-            mesh_sharing,
-            license: license.to_string(),
-            created_at: now,
-            is_shard: false,
-            chunk_range: None,
         })
     }
 

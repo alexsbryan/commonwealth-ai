@@ -60,18 +60,17 @@ pub struct StoredChunkWithMetadata {
 
 /// A single corpus index backed by LanceDB.
 /// Uses IVF-PQ for vector search and Tantivy for full-text search.
+///
+/// The on-disk `_corpus_meta.json` is the single source of truth for index
+/// metadata. We cache only the two fields read on every operation
+/// (`corpus_id` for identity, `embedding_dimensions` for vector ops); the
+/// rest is loaded on-demand via `info()`. This avoids stale-cache bugs when
+/// callers like `set_shard_meta()` mutate the metadata file.
 pub struct CorpusIndex {
     db: lancedb::Connection,
     table: lancedb::Table,
     corpus_id: String,
-    corpus_name: String,
-    embedding_model: String,
     embedding_dimensions: usize,
-    mesh_sharing: bool,
-    license: String,
-    created_at: u64,
-    is_shard: bool,
-    chunk_range: Option<ChunkRange>,
 }
 
 /// Build the Arrow schema for a corpus index table.
@@ -208,27 +207,11 @@ impl CorpusIndex {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        let chunk_range = if meta.is_shard {
-            match (meta.chunk_range_start, meta.chunk_range_end) {
-                (Some(s), Some(e)) => Some(ChunkRange::new(s, e)),
-                _ => None,
-            }
-        } else {
-            None
-        };
-
         Ok(Self {
             db,
             table,
             corpus_id: meta.corpus_id,
-            corpus_name: meta.corpus_name,
-            embedding_model: meta.embedding_model,
             embedding_dimensions: meta.embedding_dimensions,
-            mesh_sharing: meta.mesh_sharing,
-            license: meta.license,
-            created_at: meta.created_at,
-            is_shard: meta.is_shard,
-            chunk_range,
         })
     }
 
