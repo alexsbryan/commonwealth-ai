@@ -368,8 +368,6 @@ struct EmbedSlot {
     /// instruction prefixes, EOS appending. None = nomic/mxbai-style
     /// defaults (mean pooling, no instructions, no EOS).
     embed_quirks: Option<EmbedQuirks>,
-    /// Reference to the backend, needed to create additional contexts.
-    backend: Arc<LlamaBackend>,
 }
 
 struct EmbedSlotContext {
@@ -379,10 +377,6 @@ struct EmbedSlotContext {
 
 unsafe impl Send for EmbedSlotContext {}
 unsafe impl Sync for EmbedSlotContext {}
-
-/// Number of parallel embedding contexts to create. Each context
-/// adds ~50MB of KV cache memory but enables true concurrent embedding.
-const EMBED_WORKERS: usize = 4;
 
 impl EmbedSlot {
     fn load(
@@ -406,30 +400,20 @@ impl EmbedSlot {
             _                           => LlamaPoolingType::Mean,
         };
 
-        // Create a pool of contexts for parallel embedding.
-        let mut contexts = Vec::with_capacity(EMBED_WORKERS);
-        for i in 0..EMBED_WORKERS {
-            let ctx_params = LlamaContextParams::default()
-                .with_n_ctx(NonZeroU32::new(max_tokens as u32))
-                .with_n_batch(max_tokens as u32)
-                .with_n_ubatch(max_tokens as u32)
-                .with_embeddings(true)
-                .with_pooling_type(pooling_type);
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(NonZeroU32::new(max_tokens as u32))
+            .with_n_batch(max_tokens as u32)
+            .with_n_ubatch(max_tokens as u32)
+            .with_embeddings(true)
+            .with_pooling_type(pooling_type);
 
-            let ctx = unsafe {
-                let model_ref: &'static LlamaModel =
-                    &*(Arc::as_ptr(&model) as *const LlamaModel);
-                model_ref
-                    .new_context(backend, ctx_params)
-                    .map_err(|e| Error::Inference(format!(
-                        "Failed to create embed context {i}: {e}"
-                    )))?
-            };
-            contexts.push(Mutex::new(EmbedSlotContext {
-                ctx,
-                _model: model.clone(),
-            }));
-        }
+        let ctx = unsafe {
+            let model_ref: &'static LlamaModel =
+                &*(Arc::as_ptr(&model) as *const LlamaModel);
+            model_ref
+                .new_context(backend, ctx_params)
+                .map_err(|e| Error::Inference(format!("Failed to create embed context: {e}")))?
+        };
 
         let pooling_name = match embed_quirks.as_ref().map(|q| &q.pooling) {
             Some(PoolingStrategy::Last) => "last-token",
@@ -437,8 +421,7 @@ impl EmbedSlot {
             _                           => "mean",
         };
         eprintln!(
-            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}, \
-             n_ctx={max_tokens}, workers={EMBED_WORKERS}",
+            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}, n_ctx={max_tokens}",
             n_embd,
             model.n_layer(),
             model.size() / (1024 * 1024),
@@ -446,11 +429,13 @@ impl EmbedSlot {
 
         Ok(Self {
             model: model.clone(),
-            contexts,
+            contexts: vec![Mutex::new(EmbedSlotContext {
+                ctx,
+                _model: model,
+            })],
             n_embd,
             max_tokens,
             embed_quirks,
-            backend: Arc::clone(backend),
         })
     }
 
@@ -569,9 +554,8 @@ impl EmbedSlot {
     ///
     /// If the combined token count exceeds `max_tokens`, the batch is
     /// split into sub-batches that each fit within the context window.
-    /// Batch-embed using parallel worker threads, each with its own
-    /// context. The inputs are split into N chunks (one per worker)
-    /// and processed concurrently via `std::thread::scope`.
+    /// Batch-embed: hold the context lock once and embed all texts
+    /// sequentially. Avoids per-call mutex + spawn_blocking overhead.
     fn run_embed_batch_sync(
         slot: &EmbedSlot,
         inputs: &[String],
@@ -580,72 +564,20 @@ impl EmbedSlot {
             return Ok(vec![]);
         }
 
-        let n_workers = slot.contexts.len();
         let batch_start = std::time::Instant::now();
+        let mut ctx_lock = slot.contexts[0].blocking_lock();
+        let mut results = Vec::with_capacity(inputs.len());
 
-        // Split inputs into roughly equal chunks, one per worker.
-        let chunk_size = (inputs.len() + n_workers - 1) / n_workers;
-        let chunks: Vec<&[String]> = inputs.chunks(chunk_size).collect();
-        let actual_workers = chunks.len();
-
-        // Each worker produces a Vec<Vec<f32>> for its slice.
-        let mut all_results: Vec<Option<Result<Vec<Vec<f32>>>>> =
-            (0..actual_workers).map(|_| None).collect();
-
-        std::thread::scope(|scope| {
-            let handles: Vec<_> = chunks
-                .iter()
-                .enumerate()
-                .map(|(worker_id, chunk)| {
-                    let model = &slot.model;
-                    let ctx_mutex = &slot.contexts[worker_id];
-                    let n_embd = slot.n_embd;
-                    let max_tokens = slot.max_tokens;
-                    let embed_quirks = slot.embed_quirks.as_ref();
-
-                    scope.spawn(move || {
-                        let mut ctx_lock = ctx_mutex.blocking_lock();
-                        let mut results = Vec::with_capacity(chunk.len());
-                        for text in *chunk {
-                            let emb = Self::embed_sync(
-                                model,
-                                &mut ctx_lock.ctx,
-                                text,
-                                n_embd,
-                                max_tokens,
-                                embed_quirks,
-                            )?;
-                            results.push(emb);
-                        }
-                        Ok(results)
-                    })
-                })
-                .collect();
-
-            for (i, handle) in handles.into_iter().enumerate() {
-                all_results[i] = Some(handle.join().unwrap_or_else(|_| {
-                    Err(Error::Inference(
-                        "Embed worker thread panicked".to_string(),
-                    ))
-                }));
-            }
-        });
-
-        // Flatten results in order.
-        let mut output = Vec::with_capacity(inputs.len());
-        for (i, result) in all_results.into_iter().enumerate() {
-            match result {
-                Some(Ok(embeddings)) => output.extend(embeddings),
-                Some(Err(e)) => {
-                    tracing::error!(worker = i, error = %e, "Embed worker failed");
-                    return Err(e);
-                }
-                None => {
-                    return Err(Error::Inference(format!(
-                        "Embed worker {i} produced no result"
-                    )));
-                }
-            }
+        for text in inputs {
+            let emb = Self::embed_sync(
+                &slot.model,
+                &mut ctx_lock.ctx,
+                text,
+                slot.n_embd,
+                slot.max_tokens,
+                slot.embed_quirks.as_ref(),
+            )?;
+            results.push(emb);
         }
 
         let total_ms = batch_start.elapsed().as_millis();
@@ -656,13 +588,12 @@ impl EmbedSlot {
         };
         tracing::info!(
             sequences = inputs.len(),
-            workers = actual_workers,
             total_ms,
             seqs_per_sec = format!("{seqs_per_sec:.1}"),
             "Batch embed complete"
         );
 
-        Ok(output)
+        Ok(results)
     }
 }
 
