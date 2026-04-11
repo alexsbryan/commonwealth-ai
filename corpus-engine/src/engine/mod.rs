@@ -13,7 +13,11 @@ use crate::types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, EmbedFn, IndexInfo, IndexStats, ShardInfo,
 };
 
-const EMBED_BATCH_SIZE: usize = 64;
+/// Number of chunks to accumulate before embedding + inserting.
+/// Larger batches amortise LanceDB insert/compaction overhead —
+/// at 64 chunks, compaction stalls (~3 min) happen every ~30 batches.
+/// At 512 the same compaction happens ~8x less often.
+const EMBED_BATCH_SIZE: usize = 512;
 
 pub struct CorpusEngine {
     registry: RecipeRegistry,

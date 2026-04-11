@@ -262,18 +262,32 @@ impl CorpusEngine {
                     let batch_secs = batch_start.elapsed().as_secs_f32().max(0.001);
                     let chunks_per_sec = batch.len() as f32 / batch_secs;
                     total_chunks += batch.len() as u64;
+
+                    let insert_start = Instant::now();
                     index.insert_batch(&batch).await?;
+                    let insert_ms = insert_start.elapsed().as_millis();
                     // Checkpoint: persist how far we've iterated so a restart can resume.
                     let _ = index.update_committed_iter_pos(iter_pos);
                     batch.clear();
 
+                    if insert_ms > 5000 {
+                        tracing::warn!(
+                            insert_ms,
+                            total_chunks,
+                            "Index insert_batch stall — likely LanceDB compaction"
+                        );
+                    } else {
+                        tracing::debug!(insert_ms, "Index insert_batch");
+                    }
+
                     let elapsed = start.elapsed();
                     eprintln!(
-                        "[{}] {total_chunks} chunks | {} docs | {chunks_per_sec:.1} chunks/s | {}m{}s elapsed",
+                        "[{}] {total_chunks} chunks | {} docs | {chunks_per_sec:.1} chunks/s | {}m{}s elapsed{}",
                         recipe.corpus.id,
                         resume_iter_pos + docs_processed,
                         elapsed.as_secs() / 60,
                         elapsed.as_secs() % 60,
+                        if insert_ms > 5000 { format!(" (index compaction: {insert_ms}ms)") } else { String::new() },
                     );
 
                     if let Some(ref cb) = progress {
