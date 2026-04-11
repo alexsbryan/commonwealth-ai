@@ -14,7 +14,7 @@ use crate::progress::{IngestProgress, ProgressCallback};
 use crate::recipe::{AcquirerConfig, ChunkerConfig, ExtractorConfig, Recipe};
 use crate::types::{CorpusSpec, IngestResult};
 
-use super::{blake3_hex, normalize_content, CorpusEngine, EMBED_BATCH_SIZE};
+use super::{blake3_hex, normalize_content, CorpusEngine, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE};
 
 impl CorpusEngine {
     /// Ingest a corpus from source. Downloads, parses, chunks,
@@ -159,34 +159,31 @@ impl CorpusEngine {
         let mut total_chunks = index.chunk_count().await.unwrap_or(0);
         let mut docs_processed = 0u64; // successful docs in THIS run
         let mut iter_pos = 0u64;       // absolute position in the source iterator
-        let mut batch: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
-        let mut batch_start = Instant::now();
+
+        // Two-tier buffering:
+        //  1. pending_chunks/texts: accumulate until EMBED_BATCH_SIZE, then embed
+        //  2. index_buffer: accumulate embedded chunks until INDEX_FLUSH_SIZE, then write
+        // This decouples embedding frequency from LanceDB insert frequency,
+        // drastically reducing fragment count and compaction stalls.
+        let mut pending_chunks: Vec<InsertChunk> = Vec::new();
+        let mut pending_texts: Vec<String> = Vec::new();
+        let mut index_buffer: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
+        let mut embed_timer = Instant::now();
 
         let use_batch_embed = self.batch_embed.is_some();
         if resume_iter_pos == 0 {
-            if use_batch_embed {
-                tracing::info!(
-                    corpus = %recipe.corpus.id,
-                    batch_size = EMBED_BATCH_SIZE,
-                    "Starting embed+index pipeline (batch embedding enabled)"
-                );
-                eprintln!(
-                    "[{}] Starting embed+index pipeline (batch embed, batch_size={})",
-                    recipe.corpus.id, EMBED_BATCH_SIZE,
-                );
-            } else {
-                tracing::info!(
-                    corpus = %recipe.corpus.id,
-                    "Starting embed+index pipeline (sequential embedding)"
-                );
-                eprintln!("[{}] Starting embed+index pipeline (sequential embed)", recipe.corpus.id);
-            }
+            tracing::info!(
+                corpus = %recipe.corpus.id,
+                embed_batch = EMBED_BATCH_SIZE,
+                index_flush = INDEX_FLUSH_SIZE,
+                batch_embed = use_batch_embed,
+                "Starting embed+index pipeline"
+            );
+            eprintln!(
+                "[{}] Starting embed+index pipeline (embed_batch={}, index_flush={}, batch_embed={})",
+                recipe.corpus.id, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE, use_batch_embed,
+            );
         }
-
-        // Pending chunks awaiting embedding. When batch_embed is available,
-        // we accumulate chunks and embed them all at once.
-        let mut pending_chunks: Vec<InsertChunk> = Vec::new();
-        let mut pending_texts: Vec<String> = Vec::new();
 
         for doc_result in doc_iter {
             iter_pos += 1;
@@ -232,8 +229,8 @@ impl CorpusEngine {
                         .or_else(|| Some(doc.source_id.clone())),
                 });
 
+                // Tier 1: embed when we have enough pending chunks.
                 if pending_chunks.len() >= EMBED_BATCH_SIZE {
-                    // Embed the accumulated batch.
                     let embed_start = Instant::now();
                     let embed_count = pending_texts.len();
                     let embeddings = if let Some(ref batch_embed) = self.batch_embed {
@@ -246,65 +243,72 @@ impl CorpusEngine {
                         embs
                     };
                     let embed_ms = embed_start.elapsed().as_millis();
+                    let embed_rate = embed_count as f64 / (embed_ms as f64 / 1000.0).max(0.001);
 
                     tracing::debug!(
                         chunks = embed_count,
                         embed_ms,
-                        mode = if use_batch_embed { "batch" } else { "sequential" },
-                        "Embed batch completed"
+                        rate = format!("{embed_rate:.1}/s"),
+                        "Embed batch"
                     );
 
                     for (chunk, embedding) in pending_chunks.drain(..).zip(embeddings) {
-                        batch.push((chunk, embedding));
+                        index_buffer.push((chunk, embedding));
                     }
                     pending_texts.clear();
 
-                    let batch_secs = batch_start.elapsed().as_secs_f32().max(0.001);
-                    let chunks_per_sec = batch.len() as f32 / batch_secs;
-                    total_chunks += batch.len() as u64;
-
-                    let insert_start = Instant::now();
-                    index.insert_batch(&batch).await?;
-                    let insert_ms = insert_start.elapsed().as_millis();
-                    // Checkpoint: persist how far we've iterated so a restart can resume.
-                    let _ = index.update_committed_iter_pos(iter_pos);
-                    batch.clear();
-
-                    if insert_ms > 5000 {
-                        tracing::warn!(
-                            insert_ms,
-                            total_chunks,
-                            "Index insert_batch stall — likely LanceDB compaction"
-                        );
-                    } else {
-                        tracing::debug!(insert_ms, "Index insert_batch");
-                    }
-
+                    // Report progress after each embed batch.
                     let elapsed = start.elapsed();
+                    let embed_secs = embed_timer.elapsed().as_secs_f32().max(0.001);
+                    let chunks_per_sec = embed_count as f32 / embed_secs;
                     eprintln!(
-                        "[{}] {total_chunks} chunks | {} docs | {chunks_per_sec:.1} chunks/s | {}m{}s elapsed{}",
+                        "[{}] {} embedded ({} buffered) | {} docs | {chunks_per_sec:.1} chunks/s | {}m{}s",
                         recipe.corpus.id,
+                        total_chunks + index_buffer.len() as u64,
+                        index_buffer.len(),
                         resume_iter_pos + docs_processed,
                         elapsed.as_secs() / 60,
                         elapsed.as_secs() % 60,
-                        if insert_ms > 5000 { format!(" (index compaction: {insert_ms}ms)") } else { String::new() },
                     );
+                    embed_timer = Instant::now();
 
                     if let Some(ref cb) = progress {
                         cb(IngestProgress::Embedding {
-                            chunks_embedded: total_chunks,
+                            chunks_embedded: total_chunks + index_buffer.len() as u64,
                             total: 0,
                             docs_processed: resume_iter_pos + docs_processed,
                             chunks_per_sec,
                         });
                     }
+                }
 
-                    batch_start = Instant::now();
+                // Tier 2: flush to index when buffer is large enough.
+                if index_buffer.len() >= INDEX_FLUSH_SIZE {
+                    let flush_count = index_buffer.len();
+                    let insert_start = Instant::now();
+                    index.insert_batch(&index_buffer).await?;
+                    let insert_ms = insert_start.elapsed().as_millis();
+                    let _ = index.update_committed_iter_pos(iter_pos);
+                    total_chunks += flush_count as u64;
+                    index_buffer.clear();
+
+                    if insert_ms > 5000 {
+                        tracing::warn!(
+                            insert_ms,
+                            flush_count,
+                            total_chunks,
+                            "Index flush stall — likely LanceDB compaction"
+                        );
+                    }
+                    eprintln!(
+                        "[{}] Flushed {} chunks to index ({insert_ms}ms) — {total_chunks} total committed",
+                        recipe.corpus.id, flush_count,
+                    );
                 }
             }
         }
 
-        // Flush remaining pending chunks.
+        // Flush remaining pending chunks through embedding.
         if !pending_chunks.is_empty() {
             let embeddings = if let Some(ref batch_embed) = self.batch_embed {
                 (batch_embed)(&pending_texts).await?
@@ -316,17 +320,18 @@ impl CorpusEngine {
                 embs
             };
             for (chunk, embedding) in pending_chunks.drain(..).zip(embeddings) {
-                batch.push((chunk, embedding));
+                index_buffer.push((chunk, embedding));
             }
         }
 
-        // Flush remaining.
-        if !batch.is_empty() {
-            total_chunks += batch.len() as u64;
-            index.insert_batch(&batch).await?;
+        // Flush remaining index buffer.
+        if !index_buffer.is_empty() {
+            let flush_count = index_buffer.len();
+            total_chunks += flush_count as u64;
+            index.insert_batch(&index_buffer).await?;
             let _ = index.update_committed_iter_pos(iter_pos);
             eprintln!(
-                "[{}] Flushed final batch — {total_chunks} chunks total from {} docs",
+                "[{}] Final flush — {flush_count} chunks — {total_chunks} total committed from {} docs",
                 recipe.corpus.id,
                 resume_iter_pos + docs_processed,
             );
