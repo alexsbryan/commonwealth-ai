@@ -353,7 +353,11 @@ impl ModelSlot {
 /// is an independent sequence.
 struct EmbedSlot {
     model: Arc<LlamaModel>,
-    context: Mutex<EmbedSlotContext>,
+    /// Pool of contexts for parallel batch embedding. contexts[0] is
+    /// the primary context used by single `embed()` calls. All contexts
+    /// share the same model weights (via Arc) — only the KV cache is
+    /// per-context (~50MB each for a 2048-token embedding model).
+    contexts: Vec<Mutex<EmbedSlotContext>>,
     /// Embedding dimensionality reported by the model. Cached so the
     /// hot path doesn't have to call `model.n_embd()` on every embed.
     n_embd: usize,
@@ -364,6 +368,8 @@ struct EmbedSlot {
     /// instruction prefixes, EOS appending. None = nomic/mxbai-style
     /// defaults (mean pooling, no instructions, no EOS).
     embed_quirks: Option<EmbedQuirks>,
+    /// Reference to the backend, needed to create additional contexts.
+    backend: Arc<LlamaBackend>,
 }
 
 struct EmbedSlotContext {
@@ -373,6 +379,10 @@ struct EmbedSlotContext {
 
 unsafe impl Send for EmbedSlotContext {}
 unsafe impl Sync for EmbedSlotContext {}
+
+/// Number of parallel embedding contexts to create. Each context
+/// adds ~50MB of KV cache memory but enables true concurrent embedding.
+const EMBED_WORKERS: usize = 4;
 
 impl EmbedSlot {
     fn load(
@@ -387,35 +397,39 @@ impl EmbedSlot {
             .map_err(|e| Error::Inference(format!("Failed to load embed model: {e}")))?;
 
         let n_embd = model.n_embd() as usize;
-        // Embedding models are bidirectional encoders — the whole input
-        // gets packed into a single batch. 2048 tokens is enough for
-        // any chunk we produce (paragraph chunker maxes around 512).
         let max_tokens = 2048;
-
         let model = Arc::new(model);
 
-        // Use the pooling strategy from EmbedQuirks when available.
-        // Defaults to Mean (nomic/mxbai-style) when no quirks are provided.
         let pooling_type = match embed_quirks.as_ref().map(|q| &q.pooling) {
             Some(PoolingStrategy::Last) => LlamaPoolingType::Last,
             Some(PoolingStrategy::Cls)  => LlamaPoolingType::Cls,
             _                           => LlamaPoolingType::Mean,
         };
 
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(NonZeroU32::new(max_tokens as u32))
-            .with_n_batch(max_tokens as u32)
-            .with_n_ubatch(max_tokens as u32)
-            .with_embeddings(true)
-            .with_pooling_type(pooling_type);
+        // Create a pool of contexts for parallel embedding.
+        let mut contexts = Vec::with_capacity(EMBED_WORKERS);
+        for i in 0..EMBED_WORKERS {
+            let ctx_params = LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(max_tokens as u32))
+                .with_n_batch(max_tokens as u32)
+                .with_n_ubatch(max_tokens as u32)
+                .with_embeddings(true)
+                .with_pooling_type(pooling_type);
 
-        let ctx = unsafe {
-            let model_ref: &'static LlamaModel =
-                &*(Arc::as_ptr(&model) as *const LlamaModel);
-            model_ref
-                .new_context(backend, ctx_params)
-                .map_err(|e| Error::Inference(format!("Failed to create embed context: {e}")))?
-        };
+            let ctx = unsafe {
+                let model_ref: &'static LlamaModel =
+                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                model_ref
+                    .new_context(backend, ctx_params)
+                    .map_err(|e| Error::Inference(format!(
+                        "Failed to create embed context {i}: {e}"
+                    )))?
+            };
+            contexts.push(Mutex::new(EmbedSlotContext {
+                ctx,
+                _model: model.clone(),
+            }));
+        }
 
         let pooling_name = match embed_quirks.as_ref().map(|q| &q.pooling) {
             Some(PoolingStrategy::Last) => "last-token",
@@ -423,7 +437,8 @@ impl EmbedSlot {
             _                           => "mean",
         };
         eprintln!(
-            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}, n_ctx={max_tokens}",
+            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}, \
+             n_ctx={max_tokens}, workers={EMBED_WORKERS}",
             n_embd,
             model.n_layer(),
             model.size() / (1024 * 1024),
@@ -431,13 +446,11 @@ impl EmbedSlot {
 
         Ok(Self {
             model: model.clone(),
-            context: Mutex::new(EmbedSlotContext {
-                ctx,
-                _model: model,
-            }),
+            contexts,
             n_embd,
             max_tokens,
             embed_quirks,
+            backend: Arc::clone(backend),
         })
     }
 
@@ -556,41 +569,82 @@ impl EmbedSlot {
     ///
     /// If the combined token count exceeds `max_tokens`, the batch is
     /// split into sub-batches that each fit within the context window.
-    /// Batch-embed by reusing the same context lock for all texts.
-    ///
-    /// This avoids the per-call overhead of acquiring the mutex, spawning
-    /// a blocking task, and clearing the KV cache independently. Each text
-    /// is still decoded as its own single-sequence batch (which llama.cpp
-    /// handles reliably), but the lock is held for the entire batch,
-    /// eliminating contention and task-spawn overhead.
+    /// Batch-embed using parallel worker threads, each with its own
+    /// context. The inputs are split into N chunks (one per worker)
+    /// and processed concurrently via `std::thread::scope`.
     fn run_embed_batch_sync(
-        model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        slot: &EmbedSlot,
         inputs: &[String],
-        n_embd: usize,
-        max_tokens: usize,
-        embed_quirks: Option<&EmbedQuirks>,
     ) -> Result<Vec<Vec<f32>>> {
         if inputs.is_empty() {
             return Ok(vec![]);
         }
 
+        let n_workers = slot.contexts.len();
         let batch_start = std::time::Instant::now();
-        let mut results = Vec::with_capacity(inputs.len());
 
-        for (i, text) in inputs.iter().enumerate() {
-            let embedding = Self::embed_sync(model, ctx, text, n_embd, max_tokens, embed_quirks)?;
-            results.push(embedding);
+        // Split inputs into roughly equal chunks, one per worker.
+        let chunk_size = (inputs.len() + n_workers - 1) / n_workers;
+        let chunks: Vec<&[String]> = inputs.chunks(chunk_size).collect();
+        let actual_workers = chunks.len();
 
-            // Log progress every 16 texts within a batch.
-            if (i + 1) % 16 == 0 {
-                let elapsed_ms = batch_start.elapsed().as_millis();
-                let rate = (i + 1) as f64 / (elapsed_ms as f64 / 1000.0).max(0.001);
-                tracing::debug!(
-                    progress = format!("{}/{}", i + 1, inputs.len()),
-                    rate = format!("{rate:.1} seq/s"),
-                    "Batch embed progress"
-                );
+        // Each worker produces a Vec<Vec<f32>> for its slice.
+        let mut all_results: Vec<Option<Result<Vec<Vec<f32>>>>> =
+            (0..actual_workers).map(|_| None).collect();
+
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = chunks
+                .iter()
+                .enumerate()
+                .map(|(worker_id, chunk)| {
+                    let model = &slot.model;
+                    let ctx_mutex = &slot.contexts[worker_id];
+                    let n_embd = slot.n_embd;
+                    let max_tokens = slot.max_tokens;
+                    let embed_quirks = slot.embed_quirks.as_ref();
+
+                    scope.spawn(move || {
+                        let mut ctx_lock = ctx_mutex.blocking_lock();
+                        let mut results = Vec::with_capacity(chunk.len());
+                        for text in *chunk {
+                            let emb = Self::embed_sync(
+                                model,
+                                &mut ctx_lock.ctx,
+                                text,
+                                n_embd,
+                                max_tokens,
+                                embed_quirks,
+                            )?;
+                            results.push(emb);
+                        }
+                        Ok(results)
+                    })
+                })
+                .collect();
+
+            for (i, handle) in handles.into_iter().enumerate() {
+                all_results[i] = Some(handle.join().unwrap_or_else(|_| {
+                    Err(Error::Inference(
+                        "Embed worker thread panicked".to_string(),
+                    ))
+                }));
+            }
+        });
+
+        // Flatten results in order.
+        let mut output = Vec::with_capacity(inputs.len());
+        for (i, result) in all_results.into_iter().enumerate() {
+            match result {
+                Some(Ok(embeddings)) => output.extend(embeddings),
+                Some(Err(e)) => {
+                    tracing::error!(worker = i, error = %e, "Embed worker failed");
+                    return Err(e);
+                }
+                None => {
+                    return Err(Error::Inference(format!(
+                        "Embed worker {i} produced no result"
+                    )));
+                }
             }
         }
 
@@ -602,12 +656,13 @@ impl EmbedSlot {
         };
         tracing::info!(
             sequences = inputs.len(),
+            workers = actual_workers,
             total_ms,
             seqs_per_sec = format!("{seqs_per_sec:.1}"),
             "Batch embed complete"
         );
 
-        Ok(results)
+        Ok(output)
     }
 }
 
@@ -1029,10 +1084,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let text = text.to_string();
 
         tokio::task::spawn_blocking(move || {
-            let mut ctx_lock = slot.context.blocking_lock();
-            // Catch panics from llama.cpp (e.g., context overflow assertions)
-            // so they surface as a regular error instead of taking down the
-            // whole runtime.
+            let mut ctx_lock = slot.contexts[0].blocking_lock();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_sync(
                     &slot.model,
@@ -1068,7 +1120,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let query = query.to_string();
 
         tokio::task::spawn_blocking(move || {
-            let mut ctx_lock = slot.context.blocking_lock();
+            let mut ctx_lock = slot.contexts[0].blocking_lock();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_query_sync(
                     &slot.model,
@@ -1104,16 +1156,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let texts = texts.to_vec();
 
         tokio::task::spawn_blocking(move || {
-            let mut ctx_lock = slot.context.blocking_lock();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                EmbedSlot::run_embed_batch_sync(
-                    &slot.model,
-                    &mut ctx_lock.ctx,
-                    &texts,
-                    slot.n_embd,
-                    slot.max_tokens,
-                    slot.embed_quirks.as_ref(),
-                )
+                EmbedSlot::run_embed_batch_sync(&slot, &texts)
             }));
             match result {
                 Ok(Ok(v)) => Ok(v),
