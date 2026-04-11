@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import { meshGetState, meshIsRunning } from "../api";
   import type { MeshStateResponse } from "../types";
+
+  const POLL_INTERVAL_MS = 10_000;
 
   interface Props {
     /** Called when the user clicks the indicator. Opens settings to the mesh section. */
@@ -10,37 +12,29 @@
 
   let { onOpen }: Props = $props();
 
-  let running = $state(false);
-  let state = $state<MeshStateResponse | null>(null);
-  let pollHandle: ReturnType<typeof setInterval> | null = null;
+  let mesh: MeshStateResponse | null = $state(null);
 
-  onMount(async () => {
-    await refresh();
-    // Poll every 10 seconds. Cheap call — daemon is in-process.
-    pollHandle = setInterval(refresh, 10000);
-  });
-
-  onDestroy(() => {
-    if (pollHandle) clearInterval(pollHandle);
+  onMount(() => {
+    void refresh();
+    const handle = setInterval(refresh, POLL_INTERVAL_MS);
+    return () => clearInterval(handle);
   });
 
   async function refresh() {
     try {
-      running = await meshIsRunning();
-      state = running ? await meshGetState() : null;
+      mesh = (await meshIsRunning()) ? await meshGetState() : null;
     } catch {
-      running = false;
-      state = null;
+      mesh = null;
     }
   }
 </script>
 
-{#if running && state}
+{#if mesh}
   <button class="indicator" onclick={onOpen} title="Open mesh settings">
     <span class="dot online" aria-hidden="true"></span>
     <span class="net-info">
-      <span class="net-name">{state.status.name}</span>
-      <span class="net-count">{state.status.members_online} / {state.status.members_total} nodes</span>
+      <span class="net-name">{mesh.status.name}</span>
+      <span class="net-count">{mesh.status.members_online} / {mesh.status.members_total} nodes</span>
     </span>
     <svg class="arrow" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
       <path d="M3.5 2l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>

@@ -47,12 +47,12 @@ pub struct InferenceSection {
 #[derive(Debug, Clone, Deserialize)]
 pub struct BackendConfig {
     pub name: String,
+    /// `"embedded"` or `"remote"`. Locality is derived from this — see
+    /// `main.rs::build_backends`.
     #[serde(rename = "type")]
-    pub backend_type: String, // "embedded" or "remote"
+    pub backend_type: String,
     #[serde(default = "default_priority")]
     pub priority: u32,
-    #[serde(default)]
-    pub is_local: bool,
     // Embedded fields
     pub model: Option<PathBuf>,
     pub primary_model: Option<PathBuf>,
@@ -70,12 +70,8 @@ fn default_priority() -> u32 {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StoreSection {
-    #[serde(default = "default_store_mode")]
-    pub mode: String,
     #[serde(default = "default_store_path")]
     pub path: PathBuf,
-    /// PostgreSQL connection URL (when mode = "postgres").
-    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -98,9 +94,6 @@ fn default_auth_mode() -> String {
 fn default_context_size() -> u32 {
     2048
 }
-fn default_store_mode() -> String {
-    "sqlite".to_string()
-}
 fn default_store_path() -> PathBuf {
     PathBuf::from("data/sovereign.db")
 }
@@ -111,9 +104,7 @@ fn default_server() -> ServerSection {
 }
 fn default_store() -> StoreSection {
     StoreSection {
-        mode: default_store_mode(),
         path: default_store_path(),
-        url: None,
     }
 }
 

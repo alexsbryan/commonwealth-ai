@@ -21,15 +21,10 @@ enum ClientEvent {
     UserReply { task_id: String, content: String },
 }
 
-/// Server → Client WebSocket messages.
-#[derive(serde::Serialize)]
-#[serde(tag = "type", content = "data")]
-#[serde(rename_all = "snake_case")]
-enum WsResponse {
-    Response { message_id: String, content: String },
-    TaskUpdate { task_id: String, status: String, steps_completed: usize },
-    Error { message: String },
-}
+// Server → Client traffic flows through `ServerEvent` over the approval
+// channel's broadcast subscription (see `handle_ws` below). There is no
+// separate `WsResponse` envelope; the broadcast already carries everything
+// the client needs to render.
 
 /// WebSocket upgrade handler for /v1/conversations/:id/stream
 pub async fn ws_handler(
@@ -92,20 +87,13 @@ async fn handle_ws(
 
                 match tr.handle_message(&content, &conversation_id).await {
                     Ok(response) => {
-                        let ws_resp = WsResponse::Response {
-                            message_id: response.message.id,
-                            content: response.message.content,
-                        };
-                        // Send response back via the event channel isn't ideal here;
-                        // we need direct access to the sender. For now, log it.
-                        // The event subscription above will forward progress events.
+                        // Final assistant message is delivered via the
+                        // broadcast subscription as a `ServerEvent`. We log
+                        // here only for server-side debugging.
                         tracing::info!(
-                            "WS response: {} chars",
-                            if let WsResponse::Response { ref content, .. } = ws_resp {
-                                content.len()
-                            } else {
-                                0
-                            }
+                            message_id = %response.message.id,
+                            chars = response.message.content.len(),
+                            "WS message handled"
                         );
                     }
                     Err(e) => {

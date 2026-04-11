@@ -52,7 +52,12 @@
     assistant: "essential",
   };
 
-  let selected: string = $state(recommended[persona] ?? "essential");
+  // Split recommendation from user choice: `selected` is what the user sees
+  // highlighted, which defaults to the recommendation but flips to their pick
+  // as soon as they click. This avoids capturing `persona` at init time.
+  let userSelection: string | null = $state(null);
+  let recommendedTier = $derived(recommended[persona] ?? "essential");
+  let selected = $derived(userSelection ?? recommendedTier);
 </script>
 
 <div class="kb-setup">
@@ -67,7 +72,7 @@
       <button
         class="tier-card"
         class:selected={selected === tier.id}
-        onclick={() => (selected = tier.id)}
+        onclick={() => (userSelection = tier.id)}
       >
         <div class="tier-header">
           <h2>{tier.name}</h2>

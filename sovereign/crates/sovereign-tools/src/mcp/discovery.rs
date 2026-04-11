@@ -3,17 +3,14 @@
 //! `McpServerManager` owns all active MCP connections, connects to
 //! configured servers at startup, and registers discovered tools.
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use tokio::sync::RwLock;
 
-use sovereign_core::error::{Error, Result};
+use sovereign_core::error::Result;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::Tool;
 
 use super::auth::McpAuth;
-use super::config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
+use super::config::{McpServerConfig, McpTransportConfig};
 
 /// Connection status for a server.
 #[derive(Debug, Clone)]
@@ -97,57 +94,8 @@ async fn connect_and_discover(
             super::connect_mcp_server(command, &args_refs, &config.name).await
         }
         McpTransportConfig::Http { url, auth: auth_config } => {
-            let auth = resolve_auth(&config.name, auth_config);
+            let auth = McpAuth::resolve(&config.name, auth_config);
             super::connect_http_mcp_server(url, auth, &config.name).await
-        }
-    }
-}
-
-/// Resolve auth configuration to an actual `McpAuth` value.
-/// For keychain-backed auth, loads the credential from the keychain.
-fn resolve_auth(server_name: &str, config: &McpAuthConfig) -> McpAuth {
-    match config {
-        McpAuthConfig::None => McpAuth::None,
-        McpAuthConfig::Bearer => {
-            // Try loading from keychain; fall back to None.
-            #[cfg(feature = "keychain")]
-            {
-                McpAuth::from_keychain(server_name).unwrap_or(McpAuth::None)
-            }
-            #[cfg(not(feature = "keychain"))]
-            {
-                let _ = server_name;
-                tracing::warn!("Keychain support not enabled — bearer auth unavailable");
-                McpAuth::None
-            }
-        }
-        McpAuthConfig::ApiKey { header } => {
-            #[cfg(feature = "keychain")]
-            {
-                match McpAuth::from_keychain(server_name) {
-                    Ok(McpAuth::ApiKey { value, .. }) => McpAuth::ApiKey {
-                        header: header.clone(),
-                        value,
-                    },
-                    _ => McpAuth::None,
-                }
-            }
-            #[cfg(not(feature = "keychain"))]
-            {
-                let _ = (server_name, header);
-                McpAuth::None
-            }
-        }
-        McpAuthConfig::Basic => {
-            #[cfg(feature = "keychain")]
-            {
-                McpAuth::from_keychain(server_name).unwrap_or(McpAuth::None)
-            }
-            #[cfg(not(feature = "keychain"))]
-            {
-                let _ = server_name;
-                McpAuth::None
-            }
         }
     }
 }

@@ -9,14 +9,14 @@ use sovereign_core::traits::ApprovalChannel;
 use sovereign_core::types::*;
 
 /// Event emitted by the server for WebSocket/SSE consumers.
+///
+/// Variants are added when a corresponding emit site exists. Don't add
+/// speculative variants — they break exhaustiveness for downstream consumers
+/// without ever firing.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "snake_case")]
 pub enum ServerEvent {
-    StepStarted {
-        task_id: String,
-        step: StepSummary,
-    },
     StepDone {
         task_id: String,
         step: StepSummary,
@@ -31,9 +31,6 @@ pub enum ServerEvent {
         task_id: String,
         step_id: usize,
         question: String,
-    },
-    Error {
-        message: String,
     },
 }
 

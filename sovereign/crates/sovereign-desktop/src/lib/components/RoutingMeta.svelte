@@ -22,6 +22,12 @@
       .map((s) => s.origin),
   );
 
+  let corporaDetail = $derived(
+    (provenance?.sources ?? [])
+      .filter((s) => s.count > 0)
+      .map((s) => `${s.origin} (${s.count})`),
+  );
+
   let elapsedLabel = $derived(
     provenance
       ? provenance.total_latency_ms < 1000
@@ -50,23 +56,43 @@
     {/if}
   </div>
   {#if expanded}
+    <!-- DEV-PROVENANCE:START — remove entire block before shipping to end users -->
     <div class="routing-detail">
-      <div><strong>Model:</strong> {provenance.inference_backend}</div>
-      {#if provenance.coarse_intent}
-        <div>
-          <strong>Routing:</strong>
+      <div>
+        <strong>Routing:</strong>
+        {#if provenance.coarse_intent}
           {provenance.coarse_intent}{provenance.self_assessment
             ? ` (${provenance.self_assessment})`
             : ""} &rarr; {provenance.intent}
-        </div>
-      {/if}
+        {:else}
+          &rarr; {provenance.intent}
+        {/if}
+      </div>
+      <div>
+        <strong>Corpora:</strong>
+        {#if corporaDetail.length > 0}
+          {corporaDetail.join(", ")}
+        {:else}
+          &mdash;
+        {/if}
+      </div>
       {#if provenance.search_method}
         <div><strong>Search:</strong> {provenance.search_method}</div>
+      {/if}
+      {#if provenance.inference_backend}
+        <div><strong>Backend:</strong> {provenance.inference_backend}</div>
       {/if}
       {#if provenance.oicp_match}
         <div><strong>OICP:</strong> {provenance.oicp_match}</div>
       {/if}
+      <div>
+        <strong>Timing:</strong>
+        {elapsedLabel}{provenance.tokens_used > 0
+          ? ` · ${provenance.tokens_used} tok`
+          : ""}
+      </div>
     </div>
+    <!-- DEV-PROVENANCE:END -->
   {/if}
 {/if}
 

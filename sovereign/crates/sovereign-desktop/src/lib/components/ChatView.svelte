@@ -54,7 +54,7 @@
   let isLoading = $state(false);
   let messagesContainer: HTMLDivElement;
   let activeConversationId: string | null = $state(null);
-  let streamingMessageId: string | null = null;
+  let streamingMessageId: string | null = $state(null);
   let wordBuffer = new WordBufferedStream();
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenComplete: UnlistenFn | null = null;

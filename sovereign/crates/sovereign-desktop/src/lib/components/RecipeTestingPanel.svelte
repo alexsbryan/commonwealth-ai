@@ -90,10 +90,25 @@
     } catch {}
   }
 
+  function isTestResult(
+    r: RecipeValidateResult | RecipeTestResult,
+  ): r is RecipeTestResult {
+    return "recipe_id" in r;
+  }
+
+  function displayNameOf(
+    r: RecipeValidateResult | RecipeTestResult,
+  ): string {
+    return isTestResult(r)
+      ? (r.recipe_name || r.recipe_id)
+      : (r.corpus_name || r.corpus_id);
+  }
+
   let activeResult = $derived(testResult ?? validateResult);
   let passed = $derived(activeResult?.passed ?? false);
   let hasErrors = $derived((activeResult?.errors?.length ?? 0) > 0);
   let hasWarnings = $derived((activeResult?.warnings?.length ?? 0) > 0);
+  let displayName = $derived(activeResult ? displayNameOf(activeResult) : "");
 </script>
 
 <!-- ── File picker row ─────────────────────────────────────────────────────── -->
@@ -211,9 +226,7 @@
           FAIL
         </span>
       {/if}
-      <span class="result-name">
-        {activeResult.corpus_name ?? activeResult.recipe_name ?? activeResult.recipe_id}
-      </span>
+      <span class="result-name">{displayName}</span>
     </div>
 
     <!-- Errors -->

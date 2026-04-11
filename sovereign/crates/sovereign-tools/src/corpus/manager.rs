@@ -472,8 +472,6 @@ fn extract_extension(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::corpus::CorpusParser;
-    use sovereign_core::types::{DocumentChunk, SourceType};
     use sovereign_store::memory::InMemoryStateStore;
     use std::io::Write;
     use std::sync::atomic::{AtomicUsize, Ordering};

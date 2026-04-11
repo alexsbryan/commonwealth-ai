@@ -251,7 +251,7 @@ async fn make_oicp_backend(
 ) -> BackendEntry {
     let health = Arc::new(HealthTracker::new());
     health.record_success(50);
-    let mut be = if is_local {
+    let be = if is_local {
         BackendEntry::new_local(name, health, priority)
     } else {
         BackendEntry::new_remote(name, health, priority, Some(0.01))

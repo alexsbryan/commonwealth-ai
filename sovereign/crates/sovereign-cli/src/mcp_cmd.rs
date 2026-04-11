@@ -1,10 +1,10 @@
 //! `sovereign mcp` subcommand handlers.
 //!
-//! Manages MCP server connections, credentials, and tool discovery.
-//! These are lightweight commands that don't require loading a full model.
+//! Read-only commands for inspecting and testing configured MCP servers.
+//! These are lightweight: they don't require loading a full model.
 
 use sovereign_tools::mcp::auth::McpAuth;
-use sovereign_tools::mcp::config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
+use sovereign_tools::mcp::config::{McpServerConfig, McpTransportConfig};
 
 /// Run an MCP subcommand. Returns the exit code.
 pub async fn run_mcp(args: &[String]) -> i32 {
@@ -17,8 +17,6 @@ pub async fn run_mcp(args: &[String]) -> i32 {
         "list" => cmd_list().await,
         "test" => cmd_test(&args[1..]).await,
         "tools" => cmd_tools(&args[1..]).await,
-        "add-credential" => cmd_add_credential(&args[1..]).await,
-        "remove-credential" => cmd_remove_credential(&args[1..]).await,
         "help" | "--help" | "-h" => {
             print_mcp_usage();
             0
@@ -39,8 +37,6 @@ Commands:
   list                     List configured MCP servers with status
   test <server-name>       Test connection to a server
   tools [server-name]      List available MCP tools
-  add-credential <name>    Store credentials in system keychain
-  remove-credential <name> Remove credentials from keychain
   help                     Show this help"
     );
 }
@@ -137,89 +133,6 @@ async fn cmd_tools(args: &[String]) -> i32 {
     0
 }
 
-async fn cmd_add_credential(args: &[String]) -> i32 {
-    if args.is_empty() {
-        eprintln!("Usage: sovereign mcp add-credential <server-name> [--bearer|--api-key|--basic]");
-        return 1;
-    }
-    let name = &args[0];
-    let auth_type = args.get(1).map(|s| s.as_str()).unwrap_or("--bearer");
-
-    let auth = match auth_type {
-        "--bearer" => {
-            eprint!("Token: ");
-            let token = read_hidden_input();
-            McpAuth::BearerToken(token)
-        }
-        "--api-key" => {
-            eprint!("Header name: ");
-            let header = read_line_input();
-            eprint!("API key: ");
-            let value = read_hidden_input();
-            McpAuth::ApiKey { header, value }
-        }
-        "--basic" => {
-            eprint!("Username: ");
-            let username = read_line_input();
-            eprint!("Password: ");
-            let password = read_hidden_input();
-            McpAuth::Basic { username, password }
-        }
-        other => {
-            eprintln!("Unknown auth type: {other}. Use --bearer, --api-key, or --basic.");
-            return 1;
-        }
-    };
-
-    #[cfg(feature = "keychain")]
-    {
-        match McpAuth::store_in_keychain(name, &auth) {
-            Ok(()) => {
-                eprintln!("Stored in keychain as \"sovereign-mcp-{name}\"");
-                0
-            }
-            Err(e) => {
-                eprintln!("Failed to store credential: {e}");
-                1
-            }
-        }
-    }
-    #[cfg(not(feature = "keychain"))]
-    {
-        let _ = (name, auth);
-        eprintln!("Keychain support not compiled in. Rebuild with --features keychain.");
-        1
-    }
-}
-
-async fn cmd_remove_credential(args: &[String]) -> i32 {
-    if args.is_empty() {
-        eprintln!("Usage: sovereign mcp remove-credential <server-name>");
-        return 1;
-    }
-    let name = &args[0];
-
-    #[cfg(feature = "keychain")]
-    {
-        match McpAuth::remove_from_keychain(name) {
-            Ok(()) => {
-                eprintln!("Removed credential for \"{name}\"");
-                0
-            }
-            Err(e) => {
-                eprintln!("Failed: {e}");
-                1
-            }
-        }
-    }
-    #[cfg(not(feature = "keychain"))]
-    {
-        let _ = name;
-        eprintln!("Keychain support not compiled in.");
-        1
-    }
-}
-
 // ─── Helpers ──────────────────────────────────────────────────
 
 fn load_mcp_configs() -> Vec<McpServerConfig> {
@@ -267,7 +180,7 @@ async fn test_connection_verbose(
             Ok(tools.iter().map(|t| t.descriptor().id).collect())
         }
         McpTransportConfig::Http { url, auth: auth_config } => {
-            let auth = resolve_auth_for_test(&config.name, auth_config);
+            let auth = McpAuth::resolve(&config.name, auth_config);
             let tools =
                 sovereign_tools::mcp::connect_http_mcp_server(url, auth, &config.name)
                     .await
@@ -275,73 +188,4 @@ async fn test_connection_verbose(
             Ok(tools.iter().map(|t| t.descriptor().id).collect())
         }
     }
-}
-
-fn resolve_auth_for_test(server_name: &str, config: &McpAuthConfig) -> McpAuth {
-    match config {
-        McpAuthConfig::None => McpAuth::None,
-        _ => {
-            #[cfg(feature = "keychain")]
-            {
-                McpAuth::from_keychain(server_name).unwrap_or(McpAuth::None)
-            }
-            #[cfg(not(feature = "keychain"))]
-            {
-                let _ = server_name;
-                McpAuth::None
-            }
-        }
-    }
-}
-
-fn read_line_input() -> String {
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input).unwrap_or(0);
-    input.trim().to_string()
-}
-
-fn read_hidden_input() -> String {
-    // Simple hidden input — on Unix, disable echo. On other platforms, fall back.
-    #[cfg(unix)]
-    {
-        if let Ok(()) = disable_echo() {
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input).unwrap_or(0);
-            let _ = enable_echo();
-            eprintln!(); // newline after hidden input
-            return input.trim().to_string();
-        }
-    }
-    // Fallback: read normally (visible).
-    read_line_input()
-}
-
-#[cfg(unix)]
-fn disable_echo() -> std::result::Result<(), ()> {
-    unsafe {
-        let mut termios: libc::termios = std::mem::zeroed();
-        if libc::tcgetattr(0, &mut termios) != 0 {
-            return Err(());
-        }
-        termios.c_lflag &= !libc::ECHO;
-        if libc::tcsetattr(0, libc::TCSANOW, &termios) != 0 {
-            return Err(());
-        }
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn enable_echo() -> std::result::Result<(), ()> {
-    unsafe {
-        let mut termios: libc::termios = std::mem::zeroed();
-        if libc::tcgetattr(0, &mut termios) != 0 {
-            return Err(());
-        }
-        termios.c_lflag |= libc::ECHO;
-        if libc::tcsetattr(0, libc::TCSANOW, &termios) != 0 {
-            return Err(());
-        }
-    }
-    Ok(())
 }

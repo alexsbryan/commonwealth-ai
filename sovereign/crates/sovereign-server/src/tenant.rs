@@ -29,9 +29,4 @@ impl TenantRuntime {
         let scoped = self.scoped_id(conversation_id);
         self.runtime.handle_message(message, &scoped).await
     }
-
-    pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
-        let scoped = self.scoped_id(conversation_id);
-        self.runtime.end_conversation(&scoped).await
-    }
 }

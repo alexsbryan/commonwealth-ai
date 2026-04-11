@@ -780,37 +780,6 @@ impl EmbeddedLlamaCpp {
         self.embed_slot.is_some()
     }
 
-    /// Ensure the primary slot is loaded, returning a reference.
-    /// If no separate primary model path was provided, falls back to the fast slot.
-    async fn ensure_primary(&self) -> Result<Arc<ModelSlot>> {
-        let primary_path = match &self.primary_path {
-            Some(p) => p.clone(),
-            None => return Ok(Arc::clone(&self.fast)), // Single-model mode.
-        };
-
-        let mut primary = self.primary.lock().await;
-        if primary.is_none() {
-            eprintln!("Loading primary slot...");
-            let slot = ModelSlot::load(
-                &self.primary_backend,
-                &primary_path,
-                self.primary_ctx_size,
-                self.gpu_layers,
-            )?;
-            *primary = Some(slot);
-        }
-
-        *self.last_primary_use.lock().await = Some(Instant::now());
-
-        // This is safe because we hold the mutex and the slot is Some.
-        // We can't return a reference into the MutexGuard, so we'll
-        // run generation inline while we have the lock. But for the
-        // InferenceProvider trait, we need to dispatch differently.
-        // Instead, fall back to the fast slot when primary has no separate path.
-        // When primary IS loaded, we'll use it via the blocking task.
-        Ok(Arc::clone(&self.fast)) // placeholder, actual dispatch below
-    }
-
     /// Start a background task that unloads the primary model after idle timeout.
     pub fn start_idle_monitor(self: &Arc<Self>, timeout_secs: u64) {
         let this = Arc::clone(self);
