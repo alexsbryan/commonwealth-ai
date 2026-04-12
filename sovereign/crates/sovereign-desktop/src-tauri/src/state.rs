@@ -516,7 +516,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
-    // Code Intelligence v1 tools.
+    // Code Intelligence tools.
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
     )));

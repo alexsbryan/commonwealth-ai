@@ -1,7 +1,6 @@
 //! Code Intelligence tools.
 //!
-//! Three Sovereign `Tool` implementations that query code corpora indexed
-//! by the `corpus-engine` tree-sitter extractor (`sovereign code index`):
+//! Five Sovereign `Tool` implementations for navigating local codebases:
 //!
 //! - [`SymbolLookupTool`]  — EXACT symbol-name lookup. Metadata filter
 //!   pushdown; always correct.
@@ -10,6 +9,15 @@
 //!   of the contract, not cosmetic.
 //! - [`RecentChangesTool`] — Symbols modified within the last N hours.
 //!   Exact, by file mtime.
+//! - [`FindCalleesTool`]   — What does this function call? SCIP graph,
+//!   compiler-resolved. Staleness note appended when graph isn't fresh.
+//! - [`FindCallersTool`]   — What calls this function? Supports depth=2
+//!   for impact radius. Same staleness model.
+//!
+//! The first three tools query LanceDB via tree-sitter-indexed code
+//! columns and work without a SCIP export. The call graph tools
+//! (`find_callees`, `find_callers`) require a SCIP export and query the
+//! [`ScipGraph`](corpus_engine::scip_graph::ScipGraph) SQLite database.
 //!
 //! None of these tools return results when no code corpora are indexed.
 //! Non-code corpora (Wikipedia, SEP, etc.) are implicitly filtered out by
@@ -44,7 +52,7 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 use corpus_engine::{CorpusEngine, CorpusIndex, Error as CorpusError};
 
 /// A single code chunk row read from a LanceDB query via the typed code
-/// columns. This is the in-memory shape the three tools operate on after
+/// columns. This is the in-memory shape the index-based tools operate on after
 /// running a metadata filter query against a `CorpusIndex`.
 #[derive(Debug, Clone)]
 pub struct CodeRow {

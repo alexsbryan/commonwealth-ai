@@ -66,9 +66,9 @@ Commands:
   search <query>      Semantic search (use the Sovereign chat or MCP for now)
   help                Show this help
 
-Code Intelligence v1 is phased:
+Code Intelligence phases:
   P1  — corpus indexing via `code index`
-  P2  — three tools (symbol_lookup, code_search, recent_changes)
+  P2  — five tools (symbol_lookup, code_search, recent_changes, find_callees, find_callers)
   P3  — filesystem watcher (this command)
   P4  — MCP HTTP server"
     );
@@ -489,10 +489,12 @@ async fn cmd_search(args: &[String]) -> i32 {
     let query = args.join(" ");
     eprintln!(
         "`sovereign code search` ships in Code Intelligence Phase 2.\n\n\
-         Phase 2 adds three Sovereign tools wired to the corpus you indexed:\n\
+         Phase 2 adds five Sovereign tools wired to the corpus you indexed:\n\
            symbol_lookup  — exact symbol name → file:line (always correct)\n\
            code_search    — semantic search (approximate, labelled as such)\n\
-           recent_changes — files modified within the last N hours\n\n\
+           recent_changes — files modified within the last N hours\n\
+           find_callees   — what does this function call? (SCIP graph)\n\
+           find_callers   — what calls this function? (SCIP graph)\n\n\
          In the meantime, index with `sovereign code index <path>` — the\n\
          on-disk LanceDB table is already populated and queryable from\n\
          tools that open it directly.\n\n\

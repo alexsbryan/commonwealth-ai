@@ -351,7 +351,7 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
-    // Code Intelligence v1 tools — active as soon as any code corpus is
+    // Code Intelligence tools — active as soon as any code corpus is
     // indexed via `sovereign code index`. They always register; with no
     // code corpora they return "no results" honestly rather than failing.
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(

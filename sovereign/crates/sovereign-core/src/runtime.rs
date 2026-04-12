@@ -179,6 +179,60 @@ impl Runtime {
         self
     }
 
+    /// Search all installed corpus-engine LanceDB indexes.
+    ///
+    /// Returns scored chunks from every installed corpus. If the IVF-PQ
+    /// vector index is not built for a corpus, passes an empty embedding
+    /// to trigger FTS-only mode (fast Tantivy, avoids the 20–60 second
+    /// O(n) full-scan fallback).
+    ///
+    /// Used by both `handle_knowledge_query` and `handle_simple` so that
+    /// installed corpora enrich all intent types, not just KnowledgeQuery.
+    async fn search_corpus_indexes(
+        &self,
+        embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+        label: &str,
+    ) -> Vec<corpus_engine::ScoredChunk> {
+        let mut chunks = Vec::new();
+        let engine = match &self.corpus_engine {
+            Some(e) => e,
+            None => return chunks,
+        };
+        let indexes = match engine.installed_indexes().await {
+            Ok(ix) => ix,
+            Err(e) => {
+                tracing::warn!(error = %e, "{label}: installed_indexes() failed");
+                return chunks;
+            }
+        };
+        tracing::info!(count = indexes.len(), "{label}: searching corpus indexes");
+        for info in &indexes {
+            let idx = match engine.open_index(&info.path).await {
+                Ok(i) => i,
+                Err(e) => {
+                    tracing::warn!(corpus = %info.corpus_id, error = %e, "{label}: open_index failed");
+                    continue;
+                }
+            };
+            match idx.search(embedding, query_text, limit).await {
+                Ok(scored) => {
+                    tracing::info!(
+                        corpus = %info.corpus_id,
+                        results = scored.len(),
+                        "{label}: search complete"
+                    );
+                    chunks.extend(scored);
+                }
+                Err(e) => {
+                    tracing::warn!(corpus = %info.corpus_id, error = %e, "{label}: search failed");
+                }
+            }
+        }
+        chunks
+    }
+
     /// Build OICP requirements from active skills for non-Fast requests.
     /// Returns None if no skills have OICP capability configuration.
     fn build_oicp(
@@ -583,14 +637,40 @@ impl Runtime {
             self.build_oicp(LatencyPreference::BestEffort)
         };
 
-        // Always search local knowledge bases for relevant context.
-        // FTS5 search is fast — the worst case is finding nothing.
+        // Search local knowledge bases for relevant context.
+        // 1. User documents (StateStore FTS5/vector — fast).
         let embedding = self.inference.embed(message).await.unwrap_or_default();
-        let chunks = self
+        let user_doc_chunks = self
             .store
             .search_documents(&embedding, message, 5)
             .await
             .unwrap_or_default();
+
+        // 2. Installed corpora (corpus-engine LanceDB indexes).
+        //    embed_query applies the instruction prefix for asymmetric models.
+        let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
+        let corpus_chunks = self
+            .search_corpus_indexes(&corpus_embedding, message, 5, "DeepQuery")
+            .await;
+
+        // Merge: user docs get converted to the same ScoredChunk shape,
+        // then we sort by score and truncate.
+        let mut all_chunks: Vec<corpus_engine::ScoredChunk> = corpus_chunks;
+        for doc in &user_doc_chunks {
+            all_chunks.push(corpus_engine::ScoredChunk {
+                content: doc.content.clone(),
+                title: Some(doc.source.clone()),
+                url: None,
+                corpus_id: "user_document".to_string(),
+                score: 0.5, // user docs don't carry scores from FTS5
+                metadata: HashMap::new(),
+            });
+        }
+        all_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        all_chunks.truncate(8);
+
+        // For the prompt and provenance, treat merged results as "chunks".
+        let chunks = all_chunks;
 
         // Check what corpora are installed (for provenance reporting).
         let installed_corpora = self
@@ -598,7 +678,7 @@ impl Runtime {
             .list_corpus_states()
             .await
             .unwrap_or_default();
-        let corpora_searched = !installed_corpora.is_empty();
+        let corpora_searched = !installed_corpora.is_empty() || self.corpus_engine.is_some();
 
         let search_method = if !chunks.is_empty() {
             Some("LocalOnly".to_string())
@@ -619,7 +699,7 @@ impl Runtime {
         let history = format_history_as_prompt(context, 10);
 
         let prompt = if !chunks.is_empty() {
-            let doc_context = truncate_knowledge_context(&chunks, MAX_KNOWLEDGE_CHARS);
+            let doc_context = format_scored_chunks(&chunks, MAX_KNOWLEDGE_CHARS);
             if history.is_empty() {
                 format!(
                     "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
@@ -671,12 +751,7 @@ impl Runtime {
         // Build provenance with source info from retrieved chunks.
         let mut source_map: HashMap<String, usize> = HashMap::new();
         for c in &chunks {
-            let origin = match &c.source_type {
-                SourceType::Corpus { corpus_id } => corpus_id.clone(),
-                SourceType::WebSearch { .. } => "web".to_string(),
-                SourceType::UserDocument => "user_document".to_string(),
-            };
-            *source_map.entry(origin).or_insert(0) += 1;
+            *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
         }
         // If no results but corpora are installed, list them as "searched (0 results)".
         if chunks.is_empty() && corpora_searched {
@@ -739,75 +814,13 @@ impl Runtime {
 
         // 1. Embed the query using the query-side function (applies instruction prefix
         //    for asymmetric models like Qwen3-Embedding).
-        let t0 = std::time::Instant::now();
-        let embedding = self.inference.embed_query(message).await.unwrap_or_default();
-        tracing::info!(
-            embedding_dims = embedding.len(),
-            embedding_ms = t0.elapsed().as_millis() as u64,
-            "KnowledgeQuery: embed complete"
-        );
-
-        // 2. Search corpus-engine LanceDB indexes, gated on per-corpus vector index readiness.
-        // If the IVF-PQ index is not built, pass an empty embedding to trigger FTS-only mode
-        // (fast Tantivy, avoids the 20-60 second O(n) full-scan fallback).
         let t_search = std::time::Instant::now();
-        let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
-        match &self.corpus_engine {
-            None => tracing::warn!("KnowledgeQuery: corpus_engine is None — no LanceDB search"),
-            Some(engine) => match engine.installed_indexes().await {
-                Err(e) => tracing::warn!(error = %e, "KnowledgeQuery: installed_indexes() failed"),
-                Ok(indexes) => {
-                    tracing::info!(count = indexes.len(), "KnowledgeQuery: indexes found");
-                    for info in &indexes {
-                        tracing::info!(
-                            corpus = %info.corpus_id,
-                            embedding_model = %info.embedding_model,
-                            stored_dims = info.embedding_dimensions,
-                            query_dims = embedding.len(),
-                            dims_match = (embedding.is_empty() || embedding.len() == info.embedding_dimensions),
-                            chunk_count = info.chunk_count,
-                            chunks_expected = ?info.chunks_expected,
-                            "KnowledgeQuery: opening index"
-                        );
-                        let t_open = std::time::Instant::now();
-                        match engine.open_index(&info.path).await {
-                            Err(e) => tracing::warn!(
-                                corpus = %info.corpus_id, error = %e,
-                                "KnowledgeQuery: open_index failed"
-                            ),
-                            Ok(idx) => {
-                                tracing::info!(
-                                    corpus = %info.corpus_id,
-                                    open_ms = t_open.elapsed().as_millis() as u64,
-                                    "KnowledgeQuery: searching"
-                                );
-                                let t_s = std::time::Instant::now();
-                                match idx.search(&embedding, message, 5).await {
-                                    Err(e) => tracing::warn!(
-                                        corpus = %info.corpus_id, error = %e,
-                                        "KnowledgeQuery: search() failed"
-                                    ),
-                                    Ok(scored) => {
-                                        tracing::info!(
-                                            corpus = %info.corpus_id,
-                                            results = scored.len(),
-                                            search_ms = t_s.elapsed().as_millis() as u64,
-                                            "KnowledgeQuery: search complete"
-                                        );
-                                        chunks.extend(scored);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-        }
-        tracing::info!(
-            total_chunks = chunks.len(),
-            total_search_ms = t_search.elapsed().as_millis() as u64,
-            "KnowledgeQuery: search phase done"
-        );
+        let embedding = self.inference.embed_query(message).await.unwrap_or_default();
+
+        // 2. Search corpus-engine LanceDB indexes.
+        let mut chunks = self
+            .search_corpus_indexes(&embedding, message, 5, "KnowledgeQuery")
+            .await;
 
         // 3. Sort by score, keep top 8.
         chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));

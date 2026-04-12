@@ -1143,7 +1143,11 @@ pub async fn build_corpus_index(
             );
         });
 
-        match idx.build_indexes(true, false, Some(&*on_progress)).await {
+        // Build both vector and FTS indexes. The recipe controls which
+        // are enabled; passing (true, true) lets the index builder respect
+        // those flags rather than hardcoding FTS off (which would corrupt
+        // the metadata by marking FTS as built without building it).
+        match idx.build_indexes(true, true, Some(&*on_progress)).await {
             Ok(()) => {
                 let _ = store.set_vector_index_ready(&cid, true).await;
                 let _ = app_handle.emit(

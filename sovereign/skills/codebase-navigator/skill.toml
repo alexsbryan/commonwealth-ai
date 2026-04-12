@@ -1,8 +1,8 @@
 [skill]
 id = "codebase-navigator"
 name = "Codebase Navigator"
-version = "0.1.0"
-description = "Navigate, search, and review code in your private codebase via the Code Intelligence tools."
+version = "0.2.0"
+description = "Navigate, search, and trace call graphs in your private codebase via the Code Intelligence tools."
 
 [routing]
 trigger_phrases = [
@@ -11,6 +11,8 @@ trigger_phrases = [
     "what changed", "recent changes", "what did I change",
     "search the code", "semantic code", "in the codebase",
     "implementation of", "definition of",
+    "who calls", "what calls", "callers of", "callees of",
+    "call graph", "call chain", "impact of changing",
 ]
 default_intent = "KnowledgeQuery"
 min_confidence = 0.70
@@ -42,31 +44,60 @@ steps = """
 3. Offer symbol_lookup for any specific symbol the user wants to examine.
 """
 
+[[planner.templates]]
+name = "call_graph_tracing"
+trigger = "User asks what a function calls, who calls it, or wants to trace a call chain"
+steps = """
+1. Use find_callees to see what the target function calls, or find_callers to see
+   what calls it. Use depth=2 on find_callers to assess blast radius.
+2. Follow the chain: call find_callees on each interesting callee to trace deeper.
+3. Use symbol_lookup to inspect specific implementations when the chain reveals
+   something worth reading.
+4. If the SCIP graph reports staleness, include the note verbatim — do not suppress
+   it or rephrase it. The user needs to know.
+"""
+
+[[planner.templates]]
+name = "security_review"
+trigger = "User asks about security, vulnerabilities, or wants to audit a code path"
+steps = """
+1. Use code_search to find the surface area (e.g. 'authentication', 'password', 'token').
+2. Use find_callees to trace what each entry point calls — look for missing validation,
+   plaintext storage, or broken chains.
+3. Use symbol_lookup to inspect suspicious implementations and retrieve actual code.
+4. Cite file path and line number for every finding. Ground every claim in retrieved code,
+   never in inference from patterns.
+"""
+
 [tools]
-required = ["symbol_lookup", "code_search", "recent_changes"]
+required = ["symbol_lookup", "code_search", "recent_changes", "find_callees", "find_callers"]
 optional = ["file", "shell"]
 
 [prompts]
 synthesis = """
-You have three code intelligence tools backed by a local tree-sitter index:
+You have five code intelligence tools:
 
   symbol_lookup   EXACT name match. Always correct. Use when the name is known.
   code_search     APPROXIMATE semantic search. Label results as approximate.
   recent_changes  EXACT list by file mtime. Always correct.
+  find_callees    What does this function call? SCIP graph, compiler-resolved.
+  find_callers    What calls this function? Supports depth=2 for impact radius.
 
 Rules of engagement — these are non-negotiable:
 - Never describe code you haven't retrieved.
 - Cite file path and line number for every code reference.
 - Prefix code_search results with 'Based on semantically similar code in…' —
   the tool already labels output approximate; keep that label in your synthesis.
-- If asked for callers, cross-file usages, or impact analysis, answer honestly:
-  'Caller tracing isn't available in this version. I can find the definition
-  with symbol_lookup or semantically similar code with code_search — would
-  either help?'
+- If find_callees or find_callers includes a staleness note, pass it through
+  verbatim. Do not suppress, rephrase, or apologise for it. The note exists to
+  calibrate the user's confidence — removing it undermines the trust contract.
+- For call graph tracing, follow the chain rather than guessing. Three targeted
+  tool calls (find_callees → find_callees → symbol_lookup) beat reading whole
+  files. The agent traces; the user decides.
 - If asked to modify code, use the `file` tool to read the full current contents
   before proposing edits. Index chunks carry context but may not include every
   relevant line.
-- If the three tools return nothing, say so plainly. Do not fabricate a plausible
+- If the tools return nothing, say so plainly. Do not fabricate a plausible
   implementation from memory.
 
 Your job is navigation and grounded synthesis. Correctness matters more than
@@ -92,5 +123,5 @@ For codebase navigation conversations, extract:
 - Naming conventions or project layout patterns they've mentioned.
 - Modules or subsystems the user returns to repeatedly.
 Do NOT extract: specific line numbers, symbol names, or code snippets — these
-go stale quickly and are already available via the three tools.
+go stale quickly and are already available via the tools.
 """

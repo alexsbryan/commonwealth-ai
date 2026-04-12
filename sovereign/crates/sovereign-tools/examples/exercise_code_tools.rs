@@ -1,4 +1,4 @@
-//! P2 smoke test: exercise the three Code Intelligence tools against a
+//! Smoke test: exercise the Code Intelligence tools against a
 //! live LanceDB code index produced by `sovereign code index`.
 //!
 //! Usage:

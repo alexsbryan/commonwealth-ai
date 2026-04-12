@@ -1,7 +1,7 @@
 #![cfg(feature = "treesitter")]
-//! Code Intelligence v1 — E2E tests.
+//! Code Intelligence — E2E tests.
 //!
-//! Exercises the three tools against a controlled fixture repository.
+//! Exercises all five tools against controlled fixture repositories.
 //! Every test uses real indexing, real tools, and real LanceDB queries —
 //! no mocking. The only shortcut is transport: calls go through
 //! `tool.execute()` directly instead of the MCP HTTP wire. The MCP
@@ -11,11 +11,14 @@
 //! - T-01..T-05: Index correctness (this file)
 //! - T-06..T-09: Semantic search (this file)
 //! - T-10..T-11: Recent changes (this file)
-//! - T-12..T-14: Watcher (corpus-engine/tests/watcher_e2e.rs — Phase 3)
-//! - T-15..T-17: MCP protocol (sovereign-server::routes_mcp::tests — Phase 4)
+//! - T-12..T-14: Watcher (corpus-engine/tests/watcher_e2e.rs)
+//! - T-15..T-17: MCP protocol (sovereign-server::routes_mcp::tests)
 //! - T-18: Session arc (this file)
 //! - T-19: Latency (this file)
-//! - T-20: Watcher SLA (corpus-engine/tests/watcher_e2e.rs — Phase 3)
+//! - T-20: Watcher SLA (corpus-engine/tests/watcher_e2e.rs)
+//! - T-21..T-24: Call graph tools + staleness (this file, auth demo fixture)
+//! - T-25..T-27: Demo scenario — auth surface discovery, call chain
+//!   traversal, grounded security finding (this file, auth demo fixture)
 //!
 //! Run with:
 //!     cargo test -p sovereign-tools --test e2e_code_intel

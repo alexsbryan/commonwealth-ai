@@ -210,10 +210,11 @@ async fn mcp_message(
 
 // ─── tools/list ───────────────────────────────────────────────
 
-/// Tool IDs exposed through the MCP surface. Deliberately narrow —
-/// only the three Code Intelligence tools are v1. Adding a tool here
-/// without also implementing it would be a trust violation, so the
-/// list is colocated with the handler and tested against the spec.
+/// Tool IDs exposed through the MCP surface. Five Code Intelligence
+/// tools: three index-based (symbol_lookup, code_search, recent_changes)
+/// and two SCIP call-graph tools (find_callees, find_callers). Adding
+/// a tool here without also implementing it would be a trust violation,
+/// so the list is colocated with the handler and tested against the spec.
 const MCP_EXPOSED_TOOLS: &[&str] = &[
     "symbol_lookup",
     "code_search",
@@ -240,9 +241,8 @@ pub(crate) fn handle_tools_list(registry: &ToolRegistry, id: Value) -> JsonRpcRe
 
 // ─── tools/call ───────────────────────────────────────────────
 
-/// Explicitly unsupported tool names that we refuse honestly. The
-/// names come from the spec's "what NOT ships in v1" list — caller
-/// graph tracing, cross-file references, impact analysis. Any agent
+/// Explicitly unsupported tool names that we refuse honestly. Cross-file
+/// references and impact analysis are not yet implemented. Any agent
 /// asking for these gets a useful message back, not an error or a
 /// hallucinated answer.
 const UNSUPPORTED_TOOLS: &[&str] = &["find_references", "impact_analysis"];
@@ -266,7 +266,7 @@ pub(crate) async fn handle_tools_call(
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
 
-    // Honest refusal for v1-unsupported tools. Returns a successful
+    // Honest refusal for unsupported tools. Returns a successful
     // result envelope with `isError: false` and a helpful message so
     // the agent's loop can keep going.
     if UNSUPPORTED_TOOLS.contains(&name.as_str()) {
@@ -284,7 +284,7 @@ pub(crate) async fn handle_tools_call(
         );
     }
 
-    // Only route the three MCP-exposed tools. An agent asking for a
+    // Only route MCP-exposed tools. An agent asking for a
     // tool ID we host internally but don't expose (e.g. `shell`) gets
     // a method-not-found error — keeps the MCP surface bounded to the
     // coding-agent use case.
@@ -452,7 +452,7 @@ mod tests {
         );
     }
 
-    // ─── T-15: tools/list returns exactly the three v1 tools ─
+    // ─── T-15: tools/list returns exactly the five code tools ─
 
     #[tokio::test]
     async fn t15_tools_list_complete_and_bounded() {
