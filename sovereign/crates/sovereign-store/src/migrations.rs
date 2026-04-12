@@ -267,6 +267,33 @@ pub fn run_insight_migrations(conn: &Connection) -> rusqlite::Result<()> {
     )
 }
 
+/// Document sessions for the document-analyst skill.
+/// Persists map/reduce prompts and structured output so follow-up
+/// questions can reference results without re-running the operation.
+pub fn run_document_session_migration(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS document_sessions (
+            id                TEXT    PRIMARY KEY,
+            conversation_id   TEXT    NOT NULL,
+            filename          TEXT    NOT NULL,
+            source            TEXT    NOT NULL,
+            word_count        INTEGER NOT NULL DEFAULT 0,
+            chunk_count       INTEGER NOT NULL DEFAULT 0,
+            created_at        INTEGER NOT NULL,
+            operation         TEXT    NOT NULL,
+            map_prompt        TEXT    NOT NULL DEFAULT '',
+            reduce_prompt     TEXT    NOT NULL DEFAULT '',
+            last_output       TEXT,
+            history           TEXT    NOT NULL DEFAULT '[]'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_docsess_conv
+            ON document_sessions(conversation_id);
+        ",
+    )
+}
+
 /// Add vector index readiness tracking to corpus_state.
 /// `vector_index_ready = 1` means the IVF-PQ index is built and semantic
 /// search is available. Defaults to 0 so existing corpora start unverified;

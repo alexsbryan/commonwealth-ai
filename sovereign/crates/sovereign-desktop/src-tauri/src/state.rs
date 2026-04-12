@@ -350,6 +350,10 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             Arc::clone(&store),
             Arc::clone(&inference),
         )));
+        tools.register(Box::new(sovereign_tools::DocumentOperationTool::new(
+            Arc::clone(&store),
+            Arc::clone(&inference),
+        )));
     }
     if enabled.iter().any(|t| t == "search" || t == "knowledge" || t == "web_search") {
         let backend = match config.search_backend.provider.as_str() {

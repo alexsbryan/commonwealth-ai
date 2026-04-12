@@ -241,13 +241,24 @@ pub trait HealthStore: Send + Sync {
     }
 }
 
+#[async_trait]
+pub trait DocumentSessionStore: Send + Sync {
+    async fn create_document_session(&self, session: &DocumentSession) -> Result<()>;
+    async fn get_document_session(&self, session_id: &str) -> Result<Option<DocumentSession>>;
+    async fn get_document_session_by_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<DocumentSession>>;
+    async fn update_document_session(&self, session: &DocumentSession) -> Result<()>;
+}
+
 // ─── 6. Storage (supertrait) ──────────────────────────────────
 
 #[async_trait]
 pub trait StateStore:
     ConversationStore + TaskStore + MemoryStore + RoutingStore
     + DocumentStore + CorpusStateStore + BudgetStore + PermissionStore
-    + HealthStore
+    + HealthStore + DocumentSessionStore
 {}
 
 // ─── Approval Channel ─────────────────────────────────────────

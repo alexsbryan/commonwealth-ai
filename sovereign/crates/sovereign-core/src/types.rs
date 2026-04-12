@@ -409,6 +409,11 @@ pub struct ConversationContext {
     /// to tell the model what local knowledge is available.
     #[serde(default)]
     pub installed_corpora: Vec<String>,
+    /// Active document session for this conversation (if any).
+    /// When present, follow-up questions can reference the structured
+    /// output without re-running the full map-reduce operation.
+    #[serde(default)]
+    pub document_session: Option<DocumentSession>,
 }
 
 impl ConversationContext {
@@ -590,6 +595,44 @@ pub struct DocumentChunk {
     pub version: i64,
     #[serde(default)]
     pub deleted_at: Option<i64>,
+}
+
+// ─── Document Session Types ─────────────────────────────────────
+
+/// A persistent session around an uploaded document.
+/// Created when a user uploads a file and describes an operation.
+/// Holds the planner-derived map/reduce prompts and the structured
+/// output so follow-up questions can reference results cheaply
+/// without re-running the full map-reduce.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentSession {
+    pub id: String,
+    pub conversation_id: String,
+    pub filename: String,
+    /// Matches `DocumentChunk.source` — the key for chunk retrieval.
+    pub source: String,
+    pub word_count: usize,
+    pub chunk_count: usize,
+    pub created_at: i64,
+    /// The operation the user originally requested, in their words.
+    pub operation: String,
+    /// The map prompt the planner derived from the operation.
+    pub map_prompt: String,
+    /// The reduce prompt the planner derived from the operation.
+    pub reduce_prompt: String,
+    /// The structured output from the last completed operation.
+    /// JSON — shape determined by the operation.
+    pub last_output: Option<String>,
+    /// Previous operations run on this document in this session.
+    pub history: Vec<DocumentOperation>,
+}
+
+/// A completed operation within a document session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentOperation {
+    pub description: String,
+    pub output: String,
+    pub completed_at: i64,
 }
 
 // ─── Execution Intelligence Types ─────────────────────────────

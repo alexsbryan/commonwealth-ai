@@ -198,7 +198,10 @@ impl Runtime {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
             Some(e) => e,
-            None => return chunks,
+            None => {
+                tracing::warn!("{label}: corpus_engine is None — no corpus search possible");
+                return chunks;
+            }
         };
         let indexes = match engine.installed_indexes().await {
             Ok(ix) => ix,
@@ -207,8 +210,20 @@ impl Runtime {
                 return chunks;
             }
         };
-        tracing::info!(count = indexes.len(), "{label}: searching corpus indexes");
+        if indexes.is_empty() {
+            tracing::warn!("{label}: installed_indexes() returned 0 indexes — nothing to search");
+        } else {
+            tracing::info!(count = indexes.len(), "{label}: found corpus indexes");
+        }
         for info in &indexes {
+            tracing::info!(
+                corpus = %info.corpus_id,
+                path = %info.path.display(),
+                chunks = info.chunk_count,
+                dims = info.embedding_dimensions,
+                embedding_model = %info.embedding_model,
+                "{label}: opening index"
+            );
             let idx = match engine.open_index(&info.path).await {
                 Ok(i) => i,
                 Err(e) => {

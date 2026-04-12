@@ -46,11 +46,18 @@ pub async fn build_context(
         .map(|s| s.corpus_id)
         .collect();
 
+    // Check for an active document session in this conversation.
+    let document_session = store
+        .get_document_session_by_conversation(conversation_id)
+        .await
+        .unwrap_or(None);
+
     Ok(ConversationContext {
         conversation,
         memories,
         working_memory: None,
         installed_corpora,
+        document_session,
     })
 }
 

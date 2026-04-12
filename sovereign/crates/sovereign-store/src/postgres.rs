@@ -4,8 +4,9 @@ use tokio_postgres::NoTls;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{
-    BudgetStore, ConversationStore, CorpusStateStore, DocumentStore, HealthStore,
-    MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentSessionStore,
+    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore,
+    StateStore, TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -706,5 +707,24 @@ impl PermissionStore for PostgresStateStore {
 
 #[async_trait]
 impl HealthStore for PostgresStateStore {}
+
+#[async_trait]
+impl DocumentSessionStore for PostgresStateStore {
+    async fn create_document_session(&self, _session: &DocumentSession) -> Result<()> {
+        Err(Error::NotImplemented("Postgres document sessions".into()))
+    }
+    async fn get_document_session(&self, _session_id: &str) -> Result<Option<DocumentSession>> {
+        Ok(None)
+    }
+    async fn get_document_session_by_conversation(
+        &self,
+        _conversation_id: &str,
+    ) -> Result<Option<DocumentSession>> {
+        Ok(None)
+    }
+    async fn update_document_session(&self, _session: &DocumentSession) -> Result<()> {
+        Err(Error::NotImplemented("Postgres document sessions".into()))
+    }
+}
 
 impl StateStore for PostgresStateStore {}

@@ -6,8 +6,9 @@ use tokio::sync::RwLock;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{
-    BudgetStore, ConversationStore, CorpusStateStore, DocumentStore, HealthStore,
-    MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentSessionStore,
+    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore,
+    StateStore, TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -381,5 +382,24 @@ impl PermissionStore for InMemoryStateStore {
 
 #[async_trait]
 impl HealthStore for InMemoryStateStore {}
+
+#[async_trait]
+impl DocumentSessionStore for InMemoryStateStore {
+    async fn create_document_session(&self, _session: &DocumentSession) -> Result<()> {
+        Ok(())
+    }
+    async fn get_document_session(&self, _session_id: &str) -> Result<Option<DocumentSession>> {
+        Ok(None)
+    }
+    async fn get_document_session_by_conversation(
+        &self,
+        _conversation_id: &str,
+    ) -> Result<Option<DocumentSession>> {
+        Ok(None)
+    }
+    async fn update_document_session(&self, _session: &DocumentSession) -> Result<()> {
+        Ok(())
+    }
+}
 
 impl StateStore for InMemoryStateStore {}

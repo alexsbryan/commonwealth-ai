@@ -216,6 +216,10 @@ async fn main() {
         Arc::clone(&store),
         Arc::clone(&inference),
     )));
+    tools.register(Box::new(sovereign_tools::DocumentOperationTool::new(
+        Arc::clone(&store),
+        Arc::clone(&inference),
+    )));
     tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
         Arc::clone(&store),
         Arc::clone(&inference),

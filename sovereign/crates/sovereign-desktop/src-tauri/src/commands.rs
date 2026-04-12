@@ -1168,6 +1168,19 @@ pub async fn build_corpus_index(
 }
 
 #[tauri::command]
+pub async fn diagnose_corpus(
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    drop(engine_guard);
+    Ok(engine.diagnose_indexes().await)
+}
+
+#[tauri::command]
 pub async fn install_corpus(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,

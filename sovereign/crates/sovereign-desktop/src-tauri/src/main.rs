@@ -119,6 +119,7 @@ fn main() {
             commands::install_corpus,
             commands::remove_corpus,
             commands::build_corpus_index,
+            commands::diagnose_corpus,
             commands::get_corpus_progress,
             commands::get_corpus_health,
             commands::retry_enrichment_failures,

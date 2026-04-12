@@ -1,0 +1,137 @@
+[skill]
+id          = "document-analyst"
+name        = "Document Analyst"
+version     = "1.0.0"
+description = "Runs any user-defined operation across a full uploaded document. \
+               Supports follow-up questions against the same document."
+
+[routing]
+trigger_phrases = [
+    "analyse this document", "analyze this document",
+    "read this and", "go through this and",
+    "extract from this", "summarise this", "summarize this",
+    "find all", "map the", "identify the",
+    "character map", "plot summary", "argument map",
+    "what are the themes", "who are the characters",
+    "trace the", "list every", "catalogue the",
+]
+default_intent  = "ComplexTask"
+min_confidence  = 0.65
+
+[tools]
+required = ["file", "document_operation"]
+optional = ["file_write"]
+
+[inference]
+privacy            = "local_only"
+min_context_tokens = 8000
+
+[inference.preferred_capabilities]
+instruction = 3
+analysis    = 3
+
+[inference.required_capabilities]
+instruction = 2
+
+# ─── Planner templates ────────────────────────────────────────
+
+[[planner.templates]]
+name    = "initial_operation"
+trigger = "file attached OR upload OR document OR first message with an operation request"
+steps = """
+1. Read the uploaded document using the file tool.
+2. Given the user's operation request and the document content, write a
+   map prompt (what to extract from each chunk) and a reduce prompt (how
+   to merge the extractions). The prompts should be precise and produce JSON.
+   Respond in JSON: {"map_prompt": "...", "reduce_prompt": "...", "output_description": "..."}
+3. Call document_operation with the source path, the user's operation
+   description, and the planned map/reduce prompts.
+4. Format the structured output into a clear, readable response.
+   Invite follow-up questions.
+"""
+
+[[planner.templates]]
+name    = "followup"
+trigger = "followup OR question about document OR tell me more OR same document"
+steps = """
+1. Answer the follow-up question using the document session context.
+   The structured output from the previous operation is available — use it
+   directly. Only retrieve specific document chunks if the question genuinely
+   requires going back to the source text.
+"""
+
+# ─── Prompts ──────────────────────────────────────────────────
+
+[prompts]
+operation_planner = """
+The user has uploaded a document and requested this operation:
+"{{ operation }}"
+
+The document is {{ word_count }} words, chunked into {{ chunk_count }} passages.
+
+Your task: write two prompts that will be used to run a map-reduce over the document.
+
+MAP PROMPT — applied to each passage individually:
+- Should extract only what's present in that passage
+- Should produce JSON (schema of your design, appropriate to the operation)
+- Should instruct the model NOT to invent things not in the passage
+- Should be specific about what to look for
+
+REDUCE PROMPT — applied to merge all extracted JSON fragments:
+- Should merge results from all passages into one coherent whole
+- Should deduplicate where appropriate (e.g. same character mentioned in many passages)
+- Should preserve ordering that matters (e.g. chronological events)
+- Should produce a final JSON structure appropriate to the operation
+
+Respond in JSON:
+{
+  "map_prompt": "...",
+  "reduce_prompt": "...",
+  "output_description": "one sentence on what the final output will contain"
+}
+"""
+
+synthesis = """
+You have the structured output of a document analysis operation.
+
+Original operation: {{ operation }}
+Output description: {{ output_description }}
+
+Format this into a clear, well-structured response for the user.
+Use markdown headers and lists where appropriate.
+Be specific — cite characters, events, arguments, or findings by name.
+Do not pad with generalities.
+
+At the end, invite the user to ask follow-up questions.
+You can answer questions about:
+- Specific characters, events, arguments, or findings
+- Relationships between elements
+- Things not covered in the initial operation
+- Alternative operations on the same document
+"""
+
+followup = """
+The user has a follow-up question about a document they uploaded.
+
+Document: {{ filename }} ({{ word_count }} words)
+Original operation: {{ operation }}
+
+Structured output from the operation:
+{{ last_output }}
+
+Follow-up question: {{ question }}
+
+Answer specifically and concisely. If the answer requires looking at
+specific passages rather than the structured output, say so and retrieve them.
+Do not re-run the full operation — use the existing output unless the question
+genuinely requires going back to the source.
+"""
+
+[memory]
+extract_prompt_addendum = """
+For document analysis conversations, extract:
+- The type of documents the user works with (manuscripts, legal, technical, etc.).
+- Operation patterns the user returns to (character analysis, argument mapping, etc.).
+- Quality preferences (level of detail, output format, citation style).
+Do NOT extract: specific document content, operation outputs, or file paths.
+"""
