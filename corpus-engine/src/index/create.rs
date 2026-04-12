@@ -401,8 +401,10 @@ impl CorpusIndex {
         // (2/3) Tantivy FTS index on content.
         let content_done = read_meta(&dir).map(|m| m.content_fts_built).unwrap_or(false);
         if !build_fts {
-            if !content_done { let _ = self.mark_content_fts_built(); }
-            eprintln!("[{id}] FTS indexes disabled in recipe — skipping (2/3)");
+            // Do NOT mark FTS as built when skipping — that would corrupt
+            // metadata and prevent a future build_indexes(true, true) from
+            // actually building the index.
+            eprintln!("[{id}] FTS indexes not requested — skipping (2/3)");
         } else if content_done {
             eprintln!("[{id}] FTS content index already built — skipping (2/3)");
         } else {
@@ -425,8 +427,7 @@ impl CorpusIndex {
         // (3/3) Tantivy FTS index on title.
         let title_done = read_meta(&dir).map(|m| m.title_fts_built).unwrap_or(false);
         if !build_fts {
-            if !title_done { let _ = self.mark_title_fts_built(); }
-            eprintln!("[{id}] FTS indexes disabled in recipe — skipping (3/3)");
+            eprintln!("[{id}] FTS indexes not requested — skipping (3/3)");
         } else if title_done {
             eprintln!("[{id}] FTS title index already built — skipping (3/3)");
         } else {
