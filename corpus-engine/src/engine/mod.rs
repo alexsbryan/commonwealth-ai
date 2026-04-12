@@ -204,6 +204,92 @@ impl CorpusEngine {
         Ok(indexes)
     }
 
+    /// Dump diagnostic information about all installed indexes.
+    /// Checks both the metadata file and the actual LanceDB state.
+    pub async fn diagnose_indexes(&self) -> String {
+        let mut report = String::new();
+        report.push_str(&format!("Index directory: {}\n", self.index_dir.display()));
+
+        if !self.index_dir.is_dir() {
+            report.push_str("  Directory does not exist.\n");
+            return report;
+        }
+
+        let entries = match std::fs::read_dir(&self.index_dir) {
+            Ok(e) => e,
+            Err(e) => {
+                report.push_str(&format!("  Cannot read directory: {e}\n"));
+                return report;
+            }
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+            if name.starts_with('_') {
+                continue;
+            }
+
+            report.push_str(&format!("\n--- {} ---\n", name));
+
+            let meta_path = path.join("_corpus_meta.json");
+            if !meta_path.exists() {
+                report.push_str("  No _corpus_meta.json — not an index.\n");
+                continue;
+            }
+
+            // Read meta file raw.
+            if let Ok(raw) = std::fs::read_to_string(&meta_path) {
+                if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    report.push_str(&format!(
+                        "  ingestion_in_progress: {}\n\
+                         indexes_built: {}\n\
+                         vector_index_built: {}\n\
+                         content_fts_built: {}\n\
+                         title_fts_built: {}\n\
+                         committed_iter_pos: {}\n\
+                         embedding_model: {}\n\
+                         embedding_dimensions: {}\n",
+                        meta.get("ingestion_in_progress").unwrap_or(&serde_json::Value::Null),
+                        meta.get("indexes_built").unwrap_or(&serde_json::Value::Null),
+                        meta.get("vector_index_built").unwrap_or(&serde_json::Value::Null),
+                        meta.get("content_fts_built").unwrap_or(&serde_json::Value::Null),
+                        meta.get("title_fts_built").unwrap_or(&serde_json::Value::Null),
+                        meta.get("committed_iter_pos").unwrap_or(&serde_json::Value::Null),
+                        meta.get("embedding_model").unwrap_or(&serde_json::Value::Null),
+                        meta.get("embedding_dimensions").unwrap_or(&serde_json::Value::Null),
+                    ));
+                } else {
+                    report.push_str("  Meta file exists but failed to parse.\n");
+                }
+            }
+
+            // Check ingestion complete.
+            let complete = CorpusIndex::is_ingestion_complete(&path);
+            report.push_str(&format!("  is_ingestion_complete: {complete}\n"));
+
+            if !complete {
+                report.push_str("  *** WOULD BE SKIPPED by installed_indexes() ***\n");
+            }
+
+            // Open and diagnose the actual LanceDB state.
+            match CorpusIndex::open(&path).await {
+                Ok(idx) => {
+                    report.push_str(&idx.diagnose().await);
+                    report.push('\n');
+                }
+                Err(e) => {
+                    report.push_str(&format!("  Failed to open index: {e}\n"));
+                }
+            }
+        }
+
+        report
+    }
+
     /// Open an index for search. Validates embedding model.
     pub async fn open_index(&self, path: &Path) -> Result<CorpusIndex> {
         let index = CorpusIndex::open(path).await?;

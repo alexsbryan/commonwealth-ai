@@ -14,6 +14,45 @@ use crate::types::ScoredChunk;
 use super::CorpusIndex;
 
 impl CorpusIndex {
+    /// Dump diagnostic information about this index's search readiness.
+    /// Returns a human-readable report for debugging.
+    pub async fn diagnose(&self) -> String {
+        let row_count = self.table.count_rows(None).await.unwrap_or(0);
+        let indices = self.table.list_indices().await.unwrap_or_default();
+        let ivf_built = indices
+            .iter()
+            .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+        let content_fts = indices
+            .iter()
+            .any(|idx| idx.columns.iter().any(|c| c == "content"));
+        let title_fts = indices
+            .iter()
+            .any(|idx| idx.columns.iter().any(|c| c == "title"));
+
+        let index_names: Vec<String> = indices
+            .iter()
+            .map(|idx| format!("  {} (columns: {})", idx.name, idx.columns.join(", ")))
+            .collect();
+
+        format!(
+            "Corpus: {}\n\
+             Rows: {}\n\
+             Embedding dims: {}\n\
+             LanceDB indices ({}):\n{}\n\
+             IVF-PQ vector index: {}\n\
+             FTS content index: {}\n\
+             FTS title index: {}",
+            self.corpus_id,
+            row_count,
+            self.embedding_dimensions,
+            indices.len(),
+            if index_names.is_empty() { "  (none)".to_string() } else { index_names.join("\n") },
+            if ivf_built { "YES" } else { "NO" },
+            if content_fts { "YES" } else { "NO" },
+            if title_fts { "YES" } else { "NO" },
+        )
+    }
+
     /// Hybrid search combining vector similarity and FTS keyword matching.
     pub async fn search(
         &self,
@@ -38,21 +77,26 @@ impl CorpusIndex {
             && indices.iter().any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
         let do_fts = fts_built;
 
-        tracing::debug!(
+        tracing::info!(
+            corpus = %self.corpus_id,
             do_vector,
             do_fts,
             ivf_built,
             fts_built,
             row_count = row_count as u64,
+            indices_count = indices.len(),
             stored_dims = self.embedding_dimensions,
             query_dims = query_embedding.len(),
             dims_match = (query_embedding.is_empty() || query_embedding.len() == self.embedding_dimensions),
             sanitized_query = %sanitized,
-            "CorpusIndex::search"
+            "CorpusIndex::search gate"
         );
 
         if !do_vector && !do_fts {
-            tracing::debug!("CorpusIndex::search: nothing to search, returning empty");
+            tracing::warn!(
+                corpus = %self.corpus_id,
+                "CorpusIndex::search: SKIPPED — no vector index and no FTS index available"
+            );
             return Ok(Vec::new());
         }
 
