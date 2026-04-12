@@ -108,6 +108,8 @@ struct KnowledgeContext {
     speed: Speed,
     search_method: Option<String>,
     sources: Vec<SourceSummary>,
+    /// Summaries of retrieved chunks for frontend source linking.
+    retrieved_chunks: Vec<serde_json::Value>,
 }
 
 /// Streaming handle returned by [`Runtime::handle_message_stream`].
@@ -352,6 +354,28 @@ impl Runtime {
             _ => Speed::Medium,
         };
 
+        // 8. Build chunk summaries for frontend source linking.
+        let retrieved_chunks: Vec<serde_json::Value> = all_chunks
+            .iter()
+            .map(|c| {
+                let snippet = if c.content.len() > 200 {
+                    let truncated = &c.content[..200];
+                    match truncated.rfind(' ') {
+                        Some(pos) => format!("{}...", &truncated[..pos]),
+                        None => format!("{truncated}..."),
+                    }
+                } else {
+                    c.content.clone()
+                };
+                serde_json::json!({
+                    "title": c.title.as_deref().unwrap_or(""),
+                    "corpus_id": c.corpus_id,
+                    "url": c.url,
+                    "snippet": snippet,
+                })
+            })
+            .collect();
+
         KnowledgeContext {
             chunks: all_chunks,
             prompt,
@@ -359,6 +383,7 @@ impl Runtime {
             speed,
             search_method,
             sources,
+            retrieved_chunks,
         }
     }
 
@@ -526,6 +551,7 @@ impl Runtime {
 
         let search_method = kc.search_method;
         let sources = kc.sources;
+        let retrieved_chunks = kc.retrieved_chunks;
 
         let intent_label = format!("{intent:?}");
         let message_id = uuid::Uuid::new_v4().to_string();
@@ -587,6 +613,7 @@ impl Runtime {
                 metadata: Some(serde_json::json!({
                     "streamed": true,
                     "provenance": provenance,
+                    "retrieved_chunks": retrieved_chunks,
                 })),
                 version: now(),
             };
@@ -722,6 +749,7 @@ impl Runtime {
                 "tokens": completion.tokens_used,
                 "latency_ms": completion.latency_ms,
                 "provenance": provenance,
+                "retrieved_chunks": kc.retrieved_chunks,
             })),
             version: now(),
         };

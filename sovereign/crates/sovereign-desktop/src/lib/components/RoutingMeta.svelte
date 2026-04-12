@@ -11,10 +11,17 @@
       coarse_intent?: string;
       self_assessment?: string;
     };
+    retrievedChunks?: Array<{
+      title: string;
+      corpus_id: string;
+      url?: string;
+      snippet: string;
+    }>;
   }
 
-  let { provenance }: Props = $props();
+  let { provenance, retrievedChunks = [] }: Props = $props();
   let expanded = $state(false);
+  let sourcesExpanded = $state(false);
 
   let corporaSearched = $derived(
     (provenance?.sources ?? [])
@@ -56,7 +63,6 @@
     {/if}
   </div>
   {#if expanded}
-    <!-- DEV-PROVENANCE:START — remove entire block before shipping to end users -->
     <div class="routing-detail">
       <div>
         <strong>Routing:</strong>
@@ -88,11 +94,35 @@
       <div>
         <strong>Timing:</strong>
         {elapsedLabel}{provenance.tokens_used > 0
-          ? ` · ${provenance.tokens_used} tok`
+          ? ` \u00B7 ${provenance.tokens_used} tok`
           : ""}
       </div>
+
+      {#if retrievedChunks.length > 0}
+        <div class="sources-section">
+          <button
+            class="sources-toggle"
+            onclick|stopPropagation={() => (sourcesExpanded = !sourcesExpanded)}
+          >
+            <strong>Retrieved passages ({retrievedChunks.length})</strong>
+            <span class="toggle-arrow">{sourcesExpanded ? "\u25B4" : "\u25BE"}</span>
+          </button>
+          {#if sourcesExpanded}
+            <div class="sources-list">
+              {#each retrievedChunks as chunk, i}
+                <div class="source-item">
+                  <div class="source-header">
+                    <span class="source-badge">{chunk.corpus_id}</span>
+                    <span class="source-title">{chunk.title || `Passage ${i + 1}`}</span>
+                  </div>
+                  <div class="source-snippet">{chunk.snippet}</div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
-    <!-- DEV-PROVENANCE:END -->
   {/if}
 {/if}
 
@@ -135,5 +165,76 @@
     font-size: 0.75rem;
     color: var(--text-secondary);
     line-height: 1.55;
+  }
+
+  .sources-section {
+    margin-top: 8px;
+    border-top: 0.5px solid var(--border);
+    padding-top: 6px;
+  }
+
+  .sources-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 2px 0;
+    font-family: var(--font-sans);
+  }
+  .sources-toggle:hover {
+    color: var(--text-primary);
+  }
+
+  .toggle-arrow {
+    font-size: 0.7em;
+    opacity: 0.6;
+  }
+
+  .sources-list {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .source-item {
+    background: var(--bg-elevated);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    border: 0.5px solid var(--border);
+  }
+
+  .source-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .source-badge {
+    font-size: 0.65rem;
+    font-family: var(--font-mono);
+    padding: 0 5px;
+    border-radius: 3px;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
+    white-space: nowrap;
+  }
+
+  .source-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.75rem;
+  }
+
+  .source-snippet {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    font-family: var(--font-serif);
   }
 </style>

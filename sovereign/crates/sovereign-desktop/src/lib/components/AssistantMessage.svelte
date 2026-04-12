@@ -1,12 +1,11 @@
 <script lang="ts">
   import { parseAssistantContent } from "../parse-message";
+  import { renderMarkdown } from "../utils/markdown";
   import { insightStore } from "../stores/insights.svelte";
   import { clipInsight } from "../api";
   import type { InsightSource } from "../types";
   import ThinkBlock from "./ThinkBlock.svelte";
   import RoutingMeta from "./RoutingMeta.svelte";
-  import ResponseParagraph from "./ResponseParagraph.svelte";
-  import ResearchGapCard from "./ResearchGapCard.svelte";
   import SourceAttribution from "./SourceAttribution.svelte";
 
   interface Props {
@@ -21,6 +20,18 @@
     $props();
 
   let blocks = $derived(parseAssistantContent(content));
+
+  // Separate think blocks from prose content. Prose blocks are merged
+  // and rendered as a single markdown document so headings, lists, and
+  // horizontal rules render correctly.
+  let thinkBlocks = $derived(blocks.filter((b) => b.type === "think"));
+  let proseText = $derived(
+    blocks
+      .filter((b) => b.type !== "think")
+      .map((b) => b.text)
+      .join("\n\n"),
+  );
+  let proseHtml = $derived(renderMarkdown(proseText));
 
   let provenance = $derived(
     metadata?.provenance as
@@ -38,6 +49,15 @@
       | undefined,
   );
 
+  let retrievedChunks = $derived(
+    (metadata?.retrieved_chunks ?? []) as Array<{
+      title: string;
+      corpus_id: string;
+      url?: string;
+      snippet: string;
+    }>,
+  );
+
   // Build source from provenance metadata.
   function buildSource(): InsightSource {
     const sources = provenance?.sources ?? [];
@@ -52,16 +72,9 @@
   async function handleClip(detail: {
     text: string;
     paragraphIndex: number;
-    position?: { name: string; style: import("../types").PositionStyle };
   }) {
     const source = buildSource();
     const sourceJson = JSON.stringify(source);
-    const positionJson = detail.position
-      ? JSON.stringify({
-          name: detail.position.name,
-          style: detail.position.style,
-        })
-      : undefined;
 
     try {
       const node = await clipInsight(
@@ -69,7 +82,7 @@
         messageId,
         detail.paragraphIndex,
         sourceJson,
-        positionJson,
+        undefined,
       );
       insightStore.add(node);
     } catch (e) {
@@ -81,23 +94,17 @@
 <div class="sv-ai-msg">
   <div class="role-label">&#x25C8; SOVEREIGN</div>
 
-  <RoutingMeta {provenance} />
+  <RoutingMeta {provenance} {retrievedChunks} />
 
-  {#each blocks as block, i (i)}
-    {#if block.type === "think"}
-      <ThinkBlock content={block.text} />
-    {:else if block.type === "research_gap"}
-      <ResearchGapCard text={block.text} gapQuery={block.gapQuery} />
-    {:else}
-      <ResponseParagraph
-        text={block.text}
-        index={i}
-        position={block.position}
-        alreadyClipped={insightStore.has(messageId, i)}
-        onclip={handleClip}
-      />
-    {/if}
+  {#each thinkBlocks as block}
+    <ThinkBlock content={block.text} />
   {/each}
+
+  {#if proseText}
+    <div class="sv-prose">
+      {@html proseHtml}
+    </div>
+  {/if}
 
   <SourceAttribution {content} />
 </div>
