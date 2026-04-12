@@ -345,6 +345,11 @@ pub enum ExtractorConfig {
         /// `wikimedia/wikipedia`). Populates search result source links.
         #[serde(default)]
         url_column: Option<String>,
+        /// Optional transform applied to the content column before chunking.
+        /// `"openalex_inverted_index"` reconstructs text from OpenAlex's
+        /// inverted-index JSON format (`{ "word": [pos1, pos2], ... }`).
+        #[serde(default)]
+        content_transform: Option<String>,
     },
     #[serde(rename = "plaintext")]
     Plaintext {

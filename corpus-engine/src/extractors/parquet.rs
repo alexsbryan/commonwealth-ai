@@ -21,6 +21,10 @@ pub struct ParquetExtractor {
     pub label_column: Option<String>,
     /// Column name for a source URL (optional). Populates `ExtractedDoc::url`.
     pub url_column: Option<String>,
+    /// Optional transform applied to the content column before use.
+    /// `"openalex_inverted_index"` reconstructs text from OpenAlex's
+    /// inverted-index JSON format.
+    pub content_transform: Option<String>,
 }
 
 impl ParquetExtractor {
@@ -29,6 +33,7 @@ impl ParquetExtractor {
             content_column: content_column.to_string(),
             label_column: label_column.map(|s| s.to_string()),
             url_column: None,
+            content_transform: None,
         }
     }
 
@@ -73,6 +78,7 @@ impl Extractor for ParquetExtractor {
                 content_column: self.content_column.clone(),
                 label_column: self.label_column.clone(),
                 url_column: self.url_column.clone(),
+                content_transform: self.content_transform.clone(),
             }))
         } else {
             let file = File::open(source_path).map_err(|e| {
@@ -95,6 +101,7 @@ impl Extractor for ParquetExtractor {
                 content_column: self.content_column.clone(),
                 label_column: self.label_column.clone(),
                 url_column: self.url_column.clone(),
+                content_transform: self.content_transform.clone(),
                 pending: VecDeque::new(),
                 row_counter: 0,
             }))
@@ -111,6 +118,7 @@ struct MultiShardParquetIterator {
     content_column: String,
     label_column: Option<String>,
     url_column: Option<String>,
+    content_transform: Option<String>,
 }
 
 impl Iterator for MultiShardParquetIterator {
@@ -163,6 +171,7 @@ impl Iterator for MultiShardParquetIterator {
                 content_column: self.content_column.clone(),
                 label_column: self.label_column.clone(),
                 url_column: self.url_column.clone(),
+                content_transform: self.content_transform.clone(),
                 pending: VecDeque::new(),
                 row_counter: 0,
             });
@@ -175,6 +184,7 @@ struct ParquetIterator {
     content_column: String,
     label_column: Option<String>,
     url_column: Option<String>,
+    content_transform: Option<String>,
     pending: VecDeque<ExtractedDoc>,
     row_counter: usize,
 }
@@ -222,11 +232,30 @@ impl Iterator for ParquetIterator {
 
             let num_rows = batch.num_rows();
             for row in 0..num_rows {
-                let content = get_string_value(&batch, content_idx, row);
-                if content.is_empty() {
+                let raw_content = get_string_value(&batch, content_idx, row);
+                if raw_content.is_empty() {
                     self.row_counter += 1;
                     continue;
                 }
+
+                // Apply content transform if configured.
+                let content = match self.content_transform.as_deref() {
+                    Some("openalex_inverted_index") => {
+                        match serde_json::from_str::<serde_json::Value>(&raw_content)
+                            .ok()
+                            .and_then(|v| super::reconstruct_abstract(&v))
+                        {
+                            Some(text) if !text.is_empty() => text,
+                            _ => {
+                                // Skip rows where abstract reconstruction fails
+                                // (null inverted index, empty, malformed JSON).
+                                self.row_counter += 1;
+                                continue;
+                            }
+                        }
+                    }
+                    _ => raw_content,
+                };
 
                 let label = label_idx
                     .map(|idx| get_string_value(&batch, idx, row))

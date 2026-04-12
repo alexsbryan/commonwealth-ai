@@ -22,7 +22,7 @@ subset = "en"
 [extract]
 type = "parquet"
 content_column = "text"
-label_column = "id"
+label_column = "title"
 
 [chunk]
 type = "paragraph"

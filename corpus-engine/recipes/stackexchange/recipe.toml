@@ -4,21 +4,21 @@ name = "Stack Exchange"
 description = "Questions and answers from the Stack Exchange network."
 license = "CC-BY-SA-4.0"
 mesh_sharing = true
-size_compressed_gb = 85.0
+size_compressed_gb = 39.0
 size_indexed_gb = 120.0
 
-# Full Stack Exchange data dump from the Internet Archive.
-# The dump is updated quarterly and contains XML files for each site.
+# Sourced from common-pile/stackexchange on HuggingFace, which mirrors the
+# December 2024 Stack Exchange data dump. Each document is a pre-composed
+# question with its comments, answers, and answer comments. ~30.4M rows
+# across multiple parquet shards (~39 GB compressed).
 [acquire]
-type = "bulk_download"
-url = "https://archive.org/download/stackexchange"
-resume = true
+type = "huggingface_dataset"
+repo = "common-pile/stackexchange"
 
 [extract]
-type = "stackexchange_xml"
-# min_score filters out low-quality answers. The default (3) keeps answers
-# with meaningful community validation while trimming spam and noise.
-min_score = 3
+type = "parquet"
+content_column = "text"
+label_column = "id"
 
 [chunk]
 type = "paragraph"

@@ -238,26 +238,9 @@ fn format_openalex_work(work: &OpenAlexWork) -> Option<ExtractedDoc> {
     })
 }
 
-/// Reconstruct text from an OpenAlex inverted index.
-fn reconstruct_abstract(inverted_index: &serde_json::Value) -> Option<String> {
-    let obj = inverted_index.as_object()?;
-    let mut words: Vec<(usize, &str)> = Vec::new();
-    for (word, positions) in obj {
-        if let Some(arr) = positions.as_array() {
-            for pos in arr {
-                if let Some(idx) = pos.as_u64() {
-                    words.push((idx as usize, word.as_str()));
-                }
-            }
-        }
-    }
-    if words.is_empty() {
-        return None;
-    }
-    words.sort_by_key(|(idx, _)| *idx);
-    let text: String = words.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(" ");
-    Some(text)
-}
+// `reconstruct_abstract` lives in `super::reconstruct_abstract` (extractors/mod.rs)
+// so both the JSONL and Parquet extractors can use it.
+use super::reconstruct_abstract;
 
 #[cfg(test)]
 mod tests {

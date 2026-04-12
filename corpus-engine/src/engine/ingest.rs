@@ -591,10 +591,12 @@ impl CorpusEngine {
                 content_column,
                 label_column,
                 url_column,
+                content_transform,
             } => Box::new(extractors::parquet::ParquetExtractor {
                 content_column: content_column.clone(),
                 label_column: label_column.clone(),
                 url_column: url_column.clone(),
+                content_transform: content_transform.clone(),
             }),
             ExtractorConfig::Plaintext {
                 title_pattern,

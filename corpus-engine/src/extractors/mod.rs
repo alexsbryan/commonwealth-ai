@@ -48,6 +48,35 @@ pub(crate) fn slug(text: &str) -> String {
         .join("-")
 }
 
+/// Reconstruct text from an OpenAlex inverted-index JSON value.
+///
+/// OpenAlex encodes abstracts as `{ "word": [pos1, pos2], ... }` where
+/// positions indicate word order. This function sorts by position and
+/// joins the words with spaces to recover the original text.
+///
+/// Shared between the JSONL extractor (which reads the field from JSON)
+/// and the Parquet extractor (which reads it as a string column and
+/// parses it).
+pub(crate) fn reconstruct_abstract(inverted_index: &serde_json::Value) -> Option<String> {
+    let obj = inverted_index.as_object()?;
+    let mut words: Vec<(usize, &str)> = Vec::new();
+    for (word, positions) in obj {
+        if let Some(arr) = positions.as_array() {
+            for pos in arr {
+                if let Some(idx) = pos.as_u64() {
+                    words.push((idx as usize, word.as_str()));
+                }
+            }
+        }
+    }
+    if words.is_empty() {
+        return None;
+    }
+    words.sort_by_key(|(idx, _)| *idx);
+    let text: String = words.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(" ");
+    Some(text)
+}
+
 /// Strip HTML tags and decode common entities.
 pub(crate) fn strip_html(html: &str) -> String {
     let mut result = String::with_capacity(html.len());
