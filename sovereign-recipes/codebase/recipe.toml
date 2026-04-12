@@ -1,0 +1,48 @@
+[corpus]
+id = "codebase"
+name = "Codebase"
+description = """
+Tree-sitter-indexed code corpus for a local repository. Walks the source \
+directory, parses supported files with their grammars, and yields one chunk \
+per symbol (function, class, struct, interface, etc.) with the symbol's \
+surrounding context lines attached.
+
+Supported languages in v1: Rust, TypeScript/TSX, JavaScript/JSX, Go, Python. \
+Adding a language is strictly additive — one grammar crate on corpus-engine, \
+one entry in the language registry, one `queries/{lang}/symbols.scm` file.
+
+The `path` field below is a placeholder — users either drop a copy of this \
+recipe under `~/.sovereign/recipes/codebase/` with `path` pointing at their \
+repo, or run `sovereign code index <path>` which generates an ephemeral \
+recipe over the supplied path.
+"""
+license = "private"
+mesh_sharing = false
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+# LocalFileAcquirer just validates + expands `~`; the Code extractor below
+# owns directory walking via walkdir.
+[acquire]
+type = "local_file"
+path = "${REPO_ROOT}"
+
+# The `code` extractor walks the directory, parses each supported file with
+# its tree-sitter grammar, and emits one ExtractedDoc per symbol. See
+# `corpus-engine/src/extractors/code/mod.rs` for the full pipeline.
+[extract]
+type = "code"
+context_lines = 3
+max_lines_per_chunk = 150
+
+# The code extractor already produces chunk-sized output (one symbol per
+# doc). A passthrough chunker keeps the ingest pipeline generic without a
+# special "already chunked" branch.
+[chunk]
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+# embedding_model and embedding_dimensions auto-detected from the loaded
+# embed slot at ingest time.
