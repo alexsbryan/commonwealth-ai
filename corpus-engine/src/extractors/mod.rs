@@ -8,6 +8,9 @@ pub mod wikipedia_structured;
 pub mod wikipedia_jsonl;
 pub mod wikipedia_types;
 
+#[cfg(feature = "treesitter")]
+pub mod code;
+
 use crate::error::Result;
 
 /// A raw document extracted from a source, before chunking.

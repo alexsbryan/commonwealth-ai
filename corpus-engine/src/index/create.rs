@@ -168,6 +168,7 @@ impl CorpusIndex {
             license: license.to_string(),
             created_at: now,
             last_updated: now,
+            schema_version: super::CURRENT_INDEX_SCHEMA_VERSION,
             is_shard: false,
             chunk_range_start: None,
             chunk_range_end: None,

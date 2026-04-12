@@ -18,6 +18,39 @@ use crate::types::{ChunkRange, IndexInfo};
 
 // ─── Helper types ──────────────────────────────────────────
 
+/// Typed code-intelligence metadata for a single chunk. Populated by the
+/// `code` extractor and promoted into the typed schema columns by the
+/// insert path; `None` for non-code corpora.
+#[derive(Clone, Debug, Default)]
+pub struct InsertCodeMeta {
+    pub symbol_name: Option<String>,
+    pub symbol_kind: Option<String>,
+    pub file_path: Option<String>,
+    pub line_start: Option<i32>,
+    pub line_end: Option<i32>,
+    pub language: Option<String>,
+    pub mtime: Option<i64>,
+}
+
+/// Extract code-intelligence fields from an `ExtractedDoc.metadata` JSON
+/// object. Returns an empty `InsertCodeMeta` if the metadata is missing or
+/// doesn't carry code-specific keys — in that case every code column is
+/// stored as Null and the chunk behaves like any other non-code chunk.
+pub fn code_meta_from_json(metadata: Option<&serde_json::Value>) -> InsertCodeMeta {
+    let Some(obj) = metadata.and_then(|v| v.as_object()) else {
+        return InsertCodeMeta::default();
+    };
+    InsertCodeMeta {
+        symbol_name: obj.get("symbol_name").and_then(|v| v.as_str()).map(String::from),
+        symbol_kind: obj.get("symbol_kind").and_then(|v| v.as_str()).map(String::from),
+        file_path: obj.get("file_path").and_then(|v| v.as_str()).map(String::from),
+        line_start: obj.get("line_start").and_then(|v| v.as_i64()).map(|n| n as i32),
+        line_end: obj.get("line_end").and_then(|v| v.as_i64()).map(|n| n as i32),
+        language: obj.get("language").and_then(|v| v.as_str()).map(String::from),
+        mtime: obj.get("mtime").and_then(|v| v.as_i64()),
+    }
+}
+
 /// A chunk to be inserted into the index.
 #[derive(Clone)]
 pub struct InsertChunk {
@@ -30,6 +63,9 @@ pub struct InsertChunk {
     /// Document-level grouping key (article URL, DOI, etc.).
     /// Used by delta updates to delete/replace all chunks from one document.
     pub source_doc_id: Option<String>,
+    /// Optional code-intelligence metadata. `Default::default()` means
+    /// non-code chunk — all code columns will be Null.
+    pub code: InsertCodeMeta,
 }
 
 /// A pre-embedded chunk ready for direct insertion.
@@ -74,8 +110,18 @@ pub struct CorpusIndex {
 }
 
 /// Build the Arrow schema for a corpus index table.
+///
+/// Columns fall into two groups:
+/// - **Base** (`id`, `content`, `title`, `url`, `embedding`, `metadata`,
+///   `content_hash`, `source_doc_id`) — populated by every corpus type.
+/// - **Code intelligence** (`symbol_name`, `symbol_kind`, `file_path`,
+///   `line_start`, `line_end`, `language`, `mtime`) — nullable. Populated
+///   only by code corpora; Wikipedia/SEP etc. leave them Null. Real
+///   columns (not JSON) so LanceDB filter pushdown keeps symbol-lookup
+///   under 10ms.
 pub(crate) fn corpus_schema(embedding_dim: usize) -> SchemaRef {
     Arc::new(Schema::new(vec![
+        // Base columns
         Field::new("id", DataType::Int64, false),
         Field::new("content", DataType::Utf8, false),
         Field::new("title", DataType::Utf8, true),
@@ -91,7 +137,23 @@ pub(crate) fn corpus_schema(embedding_dim: usize) -> SchemaRef {
         Field::new("metadata", DataType::Utf8, true),
         Field::new("content_hash", DataType::Utf8, true),
         Field::new("source_doc_id", DataType::Utf8, true),
+        // Code-intelligence columns (nullable for non-code corpora)
+        Field::new("symbol_name", DataType::Utf8, true),
+        Field::new("symbol_kind", DataType::Utf8, true),
+        Field::new("file_path", DataType::Utf8, true),
+        Field::new("line_start", DataType::Int32, true),
+        Field::new("line_end", DataType::Int32, true),
+        Field::new("language", DataType::Utf8, true),
+        Field::new("mtime", DataType::Int64, true),
     ]))
+}
+
+/// Current on-disk schema version. Bumped when `corpus_schema()` changes
+/// in a way that requires an LanceDB `add_columns` migration on open.
+pub(crate) const CURRENT_INDEX_SCHEMA_VERSION: u32 = 2;
+
+fn default_index_schema_version() -> u32 {
+    1 // Files without the field predate versioning → treat as v1.
 }
 
 /// Metadata stored as a JSON file alongside the LanceDB table.
@@ -105,6 +167,11 @@ struct IndexMeta {
     license: String,
     created_at: u64,
     last_updated: u64,
+    /// Version of the LanceDB column layout used by this index. Opened
+    /// indexes with a version lower than `CURRENT_INDEX_SCHEMA_VERSION`
+    /// are migrated in place via `Table::add_columns`.
+    #[serde(default = "default_index_schema_version")]
+    schema_version: u32,
     #[serde(default)]
     is_shard: bool,
     #[serde(default)]
@@ -167,6 +234,58 @@ fn meta_path(index_dir: &Path) -> std::path::PathBuf {
     index_dir.join("_corpus_meta.json")
 }
 
+/// Migrate an on-disk index from `from_version` to the current schema
+/// version. Adds the code-intelligence columns as all-Null when the
+/// source version is < 2. Safe to call on a partially-migrated index;
+/// LanceDB's `add_columns` is a no-op for columns that already exist.
+async fn migrate_schema(table: &lancedb::Table, from_version: u32) -> Result<()> {
+    if from_version >= 2 {
+        return Ok(());
+    }
+
+    use lancedb::table::NewColumnTransform;
+
+    // Check which code columns are actually missing — a previous
+    // migration attempt may have added some and then crashed. We build
+    // the Arrow schema for exactly the columns that don't exist yet,
+    // so retries are idempotent.
+    let current = table
+        .schema()
+        .await
+        .map_err(|e| Error::Database(format!("read schema: {e}")))?;
+    let existing: std::collections::HashSet<&str> =
+        current.fields().iter().map(|f| f.name().as_str()).collect();
+
+    let wanted: &[(&str, DataType)] = &[
+        ("symbol_name", DataType::Utf8),
+        ("symbol_kind", DataType::Utf8),
+        ("file_path", DataType::Utf8),
+        ("line_start", DataType::Int32),
+        ("line_end", DataType::Int32),
+        ("language", DataType::Utf8),
+        ("mtime", DataType::Int64),
+    ];
+
+    let missing: Vec<Field> = wanted
+        .iter()
+        .filter(|(name, _)| !existing.contains(name))
+        .map(|(name, dtype)| Field::new(*name, dtype.clone(), true))
+        .collect();
+
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    let add_schema = Arc::new(Schema::new(missing));
+    table
+        .add_columns(NewColumnTransform::AllNulls(add_schema), None)
+        .await
+        .map_err(|e| Error::Database(format!("add_columns migration: {e}")))?;
+
+    tracing::info!("Migrated index to schema v{CURRENT_INDEX_SCHEMA_VERSION}");
+    Ok(())
+}
+
 fn read_meta(index_dir: &Path) -> Result<IndexMeta> {
     let path = meta_path(index_dir);
     let content = std::fs::read_to_string(&path).map_err(|e| {
@@ -189,12 +308,16 @@ const CHUNKS_TABLE: &str = "chunks";
 
 impl CorpusIndex {
     /// Open an existing LanceDB index.
+    ///
+    /// Lazily migrates pre-v2 indexes to add the code-intelligence
+    /// columns. Migration is idempotent — guarded by the schema_version
+    /// field in `_corpus_meta.json` — so subsequent opens are cheap.
     pub async fn open(path: &Path) -> Result<Self> {
         if !path.exists() {
             return Err(Error::IndexNotFound(path.display().to_string()));
         }
 
-        let meta = read_meta(path)?;
+        let mut meta = read_meta(path)?;
 
         let db = lancedb::connect(path.to_str().unwrap())
             .execute()
@@ -206,6 +329,12 @@ impl CorpusIndex {
             .execute()
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
+
+        if meta.schema_version < CURRENT_INDEX_SCHEMA_VERSION {
+            migrate_schema(&table, meta.schema_version).await?;
+            meta.schema_version = CURRENT_INDEX_SCHEMA_VERSION;
+            let _ = write_meta(path, &meta);
+        }
 
         Ok(Self {
             db,
@@ -407,6 +536,7 @@ mod tests {
                     metadata: Some(r#"{"source":"docs"}"#.into()),
                     content_hash: None,
                     source_doc_id: Some("https://rust-lang.org".into()),
+                    code: InsertCodeMeta::default(),
                 },
                 make_embedding(&[1.0, 0.0, 0.0, 0.0]),
             ),
@@ -418,6 +548,7 @@ mod tests {
                     metadata: None,
                     content_hash: None,
                     source_doc_id: None,
+                    code: InsertCodeMeta::default(),
                 },
                 make_embedding(&[0.0, 1.0, 0.0, 0.0]),
             ),
@@ -429,6 +560,7 @@ mod tests {
                     metadata: Some(r#"{"source":"wiki"}"#.into()),
                     content_hash: None,
                     source_doc_id: Some("https://sqlite.org".into()),
+                    code: InsertCodeMeta::default(),
                 },
                 make_embedding(&[0.0, 0.0, 1.0, 0.0]),
             ),
@@ -440,6 +572,7 @@ mod tests {
                     metadata: None,
                     content_hash: None,
                     source_doc_id: None,
+                    code: InsertCodeMeta::default(),
                 },
                 make_embedding(&[0.9, 0.1, 0.0, 0.0]),
             ),

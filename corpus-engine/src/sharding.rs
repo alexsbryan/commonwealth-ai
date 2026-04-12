@@ -181,20 +181,38 @@ pub async fn merge_shards(
             next_id += num_rows as i64;
 
             // Rebuild batch with new IDs.
-            // Column order must match corpus_schema() exactly:
-            //   id, content, title, url, embedding, metadata, content_hash, source_doc_id
+            // Column order must match corpus_schema() exactly.
             let schema = crate::index::corpus_schema(dim);
             let null_str_col: ArrayRef = Arc::new(
                 StringArray::from(vec![Option::<String>::None; num_rows]),
             );
-            let content_hash_col = batch
-                .column_by_name("content_hash")
-                .cloned()
-                .unwrap_or_else(|| null_str_col.clone());
-            let source_doc_id_col = batch
-                .column_by_name("source_doc_id")
-                .cloned()
-                .unwrap_or_else(|| null_str_col.clone());
+            let null_i32_col: ArrayRef = Arc::new(
+                arrow_array::Int32Array::from(vec![Option::<i32>::None; num_rows]),
+            );
+            let null_i64_col: ArrayRef = Arc::new(
+                Int64Array::from(vec![Option::<i64>::None; num_rows]),
+            );
+            // Shards written by older builds may be missing any of the
+            // optional columns — fall back to the typed Null column for
+            // each one.
+            let col_or_null_str = |name: &str| {
+                batch
+                    .column_by_name(name)
+                    .cloned()
+                    .unwrap_or_else(|| null_str_col.clone())
+            };
+            let col_or_null_i32 = |name: &str| {
+                batch
+                    .column_by_name(name)
+                    .cloned()
+                    .unwrap_or_else(|| null_i32_col.clone())
+            };
+            let col_or_null_i64 = |name: &str| {
+                batch
+                    .column_by_name(name)
+                    .cloned()
+                    .unwrap_or_else(|| null_i64_col.clone())
+            };
             let new_batch = RecordBatch::try_new(
                 schema.clone(),
                 vec![
@@ -204,8 +222,15 @@ pub async fn merge_shards(
                     batch.column_by_name("url").unwrap().clone(),
                     batch.column_by_name("embedding").unwrap().clone(),
                     batch.column_by_name("metadata").unwrap().clone(),
-                    content_hash_col,
-                    source_doc_id_col,
+                    col_or_null_str("content_hash"),
+                    col_or_null_str("source_doc_id"),
+                    col_or_null_str("symbol_name"),
+                    col_or_null_str("symbol_kind"),
+                    col_or_null_str("file_path"),
+                    col_or_null_i32("line_start"),
+                    col_or_null_i32("line_end"),
+                    col_or_null_str("language"),
+                    col_or_null_i64("mtime"),
                 ],
             )
             .map_err(|e| Error::Serialization(format!("merge batch: {e}")))?;
@@ -263,6 +288,7 @@ mod tests {
                         metadata: None,
                         content_hash: None,
                         source_doc_id: None,
+                        code: crate::index::InsertCodeMeta::default(),
                     },
                     make_test_embedding(i as f32),
                 )

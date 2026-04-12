@@ -639,6 +639,7 @@ pub(crate) async fn run_test(
                             metadata: None,
                             content_hash: Some(blake3_hex(content)),
                             source_doc_id: url.clone(),
+                            code: crate::index::InsertCodeMeta::default(),
                         },
                         emb,
                     ));
@@ -854,6 +855,9 @@ fn chunker_max_chars(config: &ChunkerConfig) -> usize {
         ChunkerConfig::Sentence { max_chars } => *max_chars,
         ChunkerConfig::Fixed { max_chars, .. } => *max_chars,
         ChunkerConfig::Semantic { max_chars } => *max_chars,
+        // Passthrough has no bound — the upstream extractor (e.g. `code`)
+        // is responsible for keeping pieces chunk-sized.
+        ChunkerConfig::Passthrough => usize::MAX,
     }
 }
 

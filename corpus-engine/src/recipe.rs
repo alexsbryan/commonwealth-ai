@@ -380,6 +380,24 @@ pub enum ExtractorConfig {
         #[serde(default = "default_factual_patterns")]
         factual_patterns: Vec<String>,
     },
+    /// Tree-sitter code extractor. Walks the source directory, parses each
+    /// supported file with its grammar, and yields one `ExtractedDoc` per
+    /// symbol (function, class, struct, etc.). Requires the `treesitter`
+    /// Cargo feature on `corpus-engine`.
+    #[serde(rename = "code")]
+    Code {
+        #[serde(default = "default_code_context_lines")]
+        context_lines: usize,
+        #[serde(default = "default_code_max_lines")]
+        max_lines_per_chunk: usize,
+    },
+}
+
+fn default_code_context_lines() -> usize {
+    3
+}
+fn default_code_max_lines() -> usize {
+    150
 }
 
 // ---------------------------------------------------------------------------
@@ -413,6 +431,10 @@ pub enum ChunkerConfig {
         #[serde(default = "default_max_chunk_chars")]
         max_chars: usize,
     },
+    /// Emits the input text as a single chunk. Use when the extractor
+    /// already produces chunk-sized output (e.g. the `code` extractor).
+    #[serde(rename = "passthrough")]
+    Passthrough,
 }
 
 // ---------------------------------------------------------------------------

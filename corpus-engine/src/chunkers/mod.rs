@@ -2,6 +2,7 @@ pub mod paragraph;
 pub mod sentence;
 pub mod fixed;
 pub mod semantic;
+pub mod passthrough;
 
 /// A text chunk produced by a chunker.
 #[derive(Debug, Clone)]

@@ -218,6 +218,11 @@ impl CorpusEngine {
                 };
 
                 let content_hash = blake3_hex(&content);
+                // Promote code-intelligence metadata from the extractor's
+                // metadata JSON into typed columns. Non-code extractors
+                // leave the JSON untouched and `code_meta_from_json`
+                // returns all-None → stored as Null columns.
+                let code = crate::index::code_meta_from_json(doc.metadata.as_ref());
                 pending_texts.push(content.clone());
                 pending_chunks.push(InsertChunk {
                     content,
@@ -227,6 +232,7 @@ impl CorpusEngine {
                     content_hash: Some(content_hash),
                     source_doc_id: doc.url.clone()
                         .or_else(|| Some(doc.source_id.clone())),
+                    code,
                 });
 
                 // Tier 1: embed when we have enough pending chunks.
@@ -598,6 +604,25 @@ impl CorpusEngine {
                     factual_patterns: factual_patterns.clone(),
                 },
             ),
+            #[cfg(feature = "treesitter")]
+            ExtractorConfig::Code {
+                context_lines,
+                max_lines_per_chunk,
+            } => Box::new(extractors::code::CodeExtractor {
+                context_lines: *context_lines,
+                max_lines_per_chunk: *max_lines_per_chunk,
+            }),
+            #[cfg(not(feature = "treesitter"))]
+            ExtractorConfig::Code { .. } => {
+                // The recipe requested the `code` extractor but this
+                // corpus-engine build doesn't include tree-sitter. Fail
+                // loudly at recipe-load time, not silently at query time.
+                panic!(
+                    "corpus-engine was built without the `treesitter` feature — \
+                     rebuild with `cargo build --features treesitter` to enable \
+                     the `code` extractor"
+                );
+            }
         }
     }
 
@@ -627,6 +652,7 @@ impl CorpusEngine {
                     max_chars: *max_chars,
                 })
             }
+            ChunkerConfig::Passthrough => Box::new(chunkers::passthrough::PassthroughChunker),
         }
     }
 }

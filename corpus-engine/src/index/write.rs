@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use arrow_array::{
-    Array, Int64Array, RecordBatch, StringArray,
+    Array, Int32Array, Int64Array, RecordBatch, StringArray,
     FixedSizeListArray,
     types::Float32Type,
 };
@@ -52,6 +52,37 @@ impl CorpusIndex {
             .map(|(c, _)| c.source_doc_id.as_deref())
             .collect();
 
+        // Code-intelligence columns. Non-code chunks leave every field
+        // None → stored as Null. No JSON parsing at query time.
+        let symbol_names: Vec<Option<&str>> = chunks
+            .iter()
+            .map(|(c, _)| c.code.symbol_name.as_deref())
+            .collect();
+        let symbol_kinds: Vec<Option<&str>> = chunks
+            .iter()
+            .map(|(c, _)| c.code.symbol_kind.as_deref())
+            .collect();
+        let file_paths: Vec<Option<&str>> = chunks
+            .iter()
+            .map(|(c, _)| c.code.file_path.as_deref())
+            .collect();
+        let line_starts: Vec<Option<i32>> = chunks
+            .iter()
+            .map(|(c, _)| c.code.line_start)
+            .collect();
+        let line_ends: Vec<Option<i32>> = chunks
+            .iter()
+            .map(|(c, _)| c.code.line_end)
+            .collect();
+        let languages: Vec<Option<&str>> = chunks
+            .iter()
+            .map(|(c, _)| c.code.language.as_deref())
+            .collect();
+        let mtimes: Vec<Option<i64>> = chunks
+            .iter()
+            .map(|(c, _)| c.code.mtime)
+            .collect();
+
         // Build the embedding FixedSizeList array.
         let dim = self.embedding_dimensions as i32;
         let embedding_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
@@ -73,6 +104,13 @@ impl CorpusIndex {
                 Arc::new(StringArray::from(metadatas)),
                 Arc::new(StringArray::from(content_hashes)),
                 Arc::new(StringArray::from(source_doc_ids)),
+                Arc::new(StringArray::from(symbol_names)),
+                Arc::new(StringArray::from(symbol_kinds)),
+                Arc::new(StringArray::from(file_paths)),
+                Arc::new(Int32Array::from(line_starts)),
+                Arc::new(Int32Array::from(line_ends)),
+                Arc::new(StringArray::from(languages)),
+                Arc::new(Int64Array::from(mtimes)),
             ],
         )
         .map_err(|e| Error::Serialization(format!("record batch: {e}")))?;

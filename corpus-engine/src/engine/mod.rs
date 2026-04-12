@@ -332,6 +332,7 @@ impl CorpusEngine {
                     metadata: None,
                     content_hash: Some(hash),
                     source_doc_id: None,
+                    code: crate::index::InsertCodeMeta::default(),
                 }
             })
             .collect();
