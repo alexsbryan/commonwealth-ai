@@ -229,7 +229,7 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
-    // Code Intelligence v1 tools.
+    // Code Intelligence tools.
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
     )));
@@ -239,6 +239,21 @@ async fn main() {
     ));
     tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
         Arc::clone(&corpus_engine),
+    )));
+
+    // SCIP call graph database + tools (v2).
+    let scip_db_path = home.join(".sovereign").join("indexes").join("_scip_graph.db");
+    let scip_graph = Arc::new(
+        corpus_engine::ScipGraph::open(&scip_db_path, "default")
+            .expect("SCIP graph database"),
+    );
+    tools.register(Box::new(sovereign_tools::FindCalleesTool::new(
+        Arc::clone(&corpus_engine),
+        Arc::clone(&scip_graph),
+    )));
+    tools.register(Box::new(sovereign_tools::FindCallersTool::new(
+        Arc::clone(&corpus_engine),
+        Arc::clone(&scip_graph),
     )));
 
     // Connect MCP servers (stdio and HTTP+SSE).

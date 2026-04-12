@@ -20,9 +20,19 @@ pub mod code_search;
 pub mod recent_changes;
 pub mod symbol_lookup;
 
+#[cfg(feature = "treesitter")]
+pub mod callees;
+#[cfg(feature = "treesitter")]
+pub mod callers;
+
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
 pub use symbol_lookup::SymbolLookupTool;
+
+#[cfg(feature = "treesitter")]
+pub use callees::FindCalleesTool;
+#[cfg(feature = "treesitter")]
+pub use callers::FindCallersTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

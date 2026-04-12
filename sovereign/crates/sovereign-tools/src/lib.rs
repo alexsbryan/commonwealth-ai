@@ -16,5 +16,7 @@ pub mod shell;
 pub mod web;
 
 pub use code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
+#[cfg(feature = "treesitter")]
+pub use code::{FindCalleesTool, FindCallersTool};
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
 pub use sovereign_core;

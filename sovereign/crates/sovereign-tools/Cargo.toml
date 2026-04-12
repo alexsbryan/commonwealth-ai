@@ -31,9 +31,12 @@ arrow-array = "57"
 [features]
 default = []
 email = ["lettre"]
+treesitter = ["corpus-engine/treesitter"]
 
 [dev-dependencies]
 sovereign-store = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 tempfile = "3"
+tokio = { workspace = true, features = ["test-util"] }
+filetime = "0.2"

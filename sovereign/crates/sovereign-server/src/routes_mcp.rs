@@ -214,7 +214,13 @@ async fn mcp_message(
 /// only the three Code Intelligence tools are v1. Adding a tool here
 /// without also implementing it would be a trust violation, so the
 /// list is colocated with the handler and tested against the spec.
-const MCP_EXPOSED_TOOLS: &[&str] = &["symbol_lookup", "code_search", "recent_changes"];
+const MCP_EXPOSED_TOOLS: &[&str] = &[
+    "symbol_lookup",
+    "code_search",
+    "recent_changes",
+    "find_callees",
+    "find_callers",
+];
 
 pub(crate) fn handle_tools_list(registry: &ToolRegistry, id: Value) -> JsonRpcResponse {
     let mut tools = Vec::new();
@@ -239,7 +245,7 @@ pub(crate) fn handle_tools_list(registry: &ToolRegistry, id: Value) -> JsonRpcRe
 /// graph tracing, cross-file references, impact analysis. Any agent
 /// asking for these gets a useful message back, not an error or a
 /// hallucinated answer.
-const UNSUPPORTED_TOOLS: &[&str] = &["find_callers", "find_references", "impact_analysis"];
+const UNSUPPORTED_TOOLS: &[&str] = &["find_references", "impact_analysis"];
 
 pub(crate) async fn handle_tools_call(
     registry: &ToolRegistry,
@@ -373,6 +379,10 @@ mod tests {
 
     fn registry_with_code_tools() -> ToolRegistry {
         let engine = empty_engine();
+        let graph = Arc::new(
+            corpus_engine::ScipGraph::open_in_memory("test")
+                .expect("in-memory ScipGraph"),
+        );
         let mut registry = ToolRegistry::new();
         registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
             Arc::clone(&engine),
@@ -382,6 +392,14 @@ mod tests {
         )));
         registry.register(Box::new(sovereign_tools::RecentChangesTool::new(
             Arc::clone(&engine),
+        )));
+        registry.register(Box::new(sovereign_tools::FindCalleesTool::new(
+            Arc::clone(&engine),
+            Arc::clone(&graph),
+        )));
+        registry.register(Box::new(sovereign_tools::FindCallersTool::new(
+            Arc::clone(&engine),
+            Arc::clone(&graph),
         )));
         registry
     }
@@ -421,16 +439,16 @@ mod tests {
 
     #[test]
     fn unsupported_tools_covered() {
-        for t in ["find_callers", "find_references", "impact_analysis"] {
+        for t in ["find_references", "impact_analysis"] {
             assert!(UNSUPPORTED_TOOLS.contains(&t));
         }
     }
 
     #[test]
-    fn mcp_exposed_tools_are_the_three_v1_tools() {
+    fn mcp_exposed_tools_are_the_five_v2_tools() {
         assert_eq!(
             MCP_EXPOSED_TOOLS,
-            &["symbol_lookup", "code_search", "recent_changes"]
+            &["symbol_lookup", "code_search", "recent_changes", "find_callees", "find_callers"]
         );
     }
 
@@ -448,8 +466,11 @@ mod tests {
             .filter_map(|t| t["name"].as_str())
             .collect();
 
-        // All three v1 tools must be present
-        for required in &["symbol_lookup", "code_search", "recent_changes"] {
+        // All five v2 tools must be present
+        for required in &[
+            "symbol_lookup", "code_search", "recent_changes",
+            "find_callees", "find_callers",
+        ] {
             assert!(
                 names.contains(required),
                 "Required tool `{required}` missing from tools/list"
@@ -459,7 +480,6 @@ mod tests {
         // Out-of-scope tools never appear, even if someone adds them
         // to the registry later and forgets to update `MCP_EXPOSED_TOOLS`.
         for excluded in &[
-            "find_callers",
             "find_references",
             "impact_analysis",
             "decision_context",
@@ -472,8 +492,8 @@ mod tests {
             );
         }
 
-        // Exactly 3 tools — no stragglers.
-        assert_eq!(tools.len(), 3, "expected exactly 3 MCP tools");
+        // Exactly 5 tools — no stragglers.
+        assert_eq!(tools.len(), 5, "expected exactly 5 MCP tools");
     }
 
     // ─── T-16: Honest refusal for unsupported tools ──────────
@@ -482,7 +502,7 @@ mod tests {
     async fn t16_unsupported_tools_return_honest_refusal() {
         let registry = registry_with_code_tools();
 
-        for tool in &["find_callers", "find_references", "impact_analysis"] {
+        for tool in &["find_references", "impact_analysis"] {
             let params = serde_json::json!({
                 "name": tool,
                 "arguments": { "symbol": "execute_step" }
