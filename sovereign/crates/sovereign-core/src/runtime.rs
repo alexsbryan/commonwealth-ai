@@ -399,19 +399,43 @@ impl Runtime {
             self.build_oicp(LatencyPreference::BestEffort)
         };
 
+        // Search local knowledge: user documents + installed corpora.
         let embedding = self.inference.embed(message).await.unwrap_or_default();
-        let chunks = self
+        let user_doc_chunks = self
             .store
             .search_documents(&embedding, message, 5)
             .await
             .unwrap_or_default();
+
+        // Corpus-engine search (SEP, Wikipedia, etc.).
+        let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
+        let corpus_chunks = self
+            .search_corpus_indexes(&corpus_embedding, message, 5, "Stream")
+            .await;
+
+        // Merge into ScoredChunks, sort by score.
+        let mut all_chunks: Vec<corpus_engine::ScoredChunk> = corpus_chunks;
+        for doc in &user_doc_chunks {
+            all_chunks.push(corpus_engine::ScoredChunk {
+                content: doc.content.clone(),
+                title: Some(doc.source.clone()),
+                url: None,
+                corpus_id: "user_document".to_string(),
+                score: 0.5,
+                metadata: HashMap::new(),
+            });
+        }
+        all_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        all_chunks.truncate(8);
+
+        let chunks = all_chunks;
 
         let installed_corpora = self
             .store
             .list_corpus_states()
             .await
             .unwrap_or_default();
-        let corpora_searched = !installed_corpora.is_empty();
+        let corpora_searched = !installed_corpora.is_empty() || self.corpus_engine.is_some();
 
         let search_method = if !chunks.is_empty() {
             Some("LocalOnly".to_string())
@@ -430,7 +454,7 @@ impl Runtime {
         let history = format_history_as_prompt(&context, 10);
 
         let prompt = if !chunks.is_empty() {
-            let doc_context = truncate_knowledge_context(&chunks, MAX_KNOWLEDGE_CHARS);
+            let doc_context = format_scored_chunks(&chunks, MAX_KNOWLEDGE_CHARS);
             if history.is_empty() {
                 format!(
                     "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
@@ -478,12 +502,7 @@ impl Runtime {
         // model_id/latency on completion).
         let mut source_map: HashMap<String, usize> = HashMap::new();
         for c in &chunks {
-            let origin = match &c.source_type {
-                SourceType::Corpus { corpus_id } => corpus_id.clone(),
-                SourceType::WebSearch { .. } => "web".to_string(),
-                SourceType::UserDocument => "user_document".to_string(),
-            };
-            *source_map.entry(origin).or_insert(0) += 1;
+            *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
         }
         if chunks.is_empty() && corpora_searched {
             for cs in &installed_corpora {
