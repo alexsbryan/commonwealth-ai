@@ -7977,12 +7977,15 @@ name = "sovereign-tools"
 version = "0.1.0"
 dependencies = [
  "arrow 55.2.0",
+ "arrow-array 57.3.0",
  "async-trait",
  "bzip2",
+ "chrono",
  "corpus-engine",
  "flate2",
  "futures",
  "glob",
+ "lancedb",
  "lettre",
  "parquet 55.2.0",
  "quick-xml 0.37.5",

@@ -227,6 +227,17 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // Code Intelligence v1 tools.
+    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+        Arc::clone(&corpus_engine),
+    )));
+    tools.register(Box::new(
+        sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
+            .with_inference(Arc::clone(&inference)),
+    ));
+    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
+        Arc::clone(&corpus_engine),
+    )));
 
     // Connect MCP servers (stdio and HTTP+SSE).
     let _mcp_manager = sovereign_tools::mcp::McpServerManager::from_config(

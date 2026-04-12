@@ -1,0 +1,96 @@
+[skill]
+id = "codebase-navigator"
+name = "Codebase Navigator"
+version = "0.1.0"
+description = "Navigate, search, and review code in your private codebase via the Code Intelligence tools."
+
+[routing]
+trigger_phrases = [
+    "find", "find the function", "find the class", "find the struct",
+    "where is", "look up", "symbol lookup",
+    "what changed", "recent changes", "what did I change",
+    "search the code", "semantic code", "in the codebase",
+    "implementation of", "definition of",
+]
+default_intent = "KnowledgeQuery"
+min_confidence = 0.70
+
+[[planner.templates]]
+name = "symbol_lookup"
+trigger = "User asks for a specific symbol by name (function, class, struct, etc.)"
+steps = """
+1. Call symbol_lookup with the exact name and optional kind filter.
+2. If no exact match, offer code_search as the fallback.
+3. Cite file path + line number for every result shown.
+"""
+
+[[planner.templates]]
+name = "code_exploration"
+trigger = "User describes behaviour or concept and wants to find related code"
+steps = """
+1. Call code_search with the user's description.
+2. ALWAYS include the word 'approximate' when presenting results.
+3. Offer symbol_lookup as the exact-match follow-up when a specific name becomes clear.
+"""
+
+[[planner.templates]]
+name = "recent_changes_review"
+trigger = "User wants to know what changed recently"
+steps = """
+1. Call recent_changes with the hours window (default 24).
+2. Summarise which files and symbols changed; do not speculate on WHY.
+3. Offer symbol_lookup for any specific symbol the user wants to examine.
+"""
+
+[tools]
+required = ["symbol_lookup", "code_search", "recent_changes"]
+optional = ["file", "shell"]
+
+[prompts]
+synthesis = """
+You have three code intelligence tools backed by a local tree-sitter index:
+
+  symbol_lookup   EXACT name match. Always correct. Use when the name is known.
+  code_search     APPROXIMATE semantic search. Label results as approximate.
+  recent_changes  EXACT list by file mtime. Always correct.
+
+Rules of engagement — these are non-negotiable:
+- Never describe code you haven't retrieved.
+- Cite file path and line number for every code reference.
+- Prefix code_search results with 'Based on semantically similar code in…' —
+  the tool already labels output approximate; keep that label in your synthesis.
+- If asked for callers, cross-file usages, or impact analysis, answer honestly:
+  'Caller tracing isn't available in this version. I can find the definition
+  with symbol_lookup or semantically similar code with code_search — would
+  either help?'
+- If asked to modify code, use the `file` tool to read the full current contents
+  before proposing edits. Index chunks carry context but may not include every
+  relevant line.
+- If the three tools return nothing, say so plainly. Do not fabricate a plausible
+  implementation from memory.
+
+Your job is navigation and grounded synthesis. Correctness matters more than
+comprehensiveness. A limited-but-accurate answer builds trust. A confident
+guess destroys it.
+"""
+
+[inference]
+privacy = "LocalOnly"
+min_context_tokens = 8192
+
+[inference.preferred_capabilities]
+code = 3
+instruction = 3
+
+[inference.required_capabilities]
+code = 2
+
+[memory]
+extract_prompt_addendum = """
+For codebase navigation conversations, extract:
+- The user's primary languages and repos of interest.
+- Naming conventions or project layout patterns they've mentioned.
+- Modules or subsystems the user returns to repeatedly.
+Do NOT extract: specific line numbers, symbol names, or code snippets — these
+go stale quickly and are already available via the three tools.
+"""

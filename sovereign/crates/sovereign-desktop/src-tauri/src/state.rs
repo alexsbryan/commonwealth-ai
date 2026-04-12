@@ -516,6 +516,17 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // Code Intelligence v1 tools.
+    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+        Arc::clone(&corpus_engine),
+    )));
+    tools.register(Box::new(
+        sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
+            .with_inference(Arc::clone(&inference)),
+    ));
+    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     tracing::info!("Tools: {} registered", tools.count());
 
     let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =

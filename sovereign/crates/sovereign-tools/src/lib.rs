@@ -1,4 +1,5 @@
 pub mod calendar;
+pub mod code;
 pub mod compute;
 pub mod corpus;
 pub mod document;
@@ -14,5 +15,6 @@ pub mod search;
 pub mod shell;
 pub mod web;
 
+pub use code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
 pub use sovereign_core;

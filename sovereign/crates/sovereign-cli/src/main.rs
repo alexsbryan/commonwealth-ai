@@ -351,6 +351,19 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // Code Intelligence v1 tools — active as soon as any code corpus is
+    // indexed via `sovereign code index`. They always register; with no
+    // code corpora they return "no results" honestly rather than failing.
+    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+        Arc::clone(&corpus_engine),
+    )));
+    tools.register(Box::new(
+        sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
+            .with_inference(Arc::clone(&inference_arc)),
+    ));
+    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     // Select search backend: Tavily > Brave > DuckDuckGo (free default).
     let search_backend = if let Some(ref key) = args.tavily_api_key {
         eprintln!("Search: Tavily");
