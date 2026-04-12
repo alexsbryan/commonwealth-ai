@@ -1,3 +1,4 @@
+mod code_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
 mod recipe_cmd;
@@ -206,6 +207,10 @@ async fn main() {
             }
             "recipe" => {
                 let code = recipe_cmd::run_recipe(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "code" => {
+                let code = code_cmd::run_code(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             _ => {}
