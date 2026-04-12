@@ -32,6 +32,8 @@ pub async fn run_code(args: &[String]) -> i32 {
 
     match args[0].as_str() {
         "index" => cmd_index(&args[1..]).await,
+        "watch" => cmd_watch(&args[1..]).await,
+        "mcp-status" => cmd_mcp_status(&args[1..]).await,
         "search" => cmd_search(&args[1..]).await,
         "help" | "--help" | "-h" => {
             print_usage();
@@ -50,18 +52,25 @@ fn print_usage() {
         "Usage: sovereign code <command>
 
 Commands:
-  index <path>        Index a local repository with tree-sitter (Phase 1)
+  index <path>        Index a local repository with tree-sitter
     --corpus-id <id>  Corpus identifier (default: basename of <path>)
     --data-dir <dir>  Index directory (default: ~/.sovereign/indexes)
 
-  search <query>      Semantic search over indexed code (lands in Phase 2)
+  watch <corpus-id>   Run a filesystem watcher that re-indexes files on save
+    --root <path>     Override the source root stored at ingest time
+    --data-dir <dir>  Index directory (default: ~/.sovereign/indexes)
+
+  mcp-status          Ping the local MCP server and list exposed tools
+    --url <url>       Override the default http://localhost:8080/mcp
+
+  search <query>      Semantic search (use the Sovereign chat or MCP for now)
   help                Show this help
 
 Code Intelligence v1 is phased:
-  P1 (now)  — corpus indexing via this command
-  P2 (next) — three tools usable from Sovereign chat
-  P3        — filesystem watcher (incremental reindex on save)
-  P4        — MCP HTTP server (Claude Code / Cursor integration)"
+  P1  — corpus indexing via `code index`
+  P2  — three tools (symbol_lookup, code_search, recent_changes)
+  P3  — filesystem watcher (this command)
+  P4  — MCP HTTP server"
     );
 }
 
@@ -217,6 +226,261 @@ vector = false
             1
         }
     }
+}
+
+// ─── watch (P3) ───────────────────────────────────────────────
+
+async fn cmd_watch(args: &[String]) -> i32 {
+    let mut corpus_id: Option<String> = None;
+    let mut root_override: Option<PathBuf> = None;
+    let mut data_dir: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                root_override = args.get(i).map(PathBuf::from);
+                if root_override.is_none() {
+                    eprintln!("error: --root requires a value");
+                    return 1;
+                }
+            }
+            "--data-dir" => {
+                i += 1;
+                data_dir = args.get(i).map(PathBuf::from);
+                if data_dir.is_none() {
+                    eprintln!("error: --data-dir requires a value");
+                    return 1;
+                }
+            }
+            flag if flag.starts_with('-') => {
+                eprintln!("warning: unknown flag '{flag}' — ignored");
+            }
+            v => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(v.to_string());
+                } else {
+                    eprintln!("warning: ignoring extra positional arg '{v}'");
+                }
+            }
+        }
+        i += 1;
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("error: missing <corpus-id>");
+        return 1;
+    };
+
+    let data_dir = data_dir
+        .or_else(default_data_dir)
+        .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
+
+    // Open the index to discover the source_path unless the caller
+    // overrode it. Doing this via CorpusIndex means the meta-file
+    // schema is the single source of truth.
+    let index_path = data_dir.join(&corpus_id);
+    if !index_path.exists() {
+        eprintln!(
+            "error: no index for corpus '{corpus_id}' at {}",
+            index_path.display()
+        );
+        eprintln!("Run `sovereign code index <path> --corpus-id {corpus_id}` first.");
+        return 1;
+    }
+
+    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("error: cannot open index: {e}");
+            return 1;
+        }
+    };
+
+    let root = match root_override {
+        Some(p) => p,
+        None => match index.source_path() {
+            Some(p) => p,
+            None => {
+                eprintln!(
+                    "error: corpus '{corpus_id}' has no recorded source_path. \
+                     Re-index with `sovereign code index <path>`, or pass `--root <path>`."
+                );
+                return 1;
+            }
+        },
+    };
+
+    if !root.exists() {
+        eprintln!(
+            "error: source root '{}' does not exist. Use --root to override.",
+            root.display()
+        );
+        return 1;
+    }
+    drop(index); // Watcher owns its own CorpusIndex handle via the engine.
+
+    let embed: EmbedFn = Arc::new(|_text: &str| {
+        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+    });
+    let recipes_dir = data_dir.clone(); // unused placeholder — engine requires one
+    let engine = Arc::new(corpus_engine::CorpusEngine::new(
+        recipes_dir,
+        data_dir.clone(),
+        embed,
+    ));
+
+    eprintln!("Watching {} for corpus '{corpus_id}'", root.display());
+    eprintln!("Press Ctrl-C to stop.");
+
+    let watcher = corpus_engine::update::watch::CodeWatcher::new(
+        Arc::clone(&engine),
+        corpus_id.clone(),
+        root.clone(),
+    );
+
+    let handle = match watcher.start().await {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("error: failed to start watcher: {e}");
+            return 1;
+        }
+    };
+
+    // Keep the process alive until Ctrl-C. The watcher handle aborts
+    // its background task on drop.
+    match tokio::signal::ctrl_c().await {
+        Ok(()) => {
+            eprintln!("\nShutting down watcher...");
+            handle.abort();
+            0
+        }
+        Err(e) => {
+            eprintln!("error: failed to install ctrl-c handler: {e}");
+            1
+        }
+    }
+}
+
+// ─── mcp-status (P4) ──────────────────────────────────────────
+
+async fn cmd_mcp_status(args: &[String]) -> i32 {
+    let mut url = "http://localhost:8080/mcp".to_string();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--url" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => url = v.clone(),
+                    None => {
+                        eprintln!("error: --url requires a value");
+                        return 1;
+                    }
+                }
+            }
+            flag if flag.starts_with('-') => {
+                eprintln!("warning: unknown flag '{flag}' — ignored");
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    eprintln!("MCP endpoint: {url}");
+    let client = reqwest::Client::new();
+
+    // Step 1 — initialize handshake.
+    let init_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {}
+    });
+    let init_res = match client.post(&url).json(&init_body).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: cannot reach MCP server: {e}");
+            eprintln!("  Is `sovereign-server` running? Start it with:");
+            eprintln!("    sovereign-server --config sovereign-server.toml");
+            return 1;
+        }
+    };
+    if !init_res.status().is_success() {
+        eprintln!("error: initialize returned HTTP {}", init_res.status());
+        return 1;
+    }
+    let init_json: serde_json::Value = match init_res.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: initialize response not JSON: {e}");
+            return 1;
+        }
+    };
+    let version = init_json["result"]["protocolVersion"].as_str().unwrap_or("?");
+    let server_name = init_json["result"]["serverInfo"]["name"].as_str().unwrap_or("?");
+    let server_version = init_json["result"]["serverInfo"]["version"].as_str().unwrap_or("?");
+    println!("  ✓ initialize");
+    println!("    protocolVersion: {version}");
+    println!("    serverInfo:      {server_name} v{server_version}");
+
+    // Step 2 — tools/list.
+    let list_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+    let message_url = format!("{url}/message");
+    let list_res = match client.post(&message_url).json(&list_body).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: tools/list failed: {e}");
+            return 1;
+        }
+    };
+    let list_json: serde_json::Value = match list_res.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: tools/list response not JSON: {e}");
+            return 1;
+        }
+    };
+    let tools = list_json["result"]["tools"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    println!("  ✓ tools/list  ({} exposed)", tools.len());
+    for tool in &tools {
+        let name = tool["name"].as_str().unwrap_or("?");
+        let desc = tool["description"]
+            .as_str()
+            .unwrap_or("")
+            .lines()
+            .next()
+            .unwrap_or("");
+        println!("      {name} — {desc}");
+    }
+
+    if tools.is_empty() {
+        eprintln!();
+        eprintln!("warning: no tools exposed. Rebuild with --features treesitter");
+        eprintln!("         and make sure a code corpus is indexed.");
+        return 1;
+    }
+
+    eprintln!();
+    eprintln!("To wire Claude Code, add to ~/.claude/settings.json:");
+    eprintln!("  {{");
+    eprintln!("    \"mcpServers\": {{");
+    eprintln!("      \"sovereign\": {{");
+    eprintln!("        \"type\": \"http\",");
+    eprintln!("        \"url\": \"{url}\"");
+    eprintln!("      }}");
+    eprintln!("    }}");
+    eprintln!("  }}");
+    0
 }
 
 // ─── search (P2 placeholder) ──────────────────────────────────

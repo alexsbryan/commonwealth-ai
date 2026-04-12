@@ -2,9 +2,11 @@ mod approval;
 mod auth;
 mod config;
 mod routes;
+mod routes_mcp;
 mod tenant;
 mod ws;
 
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -272,8 +274,10 @@ async fn main() {
         AuthState::disabled()
     };
 
-    // Build Axum router.
-    let app = axum::Router::new()
+    // Build Axum router. The `/v1/*` API goes through the auth
+    // middleware; the MCP routes do not — MCP is local-only and
+    // enforced via `ConnectInfo<SocketAddr>` inside the handlers.
+    let authed = axum::Router::new()
         .route("/v1/conversations", post(routes::create_conversation))
         .route("/v1/conversations", get(routes::list_conversations))
         .route("/v1/conversations/{id}", get(routes::get_conversation))
@@ -290,8 +294,11 @@ async fn main() {
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
         .layer(middleware::from_fn(auth::auth_middleware))
-        .layer(Extension(auth_state))
-        .layer(Extension(runtime))
+        .layer(Extension(auth_state));
+
+    let app = authed
+        .merge(routes_mcp::mcp_router())
+        .layer(Extension(Arc::clone(&runtime)))
         .layer(Extension(approval))
         .layer(CorsLayer::permissive());
 
@@ -307,7 +314,12 @@ async fn main() {
         }
     };
 
-    if let Err(e) = axum::serve(listener, app).await {
+    // Use `into_make_service_with_connect_info` so MCP handlers can
+    // extract `ConnectInfo<SocketAddr>` to enforce localhost-only
+    // access. Without this the extractor fails and every MCP request
+    // is rejected.
+    let service = app.into_make_service_with_connect_info::<SocketAddr>();
+    if let Err(e) = axum::serve(listener, service).await {
         eprintln!("Server error: {e}");
         std::process::exit(1);
     }
