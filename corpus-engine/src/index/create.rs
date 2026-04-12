@@ -169,6 +169,7 @@ impl CorpusIndex {
             created_at: now,
             last_updated: now,
             schema_version: super::CURRENT_INDEX_SCHEMA_VERSION,
+            source_path: None,
             is_shard: false,
             chunk_range_start: None,
             chunk_range_end: None,

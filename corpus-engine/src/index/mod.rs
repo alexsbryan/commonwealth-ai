@@ -6,7 +6,7 @@ mod enrichment;
 mod search;
 mod write;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -228,6 +228,14 @@ struct IndexMeta {
     /// Manifest URL for update checks.
     #[serde(default)]
     update_manifest_url: Option<String>,
+
+    /// Absolute source directory for code corpora, captured at ingest
+    /// time from the recipe's `[acquire] local_file path`. Used by the
+    /// `sovereign code watch` subcommand so the watcher knows where to
+    /// observe. `None` for non-code corpora; present with `#[serde(default)]`
+    /// so pre-v2 indexes deserialize cleanly.
+    #[serde(default)]
+    source_path: Option<String>,
 }
 
 fn meta_path(index_dir: &Path) -> std::path::PathBuf {
@@ -436,6 +444,24 @@ impl CorpusIndex {
         meta.chunk_range_start = Some(chunk_range.start_id);
         meta.chunk_range_end = Some(chunk_range.end_id);
         write_meta(index_dir, &meta)
+    }
+
+    /// Record the filesystem source path for this corpus. Called by the
+    /// ingest pipeline for code corpora so the `sovereign code watch`
+    /// subcommand (and any future re-index caller) can find the
+    /// original directory without re-parsing the recipe.
+    pub fn set_source_path(&self, path: &Path) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.source_path = Some(path.to_string_lossy().into_owned());
+        write_meta(index_dir, &meta)
+    }
+
+    /// Return the recorded source path (absolute) for this corpus, if any.
+    /// Used by the `sovereign code watch` subcommand.
+    pub fn source_path(&self) -> Option<PathBuf> {
+        let index_dir = Path::new(self.db.uri());
+        read_meta(index_dir).ok().and_then(|m| m.source_path.map(PathBuf::from))
     }
 
     /// The corpus ID this index belongs to.

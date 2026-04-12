@@ -460,6 +460,28 @@ impl CorpusEngine {
             tracing::warn!("Failed to mark ingestion complete for '{}': {e}", recipe.corpus.id);
         }
 
+        // For code corpora sourced from a local directory, record the
+        // absolute source path so the watcher can find the root without
+        // re-parsing the recipe. `reindex_file` and `sovereign code watch`
+        // both rely on this.
+        if matches!(recipe.extract, crate::recipe::ExtractorConfig::Code { .. }) {
+            if let crate::recipe::AcquirerConfig::LocalFile { path } = &recipe.acquire {
+                // Expand `~` the same way LocalFileAcquirer does —
+                // via $HOME so we don't take a `dirs` dep.
+                let resolved = if let Some(rest) = path.strip_prefix("~/") {
+                    std::env::var("HOME")
+                        .map(|h| PathBuf::from(h).join(rest))
+                        .unwrap_or_else(|_| PathBuf::from(path))
+                } else {
+                    PathBuf::from(path)
+                };
+                let abs = resolved.canonicalize().unwrap_or(resolved);
+                if let Err(e) = index.set_source_path(&abs) {
+                    tracing::warn!("Failed to set source_path for '{}': {e}", recipe.corpus.id);
+                }
+            }
+        }
+
         eprintln!(
             "[{}] Ingestion complete — {total_chunks} chunks in {}m{}s",
             recipe.corpus.id,

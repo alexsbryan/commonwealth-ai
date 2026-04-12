@@ -3,6 +3,9 @@
 
 mod ingest;
 
+#[cfg(feature = "treesitter")]
+pub mod reindex;
+
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};

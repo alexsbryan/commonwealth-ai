@@ -82,6 +82,7 @@ tree-sitter-go         = { version = "0.25", optional = true }
 tree-sitter-python     = { version = "0.25", optional = true }
 streaming-iterator     = { version = "0.1",  optional = true }
 walkdir                = { version = "2",    optional = true }
+notify                 = { version = "8",    optional = true }
 
 [features]
 default = []
@@ -95,6 +96,7 @@ treesitter = [
     "dep:tree-sitter-python",
     "dep:streaming-iterator",
     "dep:walkdir",
+    "dep:notify",
 ]
 
 [dev-dependencies]
