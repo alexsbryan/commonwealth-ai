@@ -64,38 +64,6 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
-/// Build a truncated knowledge context string from document chunks,
-/// staying within a character budget to avoid exceeding model context limits.
-fn truncate_knowledge_context(chunks: &[DocumentChunk], max_chars: usize) -> String {
-    let mut parts = Vec::new();
-    let mut total = 0;
-
-    for c in chunks {
-        let content = if c.content.len() > MAX_CHUNK_CHARS {
-            // Truncate at a word boundary.
-            let truncated = &c.content[..MAX_CHUNK_CHARS];
-            match truncated.rfind(' ') {
-                Some(pos) => format!("{}...", &truncated[..pos]),
-                None => format!("{truncated}..."),
-            }
-        } else {
-            c.content.clone()
-        };
-
-        let part = format!("[Source: {}]\n{content}", c.source);
-        let part_len = part.len() + 5; // account for separator
-
-        if total + part_len > max_chars {
-            break;
-        }
-
-        total += part_len;
-        parts.push(part);
-    }
-
-    parts.join("\n\n---\n\n")
-}
-
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
@@ -126,6 +94,20 @@ fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize)
     }
 
     parts.join("\n\n---\n\n")
+}
+
+/// Pre-computed knowledge context shared between streaming and non-streaming
+/// response paths. Produced by [`Runtime::prepare_knowledge_context`] so the
+/// two paths cannot diverge in how they search, build prompts, or report
+/// provenance.
+struct KnowledgeContext {
+    #[allow(dead_code)]
+    chunks: Vec<corpus_engine::ScoredChunk>,
+    prompt: String,
+    system: String,
+    speed: Speed,
+    search_method: Option<String>,
+    sources: Vec<SourceSummary>,
 }
 
 /// Streaming handle returned by [`Runtime::handle_message_stream`].
@@ -246,6 +228,138 @@ impl Runtime {
             }
         }
         chunks
+    }
+
+    /// Search all knowledge sources, build the prompt with retrieved context,
+    /// and assemble provenance metadata. Shared between the streaming and
+    /// non-streaming response paths so they cannot diverge.
+    async fn prepare_knowledge_context(
+        &self,
+        message: &str,
+        context: &ConversationContext,
+        intent: &Intent,
+    ) -> KnowledgeContext {
+        // 1. User documents (StateStore FTS5/vector).
+        let embedding = self.inference.embed(message).await.unwrap_or_default();
+        let user_doc_chunks = self
+            .store
+            .search_documents(&embedding, message, 5)
+            .await
+            .unwrap_or_default();
+
+        // 2. Installed corpora (corpus-engine LanceDB indexes).
+        let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
+        let label = format!("{intent:?}");
+        let corpus_chunks = self
+            .search_corpus_indexes(&corpus_embedding, message, 5, &label)
+            .await;
+
+        // 3. Merge into ScoredChunks, sort by score, truncate.
+        let mut all_chunks: Vec<corpus_engine::ScoredChunk> = corpus_chunks;
+        for doc in &user_doc_chunks {
+            all_chunks.push(corpus_engine::ScoredChunk {
+                content: doc.content.clone(),
+                title: Some(doc.source.clone()),
+                url: None,
+                corpus_id: "user_document".to_string(),
+                score: 0.5,
+                metadata: HashMap::new(),
+            });
+        }
+        all_chunks.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        all_chunks.truncate(8);
+
+        // 4. Provenance metadata.
+        let installed_corpora = self
+            .store
+            .list_corpus_states()
+            .await
+            .unwrap_or_default();
+        let corpora_searched = !installed_corpora.is_empty() || self.corpus_engine.is_some();
+
+        let search_method = if !all_chunks.is_empty() {
+            Some("LocalOnly".to_string())
+        } else if corpora_searched {
+            Some("LocalOnly (no matches)".to_string())
+        } else {
+            None
+        };
+
+        let mut source_map: HashMap<String, usize> = HashMap::new();
+        for c in &all_chunks {
+            *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
+        }
+        if all_chunks.is_empty() && corpora_searched {
+            for cs in &installed_corpora {
+                source_map.entry(cs.corpus_id.clone()).or_insert(0);
+            }
+        }
+        let sources: Vec<SourceSummary> = source_map
+            .into_iter()
+            .map(|(origin, count)| SourceSummary { origin, count })
+            .collect();
+
+        // 5. Build prompt with knowledge context.
+        let history = format_history_as_prompt(context, 10);
+        let prompt = if !all_chunks.is_empty() {
+            let doc_context = format_scored_chunks(&all_chunks, MAX_KNOWLEDGE_CHARS);
+            if history.is_empty() {
+                format!(
+                    "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
+                )
+            } else {
+                let short_history = format_history_as_prompt(context, 4);
+                format!(
+                    "{short_history}\n\nRelevant knowledge:\n{doc_context}\n\nAssistant:"
+                )
+            }
+        } else if history.is_empty() {
+            message.to_string()
+        } else {
+            format!("{history}\n\nAssistant:")
+        };
+
+        // 6. System message — epistemic contract when knowledge is present.
+        let system = if !all_chunks.is_empty() {
+            self.build_primary_system_message(
+                "Answer based on the provided knowledge sources when relevant. \
+                 Cite sources when referencing them using [Source: name] notation. \
+                 If you make a claim NOT directly supported by the provided sources, \
+                 mark it with [unverified].",
+                context,
+            )
+        } else {
+            self.build_system_message(
+                "You are a helpful AI assistant. Respond concisely and accurately.",
+                context,
+            )
+        };
+
+        // 7. Speed upgrade: if knowledge found for SimpleQuery, use Slow.
+        let speed = match intent {
+            Intent::SimpleQuery => {
+                if !all_chunks.is_empty() {
+                    Speed::Slow
+                } else {
+                    Speed::Fast
+                }
+            }
+            Intent::DeepQuery => Speed::Slow,
+            _ => Speed::Medium,
+        };
+
+        KnowledgeContext {
+            chunks: all_chunks,
+            prompt,
+            system,
+            speed,
+            search_method,
+            sources,
+        }
     }
 
     /// Build OICP requirements from active skills for non-Fast requests.
@@ -383,15 +497,10 @@ impl Runtime {
             ));
         }
 
-        // 4. Build the completion request (mirrors handle_simple).
-        let speed = match intent {
-            Intent::SimpleQuery => Speed::Fast,
-            Intent::DeepQuery => Speed::Slow,
-            _ => Speed::Medium,
-        };
-
-        // Capture model ID before spawning — complete_stream returns no metadata.
-        let model_id = self.inference.model_id_for(speed);
+        // 4. Search knowledge + build prompt (shared with handle_simple).
+        let kc = self
+            .prepare_knowledge_context(message, &context, &intent)
+            .await;
 
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
@@ -399,96 +508,13 @@ impl Runtime {
             self.build_oicp(LatencyPreference::BestEffort)
         };
 
-        // Search local knowledge: user documents + installed corpora.
-        let embedding = self.inference.embed(message).await.unwrap_or_default();
-        let user_doc_chunks = self
-            .store
-            .search_documents(&embedding, message, 5)
-            .await
-            .unwrap_or_default();
-
-        // Corpus-engine search (SEP, Wikipedia, etc.).
-        let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
-        let corpus_chunks = self
-            .search_corpus_indexes(&corpus_embedding, message, 5, "Stream")
-            .await;
-
-        // Merge into ScoredChunks, sort by score.
-        let mut all_chunks: Vec<corpus_engine::ScoredChunk> = corpus_chunks;
-        for doc in &user_doc_chunks {
-            all_chunks.push(corpus_engine::ScoredChunk {
-                content: doc.content.clone(),
-                title: Some(doc.source.clone()),
-                url: None,
-                corpus_id: "user_document".to_string(),
-                score: 0.5,
-                metadata: HashMap::new(),
-            });
-        }
-        all_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        all_chunks.truncate(8);
-
-        let chunks = all_chunks;
-
-        let installed_corpora = self
-            .store
-            .list_corpus_states()
-            .await
-            .unwrap_or_default();
-        let corpora_searched = !installed_corpora.is_empty() || self.corpus_engine.is_some();
-
-        let search_method = if !chunks.is_empty() {
-            Some("LocalOnly".to_string())
-        } else if corpora_searched {
-            Some("LocalOnly (no matches)".to_string())
-        } else {
-            None
-        };
-
-        let speed = if !chunks.is_empty() && matches!(intent, Intent::SimpleQuery) {
-            Speed::Slow
-        } else {
-            speed
-        };
-
-        let history = format_history_as_prompt(&context, 10);
-
-        let prompt = if !chunks.is_empty() {
-            let doc_context = format_scored_chunks(&chunks, MAX_KNOWLEDGE_CHARS);
-            if history.is_empty() {
-                format!(
-                    "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
-                )
-            } else {
-                let history = format_history_as_prompt(&context, 4);
-                format!(
-                    "{history}\n\nRelevant knowledge:\n{doc_context}\n\nAssistant:"
-                )
-            }
-        } else if history.is_empty() {
-            message.to_string()
-        } else {
-            format!("{history}\n\nAssistant:")
-        };
-
-        let system = self.build_system_message(
-            if !chunks.is_empty() {
-                "You are a helpful AI assistant. Answer based on the provided knowledge sources when relevant. \
-                 Cite sources when referencing them using [Source: name] notation. \
-                 IMPORTANT: If you make a claim that is NOT directly supported by the provided sources, \
-                 mark it with [unverified] so the user knows it comes from your general knowledge rather \
-                 than a retrieved source. Only omit [unverified] when a claim is directly supported by \
-                 a provided source that you cite."
-            } else {
-                "You are a helpful AI assistant. Respond concisely and accurately."
-            },
-            &context,
-        );
+        // Capture model ID before spawning — complete_stream returns no metadata.
+        let model_id = self.inference.model_id_for(kc.speed);
 
         let request = CompletionRequest {
-            prompt,
-            system_message: Some(system),
-            preferred_speed: speed,
+            prompt: kc.prompt,
+            system_message: Some(kc.system),
+            preferred_speed: kc.speed,
             max_tokens: Some(self.inference_config.max_tokens),
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(self.inference_config.think_budget),
@@ -498,21 +524,8 @@ impl Runtime {
             oicp,
         };
 
-        // Build provenance source map (no inference results yet — we fill in
-        // model_id/latency on completion).
-        let mut source_map: HashMap<String, usize> = HashMap::new();
-        for c in &chunks {
-            *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
-        }
-        if chunks.is_empty() && corpora_searched {
-            for cs in &installed_corpora {
-                source_map.entry(cs.corpus_id.clone()).or_insert(0);
-            }
-        }
-        let sources: Vec<SourceSummary> = source_map
-            .into_iter()
-            .map(|(origin, count)| SourceSummary { origin, count })
-            .collect();
+        let search_method = kc.search_method;
+        let sources = kc.sources;
 
         let intent_label = format!("{intent:?}");
         let message_id = uuid::Uuid::new_v4().to_string();
@@ -646,8 +659,7 @@ impl Runtime {
     }
 
     /// Handle SimpleQuery, DeepQuery, and other non-plan intents.
-    /// Always searches local knowledge bases for relevant context
-    /// before generating a response.
+    /// Searches all knowledge sources before generating a response.
     async fn handle_simple(
         &self,
         message: &str,
@@ -657,120 +669,21 @@ impl Runtime {
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
     ) -> Result<Response> {
-        let speed = match intent {
-            Intent::SimpleQuery => Speed::Fast,
-            Intent::DeepQuery => Speed::Slow,
-            _ => Speed::Medium,
-        };
+        // Search knowledge + build prompt (shared with handle_message_stream).
+        let kc = self
+            .prepare_knowledge_context(message, context, intent)
+            .await;
 
-        // SimpleQuery uses Fast slot (always local) — no OICP.
-        // DeepQuery may route to external providers — attach OICP.
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
         } else {
             self.build_oicp(LatencyPreference::BestEffort)
         };
 
-        // Search local knowledge bases for relevant context.
-        // 1. User documents (StateStore FTS5/vector — fast).
-        let embedding = self.inference.embed(message).await.unwrap_or_default();
-        let user_doc_chunks = self
-            .store
-            .search_documents(&embedding, message, 5)
-            .await
-            .unwrap_or_default();
-
-        // 2. Installed corpora (corpus-engine LanceDB indexes).
-        //    embed_query applies the instruction prefix for asymmetric models.
-        let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
-        let corpus_chunks = self
-            .search_corpus_indexes(&corpus_embedding, message, 5, "DeepQuery")
-            .await;
-
-        // Merge: user docs get converted to the same ScoredChunk shape,
-        // then we sort by score and truncate.
-        let mut all_chunks: Vec<corpus_engine::ScoredChunk> = corpus_chunks;
-        for doc in &user_doc_chunks {
-            all_chunks.push(corpus_engine::ScoredChunk {
-                content: doc.content.clone(),
-                title: Some(doc.source.clone()),
-                url: None,
-                corpus_id: "user_document".to_string(),
-                score: 0.5, // user docs don't carry scores from FTS5
-                metadata: HashMap::new(),
-            });
-        }
-        all_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        all_chunks.truncate(8);
-
-        // For the prompt and provenance, treat merged results as "chunks".
-        let chunks = all_chunks;
-
-        // Check what corpora are installed (for provenance reporting).
-        let installed_corpora = self
-            .store
-            .list_corpus_states()
-            .await
-            .unwrap_or_default();
-        let corpora_searched = !installed_corpora.is_empty() || self.corpus_engine.is_some();
-
-        let search_method = if !chunks.is_empty() {
-            Some("LocalOnly".to_string())
-        } else if corpora_searched {
-            Some("LocalOnly (no matches)".to_string())
-        } else {
-            None
-        };
-
-        // If local search found relevant results, upgrade SimpleQuery to Slow
-        // for a more thorough synthesis.
-        let speed = if !chunks.is_empty() && matches!(intent, Intent::SimpleQuery) {
-            Speed::Slow
-        } else {
-            speed
-        };
-
-        let history = format_history_as_prompt(context, 10);
-
-        let prompt = if !chunks.is_empty() {
-            let doc_context = format_scored_chunks(&chunks, MAX_KNOWLEDGE_CHARS);
-            if history.is_empty() {
-                format!(
-                    "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
-                )
-            } else {
-                let history = format_history_as_prompt(context, 4); // shorter history when knowledge is present
-                format!(
-                    "{history}\n\nRelevant knowledge:\n{doc_context}\n\nAssistant:"
-                )
-            }
-        } else if history.is_empty() {
-            message.to_string()
-        } else {
-            format!("{history}\n\nAssistant:")
-        };
-
-        // Use the epistemic base prompt when retrieval results are present
-        // (which also triggers Speed::Slow). Plain system prompt for Fast-slot answers.
-        let system = if !chunks.is_empty() {
-            self.build_primary_system_message(
-                "Answer based on the provided knowledge sources when relevant. \
-                 Cite sources when referencing them using [Source: name] notation. \
-                 If you make a claim NOT directly supported by the provided sources, \
-                 mark it with [unverified].",
-                context,
-            )
-        } else {
-            self.build_system_message(
-                "You are a helpful AI assistant. Respond concisely and accurately.",
-                context,
-            )
-        };
-
         let request = CompletionRequest {
-            prompt,
-            system_message: Some(system),
-            preferred_speed: speed,
+            prompt: kc.prompt,
+            system_message: Some(kc.system),
+            preferred_speed: kc.speed,
             max_tokens: Some(self.inference_config.max_tokens),
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(self.inference_config.think_budget),
@@ -782,25 +695,10 @@ impl Runtime {
 
         let completion = self.inference.complete(&request).await?;
 
-        // Build provenance with source info from retrieved chunks.
-        let mut source_map: HashMap<String, usize> = HashMap::new();
-        for c in &chunks {
-            *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
-        }
-        // If no results but corpora are installed, list them as "searched (0 results)".
-        if chunks.is_empty() && corpora_searched {
-            for cs in &installed_corpora {
-                source_map.entry(cs.corpus_id.clone()).or_insert(0);
-            }
-        }
-
         let provenance = ResponseProvenance {
             intent: format!("{intent:?}"),
-            search_method,
-            sources: source_map
-                .into_iter()
-                .map(|(origin, count)| SourceSummary { origin, count })
-                .collect(),
+            search_method: kc.search_method,
+            sources: kc.sources,
             inference_backend: completion.model_id.clone(),
             oicp_match: completion
                 .oicp_meta
