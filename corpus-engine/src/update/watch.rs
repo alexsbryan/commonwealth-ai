@@ -65,6 +65,8 @@ pub struct CodeWatcher {
     corpus_id: String,
     root: PathBuf,
     debounce: Duration,
+    #[cfg(feature = "treesitter")]
+    scip_graph: Option<Arc<crate::scip_graph::ScipGraph>>,
 }
 
 impl CodeWatcher {
@@ -74,6 +76,8 @@ impl CodeWatcher {
             corpus_id: corpus_id.into(),
             root,
             debounce: DEFAULT_DEBOUNCE,
+            #[cfg(feature = "treesitter")]
+            scip_graph: None,
         }
     }
 
@@ -81,6 +85,15 @@ impl CodeWatcher {
     /// bound — in production the default is the right value.
     pub fn with_debounce(mut self, debounce: Duration) -> Self {
         self.debounce = debounce;
+        self
+    }
+
+    /// Attach a SCIP call graph so the watcher can mark files as stale
+    /// when they're modified. Without this, the call graph has no
+    /// per-file staleness tracking.
+    #[cfg(feature = "treesitter")]
+    pub fn with_scip_graph(mut self, graph: Arc<crate::scip_graph::ScipGraph>) -> Self {
+        self.scip_graph = Some(graph);
         self
     }
 
@@ -129,9 +142,15 @@ impl CodeWatcher {
         let engine = self.engine;
         let corpus_id = self.corpus_id;
         let debounce = self.debounce;
+        #[cfg(feature = "treesitter")]
+        let scip_graph = self.scip_graph;
 
         let task = tokio::spawn(async move {
-            run_debouncer(rx, engine, corpus_id, root, debounce).await;
+            run_debouncer(
+                rx, engine, corpus_id, root, debounce,
+                #[cfg(feature = "treesitter")]
+                scip_graph,
+            ).await;
         });
 
         Ok(WatcherHandle {
@@ -149,6 +168,8 @@ async fn run_debouncer(
     corpus_id: String,
     root: PathBuf,
     debounce: Duration,
+    #[cfg(feature = "treesitter")]
+    scip_graph: Option<Arc<crate::scip_graph::ScipGraph>>,
 ) {
     // `pending` maps absolute path → (last_event_at, is_delete). We
     // track the last event time so we can flush only after idle; we
@@ -182,13 +203,21 @@ async fn run_debouncer(
                     None => {
                         // Sender dropped → the `notify` thread has gone
                         // away. Flush whatever is pending and exit.
-                        flush_ready(&mut pending, &engine, &corpus_id, &root, Duration::ZERO).await;
+                        flush_ready(
+                            &mut pending, &engine, &corpus_id, &root, Duration::ZERO,
+                            #[cfg(feature = "treesitter")]
+                            &scip_graph,
+                        ).await;
                         return;
                     }
                 }
             }
             _ = tokio::time::sleep(tick_interval) => {
-                flush_ready(&mut pending, &engine, &corpus_id, &root, debounce).await;
+                flush_ready(
+                    &mut pending, &engine, &corpus_id, &root, debounce,
+                    #[cfg(feature = "treesitter")]
+                    &scip_graph,
+                ).await;
             }
         }
     }
@@ -228,6 +257,8 @@ async fn flush_ready(
     corpus_id: &str,
     root: &Path,
     debounce: Duration,
+    #[cfg(feature = "treesitter")]
+    scip_graph: &Option<Arc<crate::scip_graph::ScipGraph>>,
 ) {
     let now = Instant::now();
     let ready: Vec<PathBuf> = pending
@@ -246,6 +277,14 @@ async fn flush_ready(
                     ?result,
                     "watcher reindexed"
                 );
+                // Mark the file stale in the call graph so queries for
+                // symbols in this file show staleness notes.
+                #[cfg(feature = "treesitter")]
+                if let Some(ref graph) = scip_graph {
+                    if let Ok(rel) = path.strip_prefix(root) {
+                        graph.mark_file_stale(&rel.to_string_lossy()).await;
+                    }
+                }
             }
             Err(e) => {
                 tracing::warn!(

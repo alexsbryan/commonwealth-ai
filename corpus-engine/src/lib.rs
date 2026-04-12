@@ -26,6 +26,14 @@ pub mod testing;
 pub mod types;
 pub mod update;
 
+// SCIP call graph (gated on treesitter alongside the code intelligence stack).
+#[cfg(feature = "treesitter")]
+pub mod scip_graph;
+#[cfg(feature = "treesitter")]
+pub mod scip_export;
+#[cfg(feature = "treesitter")]
+mod scip_proto;
+
 // ─── Public API Re-exports ──────────────────────────────
 
 pub use engine::CorpusEngine;
@@ -48,3 +56,6 @@ pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
     InferenceFn, IngestResult, ScoredChunk, ShardInfo,
 };
+
+#[cfg(feature = "treesitter")]
+pub use scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord};

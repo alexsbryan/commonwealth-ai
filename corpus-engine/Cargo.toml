@@ -84,6 +84,13 @@ streaming-iterator     = { version = "0.1",  optional = true }
 walkdir                = { version = "2",    optional = true }
 notify                 = { version = "8",    optional = true }
 
+# SCIP call graph (gated on `treesitter` feature alongside the code
+# intelligence stack). rusqlite stores the symbol graph, prost parses
+# SCIP protobuf exports, which detects exporter binaries on PATH.
+rusqlite               = { version = "0.35", features = ["bundled"], optional = true }
+prost                  = { version = "0.13", optional = true }
+which                  = { version = "7",    optional = true }
+
 [features]
 default = []
 treesitter = [
@@ -97,6 +104,9 @@ treesitter = [
     "dep:streaming-iterator",
     "dep:walkdir",
     "dep:notify",
+    "dep:rusqlite",
+    "dep:prost",
+    "dep:which",
 ]
 
 [dev-dependencies]
