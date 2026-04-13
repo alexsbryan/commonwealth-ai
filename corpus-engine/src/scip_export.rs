@@ -44,7 +44,7 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
         ScipExporterConfig {
             language_id: "rust",
             command: "rust-analyzer",
-            args: &["scip", "--output", "{output}"],
+            args: &["scip", ".", "--output", "{output}"],
             extensions: &["rs"],
             workspace_level: true,
             install_hint: "Install via rustup: rustup component add rust-analyzer",
@@ -176,24 +176,45 @@ pub async fn export_all(
             .map(|a| a.replace("{output}", scip_path.to_str().unwrap_or("")))
             .collect();
 
-        let status = tokio::process::Command::new(exporter.command)
+        let output = tokio::process::Command::new(exporter.command)
             .args(&args)
             .current_dir(repo_root)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
-            .status()
+            .output()
             .await
             .map_err(|e| Error::Io(e))?;
+        let status = output.status;
 
         if !status.success() {
+            let stderr_tail = String::from_utf8_lossy(&output.stderr);
+            let stderr_last = stderr_tail
+                .lines()
+                .rev()
+                .take(5)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>()
+                .join("\n");
             tracing::warn!(
                 language = exporter.language_id,
+                stderr = %stderr_last,
                 "SCIP export failed — {} call graph unavailable",
                 exporter.language_id,
             );
             summary.languages_skipped.push(SkippedLanguage {
                 language: exporter.language_id.to_string(),
-                reason: format!("{} exited with status {}", exporter.command, status),
+                reason: format!(
+                    "{} exited with status {}{}",
+                    exporter.command,
+                    status,
+                    if stderr_last.is_empty() {
+                        String::new()
+                    } else {
+                        format!("\n{stderr_last}")
+                    }
+                ),
                 install_hint: exporter.install_hint.to_string(),
             });
             progress(ScipProgress::Skipped {
@@ -269,12 +290,16 @@ pub fn parse_scip_file(
         };
 
         // Collect symbol definitions from SymbolInformation entries.
+        // Note: sym_info.symbol is Vec<u8> (not String) because
+        // rust-analyzer sometimes emits non-UTF-8 SCIP symbols. We
+        // convert to String with lossy replacement at comparison sites.
         for sym_info in &doc.symbols {
             if sym_info.symbol.is_empty() {
                 continue;
             }
+            let sym_str = scip_proto::sym_to_string(&sym_info.symbol);
             let display_name = if sym_info.display_name.is_empty() {
-                scip_proto::extract_symbol_name(&sym_info.symbol)
+                scip_proto::extract_symbol_name(&sym_str)
             } else {
                 sym_info.display_name.clone()
             };
@@ -284,7 +309,7 @@ pub fn parse_scip_file(
                 .occurrences
                 .iter()
                 .find(|occ| {
-                    occ.symbol == sym_info.symbol
+                    occ.symbol == sym_str
                         && (occ.symbol_roles & scip_proto::SymbolRole::DEFINITION) != 0
                 })
                 .map(|occ| {
@@ -326,10 +351,10 @@ pub fn parse_scip_file(
                 let display = doc
                     .symbols
                     .iter()
-                    .find(|s| s.symbol == occ.symbol)
+                    .find(|s| scip_proto::sym_to_string(&s.symbol) == occ.symbol)
                     .map(|s| {
                         if s.display_name.is_empty() {
-                            scip_proto::extract_symbol_name(&s.symbol)
+                            scip_proto::extract_symbol_name(&scip_proto::sym_to_string(&s.symbol))
                         } else {
                             s.display_name.clone()
                         }
@@ -363,18 +388,18 @@ pub fn parse_scip_file(
                 let callee_name = doc
                     .symbols
                     .iter()
-                    .find(|s| s.symbol == occ.symbol)
+                    .find(|s| scip_proto::sym_to_string(&s.symbol) == occ.symbol)
                     .map(|s| {
                         if s.display_name.is_empty() {
-                            scip_proto::extract_symbol_name(&s.symbol)
+                            scip_proto::extract_symbol_name(&scip_proto::sym_to_string(&s.symbol))
                         } else {
                             s.display_name.clone()
                         }
                     })
                     .or_else(|| {
-                        index.external_symbols.iter().find(|s| s.symbol == occ.symbol).map(|s| {
+                        index.external_symbols.iter().find(|s| scip_proto::sym_to_string(&s.symbol) == occ.symbol).map(|s| {
                             if s.display_name.is_empty() {
-                                scip_proto::extract_symbol_name(&s.symbol)
+                                scip_proto::extract_symbol_name(&scip_proto::sym_to_string(&s.symbol))
                             } else {
                                 s.display_name.clone()
                             }

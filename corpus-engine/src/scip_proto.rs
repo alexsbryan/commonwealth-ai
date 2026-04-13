@@ -99,11 +99,16 @@ pub struct Occurrence {
 }
 
 /// Information about a symbol (definition-side metadata).
+///
+/// The `symbol` and `enclosing_symbol` fields use `bytes` instead of
+/// `string` because rust-analyzer sometimes emits non-UTF-8 SCIP symbol
+/// identifiers (e.g. from macro-generated code). Using `bytes` avoids a
+/// hard decode failure; callers convert to String with lossy replacement.
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct SymbolInformation {
-    /// The SCIP symbol string.
-    #[prost(string, tag = "1")]
-    pub symbol: String,
+    /// The SCIP symbol string (may contain non-UTF-8 bytes).
+    #[prost(bytes = "vec", tag = "1")]
+    pub symbol: Vec<u8>,
     /// Human-readable documentation.
     #[prost(string, repeated, tag = "3")]
     pub documentation: Vec<String>,
@@ -116,9 +121,9 @@ pub struct SymbolInformation {
     /// Display name (without qualification).
     #[prost(string, tag = "6")]
     pub display_name: String,
-    /// Enclosing symbol.
-    #[prost(string, tag = "7")]
-    pub enclosing_symbol: String,
+    /// Enclosing symbol (may contain non-UTF-8 bytes).
+    #[prost(bytes = "vec", tag = "7")]
+    pub enclosing_symbol: Vec<u8>,
 }
 
 pub mod symbol_information {
@@ -346,6 +351,14 @@ pub enum SyntaxKind {
 
 /// Extract a human-readable symbol name from a SCIP symbol string.
 ///
+/// Convert a SCIP symbol bytes field to a String, replacing any
+/// non-UTF-8 sequences with the Unicode replacement character.
+/// rust-analyzer sometimes emits non-UTF-8 symbol identifiers from
+/// macro-generated code.
+pub fn sym_to_string(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
 /// SCIP symbol strings look like:
 ///   `rust-analyzer cargo my_crate 0.1.0 src/lib.rs/MyStruct#method().`
 ///

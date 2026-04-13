@@ -619,6 +619,80 @@ impl ScipGraph {
         .ok();
     }
 
+    /// Import all symbols and references from another ScipGraph database
+    /// file into this graph. Used to build a merged view across multiple
+    /// per-project graphs (e.g. for a multi-project MCP server).
+    ///
+    /// Returns `(symbols_imported, refs_imported)`.
+    pub async fn import_from_path(&self, other_path: &Path) -> Result<(usize, usize)> {
+        if !other_path.exists() {
+            return Ok((0, 0));
+        }
+
+        let other_conn = Connection::open(other_path)
+            .map_err(|e| Error::Database(format!("import open: {e}")))?;
+
+        // Read symbols.
+        let mut symbols = Vec::new();
+        {
+            let mut stmt = other_conn
+                .prepare("SELECT name, kind, file_path, line_start, line_end, language FROM symbols")
+                .map_err(|e| Error::Database(format!("import read symbols: {e}")))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(ScipSymbolRecord {
+                        name: row.get(0)?,
+                        kind: row.get(1)?,
+                        file_path: row.get(2)?,
+                        line_start: row.get(3)?,
+                        line_end: row.get(4)?,
+                        language: row.get(5)?,
+                    })
+                })
+                .map_err(|e| Error::Database(format!("import query symbols: {e}")))?;
+            for row in rows {
+                if let Ok(sym) = row {
+                    symbols.push(sym);
+                }
+            }
+        }
+
+        // Read refs.
+        let mut refs = Vec::new();
+        {
+            let mut stmt = other_conn
+                .prepare(
+                    "SELECT caller_symbol, callee_symbol, file_path, line, ref_kind FROM refs",
+                )
+                .map_err(|e| Error::Database(format!("import read refs: {e}")))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(ScipRefRecord {
+                        caller_symbol: row.get(0)?,
+                        callee_symbol: row.get(1)?,
+                        file_path: row.get(2)?,
+                        line: row.get(3)?,
+                        ref_kind: row.get(4)?,
+                    })
+                })
+                .map_err(|e| Error::Database(format!("import query refs: {e}")))?;
+            for row in rows {
+                if let Ok(r) = row {
+                    refs.push(r);
+                }
+            }
+        }
+
+        let sym_count = symbols.len();
+        let ref_count = refs.len();
+
+        if !symbols.is_empty() || !refs.is_empty() {
+            self.ingest_symbols_and_refs(symbols, refs).await?;
+        }
+
+        Ok((sym_count, ref_count))
+    }
+
     /// Get which languages have SCIP coverage.
     pub async fn languages_with_scip(&self) -> Vec<String> {
         let conn = self.conn.lock().await;
