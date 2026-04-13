@@ -1,3 +1,4 @@
+pub mod adaptive;
 pub mod knowledge_assignment;
 pub mod layer_assignment;
 pub mod leader;

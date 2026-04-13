@@ -18,6 +18,27 @@ pub struct ModelInfo {
     pub available_on: HashMap<NodeId, ModelAvailability>,
     pub oicp_capabilities: CapabilityProfile,
     pub quantization: String,
+
+    // ── Deployment constraints (used by the adaptive mesh scheduler) ──
+
+    /// Minimum unified/VRAM memory required to load this model at all.
+    /// Nodes below this threshold are never assigned this model.
+    #[serde(default)]
+    pub min_memory_gb: u32,
+
+    /// Preferred memory for comfortable operation (model + KV cache headroom).
+    #[serde(default)]
+    pub preferred_memory_gb: u32,
+
+    /// Whether this model can run as multiple independent instances.
+    /// Dense models: true. MoE with expert routing that requires shared
+    /// memory: false.
+    #[serde(default)]
+    pub supports_parallel_instances: bool,
+
+    /// Whether this model can be sharded across nodes via pipeline parallelism.
+    #[serde(default)]
+    pub supports_pipeline_shard: bool,
 }
 
 /// Model architecture family.
@@ -62,6 +83,10 @@ mod tests {
             available_on: HashMap::new(),
             oicp_capabilities: CapabilityProfile::default(),
             quantization: "Q4_K_M".into(),
+            min_memory_gb: 32,
+            preferred_memory_gb: 48,
+            supports_parallel_instances: true,
+            supports_pipeline_shard: true,
         };
         let json = serde_json::to_string(&model).unwrap();
         let back: ModelInfo = serde_json::from_str(&json).unwrap();

@@ -902,6 +902,7 @@ dependencies = [
  "anyhow",
  "axum",
  "bytes",
+ "chrono",
  "commonwealth-app",
  "commonwealth-core",
  "commonwealth-state",
@@ -909,6 +910,8 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-stream",
+ "tokio-util",
  "toml",
  "tracing",
 ]

@@ -15,4 +15,4 @@ pub mod oicp_registry;
 pub mod scheduler;
 
 pub use error::{Error, Result};
-pub use ids::{MeshId, ModelId, NodeId, ProcessId};
+pub use ids::{MeshId, ModelId, NodeId, PlanId, ProcessId};

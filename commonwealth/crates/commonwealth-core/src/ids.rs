@@ -53,6 +53,7 @@ define_id!(MeshId, "mesh");
 define_id!(NodeId, "node");
 define_id!(ModelId, "model");
 define_id!(ProcessId, "proc");
+define_id!(PlanId, "plan");
 
 #[cfg(test)]
 mod tests {
