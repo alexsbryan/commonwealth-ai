@@ -88,6 +88,14 @@ impl DocumentOperationTool {
 
             let response = self.inference.complete(&request).await?;
 
+            if i == 0 {
+                eprintln!(
+                    "  [document_operation] First batch completed. Model: {}, latency: {}ms",
+                    response.model_id,
+                    response.latency_ms,
+                );
+            }
+
             // Skip null/empty responses (passage had nothing relevant).
             let text = response.text.trim().to_string();
             if text != "null" && !text.is_empty() {

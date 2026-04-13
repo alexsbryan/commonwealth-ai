@@ -1044,6 +1044,7 @@ impl Runtime {
             preferred_speed: Speed::Slow,
             max_tokens: Some(512),
             temperature: Some(0.0),
+            think_budget: Some(0), // no thinking — just produce the JSON
             structured_output: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -1052,7 +1053,7 @@ impl Runtime {
                 },
                 "required": ["map_prompt", "reduce_prompt"]
             })),
-            think_budget: None,
+            // think_budget already set above
             top_k: None,
             top_p: None,
             oicp: None,
