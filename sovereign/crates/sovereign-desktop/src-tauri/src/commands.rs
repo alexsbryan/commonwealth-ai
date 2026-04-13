@@ -1248,6 +1248,153 @@ pub async fn ingest_document(
     })
 }
 
+// ─── Document Asset commands ─────────────────────────────────
+
+#[derive(Serialize)]
+pub struct DocumentAssetResponse {
+    pub asset: sovereign_core::types::DocumentAsset,
+}
+
+#[derive(Serialize)]
+pub struct DocumentAskResponse {
+    pub response: String,
+    pub operation: sovereign_core::types::DocumentAssetOperation,
+    pub sources: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn upload_document_asset(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    file_path: String,
+) -> Result<DocumentAssetResponse, String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+    let inference = {
+        let guard = state.inference.read().await;
+        guard
+            .as_ref()
+            .map(Arc::clone)
+            .ok_or("Inference not ready")?
+    };
+
+    let path = std::path::Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File not found: {file_path}"));
+    }
+
+    let manager =
+        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store);
+
+    let handle = app_handle.clone();
+    let asset = manager
+        .ingest(path, move |progress| {
+            let _ = handle.emit("document:progress", &progress);
+        })
+        .await
+        .map_err(|e| format!("Ingest failed: {e}"))?;
+
+    Ok(DocumentAssetResponse { asset })
+}
+
+#[tauri::command]
+pub async fn ask_document(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    asset_id: String,
+    question: String,
+) -> Result<DocumentAskResponse, String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+    let inference = {
+        let guard = state.inference.read().await;
+        guard
+            .as_ref()
+            .map(Arc::clone)
+            .ok_or("Inference not ready")?
+    };
+
+    let asset = store
+        .get_document_asset(&asset_id)
+        .await
+        .map_err(|e| format!("Load failed: {e}"))?
+        .ok_or("Document not found")?;
+
+    if !asset.state.is_queryable() {
+        return Err(format!(
+            "Document is not ready for queries (state: {})",
+            asset.state.label()
+        ));
+    }
+
+    let manager =
+        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store.clone());
+
+    let handle = app_handle.clone();
+    let start = std::time::Instant::now();
+    let (response, operation, sources) = manager
+        .ask(&asset, &question, move |progress| {
+            let _ = handle.emit("document:operation", &progress);
+        })
+        .await
+        .map_err(|e| format!("Query failed: {e}"))?;
+
+    let duration_ms = start.elapsed().as_millis() as u64;
+    let message_id = uuid::Uuid::new_v4().to_string();
+    let _ = store
+        .save_document_operation(&message_id, &asset_id, &operation, duration_ms)
+        .await;
+
+    Ok(DocumentAskResponse {
+        response,
+        operation,
+        sources,
+    })
+}
+
+#[tauri::command]
+pub async fn list_document_assets(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<sovereign_core::types::DocumentAsset>, String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+    store
+        .list_document_assets()
+        .await
+        .map_err(|e| format!("List failed: {e}"))
+}
+
+#[tauri::command]
+pub async fn delete_document_asset(
+    state: State<'_, Arc<AppState>>,
+    asset_id: String,
+) -> Result<(), String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+    let inference = {
+        let guard = state.inference.read().await;
+        guard
+            .as_ref()
+            .map(Arc::clone)
+            .ok_or("Inference not ready")?
+    };
+
+    let manager =
+        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store);
+    manager
+        .delete(&asset_id)
+        .await
+        .map_err(|e| format!("Delete failed: {e}"))
+}
+
 #[tauri::command]
 pub async fn diagnose_corpus(
     state: State<'_, Arc<AppState>>,

@@ -392,3 +392,90 @@ export interface SinkInfoDto {
   display_name: string;
   connected: boolean;
 }
+
+// ─── Document Assets ─────────────────────────────────────────
+
+export interface DocumentAsset {
+  id: string;
+  title: string;
+  filename: string;
+  file_size_mb: number;
+  word_count: number;
+  chunk_count: number;
+  document_type: string;
+  ingested_at: string;
+  index_id: string;
+  skeleton: DocumentSkeleton | null;
+  state: AssetState;
+}
+
+export type AssetState =
+  | "Pending"
+  | { Indexing: { chunks_done: number; chunks_total: number } }
+  | "PartiallyReady"
+  | { BuildingSkeleton: { chunks_done: number; chunks_total: number } }
+  | "Ready"
+  | { Failed: { reason: string } };
+
+export interface DocumentSkeleton {
+  sections: SectionAnnotation[];
+  main_entities: RankedEntity[];
+  entity_index: Record<string, EntityAppearances>;
+  structural_moments: StructuralMoment[];
+  overview: string;
+  built_at: string;
+}
+
+export interface SectionAnnotation {
+  chunk_index: number;
+  function: string;
+  key_entities: string[];
+  establishes: string;
+}
+
+export interface RankedEntity {
+  name: string;
+  kind: string;
+  presence_rate: number;
+  first_appearance: number;
+  last_appearance: number;
+}
+
+export interface EntityAppearances {
+  chunk_indices: number[];
+  quote_samples: string[];
+}
+
+export interface StructuralMoment {
+  chunk_index: number;
+  description: string;
+  salience: number;
+}
+
+export type DocumentAssetOperation =
+  | { Rag: { query: string } }
+  | { Synthesis: { focus: string; entities: string[] } }
+  | { Aggregation: { query: string } }
+  | "Transformation";
+
+export interface DocumentAskResponse {
+  response: string;
+  operation: DocumentAssetOperation;
+  sources: string[];
+}
+
+export interface DocumentProgressPayload {
+  type: string;
+  asset_id?: string;
+  done?: number;
+  total?: number;
+  main_entities?: number;
+  structural_moments?: number;
+  reason?: string;
+}
+
+export interface DocumentOperationPayload {
+  type: string;
+  operation?: string;
+  name?: string;
+}

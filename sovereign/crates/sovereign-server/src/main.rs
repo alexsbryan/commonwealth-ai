@@ -2,6 +2,7 @@ mod approval;
 mod auth;
 mod config;
 mod routes;
+mod routes_documents;
 mod routes_mcp;
 mod tenant;
 mod ws;
@@ -312,6 +313,7 @@ async fn main() {
         .route("/v1/tools", get(routes::list_tools))
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
+        .merge(routes_documents::document_router())
         .layer(middleware::from_fn(auth::auth_middleware))
         .layer(Extension(auth_state));
 

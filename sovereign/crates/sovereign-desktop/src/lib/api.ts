@@ -23,6 +23,8 @@ import type {
   RecipeTestResult,
   InsightNodeDto,
   SinkStatusDto,
+  DocumentAsset,
+  DocumentAskResponse,
 } from "./types";
 
 export async function sendMessage(
@@ -270,4 +272,29 @@ export async function exploreInsights(
   nodeIds: string[],
 ): Promise<string> {
   return invoke("explore_insights", { nodeIds });
+}
+
+// ─── Document Assets ─────────────────────────────────────────
+
+export async function uploadDocumentAsset(
+  filePath: string,
+): Promise<{ asset: DocumentAsset }> {
+  return invoke("upload_document_asset", { filePath });
+}
+
+export async function askDocument(
+  assetId: string,
+  question: string,
+): Promise<DocumentAskResponse> {
+  return invoke("ask_document", { assetId, question });
+}
+
+export async function listDocumentAssets(): Promise<DocumentAsset[]> {
+  return invoke("list_document_assets");
+}
+
+export async function deleteDocumentAsset(
+  assetId: string,
+): Promise<void> {
+  return invoke("delete_document_asset", { assetId });
 }

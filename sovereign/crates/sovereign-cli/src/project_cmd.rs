@@ -1439,6 +1439,34 @@ precise definitions.
 Call `recent_changes(hours: 24)` at session start to see which
 subsystems are active before diving into code.
 
+## Mandatory checks
+
+These are easy to forget and expensive when skipped:
+
+**Before adding a method to a trait:**
+Call `find_callers("TraitName")` to find ALL implementors. Every
+impl block must be updated or the build breaks. Do not rely on
+the compiler alone — find them before you start writing so you
+know the full scope of the change.
+
+**Before using a type from another crate:**
+Call `symbol_lookup("TypeName")` to confirm it exists, see its
+fields, and verify it's in scope. This is faster and more reliable
+than grepping Cargo.toml for dependency availability.
+
+**Before modifying a function signature:**
+Call `find_callers("function_name")` first. If it has 20 callers,
+you need a different strategy than if it has 2. Know the blast
+radius before you touch it.
+
+## When MCP tools add less value
+
+For **greenfield additions** (new types, new tables, new files),
+the MCP tools are less useful — you're writing, not reading. Use
+Glob/Read to find the insertion point and the surrounding patterns,
+then write directly. Save the MCP tools for when you need to
+understand or modify what already exists.
+
 ## Session start
 
 1. Call `recent_changes(hours: 24)` to see what's active
