@@ -1039,10 +1039,11 @@ impl Runtime {
             system_message: Some(
                 "You write analysis prompts. Output ONLY the JSON object, nothing else.".to_string()
             ),
-            preferred_speed: Speed::Fast,
+            // Use the primary model for prompt generation — it's a one-time
+            // cost and the 0.6B fast model can't reliably produce JSON.
+            preferred_speed: Speed::Slow,
             max_tokens: Some(512),
-            temperature: Some(0.0), // deterministic — this is structured output
-            // Grammar-constrain to produce exactly {"map_prompt":"...","reduce_prompt":"..."}
+            temperature: Some(0.0),
             structured_output: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -1078,17 +1079,38 @@ impl Runtime {
                 ).to_string();
                 (mp, rp)
             }
-            Err(_) => {
-                // Fallback prompts if JSON parsing fails.
-                tracing::warn!("Failed to parse prompt JSON, using defaults");
+            Err(e) => {
+                // Fallback: use specific prompts tailored to the user's question.
+                tracing::warn!(
+                    error = %e,
+                    raw_output = %prompt_text,
+                    "Failed to parse prompt JSON — using tailored fallback prompts"
+                );
                 (
-                    format!("Extract information relevant to this question from the passage: {user_query}"),
-                    "Synthesize all extracted information into a comprehensive, well-organized answer.".to_string(),
+                    format!(
+                        "Read this passage carefully. The user asked: \"{user_query}\"\n\n\
+                         Extract ALL information from this passage that is relevant to \
+                         answering the user's question. Include:\n\
+                         - Key facts, events, or arguments\n\
+                         - Character names and their actions (if narrative)\n\
+                         - Direct quotes that are significant\n\
+                         If nothing relevant appears, respond with just: null"
+                    ),
+                    format!(
+                        "The user asked: \"{user_query}\"\n\n\
+                         You have been given extracted notes from across an entire document. \
+                         Synthesize ALL the extracted information into a comprehensive, \
+                         well-organized answer to the user's question. \
+                         Be thorough — include every relevant detail from the notes. \
+                         Organize logically with clear sections."
+                    ),
                 )
             }
         };
 
-        eprintln!("[runtime] Prompts generated. Running document_operation...");
+        eprintln!("[runtime] Map prompt: {}...{}", &map_prompt[..80.min(map_prompt.len())], if map_prompt.len() > 80 { " (truncated)" } else { "" });
+        eprintln!("[runtime] Reduce prompt: {}...{}", &reduce_prompt[..80.min(reduce_prompt.len())], if reduce_prompt.len() > 80 { " (truncated)" } else { "" });
+        eprintln!("[runtime] Running document_operation...");
 
         // 3. Call document_operation tool directly.
         let tool = self.tools.get("document_operation")?;
