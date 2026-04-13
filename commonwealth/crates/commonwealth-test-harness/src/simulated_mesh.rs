@@ -6,6 +6,8 @@ use commonwealth_app::manifest::MeshAppManifest;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::latency::{LatencyMatrix, LatencyRecord};
 use commonwealth_core::mesh::Mesh;
+use commonwealth_inference::plan::MeshPlan;
+use commonwealth_inference::scheduler::adaptive::{InferenceScheduler, NodeProfile, SchedulerConfig};
 
 use crate::simulated_node::{SimulatedNode, SimulatedNodeBuilder};
 
@@ -186,6 +188,138 @@ impl SimulatedMesh {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
+
+    // ── Adaptive scheduler helpers ─────────────────────────────────────
+
+    /// Build node profiles for the adaptive scheduler from the current mesh.
+    pub fn scheduler_profiles(&self) -> HashMap<NodeId, NodeProfile> {
+        self.nodes
+            .iter()
+            .map(|n| {
+                // Use system RAM as the memory metric (Apple Silicon unified memory).
+                let memory_gb = n.hardware.system_ram_gb;
+                // Collect model IDs from the node's registered models in the store.
+                let model_ids = n
+                    .state
+                    .inner
+                    .inference_store
+                    .list_models()
+                    .values()
+                    .map(|m| m.name.clone())
+                    .collect();
+                (
+                    n.node_id,
+                    NodeProfile {
+                        available_memory_gb: memory_gb,
+                        model_ids,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// Create an InferenceScheduler configured for the leader node in this mesh.
+    pub fn make_scheduler(&self) -> InferenceScheduler {
+        let leader = self
+            .nodes
+            .iter()
+            .map(|n| n.node_id)
+            .min()
+            .expect("mesh has no nodes");
+        let mut scheduler = InferenceScheduler::new(leader, SchedulerConfig::default());
+        // Set online nodes so the scheduler knows it's the leader.
+        scheduler.online_nodes = self.node_ids();
+        scheduler
+    }
+
+    /// Create an InferenceScheduler with a custom config.
+    pub fn make_scheduler_with_config(&self, config: SchedulerConfig) -> InferenceScheduler {
+        let leader = self
+            .nodes
+            .iter()
+            .map(|n| n.node_id)
+            .min()
+            .expect("mesh has no nodes");
+        let mut scheduler = InferenceScheduler::new(leader, config);
+        scheduler.online_nodes = self.node_ids();
+        scheduler
+    }
+
+    /// Write a MeshPlan to all nodes' stores (simulating gossip propagation).
+    pub fn propagate_mesh_plan(&self, plan: &MeshPlan) {
+        for node in &self.nodes {
+            node.state.inner.inference_store.set_mesh_plan(plan);
+        }
+    }
+
+    /// Read the current MeshPlan from the first node (all should agree after propagation).
+    pub fn current_mesh_plan(&self) -> Option<MeshPlan> {
+        self.nodes
+            .first()
+            .and_then(|n| n.state.inner.inference_store.get_mesh_plan())
+    }
+
+    /// Check if all nodes have the same MeshPlan version.
+    pub fn plans_converged(&self) -> bool {
+        let versions: Vec<Option<u64>> = self
+            .nodes
+            .iter()
+            .map(|n| n.state.inner.inference_store.get_mesh_plan().map(|p| p.version))
+            .collect();
+
+        if versions.is_empty() {
+            return false;
+        }
+
+        let first = versions[0];
+        first.is_some() && versions.iter().all(|v| *v == first)
+    }
+}
+
+/// Builder for the twenty-node hacker collective demo scenario.
+///
+/// Creates a realistic mesh of Apple Silicon MacBooks:
+/// - 12 x M3 Pro 36GB
+/// - 5 x M3 Pro 18GB
+/// - 2 x M3 Max 48GB
+/// - 1 x M3 Max 96GB
+pub fn twenty_node_hacker_collective() -> SimulatedMesh {
+    let mut mesh = SimulatedMesh::new("hacker-collective");
+
+    // 12 x M3 Pro 36GB — the core workhorses.
+    for i in 0..12 {
+        let node = SimulatedNodeBuilder::new(100 + i, &format!("m3pro-36-{i}"))
+            .gpu("Apple M3 Pro", 36, commonwealth_core::capabilities::ComputeType::Metal)
+            .ram_gb(36);
+        mesh.add_node(node);
+    }
+
+    // 5 x M3 Pro 18GB — smaller machines.
+    for i in 0..5 {
+        let node = SimulatedNodeBuilder::new(200 + i, &format!("m3pro-18-{i}"))
+            .gpu("Apple M3 Pro", 18, commonwealth_core::capabilities::ComputeType::Metal)
+            .ram_gb(18);
+        mesh.add_node(node);
+    }
+
+    // 2 x M3 Max 48GB.
+    for i in 0..2 {
+        let node = SimulatedNodeBuilder::new(300 + i, &format!("m3max-48-{i}"))
+            .gpu("Apple M3 Max", 48, commonwealth_core::capabilities::ComputeType::Metal)
+            .ram_gb(48);
+        mesh.add_node(node);
+    }
+
+    // 1 x M3 Max 96GB.
+    let node = SimulatedNodeBuilder::new(400, "m3max-96")
+        .gpu("Apple M3 Max", 96, commonwealth_core::capabilities::ComputeType::Metal)
+        .ram_gb(96);
+    mesh.add_node(node);
+
+    // Set uniform LAN latency.
+    mesh.set_lan_latency(2.0);
+
+    mesh
 }
 
 impl Drop for SimulatedMesh {

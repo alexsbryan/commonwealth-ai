@@ -58,12 +58,12 @@ impl Default for SchedulerConfig {
 // ─── Scheduler ───────────────────────────────────────────────
 
 pub struct InferenceScheduler {
-    node_id: NodeId,
+    pub node_id: NodeId,
     config: SchedulerConfig,
     /// Monotonically increasing plan version.
     version: Arc<AtomicU64>,
     /// All online node IDs — maintained by the event loop.
-    online_nodes: Vec<NodeId>,
+    pub online_nodes: Vec<NodeId>,
 }
 
 impl InferenceScheduler {
