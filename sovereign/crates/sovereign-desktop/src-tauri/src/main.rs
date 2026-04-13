@@ -124,6 +124,8 @@ fn main() {
             commands::upload_document_asset,
             commands::ask_document,
             commands::list_document_assets,
+            commands::list_legacy_documents,
+            commands::promote_legacy_document,
             commands::delete_document_asset,
             commands::get_corpus_progress,
             commands::get_corpus_health,

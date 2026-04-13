@@ -1,8 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { listDocumentAssets, uploadDocumentAsset } from "../api";
-  import type { DocumentAsset, AssetState } from "../types";
+  import {
+    listDocumentAssets,
+    uploadDocumentAsset,
+    listLegacyDocuments,
+    promoteLegacyDocument,
+  } from "../api";
+  import type { DocumentAsset, AssetState, LegacyDocumentEntry } from "../types";
 
   interface Props {
     onSelect: (asset: DocumentAsset) => void;
@@ -12,15 +17,19 @@
   let { onSelect, onClose }: Props = $props();
 
   let assets: DocumentAsset[] = $state([]);
+  let legacyDocs: LegacyDocumentEntry[] = $state([]);
   let isUploading = $state(false);
+  let isPromoting = $state(false);
   let uploadError: string | null = $state(null);
 
   onMount(async () => {
-    try {
-      assets = await listDocumentAssets();
-    } catch {
-      // No assets yet — that's fine.
-    }
+    // Load both asset types in parallel.
+    const [assetResult, legacyResult] = await Promise.allSettled([
+      listDocumentAssets(),
+      listLegacyDocuments(),
+    ]);
+    if (assetResult.status === "fulfilled") assets = assetResult.value;
+    if (legacyResult.status === "fulfilled") legacyDocs = legacyResult.value;
   });
 
   async function handleUpload() {
@@ -45,6 +54,18 @@
       try { assets = await listDocumentAssets(); } catch {}
     } finally {
       isUploading = false;
+    }
+  }
+
+  async function handleSelectLegacy(entry: LegacyDocumentEntry) {
+    isPromoting = true;
+    try {
+      const { asset } = await promoteLegacyDocument(entry.source);
+      onSelect(asset);
+    } catch (e) {
+      uploadError = `Failed to load document: ${e}`;
+    } finally {
+      isPromoting = false;
     }
   }
 
@@ -99,9 +120,9 @@
       <div class="picker-error">{uploadError}</div>
     {/if}
 
-    {#if assets.length > 0}
+    {#if assets.length > 0 || legacyDocs.length > 0}
       <div class="picker-divider"></div>
-      <div class="picker-label">Recent documents</div>
+      <div class="picker-label">Your documents</div>
       <div class="picker-list">
         {#each assets as asset (asset.id)}
           <button
@@ -118,6 +139,18 @@
               {#if stateLabel(asset.state)}
                 <span class="item-state">&middot; {stateLabel(asset.state)}</span>
               {/if}
+            </div>
+          </button>
+        {/each}
+        {#each legacyDocs as doc (doc.source)}
+          <button
+            class="picker-item"
+            disabled={isPromoting}
+            onclick={() => handleSelectLegacy(doc)}
+          >
+            <div class="item-title">{doc.filename}</div>
+            <div class="item-meta">
+              {formatWords(doc.word_count)} words &middot; {doc.chunk_count} chunks
             </div>
           </button>
         {/each}

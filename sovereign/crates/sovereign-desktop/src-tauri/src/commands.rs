@@ -1262,6 +1262,10 @@ pub struct DocumentAskResponse {
     pub sources: Vec<String>,
 }
 
+/// Upload and ingest a document. The command returns immediately with
+/// a Pending asset. The full ingest pipeline (embed + skeleton) runs
+/// in a background task and emits `document:progress` events. The
+/// frontend shows these via the IngestBanner / DocOpProgress indicator.
 #[tauri::command]
 pub async fn upload_document_asset(
     app_handle: tauri::AppHandle,
@@ -1285,18 +1289,85 @@ pub async fn upload_document_asset(
         return Err(format!("File not found: {file_path}"));
     }
 
-    let manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store);
+    // Parse and chunk synchronously (fast — no inference needed).
+    let parsed = sovereign_tools::rag::parse::parse_file(path)
+        .map_err(|e| format!("Parse failed: {e}"))?;
+    let text_chunks = sovereign_tools::rag::chunk::chunk_text(&parsed.content);
+    let word_count = parsed.content.split_whitespace().count();
+    let chunk_count = text_chunks.len();
+    let file_size_mb = std::fs::metadata(path)
+        .map(|m| m.len() as f32 / (1024.0 * 1024.0))
+        .unwrap_or(0.0);
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("document")
+        .to_string();
+    let title = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(&filename)
+        .replace('_', " ")
+        .replace('-', " ");
 
-    let handle = app_handle.clone();
-    let asset = manager
-        .ingest(path, move |progress| {
-            let _ = handle.emit("document:progress", &progress);
-        })
+    // Create the asset record immediately so the UI shows it.
+    let asset = sovereign_core::types::DocumentAsset {
+        id: uuid::Uuid::new_v4().to_string(),
+        title,
+        filename,
+        file_size_mb,
+        word_count,
+        chunk_count,
+        document_type: sovereign_core::types::DocumentTypeTag::Unknown,
+        ingested_at: chrono::Utc::now(),
+        index_id: format!("doc-pending"),
+        skeleton: None,
+        state: sovereign_core::types::AssetState::Pending,
+    };
+    store
+        .save_document_asset(&asset)
         .await
-        .map_err(|e| format!("Ingest failed: {e}"))?;
+        .map_err(|e| format!("Save failed: {e}"))?;
 
-    Ok(DocumentAssetResponse { asset })
+    let response_asset = asset.clone();
+
+    // Spawn the full ingest in the background. Progress events will
+    // update the UI in real time; the asset state transitions from
+    // Pending → Indexing → PartiallyReady → BuildingSkeleton → Ready.
+    let file_path_owned = file_path.to_string();
+    let handle = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let manager =
+            sovereign_tools::document_asset::DocumentAssetManager::new(inference, store);
+
+        let path = std::path::Path::new(&file_path_owned);
+        match manager
+            .ingest(path, move |progress| {
+                let _ = handle.emit("document:progress", &progress);
+            })
+            .await
+        {
+            Ok(completed) => {
+                eprintln!(
+                    "[document_asset] Ingest complete: {} ({} chunks, {} entities)",
+                    completed.filename,
+                    completed.chunk_count,
+                    completed
+                        .skeleton
+                        .as_ref()
+                        .map(|s| s.main_entities.len())
+                        .unwrap_or(0),
+                );
+            }
+            Err(e) => {
+                eprintln!("[document_asset] Ingest failed: {e}");
+            }
+        }
+    });
+
+    Ok(DocumentAssetResponse {
+        asset: response_asset,
+    })
 }
 
 #[tauri::command]
@@ -1393,6 +1464,138 @@ pub async fn delete_document_asset(
         .delete(&asset_id)
         .await
         .map_err(|e| format!("Delete failed: {e}"))
+}
+
+/// A document from the legacy chunks table (uploaded via the old
+/// paperclip path before DocumentAssetManager existed).
+#[derive(Serialize)]
+pub struct LegacyDocumentEntry {
+    pub source: String,
+    pub filename: String,
+    pub chunk_count: usize,
+    pub word_count: usize,
+}
+
+/// List documents from the legacy `documents` table that don't have
+/// a corresponding DocumentAsset record. These are shown in the picker
+/// so users can see and select previously uploaded files.
+#[tauri::command]
+pub async fn list_legacy_documents(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<LegacyDocumentEntry>, String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+
+    let sources = store.list_sources().await.map_err(|e| format!("{e}"))?;
+    let assets = store.list_document_assets().await.unwrap_or_default();
+
+    // Filter out sources that already have a DocumentAsset (including
+    // the "asset:uuid" sources created by DocumentAssetManager).
+    let asset_sources: std::collections::HashSet<String> = assets
+        .iter()
+        .map(|a| format!("asset:{}", a.id))
+        .collect();
+
+    let mut entries = Vec::new();
+    for source in &sources {
+        // Skip asset-managed documents and corpus chunks.
+        if source.starts_with("asset:") && asset_sources.contains(source) {
+            continue;
+        }
+        // Skip corpus-sourced chunks (Wikipedia, SEP, etc.).
+        if source.starts_with("corpus:") {
+            continue;
+        }
+
+        let chunks = store
+            .get_chunks_by_source(source)
+            .await
+            .unwrap_or_default();
+        if chunks.is_empty() {
+            continue;
+        }
+
+        let word_count: usize = chunks
+            .iter()
+            .map(|c| c.content.split_whitespace().count())
+            .sum();
+        let filename = source
+            .rsplit('/')
+            .next()
+            .unwrap_or(source)
+            .to_string();
+
+        entries.push(LegacyDocumentEntry {
+            source: source.clone(),
+            filename,
+            chunk_count: chunks.len(),
+            word_count,
+        });
+    }
+
+    Ok(entries)
+}
+
+/// Promote a legacy document (from the old chunks table) into a
+/// DocumentAsset. This creates the asset record from existing data —
+/// no re-upload, no re-embedding. The skeleton is null until built.
+#[tauri::command]
+pub async fn promote_legacy_document(
+    state: State<'_, Arc<AppState>>,
+    source: String,
+) -> Result<DocumentAssetResponse, String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+
+    let chunks = store
+        .get_chunks_by_source(&source)
+        .await
+        .map_err(|e| format!("{e}"))?;
+
+    if chunks.is_empty() {
+        return Err(format!("No chunks found for source: {source}"));
+    }
+
+    let word_count: usize = chunks
+        .iter()
+        .map(|c| c.content.split_whitespace().count())
+        .sum();
+    let filename = source
+        .rsplit('/')
+        .next()
+        .unwrap_or(&source)
+        .to_string();
+    let title = filename
+        .rsplit_once('.')
+        .map(|(name, _)| name)
+        .unwrap_or(&filename)
+        .replace('_', " ")
+        .replace('-', " ");
+
+    let asset = sovereign_core::types::DocumentAsset {
+        id: uuid::Uuid::new_v4().to_string(),
+        title,
+        filename,
+        file_size_mb: 0.0, // Unknown for legacy docs.
+        word_count,
+        chunk_count: chunks.len(),
+        document_type: sovereign_core::types::DocumentTypeTag::Unknown,
+        ingested_at: chrono::Utc::now(),
+        index_id: format!("legacy:{source}"),
+        skeleton: None,
+        state: sovereign_core::types::AssetState::PartiallyReady,
+    };
+
+    store
+        .save_document_asset(&asset)
+        .await
+        .map_err(|e| format!("{e}"))?;
+
+    Ok(DocumentAssetResponse { asset })
 }
 
 #[tauri::command]

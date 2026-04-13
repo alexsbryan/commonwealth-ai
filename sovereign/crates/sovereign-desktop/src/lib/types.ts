@@ -480,6 +480,13 @@ export interface DocumentOperationPayload {
   name?: string;
 }
 
+export interface LegacyDocumentEntry {
+  source: string;
+  filename: string;
+  chunk_count: number;
+  word_count: number;
+}
+
 export interface DocOpProgress {
   type:
     | "Resolving"

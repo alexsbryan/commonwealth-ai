@@ -25,6 +25,7 @@ import type {
   SinkStatusDto,
   DocumentAsset,
   DocumentAskResponse,
+  LegacyDocumentEntry,
 } from "./types";
 
 export async function sendMessage(
@@ -297,4 +298,14 @@ export async function deleteDocumentAsset(
   assetId: string,
 ): Promise<void> {
   return invoke("delete_document_asset", { assetId });
+}
+
+export async function listLegacyDocuments(): Promise<LegacyDocumentEntry[]> {
+  return invoke("list_legacy_documents");
+}
+
+export async function promoteLegacyDocument(
+  source: string,
+): Promise<{ asset: DocumentAsset }> {
+  return invoke("promote_legacy_document", { source });
 }

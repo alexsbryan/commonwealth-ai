@@ -8079,6 +8079,7 @@ name = "sovereign-desktop"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "corpus-engine",
  "dirs 6.0.0",
  "futures",
