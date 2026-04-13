@@ -877,6 +877,21 @@ pub struct DocumentAsset {
     pub state: AssetState,
 }
 
+impl DocumentAsset {
+    /// The source key used to look up this document's chunks in the
+    /// `DocumentStore`. For assets ingested via `DocumentAssetManager`,
+    /// this is `"asset:{id}"`. For legacy documents promoted from the
+    /// old chunks table, this is the original file path stored in
+    /// `index_id` (prefixed with `"legacy:"`).
+    pub fn source_key(&self) -> String {
+        if let Some(original) = self.index_id.strip_prefix("legacy:") {
+            original.to_string()
+        } else {
+            format!("asset:{}", self.id)
+        }
+    }
+}
+
 /// Processing state of a document asset. Drives the UI's progress
 /// display and determines which operations are available.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

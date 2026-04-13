@@ -349,7 +349,7 @@ impl DocumentAssetManager {
     /// Delete an asset and its chunks.
     pub async fn delete(&self, id: &str) -> Result<()> {
         // Delete chunks from the document store.
-        let source_id = format!("asset:{id}");
+        let source_id = format!("asset:{}", id);
         if let Ok(chunks) = self.store.get_chunks_by_source(&source_id).await {
             if !chunks.is_empty() {
                 // Soft-delete by overwriting with empty + deleted_at.
@@ -436,7 +436,7 @@ impl DocumentAssetManager {
         operation: &DocumentAssetOperation,
         on_progress: &(dyn Fn(OperationProgress) + Send + Sync),
     ) -> Result<(String, Vec<String>)> {
-        let source_id = format!("asset:{}", asset.id);
+        let source_id = asset.source_key();
 
         match operation {
             DocumentAssetOperation::Rag { query } => {
@@ -535,7 +535,7 @@ impl DocumentAssetManager {
         entities: &[String],
         original_request: &str,
     ) -> Result<(String, Vec<String>)> {
-        let source_id = format!("asset:{}", asset.id);
+        let source_id = asset.source_key();
         let all_chunks = self.store.get_chunks_by_source(&source_id).await?;
 
         if all_chunks.is_empty() {
