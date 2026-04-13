@@ -8,9 +8,9 @@ use tokio::sync::Mutex;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{
-    BudgetStore, ConversationStore, CorpusStateStore, DocumentSessionStore,
-    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore,
-    StateStore, TaskStore,
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentAssetStore,
+    DocumentSessionStore, DocumentStore, HealthStore, MemoryStore,
+    PermissionStore, RoutingStore, StateStore, TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -51,6 +51,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Insight migration failed: {e}")))?;
         migrations::run_document_session_migration(&conn)
             .map_err(|e| Error::Storage(format!("Document session migration failed: {e}")))?;
+        migrations::run_document_asset_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -98,6 +100,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Insight migration failed: {e}")))?;
         migrations::run_document_session_migration(&conn)
             .map_err(|e| Error::Storage(format!("Document session migration failed: {e}")))?;
+        migrations::run_document_asset_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -1413,6 +1417,170 @@ impl DocumentSessionStore for SqliteStateStore {
         )
         .map_err(map_db)?;
         Ok(())
+    }
+}
+
+// ─── DocumentAssetStore ──────────────────────────────────────
+
+#[async_trait]
+impl DocumentAssetStore for SqliteStateStore {
+    async fn save_document_asset(&self, asset: &DocumentAsset) -> Result<()> {
+        let conn = self.conn.lock().await;
+        let state_json =
+            serde_json::to_string(&asset.state).map_err(|e| Error::Storage(e.to_string()))?;
+        let skeleton_json = asset
+            .skeleton
+            .as_ref()
+            .map(|s| serde_json::to_string(s))
+            .transpose()
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        let ingested_ts = asset.ingested_at.timestamp();
+        let doc_type = serde_json::to_string(&asset.document_type)
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO document_assets
+             (id, title, filename, file_size_mb, word_count, chunk_count,
+              document_type, ingested_at, index_id, state_json, skeleton_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params![
+                asset.id,
+                asset.title,
+                asset.filename,
+                asset.file_size_mb,
+                asset.word_count as i64,
+                asset.chunk_count as i64,
+                doc_type,
+                ingested_ts,
+                asset.index_id,
+                state_json,
+                skeleton_json,
+            ],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn update_asset_state(&self, id: &str, state: &AssetState) -> Result<()> {
+        let conn = self.conn.lock().await;
+        let state_json =
+            serde_json::to_string(state).map_err(|e| Error::Storage(e.to_string()))?;
+        conn.execute(
+            "UPDATE document_assets SET state_json = ?1 WHERE id = ?2",
+            rusqlite::params![state_json, id],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn save_asset_skeleton(
+        &self,
+        id: &str,
+        skeleton: &DocumentSkeleton,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        let skeleton_json =
+            serde_json::to_string(skeleton).map_err(|e| Error::Storage(e.to_string()))?;
+        conn.execute(
+            "UPDATE document_assets SET skeleton_json = ?1 WHERE id = ?2",
+            rusqlite::params![skeleton_json, id],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn get_document_asset(&self, id: &str) -> Result<Option<DocumentAsset>> {
+        let conn = self.conn.lock().await;
+        conn.query_row(
+            "SELECT id, title, filename, file_size_mb, word_count, chunk_count,
+                    document_type, ingested_at, index_id, state_json, skeleton_json
+             FROM document_assets WHERE id = ?1",
+            rusqlite::params![id],
+            |row| Ok(row_to_document_asset(row)),
+        )
+        .optional()
+        .map_err(map_db)
+    }
+
+    async fn list_document_assets(&self) -> Result<Vec<DocumentAsset>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, title, filename, file_size_mb, word_count, chunk_count,
+                        document_type, ingested_at, index_id, state_json, skeleton_json
+                 FROM document_assets
+                 ORDER BY ingested_at DESC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map([], |row| Ok(row_to_document_asset(row)))
+            .map_err(map_db)?;
+        let mut assets = Vec::new();
+        for row in rows {
+            assets.push(row.map_err(map_db)?);
+        }
+        Ok(assets)
+    }
+
+    async fn delete_document_asset(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().await;
+        // Cascade: document_conversations has ON DELETE CASCADE.
+        // document_operations doesn't — clean up explicitly.
+        conn.execute(
+            "DELETE FROM document_operations WHERE asset_id = ?1",
+            rusqlite::params![id],
+        )
+        .map_err(map_db)?;
+        conn.execute(
+            "DELETE FROM document_assets WHERE id = ?1",
+            rusqlite::params![id],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn save_document_operation(
+        &self,
+        message_id: &str,
+        asset_id: &str,
+        operation: &DocumentAssetOperation,
+        duration_ms: u64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        let operation_json =
+            serde_json::to_string(operation).map_err(|e| Error::Storage(e.to_string()))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO document_operations
+             (message_id, asset_id, operation_json, duration_ms)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![message_id, asset_id, operation_json, duration_ms as i64],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+}
+
+fn row_to_document_asset(row: &rusqlite::Row) -> DocumentAsset {
+    let state_json: String = row.get(9).unwrap_or_else(|_| r#""Pending""#.to_string());
+    let skeleton_json: Option<String> = row.get(10).ok().flatten();
+    let doc_type_str: String = row.get(6).unwrap_or_else(|_| r#""Unknown""#.to_string());
+    let ingested_ts: i64 = row.get(7).unwrap_or(0);
+
+    DocumentAsset {
+        id: row.get(0).unwrap_or_default(),
+        title: row.get(1).unwrap_or_default(),
+        filename: row.get(2).unwrap_or_default(),
+        file_size_mb: row.get(3).unwrap_or(0.0),
+        word_count: row.get::<_, i64>(4).unwrap_or(0) as usize,
+        chunk_count: row.get::<_, i64>(5).unwrap_or(0) as usize,
+        document_type: serde_json::from_str(&doc_type_str).unwrap_or(DocumentTypeTag::Unknown),
+        ingested_at: chrono::DateTime::from_timestamp(ingested_ts, 0)
+            .unwrap_or_else(|| chrono::Utc::now()),
+        index_id: row.get(8).unwrap_or_default(),
+        skeleton: skeleton_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok()),
+        state: serde_json::from_str(&state_json).unwrap_or(AssetState::Pending),
     }
 }
 

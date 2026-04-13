@@ -848,3 +848,296 @@ pub enum InsightSinkState {
         error: String,
     },
 }
+
+// ─── Document Asset Types ─────────────────────────────────────
+//
+// A persistent document that has been ingested once and can be
+// queried many times. Lives in the document library alongside
+// corpora. The ingest cost is paid once; subsequent queries are
+// fast because the embedding index and structural skeleton are
+// already built.
+
+/// A document that has been uploaded, parsed, embedded, and
+/// structurally analysed. Created by `DocumentAssetManager::ingest`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentAsset {
+    pub id: String,
+    pub title: String,
+    pub filename: String,
+    pub file_size_mb: f32,
+    pub word_count: usize,
+    pub chunk_count: usize,
+    pub document_type: DocumentTypeTag,
+    pub ingested_at: chrono::DateTime<chrono::Utc>,
+    /// LanceDB index ID for this document's embedded chunks.
+    pub index_id: String,
+    /// Structural skeleton — built during ingest, stored permanently.
+    /// None until the skeleton phase completes.
+    pub skeleton: Option<DocumentSkeleton>,
+    pub state: AssetState,
+}
+
+/// Processing state of a document asset. Drives the UI's progress
+/// display and determines which operations are available.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum AssetState {
+    /// File accepted. Processing not yet started.
+    Pending,
+    /// Embedding chunks into LanceDB. RAG not yet available.
+    Indexing {
+        chunks_done: usize,
+        chunks_total: usize,
+    },
+    /// Embedding done. RAG available. Skeleton extraction running.
+    /// Synthesis and coherent analysis available with degraded quality.
+    PartiallyReady,
+    /// Skeleton extraction in progress.
+    BuildingSkeleton {
+        chunks_done: usize,
+        chunks_total: usize,
+    },
+    /// Fully ready. All operations available.
+    Ready,
+    /// Ingest failed.
+    Failed { reason: String },
+}
+
+impl AssetState {
+    /// True when the document has enough indexed data to answer
+    /// RAG queries — embedding is complete even if the skeleton
+    /// is still building.
+    pub fn is_queryable(&self) -> bool {
+        matches!(
+            self,
+            AssetState::PartiallyReady
+                | AssetState::BuildingSkeleton { .. }
+                | AssetState::Ready
+        )
+    }
+
+    /// Short human-readable label for the UI.
+    pub fn label(&self) -> &'static str {
+        match self {
+            AssetState::Pending => "Waiting",
+            AssetState::Indexing { .. } => "Indexing",
+            AssetState::PartiallyReady => "Partially ready",
+            AssetState::BuildingSkeleton { .. } => "Building structure",
+            AssetState::Ready => "Ready",
+            AssetState::Failed { .. } => "Failed",
+        }
+    }
+
+    /// Progress as a 0.0–1.0 fraction. Indexing is the first half,
+    /// skeleton extraction is the second half.
+    pub fn progress_fraction(&self) -> Option<f32> {
+        match self {
+            AssetState::Indexing {
+                chunks_done,
+                chunks_total,
+            } if *chunks_total > 0 => Some(*chunks_done as f32 / *chunks_total as f32 * 0.5),
+            AssetState::PartiallyReady => Some(0.5),
+            AssetState::BuildingSkeleton {
+                chunks_done,
+                chunks_total,
+            } if *chunks_total > 0 => {
+                Some(0.5 + *chunks_done as f32 / *chunks_total as f32 * 0.5)
+            }
+            AssetState::Ready => Some(1.0),
+            _ => None,
+        }
+    }
+}
+
+/// Coarse classification of a document's genre/type. Influences
+/// which skeleton extraction prompts are used and which starter
+/// chips are shown in the conversation view.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DocumentTypeTag {
+    /// Novels, memoirs, literary non-fiction.
+    Narrative,
+    /// Dissertations, essays, philosophy.
+    Argument,
+    /// Legal briefs, scientific papers.
+    Evidence,
+    /// History, biography, journalism.
+    Chronicle,
+    /// Manuals, specifications, documentation.
+    Technical,
+    /// Not yet classified or doesn't fit a category.
+    Unknown,
+}
+
+impl DocumentTypeTag {
+    pub fn label(&self) -> &'static str {
+        match self {
+            DocumentTypeTag::Narrative => "Narrative",
+            DocumentTypeTag::Argument => "Argument",
+            DocumentTypeTag::Evidence => "Evidence",
+            DocumentTypeTag::Chronicle => "Chronicle",
+            DocumentTypeTag::Technical => "Technical",
+            DocumentTypeTag::Unknown => "Document",
+        }
+    }
+}
+
+impl Default for DocumentTypeTag {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+// ─── Document Skeleton ────────────────────────────────────────
+//
+// The structural skeleton is built by the ingest pipeline via
+// batched LLM inference over the document's chunks. It enables
+// synthesis (whole-document analysis) and entity-aware routing
+// that plain RAG cannot do.
+
+/// Structural skeleton of a document — entities, sections, and
+/// key moments. Built once during ingest, stored permanently.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentSkeleton {
+    /// Annotated sections with structural function labels.
+    pub sections: Vec<SectionAnnotation>,
+    /// Top entities ranked by presence across the document.
+    pub main_entities: Vec<RankedEntity>,
+    /// Entity name → chunk indices + representative quotes.
+    pub entity_index: std::collections::HashMap<String, EntityAppearances>,
+    /// Key turning points, revelations, or structural shifts.
+    pub structural_moments: Vec<StructuralMoment>,
+    /// One-paragraph overview used by the router to decide
+    /// operation type without reading the full document.
+    pub overview: String,
+    pub built_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A chunk annotated with its structural role in the document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionAnnotation {
+    pub chunk_index: usize,
+    pub function: SectionFunction,
+    pub key_entities: Vec<String>,
+    /// What this section establishes, advances, or resolves.
+    pub establishes: String,
+}
+
+/// The narrative/argumentative role a section plays.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SectionFunction {
+    Introduces,
+    Develops,
+    Complicates,
+    Resolves,
+    Transitions,
+    Evidences,
+}
+
+impl SectionFunction {
+    pub fn label(&self) -> &'static str {
+        match self {
+            SectionFunction::Introduces => "Introduces",
+            SectionFunction::Develops => "Develops",
+            SectionFunction::Complicates => "Complicates",
+            SectionFunction::Resolves => "Resolves",
+            SectionFunction::Transitions => "Transitions",
+            SectionFunction::Evidences => "Evidences",
+        }
+    }
+}
+
+/// An entity ranked by how prominently it appears in the document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RankedEntity {
+    pub name: String,
+    pub kind: EntityKind,
+    /// Fraction of sections where this entity appears (0.0–1.0).
+    pub presence_rate: f32,
+    /// First chunk index where this entity appears.
+    pub first_appearance: usize,
+    /// Last chunk index where this entity appears.
+    pub last_appearance: usize,
+}
+
+/// Classification of an entity found in a document.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum EntityKind {
+    Character,
+    Argument,
+    Concept,
+    Claim,
+    Evidence,
+    Theme,
+    Person,
+    Event,
+}
+
+impl EntityKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            EntityKind::Character => "Character",
+            EntityKind::Argument => "Argument",
+            EntityKind::Concept => "Concept",
+            EntityKind::Claim => "Claim",
+            EntityKind::Evidence => "Evidence",
+            EntityKind::Theme => "Theme",
+            EntityKind::Person => "Person",
+            EntityKind::Event => "Event",
+        }
+    }
+}
+
+/// Where an entity appears in the document, with sample quotes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityAppearances {
+    pub chunk_indices: Vec<usize>,
+    /// Up to 3 representative quotes from the entity's appearances.
+    pub quote_samples: Vec<String>,
+}
+
+/// A structurally significant moment in the document — a turning
+/// point, key revelation, or major transition.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StructuralMoment {
+    pub chunk_index: usize,
+    /// Short description: "Shevek departs Anarres", "Author
+    /// concedes the counterargument".
+    pub description: String,
+    /// 0.0–1.0 importance score. Used to cap the skeleton at
+    /// 15–40 moments for a full-length document.
+    pub salience: f32,
+}
+
+// ─── Document Operations ──────────────────────────────────────
+//
+// The operation the router selected for a user's request. Stored
+// alongside the response so the user can see how it was handled
+// and so the UI can show the correct badge and explanation.
+
+/// The operation type chosen by the document router for a query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DocumentAssetOperation {
+    /// Retrieved specific passages matching the query.
+    Rag { query: String },
+    /// Synthesised across the full document, tracing entities or
+    /// themes through multiple sections.
+    Synthesis {
+        focus: String,
+        entities: Vec<String>,
+    },
+    /// Searched every section for all instances of a pattern.
+    Aggregation { query: String },
+    /// Applied a transformation (edit, rewrite, extract).
+    Transformation,
+}
+
+impl DocumentAssetOperation {
+    /// Short label for the operation badge in the UI.
+    pub fn label(&self) -> &'static str {
+        match self {
+            DocumentAssetOperation::Rag { .. } => "Retrieved passages",
+            DocumentAssetOperation::Synthesis { .. } => "Synthesised across full document",
+            DocumentAssetOperation::Aggregation { .. } => "Found all instances",
+            DocumentAssetOperation::Transformation => "Applied transformation",
+        }
+    }
+}

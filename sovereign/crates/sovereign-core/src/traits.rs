@@ -267,13 +267,54 @@ pub trait DocumentSessionStore: Send + Sync {
     async fn update_document_session(&self, session: &DocumentSession) -> Result<()>;
 }
 
+// ─── Document Asset Store ────────────────────────────────────
+
+#[async_trait]
+pub trait DocumentAssetStore: Send + Sync {
+    /// Persist a new document asset. Called immediately after parsing
+    /// so the asset appears in the library while processing continues.
+    async fn save_document_asset(&self, asset: &DocumentAsset) -> Result<()>;
+
+    /// Update just the processing state. Called frequently during
+    /// ingest to drive UI progress.
+    async fn update_asset_state(&self, id: &str, state: &AssetState) -> Result<()>;
+
+    /// Store the completed skeleton. Called once when skeleton
+    /// extraction finishes.
+    async fn save_asset_skeleton(
+        &self,
+        id: &str,
+        skeleton: &DocumentSkeleton,
+    ) -> Result<()>;
+
+    /// Retrieve a single asset by ID.
+    async fn get_document_asset(&self, id: &str) -> Result<Option<DocumentAsset>>;
+
+    /// List all assets, ordered by ingested_at descending.
+    async fn list_document_assets(&self) -> Result<Vec<DocumentAsset>>;
+
+    /// Delete an asset and its associated data.
+    async fn delete_document_asset(&self, id: &str) -> Result<()>;
+
+    /// Record which operation was used for a document response.
+    /// Stored alongside message metadata for the operation badge
+    /// and for analytics.
+    async fn save_document_operation(
+        &self,
+        message_id: &str,
+        asset_id: &str,
+        operation: &DocumentAssetOperation,
+        duration_ms: u64,
+    ) -> Result<()>;
+}
+
 // ─── 6. Storage (supertrait) ──────────────────────────────────
 
 #[async_trait]
 pub trait StateStore:
     ConversationStore + TaskStore + MemoryStore + RoutingStore
     + DocumentStore + CorpusStateStore + BudgetStore + PermissionStore
-    + HealthStore + DocumentSessionStore
+    + HealthStore + DocumentSessionStore + DocumentAssetStore
 {}
 
 // ─── Approval Channel ─────────────────────────────────────────

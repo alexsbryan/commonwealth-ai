@@ -6,9 +6,9 @@ use tokio::sync::RwLock;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{
-    BudgetStore, ConversationStore, CorpusStateStore, DocumentSessionStore,
-    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore,
-    StateStore, TaskStore,
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentAssetStore,
+    DocumentSessionStore, DocumentStore, HealthStore, MemoryStore,
+    PermissionStore, RoutingStore, StateStore, TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -398,6 +398,37 @@ impl DocumentSessionStore for InMemoryStateStore {
         Ok(None)
     }
     async fn update_document_session(&self, _session: &DocumentSession) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl DocumentAssetStore for InMemoryStateStore {
+    async fn save_document_asset(&self, _asset: &DocumentAsset) -> Result<()> {
+        Ok(())
+    }
+    async fn update_asset_state(&self, _id: &str, _state: &AssetState) -> Result<()> {
+        Ok(())
+    }
+    async fn save_asset_skeleton(&self, _id: &str, _skeleton: &DocumentSkeleton) -> Result<()> {
+        Ok(())
+    }
+    async fn get_document_asset(&self, _id: &str) -> Result<Option<DocumentAsset>> {
+        Ok(None)
+    }
+    async fn list_document_assets(&self) -> Result<Vec<DocumentAsset>> {
+        Ok(vec![])
+    }
+    async fn delete_document_asset(&self, _id: &str) -> Result<()> {
+        Ok(())
+    }
+    async fn save_document_operation(
+        &self,
+        _message_id: &str,
+        _asset_id: &str,
+        _operation: &DocumentAssetOperation,
+        _duration_ms: u64,
+    ) -> Result<()> {
         Ok(())
     }
 }

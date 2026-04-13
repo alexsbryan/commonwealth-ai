@@ -294,6 +294,60 @@ pub fn run_document_session_migration(conn: &Connection) -> rusqlite::Result<()>
     )
 }
 
+/// Document asset library — persistent documents that are ingested once
+/// and queried many times.
+pub fn run_document_asset_migration(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS document_assets (
+            id              TEXT PRIMARY KEY,
+            title           TEXT NOT NULL,
+            filename        TEXT NOT NULL,
+            file_size_mb    REAL NOT NULL,
+            word_count      INTEGER NOT NULL,
+            chunk_count     INTEGER NOT NULL,
+            document_type   TEXT NOT NULL DEFAULT 'Unknown',
+            ingested_at     INTEGER NOT NULL,
+            index_id        TEXT NOT NULL,
+            -- AssetState serialised as JSON so variants with fields
+            -- (Indexing{chunks_done, chunks_total}) round-trip cleanly.
+            state_json      TEXT NOT NULL,
+            -- DocumentSkeleton as JSON. NULL until skeleton extraction
+            -- completes. Can be large (50–200 KB for a novel).
+            skeleton_json   TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_document_assets_ingested
+            ON document_assets(ingested_at DESC);
+
+        -- Each document gets its own conversation thread. This is a
+        -- regular conversation that the conversation view renders,
+        -- but scoped to a single document asset.
+        CREATE TABLE IF NOT EXISTS document_conversations (
+            id          TEXT PRIMARY KEY,
+            asset_id    TEXT NOT NULL REFERENCES document_assets(id) ON DELETE CASCADE,
+            created_at  INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_docconv_asset
+            ON document_conversations(asset_id);
+
+        -- Track which operation was used for each document response.
+        -- The operation badge in the UI reads from message metadata,
+        -- but this table enables analytics and debugging.
+        CREATE TABLE IF NOT EXISTS document_operations (
+            message_id      TEXT PRIMARY KEY,
+            asset_id        TEXT NOT NULL,
+            operation_json  TEXT NOT NULL,
+            duration_ms     INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_docops_asset
+            ON document_operations(asset_id);
+        ",
+    )
+}
+
 /// Add vector index readiness tracking to corpus_state.
 /// `vector_index_ready = 1` means the IVF-PQ index is built and semantic
 /// search is available. Defaults to 0 so existing corpora start unverified;
