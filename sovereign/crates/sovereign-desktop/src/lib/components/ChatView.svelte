@@ -39,6 +39,7 @@
     onInputHandled: () => void;
     onOpenSettings?: () => void;
     onToggleInsights?: () => void;
+    onConversationCreated?: (id: string) => void;
   }
 
   let {
@@ -51,6 +52,7 @@
     onInputHandled,
     onOpenSettings,
     onToggleInsights,
+    onConversationCreated,
   }: Props = $props();
 
   let messages: MessageEntry[] = $state([]);
@@ -202,6 +204,7 @@
       const created = await createConversation();
       convoId = created.id;
       activeConversationId = convoId;
+      onConversationCreated?.(convoId);
     }
 
     // Add user message optimistically.
@@ -254,6 +257,7 @@
       const created = await createConversation();
       convoId = created.id;
       activeConversationId = convoId;
+      onConversationCreated?.(convoId);
     }
 
     const userMsg: MessageEntry = {

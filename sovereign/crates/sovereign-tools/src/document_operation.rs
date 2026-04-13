@@ -19,8 +19,10 @@ use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
 // ToolExample is part of types::* but explicit for clarity.
 
-/// Chunks per map batch.
-const CHUNKS_PER_BATCH: usize = 8;
+/// Chunks per map batch. Smaller batches = more calls but each call
+/// is disproportionately faster (attention scales with sequence length).
+/// 4 chunks × ~512 tokens = ~2048 tokens input — fast on the 9B model.
+const CHUNKS_PER_BATCH: usize = 4;
 /// Number of map batches to dispatch concurrently.
 /// Against embedded inference: serializes (same speed as sequential).
 /// Against a remote server with --parallel N: N batches run simultaneously.
@@ -79,21 +81,16 @@ impl DocumentOperationTool {
                         .collect::<Vec<_>>()
                         .join("\n\n");
 
+                    // Minimal prompt — every token of instruction prefix is
+                    // prefill overhead multiplied by batch_count. No system
+                    // message (saves ~50 tokens of template per call).
                     CompletionRequest {
                         prompt: format!(
-                            "{map_prompt}\n\nPassage ({} of {total_batches}):\n{passage}\n\n\
-                             Return only JSON. If nothing relevant appears in this \
-                             passage, return null.",
-                            batch_idx + 1,
+                            "{map_prompt}\n\nPassage:\n{passage}\n\nExtract relevant info. If nothing relevant, respond: null",
                         ),
-                        system_message: Some(format!(
-                            "You are processing section {} of {} from a document. \
-                             Follow the extraction instructions precisely.",
-                            batch_idx + 1,
-                            total_batches,
-                        )),
+                        system_message: None,
                         preferred_speed: Speed::Fast,
-                        max_tokens: Some(512),
+                        max_tokens: Some(384),
                         temperature: Some(0.0),
                         structured_output: None,
                         think_budget: Some(0),
@@ -207,24 +204,20 @@ impl DocumentOperationTool {
         reduce_prompt: &str,
     ) -> Result<String> {
         let combined = fragments.join("\n\n---\n\n");
+        // Minimal prompt — no system message, no extra instructions.
         let prompt = format!(
-            "{reduce_prompt}\n\nFragments:\n{combined}\n\n\
-             Produce the merged JSON. Resolve conflicts in favour of \
-             the more specific or later-occurring information."
+            "Merge these extracted notes. Deduplicate, organize, keep all details.\n\n\
+             {combined}"
         );
 
         let request = CompletionRequest {
             prompt,
-            system_message: Some(
-                "You are merging extraction results from multiple document sections. \
-                 Produce a coherent, deduplicated final output."
-                    .to_string(),
-            ),
+            system_message: None,
             preferred_speed: Speed::Fast,
             max_tokens: Some(1024),
             temperature: Some(0.0),
             structured_output: None,
-            think_budget: Some(0), // no thinking — merge is mechanical
+            think_budget: Some(0),
             top_k: None,
             top_p: None,
             oicp: None,

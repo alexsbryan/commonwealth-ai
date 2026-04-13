@@ -111,6 +111,15 @@
     pendingApproval = null;
     pendingInput = null;
   }
+
+  let conversationListRef: ConversationList;
+
+  function handleConversationCreated(id: string) {
+    // ChatView auto-created a conversation — update the sidebar
+    // and select it so the user can navigate back to it.
+    selectedConversationId = id;
+    conversationListRef?.loadConversations?.();
+  }
 </script>
 
 {#if view === "loading"}
@@ -141,6 +150,7 @@
   <div class="app-layout">
     <aside class="sidebar">
       <ConversationList
+        bind:this={conversationListRef}
         {selectedConversationId}
         onSelect={handleConversationSelect}
         onToggleSettings={handleToggleSettings}
@@ -160,6 +170,7 @@
           onInputHandled={() => (pendingInput = null)}
           onOpenSettings={() => (showSettings = true)}
           onToggleInsights={() => (showInsights = !showInsights)}
+          onConversationCreated={handleConversationCreated}
         />
       {/if}
     </main>

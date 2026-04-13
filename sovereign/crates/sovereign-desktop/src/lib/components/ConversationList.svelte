@@ -22,7 +22,7 @@
     loadConversations();
   });
 
-  async function loadConversations() {
+  export async function loadConversations() {
     try {
       conversations = await listConversations(50, 0);
     } catch (e) {

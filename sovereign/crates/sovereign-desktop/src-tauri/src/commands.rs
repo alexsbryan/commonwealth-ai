@@ -356,21 +356,28 @@ pub async fn send_message_stream(
                     .await
                 {
                     Ok(response) => {
+                        // Use pending_clone as the message_id — the frontend
+                        // created a placeholder with this ID and the guard
+                        // check in the message-complete handler matches on it.
                         let _ = app.emit(
                             "message-complete",
                             MessageCompletePayload {
                                 conversation_id: conversation_id_owned,
-                                message_id: response.message.id,
+                                message_id: pending_clone.clone(),
                                 full_text: response.message.content,
                                 metadata: response.message.metadata,
                             },
                         );
                     }
                     Err(e) => {
+                        // Clear the loading state on error too.
                         let _ = app.emit(
-                            "message-error",
-                            crate::approval::ErrorPayload {
-                                message: e.to_string(),
+                            "message-complete",
+                            MessageCompletePayload {
+                                conversation_id: conversation_id_owned,
+                                message_id: pending_clone.clone(),
+                                full_text: format!("Error: {e}"),
+                                metadata: None,
                             },
                         );
                     }
