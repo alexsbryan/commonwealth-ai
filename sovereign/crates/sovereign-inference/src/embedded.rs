@@ -1169,22 +1169,20 @@ const THINK_BUDGET: usize = 512;
 fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> LlamaSampler {
     // Grammar-constrained decoding: if structured_output contains a JSON
     // schema, generate a GBNF grammar and use it to constrain the sampler.
-    // The model physically can't produce tokens outside the grammar.
-    // Always greedy (temperature 0) with grammar — tool calling is deterministic.
+    // DISABLED: the generated GBNF causes llama.cpp assertion failures
+    // during sampling (empty parse stacks). The grammar generator needs
+    // validation against llama.cpp's GBNF parser before we can enable this.
+    // For now, log the grammar so we can debug it offline, and fall through
+    // to the standard sampler.
     if let Some(ref schema) = request.structured_output {
         let grammar_str = json_schema_to_gbnf(schema);
-        tracing::debug!(grammar = %grammar_str, "Using grammar-constrained decoding");
-        match LlamaSampler::grammar(model, &grammar_str, "root") {
-            Ok(grammar_sampler) => {
-                return LlamaSampler::chain_simple([
-                    grammar_sampler,
-                    LlamaSampler::greedy(),
-                ]);
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "Grammar sampler failed, falling back to standard");
-            }
-        }
+        tracing::info!(
+            grammar = %grammar_str,
+            schema = %schema,
+            "Grammar-constrained decoding requested (currently disabled — using standard sampler)"
+        );
+        // TODO: Re-enable once grammar is validated:
+        // match LlamaSampler::grammar(model, &grammar_str, "root") { ... }
     }
 
     // Temperature: per-request override → family default.
