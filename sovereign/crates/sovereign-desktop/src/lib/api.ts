@@ -156,6 +156,17 @@ export async function diagnoseCorpus(): Promise<string> {
   return invoke("diagnose_corpus");
 }
 
+export interface IngestDocumentResult {
+  source: string;
+  chunks_created: number;
+}
+
+export async function ingestDocument(
+  filePath: string,
+): Promise<IngestDocumentResult> {
+  return invoke("ingest_document", { filePath });
+}
+
 export async function getCorpusProgress(
   corpusId: string,
 ): Promise<CorpusProgressPayload | null> {

@@ -1167,6 +1167,53 @@ pub async fn build_corpus_index(
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+pub struct IngestDocumentResult {
+    pub source: String,
+    pub chunks_created: usize,
+}
+
+#[tauri::command]
+pub async fn ingest_document(
+    state: State<'_, Arc<AppState>>,
+    file_path: String,
+) -> Result<IngestDocumentResult, String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+    let inference = {
+        let guard = state.inference.read().await;
+        guard.as_ref().map(Arc::clone)
+    };
+
+    let path = std::path::Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File not found: {file_path}"));
+    }
+
+    let chunks_created = sovereign_tools::rag::ingest::ingest_file(
+        path,
+        store.as_ref(),
+        inference.as_ref().map(|i| i.as_ref()),
+    )
+    .await
+    .map_err(|e| format!("Ingest failed: {e}"))?;
+
+    let source = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&file_path)
+        .to_string();
+
+    eprintln!("[ingest] {} -> {} chunks", source, chunks_created);
+
+    Ok(IngestDocumentResult {
+        source,
+        chunks_created,
+    })
+}
+
 #[tauri::command]
 pub async fn diagnose_corpus(
     state: State<'_, Arc<AppState>>,

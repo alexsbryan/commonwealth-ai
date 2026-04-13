@@ -120,6 +120,7 @@ fn main() {
             commands::remove_corpus,
             commands::build_corpus_index,
             commands::diagnose_corpus,
+            commands::ingest_document,
             commands::get_corpus_progress,
             commands::get_corpus_health,
             commands::retry_enrichment_failures,

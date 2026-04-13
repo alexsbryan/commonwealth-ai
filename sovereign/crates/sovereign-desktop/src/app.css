@@ -269,8 +269,13 @@ input, textarea, select {
   background: var(--lavender-dim);
   padding: 1px 6px;
   border-radius: 3px;
-  cursor: default;
+  cursor: pointer;
   white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.sv-prose .source-citation:hover {
+  background: color-mix(in srgb, var(--lavender) 25%, transparent);
+  color: var(--text-primary);
 }
 .sv-prose .source-citation::before {
   content: "\25C8 ";

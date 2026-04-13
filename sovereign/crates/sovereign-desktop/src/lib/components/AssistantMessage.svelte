@@ -7,6 +7,7 @@
   import ThinkBlock from "./ThinkBlock.svelte";
   import RoutingMeta from "./RoutingMeta.svelte";
   import SourceAttribution from "./SourceAttribution.svelte";
+  import SourcePopover from "./SourcePopover.svelte";
 
   interface Props {
     content: string;
@@ -58,7 +59,43 @@
     }>,
   );
 
-  // Build source from provenance metadata.
+  // ── Citation popover state ─────────────────────────────────
+
+  let popoverChunk = $state<{
+    title: string;
+    corpus_id: string;
+    url?: string;
+    snippet: string;
+  } | null>(null);
+
+  let popoverAnchor = $state({ x: 0, y: 0 });
+
+  function handleProseClick(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains("source-citation")) return;
+
+    const sourceName = target.getAttribute("data-source");
+    if (!sourceName) return;
+
+    // Find the matching chunk — try exact title match, then partial.
+    const chunk =
+      retrievedChunks.find((c) => c.title === sourceName) ??
+      retrievedChunks.find((c) =>
+        c.title.toLowerCase().includes(sourceName.toLowerCase()),
+      ) ??
+      retrievedChunks.find((c) =>
+        sourceName.toLowerCase().includes(c.title.toLowerCase()),
+      );
+
+    if (!chunk) return;
+
+    const rect = target.getBoundingClientRect();
+    popoverAnchor = { x: rect.left, y: rect.bottom };
+    popoverChunk = chunk;
+  }
+
+  // ── Insight clipping ───────────────────────────────────────
+
   function buildSource(): InsightSource {
     const sources = provenance?.sources ?? [];
     const corpusSource = sources.find((s) => s.count > 0);
@@ -101,13 +138,22 @@
   {/each}
 
   {#if proseText}
-    <div class="sv-prose">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="sv-prose" onclick={handleProseClick}>
       {@html proseHtml}
     </div>
   {/if}
 
   <SourceAttribution {content} />
 </div>
+
+{#if popoverChunk}
+  <SourcePopover
+    chunk={popoverChunk}
+    anchor={popoverAnchor}
+    onclose={() => (popoverChunk = null)}
+  />
+{/if}
 
 <style>
   .sv-ai-msg {

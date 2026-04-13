@@ -1,13 +1,16 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { open } from "@tauri-apps/plugin-dialog";
   import {
     sendMessageStream,
     searchWeb,
     getConversation,
     createConversation,
     listCorpora,
+    ingestDocument,
   } from "../api";
+  import type { IngestDocumentResult } from "../api";
   import type {
     MessageEntry,
     TaskStep,
@@ -24,6 +27,7 @@
   import TaskProgress from "./TaskProgress.svelte";
   import ApprovalCard from "./ApprovalCard.svelte";
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
+  import AttachmentBanner from "./AttachmentBanner.svelte";
 
   interface Props {
     conversationId: string | null;
@@ -53,6 +57,14 @@
   let inputText = $state("");
   let isLoading = $state(false);
   let messagesContainer: HTMLDivElement;
+
+  // Document attachment state.
+  let attachment = $state<{
+    source: string;
+    filePath: string;
+    chunksCreated: number;
+  } | null>(null);
+  let isIngesting = $state(false);
   let activeConversationId: string | null = $state(null);
   let streamingMessageId: string | null = $state(null);
   let wordBuffer = new WordBufferedStream();
@@ -139,9 +151,43 @@
     }
   }
 
+  async function handleAttach() {
+    const selected = await open({
+      multiple: false,
+      filters: [
+        {
+          name: "Documents",
+          extensions: ["txt", "md", "pdf"],
+        },
+      ],
+    });
+    if (!selected) return;
+
+    const filePath = typeof selected === "string" ? selected : selected;
+    isIngesting = true;
+
+    try {
+      const result = await ingestDocument(filePath);
+      attachment = {
+        source: result.source,
+        filePath,
+        chunksCreated: result.chunks_created,
+      };
+    } catch (e) {
+      console.error("Failed to ingest document:", e);
+    } finally {
+      isIngesting = false;
+    }
+  }
+
   async function handleSend() {
-    const text = inputText.trim();
+    let text = inputText.trim();
     if (!text || isLoading) return;
+
+    // If a document is attached, prepend context so the planner/tools know.
+    if (attachment) {
+      text = `[Document attached: ${attachment.source}]\n\n${text}`;
+    }
 
     // Create a conversation if none selected.
     let convoId = activeConversationId;
@@ -160,6 +206,7 @@
     };
     messages = [...messages, userMsg];
     inputText = "";
+    attachment = null;
     isLoading = true;
     onClearTask();
     scrollToBottom();
@@ -210,6 +257,7 @@
     };
     messages = [...messages, userMsg];
     inputText = "";
+    attachment = null;
     isLoading = true;
     onClearTask();
     scrollToBottom();
@@ -304,9 +352,31 @@
   </div>
 
   <div class="input-area">
+    {#if attachment}
+      <AttachmentBanner
+        filename={attachment.source}
+        chunksCreated={attachment.chunksCreated}
+        onremove={() => (attachment = null)}
+      />
+    {/if}
+    <div class="input-row">
+    <button
+      class="attach-btn"
+      onclick={handleAttach}
+      disabled={isLoading || isIngesting}
+      title={isIngesting ? "Ingesting document..." : "Attach a document"}
+    >
+      {#if isIngesting}
+        <span class="attach-spinner"></span>
+      {:else}
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M14 8.5l-5.6 5.6a3.5 3.5 0 01-5-5L9 3.5a2.5 2.5 0 013.5 3.5L7 12.5a1.5 1.5 0 01-2.1-2.1L10.3 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+      {/if}
+    </button>
     <textarea
       bind:value={inputText}
-      placeholder="Type a message..."
+      placeholder={attachment ? `Ask about ${attachment.source}...` : "Type a message..."}
       onkeydown={handleKeydown}
       rows="1"
       disabled={isLoading}
@@ -341,6 +411,7 @@
     >
       Send
     </button>
+    </div>
   </div>
 </div>
 
@@ -444,10 +515,50 @@
   /* ── Input area ── */
   .input-area {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
     padding: 12px 20px 16px;
     border-top: 1px solid var(--border-mid);
     background: var(--bg-secondary);
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .attach-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .attach-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .attach-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .attach-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--text-muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   textarea {

@@ -9,7 +9,7 @@ pub struct ParsedDocument {
 }
 
 /// Parse a file into text content.
-/// Supports: .txt, .md, .markdown
+/// Supports: .txt, .md, .markdown, .pdf
 /// Returns an error for unsupported formats.
 pub fn parse_file(path: &Path) -> Result<ParsedDocument> {
     let ext = path
@@ -36,8 +36,23 @@ pub fn parse_file(path: &Path) -> Result<ParsedDocument> {
                 content: cleaned,
             })
         }
+        "pdf" => {
+            let content = pdf_extract::extract_text(path)
+                .map_err(|e| Error::Storage(format!("Failed to extract PDF text from {source}: {e}")))?;
+            // Clean up common PDF extraction artifacts.
+            let cleaned = content
+                .lines()
+                .map(|l| l.trim())
+                .filter(|l| !l.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+            Ok(ParsedDocument {
+                source,
+                content: cleaned,
+            })
+        }
         _ => Err(Error::InvalidInput(format!(
-            "Unsupported file format: .{ext} (supported: .txt, .md)"
+            "Unsupported file format: .{ext} (supported: .txt, .md, .pdf)"
         ))),
     }
 }
@@ -47,7 +62,7 @@ pub fn list_parseable_files(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
     let entries = std::fs::read_dir(dir)
         .map_err(|e| Error::Storage(format!("Failed to read directory {}: {e}", dir.display())))?;
 
-    let supported = ["txt", "text", "md", "markdown"];
+    let supported = ["txt", "text", "md", "markdown", "pdf"];
     let mut files = Vec::new();
 
     for entry in entries {

@@ -27,6 +27,8 @@ lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport"],
 chrono = { version = "0.4", features = ["clock"] }
 lancedb = "0.27"
 arrow-array = "57"
+# Document parsing (RAG pipeline)
+pdf-extract = "0.7"
 
 [features]
 default = []
