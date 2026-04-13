@@ -938,32 +938,69 @@ impl Runtime {
         context: &ConversationContext,
         tool_descriptors: &[ToolDescriptor],
     ) -> Result<Response> {
-        // 1. Generate plan.
-        // If a document is attached, augment the goal with explicit instructions
-        // about the source parameter so the planner generates correct tool params.
-        let plan_goal = if let Some(rest) = message.strip_prefix("[Document attached: ") {
-            if let Some(end) = rest.find(']') {
-                let source = &rest[..end];
-                let query = rest[end + 1..].trim();
-                format!(
-                    "{query}\n\n\
-                     IMPORTANT: The user has uploaded a document. Its source path is \"{source}\". \
-                     When using the document_operation tool, you MUST include \
-                     \"source\": \"{source}\" in the params, along with \"operation\", \
-                     \"map_prompt\", and \"reduce_prompt\"."
-                )
+        // 1. Extract attached document source (if any) and the actual query.
+        let (attached_source, plan_goal) =
+            if let Some(rest) = message.strip_prefix("[Document attached: ") {
+                if let Some(end) = rest.find(']') {
+                    let source = rest[..end].to_string();
+                    let query = rest[end + 1..].trim();
+                    // Tell the planner about the document_operation tool but
+                    // DON'T ask it to generate the source param — we inject that.
+                    let goal = format!(
+                        "{query}\n\n\
+                         The user has uploaded a document. Use the document_operation tool \
+                         to analyze it. You do NOT need to specify the \"source\" parameter — \
+                         it will be injected automatically."
+                    );
+                    (Some(source), goal)
+                } else {
+                    (None, message.to_string())
+                }
             } else {
-                message.to_string()
-            }
-        } else {
-            message.to_string()
-        };
+                (None, message.to_string())
+            };
 
         eprintln!("[runtime] Generating plan...");
-        let plan = self
+        let mut plan = self
             .planner
             .plan(&plan_goal, context, tool_descriptors)
             .await?;
+
+        // Deterministically inject the document source into any
+        // document_operation tool steps. The planner generates the
+        // operation/map_prompt/reduce_prompt; we supply the source
+        // so the filename is never hallucinated.
+        if let Some(ref source) = attached_source {
+            // Resolve the actual source path from the store (the ingest
+            // may have stored it with a full path or just the filename).
+            let resolved_source = {
+                let sources = self.store.list_sources().await.unwrap_or_default();
+                let source_lower = source.to_lowercase();
+                sources
+                    .into_iter()
+                    .find(|s| s.to_lowercase().contains(&source_lower))
+                    .unwrap_or_else(|| source.clone())
+            };
+
+            for step in &mut plan.steps {
+                if let StepKind::Tool { tool_id, params } = &mut step.kind {
+                    if tool_id == "document_operation"
+                        || tool_id.to_lowercase() == "document_operation"
+                    {
+                        if let serde_json::Value::Object(ref mut map) = params {
+                            map.insert(
+                                "source".to_string(),
+                                serde_json::Value::String(resolved_source.clone()),
+                            );
+                        }
+                        tracing::info!(
+                            source = %resolved_source,
+                            "Injected document source into tool params"
+                        );
+                    }
+                }
+            }
+        }
 
         eprintln!(
             "[runtime] Plan: {} steps",
