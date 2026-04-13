@@ -198,10 +198,12 @@ fn build_plan_prompt(
     if !available_tools.is_empty() {
         let tools: String = available_tools
             .iter()
-            .map(|t| format!("- {} — {}", t.name, t.description))
+            .map(|t| format!("- \"{}\" — {}", t.id, t.description))
             .collect::<Vec<_>>()
             .join("\n");
-        prompt.push_str(&format!("\n\nAvailable tools:\n{tools}"));
+        prompt.push_str(&format!(
+            "\n\nAvailable tools (use the quoted ID as \"tool_id\" in your plan):\n{tools}"
+        ));
     }
 
     if !error_feedback.is_empty() {

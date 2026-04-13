@@ -16,11 +16,28 @@ impl ToolRegistry {
     }
 
     pub fn get(&self, tool_id: &str) -> Result<&dyn Tool> {
+        // Try exact match first, then case-insensitive. Models sometimes
+        // capitalize tool names ("Document" vs "document").
+        let tool_id_lower = tool_id.to_lowercase();
         self.tools
             .iter()
-            .find(|t| t.descriptor().id == tool_id)
+            .find(|t| {
+                let id = t.descriptor().id;
+                id == tool_id || id.to_lowercase() == tool_id_lower
+            })
             .map(|t| t.as_ref())
-            .ok_or_else(|| Error::ToolNotFound(tool_id.to_string()))
+            .ok_or_else(|| {
+                let available: Vec<String> = self.tools
+                    .iter()
+                    .map(|t| t.descriptor().id)
+                    .collect();
+                tracing::warn!(
+                    requested = tool_id,
+                    available = ?available,
+                    "Tool not found"
+                );
+                Error::ToolNotFound(tool_id.to_string())
+            })
     }
 
     pub fn descriptors(&self) -> Vec<ToolDescriptor> {
