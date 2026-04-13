@@ -258,70 +258,24 @@ impl Runtime {
 
         let mut all_chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
 
-        if let Some(ref source) = attached_source {
-            // Document-attached mode: retrieve chunks from the attached document.
-            // Search by source name (partial match) in the user document store.
-            tracing::info!(source = %source, "Searching attached document chunks");
-
-            let doc_embedding = self.inference.embed_query(&query_text).await.unwrap_or_default();
-            let user_doc_chunks = self
-                .store
-                .search_documents(&doc_embedding, &query_text, 8)
-                .await
-                .unwrap_or_default();
-
-            // Filter to chunks from the attached document.
-            let source_lower = source.to_lowercase();
-            let matching: Vec<_> = user_doc_chunks
-                .into_iter()
-                .filter(|c| c.source.to_lowercase().contains(&source_lower))
-                .collect();
-
-            tracing::info!(
-                source = %source,
-                matched = matching.len(),
-                "Attached document chunks found"
-            );
-
-            for doc in &matching {
-                all_chunks.push(corpus_engine::ScoredChunk {
-                    content: doc.content.clone(),
-                    title: Some(doc.source.clone()),
-                    url: None,
-                    corpus_id: "user_document".to_string(),
-                    score: 0.8, // boost attached document results
-                    metadata: HashMap::new(),
-                });
-            }
+        if attached_source.is_some() {
+            // Document-attached messages are routed to ComplexTask and should
+            // never reach this path — the planner invokes DocumentOperationTool
+            // for full map-reduce across all chunks. If we somehow get here,
+            // return empty context rather than stuffing a few search results
+            // into the prompt.
+            tracing::debug!("prepare_knowledge_context called with attached document — skipping (should be ComplexTask)");
         } else {
-            // Normal mode: search user documents + installed corpora.
-
-            // 1. User documents (StateStore FTS5/vector).
-            let embedding = self.inference.embed(message).await.unwrap_or_default();
-            let user_doc_chunks = self
-                .store
-                .search_documents(&embedding, message, 5)
-                .await
-                .unwrap_or_default();
-
-            // 2. Installed corpora (corpus-engine LanceDB indexes).
+            // Normal mode: search installed corpora only.
+            // User document chunks are NOT included here — they are only
+            // surfaced when explicitly attached via [Document attached: ...].
+            // This prevents a 764-chunk novel from polluting every unrelated
+            // query with low-relevance matches.
             let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
             let label = format!("{intent:?}");
-            let corpus_chunks = self
+            all_chunks = self
                 .search_corpus_indexes(&corpus_embedding, message, 5, &label)
                 .await;
-
-            all_chunks = corpus_chunks;
-            for doc in &user_doc_chunks {
-                all_chunks.push(corpus_engine::ScoredChunk {
-                    content: doc.content.clone(),
-                    title: Some(doc.source.clone()),
-                    url: None,
-                    corpus_id: "user_document".to_string(),
-                    score: 0.5,
-                    metadata: HashMap::new(),
-                });
-            }
         }
 
         all_chunks.sort_by(|a, b| {
@@ -572,7 +526,10 @@ impl Runtime {
             .classify(message, &context, &tool_descriptors)
             .await?;
 
-        if matches!(intent, Intent::ComplexTask | Intent::KnowledgeQuery) {
+        // Document attached → force ComplexTask fallback to planner path.
+        if message.starts_with("[Document attached: ")
+            || matches!(intent, Intent::ComplexTask | Intent::KnowledgeQuery)
+        {
             return Err(Error::NotImplemented(
                 "Streaming not supported for this intent".into(),
             ));
@@ -715,10 +672,18 @@ impl Runtime {
 
         // 3. Route.
         let tool_descriptors = self.tools.descriptors();
-        let RoutingOutcome { intent, coarse_intent, self_assessment } = self
+        let RoutingOutcome { mut intent, coarse_intent, self_assessment } = self
             .router
             .classify(message, &context, &tool_descriptors)
             .await?;
+
+        // Override: when a document is attached, force ComplexTask so the
+        // planner can invoke DocumentOperationTool for full map-reduce
+        // processing across all chunks — not just 5 search results.
+        if message.starts_with("[Document attached: ") {
+            tracing::info!("Document attached — forcing ComplexTask for planner/tool dispatch");
+            intent = Intent::ComplexTask;
+        }
 
         // 4. Dispatch based on intent.
         match intent {
