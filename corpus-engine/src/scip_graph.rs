@@ -428,11 +428,10 @@ impl ScipGraph {
             let conn = self.conn.lock().await;
             let mut stmt = conn
                 .prepare(
-                    "SELECT r.callee_symbol, s.file_path, r.line, r.ref_kind
+                    "SELECT r.callee_symbol, r.file_path, r.line, r.ref_kind
                      FROM refs r
-                     LEFT JOIN symbols s ON r.callee_symbol = s.name
                      WHERE r.caller_symbol = ?
-                     ORDER BY COALESCE(s.file_path, ''), r.line",
+                     ORDER BY r.file_path, r.line",
                 )
                 .map_err(|e| Error::Database(format!("find_callees prepare: {e}")))?;
 
@@ -440,7 +439,7 @@ impl ScipGraph {
                 .query_map(params![resolved], |row| {
                     Ok(Callee {
                         symbol_name: row.get(0)?,
-                        file_path: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                        file_path: row.get(1)?,
                         line: row.get(2)?,
                         call_kind: CallKind::from_ref_kind(
                             &row.get::<_, String>(3).unwrap_or_default(),
@@ -484,13 +483,17 @@ impl ScipGraph {
             for target in &frontier {
                 let rows = {
                     let conn = self.conn.lock().await;
+                    // Use r.file_path directly — the refs table records
+                    // where the reference occurs, which is always correct.
+                    // The LEFT JOIN on symbols is only for enrichment (e.g.
+                    // resolving a module-level ref to a struct name); the
+                    // file_path from refs is the source of truth.
                     let mut stmt = conn
                         .prepare(
-                            "SELECT r.caller_symbol, s.file_path, r.line, r.ref_kind
+                            "SELECT r.caller_symbol, r.file_path, r.line, r.ref_kind
                              FROM refs r
-                             LEFT JOIN symbols s ON r.caller_symbol = s.name
                              WHERE r.callee_symbol = ?
-                             ORDER BY COALESCE(s.file_path, ''), r.line",
+                             ORDER BY r.file_path, r.line",
                         )
                         .map_err(|e| Error::Database(format!("find_callers prepare: {e}")))?;
 
@@ -498,7 +501,7 @@ impl ScipGraph {
                         .query_map(params![target], |row| {
                             Ok(Caller {
                                 symbol_name: row.get(0)?,
-                                file_path: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                                file_path: row.get(1)?,
                                 line: row.get(2)?,
                                 call_kind: CallKind::from_ref_kind(
                                     &row.get::<_, String>(3).unwrap_or_default(),
