@@ -241,33 +241,89 @@ impl Runtime {
         context: &ConversationContext,
         intent: &Intent,
     ) -> KnowledgeContext {
-        // 1. User documents (StateStore FTS5/vector).
-        let embedding = self.inference.embed(message).await.unwrap_or_default();
-        let user_doc_chunks = self
-            .store
-            .search_documents(&embedding, message, 5)
-            .await
-            .unwrap_or_default();
+        // Check if a document is attached. When present, retrieve chunks
+        // from that specific document rather than doing a general search.
+        // The prefix format is: [Document attached: filename]\n\n<actual question>
+        let (attached_source, query_text) = if let Some(rest) = message.strip_prefix("[Document attached: ") {
+            if let Some(end) = rest.find(']') {
+                let source = rest[..end].to_string();
+                let query = rest[end + 1..].trim().to_string();
+                (Some(source), if query.is_empty() { message.to_string() } else { query })
+            } else {
+                (None, message.to_string())
+            }
+        } else {
+            (None, message.to_string())
+        };
 
-        // 2. Installed corpora (corpus-engine LanceDB indexes).
-        let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
-        let label = format!("{intent:?}");
-        let corpus_chunks = self
-            .search_corpus_indexes(&corpus_embedding, message, 5, &label)
-            .await;
+        let mut all_chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
 
-        // 3. Merge into ScoredChunks, sort by score, truncate.
-        let mut all_chunks: Vec<corpus_engine::ScoredChunk> = corpus_chunks;
-        for doc in &user_doc_chunks {
-            all_chunks.push(corpus_engine::ScoredChunk {
-                content: doc.content.clone(),
-                title: Some(doc.source.clone()),
-                url: None,
-                corpus_id: "user_document".to_string(),
-                score: 0.5,
-                metadata: HashMap::new(),
-            });
+        if let Some(ref source) = attached_source {
+            // Document-attached mode: retrieve chunks from the attached document.
+            // Search by source name (partial match) in the user document store.
+            tracing::info!(source = %source, "Searching attached document chunks");
+
+            let doc_embedding = self.inference.embed_query(&query_text).await.unwrap_or_default();
+            let user_doc_chunks = self
+                .store
+                .search_documents(&doc_embedding, &query_text, 8)
+                .await
+                .unwrap_or_default();
+
+            // Filter to chunks from the attached document.
+            let source_lower = source.to_lowercase();
+            let matching: Vec<_> = user_doc_chunks
+                .into_iter()
+                .filter(|c| c.source.to_lowercase().contains(&source_lower))
+                .collect();
+
+            tracing::info!(
+                source = %source,
+                matched = matching.len(),
+                "Attached document chunks found"
+            );
+
+            for doc in &matching {
+                all_chunks.push(corpus_engine::ScoredChunk {
+                    content: doc.content.clone(),
+                    title: Some(doc.source.clone()),
+                    url: None,
+                    corpus_id: "user_document".to_string(),
+                    score: 0.8, // boost attached document results
+                    metadata: HashMap::new(),
+                });
+            }
+        } else {
+            // Normal mode: search user documents + installed corpora.
+
+            // 1. User documents (StateStore FTS5/vector).
+            let embedding = self.inference.embed(message).await.unwrap_or_default();
+            let user_doc_chunks = self
+                .store
+                .search_documents(&embedding, message, 5)
+                .await
+                .unwrap_or_default();
+
+            // 2. Installed corpora (corpus-engine LanceDB indexes).
+            let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
+            let label = format!("{intent:?}");
+            let corpus_chunks = self
+                .search_corpus_indexes(&corpus_embedding, message, 5, &label)
+                .await;
+
+            all_chunks = corpus_chunks;
+            for doc in &user_doc_chunks {
+                all_chunks.push(corpus_engine::ScoredChunk {
+                    content: doc.content.clone(),
+                    title: Some(doc.source.clone()),
+                    url: None,
+                    corpus_id: "user_document".to_string(),
+                    score: 0.5,
+                    metadata: HashMap::new(),
+                });
+            }
         }
+
         all_chunks.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
