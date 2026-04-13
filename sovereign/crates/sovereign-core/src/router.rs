@@ -614,6 +614,84 @@ Reply with ONLY the letter: A, B, or C"#
             _ => Intent::SimpleQuery,
         }
     }
+
+    /// Check whether the conversation's topic context suggests a routing override.
+    ///
+    /// Returns `Some(Intent)` when the topic context is strong enough to override
+    /// the normal two-pass classification. This prevents general knowledge questions
+    /// in an established conversation from being routed to corpus retrieval that
+    /// will find nothing and refuse.
+    ///
+    /// The key insight: after 2+ turns on a topic, a follow-up question that doesn't
+    /// reference the anchored document's specific content is likely a general knowledge
+    /// question that should be answered directly (SimpleQuery or DeepQuery), not
+    /// sent through KnowledgeQuery retrieval.
+    fn check_topic_continuity(message: &str, context: &ConversationContext) -> Option<Intent> {
+        let tc = context.topic_context.as_ref()?;
+
+        // Need at least 2 turns of established context for an override.
+        if tc.turn_depth < 2 {
+            return None;
+        }
+
+        let msg_lower = message.to_lowercase();
+
+        // If there's an anchored document and the message references it
+        // specifically (uses the filename, "the document", "chapter", "page"),
+        // let normal routing handle it — it's a document query.
+        if tc.anchored_source.is_some() {
+            let doc_reference_patterns = [
+                "the document", "the paper", "the article", "the book",
+                "chapter", "page", "paragraph", "section",
+                "the author writes", "according to the text",
+            ];
+            if doc_reference_patterns.iter().any(|p| msg_lower.contains(p)) {
+                return None;
+            }
+        }
+
+        // Detect general knowledge follow-ups: questions that are about the
+        // broader domain but not about the specific document content.
+        // These use domain terms but not document-specific references.
+        let general_knowledge_signals = [
+            // Question words + broad domain terms suggest general knowledge.
+            "what are the", "what is the", "how does", "how do",
+            "core differences", "main differences", "key differences",
+            "compare", "contrast", "relationship between",
+            "explain", "define", "describe",
+        ];
+
+        let is_general = general_knowledge_signals
+            .iter()
+            .any(|p| msg_lower.contains(p));
+
+        // Pronoun-heavy short follow-ups in an established conversation
+        // are likely continuations that can be answered from general knowledge.
+        let pronoun_patterns = ["he ", "she ", "they ", "it ", "his ", "her ", "their ", "that "];
+        let has_pronouns = pronoun_patterns.iter().any(|p| msg_lower.starts_with(p));
+        let is_short = message.split_whitespace().count() <= 12;
+
+        if is_general || (has_pronouns && is_short) {
+            // Determine whether this needs deep reasoning or a simple answer.
+            if Self::needs_deep_reasoning(message) {
+                tracing::info!(
+                    topic = ?tc.topic,
+                    turn_depth = tc.turn_depth,
+                    "Topic continuity override → DeepQuery (general knowledge follow-up)"
+                );
+                Some(Intent::DeepQuery)
+            } else {
+                tracing::info!(
+                    topic = ?tc.topic,
+                    turn_depth = tc.turn_depth,
+                    "Topic continuity override → SimpleQuery (general knowledge follow-up)"
+                );
+                Some(Intent::SimpleQuery)
+            }
+        } else {
+            None
+        }
+    }
 }
 
 #[async_trait]
@@ -635,6 +713,31 @@ impl Router for LlmRouter {
 
         // Get active skill routing hints.
         let routing_hints = self.skills.routing_hints();
+
+        // Pre-check 0: topic continuity — if the conversation has established
+        // context (2+ turns on a topic), check whether this message is a general
+        // knowledge follow-up that should bypass corpus retrieval.
+        if let Some(override_intent) = Self::check_topic_continuity(message, context) {
+            let latency_ms = start.elapsed().as_millis() as i64;
+            let mut hasher = DefaultHasher::new();
+            message.hash(&mut hasher);
+            let hash = format!("{:x}", hasher.finish());
+            let intent_str = format!("{override_intent:?}");
+            let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+            let _ = self.store.log_routing_meta(&hash, "TOPIC_CONTINUITY", None).await;
+
+            eprintln!(
+                "[router] \"{}\" → {:?} (topic continuity override)",
+                &message[..message.len().min(50)],
+                override_intent,
+            );
+
+            return Ok(RoutingOutcome {
+                intent: override_intent,
+                coarse_intent: Some("TOPIC_CONTINUITY".to_string()),
+                self_assessment: None,
+            });
+        }
 
         // Pre-check 1: temporal/current-info → force ACTION (search).
         // Small models are unreliable at detecting these.
@@ -803,6 +906,7 @@ mod tests {
             }),
             installed_corpora: vec![],
             document_session: None,
+            topic_context: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -834,6 +938,7 @@ mod tests {
             working_memory: None,
             installed_corpora: vec![],
             document_session: None,
+            topic_context: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);

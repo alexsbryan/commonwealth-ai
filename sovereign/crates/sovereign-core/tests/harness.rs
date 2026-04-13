@@ -70,9 +70,33 @@ impl InferenceProvider for DeterministicInference {
         } else if prompt_lower.contains("working memory") || prompt_lower.contains("current goal") {
             // Working memory compression
             r#"{"current_goal": null, "facts": [], "active_documents": []}"#.to_string()
+        } else if prompt_lower.contains("extract the topic and domain") {
+            // Topic context extraction — derive topic and domain from message content.
+            let topic = if prompt_lower.contains("schrödinger") || prompt_lower.contains("schrodinger") {
+                "Schrödinger"
+            } else if prompt_lower.contains("buddhis") || prompt_lower.contains("theravada") || prompt_lower.contains("zen") {
+                "Buddhist philosophy"
+            } else {
+                "general topic"
+            };
+            let domain = if prompt_lower.contains("buddhis") || prompt_lower.contains("theravada") || prompt_lower.contains("zen") {
+                "buddhism"
+            } else if prompt_lower.contains("schrödinger") || prompt_lower.contains("schrodinger") || prompt_lower.contains("quantum") {
+                "physics"
+            } else {
+                "general"
+            };
+            format!(r#"{{"topic": "{topic}", "domain": "{domain}"}}"#)
+        } else if prompt_lower.contains("no relevant results") || prompt_lower.contains("no corpus results") {
+            // Empty-results path — answer from parametric knowledge (new layered confidence behavior)
+            "While no corpus results were found, from general knowledge: this topic is well-studied. Here is a substantive answer based on established knowledge.".to_string()
         } else {
             // Default: deterministic echo response
-            let snippet = &request.prompt[..request.prompt.len().min(100)];
+            let mut end = request.prompt.len().min(100);
+            while end > 0 && !request.prompt.is_char_boundary(end) {
+                end -= 1;
+            }
+            let snippet = &request.prompt[..end];
             format!("Response to: {snippet}")
         };
 

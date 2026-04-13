@@ -235,6 +235,17 @@ impl sovereign_core::traits::DocumentSessionStore for MockStore {
     async fn update_document_session(&self, _session: &sovereign_core::DocumentSession) -> sovereign_core::error::Result<()> { Ok(()) }
 }
 
+#[async_trait::async_trait]
+impl sovereign_core::traits::DocumentAssetStore for MockStore {
+    async fn save_document_asset(&self, _asset: &sovereign_core::DocumentAsset) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn update_asset_state(&self, _id: &str, _state: &sovereign_core::AssetState) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn save_asset_skeleton(&self, _id: &str, _skeleton: &sovereign_core::DocumentSkeleton) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn get_document_asset(&self, _id: &str) -> sovereign_core::error::Result<Option<sovereign_core::DocumentAsset>> { Ok(None) }
+    async fn list_document_assets(&self) -> sovereign_core::error::Result<Vec<sovereign_core::DocumentAsset>> { Ok(Vec::new()) }
+    async fn delete_document_asset(&self, _id: &str) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn save_document_operation(&self, _message_id: &str, _asset_id: &str, _operation: &sovereign_core::DocumentAssetOperation, _duration_ms: u64) -> sovereign_core::error::Result<()> { Ok(()) }
+}
+
 impl StateStore for MockStore {}
 
 // ─── ToolRegistry Tests ────────────────────────────────────────
@@ -436,6 +447,7 @@ fn format_history_empty() {
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
+        topic_context: None,
     };
     assert_eq!(format_history_as_prompt(&ctx, 10), "");
 }
@@ -475,6 +487,7 @@ fn format_history_multi_turn() {
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
+        topic_context: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 10);
@@ -510,6 +523,7 @@ fn format_history_truncates_to_max() {
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
+        topic_context: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 3);
@@ -538,6 +552,7 @@ async fn passthrough_router_always_simple_query() {
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
+        topic_context: None,
     };
 
     let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
@@ -561,6 +576,7 @@ async fn noop_planner_returns_not_implemented() {
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
+        topic_context: None,
     };
 
     let result = planner.plan("do something", &ctx, &[]).await;
@@ -971,6 +987,7 @@ async fn planner_generates_valid_plan() {
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
+        topic_context: None,
     };
 
     let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
@@ -1001,6 +1018,7 @@ async fn planner_fallback_on_garbage() {
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
+        topic_context: None,
     };
 
     // Should succeed with fallback plan (single step).

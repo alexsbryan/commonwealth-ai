@@ -4,7 +4,17 @@
   }
 
   let { content }: Props = $props();
-  let expanded = $state(false);
+
+  // Glass box: expanded by default in dev builds for full visibility.
+  const isDev = (import.meta as any).env?.DEV ?? false;
+  let expanded = $state(isDev);
+
+  // Derive a short preview from the first substantive line.
+  let preview = $derived.by(() => {
+    const firstLine = content.split("\n").find((l) => l.trim().length > 0) ?? "";
+    const trimmed = firstLine.trim();
+    return trimmed.length > 60 ? trimmed.slice(0, 57) + "..." : trimmed;
+  });
 </script>
 
 <div class="think-block">
@@ -14,7 +24,10 @@
     aria-expanded={expanded}
   >
     <span class="think-arrow" class:expanded>&#x25B6;</span>
-    <span class="think-label">Thinking</span>
+    <span class="think-label">Reasoning</span>
+    {#if !expanded && preview}
+      <span class="think-preview">{preview}</span>
+    {/if}
   </button>
   {#if expanded}
     <pre class="think-body">{content}</pre>
@@ -63,6 +76,17 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
     font-weight: 600;
+  }
+
+  .think-preview {
+    color: var(--text-muted);
+    font-style: italic;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .think-body {

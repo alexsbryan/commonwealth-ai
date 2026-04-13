@@ -335,6 +335,112 @@ async fn corpus_state_tracks_chunk_count() {
 
 // ─── ReasonWithTools ─────────────────────────────────────────
 
+// ─── Layered Confidence ─────────────────────────────────────
+
+#[tokio::test]
+async fn layered_confidence_no_unverified_tags() {
+    let h = TestHarness::new();
+    h.ingest_test_corpus(
+        "physics",
+        vec![(
+            "schrodinger",
+            "Schrödinger proposed the cat thought experiment in 1935 to illustrate quantum superposition.",
+        )],
+    )
+    .await;
+
+    let resp = h.send("What is quantum superposition and how does it relate to consciousness?").await;
+
+    // The response should not contain [unverified] tags — the layered
+    // confidence system should present general knowledge naturally.
+    assert!(
+        !resp.message.content.contains("[unverified]"),
+        "Response should not contain [unverified] tags. Got: {}",
+        resp.message.content
+    );
+
+    // Should not refuse to answer.
+    assert!(
+        !resp.message.content.to_lowercase().contains("i cannot find"),
+        "Should not refuse to answer. Got: {}",
+        resp.message.content
+    );
+    assert!(
+        !resp.message.content.to_lowercase().contains("i cannot provide"),
+        "Should not refuse to answer. Got: {}",
+        resp.message.content
+    );
+}
+
+#[tokio::test]
+async fn empty_corpus_produces_response_not_refusal() {
+    let h = TestHarness::new();
+    h.ingest_test_corpus("empty", vec![("stub", "Unrelated stub content about cooking recipes.")]).await;
+
+    // Ask about something not in the corpus at all.
+    let resp = h.send("What are the core differences between Theravada and Zen Buddhism?").await;
+
+    // Should produce a response, not an empty string.
+    assert!(
+        !resp.message.content.is_empty(),
+        "Response should not be empty for general knowledge question"
+    );
+
+    // Should not contain [unverified] tags.
+    assert!(
+        !resp.message.content.contains("[unverified]"),
+        "Empty-corpus response should not use [unverified]. Got: {}",
+        resp.message.content
+    );
+}
+
+// ─── Conversation Topic Context ─────────────────────────────
+
+#[tokio::test]
+async fn topic_context_tracks_across_turns() {
+    let h = TestHarness::new();
+    let conv_id = "topic-test";
+
+    // Turn 1: establish a topic.
+    let r1 = h.send_in("Tell me about Schrödinger's cat experiment", conv_id).await;
+    assert!(!r1.message.content.is_empty());
+
+    // Turn 2: follow up in the same domain.
+    let r2 = h.send_in("How does this relate to quantum decoherence?", conv_id).await;
+    assert!(!r2.message.content.is_empty());
+
+    // Turn 3: a third turn.
+    let r3 = h.send_in("What about the many-worlds interpretation?", conv_id).await;
+    assert!(!r3.message.content.is_empty());
+
+    // All three turns should have produced responses.
+    assert_eq!(h.conversation_length(conv_id).await, 6); // 3 user + 3 assistant
+}
+
+// ─── Thinking Block Filter (TypeScript unit test as Rust doc) ─
+
+// Note: The administrative thinking filter is tested via the TypeScript
+// test suite for parse-message.ts. The following documents the expected
+// behavior for integration verification:
+//
+// Input think block:
+//   **Source Analysis:**
+//   [saantarak-sita] — no substantive content on consciousness
+//   [vasubandhu] — Methodological information only
+//   Critical Problem: I cannot fabricate detailed Buddhist positions
+//
+// Expected: block is SUPPRESSED entirely (>60% administrative lines)
+//
+// Input think block:
+//   The question asks about Schrödinger's monism vs Buddhist philosophy.
+//   Schrödinger's position: consciousness is singular.
+//   What the retrieved sources give me: [religion-science] notes Buddhism
+//   rejects belief in substantive souls.
+//
+// Expected: block is PRESERVED (substantive philosophical reasoning)
+
+// ─── ReasonWithTools ─────────────────────────────────────────
+
 use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};
 use sovereign_core::ToolRegistry;
 use sovereign_core::SkillRegistry;

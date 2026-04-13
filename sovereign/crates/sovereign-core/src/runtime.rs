@@ -40,22 +40,56 @@ clearly-labelled general knowledge is acceptable.\n\
 - Fabricating specific facts (names, statistics, dates, roster members) to fill a gap \
 is never acceptable, even if it would make the response sound more complete.";
 
-/// System prompt for KnowledgeQuery synthesis — anchors `<think>` and response to retrieved passages.
+/// System prompt for KnowledgeQuery synthesis — three-tier confidence framework.
+///
+/// Tier 1 (Retrieved): Claims grounded in passages, cited with [Source: title].
+/// Tier 2 (Parametric): Well-established general knowledge, presented naturally.
+/// Tier 3 (Inference): Reasoning beyond firm ground, hedged explicitly.
 const KNOWLEDGE_SYNTHESIS_SYSTEM: &str = "\
 You have been given retrieved passages from an installed knowledge base. \
-Your answer must be grounded in these passages.\n\
+Use them together with your general knowledge to answer the question.\n\
 \n\
-In your <think> block: reason over the RETRIEVED PASSAGES provided in the prompt, \
-not from training memory. Read each passage carefully before forming any conclusion.\n\
+Use three tiers of knowledge, each presented differently:\n\
 \n\
-After reasoning:\n\
-- If the passages answer the question: synthesise and cite [Source: title].\n\
-- If the passages are partial (e.g. name some but not all items in a list): state \
-  exactly what was found and what is missing. Do not complete the list from memory.\n\
-- If the passages do not contain the answer: say so clearly. Do not fill gaps from memory.\n\
+RETRIEVED — facts directly from the passages below.\n\
+  Cite with [Source: title]. These are your strongest claims.\n\
 \n\
-NEVER present information from your training weights as if it came from the retrieved passages.\n\
-NEVER invent or complete a list, roster, or statistic.";
+PARAMETRIC — your general knowledge that is well-established and consistent \
+  with or extends the retrieved content. Present naturally in prose. \
+  No special label needed for claims that are widely accepted.\n\
+\n\
+INFERENCE — reasoning that goes beyond what sources or general knowledge \
+  can firmly establish. Introduce with hedged language: \
+  \"Drawing from this framework...\", \"This suggests...\", \
+  \"The likely position would be...\"\n\
+\n\
+Guidelines:\n\
+- Do not refuse to engage because retrieval was incomplete.\n\
+- Do not use [unverified] tags.\n\
+- If retrieval found nothing relevant, say so in one sentence, then answer \
+  from your general knowledge.\n\
+- Cite retrieved content with [Source: title]. Present confident general \
+  knowledge naturally. Hedge genuine uncertainty.\n\
+- NEVER invent or complete a list, roster, or statistic you do not fully know.";
+
+/// Thinking directive — orients `<think>` toward substantive reasoning.
+///
+/// Without this, models default to source-adequacy bookkeeping in their
+/// thinking blocks ("Source Analysis: [X] — no substantive content...").
+/// This directive redirects the thinking budget toward the intellectual
+/// content of the question.
+const THINKING_DIRECTIVE: &str = "\
+In your <think> block, reason about the SUBSTANCE of the question:\n\
+1. What does this question actually ask? What would a complete answer contain?\n\
+2. What do the retrieved sources contribute — which specific claims do they ground?\n\
+3. What do I know well enough to state directly, even without retrieved support?\n\
+4. Where are the genuine gaps — things I am uncertain about or where both \
+   sources and my knowledge fall short?\n\
+5. How should I frame what I know vs. what I'm inferring vs. what I'm uncertain about?\n\
+\n\
+Spend your thinking on the substance of the question.\n\
+Source inventory (\"source X discusses Y\") belongs in a single brief scan, \
+not as the primary content of your reasoning.";
 
 fn now() -> i64 {
     SystemTime::now()
@@ -64,25 +98,37 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
+/// Truncate a chunk's content to `MAX_CHUNK_CHARS`, breaking at a word boundary.
+fn truncate_chunk_content(content: &str) -> String {
+    if content.len() > MAX_CHUNK_CHARS {
+        let truncated = &content[..MAX_CHUNK_CHARS];
+        match truncated.rfind(' ') {
+            Some(pos) => format!("{}...", &truncated[..pos]),
+            None => format!("{truncated}..."),
+        }
+    } else {
+        content.to_string()
+    }
+}
+
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
-/// staying within a character budget.
+/// grouped by provenance tier (corpus vs web) and staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
-    let mut parts = Vec::new();
+    let mut corpus_parts = Vec::new();
+    let mut web_parts = Vec::new();
     let mut total = 0;
 
     for c in chunks {
-        let content = if c.content.len() > MAX_CHUNK_CHARS {
-            let truncated = &c.content[..MAX_CHUNK_CHARS];
-            match truncated.rfind(' ') {
-                Some(pos) => format!("{}...", &truncated[..pos]),
-                None => format!("{truncated}..."),
-            }
+        let content = truncate_chunk_content(&c.content);
+        let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
+
+        let (label, bucket) = if c.url.is_some() {
+            (format!("[Web: {title}]"), &mut web_parts)
         } else {
-            c.content.clone()
+            (format!("[Source: {title}]"), &mut corpus_parts)
         };
 
-        let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
-        let part = format!("[Source: {title}]\n{content}");
+        let part = format!("{label}\n{content}");
         let part_len = part.len() + 5; // account for separator
 
         if total + part_len > max_chars {
@@ -90,10 +136,28 @@ fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize)
         }
 
         total += part_len;
-        parts.push(part);
+        bucket.push(part);
     }
 
-    parts.join("\n\n---\n\n")
+    let mut sections = Vec::new();
+    if !corpus_parts.is_empty() {
+        sections.push(format!(
+            "## From knowledge base\n\n{}",
+            corpus_parts.join("\n\n---\n\n")
+        ));
+    }
+    if !web_parts.is_empty() {
+        sections.push(format!(
+            "## From web search\n\n{}",
+            web_parts.join("\n\n---\n\n")
+        ));
+    }
+
+    if sections.is_empty() {
+        String::new()
+    } else {
+        sections.join("\n\n")
+    }
 }
 
 /// Pre-computed knowledge context shared between streaming and non-streaming
@@ -359,13 +423,10 @@ impl Runtime {
             format!("{history}\n\nAssistant:")
         };
 
-        // 6. System message — epistemic contract when knowledge is present.
+        // 6. System message — layered confidence when knowledge is present.
         let system = if !all_chunks.is_empty() {
             self.build_primary_system_message(
-                "Answer based on the provided knowledge sources when relevant. \
-                 Cite sources when referencing them using [Source: name] notation. \
-                 If you make a claim NOT directly supported by the provided sources, \
-                 mark it with [unverified].",
+                &format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}"),
                 context,
             )
         } else {
@@ -406,6 +467,7 @@ impl Runtime {
                     "corpus_id": c.corpus_id,
                     "url": c.url,
                     "snippet": snippet,
+                    "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
                 })
             })
             .collect();
@@ -529,6 +591,17 @@ impl Runtime {
         .await
         .ok();
         context.working_memory = working_memory;
+
+        // 1b. Update topic context for turn-aware routing.
+        let topic_context = crate::context::update_topic_context(
+            self.inference.as_ref(),
+            &context.conversation.messages,
+            context.topic_context.as_ref(),
+            context.document_session.as_ref(),
+        )
+        .await
+        .ok();
+        context.topic_context = topic_context;
 
         // 2. Save user message.
         let user_msg = Message {
@@ -680,6 +753,17 @@ impl Runtime {
         .await
         .ok();
         context.working_memory = working_memory;
+
+        // 1c. Update topic context for turn-aware routing.
+        let topic_context = crate::context::update_topic_context(
+            self.inference.as_ref(),
+            &context.conversation.messages,
+            context.topic_context.as_ref(),
+            context.document_session.as_ref(),
+        )
+        .await
+        .ok();
+        context.topic_context = topic_context;
 
         // 2. Save user message.
         let user_msg = Message {
@@ -843,19 +927,20 @@ impl Runtime {
         chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
         chunks.truncate(8);
 
-        // 4a. Empty results path — Fast slot, honest not-found response.
+        // 4a. Empty results path — answer from parametric knowledge.
         if chunks.is_empty() {
-            tracing::info!("KnowledgeQuery: no chunks — returning empty-results response");
+            tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
             let corpora = context.installed_corpora_display();
             let prompt = format!(
                 "The user asked: \"{message}\"\n\n\
                  You searched these installed knowledge sources: {corpora}\n\
                  The search returned no relevant results.\n\n\
-                 Respond briefly and helpfully:\n\
-                 - Tell the user you searched but didn't find a specific answer\n\
-                 - If you have confident general knowledge about this topic, share it \
-                   briefly but clearly label it as general knowledge, not from the search\n\
-                 - If web search or installing an additional corpus might help, suggest it"
+                 Answer the question from your general knowledge. \
+                 Note briefly that no corpus results were found, but do not refuse \
+                 to answer or dwell on the absence of sources. \
+                 If you are confident about the topic, answer directly and substantively. \
+                 If you are genuinely uncertain, say so and suggest web search or \
+                 installing an additional corpus."
             );
             let request = CompletionRequest {
                 prompt,
@@ -901,7 +986,10 @@ impl Runtime {
              Question: {message}"
         );
 
-        let system = self.build_primary_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
+        let system = self.build_primary_system_message(
+            &format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}"),
+            context,
+        );
 
         let request = CompletionRequest {
             prompt,

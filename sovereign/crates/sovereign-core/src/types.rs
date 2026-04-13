@@ -428,6 +428,12 @@ pub struct ConversationContext {
     /// output without re-running the full map-reduce operation.
     #[serde(default)]
     pub document_session: Option<DocumentSession>,
+    /// Topic context tracking across turns. Updated after each turn
+    /// by a Fast-slot inference call. Used by the router to detect
+    /// follow-ups vs. pivots and avoid misclassifying general knowledge
+    /// questions as corpus queries.
+    #[serde(default)]
+    pub topic_context: Option<ConversationTopicContext>,
 }
 
 impl ConversationContext {
@@ -446,6 +452,22 @@ pub struct WorkingMemory {
     pub current_goal: Option<String>,
     pub facts: Vec<String>,
     pub active_documents: Vec<String>,
+}
+
+/// Lightweight topic context derived from the conversation arc.
+/// Updated after each turn by a Fast-slot inference call.
+/// Used by the router to avoid misclassifying follow-up questions
+/// (e.g. a general knowledge question in a document conversation).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ConversationTopicContext {
+    /// The dominant topic being discussed (e.g. "Schrödinger's What is Life?").
+    pub topic: Option<String>,
+    /// The primary intellectual domain (e.g. "philosophy", "buddhism", "biology").
+    pub domain: Option<String>,
+    /// If the conversation is anchored to a specific document or corpus.
+    pub anchored_source: Option<String>,
+    /// Number of consecutive turns on this topic. Resets on pivot.
+    pub turn_depth: u32,
 }
 
 // ─── Task Types ────────────────────────────────────────────────
