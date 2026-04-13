@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "sovereign": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
+    }
+  },
+  "systemPrompt": "You have access to Sovereign code intelligence for the oicp-types codebase via MCP.\n\nRead .sovereign/SOVEREIGN.md for the hybrid strategy, tool reference, and project-specific invariants.\n\nUse a hybrid approach: Grep/Glob/Read for discovery (finding files, scanning modules), MCP tools for precision (exact definitions, call graphs, recent changes). Start broad, then refine with symbol_lookup.\n\nAT SESSION START: call recent_changes(hours: 24) to orient yourself.\n\nBEFORE ASSUMING A TYPE'S SHAPE: call symbol_lookup. Do not guess at field names or method signatures.\n\nBefore making significant changes to a function, call find_callers to understand its impact radius. Before implementing a function, call find_callees on similar functions to understand established patterns.\n\n This is a git repository. recent_changes reflects filesystem modification time, not git history."
+}
