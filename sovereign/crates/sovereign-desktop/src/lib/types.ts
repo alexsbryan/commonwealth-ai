@@ -174,6 +174,7 @@ export interface MessageCompletePayload {
   conversation_id: string;
   message_id: string;
   full_text: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface HardwareInfo {

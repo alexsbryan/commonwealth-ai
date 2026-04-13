@@ -112,6 +112,11 @@
           if (messages[idx].content.length === 0) {
             messages[idx].content = p.full_text;
           }
+          // Apply metadata (provenance, retrieved_chunks) — now delivered
+          // with the message-complete event after the backend saves the message.
+          if (p.metadata) {
+            messages[idx].metadata = p.metadata;
+          }
         }
         streamingMessageId = null;
         isLoading = false;

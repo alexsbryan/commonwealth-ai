@@ -233,6 +233,7 @@ pub struct MessageCompletePayload {
     pub conversation_id: String,
     pub message_id: String,
     pub full_text: String,
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -262,6 +263,11 @@ pub async fn send_message_stream(
 
     state.approval.set_task_id(&conversation_id).await;
 
+    let store_for_metadata = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone)
+    };
+
     // Try streaming path first.
     match runtime
         .handle_message_stream(&message, &conversation_id)
@@ -272,6 +278,7 @@ pub async fn send_message_stream(
             let conversation_id_owned = conversation_id.clone();
             let app = app_handle.clone();
             let mut stream = handle.stream;
+            let store_ref = store_for_metadata.clone();
 
             tauri::async_runtime::spawn(async move {
                 use futures::StreamExt;
@@ -300,12 +307,31 @@ pub async fn send_message_stream(
                         }
                     }
                 }
+
+                // Fetch the saved message's metadata (includes retrieved_chunks
+                // and provenance, persisted by handle_message_stream).
+                let metadata = if let Some(ref store) = store_ref {
+                    store
+                        .get_conversation(&conversation_id_owned)
+                        .await
+                        .ok()
+                        .and_then(|c| {
+                            c.messages
+                                .iter()
+                                .find(|m| m.id == message_id)
+                                .and_then(|m| m.metadata.clone())
+                        })
+                } else {
+                    None
+                };
+
                 let _ = app.emit(
                     "message-complete",
                     MessageCompletePayload {
                         conversation_id: conversation_id_owned,
                         message_id,
                         full_text,
+                        metadata,
                     },
                 );
             });
@@ -336,6 +362,7 @@ pub async fn send_message_stream(
                                 conversation_id: conversation_id_owned,
                                 message_id: response.message.id,
                                 full_text: response.message.content,
+                                metadata: response.message.metadata,
                             },
                         );
                     }

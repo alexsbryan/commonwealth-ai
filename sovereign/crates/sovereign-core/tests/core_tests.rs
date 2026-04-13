@@ -227,6 +227,14 @@ impl PermissionStore for MockStore {
 #[async_trait]
 impl HealthStore for MockStore {}
 
+#[async_trait::async_trait]
+impl sovereign_core::traits::DocumentSessionStore for MockStore {
+    async fn create_document_session(&self, _session: &sovereign_core::DocumentSession) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn get_document_session(&self, _session_id: &str) -> sovereign_core::error::Result<Option<sovereign_core::DocumentSession>> { Ok(None) }
+    async fn get_document_session_by_conversation(&self, _conversation_id: &str) -> sovereign_core::error::Result<Option<sovereign_core::DocumentSession>> { Ok(None) }
+    async fn update_document_session(&self, _session: &sovereign_core::DocumentSession) -> sovereign_core::error::Result<()> { Ok(()) }
+}
+
 impl StateStore for MockStore {}
 
 // ─── ToolRegistry Tests ────────────────────────────────────────
@@ -426,6 +434,7 @@ fn format_history_empty() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        document_session: None,
     };
     assert_eq!(format_history_as_prompt(&ctx, 10), "");
 }
@@ -464,6 +473,7 @@ fn format_history_multi_turn() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        document_session: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 10);
@@ -498,6 +508,7 @@ fn format_history_truncates_to_max() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        document_session: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 3);
@@ -525,6 +536,7 @@ async fn passthrough_router_always_simple_query() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        document_session: None,
     };
 
     let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
@@ -547,6 +559,7 @@ async fn noop_planner_returns_not_implemented() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        document_session: None,
     };
 
     let result = planner.plan("do something", &ctx, &[]).await;
@@ -956,6 +969,7 @@ async fn planner_generates_valid_plan() {
         memories: vec![],
         working_memory: None,
         installed_corpora: vec![],
+        document_session: None,
     };
 
     let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
@@ -985,6 +999,7 @@ async fn planner_fallback_on_garbage() {
         memories: vec![],
         working_memory: None,
         installed_corpora: vec![],
+        document_session: None,
     };
 
     // Should succeed with fallback plan (single step).

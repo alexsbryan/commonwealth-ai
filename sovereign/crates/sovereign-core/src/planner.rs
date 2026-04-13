@@ -176,6 +176,7 @@ STEP KINDS:
 RULES:
 - Step IDs start at 0 and increment by 1
 - "edges" lists [from, to] pairs showing dependencies
+- IMPORTANT: Edge IDs must reference step IDs that exist in the "steps" array. If you have N steps, valid IDs are 0 through N-1. Do NOT reference step IDs that don't exist.
 - Use {N.output} in "prompt" to reference step N's output
 - "inputs" must list every step referenced in the prompt
 - When a question needs current or real-time information, use the web_search tool with a "query" param
@@ -412,7 +413,7 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
         });
     }
 
-    let edges: Vec<(usize, usize)> = obj
+    let mut edges: Vec<(usize, usize)> = obj
         .get("edges")
         .and_then(|v| v.as_array())
         .map(|arr| {
@@ -429,17 +430,38 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
         })
         .unwrap_or_default();
 
-    // Validate edges reference valid step IDs.
+    // Validate edges — auto-repair by dropping invalid ones rather than
+    // rejecting the entire plan. A plan with a missing edge is better than
+    // no plan at all.
     let max_id = steps.len();
-    for &(from, to) in &edges {
+    let original_edge_count = edges.len();
+    edges.retain(|&(from, to)| {
         if from >= max_id || to >= max_id {
-            return Err(Error::Planning(format!(
-                "Edge ({from}, {to}) references invalid step ID (max: {})",
-                max_id - 1
-            )));
+            tracing::warn!(
+                from, to, max_id,
+                "Dropping invalid edge — references non-existent step"
+            );
+            return false;
         }
         if from == to {
-            return Err(Error::Planning(format!("Self-edge on step {from}")));
+            tracing::warn!(from, "Dropping self-edge");
+            return false;
+        }
+        true
+    });
+    if edges.len() < original_edge_count {
+        tracing::info!(
+            original = original_edge_count,
+            retained = edges.len(),
+            "Plan edges auto-repaired"
+        );
+    }
+
+    // If all edges were dropped, add sequential edges so steps run in order.
+    if edges.is_empty() && steps.len() > 1 {
+        tracing::info!("No valid edges — adding sequential edges");
+        for i in 0..steps.len() - 1 {
+            edges.push((i, i + 1));
         }
     }
 
@@ -578,15 +600,19 @@ mod tests {
     }
 
     #[test]
-    fn parse_plan_invalid_edge_fails() {
+    fn parse_plan_invalid_edge_auto_repaired() {
+        // Invalid edges are dropped, not rejected. The plan should parse
+        // successfully with the invalid edge removed.
         let json = r#"{"goal": "test", "steps": [{"id": 0, "description": "a", "kind": "reason", "prompt": "x"}], "edges": [[0, 5]]}"#;
-        assert!(parse_plan_json(json, "test").is_err());
+        let plan = parse_plan_json(json, "test").unwrap();
+        assert!(plan.edges.is_empty(), "Invalid edge should be dropped");
     }
 
     #[test]
-    fn parse_plan_self_edge_fails() {
+    fn parse_plan_self_edge_auto_repaired() {
         let json = r#"{"goal": "test", "steps": [{"id": 0, "description": "a", "kind": "reason", "prompt": "x"}], "edges": [[0, 0]]}"#;
-        assert!(parse_plan_json(json, "test").is_err());
+        let plan = parse_plan_json(json, "test").unwrap();
+        assert!(plan.edges.is_empty(), "Self-edge should be dropped");
     }
 
     #[test]

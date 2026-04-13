@@ -801,6 +801,7 @@ mod tests {
                 active_documents: vec![],
             }),
             installed_corpora: vec![],
+            document_session: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -831,6 +832,7 @@ mod tests {
             memories: vec![],
             working_memory: None,
             installed_corpora: vec![],
+            document_session: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
