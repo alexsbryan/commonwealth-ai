@@ -1062,15 +1062,27 @@ impl Runtime {
         let prompt_response = self.inference.complete(&prompt_request).await?;
         let prompt_text = prompt_response.text.trim();
 
-        // Parse the generated prompts. Grammar constraint should guarantee
-        // valid JSON, but fallback handles edge cases.
-        let (map_prompt, reduce_prompt) = match serde_json::from_str::<serde_json::Value>(
-            prompt_text
-                .strip_prefix("```json")
-                .and_then(|s| s.strip_suffix("```"))
-                .unwrap_or(prompt_text)
-                .trim()
-        ) {
+        // Parse the generated prompts. Strip think tags and code fences
+        // before parsing — models often wrap JSON in these.
+        let cleaned = prompt_text
+            // Strip <think>...</think> blocks (Qwen3 thinking mode).
+            .split("</think>")
+            .last()
+            .unwrap_or(prompt_text)
+            .trim()
+            // Strip markdown code fences.
+            .strip_prefix("```json")
+            .and_then(|s| s.strip_suffix("```"))
+            .unwrap_or(
+                prompt_text
+                    .split("</think>")
+                    .last()
+                    .unwrap_or(prompt_text)
+                    .trim()
+            )
+            .trim();
+
+        let (map_prompt, reduce_prompt) = match serde_json::from_str::<serde_json::Value>(cleaned) {
             Ok(v) => {
                 let mp = v.get("map_prompt").and_then(|v| v.as_str()).unwrap_or(
                     "Extract key information relevant to the user's question from this passage."
