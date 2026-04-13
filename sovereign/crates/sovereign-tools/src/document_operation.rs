@@ -19,7 +19,10 @@ use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
 // ToolExample is part of types::* but explicit for clarity.
 
-const CHUNKS_PER_BATCH: usize = 4;
+/// Chunks per map batch. Larger batches = fewer inference calls but more
+/// tokens per call. At 8 chunks (~4000 tokens input), a 0.6B fast slot
+/// processes each batch in ~3 seconds. 764 chunks / 8 = 96 batches ≈ 5 min.
+const CHUNKS_PER_BATCH: usize = 8;
 const REDUCE_BATCH_SIZE: usize = 8;
 const MAX_REDUCE_DEPTH: usize = 5;
 
@@ -49,6 +52,7 @@ impl DocumentOperationTool {
         let batches: Vec<&[DocumentChunk]> = chunks.chunks(CHUNKS_PER_BATCH).collect();
         let total_batches = batches.len();
         let mut fragments = Vec::with_capacity(total_batches);
+        let map_start = std::time::Instant::now();
 
         for (i, batch) in batches.iter().enumerate() {
             let passage: String = batch
@@ -74,9 +78,9 @@ impl DocumentOperationTool {
                 )),
                 preferred_speed: Speed::Fast,
                 max_tokens: Some(512),
-                temperature: Some(0.3),
+                temperature: Some(0.0), // deterministic extraction
                 structured_output: None,
-                think_budget: None,
+                think_budget: Some(0), // no thinking — pure extraction
                 top_k: None,
                 top_p: None,
                 oicp: None,
@@ -90,10 +94,16 @@ impl DocumentOperationTool {
                 fragments.push(text);
             }
 
+            let elapsed = map_start.elapsed().as_secs();
+            let rate = if elapsed > 0 { (i + 1) as f32 / elapsed as f32 } else { 0.0 };
+            let eta = if rate > 0.0 { ((total_batches - i - 1) as f32 / rate) as u64 } else { 0 };
             eprintln!(
-                "  [document_operation] Map batch {}/{total_batches} ({} chunks)",
+                "  [document_operation] Map batch {}/{total_batches} ({} chunks) | {:.1} batch/s | ETA {}m{}s",
                 i + 1,
                 batch.len(),
+                rate,
+                eta / 60,
+                eta % 60,
             );
         }
 
