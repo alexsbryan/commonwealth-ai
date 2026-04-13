@@ -23,6 +23,7 @@
     ErrorPayload,
     DocOpProgress,
     DocumentAsset,
+    DocumentOperationPayload,
   } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { insightStore } from "../stores/insights.svelte";
@@ -78,12 +79,13 @@
   let attachedAsset: DocumentAsset | null = $state(null);
   let activeConversationId: string | null = $state(null);
   let streamingMessageId: string | null = $state(null);
-  let docProgress: DocOpProgress | null = $state(null);
+  let docProgressText: string | null = $state(null);
   let wordBuffer = new WordBufferedStream();
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenComplete: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
   let unlistenDocProgress: UnlistenFn | null = null;
+  let unlistenDocOp: UnlistenFn | null = null;
 
   $effect(() => {
     if (conversationId !== activeConversationId) {
@@ -135,7 +137,7 @@
         }
         streamingMessageId = null;
         isLoading = false;
-        docProgress = null;
+        docProgressText = null;
         scrollToBottom();
       },
     );
@@ -149,13 +151,22 @@
       }
       streamingMessageId = null;
       isLoading = false;
-      docProgress = null;
+      docProgressText = null;
     });
 
+    // Listen for DocumentOperationTool progress (map/reduce phases).
     unlistenDocProgress = await listen<DocOpProgress>(
       "document-progress",
       (event) => {
-        docProgress = event.payload;
+        docProgressText = docProgressLabel(event.payload);
+      },
+    );
+
+    // Listen for DocumentAssetManager progress (routing/retrieving/synthesising).
+    unlistenDocOp = await listen<DocumentOperationPayload>(
+      "document:operation",
+      (event) => {
+        docProgressText = opProgressLabel(event.payload);
       },
     );
   });
@@ -165,6 +176,7 @@
     unlistenComplete?.();
     unlistenError?.();
     unlistenDocProgress?.();
+    unlistenDocOp?.();
   });
 
   function docProgressLabel(p: DocOpProgress): string {
@@ -188,6 +200,21 @@
         return "Composing final answer\u2026";
       default:
         return "Thinking\u2026";
+    }
+  }
+
+  function opProgressLabel(p: DocumentOperationPayload): string {
+    switch (p.type) {
+      case "Routing":
+        return `${p.operation ?? "Routing"}\u2026`;
+      case "Retrieving":
+        return "Retrieving relevant passages\u2026";
+      case "AnalysingEntity":
+        return `Analysing ${p.name ?? "entity"}\u2026`;
+      case "Synthesising":
+        return "Synthesising response\u2026";
+      default:
+        return "Processing\u2026";
     }
   }
 
@@ -248,6 +275,16 @@
     // operation badges, and the skeleton-aware synthesis path.
     if (attachedAsset) {
       const asset = attachedAsset;
+
+      // Create conversation if none selected (same as legacy path).
+      let convoId = activeConversationId;
+      if (!convoId) {
+        const created = await createConversation();
+        convoId = created.id;
+        activeConversationId = convoId;
+        onConversationCreated?.(convoId);
+      }
+
       const userMsg: MessageEntry = {
         id: crypto.randomUUID(),
         role: "user",
@@ -284,7 +321,7 @@
         ];
       } finally {
         isLoading = false;
-        docProgress = null;
+        docProgressText = null;
         scrollToBottom();
       }
       return;
@@ -454,10 +491,10 @@
       />
 
       {#if isLoading}
-        {#if docProgress}
+        {#if docProgressText}
           <div class="doc-progress-indicator" aria-label="Sovereign is processing document">
             <span class="progress-mark">{"\u25C8"}</span>
-            <span class="progress-text">{docProgressLabel(docProgress)}</span>
+            <span class="progress-text">{docProgressText}</span>
           </div>
         {:else}
           <div class="typing-indicator" aria-label="Sovereign is responding">
