@@ -479,3 +479,20 @@ export interface DocumentOperationPayload {
   operation?: string;
   name?: string;
 }
+
+export interface DocOpProgress {
+  type:
+    | "Resolving"
+    | "MapStarting"
+    | "MapProgress"
+    | "ReduceStarting"
+    | "ReduceProgress"
+    | "Synthesising";
+  source?: string;
+  chunks?: number;
+  words?: number;
+  total_batches?: number;
+  batches_done?: number;
+  fragments?: number;
+  depth?: number;
+}

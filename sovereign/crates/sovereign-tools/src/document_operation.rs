@@ -37,14 +37,70 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
+// ─── Progress reporting ──────────────────────────────────────
+
+/// Progress updates emitted during document map-reduce operations.
+/// The desktop app forwards these as Tauri events to replace the
+/// typing indicator with a descriptive status line.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "type")]
+pub enum DocOpProgress {
+    /// Source resolved, about to start processing.
+    Resolving {
+        source: String,
+        chunks: usize,
+        words: usize,
+    },
+    /// Map phase starting.
+    MapStarting {
+        total_batches: usize,
+    },
+    /// Map phase progress — emitted after each batch group completes.
+    MapProgress {
+        batches_done: usize,
+        total_batches: usize,
+    },
+    /// Reduce phase starting.
+    ReduceStarting {
+        fragments: usize,
+    },
+    /// Reduce phase progress — emitted per recursion depth.
+    ReduceProgress {
+        depth: usize,
+    },
+    /// Final synthesis in progress.
+    Synthesising,
+}
+
+pub type DocOpCallback = Arc<dyn Fn(DocOpProgress) + Send + Sync>;
+
 pub struct DocumentOperationTool {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
+    progress: Option<DocOpCallback>,
 }
 
 impl DocumentOperationTool {
     pub fn new(store: Arc<dyn StateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
-        Self { store, inference }
+        Self {
+            store,
+            inference,
+            progress: None,
+        }
+    }
+
+    /// Attach a progress callback. When set, every phase of the
+    /// map-reduce pipeline emits a `DocOpProgress` variant so the
+    /// frontend can show descriptive status instead of a spinner.
+    pub fn with_progress(mut self, cb: DocOpCallback) -> Self {
+        self.progress = Some(cb);
+        self
+    }
+
+    fn emit(&self, p: DocOpProgress) {
+        if let Some(ref cb) = self.progress {
+            cb(p);
+        }
     }
 
     /// Map phase: apply the map prompt to batches of chunks.
@@ -67,6 +123,7 @@ impl DocumentOperationTool {
             "  [document_operation] Map: {} batches in {} groups of {} (parallel dispatch)",
             total_batches, total_groups, N_PARALLEL,
         );
+        self.emit(DocOpProgress::MapStarting { total_batches });
 
         for (group_idx, group) in batches.chunks(N_PARALLEL).enumerate() {
             // Build requests for all batches in this group.
@@ -137,6 +194,10 @@ impl DocumentOperationTool {
                 eta / 60,
                 eta % 60,
             );
+            self.emit(DocOpProgress::MapProgress {
+                batches_done,
+                total_batches,
+            });
         }
 
         Ok(fragments)
@@ -162,6 +223,7 @@ impl DocumentOperationTool {
                     "  [document_operation] Final reduce (depth {}, {} fragments) — using primary model",
                     depth, fragments.len(),
                 );
+                self.emit(DocOpProgress::Synthesising);
                 // Final merge uses the primary model for quality synthesis.
                 return self.reduce_final(fragments, reduce_prompt).await;
             }
@@ -171,6 +233,7 @@ impl DocumentOperationTool {
                 depth + 1,
                 fragments.len(),
             );
+            self.emit(DocOpProgress::ReduceProgress { depth });
 
             // First pass: reduce in batches.
             let reduce_batches: Vec<&[String]> = fragments.chunks(REDUCE_BATCH_SIZE).collect();
@@ -449,9 +512,15 @@ impl DocumentOperationTool {
             word_count,
             operation,
         );
+        self.emit(DocOpProgress::Resolving {
+            source: source.to_string(),
+            chunks: chunks.len(),
+            words: word_count,
+        });
 
         // Small document: single pass with map prompt (no reduce needed).
         let output = if chunks.len() <= CHUNKS_PER_BATCH {
+            self.emit(DocOpProgress::Synthesising);
             let full_text: String = chunks
                 .iter()
                 .map(|c| c.content.as_str())
@@ -489,6 +558,9 @@ impl DocumentOperationTool {
                 ));
             }
 
+            self.emit(DocOpProgress::ReduceStarting {
+                fragments: fragments.len(),
+            });
             self.hierarchical_reduce(&fragments, reduce_prompt, 0)
                 .await?
         };

@@ -96,6 +96,12 @@ impl TauriApprovalChannel {
             tracing::warn!("Failed to emit event {event}: {e}");
         }
     }
+
+    /// Emit an event to the frontend. Public so that tool progress
+    /// callbacks (e.g. document operation progress) can use it.
+    pub fn emit_event<S: serde::Serialize + Clone>(&self, event: &str, payload: S) {
+        self.emit(event, payload);
+    }
 }
 
 #[async_trait]

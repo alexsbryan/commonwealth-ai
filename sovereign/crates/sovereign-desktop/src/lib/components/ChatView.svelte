@@ -20,6 +20,7 @@
     MessageChunkPayload,
     MessageCompletePayload,
     ErrorPayload,
+    DocOpProgress,
   } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { insightStore } from "../stores/insights.svelte";
@@ -69,10 +70,12 @@
   let isIngesting = $state(false);
   let activeConversationId: string | null = $state(null);
   let streamingMessageId: string | null = $state(null);
+  let docProgress: DocOpProgress | null = $state(null);
   let wordBuffer = new WordBufferedStream();
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenComplete: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
+  let unlistenDocProgress: UnlistenFn | null = null;
 
   $effect(() => {
     if (conversationId !== activeConversationId) {
@@ -124,6 +127,7 @@
         }
         streamingMessageId = null;
         isLoading = false;
+        docProgress = null;
         scrollToBottom();
       },
     );
@@ -137,14 +141,47 @@
       }
       streamingMessageId = null;
       isLoading = false;
+      docProgress = null;
     });
+
+    unlistenDocProgress = await listen<DocOpProgress>(
+      "document-progress",
+      (event) => {
+        docProgress = event.payload;
+      },
+    );
   });
 
   onDestroy(() => {
     unlistenChunk?.();
     unlistenComplete?.();
     unlistenError?.();
+    unlistenDocProgress?.();
   });
+
+  function docProgressLabel(p: DocOpProgress): string {
+    switch (p.type) {
+      case "Resolving":
+        return `Reading ${p.source ?? "document"} (${p.chunks ?? "?"} sections)\u2026`;
+      case "MapStarting":
+        return `Analysing document (${p.total_batches ?? "?"} sections)\u2026`;
+      case "MapProgress": {
+        const pct =
+          p.batches_done && p.total_batches
+            ? Math.round((p.batches_done / p.total_batches) * 100)
+            : 0;
+        return `Analysing sections\u2026 ${pct}%`;
+      }
+      case "ReduceStarting":
+        return `Synthesising across ${p.fragments ?? "?"} fragments\u2026`;
+      case "ReduceProgress":
+        return `Synthesising (pass ${(p.depth ?? 0) + 1})\u2026`;
+      case "Synthesising":
+        return "Composing final answer\u2026";
+      default:
+        return "Thinking\u2026";
+    }
+  }
 
   async function loadConversation() {
     messages = [];
@@ -355,9 +392,16 @@
       />
 
       {#if isLoading}
-        <div class="typing-indicator" aria-label="Sovereign is responding">
-          <span></span><span></span><span></span>
-        </div>
+        {#if docProgress}
+          <div class="doc-progress-indicator" aria-label="Sovereign is processing document">
+            <span class="progress-mark">{"\u25C8"}</span>
+            <span class="progress-text">{docProgressLabel(docProgress)}</span>
+          </div>
+        {:else}
+          <div class="typing-indicator" aria-label="Sovereign is responding">
+            <span></span><span></span><span></span>
+          </div>
+        {/if}
       {/if}
     {/if}
   </div>
@@ -702,6 +746,29 @@
 
   .typing-indicator span:nth-child(3) {
     animation-delay: 0.4s;
+  }
+
+  .doc-progress-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0 6px 16px;
+    align-self: flex-start;
+    border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    animation: fade-in 0.3s ease;
+  }
+
+  .progress-mark {
+    color: var(--accent);
+    font-size: 13px;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   @keyframes typing-pulse {
