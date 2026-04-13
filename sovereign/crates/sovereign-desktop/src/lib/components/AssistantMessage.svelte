@@ -77,15 +77,21 @@
     const sourceName = target.getAttribute("data-source");
     if (!sourceName) return;
 
-    // Find the matching chunk — try exact title match, then partial.
+    // Find the matching chunk — try several matching strategies.
+    const sn = sourceName.toLowerCase();
     const chunk =
+      // 1. Exact title match.
       retrievedChunks.find((c) => c.title === sourceName) ??
+      // 2. Case-insensitive title match.
+      retrievedChunks.find((c) => c.title.toLowerCase() === sn) ??
+      // 3. Source name appears within a longer title.
+      retrievedChunks.find((c) => c.title.toLowerCase().includes(sn)) ??
+      // 4. Title appears within the source name.
       retrievedChunks.find((c) =>
-        c.title.toLowerCase().includes(sourceName.toLowerCase()),
+        sn.includes(c.title.toLowerCase()) && c.title.length > 2,
       ) ??
-      retrievedChunks.find((c) =>
-        sourceName.toLowerCase().includes(c.title.toLowerCase()),
-      );
+      // 5. Fallback: first chunk from any corpus (show something rather than nothing).
+      (retrievedChunks.length > 0 ? retrievedChunks[0] : null);
 
     if (!chunk) return;
 

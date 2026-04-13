@@ -127,7 +127,10 @@ fn split_oversized_segment(
         *chunk_index += 1;
 
         // Apply overlap: start the next chunk a bit before where we cut.
-        let overlap_start = split_at.saturating_sub(OVERLAP_CHARS);
+        let mut overlap_start = split_at.saturating_sub(OVERLAP_CHARS);
+        while overlap_start > 0 && !remaining.is_char_boundary(overlap_start) {
+            overlap_start -= 1;
+        }
         let overlap_start = remaining[overlap_start..split_at]
             .rfind(' ')
             .map(|i| overlap_start + i + 1)
@@ -140,7 +143,12 @@ fn split_oversized_segment(
 /// Find the best character position to split at, up to max_len.
 /// Prefers: sentence end (. ! ?) > comma/semicolon > word boundary.
 fn find_split_point(text: &str, max_len: usize) -> usize {
-    let search_region = &text[..max_len];
+    // Snap max_len to a char boundary to avoid panicking on multi-byte chars.
+    let mut safe_max = max_len.min(text.len());
+    while safe_max > 0 && !text.is_char_boundary(safe_max) {
+        safe_max -= 1;
+    }
+    let search_region = &text[..safe_max];
 
     // Try sentence boundary (last '. ' or '! ' or '? ' in the region).
     if let Some(pos) = search_region.rfind(". ") {
@@ -189,7 +197,12 @@ fn finalize_chunk(chunks: &mut Vec<TextChunk>, current: &mut String, chunk_index
     *chunk_index += 1;
 
     // Start next chunk with overlap from the end of this one.
-    let overlap_start = content.len().saturating_sub(OVERLAP_CHARS);
+    // Snap to a char boundary to avoid panicking on multi-byte characters
+    // (common in PDF-extracted text with ligatures like fi, fl).
+    let mut overlap_start = content.len().saturating_sub(OVERLAP_CHARS);
+    while overlap_start > 0 && !content.is_char_boundary(overlap_start) {
+        overlap_start -= 1;
+    }
     let overlap_start = content[overlap_start..]
         .find(' ')
         .map(|i| overlap_start + i + 1)
