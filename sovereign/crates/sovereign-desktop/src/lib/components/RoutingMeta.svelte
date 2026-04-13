@@ -102,7 +102,10 @@
         <div class="sources-section">
           <button
             class="sources-toggle"
-            onclick|stopPropagation={() => (sourcesExpanded = !sourcesExpanded)}
+            onclick={(e) => {
+              e.stopPropagation()
+              return sourcesExpanded = !sourcesExpanded
+            }}
           >
             <strong>Retrieved passages ({retrievedChunks.length})</strong>
             <span class="toggle-arrow">{sourcesExpanded ? "\u25B4" : "\u25BE"}</span>
