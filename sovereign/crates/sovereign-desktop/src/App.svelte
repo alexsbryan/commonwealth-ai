@@ -13,10 +13,7 @@
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
   import InsightsPanel from "./lib/components/InsightsPanel.svelte";
   import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
-  import DocumentLibrary from "./lib/components/DocumentLibrary.svelte";
-  import DocumentConversation from "./lib/components/DocumentConversation.svelte";
   import SetupWizard from "./lib/setup/SetupWizard.svelte";
-  import type { DocumentAsset } from "./lib/types";
 
   type AppView = "loading" | "setup" | "chat" | "settings";
 
@@ -26,9 +23,6 @@
   let selectedConversationId: string | null = $state(null);
   let showSettings = $state(false);
   let showInsights = $state(false);
-
-  // Document asset view state.
-  let activeDocument: DocumentAsset | null = $state(null);
 
   // Deep-link join dialog state.
   let pendingJoinLink: string | null = $state(null);
@@ -127,14 +121,6 @@
     conversationListRef?.loadConversations?.();
   }
 
-  function handleOpenDocument(asset: DocumentAsset) {
-    activeDocument = asset;
-    showSettings = false;
-  }
-
-  function handleCloseDocument() {
-    activeDocument = null;
-  }
 </script>
 
 {#if view === "loading"}
@@ -170,15 +156,9 @@
         onSelect={handleConversationSelect}
         onToggleSettings={handleToggleSettings}
       />
-      <DocumentLibrary onOpen={handleOpenDocument} />
     </aside>
     <main class="main-content">
-      {#if activeDocument}
-        <DocumentConversation
-          asset={activeDocument}
-          onBack={handleCloseDocument}
-        />
-      {:else if showSettings}
+      {#if showSettings}
         <SettingsPanel onClose={() => (showSettings = false)} />
       {:else}
         <ChatView

@@ -9,6 +9,7 @@
     createConversation,
     listCorpora,
     ingestDocument,
+    askDocument,
   } from "../api";
   import type { IngestDocumentResult } from "../api";
   import type {
@@ -21,6 +22,7 @@
     MessageCompletePayload,
     ErrorPayload,
     DocOpProgress,
+    DocumentAsset,
   } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { insightStore } from "../stores/insights.svelte";
@@ -29,6 +31,8 @@
   import ApprovalCard from "./ApprovalCard.svelte";
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
   import AttachmentBanner from "./AttachmentBanner.svelte";
+  import DocumentPicker from "./DocumentPicker.svelte";
+  import OperationBadge from "./OperationBadge.svelte";
 
   interface Props {
     conversationId: string | null;
@@ -68,6 +72,10 @@
     chunksCreated: number;
   } | null>(null);
   let isIngesting = $state(false);
+
+  // Document asset picker state.
+  let showDocPicker = $state(false);
+  let attachedAsset: DocumentAsset | null = $state(null);
   let activeConversationId: string | null = $state(null);
   let streamingMessageId: string | null = $state(null);
   let docProgress: DocOpProgress | null = $state(null);
@@ -197,21 +205,24 @@
     }
   }
 
-  async function handleAttach() {
-    const selected = await open({
-      multiple: false,
-      filters: [
-        {
-          name: "Documents",
-          extensions: ["txt", "md", "pdf"],
-        },
-      ],
-    });
-    if (!selected) return;
+  function handleAttach() {
+    showDocPicker = !showDocPicker;
+  }
 
-    const filePath = typeof selected === "string" ? selected : selected;
+  function handleAssetSelected(asset: DocumentAsset) {
+    attachedAsset = asset;
+    // Also set legacy attachment for the banner display.
+    attachment = {
+      source: asset.title || asset.filename,
+      filePath: "",
+      chunksCreated: asset.chunk_count,
+    };
+    showDocPicker = false;
+  }
+
+  // Legacy attach for files ingested via the old path (kept for backward compat).
+  async function handleLegacyAttach(filePath: string) {
     isIngesting = true;
-
     try {
       const result = await ingestDocument(filePath);
       attachment = {
@@ -230,8 +241,59 @@
     let text = inputText.trim();
     if (!text || isLoading) return;
 
-    // If a document is attached, prepend context so the planner/tools know.
-    if (attachment) {
+    // ── Document asset path ─────────────────────────────────
+    // When a DocumentAsset is attached, route through the
+    // DocumentAssetManager (ask_document) instead of the legacy
+    // [Document attached:] prefix. This gives us routing,
+    // operation badges, and the skeleton-aware synthesis path.
+    if (attachedAsset) {
+      const asset = attachedAsset;
+      const userMsg: MessageEntry = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: text,
+        created_at: Math.floor(Date.now() / 1000),
+      };
+      messages = [...messages, userMsg];
+      inputText = "";
+      attachment = null;
+      // Keep attachedAsset so subsequent messages go through the same path.
+      isLoading = true;
+      onClearTask();
+      scrollToBottom();
+
+      try {
+        const result = await askDocument(asset.id, text);
+        const assistantMsg: MessageEntry = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: result.response,
+          created_at: Math.floor(Date.now() / 1000),
+          metadata: { operation: result.operation, sources: result.sources },
+        };
+        messages = [...messages, assistantMsg];
+      } catch (e) {
+        messages = [
+          ...messages,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `Error: ${e}`,
+            created_at: Math.floor(Date.now() / 1000),
+          },
+        ];
+      } finally {
+        isLoading = false;
+        docProgress = null;
+        scrollToBottom();
+      }
+      return;
+    }
+
+    // ── Legacy path: no asset, or old-style attachment ─────
+    // If a legacy attachment is set (no DocumentAsset), use the
+    // original [Document attached:] prefix.
+    if (attachment && !attachedAsset) {
       text = `[Document attached: ${attachment.source}]\n\n${text}`;
     }
 
@@ -407,7 +469,13 @@
   </div>
 
   <div class="input-area">
-    {#if attachment}
+    {#if attachedAsset}
+      <AttachmentBanner
+        filename={attachedAsset.title || attachedAsset.filename}
+        chunksCreated={attachedAsset.chunk_count}
+        onremove={() => { attachedAsset = null; attachment = null; }}
+      />
+    {:else if attachment}
       <AttachmentBanner
         filename={attachment.source}
         chunksCreated={attachment.chunksCreated}
@@ -431,7 +499,7 @@
     </button>
     <textarea
       bind:value={inputText}
-      placeholder={attachment ? `Ask about ${attachment.source}...` : "Type a message..."}
+      placeholder={attachedAsset ? `Ask about ${attachedAsset.title || attachedAsset.filename}...` : attachment ? `Ask about ${attachment.source}...` : "Type a message..."}
       onkeydown={handleKeydown}
       rows="1"
       disabled={isLoading}
@@ -468,6 +536,13 @@
     </button>
     </div>
   </div>
+
+  {#if showDocPicker}
+    <DocumentPicker
+      onSelect={handleAssetSelected}
+      onClose={() => (showDocPicker = false)}
+    />
+  {/if}
 </div>
 
 <style>
