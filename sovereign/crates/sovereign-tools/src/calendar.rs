@@ -40,6 +40,7 @@ impl Tool for CalendarTool {
                 },
                 "required": ["action"]
             }),
+            examples: vec![],
         }
     }
 

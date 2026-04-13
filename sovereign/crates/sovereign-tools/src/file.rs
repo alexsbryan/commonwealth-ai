@@ -54,6 +54,7 @@ impl Tool for FileTool {
                 },
                 "required": ["action", "path"]
             }),
+            examples: vec![],
         }
     }
 

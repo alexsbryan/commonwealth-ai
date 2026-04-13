@@ -1167,6 +1167,26 @@ const THINK_BUDGET: usize = 512;
 /// - **penalties**: kept as a backstop for single-token repetition that DRY's
 ///   `allowed_length = 2` intentionally ignores.
 fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> LlamaSampler {
+    // Grammar-constrained decoding: if structured_output contains a JSON
+    // schema, generate a GBNF grammar and use it to constrain the sampler.
+    // The model physically can't produce tokens outside the grammar.
+    // Always greedy (temperature 0) with grammar — tool calling is deterministic.
+    if let Some(ref schema) = request.structured_output {
+        let grammar_str = json_schema_to_gbnf(schema);
+        tracing::debug!(grammar = %grammar_str, "Using grammar-constrained decoding");
+        match LlamaSampler::grammar(model, &grammar_str, "root") {
+            Ok(grammar_sampler) => {
+                return LlamaSampler::chain_simple([
+                    grammar_sampler,
+                    LlamaSampler::greedy(),
+                ]);
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Grammar sampler failed, falling back to standard");
+            }
+        }
+    }
+
     // Temperature: per-request override → family default.
     let temp = request.temperature.unwrap_or(quirks.default_temperature);
     // Top-k: per-request override → family default → hard fallback of 40.
@@ -1202,4 +1222,106 @@ fn rand_seed() -> u32 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos()
+}
+
+// ─── JSON Schema → GBNF Grammar ─────────────────────────────
+
+/// Convert a JSON schema to a GBNF (GGML BNF) grammar string.
+///
+/// Handles the subset of JSON schema used by tool descriptors:
+/// - `"type": "object"` with `"properties"` and `"required"`
+/// - `"type": "string"` / `"integer"` / `"number"` / `"boolean"`
+/// - Flat schemas only (no nested objects or arrays of objects)
+///
+/// The grammar constrains the token sampler so the model can only
+/// produce valid JSON matching the schema. This eliminates malformed
+/// JSON, missing required fields, and type errors.
+pub fn json_schema_to_gbnf(schema: &serde_json::Value) -> String {
+    let mut rules = Vec::new();
+
+    // Primitive rules shared by all schemas.
+    rules.push(r#"ws ::= [ \t\n]*"#.to_string());
+    rules.push(r#"string ::= "\"" ([^"\\] | "\\" .)* "\""  "#.to_string());
+    rules.push(r#"integer ::= "-"? [0-9]+"#.to_string());
+    rules.push(r#"number ::= "-"? [0-9]+ ("." [0-9]+)?"#.to_string());
+    rules.push(r#"boolean ::= "true" | "false""#.to_string());
+    rules.push(r#"null ::= "null""#.to_string());
+
+    match schema.get("type").and_then(|t| t.as_str()) {
+        Some("object") => {
+            let props = schema
+                .get("properties")
+                .and_then(|p| p.as_object())
+                .cloned()
+                .unwrap_or_default();
+            let required: Vec<String> = schema
+                .get("required")
+                .and_then(|r| r.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            if props.is_empty() {
+                // Any JSON object.
+                rules.push(r#"root ::= "{" ws (string ws ":" ws value (ws "," ws string ws ":" ws value)*)? ws "}""#.to_string());
+                rules.push(r#"value ::= string | number | integer | boolean | null"#.to_string());
+            } else {
+                // Build a rule that produces exactly the required fields in order,
+                // then optionally the non-required fields. This is simpler than
+                // allowing arbitrary order and covers our tool calling needs.
+                let mut field_parts = Vec::new();
+
+                // Required fields first, in schema order.
+                for key in &required {
+                    if let Some(prop_schema) = props.get(key) {
+                        let type_rule = prop_type_rule(prop_schema);
+                        field_parts.push(format!(
+                            r#"ws "\"{}\"" ws ":" ws {}"#,
+                            key, type_rule
+                        ));
+                    }
+                }
+
+                // Optional fields.
+                for (key, prop_schema) in &props {
+                    if required.contains(key) {
+                        continue;
+                    }
+                    let type_rule = prop_type_rule(prop_schema);
+                    field_parts.push(format!(
+                        r#"(ws "," ws "\"{}\"" ws ":" ws {})?"#,
+                        key, type_rule
+                    ));
+                }
+
+                if field_parts.is_empty() {
+                    rules.push(r#"root ::= "{" ws "}""#.to_string());
+                } else {
+                    let fields_joined = field_parts.join(r#" ws "," "#);
+                    rules.push(format!(r#"root ::= "{{" {} ws "}}""#, fields_joined));
+                }
+            }
+        }
+        _ => {
+            // Fallback: allow any JSON value.
+            rules.push(r#"root ::= "{" ws (string ws ":" ws value (ws "," ws string ws ":" ws value)*)? ws "}""#.to_string());
+            rules.push(r#"value ::= string | number | integer | boolean | null"#.to_string());
+        }
+    }
+
+    rules.join("\n")
+}
+
+/// Get the GBNF rule name for a property's type.
+fn prop_type_rule(schema: &serde_json::Value) -> &'static str {
+    match schema.get("type").and_then(|t| t.as_str()) {
+        Some("string") => "string",
+        Some("integer") => "integer",
+        Some("number") => "number",
+        Some("boolean") => "boolean",
+        _ => "string", // default to string for unknown types
+    }
 }

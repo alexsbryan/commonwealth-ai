@@ -61,6 +61,7 @@ impl Tool for EmailTool {
                 },
                 "required": ["action"]
             }),
+            examples: vec![],
         }
     }
 

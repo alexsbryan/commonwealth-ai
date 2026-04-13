@@ -56,6 +56,7 @@ impl Tool for ClaimSearchTool {
                 },
                 "required": ["query"]
             }),
+            examples: vec![],
         }
     }
 
@@ -259,6 +260,7 @@ impl Tool for EpistemicLandscapeTool {
                 },
                 "required": ["topic"]
             }),
+            examples: vec![],
         }
     }
 

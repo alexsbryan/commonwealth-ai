@@ -25,6 +25,7 @@ impl Tool for ComputeTool {
                 },
                 "required": ["code"]
             }),
+            examples: vec![],
         }
     }
 

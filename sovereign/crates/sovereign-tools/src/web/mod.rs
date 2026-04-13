@@ -230,6 +230,7 @@ impl Tool for WebSearchTool {
                 },
                 "required": ["query"]
             }),
+            examples: vec![],
         }
     }
 
@@ -341,6 +342,7 @@ impl Tool for WebFetchTool {
                 },
                 "required": ["url"]
             }),
+            examples: vec![],
         }
     }
 

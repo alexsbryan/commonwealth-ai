@@ -84,6 +84,7 @@ impl Tool for McpToolAdapter {
             name: self.tool_name.clone(),
             description: self.description.clone(),
             parameters: self.input_schema.clone(),
+            examples: vec![],
         }
     }
 

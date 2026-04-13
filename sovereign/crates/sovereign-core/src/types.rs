@@ -176,6 +176,20 @@ pub struct ToolDescriptor {
     pub name: String,
     pub description: String,
     pub parameters: serde_json::Value,
+    /// Concrete examples of correct tool invocations. Small models copy
+    /// examples more reliably than they follow descriptions. Injected
+    /// into planner prompts so the model sees what correct calls look like.
+    #[serde(default)]
+    pub examples: Vec<ToolExample>,
+}
+
+/// A concrete example of a correct tool invocation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolExample {
+    /// When to use this tool (e.g. "User asks about a research topic")
+    pub situation: String,
+    /// The exact JSON arguments for this invocation
+    pub call: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

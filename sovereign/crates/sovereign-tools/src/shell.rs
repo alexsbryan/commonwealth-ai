@@ -28,6 +28,7 @@ impl Tool for ShellTool {
                 },
                 "required": ["command"]
             }),
+            examples: vec![],
         }
     }
 

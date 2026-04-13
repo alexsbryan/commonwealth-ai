@@ -73,6 +73,7 @@ impl Tool for SearchTool {
                 },
                 "required": ["query"]
             }),
+            examples: vec![],
         }
     }
 

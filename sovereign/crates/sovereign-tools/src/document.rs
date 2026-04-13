@@ -185,6 +185,7 @@ impl Tool for DocumentTool {
                 },
                 "required": ["source", "operation"]
             }),
+            examples: vec![],
         }
     }
 

@@ -53,6 +53,7 @@ impl Tool for FindCalleesTool {
                 },
                 "required": ["symbol"]
             }),
+            examples: vec![],
         }
     }
 

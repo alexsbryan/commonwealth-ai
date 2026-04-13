@@ -59,6 +59,7 @@ impl Tool for RecentChangesTool {
                     }
                 }
             }),
+            examples: vec![],
         }
     }
 

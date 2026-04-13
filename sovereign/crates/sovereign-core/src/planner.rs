@@ -198,7 +198,15 @@ fn build_plan_prompt(
     if !available_tools.is_empty() {
         let tools: String = available_tools
             .iter()
-            .map(|t| format!("- \"{}\" — {}", t.id, t.description))
+            .map(|t| {
+                let mut line = format!("- \"{}\" — {}", t.id, t.description);
+                if let Some(ex) = t.examples.first() {
+                    if let Ok(json) = serde_json::to_string(&ex.call) {
+                        line.push_str(&format!("\n  Example: {json}"));
+                    }
+                }
+                line
+            })
             .collect::<Vec<_>>()
             .join("\n");
         prompt.push_str(&format!(

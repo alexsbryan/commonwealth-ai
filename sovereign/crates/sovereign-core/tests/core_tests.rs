@@ -251,6 +251,7 @@ impl Tool for DummyTool {
             name: self.id.clone(),
             description: "test tool".to_string(),
             parameters: serde_json::json!({}),
+            examples: vec![],
         }
     }
     fn required_permissions(&self) -> Vec<Permission> {
@@ -1148,6 +1149,7 @@ impl Tool for PermissionRequiringTool {
             name: "Restricted".to_string(),
             description: "needs permission".to_string(),
             parameters: serde_json::json!({}),
+            examples: vec![],
         }
     }
     fn required_permissions(&self) -> Vec<Permission> {

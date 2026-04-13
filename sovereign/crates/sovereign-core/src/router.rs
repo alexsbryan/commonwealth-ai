@@ -762,6 +762,7 @@ mod tests {
             name: "web_search".to_string(),
             description: "Search the web".to_string(),
             parameters: serde_json::json!({}),
+            examples: vec![],
         }];
         if let Intent::SimpleAction { tool } = LlmRouter::parse_intent("action", &tools) {
             assert_eq!(tool, "web_search");

@@ -46,6 +46,7 @@ impl Tool for KnowledgeTool {
                 },
                 "required": ["query"]
             }),
+            examples: vec![],
         }
     }
 

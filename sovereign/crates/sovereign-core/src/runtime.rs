@@ -266,16 +266,40 @@ impl Runtime {
             // into the prompt.
             tracing::debug!("prepare_knowledge_context called with attached document — skipping (should be ComplexTask)");
         } else {
-            // Normal mode: search installed corpora only.
-            // User document chunks are NOT included here — they are only
-            // surfaced when explicitly attached via [Document attached: ...].
-            // This prevents a 764-chunk novel from polluting every unrelated
-            // query with low-relevance matches.
+            // Normal mode: search installed corpora (corpus-engine LanceDB)
+            // and corpus-type documents in StateStore. User-uploaded documents
+            // are NOT included — they are only surfaced when explicitly
+            // attached via [Document attached: ...].
             let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
             let label = format!("{intent:?}");
             all_chunks = self
                 .search_corpus_indexes(&corpus_embedding, message, 5, &label)
                 .await;
+
+            // Also search StateStore for corpus-type documents (used by test
+            // harness and for corpora ingested directly into the store).
+            let embedding = self.inference.embed(message).await.unwrap_or_default();
+            let store_chunks = self
+                .store
+                .search_documents(&embedding, message, 5)
+                .await
+                .unwrap_or_default();
+            for doc in &store_chunks {
+                // Only include corpus-type documents, not user uploads.
+                if matches!(doc.source_type, SourceType::Corpus { .. }) {
+                    all_chunks.push(corpus_engine::ScoredChunk {
+                        content: doc.content.clone(),
+                        title: Some(doc.source.clone()),
+                        url: None,
+                        corpus_id: match &doc.source_type {
+                            SourceType::Corpus { corpus_id } => corpus_id.clone(),
+                            _ => "unknown".to_string(),
+                        },
+                        score: 0.5,
+                        metadata: HashMap::new(),
+                    });
+                }
+            }
         }
 
         all_chunks.sort_by(|a, b| {
@@ -1017,8 +1041,16 @@ impl Runtime {
             ),
             preferred_speed: Speed::Fast,
             max_tokens: Some(512),
-            temperature: Some(0.3),
-            structured_output: None,
+            temperature: Some(0.0), // deterministic — this is structured output
+            // Grammar-constrain to produce exactly {"map_prompt":"...","reduce_prompt":"..."}
+            structured_output: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "map_prompt": { "type": "string" },
+                    "reduce_prompt": { "type": "string" }
+                },
+                "required": ["map_prompt", "reduce_prompt"]
+            })),
             think_budget: None,
             top_k: None,
             top_p: None,
@@ -1028,9 +1060,9 @@ impl Runtime {
         let prompt_response = self.inference.complete(&prompt_request).await?;
         let prompt_text = prompt_response.text.trim();
 
-        // Parse the generated prompts.
+        // Parse the generated prompts. Grammar constraint should guarantee
+        // valid JSON, but fallback handles edge cases.
         let (map_prompt, reduce_prompt) = match serde_json::from_str::<serde_json::Value>(
-            // Strip markdown code fences if present.
             prompt_text
                 .strip_prefix("```json")
                 .and_then(|s| s.strip_suffix("```"))

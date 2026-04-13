@@ -57,6 +57,7 @@ impl Tool for FindCallersTool {
                 },
                 "required": ["symbol"]
             }),
+            examples: vec![],
         }
     }
 

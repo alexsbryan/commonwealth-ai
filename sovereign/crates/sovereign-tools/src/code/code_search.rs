@@ -110,6 +110,7 @@ impl Tool for CodeSearchTool {
                 },
                 "required": ["query"]
             }),
+            examples: vec![],
         }
     }
 

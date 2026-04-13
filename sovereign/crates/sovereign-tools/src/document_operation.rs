@@ -17,6 +17,7 @@ use async_trait::async_trait;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
+// ToolExample is part of types::* but explicit for clarity.
 
 const CHUNKS_PER_BATCH: usize = 4;
 const REDUCE_BATCH_SIZE: usize = 8;
@@ -211,6 +212,17 @@ impl Tool for DocumentOperationTool {
                 },
                 "required": ["source", "operation", "map_prompt", "reduce_prompt"]
             }),
+            examples: vec![
+                ToolExample {
+                    situation: "User wants to extract character arcs from a novel".to_string(),
+                    call: serde_json::json!({
+                        "source": "manuscript.pdf",
+                        "operation": "extract character arcs",
+                        "map_prompt": "From this section, extract: character names, key actions they take, and how they change.",
+                        "reduce_prompt": "Synthesize all character information into a comprehensive character map with arcs."
+                    }),
+                },
+            ],
         }
     }
 

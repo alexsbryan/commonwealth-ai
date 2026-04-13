@@ -55,6 +55,7 @@ impl Tool for SymbolLookupTool {
                 },
                 "required": ["name"]
             }),
+            examples: vec![],
         }
     }
 
