@@ -26,6 +26,10 @@ fn model_id_hex(id: ModelId) -> String {
     id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
 
+fn node_id_hex(id: NodeId) -> String {
+    id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// Thin wrapper over `MeshStore` for inference-domain state.
 /// All methods are synchronous (SQLite is sync).
 #[derive(Clone)]
@@ -101,6 +105,42 @@ impl InferenceStateStore {
             .collect()
     }
 
+    // ── Mesh plan (adaptive scheduler) ────────────────────────────────
+
+    /// Write the current MeshPlan. All nodes read this to know their role.
+    pub fn set_mesh_plan(&self, plan: &crate::plan::MeshPlan) {
+        if let Ok(bytes) = serde_json::to_vec(plan) {
+            let _ = self.store.set(APP_ID, "mesh_plan", Bytes::from(bytes), self.node_id);
+        }
+    }
+
+    pub fn get_mesh_plan(&self) -> Option<crate::plan::MeshPlan> {
+        self.store
+            .get(APP_ID, "mesh_plan")
+            .ok()
+            .flatten()
+            .and_then(|e| serde_json::from_slice(&e.value).ok())
+    }
+
+    // ── Tier queue depths ──────────────────────────────────────────
+
+    /// Write per-node queue depths for tier routing decisions.
+    pub fn set_queue_depths(&self, depths: &crate::plan::TierQueueDepths) {
+        let key = format!("queue_depth:{}", node_id_hex(self.node_id));
+        if let Ok(bytes) = serde_json::to_vec(depths) {
+            let _ = self.store.set(APP_ID, &key, Bytes::from(bytes), self.node_id);
+        }
+    }
+
+    pub fn all_queue_depths(&self) -> Vec<crate::plan::TierQueueDepths> {
+        self.store
+            .scan(APP_ID, "queue_depth:")
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|e| serde_json::from_slice(&e.value).ok())
+            .collect()
+    }
+
     // ── llama-server addresses ───────────────────────────────────────
 
     pub fn get_llama_address(&self, model_id: ModelId) -> Option<String> {
@@ -150,6 +190,10 @@ mod tests {
             available_on: HashMap::new(),
             oicp_capabilities: caps,
             quantization: "Q4_K_M".into(),
+            min_memory_gb: 0,
+            preferred_memory_gb: 0,
+            supports_parallel_instances: false,
+            supports_pipeline_shard: false,
         }
     }
 

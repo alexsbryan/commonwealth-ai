@@ -165,6 +165,10 @@ mod tests {
             available_on: HashMap::new(),
             oicp_capabilities: CapabilityProfile::default(),
             quantization: "Q4_K_M".into(),
+            min_memory_gb: 0,
+            preferred_memory_gb: 0,
+            supports_parallel_instances: false,
+            supports_pipeline_shard: false,
         }
     }
 

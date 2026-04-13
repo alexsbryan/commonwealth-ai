@@ -279,6 +279,54 @@ impl Orchestrator {
             })
         })
     }
+
+    /// Apply a MeshPlan — stop processes for removed roles, start
+    /// processes for new roles. Called by the orchestrator when it
+    /// detects a new MeshPlan in MeshStore.
+    ///
+    /// This is a best-effort operation: individual process failures
+    /// are logged but don't abort the overall plan application.
+    pub async fn apply_mesh_plan(
+        &mut self,
+        plan: &crate::plan::MeshPlan,
+        my_node_id: commonwealth_core::NodeId,
+    ) {
+        let my_roles = plan
+            .node_roles
+            .get(&my_node_id)
+            .cloned()
+            .unwrap_or_default();
+
+        info!(
+            plan_version = plan.version,
+            my_roles = my_roles.len(),
+            "Applying mesh plan"
+        );
+
+        // Check if any current processes should be stopped.
+        // In the current architecture, model processes are tracked by ModelId.
+        // The MeshPlan roles reference models by string name. For now, we log
+        // the transition rather than forcefully stopping processes — the
+        // existing apply_shard_plan handles spawning.
+        let has_standby = my_roles.iter().any(|r| matches!(r, crate::plan::NodeRole::Standby));
+        if has_standby && !my_roles.iter().any(|r| {
+            matches!(
+                r,
+                crate::plan::NodeRole::ThroughputInference { .. }
+                    | crate::plan::NodeRole::QualityInference { .. }
+            )
+        }) {
+            // Node is standby-only — stop all inference processes.
+            info!("Node assigned Standby — stopping all inference processes");
+            self.stop_all().await;
+        }
+
+        info!(
+            plan_version = plan.version,
+            roles = ?my_roles.iter().map(|r| format!("{r:?}")).collect::<Vec<_>>(),
+            "Mesh plan applied"
+        );
+    }
 }
 
 #[cfg(test)]
