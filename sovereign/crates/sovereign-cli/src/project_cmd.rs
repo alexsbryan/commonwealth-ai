@@ -1612,15 +1612,34 @@ fn update_gitignore(root: &Path) -> std::io::Result<()> {
 
 fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()> {
     let hook_path = root.join(".git/hooks/post-commit");
-
-    let hook_line = format!(
-        "sovereign project refresh --quiet &\n"
-    );
     let _ = corpus_id; // corpus_id resolved from project.json by refresh
+
+    // Resolve the binary path: use the current executable if it exists,
+    // otherwise fall back to "sovereign" on PATH. This way the hook
+    // works both for developers running from a local build and for
+    // global installs.
+    let current_exe = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.canonicalize().ok());
+    let hook_block = if let Some(ref exe) = current_exe {
+        format!(
+            r#"# Sovereign: refresh call graph after commit
+if [ -x "{exe}" ]; then
+  "{exe}" project refresh --quiet &
+elif command -v sovereign >/dev/null 2>&1; then
+  sovereign project refresh --quiet &
+fi
+"#,
+            exe = exe.display()
+        )
+    } else {
+        "# Sovereign: refresh call graph after commit\nsovereign project refresh --quiet &\n"
+            .to_string()
+    };
 
     if hook_path.exists() {
         let existing = std::fs::read_to_string(&hook_path)?;
-        if existing.contains("sovereign project refresh") {
+        if existing.contains("sovereign") && existing.contains("project refresh") {
             // Already installed — don't duplicate.
             return Ok(());
         }
@@ -1629,15 +1648,11 @@ fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()>
         if !content.ends_with('\n') {
             content.push('\n');
         }
-        content.push_str("\n# Sovereign: refresh call graph after commit\n");
-        content.push_str(&hook_line);
+        content.push('\n');
+        content.push_str(&hook_block);
         std::fs::write(&hook_path, content)?;
     } else {
-        let content = format!(
-            "#!/bin/sh\n\
-             # Sovereign: refresh call graph after commit\n\
-             {hook_line}"
-        );
+        let content = format!("#!/bin/sh\n{hook_block}");
         std::fs::write(&hook_path, content)?;
     }
 
