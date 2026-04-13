@@ -1,6 +1,7 @@
 mod code_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
+mod project_cmd;
 mod recipe_cmd;
 
 use std::io::{self, BufRead, Write};
@@ -211,6 +212,10 @@ async fn main() {
             }
             "code" => {
                 let code = code_cmd::run_code(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "project" => {
+                let code = project_cmd::run_project(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             _ => {}

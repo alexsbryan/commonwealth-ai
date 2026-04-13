@@ -111,6 +111,20 @@ cargo run --release -p sovereign-cli -- --model models/fast.gguf --router
 
 Without `--router`, every message gets a direct response. With it, Sovereign classifies intent — simple questions use the fast model, complex requests trigger multi-step planning.
 
+**Subcommands** (no model required):
+
+| Command | Description |
+|---|---|
+| `sovereign project init` | Set up code intelligence for the current repo (see [Code Intelligence](#code-intelligence)) |
+| `sovereign project serve` | Start a lightweight code-intelligence MCP server (no model required) |
+| `sovereign project status` | Check health of index, call graph, MCP server |
+| `sovereign project refresh` | Re-export the SCIP call graph |
+| `sovereign code index <path>` | Index a repository with tree-sitter |
+| `sovereign code watch <corpus>` | Filesystem watcher for incremental re-indexing |
+| `sovereign code mcp-status` | Ping the MCP server and list tools |
+| `sovereign mcp list` | List configured MCP servers |
+| `sovereign recipe test <path>` | Validate a corpus recipe |
+
 ### HTTP Server
 
 REST + WebSocket API for custom frontends and integrations.
@@ -171,6 +185,206 @@ The unified search tool (`search`) replaces separate knowledge and web search to
 4. **Synthesis** — Cited answer with source attribution and provenance
 
 Budget tracking gates web search usage. The system is designed to work fully offline with local knowledge bases as the primary source.
+
+---
+
+## Code Intelligence
+
+`sovereign project init` sets up the full code intelligence stack for a repository: tree-sitter symbol index, SCIP call graph, Claude Code integration, filesystem watcher hooks, and a generated `SOVEREIGN.md` with tool guidance and hybrid strategy. One command, no manual steps.
+
+After init, Claude Code automatically uses a hybrid approach: Grep/Glob/Read for discovering what exists in a module, `symbol_lookup` for precise type definitions, `find_callers`/`find_callees` for compiler-resolved impact analysis, and `recent_changes` for session orientation. The strategy is documented in the generated `.sovereign/SOVEREIGN.md` and wired into `.claude/settings.json` so it works without any manual configuration.
+
+### Global install
+
+If `sovereign-cli` is on your PATH (e.g. via `cargo install`):
+
+```sh
+cd /path/to/your-project
+sovereign project init
+```
+
+### From source (developer workflow)
+
+If you've just cloned the workspace and want to build from source:
+
+```sh
+cd lcol-llm
+cargo build --release -p sovereign-cli
+```
+
+Then run init from any project root:
+
+```sh
+./target/release/sovereign-cli project init
+```
+
+Or with `cargo run`:
+
+```sh
+cargo run --release -p sovereign-cli -- project init
+```
+
+### What it creates
+
+| File | Purpose | Committed? |
+|---|---|---|
+| `.sovereign/SOVEREIGN.md` | Tool reference, session-start protocol, project invariants | Yes |
+| `.sovereign/project.json` | Stores corpus ID, port, flags for `status`/`refresh` | No (gitignored) |
+| `.claude/settings.json` | MCP server entry + system prompt (merged, not overwritten) | Your choice |
+| `.git/hooks/post-commit` | Runs `sovereign project refresh --quiet &` after each commit | No (local) |
+| `~/.sovereign/indexes/{corpus}/` | LanceDB symbol index | N/A (outside repo) |
+| `~/.sovereign/indexes/{corpus}/scip_graph.db` | SCIP call graph (SQLite) | N/A (outside repo) |
+
+### Ongoing commands
+
+```sh
+# Check that everything is healthy
+sovereign project status
+
+# Re-export the SCIP call graph (happens automatically on commit if hooks are installed)
+sovereign project refresh
+```
+
+### Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--name <id>` | directory name | Corpus identifier |
+| `--port <port>` | `8080` | MCP server port written to settings |
+| `--data-dir <dir>` | `~/.sovereign/indexes` | Where the symbol index is stored |
+| `--no-scip` | off | Skip call graph export (if no SCIP exporter is installed) |
+| `--no-hooks` | off | Skip git hook installation |
+| `--no-claude-config` | off | Skip writing `.claude/settings.json` |
+
+### SCIP exporters
+
+The call graph (`find_callers`, `find_callees`) requires a language-specific SCIP exporter on PATH. Without one, `init` completes successfully but call graph tools return a `LanguageNotIndexed` caution instead of results.
+
+| Language | Exporter | Install |
+|---|---|---|
+| Rust | `rust-analyzer` | `rustup component add rust-analyzer` |
+| Go | `scip-go` | `go install github.com/sourcegraph/scip-go@latest` |
+| TypeScript | `scip-typescript` | `npm install -g @sourcegraph/scip-typescript` |
+| Python | `scip-python` | `pip install scip-python` |
+| Java | `scip-java` | [sourcegraph.github.io/scip-java](https://sourcegraph.github.io/scip-java/) |
+
+### Multi-project ecosystems
+
+This repository is part of a five-project ecosystem (`lcol-llm`, `corpus-engine`, `commonwealth`, `oicp-types`, `sovereign-recipes`), each with its own git repo. All five should be indexed so that `symbol_lookup` and `code_search` work across the entire codebase.
+
+**How it works:** Every project gets its own corpus ID (defaulting to the directory name). All indexes live under the shared `~/.sovereign/indexes/` directory. The tools `symbol_lookup`, `code_search`, and `recent_changes` automatically query every installed index — so `symbol_lookup("InferenceProvider")` finds the Rust definition in `lcol-llm` and `symbol_lookup("EmbedFn")` finds it in `corpus-engine`, regardless of which project you're working in.
+
+The call graph (`find_callers`, `find_callees`) is per-project — cross-project call edges aren't tracked. This matches reality: `corpus-engine` has no dependency on `lcol-llm`, so there are no cross-project call edges for the compiler to resolve.
+
+**Index all five projects:**
+
+```sh
+# Build the CLI once
+cd lcol-llm
+cargo build --release -p sovereign-cli
+SOVEREIGN=$PWD/target/release/sovereign-cli
+
+# Init each project (run from the ecosystem root)
+cd ..
+for project in lcol-llm corpus-engine commonwealth oicp-types sovereign-recipes; do
+  echo "=== $project ==="
+  (cd "$project" && $SOVEREIGN project init)
+done
+```
+
+With a global install this is simpler:
+
+```sh
+for project in lcol-llm corpus-engine commonwealth oicp-types sovereign-recipes; do
+  (cd "$project" && sovereign project init)
+done
+```
+
+After this, working in any one project gives you full symbol coverage of the entire ecosystem. Each project gets its own `.sovereign/SOVEREIGN.md` (for project-specific invariants), `.claude/settings.json`, and post-commit hook.
+
+**Start the MCP server:**
+
+```sh
+sovereign project serve
+```
+
+This starts a lightweight, model-free MCP server that serves all five projects. It discovers every index under `~/.sovereign/indexes/`, merges their SCIP call graphs into a single in-memory view, and exposes all five tools (`symbol_lookup`, `code_search`, `recent_changes`, `find_callers`, `find_callees`) over JSON-RPC at `http://localhost:8080/mcp`.
+
+No GGUF model, no config file, no auth. Localhost only.
+
+From source:
+
+```sh
+$SOVEREIGN project serve
+# or
+cargo run --release -p sovereign-cli -- project serve --port 8080
+```
+
+The server prints what it found on startup:
+
+```
+  Sovereign Code Intelligence MCP Server
+  ──────────────────────────────────────────────────────
+
+  Corpora:
+    ✓ lcol-llm (8,402 symbols)
+    ✓ corpus-engine (3,291 symbols)
+    ✓ commonwealth (2,104 symbols)
+    ✓ oicp-types (312 symbols)
+    ✓ sovereign-recipes (94 symbols)
+
+  Call graph:
+    ✓ lcol-llm: 8,402 symbols, 51,203 edges
+    ✓ corpus-engine: 3,291 symbols, 18,447 edges
+    ✓ commonwealth: 2,104 symbols, 12,801 edges
+    Total: 13,797 symbols, 82,451 edges across 3 projects
+
+  Tools: 5 registered
+  Listening on http://127.0.0.1:8080/mcp
+```
+
+Each project's `.claude/settings.json` (written by `init`) already points to this server — open Claude Code in any project directory and the tools are available immediately.
+
+**Full workflow — init, serve, verify:**
+
+```sh
+# 1. Build
+cd lcol-llm
+cargo build --release -p sovereign-cli
+SOVEREIGN=$PWD/target/release/sovereign-cli
+
+# 2. Index all projects
+cd ..
+for project in lcol-llm corpus-engine commonwealth oicp-types sovereign-recipes; do
+  (cd "$project" && $SOVEREIGN project init --no-scip)  # fast pass, symbols only
+done
+
+# 3. SCIP export (slower, requires rust-analyzer — do separately)
+for project in lcol-llm corpus-engine commonwealth; do
+  (cd "$project" && $SOVEREIGN project refresh)
+done
+
+# 4. Start the MCP server (runs in foreground)
+$SOVEREIGN project serve
+```
+
+**Verify everything is indexed:**
+
+```sh
+for project in lcol-llm corpus-engine commonwealth oicp-types sovereign-recipes; do
+  echo "=== $project ==="
+  (cd "$project" && sovereign project status)
+done
+```
+
+**Re-init a single project** after major structural changes (new crates, renamed modules):
+
+```sh
+cd corpus-engine
+sovereign project init
+```
+
+This is safe to run repeatedly — existing settings are merged, hooks aren't duplicated, and the index is rebuilt from scratch. Restart `sovereign project serve` afterward to pick up the new data.
 
 ---
 

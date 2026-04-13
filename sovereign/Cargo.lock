@@ -8032,8 +8032,10 @@ name = "sovereign-cli"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "corpus-engine",
  "dirs 5.0.1",
+ "futures",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -8044,6 +8046,7 @@ dependencies = [
  "sovereign-tools",
  "tokio",
  "toml 0.8.2",
+ "tower-http",
  "tracing",
  "uuid",
 ]

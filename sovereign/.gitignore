@@ -4,3 +4,7 @@
 *.gguf
 *node_modules
 dist*
+
+# Sovereign code intelligence
+.sovereign/project.json
+.sovereign/scip/

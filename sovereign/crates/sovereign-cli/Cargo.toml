@@ -7,15 +7,18 @@ edition.workspace = true
 sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
-sovereign-tools = { workspace = true }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-mesh = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 async-trait = { workspace = true }
+axum = { workspace = true }
+futures = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
-uuid = { workspace = true }
 serde = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
+tower-http = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
+uuid = { workspace = true }
 dirs = "5"
