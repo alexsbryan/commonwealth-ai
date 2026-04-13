@@ -15,11 +15,43 @@ Languages: rust
 | `find_callers` | What calls this function? | SCIP-based |
 | `find_callees` | What does this function call? | SCIP-based |
 
+## Hybrid strategy — when to use which tool
+
+Use both the MCP code intelligence tools and built-in file tools
+(Grep, Glob, Read). Each is better at different things:
+
+**Discovery** — "What's in this module? What files exist?"
+Use Glob to find files, Grep to search for patterns, Read to scan
+a file. MCP tools need a name to look up; file tools find names.
+
+**Precision** — "Show me CorpusEngine" / "What are its fields?"
+Call `symbol_lookup("CorpusEngine")`. Returns the exact definition
+with file path and line numbers. Cheaper and faster than reading
+the whole file.
+
+**Impact** — "What depends on this function?"
+Call `find_callers("reindex_file")` before modifying it. This is
+compiler-resolved (SCIP) — catches trait dispatch and method calls
+that grep misses.
+
+**Patterns** — "How do similar functions work?"
+Call `find_callees("ingest")` to see what an existing function calls,
+then follow the same pattern when implementing a new one.
+
+**Explore then refine** — "How does checkpoint resume work?"
+Start with `code_search("checkpoint resume")` to find relevant
+symbols, then call `symbol_lookup` on each result to get the
+precise definitions.
+
+**Orientation** — "What changed recently?"
+Call `recent_changes(hours: 24)` at session start to see which
+subsystems are active before diving into code.
+
 ## Session start
 
-Always call `recent_changes(hours: 24)` first.
-Call `symbol_lookup` for any type before assuming its shape.
-Call `find_callers` on a trait before modifying any implementation.
+1. Call `recent_changes(hours: 24)` to see what's active
+2. Call `symbol_lookup` for any type before assuming its shape
+3. Call `find_callers` on a trait before modifying any implementation
 
 ## Call graph
 
@@ -28,10 +60,10 @@ New symbols have no graph entries until the next git commit
 (the post-commit hook keeps this current automatically).
 To refresh manually: `sovereign project refresh`
 
-## Adding project-specific invariants
+## Project-specific invariants
 
-Add project-specific invariants below this line.
-The system prompt in .claude/settings.json tells Claude Code
-to treat this file as documentation written by the architect.
+Add invariants below this line. These are read by the coding agent
+at session start and treated as authoritative guidance from the
+architect.
 
 ---
