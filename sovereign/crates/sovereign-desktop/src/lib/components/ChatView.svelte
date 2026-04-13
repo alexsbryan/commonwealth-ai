@@ -117,6 +117,8 @@
           if (p.metadata) {
             messages[idx].metadata = p.metadata;
           }
+          // Trigger Svelte 5 reactivity by reassigning the array.
+          messages = [...messages];
         }
         streamingMessageId = null;
         isLoading = false;

@@ -244,16 +244,37 @@ impl Tool for DocumentOperationTool {
             .unwrap_or(&ctx.conversation_id);
 
         // 1. Retrieve all chunks for this source.
+        tracing::info!(source = source, "document_operation: looking up chunks");
         let chunks = self.store.get_chunks_by_source(source).await?;
+        tracing::info!(source = source, chunks = chunks.len(), "document_operation: exact match result");
 
         if chunks.is_empty() {
-            // Try partial match on filename.
+            // Try fuzzy match on filename. The planner may introduce typos
+            // or case differences in the source name.
             let sources = self.store.list_sources().await?;
+            let source_lower = source.to_lowercase();
             let matching: Vec<&str> = sources
                 .iter()
-                .filter(|s| s.contains(source) || s.ends_with(source))
+                .filter(|s| {
+                    let sl = s.to_lowercase();
+                    sl.contains(&source_lower)
+                        || source_lower.contains(&sl)
+                        || sl.ends_with(&source_lower)
+                        // Fuzzy: check if most words from the source appear in the stored name.
+                        || source_lower.split_whitespace()
+                            .filter(|w| w.len() > 2)
+                            .filter(|w| sl.contains(w))
+                            .count() >= 2
+                })
                 .map(|s| s.as_str())
                 .collect();
+
+            tracing::info!(
+                source = source,
+                available = ?sources,
+                matched = ?matching,
+                "document_operation: fuzzy match results"
+            );
 
             if matching.is_empty() {
                 return Ok(StepOutput::Text(format!(
@@ -266,9 +287,15 @@ impl Tool for DocumentOperationTool {
                 )));
             }
 
-            if matching.len() == 1 {
+            // Use the first match (best guess).
+            if !matching.is_empty() {
                 let full_source = matching[0].to_string();
                 let chunks = self.store.get_chunks_by_source(&full_source).await?;
+                tracing::info!(
+                    full_source = %full_source,
+                    chunks = chunks.len(),
+                    "document_operation: fuzzy match found chunks"
+                );
                 return self
                     .run_operation(
                         &chunks,
@@ -281,8 +308,9 @@ impl Tool for DocumentOperationTool {
                     .await;
             }
 
+            // Unreachable — matching.is_empty() handled above.
             return Ok(StepOutput::Text(format!(
-                "Multiple documents match '{source}': {}",
+                "No documents match '{source}'. Available: {}",
                 matching.join(", ")
             )));
         }
