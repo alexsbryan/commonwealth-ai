@@ -267,6 +267,19 @@ impl InferenceProvider for RemoteApiProvider {
         Ok(Box::pin(token_stream))
     }
 
+    /// Dispatch requests concurrently via HTTP connection pooling.
+    /// Against a server with `--parallel N`, N requests run simultaneously.
+    async fn complete_batch(
+        &self,
+        requests: &[CompletionRequest],
+    ) -> Result<Vec<CompletionResponse>> {
+        let futures: Vec<_> = requests.iter().map(|req| self.complete(req)).collect();
+        futures::future::join_all(futures)
+            .await
+            .into_iter()
+            .collect()
+    }
+
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let url = format!("{}/embeddings", self.endpoint);
         let body = serde_json::json!({

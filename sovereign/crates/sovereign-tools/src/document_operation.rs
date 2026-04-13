@@ -19,10 +19,12 @@ use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
 // ToolExample is part of types::* but explicit for clarity.
 
-/// Chunks per map batch. Larger batches = fewer inference calls but more
-/// tokens per call. At 8 chunks (~4000 tokens input), a 0.6B fast slot
-/// processes each batch in ~3 seconds. 764 chunks / 8 = 96 batches ≈ 5 min.
+/// Chunks per map batch.
 const CHUNKS_PER_BATCH: usize = 8;
+/// Number of map batches to dispatch concurrently.
+/// Against embedded inference: serializes (same speed as sequential).
+/// Against a remote server with --parallel N: N batches run simultaneously.
+const N_PARALLEL: usize = 4;
 const REDUCE_BATCH_SIZE: usize = 8;
 const MAX_REDUCE_DEPTH: usize = 5;
 
@@ -44,6 +46,9 @@ impl DocumentOperationTool {
     }
 
     /// Map phase: apply the map prompt to batches of chunks.
+    /// Dispatches N_PARALLEL batches concurrently via `complete_batch`.
+    /// Against embedded inference this serializes (same speed).
+    /// Against a remote server with --parallel N, batches run simultaneously.
     async fn map_chunks(
         &self,
         chunks: &[DocumentChunk],
@@ -51,64 +56,86 @@ impl DocumentOperationTool {
     ) -> Result<Vec<String>> {
         let batches: Vec<&[DocumentChunk]> = chunks.chunks(CHUNKS_PER_BATCH).collect();
         let total_batches = batches.len();
+        let total_groups = (total_batches + N_PARALLEL - 1) / N_PARALLEL;
         let mut fragments = Vec::with_capacity(total_batches);
         let map_start = std::time::Instant::now();
+        let mut batches_done = 0usize;
 
-        for (i, batch) in batches.iter().enumerate() {
-            let passage: String = batch
+        eprintln!(
+            "  [document_operation] Map: {} batches in {} groups of {} (parallel dispatch)",
+            total_batches, total_groups, N_PARALLEL,
+        );
+
+        for (group_idx, group) in batches.chunks(N_PARALLEL).enumerate() {
+            // Build requests for all batches in this group.
+            let requests: Vec<CompletionRequest> = group
                 .iter()
-                .map(|c| c.content.as_str())
-                .collect::<Vec<_>>()
-                .join("\n\n");
+                .enumerate()
+                .map(|(i, batch)| {
+                    let batch_idx = group_idx * N_PARALLEL + i;
+                    let passage: String = batch
+                        .iter()
+                        .map(|c| c.content.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
 
-            let prompt = format!(
-                "{map_prompt}\n\nPassage ({} of {total_batches}):\n{passage}\n\n\
-                 Return only JSON. If nothing relevant appears in this \
-                 passage, return null.",
-                i + 1,
-            );
+                    CompletionRequest {
+                        prompt: format!(
+                            "{map_prompt}\n\nPassage ({} of {total_batches}):\n{passage}\n\n\
+                             Return only JSON. If nothing relevant appears in this \
+                             passage, return null.",
+                            batch_idx + 1,
+                        ),
+                        system_message: Some(format!(
+                            "You are processing section {} of {} from a document. \
+                             Follow the extraction instructions precisely.",
+                            batch_idx + 1,
+                            total_batches,
+                        )),
+                        preferred_speed: Speed::Fast,
+                        max_tokens: Some(512),
+                        temperature: Some(0.0),
+                        structured_output: None,
+                        think_budget: Some(0),
+                        top_k: None,
+                        top_p: None,
+                        oicp: None,
+                    }
+                })
+                .collect();
 
-            let request = CompletionRequest {
-                prompt,
-                system_message: Some(format!(
-                    "You are processing section {} of {} from a document. \
-                     Follow the extraction instructions precisely.",
-                    i + 1,
-                    total_batches,
-                )),
-                preferred_speed: Speed::Fast,
-                max_tokens: Some(512),
-                temperature: Some(0.0), // deterministic extraction
-                structured_output: None,
-                think_budget: Some(0), // no thinking — pure extraction
-                top_k: None,
-                top_p: None,
-                oicp: None,
-            };
+            let group_size = requests.len();
 
-            let response = self.inference.complete(&request).await?;
+            // Dispatch concurrently via complete_batch.
+            let responses = self.inference.complete_batch(&requests).await?;
 
-            if i == 0 {
-                eprintln!(
-                    "  [document_operation] First batch completed. Model: {}, latency: {}ms",
-                    response.model_id,
-                    response.latency_ms,
-                );
+            if batches_done == 0 {
+                if let Some(first) = responses.first() {
+                    eprintln!(
+                        "  [document_operation] First batch completed. Model: {}, latency: {}ms",
+                        first.model_id,
+                        first.latency_ms,
+                    );
+                }
             }
 
-            // Skip null/empty responses (passage had nothing relevant).
-            let text = response.text.trim().to_string();
-            if text != "null" && !text.is_empty() {
-                fragments.push(text);
+            for response in responses {
+                let text = response.text.trim().to_string();
+                if text != "null" && !text.is_empty() {
+                    fragments.push(text);
+                }
             }
 
+            batches_done += group_size;
             let elapsed = map_start.elapsed().as_secs();
-            let rate = if elapsed > 0 { (i + 1) as f32 / elapsed as f32 } else { 0.0 };
-            let eta = if rate > 0.0 { ((total_batches - i - 1) as f32 / rate) as u64 } else { 0 };
+            let rate = if elapsed > 0 { batches_done as f32 / elapsed as f32 } else { 0.0 };
+            let remaining = total_batches - batches_done;
+            let eta = if rate > 0.0 { (remaining as f32 / rate) as u64 } else { 0 };
             eprintln!(
-                "  [document_operation] Map batch {}/{total_batches} ({} chunks) | {:.1} batch/s | ETA {}m{}s",
-                i + 1,
-                batch.len(),
+                "  [document_operation] Map group {}/{} ({} batches) | {:.1} batch/s | ETA {}m{}s",
+                group_idx + 1,
+                total_groups,
+                group_size,
                 rate,
                 eta / 60,
                 eta % 60,
@@ -134,7 +161,12 @@ impl DocumentOperationTool {
             }
 
             if fragments.len() <= REDUCE_BATCH_SIZE {
-                return self.reduce_once(fragments, reduce_prompt).await;
+                eprintln!(
+                    "  [document_operation] Final reduce (depth {}, {} fragments) — using primary model",
+                    depth, fragments.len(),
+                );
+                // Final merge uses the primary model for quality synthesis.
+                return self.reduce_final(fragments, reduce_prompt).await;
             }
 
             eprintln!(
@@ -144,10 +176,23 @@ impl DocumentOperationTool {
             );
 
             // First pass: reduce in batches.
+            let reduce_batches: Vec<&[String]> = fragments.chunks(REDUCE_BATCH_SIZE).collect();
+            let total_reduce = reduce_batches.len();
+            let reduce_start = std::time::Instant::now();
             let mut intermediate = Vec::new();
-            for batch in fragments.chunks(REDUCE_BATCH_SIZE) {
+
+            for (i, batch) in reduce_batches.iter().enumerate() {
                 let merged = self.reduce_once(batch, reduce_prompt).await?;
                 intermediate.push(merged);
+
+                let elapsed = reduce_start.elapsed().as_secs();
+                let rate = if elapsed > 0 { (i + 1) as f32 / elapsed as f32 } else { 0.0 };
+                let remaining = total_reduce - i - 1;
+                let eta = if rate > 0.0 { (remaining as f32 / rate) as u64 } else { 0 };
+                eprintln!(
+                    "  [document_operation] Reduce batch {}/{} (depth {}) | {:.1}/s | ETA {}m{}s",
+                    i + 1, total_reduce, depth, rate, eta / 60, eta % 60,
+                );
             }
 
             // Recurse on intermediate results.
@@ -175,11 +220,46 @@ impl DocumentOperationTool {
                  Produce a coherent, deduplicated final output."
                     .to_string(),
             ),
-            preferred_speed: Speed::Slow,
+            preferred_speed: Speed::Fast,
             max_tokens: Some(1024),
+            temperature: Some(0.0),
+            structured_output: None,
+            think_budget: Some(0), // no thinking — merge is mechanical
+            top_k: None,
+            top_p: None,
+            oicp: None,
+        };
+
+        let response = self.inference.complete(&request).await?;
+        Ok(response.text)
+    }
+
+    /// Final reduce — uses the primary model for quality synthesis.
+    /// This produces the user-facing response, so quality matters more
+    /// than speed here.
+    async fn reduce_final(
+        &self,
+        fragments: &[String],
+        reduce_prompt: &str,
+    ) -> Result<String> {
+        let combined = fragments.join("\n\n---\n\n");
+        let prompt = format!(
+            "{reduce_prompt}\n\nFragments:\n{combined}\n\n\
+             Produce a comprehensive, well-organized final answer."
+        );
+
+        let request = CompletionRequest {
+            prompt,
+            system_message: Some(
+                "You are producing the final synthesis of a document analysis. \
+                 Be thorough, well-organized, and cite specific details."
+                    .to_string(),
+            ),
+            preferred_speed: Speed::Slow,
+            max_tokens: Some(2048),
             temperature: Some(0.3),
             structured_output: None,
-            think_budget: None,
+            think_budget: None, // allow thinking for the final synthesis
             top_k: None,
             top_p: None,
             oicp: None,

@@ -31,6 +31,21 @@ pub trait InferenceProvider: Send + Sync {
         Ok(results)
     }
 
+    /// Complete a batch of requests. The default implementation runs them
+    /// sequentially. Remote providers (HTTP-based) override this to dispatch
+    /// concurrently via `join_all`, achieving parallelism when the server
+    /// supports `--parallel N --cont-batching`.
+    async fn complete_batch(
+        &self,
+        requests: &[CompletionRequest],
+    ) -> Result<Vec<CompletionResponse>> {
+        let mut results = Vec::with_capacity(requests.len());
+        for req in requests {
+            results.push(self.complete(req).await?);
+        }
+        Ok(results)
+    }
+
     /// Embed a query string, applying any model-specific query instruction prefix.
     ///
     /// Default implementation calls `embed()` — override in providers that support
