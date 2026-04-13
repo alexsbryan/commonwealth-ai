@@ -939,10 +939,30 @@ impl Runtime {
         tool_descriptors: &[ToolDescriptor],
     ) -> Result<Response> {
         // 1. Generate plan.
+        // If a document is attached, augment the goal with explicit instructions
+        // about the source parameter so the planner generates correct tool params.
+        let plan_goal = if let Some(rest) = message.strip_prefix("[Document attached: ") {
+            if let Some(end) = rest.find(']') {
+                let source = &rest[..end];
+                let query = rest[end + 1..].trim();
+                format!(
+                    "{query}\n\n\
+                     IMPORTANT: The user has uploaded a document. Its source path is \"{source}\". \
+                     When using the document_operation tool, you MUST include \
+                     \"source\": \"{source}\" in the params, along with \"operation\", \
+                     \"map_prompt\", and \"reduce_prompt\"."
+                )
+            } else {
+                message.to_string()
+            }
+        } else {
+            message.to_string()
+        };
+
         eprintln!("[runtime] Generating plan...");
         let plan = self
             .planner
-            .plan(message, context, tool_descriptors)
+            .plan(&plan_goal, context, tool_descriptors)
             .await?;
 
         eprintln!(

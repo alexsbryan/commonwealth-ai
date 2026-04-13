@@ -389,7 +389,11 @@ impl Executor {
                     .map_err(|e| Error::Execution(format!("Invalid resolved params: {e}")))?;
 
                 // 2. Get tool.
-                tracing::info!(tool_id = tool_id, "Executing tool step");
+                tracing::info!(
+                    tool_id = tool_id,
+                    params = %resolved_params,
+                    "Executing tool step"
+                );
                 let tool = self.tools.get(tool_id)?;
 
                 // 3. Check permissions.
