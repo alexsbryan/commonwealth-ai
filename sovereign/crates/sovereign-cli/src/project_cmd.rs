@@ -1444,10 +1444,10 @@ subsystems are active before diving into code.
 These are easy to forget and expensive when skipped:
 
 **Before adding a method to a trait:**
-Call `find_callers("TraitName")` to find ALL implementors. Every
-impl block must be updated or the build breaks. Do not rely on
-the compiler alone — find them before you start writing so you
-know the full scope of the change.
+Call `find_callers("TraitName")` to find ALL implementors and
+usage sites. The impl blocks show up as refs from the module
+where the impl lives. Every impl must be updated or the build
+breaks. Find them before you start writing.
 
 **Before using a type from another crate:**
 Call `symbol_lookup("TypeName")` to confirm it exists, see its
@@ -1462,10 +1462,17 @@ radius before you touch it.
 ## When MCP tools add less value
 
 For **greenfield additions** (new types, new tables, new files),
-the MCP tools are less useful — you're writing, not reading. Use
-Glob/Read to find the insertion point and the surrounding patterns,
-then write directly. Save the MCP tools for when you need to
-understand or modify what already exists.
+the MCP tools don't help with the writing — but you still read
+existing code to match patterns. When you need to check a type's
+fields, a constructor's arguments, or an API's return type, use
+`symbol_lookup` even during greenfield work. The writing is new;
+the patterns you're matching are not.
+
+## Server lifecycle
+
+After running `sovereign project refresh`, restart
+`sovereign project serve` if it's running. The server loads
+SCIP graphs into memory at startup and does not hot-reload.
 
 ## Session start
 
