@@ -63,6 +63,11 @@ pub async fn ingest_directory(
 }
 
 /// Ingest a single file. Returns the number of chunks created.
+///
+/// If the file was previously ingested (same source path), old chunks
+/// are replaced via INSERT OR REPLACE on the chunk ID. The chunk IDs
+/// are deterministic (`{source}:{index}`), so re-ingesting the same
+/// file is idempotent.
 pub async fn ingest_file(
     path: &Path,
     store: &dyn StateStore,

@@ -526,7 +526,7 @@ impl Runtime {
             .classify(message, &context, &tool_descriptors)
             .await?;
 
-        // Document attached → force ComplexTask fallback to planner path.
+        // Document attached or ComplexTask → fall back to non-streaming.
         if message.starts_with("[Document attached: ")
             || matches!(intent, Intent::ComplexTask | Intent::KnowledgeQuery)
         {
@@ -677,12 +677,24 @@ impl Runtime {
             .classify(message, &context, &tool_descriptors)
             .await?;
 
-        // Override: when a document is attached, force ComplexTask so the
-        // planner can invoke DocumentOperationTool for full map-reduce
-        // processing across all chunks — not just 5 search results.
-        if message.starts_with("[Document attached: ") {
-            tracing::info!("Document attached — forcing ComplexTask for planner/tool dispatch");
-            intent = Intent::ComplexTask;
+        // When a document is attached, bypass the planner entirely and
+        // call document_operation directly. The user's message is the
+        // operation; we generate map/reduce prompts with a focused
+        // inference call and inject the source deterministically.
+        if let Some(rest) = message.strip_prefix("[Document attached: ") {
+            if let Some(end) = rest.find(']') {
+                let source = rest[..end].to_string();
+                let user_query = rest[end + 1..].trim().to_string();
+                return self
+                    .handle_document_operation(
+                        &source,
+                        &user_query,
+                        message,
+                        conversation_id,
+                        &context,
+                    )
+                    .await;
+            }
         }
 
         // 4. Dispatch based on intent.
@@ -931,6 +943,184 @@ impl Runtime {
     }
 
     /// Handle ComplexTask: plan → execute → (replan on failure) → synthesize.
+    /// Handle document analysis: bypass planner, call document_operation directly.
+    ///
+    /// 1. Resolve the source path from the store
+    /// 2. Generate map/reduce prompts with a single inference call
+    /// 3. Call document_operation tool directly with deterministic params
+    /// 4. Synthesize the result into a response
+    async fn handle_document_operation(
+        &self,
+        source_hint: &str,
+        user_query: &str,
+        original_message: &str,
+        conversation_id: &str,
+        context: &ConversationContext,
+    ) -> Result<Response> {
+        eprintln!("[runtime] Document operation: resolving source...");
+
+        // 1. Resolve actual source path from the store.
+        let sources = self.store.list_sources().await.unwrap_or_default();
+        let source_lower = source_hint.to_lowercase();
+        let resolved_source = sources
+            .iter()
+            .find(|s| s.to_lowercase().contains(&source_lower))
+            .cloned()
+            .unwrap_or_else(|| source_hint.to_string());
+
+        // Get chunk count for the prompt.
+        let chunks = self.store.get_chunks_by_source(&resolved_source).await.unwrap_or_default();
+        let chunk_count = chunks.len();
+        let word_count: usize = chunks.iter().map(|c| c.content.split_whitespace().count()).sum();
+        drop(chunks);
+
+        if chunk_count == 0 {
+            let assistant_msg = Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id: conversation_id.to_string(),
+                role: Role::Assistant,
+                content: format!(
+                    "No document chunks found for '{}'. The document may not have been ingested correctly.",
+                    source_hint
+                ),
+                created_at: now(),
+                metadata: None,
+                version: now(),
+            };
+            self.store.save_message(&assistant_msg).await?;
+            return Ok(Response { message: assistant_msg, task: None });
+        }
+
+        eprintln!(
+            "[runtime] Document: {} ({} chunks, ~{} words). Generating prompts...",
+            resolved_source, chunk_count, word_count
+        );
+
+        // 2. Generate map/reduce prompts with a single focused inference call.
+        let prompt_request = CompletionRequest {
+            prompt: format!(
+                "The user uploaded a document ({chunk_count} chunks, ~{word_count} words) and asked:\n\
+                 \"{user_query}\"\n\n\
+                 Write two prompts for a map-reduce analysis of this document.\n\n\
+                 MAP PROMPT — applied to each chunk of the document:\n\
+                 - Extract only what's present in that chunk\n\
+                 - Produce structured notes relevant to the user's request\n\
+                 - Do NOT invent or assume content not in the chunk\n\n\
+                 REDUCE PROMPT — merges all extracted notes into one result:\n\
+                 - Synthesize into a coherent, comprehensive answer\n\
+                 - Deduplicate and organize logically\n\n\
+                 Respond in JSON only:\n\
+                 {{\"map_prompt\": \"...\", \"reduce_prompt\": \"...\"}}"
+            ),
+            system_message: Some(
+                "You write analysis prompts. Output ONLY the JSON object, nothing else.".to_string()
+            ),
+            preferred_speed: Speed::Fast,
+            max_tokens: Some(512),
+            temperature: Some(0.3),
+            structured_output: None,
+            think_budget: None,
+            top_k: None,
+            top_p: None,
+            oicp: None,
+        };
+
+        let prompt_response = self.inference.complete(&prompt_request).await?;
+        let prompt_text = prompt_response.text.trim();
+
+        // Parse the generated prompts.
+        let (map_prompt, reduce_prompt) = match serde_json::from_str::<serde_json::Value>(
+            // Strip markdown code fences if present.
+            prompt_text
+                .strip_prefix("```json")
+                .and_then(|s| s.strip_suffix("```"))
+                .unwrap_or(prompt_text)
+                .trim()
+        ) {
+            Ok(v) => {
+                let mp = v.get("map_prompt").and_then(|v| v.as_str()).unwrap_or(
+                    "Extract key information relevant to the user's question from this passage."
+                ).to_string();
+                let rp = v.get("reduce_prompt").and_then(|v| v.as_str()).unwrap_or(
+                    "Synthesize all extracted information into a comprehensive answer."
+                ).to_string();
+                (mp, rp)
+            }
+            Err(_) => {
+                // Fallback prompts if JSON parsing fails.
+                tracing::warn!("Failed to parse prompt JSON, using defaults");
+                (
+                    format!("Extract information relevant to this question from the passage: {user_query}"),
+                    "Synthesize all extracted information into a comprehensive, well-organized answer.".to_string(),
+                )
+            }
+        };
+
+        eprintln!("[runtime] Prompts generated. Running document_operation...");
+
+        // 3. Call document_operation tool directly.
+        let tool = self.tools.get("document_operation")?;
+        let params = serde_json::json!({
+            "source": resolved_source,
+            "operation": user_query,
+            "map_prompt": map_prompt,
+            "reduce_prompt": reduce_prompt,
+            "conversation_id": conversation_id,
+        });
+
+        let tool_ctx = ToolContext {
+            conversation_id: conversation_id.to_string(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+        };
+
+        let result = tool.execute(&params, &tool_ctx).await?;
+        let result_text = match &result {
+            StepOutput::Text(t) => t.clone(),
+            StepOutput::Json(v) => serde_json::to_string_pretty(v).unwrap_or_default(),
+            _ => String::new(),
+        };
+
+        eprintln!("[runtime] Document operation complete ({} chars output)", result_text.len());
+
+        // 4. Build response.
+        let provenance = ResponseProvenance {
+            intent: "DocumentOperation".to_string(),
+            search_method: Some("document_operation".to_string()),
+            sources: vec![SourceSummary {
+                origin: "user_document".to_string(),
+                count: chunk_count,
+            }],
+            inference_backend: prompt_response.model_id.clone(),
+            oicp_match: None,
+            total_latency_ms: 0,
+            tokens_used: 0,
+            coarse_intent: None,
+            self_assessment: None,
+        };
+
+        let assistant_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: result_text,
+            created_at: now(),
+            metadata: Some(serde_json::json!({
+                "provenance": provenance,
+                "document_source": resolved_source,
+                "document_chunks": chunk_count,
+            })),
+            version: now(),
+        };
+        self.store.save_message(&assistant_msg).await?;
+
+        Ok(Response {
+            message: assistant_msg,
+            task: None,
+        })
+    }
+
     async fn handle_complex_task(
         &self,
         message: &str,
@@ -938,69 +1128,14 @@ impl Runtime {
         context: &ConversationContext,
         tool_descriptors: &[ToolDescriptor],
     ) -> Result<Response> {
-        // 1. Extract attached document source (if any) and the actual query.
-        let (attached_source, plan_goal) =
-            if let Some(rest) = message.strip_prefix("[Document attached: ") {
-                if let Some(end) = rest.find(']') {
-                    let source = rest[..end].to_string();
-                    let query = rest[end + 1..].trim();
-                    // Tell the planner about the document_operation tool but
-                    // DON'T ask it to generate the source param — we inject that.
-                    let goal = format!(
-                        "{query}\n\n\
-                         The user has uploaded a document. Use the document_operation tool \
-                         to analyze it. You do NOT need to specify the \"source\" parameter — \
-                         it will be injected automatically."
-                    );
-                    (Some(source), goal)
-                } else {
-                    (None, message.to_string())
-                }
-            } else {
-                (None, message.to_string())
-            };
+        // Document-attached messages are handled by handle_document_operation
+        // before reaching this point. This path is for non-document ComplexTasks.
 
         eprintln!("[runtime] Generating plan...");
-        let mut plan = self
+        let plan = self
             .planner
-            .plan(&plan_goal, context, tool_descriptors)
+            .plan(message, context, tool_descriptors)
             .await?;
-
-        // Deterministically inject the document source into any
-        // document_operation tool steps. The planner generates the
-        // operation/map_prompt/reduce_prompt; we supply the source
-        // so the filename is never hallucinated.
-        if let Some(ref source) = attached_source {
-            // Resolve the actual source path from the store (the ingest
-            // may have stored it with a full path or just the filename).
-            let resolved_source = {
-                let sources = self.store.list_sources().await.unwrap_or_default();
-                let source_lower = source.to_lowercase();
-                sources
-                    .into_iter()
-                    .find(|s| s.to_lowercase().contains(&source_lower))
-                    .unwrap_or_else(|| source.clone())
-            };
-
-            for step in &mut plan.steps {
-                if let StepKind::Tool { tool_id, params } = &mut step.kind {
-                    if tool_id == "document_operation"
-                        || tool_id.to_lowercase() == "document_operation"
-                    {
-                        if let serde_json::Value::Object(ref mut map) = params {
-                            map.insert(
-                                "source".to_string(),
-                                serde_json::Value::String(resolved_source.clone()),
-                            );
-                        }
-                        tracing::info!(
-                            source = %resolved_source,
-                            "Injected document source into tool params"
-                        );
-                    }
-                }
-            }
-        }
 
         eprintln!(
             "[runtime] Plan: {} steps",
