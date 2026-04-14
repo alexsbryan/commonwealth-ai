@@ -10,6 +10,7 @@
     listCorpora,
     ingestDocument,
     askDocument,
+    getDocumentAsset,
   } from "../api";
   import type { IngestDocumentResult } from "../api";
   import type {
@@ -33,7 +34,6 @@
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
   import AttachmentBanner from "./AttachmentBanner.svelte";
   import DocumentPicker from "./DocumentPicker.svelte";
-  import OperationBadge from "./OperationBadge.svelte";
 
   interface Props {
     conversationId: string | null;
@@ -86,6 +86,7 @@
   let unlistenError: UnlistenFn | null = null;
   let unlistenDocProgress: UnlistenFn | null = null;
   let unlistenDocOp: UnlistenFn | null = null;
+  let unlistenSkeletonRebuilt: UnlistenFn | null = null;
 
   $effect(() => {
     if (conversationId !== activeConversationId) {
@@ -169,6 +170,26 @@
         docProgressText = opProgressLabel(event.payload);
       },
     );
+
+    // Auto-heal: when a background skeleton rebuild finishes, refresh the
+    // attached asset so routing decisions on subsequent turns see the new
+    // skeleton + document_type.
+    unlistenSkeletonRebuilt = await listen<string>(
+      "document:skeleton_rebuilt",
+      async (event) => {
+        const rebuiltId = event.payload;
+        if (attachedAsset && attachedAsset.id === rebuiltId) {
+          try {
+            const refreshed = await getDocumentAsset(rebuiltId);
+            if (refreshed) {
+              attachedAsset = refreshed;
+            }
+          } catch (e) {
+            console.error("Failed to refresh asset after skeleton rebuild:", e);
+          }
+        }
+      },
+    );
   });
 
   onDestroy(() => {
@@ -177,6 +198,7 @@
     unlistenError?.();
     unlistenDocProgress?.();
     unlistenDocOp?.();
+    unlistenSkeletonRebuilt?.();
   });
 
   function docProgressLabel(p: DocOpProgress): string {

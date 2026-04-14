@@ -1300,7 +1300,11 @@ pub struct DocumentAssetResponse {
 #[derive(Serialize)]
 pub struct DocumentAskResponse {
     pub response: String,
-    pub operation: sovereign_core::types::DocumentAssetOperation,
+    /// The document operation used to answer, when the document was involved.
+    /// `None` when the question was off-topic and the runtime's normal
+    /// conversation pipeline answered it instead (no operation badge shown).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation: Option<sovereign_core::types::DocumentAssetOperation>,
     pub sources: Vec<String>,
 }
 
@@ -1445,10 +1449,46 @@ pub async fn ask_document(
         ));
     }
 
+    // Self-heal: if the skeleton never persisted (common when ingest was
+    // interrupted — app quit mid-build, backend crash, etc.), kick off a
+    // rebuild in the background. The current turn still proceeds with the
+    // skeleton-less asset (routing will be slightly less accurate); every
+    // subsequent turn benefits from the rebuilt skeleton.
+    if asset.skeleton.is_none() {
+        tracing::info!(
+            asset_id = %asset_id,
+            "ask_document: skeleton missing — spawning background rebuild"
+        );
+        let inf = Arc::clone(&inference);
+        let s = store.clone();
+        let aid = asset_id.clone();
+        let app = app_handle.clone();
+        tokio::spawn(async move {
+            let manager = sovereign_tools::document_asset::DocumentAssetManager::new(inf, s);
+            match manager.rebuild_skeleton(&aid).await {
+                Ok(skeleton) => {
+                    tracing::info!(
+                        asset_id = %aid,
+                        entities = skeleton.main_entities.len(),
+                        sections = skeleton.sections.len(),
+                        "auto-heal: skeleton rebuilt"
+                    );
+                    let _ = app.emit("document:skeleton_rebuilt", &aid);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        asset_id = %aid,
+                        error = %e,
+                        "auto-heal: skeleton rebuild failed"
+                    );
+                }
+            }
+        });
+    }
+
     // Persist the user's question first. This also upserts the conversations
-    // row so the conversation survives navigation and restart. Without this,
-    // the conversation never gets stored and vanishes when the user switches
-    // tabs or restarts the app.
+    // row so the conversation survives navigation and restart, and lets the
+    // runtime pipeline (below) see the question when it builds context.
     let user_msg = sovereign_core::types::Message {
         id: uuid::Uuid::new_v4().to_string(),
         conversation_id: conversation_id.clone(),
@@ -1465,25 +1505,67 @@ pub async fn ask_document(
         .await
         .map_err(|e| format!("Failed to save user message: {e}"))?;
 
-    let manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(
-            Arc::clone(&inference),
-            store.clone(),
-        );
+    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(
+        Arc::clone(&inference),
+        store.clone(),
+    );
 
+    // Route first — a Fast-slot call that decides whether this question is
+    // about the document at all.
+    let operation = manager
+        .route(&asset, &question)
+        .await
+        .map_err(|e| format!("Routing failed: {e}"))?;
+
+    tracing::info!(
+        asset_id = %asset_id,
+        operation = %operation.label(),
+        "ask_document: routed"
+    );
+
+    // When the question isn't about the document, hand it off to the normal
+    // conversation pipeline. The runtime will route, search installed corpora,
+    // synthesise with layered confidence, and save the assistant message. The
+    // user message is already in the conversation (tagged with the asset id,
+    // preserving "this turn had a document attached" context).
+    if matches!(
+        operation,
+        sovereign_core::types::DocumentAssetOperation::OffTopic { .. }
+    ) {
+        return run_turn_via_runtime(&app_handle, &state, &question, &conversation_id).await;
+    }
+
+    // Document operation path.
     let handle = app_handle.clone();
     let start = std::time::Instant::now();
-    let (response, operation, sources) = manager
-        .ask(&asset, &question, move |progress| {
+    let (response, sources) = manager
+        .execute_operation(&asset, &question, &operation, &move |progress| {
             let _ = handle.emit("document:operation", &progress);
         })
         .await
         .map_err(|e| format!("Query failed: {e}"))?;
 
+    // RAG safety net: if retrieval returned zero matching chunks, the router
+    // mis-classified. Fall through to the runtime pipeline the same way
+    // OffTopic does. `execute_rag` signals this by returning an empty
+    // response + empty sources.
+    if matches!(
+        operation,
+        sovereign_core::types::DocumentAssetOperation::Rag { .. }
+    ) && sources.is_empty()
+        && response.is_empty()
+    {
+        tracing::info!(
+            asset_id = %asset_id,
+            "ask_document: RAG found no relevant passages — falling back to runtime"
+        );
+        return run_turn_via_runtime(&app_handle, &state, &question, &conversation_id).await;
+    }
+
     let duration_ms = start.elapsed().as_millis() as u64;
     let assistant_message_id = uuid::Uuid::new_v4().to_string();
 
-    // Persist the assistant response.
+    // Persist the assistant response with document operation metadata.
     let assistant_msg = sovereign_core::types::Message {
         id: assistant_message_id.clone(),
         conversation_id: conversation_id.clone(),
@@ -1503,13 +1585,12 @@ pub async fn ask_document(
         .await
         .map_err(|e| format!("Failed to save assistant message: {e}"))?;
 
-    // Record the operation for the badge and analytics.
+    // Record the operation for analytics.
     let _ = store
         .save_document_operation(&assistant_message_id, &asset_id, &operation, duration_ms)
         .await;
 
     // Fire auto-title in the background after the first exchange.
-    // Non-blocking — user sees the response before the title appears.
     {
         let inf = Arc::clone(&inference);
         let s = store.clone();
@@ -1532,14 +1613,112 @@ pub async fn ask_document(
         });
     }
 
-    // Notify the list immediately so updated_at sorting is reflected.
-    // The auto-title task above emits another event if it sets the title.
     let _ = app_handle.emit("conversations:changed", ());
 
     Ok(DocumentAskResponse {
         response,
-        operation,
+        operation: Some(operation),
         sources,
+    })
+}
+
+/// Refresh a single document asset by id. Used by the frontend to pick up
+/// state changes (e.g. an auto-heal rebuild that just completed in the
+/// background).
+#[tauri::command]
+pub async fn get_document_asset(
+    state: State<'_, Arc<AppState>>,
+    asset_id: String,
+) -> Result<Option<sovereign_core::types::DocumentAsset>, String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+    store
+        .get_document_asset(&asset_id)
+        .await
+        .map_err(|e| format!("Load failed: {e}"))
+}
+
+/// User-initiated skeleton rebuild. Works from stored chunks (no file
+/// required) — handy for assets whose skeleton never persisted because the
+/// original ingest was interrupted, and for documents opened from history.
+#[tauri::command]
+pub async fn rebuild_document_skeleton(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    asset_id: String,
+) -> Result<sovereign_core::types::DocumentAsset, String> {
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
+    };
+    let inference = {
+        let guard = state.inference.read().await;
+        guard
+            .as_ref()
+            .map(Arc::clone)
+            .ok_or("Inference not ready")?
+    };
+
+    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(
+        Arc::clone(&inference),
+        store.clone(),
+    );
+
+    manager
+        .rebuild_skeleton(&asset_id)
+        .await
+        .map_err(|e| format!("Skeleton rebuild failed: {e}"))?;
+
+    // Return the refreshed asset record so the caller can update UI state
+    // in-place (skeleton now Some, document_type set, state Ready).
+    let refreshed = store
+        .get_document_asset(&asset_id)
+        .await
+        .map_err(|e| format!("Reload failed: {e}"))?
+        .ok_or("Asset vanished during rebuild")?;
+
+    let _ = app_handle.emit("document:skeleton_rebuilt", &asset_id);
+
+    Ok(refreshed)
+}
+
+/// Helper used by `ask_document` when the routed question is off-topic
+/// (or when RAG retrieval comes up empty). Delegates to the runtime's
+/// normal conversation pipeline — router, corpus search, layered-confidence
+/// synthesis, auto-title — and returns a `DocumentAskResponse` with no
+/// `DocumentAssetOperation` attribution since the document wasn't used.
+///
+/// The user message has already been saved as the latest message in the
+/// conversation, so we use `handle_turn` (not `handle_message`) to avoid
+/// saving it twice.
+async fn run_turn_via_runtime(
+    app_handle: &tauri::AppHandle,
+    state: &State<'_, Arc<AppState>>,
+    question: &str,
+    conversation_id: &str,
+) -> Result<DocumentAskResponse, String> {
+    let runtime = {
+        let guard = state.runtime.read().await;
+        guard.as_ref().map(Arc::clone).ok_or("Runtime not ready")?
+    };
+
+    state.approval.set_task_id(conversation_id).await;
+
+    let response = runtime
+        .handle_turn(question, conversation_id)
+        .await
+        .map_err(|e| format!("Runtime turn failed: {e}"))?;
+
+    // Runtime saved the assistant message itself and spawned auto-title.
+    // Emit the list-refresh event the normal send_message command emits.
+    let _ = app_handle.emit("conversations:changed", ());
+
+    Ok(DocumentAskResponse {
+        response: response.message.content,
+        operation: None,
+        sources: Vec::new(),
     })
 }
 

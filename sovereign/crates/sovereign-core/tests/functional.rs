@@ -607,6 +607,142 @@ async fn auto_title_skips_when_only_assistant_messages() {
     assert!(result.is_none(), "need both a user and assistant message");
 }
 
+// ─── Document Skeleton Self-Heal ───────────────────────────
+
+#[tokio::test]
+async fn rebuild_skeleton_from_stored_chunks() {
+    use sovereign_core::types::{
+        AssetState, DocumentAsset, DocumentChunk, DocumentTypeTag, SourceType,
+    };
+    use sovereign_core::traits::DocumentAssetStore;
+
+    let h = TestHarness::new();
+
+    // Seed a document asset that has no skeleton — simulating an ingest
+    // that was interrupted before save_asset_skeleton could run.
+    let asset_id = "test-asset-id".to_string();
+    let source_id = format!("asset:{asset_id}");
+    let asset = DocumentAsset {
+        id: asset_id.clone(),
+        title: "Test Document".to_string(),
+        filename: "test.pdf".to_string(),
+        file_size_mb: 1.0,
+        word_count: 200,
+        chunk_count: 4,
+        document_type: DocumentTypeTag::Unknown,
+        ingested_at: chrono::Utc::now(),
+        index_id: format!("doc-{asset_id}"),
+        skeleton: None,
+        state: AssetState::PartiallyReady,
+    };
+    h.store.save_document_asset(&asset).await.unwrap();
+
+    // Seed the chunks that the rebuild will process.
+    let chunks: Vec<DocumentChunk> = (0..4)
+        .map(|i| DocumentChunk {
+            id: format!("{source_id}:{i}"),
+            source: source_id.clone(),
+            content: format!("Chunk {i} — introduces the central concept with test content."),
+            chunk_index: i,
+            embedding: None,
+            created_at: 0,
+            source_type: SourceType::UserDocument,
+            version: 0,
+            deleted_at: None,
+        })
+        .collect();
+    h.store.store_chunks(&chunks).await.unwrap();
+
+    // Drive the rebuild.
+    let inference: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
+        std::sync::Arc::new(harness::DeterministicInference);
+    let store_arc: std::sync::Arc<dyn sovereign_core::traits::StateStore> =
+        std::sync::Arc::clone(&h.store)
+            as std::sync::Arc<dyn sovereign_core::traits::StateStore>;
+    let manager =
+        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
+
+    let skeleton = manager
+        .rebuild_skeleton(&asset_id)
+        .await
+        .expect("rebuild should succeed on an asset with stored chunks");
+
+    // The deterministic harness returns one SectionAnnotation per batch
+    // with a "Test Entity". Assert the skeleton reflects that.
+    assert!(
+        !skeleton.sections.is_empty(),
+        "rebuilt skeleton should have at least one section annotation"
+    );
+    assert!(
+        skeleton.main_entities.iter().any(|e| e.name == "Test Entity"),
+        "rebuilt skeleton should include 'Test Entity' from the harness"
+    );
+
+    // And the asset in the store should reflect the updated skeleton +
+    // document_type atomically (document_type was Unknown, should now be
+    // Argument per the harness's detect_document_type response).
+    let reloaded = h
+        .store
+        .get_document_asset(&asset_id)
+        .await
+        .unwrap()
+        .expect("asset should still exist");
+    assert!(
+        reloaded.skeleton.is_some(),
+        "asset should have a persisted skeleton after rebuild"
+    );
+    assert_eq!(
+        reloaded.document_type,
+        DocumentTypeTag::Argument,
+        "document_type should be updated atomically with the skeleton"
+    );
+    assert!(
+        matches!(reloaded.state, AssetState::Ready),
+        "asset state should transition to Ready after rebuild"
+    );
+}
+
+#[tokio::test]
+async fn rebuild_skeleton_missing_chunks_returns_not_found() {
+    use sovereign_core::types::{
+        AssetState, DocumentAsset, DocumentTypeTag,
+    };
+    use sovereign_core::traits::DocumentAssetStore;
+
+    let h = TestHarness::new();
+
+    // Asset exists but no chunks were ever stored.
+    let asset_id = "orphan-asset".to_string();
+    let asset = DocumentAsset {
+        id: asset_id.clone(),
+        title: "Orphan".to_string(),
+        filename: "orphan.pdf".to_string(),
+        file_size_mb: 1.0,
+        word_count: 0,
+        chunk_count: 0,
+        document_type: DocumentTypeTag::Unknown,
+        ingested_at: chrono::Utc::now(),
+        index_id: format!("doc-{asset_id}"),
+        skeleton: None,
+        state: AssetState::Pending,
+    };
+    h.store.save_document_asset(&asset).await.unwrap();
+
+    let inference: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
+        std::sync::Arc::new(harness::DeterministicInference);
+    let store_arc: std::sync::Arc<dyn sovereign_core::traits::StateStore> =
+        std::sync::Arc::clone(&h.store)
+            as std::sync::Arc<dyn sovereign_core::traits::StateStore>;
+    let manager =
+        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
+
+    let result = manager.rebuild_skeleton(&asset_id).await;
+    assert!(
+        result.is_err(),
+        "rebuild should fail when no chunks are available"
+    );
+}
+
 // ─── ReasonWithTools ─────────────────────────────────────────
 
 use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};

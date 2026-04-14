@@ -460,7 +460,9 @@ export type DocumentAssetOperation =
 
 export interface DocumentAskResponse {
   response: string;
-  operation: DocumentAssetOperation;
+  /** Absent when the question was off-topic and answered via the normal
+   *  conversation pipeline — no operation badge is shown in that case. */
+  operation?: DocumentAssetOperation;
   sources: string[];
 }
 

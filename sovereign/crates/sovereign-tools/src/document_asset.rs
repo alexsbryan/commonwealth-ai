@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-use sovereign_core::error::Result;
+use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
 
@@ -286,7 +286,9 @@ impl DocumentAssetManager {
                 )
                 .await?;
 
-                store.save_asset_skeleton(&asset_id, &skeleton).await?;
+                store
+                    .save_asset_skeleton(&asset_id, &skeleton, &doc_type)
+                    .await?;
                 store
                     .update_asset_state(&asset_id, &AssetState::Ready)
                     .await?;
@@ -323,6 +325,108 @@ impl DocumentAssetManager {
             skeleton: Some(skeleton),
             state: AssetState::Ready,
         })
+    }
+
+    /// Rebuild the skeleton for an already-ingested asset, working entirely
+    /// from stored chunks — no file path required, no re-parsing, no
+    /// re-embedding.
+    ///
+    /// Used two ways:
+    /// 1. The `rebuild_document_skeleton` Tauri command (user-initiated).
+    /// 2. Auto-heal: when `ask_document` sees a skeleton-less asset, it
+    ///    spawns this in the background so subsequent turns get smarter
+    ///    routing without the user doing anything.
+    ///
+    /// Returns the freshly-built skeleton; the asset's stored skeleton and
+    /// `document_type` are updated atomically via `save_asset_skeleton`, and
+    /// the asset state transitions to `Ready` on success.
+    pub async fn rebuild_skeleton(&self, asset_id: &str) -> Result<DocumentSkeleton> {
+        tracing::info!(asset_id = %asset_id, "rebuild_skeleton — begin");
+
+        let asset = self
+            .store
+            .get_document_asset(asset_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("document asset {asset_id}")))?;
+
+        let source_id = asset.source_key();
+        let mut doc_chunks = self.store.get_chunks_by_source(&source_id).await?;
+
+        if doc_chunks.is_empty() {
+            tracing::warn!(
+                asset_id = %asset_id,
+                source_id = %source_id,
+                "rebuild_skeleton — no chunks found; cannot rebuild"
+            );
+            return Err(Error::NotFound(format!(
+                "no chunks for document asset {asset_id} — needs re-ingest from source file"
+            )));
+        }
+
+        // DocumentChunks come back in insertion order but we want them
+        // ordered by chunk_index so the skeleton batches reflect the
+        // document's narrative order.
+        doc_chunks.sort_by_key(|c| c.chunk_index);
+
+        let text_chunks: Vec<TextChunk> = doc_chunks
+            .into_iter()
+            .map(|c| TextChunk {
+                index: c.chunk_index,
+                content: c.content,
+            })
+            .collect();
+        let chunk_count = text_chunks.len();
+
+        tracing::debug!(
+            asset_id = %asset_id,
+            chunks = chunk_count,
+            "rebuild_skeleton — chunks loaded from store"
+        );
+
+        self.store
+            .update_asset_state(
+                asset_id,
+                &AssetState::BuildingSkeleton {
+                    chunks_done: 0,
+                    chunks_total: chunk_count,
+                },
+            )
+            .await?;
+
+        let doc_type = detect_document_type(&self.inference, &text_chunks).await;
+
+        // No UI progress on rebuilds — state updates inside build_skeleton
+        // are the only signal. Callers who want per-batch feedback should
+        // run a full re-ingest.
+        let noop_progress: Arc<dyn Fn(IngestProgress) + Send + Sync> =
+            Arc::new(|_| ());
+
+        let skeleton = build_skeleton(
+            &self.inference,
+            &self.store,
+            asset_id,
+            &text_chunks,
+            &doc_type,
+            &noop_progress,
+        )
+        .await?;
+
+        self.store
+            .save_asset_skeleton(asset_id, &skeleton, &doc_type)
+            .await?;
+        self.store
+            .update_asset_state(asset_id, &AssetState::Ready)
+            .await?;
+
+        tracing::info!(
+            asset_id = %asset_id,
+            doc_type = ?doc_type,
+            sections = skeleton.sections.len(),
+            entities = skeleton.main_entities.len(),
+            "rebuild_skeleton — done"
+        );
+
+        Ok(skeleton)
     }
 
     /// Route a user's question to the right operation type, then
@@ -392,7 +496,12 @@ impl DocumentAssetManager {
     /// Classify a question into an operation type using the document's
     /// skeleton overview and the question text. Uses the fast model
     /// for low latency.
-    async fn route(
+    ///
+    /// Public so callers (the `ask_document` Tauri command) can inspect the
+    /// routing decision before executing. In particular, when the router
+    /// returns `OffTopic`, the caller can route the question through the
+    /// normal conversation pipeline instead of the document operation path.
+    pub async fn route(
         &self,
         asset: &DocumentAsset,
         request: &str,
@@ -428,13 +537,21 @@ impl DocumentAssetManager {
              - {{\"op\": \"rag\", \"query\": \"<search query>\"}}\n\
              - {{\"op\": \"synthesis\", \"focus\": \"<what to trace>\", \"entities\": [\"<names>\"]}}\n\
              - {{\"op\": \"aggregation\", \"query\": \"<what to find all of>\"}}\n\
-             - {{\"op\": \"transformation\"}}\n\n\
+             - {{\"op\": \"transformation\"}}\n\
+             - {{\"op\": \"off_topic\", \"reason\": \"<brief why>\"}}\n\n\
              Guidelines:\n\
-             - Use \"rag\" for questions about specific passages, chapters, or facts.\n\
+             - Use \"rag\" for questions about specific passages, chapters, or facts \
+               in THIS document.\n\
              - Use \"synthesis\" for questions that require tracing something across \
                the full document (character arcs, argument development, thematic evolution).\n\
              - Use \"aggregation\" for \"find every mention of X\" or \"list all instances of Y\".\n\
-             - Use \"transformation\" for rewriting, editing, or extracting structured data.\n\n\
+             - Use \"transformation\" for rewriting, editing, or extracting structured data.\n\
+             - Use \"off_topic\" when the question has no clear relationship to the \
+               document's overview, entities, or type — for example, asking about \
+               Buddhism when the document is about physics, or asking a general \
+               knowledge question that doesn't reference the document at all. \
+               Prefer off_topic over rag when you're unsure whether the topic is in \
+               the document.\n\n\
              Respond with only the JSON object, no other text.",
             entities = entity_names.join(", "),
             doc_type = asset.document_type.label(),
@@ -462,7 +579,12 @@ impl DocumentAssetManager {
     // ─── Execution ───────────────────────────────────────────
 
     /// Execute a routed operation against the document.
-    async fn execute_operation(
+    ///
+    /// Public so the `ask_document` Tauri command can orchestrate
+    /// `route` + `execute_operation` and branch to the runtime conversation
+    /// pipeline when the routing decision is `OffTopic` or RAG retrieval
+    /// comes up empty.
+    pub async fn execute_operation(
         &self,
         asset: &DocumentAsset,
         request: &str,
@@ -494,10 +616,30 @@ impl DocumentAssetManager {
                 on_progress(OperationProgress::Synthesising);
                 self.execute_transformation(&source_id, request).await
             }
+            DocumentAssetOperation::OffTopic { .. } => {
+                // The manager never executes OffTopic itself — the Tauri
+                // handler is expected to detect it via the public `route()`
+                // method and route the question through the normal
+                // conversation pipeline (which gets corpus search, layered
+                // confidence synthesis, etc.).
+                //
+                // Reaching this arm means a caller bypassed the pre-check
+                // and called `ask()` with an OffTopic operation; return a
+                // sentinel so the behavior is at least well-defined.
+                Err(Error::Execution(
+                    "OffTopic must be handled by the caller via runtime.handle_turn".into(),
+                ))
+            }
         }
     }
 
     /// RAG: retrieve relevant passages and synthesise an answer.
+    ///
+    /// When retrieval returns zero document-matching chunks this method
+    /// returns an empty response + empty sources as a signal that the
+    /// question wasn't really about the document. The caller (the
+    /// `ask_document` Tauri command) detects the empty sources and falls
+    /// through to the normal conversation pipeline.
     async fn execute_rag(
         &self,
         source_id: &str,
@@ -529,14 +671,15 @@ impl DocumentAssetManager {
         );
 
         if relevant.is_empty() {
+            // Empty sources signal to the Tauri handler that this turn should
+            // fall through to the normal conversation pipeline (corpus search,
+            // layered confidence synthesis). The router ideally classifies
+            // such questions as OffTopic up front; this is the safety net.
             tracing::warn!(
                 source_id = %source_id,
-                "execute_rag — no relevant passages found for this document"
+                "execute_rag — no relevant passages; caller should fall back to runtime"
             );
-            return Ok((
-                "No relevant passages found for this question.".to_string(),
-                vec![],
-            ));
+            return Ok((String::new(), Vec::new()));
         }
 
         let passages: String = relevant
@@ -1264,6 +1407,13 @@ fn parse_route_response(response: &str, original_request: &str) -> Result<Docume
                             .to_string(),
                     },
                     "transformation" => DocumentAssetOperation::Transformation,
+                    "off_topic" => DocumentAssetOperation::OffTopic {
+                        reason: obj
+                            .get("reason")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unrelated question")
+                            .to_string(),
+                    },
                     _ => DocumentAssetOperation::Rag {
                         query: obj
                             .get("query")
@@ -1280,4 +1430,68 @@ fn parse_route_response(response: &str, original_request: &str) -> Result<Docume
     Ok(DocumentAssetOperation::Rag {
         query: original_request.to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_route_response_parses_off_topic_with_reason() {
+        let resp = r#"{"op": "off_topic", "reason": "different domain"}"#;
+        match parse_route_response(resp, "user q").unwrap() {
+            DocumentAssetOperation::OffTopic { reason } => {
+                assert_eq!(reason, "different domain");
+            }
+            other => panic!("expected OffTopic, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_route_response_off_topic_default_reason() {
+        let resp = r#"{"op": "off_topic"}"#;
+        match parse_route_response(resp, "user q").unwrap() {
+            DocumentAssetOperation::OffTopic { reason } => {
+                assert_eq!(reason, "unrelated question");
+            }
+            other => panic!("expected OffTopic, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_route_response_unknown_op_falls_back_to_rag() {
+        let resp = r#"{"op": "nonsense"}"#;
+        match parse_route_response(resp, "user q").unwrap() {
+            DocumentAssetOperation::Rag { query } => {
+                assert_eq!(query, "user q");
+            }
+            other => panic!("expected Rag, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_route_response_existing_variants_still_work() {
+        // Guard against regression in the off_topic branch addition.
+        let rag = parse_route_response(r#"{"op":"rag","query":"foo"}"#, "orig").unwrap();
+        assert!(matches!(rag, DocumentAssetOperation::Rag { .. }));
+
+        let syn = parse_route_response(
+            r#"{"op":"synthesis","focus":"themes","entities":["A","B"]}"#,
+            "orig",
+        )
+        .unwrap();
+        match syn {
+            DocumentAssetOperation::Synthesis { focus, entities } => {
+                assert_eq!(focus, "themes");
+                assert_eq!(entities, vec!["A".to_string(), "B".to_string()]);
+            }
+            other => panic!("expected Synthesis, got {other:?}"),
+        }
+
+        let agg = parse_route_response(r#"{"op":"aggregation","query":"x"}"#, "orig").unwrap();
+        assert!(matches!(agg, DocumentAssetOperation::Aggregation { .. }));
+
+        let xform = parse_route_response(r#"{"op":"transformation"}"#, "orig").unwrap();
+        assert!(matches!(xform, DocumentAssetOperation::Transformation));
+    }
 }

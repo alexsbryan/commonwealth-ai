@@ -1165,6 +1165,11 @@ pub enum DocumentAssetOperation {
     Aggregation { query: String },
     /// Applied a transformation (edit, rewrite, extract).
     Transformation,
+    /// The question had no clear connection to the attached document, so the
+    /// system answered from general knowledge rather than retrieving passages.
+    /// `reason` is a short phrase for the UI explanation ("unrelated domain",
+    /// "retrieval found nothing", etc.).
+    OffTopic { reason: String },
 }
 
 impl DocumentAssetOperation {
@@ -1175,6 +1180,7 @@ impl DocumentAssetOperation {
             DocumentAssetOperation::Synthesis { .. } => "Synthesised across full document",
             DocumentAssetOperation::Aggregation { .. } => "Found all instances",
             DocumentAssetOperation::Transformation => "Applied transformation",
+            DocumentAssetOperation::OffTopic { .. } => "Answered from general knowledge",
         }
     }
 }

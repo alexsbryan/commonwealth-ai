@@ -814,45 +814,8 @@ impl Runtime {
         message: &str,
         conversation_id: &str,
     ) -> Result<Response> {
-        let turn_start = std::time::Instant::now();
-        let has_doc_prefix = message.starts_with("[Document attached: ");
-        tracing::info!(
-            has_doc_prefix,
-            "runtime: turn begin"
-        );
-
-        // 1. Build context from store (use message text for memory retrieval).
-        let mut context = build_context(self.store.as_ref(), conversation_id, message).await?;
-        tracing::debug!(
-            messages = context.conversation.messages.len(),
-            memories = context.memories.len(),
-            installed_corpora = context.installed_corpora.len(),
-            has_document_session = context.document_session.is_some(),
-            "runtime: context built"
-        );
-
-        // 1b. Compress working memory from conversation history.
-        let working_memory = memory::compress_working_memory(
-            self.inference.as_ref(),
-            &context.conversation.messages,
-            context.working_memory.as_ref(),
-        )
-        .await
-        .ok();
-        context.working_memory = working_memory;
-
-        // 1c. Update topic context for turn-aware routing.
-        let topic_context = crate::context::update_topic_context(
-            self.inference.as_ref(),
-            &context.conversation.messages,
-            context.topic_context.as_ref(),
-            context.document_session.as_ref(),
-        )
-        .await
-        .ok();
-        context.topic_context = topic_context;
-
-        // 2. Save user message.
+        // Save the user message first so `handle_turn` sees it in the
+        // conversation history during context building and routing.
         let user_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -863,9 +826,73 @@ impl Runtime {
             version: now(),
         };
         self.store.save_message(&user_msg).await?;
-        context.conversation.messages.push(user_msg);
 
-        // 3. Route.
+        self.handle_turn(message, conversation_id).await
+    }
+
+    /// Run a conversation turn assuming the user message has **already** been
+    /// saved as the latest message in the conversation.
+    ///
+    /// Callers that need to save the user message with custom metadata — for
+    /// example the `ask_document` Tauri command which tags the message with
+    /// the attached asset id — can call this entry point directly. The
+    /// runtime pipeline (context build, working-memory compression, topic
+    /// context, routing, synthesis, auto-title) then proceeds identically
+    /// to [`Self::handle_message`].
+    ///
+    /// Build-context reads all existing messages from the store, so the
+    /// pre-saved user message is included in the in-memory context without
+    /// the caller having to push it explicitly.
+    #[tracing::instrument(
+        name = "runtime.handle_turn",
+        skip(self, message),
+        fields(conversation_id = %conversation_id, message_chars = message.len())
+    )]
+    pub async fn handle_turn(
+        &self,
+        message: &str,
+        conversation_id: &str,
+    ) -> Result<Response> {
+        let turn_start = std::time::Instant::now();
+        let has_doc_prefix = message.starts_with("[Document attached: ");
+        tracing::info!(has_doc_prefix, "runtime: turn begin");
+
+        // 1. Build context from store (use message text for memory retrieval).
+        //    The user message is already persisted so it shows up here.
+        let mut context = build_context(self.store.as_ref(), conversation_id, message).await?;
+        tracing::debug!(
+            messages = context.conversation.messages.len(),
+            memories = context.memories.len(),
+            installed_corpora = context.installed_corpora.len(),
+            has_document_session = context.document_session.is_some(),
+            "runtime: context built"
+        );
+
+        // 1b. Compress working memory from conversation history (now including
+        //     the latest user message — gives working-memory extraction a
+        //     crisper view of current intent).
+        let working_memory = memory::compress_working_memory(
+            self.inference.as_ref(),
+            &context.conversation.messages,
+            context.working_memory.as_ref(),
+        )
+        .await
+        .ok();
+        context.working_memory = working_memory;
+
+        // 1c. Update topic context for turn-aware routing. Latest user
+        //     message is part of the extraction input.
+        let topic_context = crate::context::update_topic_context(
+            self.inference.as_ref(),
+            &context.conversation.messages,
+            context.topic_context.as_ref(),
+            context.document_session.as_ref(),
+        )
+        .await
+        .ok();
+        context.topic_context = topic_context;
+
+        // 2. Route.
         let tool_descriptors = self.tools.descriptors();
         let RoutingOutcome { intent, coarse_intent, self_assessment } = self
             .router
@@ -879,10 +906,8 @@ impl Runtime {
             "runtime: routed"
         );
 
-        // When a document is attached, bypass the planner entirely and
-        // call document_operation directly. The user's message is the
-        // operation; we generate map/reduce prompts with a focused
-        // inference call and inject the source deterministically.
+        // When a legacy [Document attached: ...] prefix is used, bypass the
+        // planner entirely and route to the map-reduce document_operation path.
         if let Some(rest) = message.strip_prefix("[Document attached: ") {
             if let Some(end) = rest.find(']') {
                 let source = rest[..end].to_string();
@@ -910,7 +935,7 @@ impl Runtime {
             }
         }
 
-        // 4. Dispatch based on intent.
+        // 3. Dispatch based on intent.
         let dispatch = match intent {
             Intent::ComplexTask => "handle_complex_task",
             Intent::KnowledgeQuery => "handle_knowledge_query",

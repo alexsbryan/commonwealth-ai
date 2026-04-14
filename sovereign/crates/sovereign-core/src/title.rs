@@ -23,9 +23,15 @@ use crate::types::{CompletionRequest, Message, Role, Speed};
 /// stays small — title prompts run on the Fast slot and must be cheap.
 const MESSAGE_SNIPPET_CHARS: usize = 400;
 
-/// Maximum tokens the model may emit for the title. A 4–8 word title is
-/// typically well under 30 tokens; this cap bounds the worst case.
-const TITLE_MAX_TOKENS: usize = 30;
+/// Maximum tokens the model may emit for the title.
+///
+/// Thinking-enabled models (e.g. Qwen 3.5) default to emitting a `<think>`
+/// block even when we pass `think_budget: Some(0)`. If the cap is too low
+/// the model runs out of tokens inside the think block and we get back
+/// something like `"<think>\n..."` with no actual title. 80 gives modest
+/// thinking room plus space for a short title, while still running cheaply
+/// on the Fast slot. The sanitizer strips the think block regardless.
+const TITLE_MAX_TOKENS: usize = 80;
 
 /// Hard cap on the stored title length (characters, not tokens).
 const TITLE_MAX_CHARS: usize = 120;
@@ -68,9 +74,17 @@ pub async fn generate_title_from_messages(
          Title:"
     );
 
+    // Belt-and-suspenders: some models ignore `think_budget: 0` at the
+    // sampler level. A system directive reinforces the instruction.
+    let system_message = Some(
+        "You produce conversation titles. Output only the title — no thinking, \
+         no preface, no explanation, no surrounding quotes."
+            .to_string(),
+    );
+
     let request = CompletionRequest {
         prompt,
-        system_message: None,
+        system_message,
         preferred_speed: Speed::Fast,
         max_tokens: Some(TITLE_MAX_TOKENS),
         temperature: Some(0.3),
@@ -163,15 +177,21 @@ pub async fn try_auto_title(
 }
 
 /// Clean up model output into a storable title:
+/// - strip `<think>...</think>` blocks (complete and unclosed) — thinking
+///   models emit these even when told not to, and truncated thinking caused
+///   titles like `"<think>"` to be saved verbatim in a prior trial
+/// - take the first non-empty line of what's left
 /// - strip outer quotes (both straight and curly)
 /// - strip trailing period
-/// - collapse whitespace
-/// - trim to TITLE_MAX_CHARS
-/// - drop anything after the first newline (models sometimes explain)
+/// - trim to TITLE_MAX_CHARS at a char boundary
+///
+/// Returns "" when nothing usable remains; callers treat empty as "skip save".
 fn sanitize_title(raw: &str) -> String {
+    let after_think = strip_think_blocks(raw);
+
     // First-line only — the prompt asks for no explanation, but models
     // occasionally ignore that. Take just the first non-empty line.
-    let first_line = raw
+    let first_line = after_think
         .lines()
         .map(str::trim)
         .find(|l| !l.is_empty())
@@ -207,6 +227,50 @@ fn sanitize_title(raw: &str) -> String {
     }
 
     s
+}
+
+/// Remove `<think>...</think>` blocks from raw model output.
+///
+/// Handles three shapes:
+/// 1. Complete `<think>X</think>Y` — drop the block, keep `Y`.
+/// 2. Unclosed `<think>X` (thinking truncated by max_tokens) — drop from
+///    `<think>` to end of string. Whatever came before is kept.
+/// 3. No tag — return input unchanged.
+///
+/// Repeated blocks are all removed. Case-sensitive match on `<think>` /
+/// `</think>` since the model families we use emit them in lowercase.
+fn strip_think_blocks(raw: &str) -> String {
+    const OPEN: &str = "<think>";
+    const CLOSE: &str = "</think>";
+
+    let mut out = String::with_capacity(raw.len());
+    let mut remaining = raw;
+
+    loop {
+        match remaining.find(OPEN) {
+            Some(open_idx) => {
+                // Text before the opening tag is kept.
+                out.push_str(&remaining[..open_idx]);
+                let after_open = &remaining[open_idx + OPEN.len()..];
+                match after_open.find(CLOSE) {
+                    Some(close_idx) => {
+                        // Complete block — skip over it and continue.
+                        remaining = &after_open[close_idx + CLOSE.len()..];
+                    }
+                    None => {
+                        // Unclosed — drop everything from `<think>` to EOF.
+                        break;
+                    }
+                }
+            }
+            None => {
+                out.push_str(remaining);
+                break;
+            }
+        }
+    }
+
+    out
 }
 
 /// Truncate a string to at most `max` bytes, walking back to a valid UTF-8
@@ -262,6 +326,63 @@ mod tests {
     fn sanitize_empty_yields_empty() {
         assert_eq!(sanitize_title(""), "");
         assert_eq!(sanitize_title("   \n  "), "");
+    }
+
+    // ── <think> block handling ──────────────────────────────────
+
+    #[test]
+    fn sanitize_strips_complete_think_block() {
+        assert_eq!(
+            sanitize_title("<think>reasoning here</think>Real Title"),
+            "Real Title"
+        );
+    }
+
+    #[test]
+    fn sanitize_strips_unclosed_think_prefix() {
+        // The specific failure mode from the Apr 14 trial: max_tokens cut
+        // off inside the think block, so no title followed. Must return "".
+        assert_eq!(sanitize_title("<think>unfinished thinking"), "");
+        assert_eq!(sanitize_title("<think>"), "");
+    }
+
+    #[test]
+    fn sanitize_handles_multiline_think() {
+        let input = "<think>\nlet me think\nabout this\n</think>\n\nThe Title";
+        assert_eq!(sanitize_title(input), "The Title");
+    }
+
+    #[test]
+    fn sanitize_strips_multiple_think_blocks() {
+        let input = "<think>first</think>Title<think>second</think>";
+        assert_eq!(sanitize_title(input), "Title");
+    }
+
+    #[test]
+    fn sanitize_preserves_content_before_unclosed_think() {
+        // If the model emits a title then opens thinking (odd but possible),
+        // keep the pre-think content.
+        assert_eq!(
+            sanitize_title("Real Title\n<think>postscript reasoning"),
+            "Real Title"
+        );
+    }
+
+    #[test]
+    fn sanitize_preserves_angle_brackets_in_title() {
+        // Non-<think> angle brackets must survive.
+        assert_eq!(sanitize_title("C++ vs <tag>"), "C++ vs <tag>");
+    }
+
+    #[test]
+    fn strip_think_blocks_empty_on_think_only() {
+        assert_eq!(strip_think_blocks("<think>only thinking"), "");
+        assert_eq!(strip_think_blocks("<think></think>"), "");
+    }
+
+    #[test]
+    fn strip_think_blocks_no_tags_passthrough() {
+        assert_eq!(strip_think_blocks("hello world"), "hello world");
     }
 
     #[test]

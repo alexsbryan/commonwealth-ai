@@ -29,7 +29,20 @@ impl InferenceProvider for DeterministicInference {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let prompt_lower = request.prompt.to_lowercase();
 
-        let text = if prompt_lower.contains("a, b, or c")
+        let text = if prompt_lower.contains("classify this document into one category") {
+            // detect_document_type — return a deterministic category.
+            // Must be checked BEFORE the "categories:" router pattern, since
+            // detect_document_type prompts also contain "Categories:".
+            "Argument".to_string()
+        } else if prompt_lower.contains("analyse these passages")
+            || prompt_lower.contains("analyze these passages")
+        {
+            // build_skeleton batch — minimal valid JSON array.
+            r#"[{"function": "Introduces", "key_entities": [{"name": "Test Entity", "kind": "Concept"}], "establishes": "Establishes the test concept.", "is_structural_moment": false, "moment_description": null}]"#.to_string()
+        } else if prompt_lower.contains("write a single paragraph") && prompt_lower.contains("overview") {
+            // generate_overview — short deterministic paragraph.
+            "This is a deterministic test overview covering the document's main concept.".to_string()
+        } else if prompt_lower.contains("a, b, or c")
             || prompt_lower.contains("a) simple")
             || prompt_lower.contains("categories:")
         {

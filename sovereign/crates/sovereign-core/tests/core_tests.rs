@@ -242,7 +242,7 @@ impl sovereign_core::traits::DocumentSessionStore for MockStore {
 impl sovereign_core::traits::DocumentAssetStore for MockStore {
     async fn save_document_asset(&self, _asset: &sovereign_core::DocumentAsset) -> sovereign_core::error::Result<()> { Ok(()) }
     async fn update_asset_state(&self, _id: &str, _state: &sovereign_core::AssetState) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn save_asset_skeleton(&self, _id: &str, _skeleton: &sovereign_core::DocumentSkeleton) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn save_asset_skeleton(&self, _id: &str, _skeleton: &sovereign_core::DocumentSkeleton, _document_type: &sovereign_core::types::DocumentTypeTag) -> sovereign_core::error::Result<()> { Ok(()) }
     async fn get_document_asset(&self, _id: &str) -> sovereign_core::error::Result<Option<sovereign_core::DocumentAsset>> { Ok(None) }
     async fn list_document_assets(&self) -> sovereign_core::error::Result<Vec<sovereign_core::DocumentAsset>> { Ok(Vec::new()) }
     async fn delete_document_asset(&self, _id: &str) -> sovereign_core::error::Result<()> { Ok(()) }

@@ -298,6 +298,22 @@ export async function askDocument(
   return invoke("ask_document", { assetId, question, conversationId });
 }
 
+/** Fetch a single document asset by id. Used to pick up state changes
+ *  (e.g. after an auto-heal skeleton rebuild completes). */
+export async function getDocumentAsset(
+  assetId: string,
+): Promise<DocumentAsset | null> {
+  return invoke("get_document_asset", { assetId });
+}
+
+/** Rebuild the skeleton for an asset whose ingestion was interrupted.
+ *  Runs from stored chunks — no file re-upload needed. */
+export async function rebuildDocumentSkeleton(
+  assetId: string,
+): Promise<DocumentAsset> {
+  return invoke("rebuild_document_skeleton", { assetId });
+}
+
 export async function listDocumentAssets(): Promise<DocumentAsset[]> {
   return invoke("list_document_assets");
 }

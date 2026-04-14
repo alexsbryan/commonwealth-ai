@@ -138,6 +138,8 @@ fn main() {
             commands::ingest_document,
             commands::upload_document_asset,
             commands::ask_document,
+            commands::get_document_asset,
+            commands::rebuild_document_skeleton,
             commands::list_document_assets,
             commands::list_legacy_documents,
             commands::promote_legacy_document,

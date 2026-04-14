@@ -422,7 +422,12 @@ impl DocumentAssetStore for InMemoryStateStore {
     async fn update_asset_state(&self, _id: &str, _state: &AssetState) -> Result<()> {
         Ok(())
     }
-    async fn save_asset_skeleton(&self, _id: &str, _skeleton: &DocumentSkeleton) -> Result<()> {
+    async fn save_asset_skeleton(
+        &self,
+        _id: &str,
+        _skeleton: &DocumentSkeleton,
+        _document_type: &DocumentTypeTag,
+    ) -> Result<()> {
         Ok(())
     }
     async fn get_document_asset(&self, _id: &str) -> Result<Option<DocumentAsset>> {

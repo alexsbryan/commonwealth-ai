@@ -282,12 +282,15 @@ pub trait DocumentAssetStore: Send + Sync {
     /// ingest to drive UI progress.
     async fn update_asset_state(&self, id: &str, state: &AssetState) -> Result<()>;
 
-    /// Store the completed skeleton. Called once when skeleton
-    /// extraction finishes.
+    /// Store the completed skeleton and the detected document type.
+    /// Called once when skeleton extraction finishes. The two fields are
+    /// persisted atomically since they come from the same pipeline and
+    /// should never disagree.
     async fn save_asset_skeleton(
         &self,
         id: &str,
         skeleton: &DocumentSkeleton,
+        document_type: &DocumentTypeTag,
     ) -> Result<()>;
 
     /// Retrieve a single asset by ID.

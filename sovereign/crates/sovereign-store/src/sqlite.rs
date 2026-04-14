@@ -1493,13 +1493,16 @@ impl DocumentAssetStore for SqliteStateStore {
         &self,
         id: &str,
         skeleton: &DocumentSkeleton,
+        document_type: &DocumentTypeTag,
     ) -> Result<()> {
         let conn = self.conn.lock().await;
         let skeleton_json =
             serde_json::to_string(skeleton).map_err(|e| Error::Storage(e.to_string()))?;
+        let doc_type_json =
+            serde_json::to_string(document_type).map_err(|e| Error::Storage(e.to_string()))?;
         conn.execute(
-            "UPDATE document_assets SET skeleton_json = ?1 WHERE id = ?2",
-            rusqlite::params![skeleton_json, id],
+            "UPDATE document_assets SET skeleton_json = ?1, document_type = ?2 WHERE id = ?3",
+            rusqlite::params![skeleton_json, doc_type_json, id],
         )
         .map_err(map_db)?;
         Ok(())
