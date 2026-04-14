@@ -67,7 +67,7 @@
     <table class="peers">
       <thead>
         <tr>
-          <th>Name</th>
+          <th>Node</th>
           <th>Address</th>
           <th>Mesh</th>
         </tr>
@@ -75,10 +75,12 @@
       <tbody>
         {#each data.discovered_peers as peer (peer.address)}
           <tr>
-            <td>{peer.name}</td>
+            <td>{peer.name || "(unknown)"}</td>
             <td class="mono">{peer.address}</td>
-            <td class="mono mesh-id" title={peer.mesh_id_hex}>
-              {peer.mesh_id_hex.slice(0, 8)}…
+            <td
+              title={`mesh_id: ${peer.mesh_id_hex}`}
+            >
+              {peer.mesh_name || `mesh ${peer.mesh_id_hex.slice(0, 8)}…`}
             </td>
           </tr>
         {/each}
@@ -174,9 +176,5 @@
   .mono {
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 0.78rem;
-  }
-  .mesh-id {
-    color: var(--text-muted);
-    cursor: help;
   }
 </style>

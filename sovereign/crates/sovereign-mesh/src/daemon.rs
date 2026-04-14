@@ -367,6 +367,7 @@ impl EmbeddedDaemon {
         // design (knowing the mesh_id isn't sufficient to join;
         // accessing members still requires the join_key).
         let mesh_id_hex = hex::encode(mesh.id.as_bytes());
+        let mesh_name = mesh.name.clone();
         let node_name = mesh
             .members
             .get(&node_id)
@@ -391,8 +392,14 @@ impl EmbeddedDaemon {
         // advertise lets remote peers find us; browse populates the
         // discovered-peers table that `perform_join` (Phase B) uses
         // to locate handshake targets.
-        let mdns = MdnsDiscovery::new(node_id, &mesh_id_hex, &node_name, 9742)
-            .map_err(|e| MeshError::Network(format!("mDNS register failed: {e}")))?;
+        let mdns = MdnsDiscovery::new(
+            node_id,
+            &mesh_id_hex,
+            &mesh_name,
+            &node_name,
+            9742,
+        )
+        .map_err(|e| MeshError::Network(format!("mDNS register failed: {e}")))?;
         let mdns = Arc::new(mdns);
         // A 32-slot channel is plenty — the browse loop pushes on
         // ServiceResolved and we don't actively consume. If the buffer

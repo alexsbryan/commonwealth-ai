@@ -230,17 +230,59 @@ pub async fn perform_join(
     // Track attempted peer addresses so we don't spam the same node
     // when mDNS re-resolves it repeatedly.
     let mut attempted: Vec<SocketAddr> = Vec::new();
+    // Logged once the first time we see non-zero discovery, so the
+    // user can tell mDNS is working even if no peer matches.
+    let mut seen_any_peer = false;
+
+    info!(
+        mesh_name,
+        timeout_secs = timeout.as_secs(),
+        "join: starting mDNS discovery loop"
+    );
 
     while start.elapsed() < timeout {
         let peers = mdns.discovered_peers();
-        debug!(
-            elapsed_ms = start.elapsed().as_millis() as u64,
-            candidates = peers.len(),
-            "join: polling mDNS for peers"
-        );
+        if !peers.is_empty() && !seen_any_peer {
+            seen_any_peer = true;
+            let names: Vec<String> = peers
+                .iter()
+                .map(|p| {
+                    format!(
+                        "{}@{} (mesh={:?}, node={:?})",
+                        &p.mesh_id_hex[..p.mesh_id_hex.len().min(8)],
+                        p.address,
+                        p.mesh_name,
+                        p.name
+                    )
+                })
+                .collect();
+            info!(peers = ?names, "join: mDNS has surfaced candidates");
+        }
 
         for peer in peers {
-            if peer.name != mesh_name {
+            // Match the peer's advertised *mesh_name* (not the node
+            // name). Historically these were conflated into a single
+            // TXT field, which made this filter impossible to
+            // satisfy; see the comment on `MdnsDiscovery::new`.
+            //
+            // Empty mesh_name → peer is running an older build that
+            // only broadcast `name` as the node hostname. Fall back
+            // to comparing against `peer.name` so a mid-rollout LAN
+            // (one upgraded, one not) still connects if the mesh
+            // names happen to match.
+            let peer_mesh_label = if peer.mesh_name.is_empty() {
+                peer.name.as_str()
+            } else {
+                peer.mesh_name.as_str()
+            };
+            if peer_mesh_label != mesh_name {
+                debug!(
+                    peer_addr = %peer.address,
+                    peer_mesh_name = %peer.mesh_name,
+                    peer_node_name = %peer.name,
+                    expected = mesh_name,
+                    "join: skipping peer — mesh_name doesn't match"
+                );
                 continue;
             }
             if attempted.contains(&peer.address) {
@@ -249,7 +291,7 @@ pub async fn perform_join(
             attempted.push(peer.address);
 
             info!(
-                peer_name = %peer.name,
+                peer_node_name = %peer.name,
                 peer_addr = %peer.address,
                 "handshake_sent: POST /internal/join"
             );
@@ -264,6 +306,26 @@ pub async fn perform_join(
 
         // Sleep briefly before re-polling mDNS — don't tight-loop.
         tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    // Final log so the user sees *why* we timed out. If mDNS never
+    // surfaced any peer, it's a network issue (firewall, different
+    // subnet, Tailscale without ?relay=). If peers were seen but
+    // none matched, it's a mesh_name mismatch — bad URL.
+    if seen_any_peer {
+        warn!(
+            mesh_name,
+            tried = attempted.len(),
+            "join timed out: found LAN peers but none accepted the join key \
+             (check mesh_name in the URL matches the founder's mesh)"
+        );
+    } else {
+        warn!(
+            mesh_name,
+            "join timed out: no mDNS peers on this network — check the \
+             founder's app is running, you're on the same WiFi, and the \
+             OS firewall permits _commonwealth._tcp on port 9742"
+        );
     }
 
     Err(JoinError::NoPeerFound {

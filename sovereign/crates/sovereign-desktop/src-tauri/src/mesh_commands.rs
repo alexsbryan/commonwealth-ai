@@ -116,6 +116,12 @@ pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
 pub struct DiscoveredPeerDto {
     pub node_id: String,
     pub mesh_id_hex: String,
+    /// The peer's *mesh* name (e.g. "Masonic Mesh"). Surfaced in the
+    /// diagnostics panel so the user can tell which mesh each peer
+    /// claims membership in — load-bearing once more than one mesh
+    /// coexists on a LAN, and for debugging join-name mismatches.
+    pub mesh_name: String,
+    /// The peer's node/host label.
     pub name: String,
     pub address: String,
 }
@@ -140,6 +146,7 @@ pub async fn mesh_diagnostics(
         .map(|p| DiscoveredPeerDto {
             node_id: p.node_id.to_string(),
             mesh_id_hex: p.mesh_id_hex,
+            mesh_name: p.mesh_name,
             name: p.name,
             address: p.address.to_string(),
         })

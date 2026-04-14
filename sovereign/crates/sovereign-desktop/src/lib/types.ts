@@ -324,6 +324,9 @@ export interface MeshCorpus {
 export interface DiscoveredPeerDto {
   node_id: string;
   mesh_id_hex: string;
+  /** The mesh the peer claims membership in (e.g. "Masonic Mesh").
+   *  Distinct from `name`, which is the node/host label. */
+  mesh_name: string;
   name: string;
   address: string;
 }
