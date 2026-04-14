@@ -12,19 +12,19 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::scip_graph::ScipGraph;
 use corpus_engine::CorpusEngine;
 
+use super::callees::ScipGraphHandle;
 use super::is_valid_symbol_name;
 
 pub struct FindCallersTool {
     #[allow(dead_code)]
     engine: Arc<CorpusEngine>,
-    graph: Arc<ScipGraph>,
+    graph: ScipGraphHandle,
 }
 
 impl FindCallersTool {
-    pub fn new(engine: Arc<CorpusEngine>, graph: Arc<ScipGraph>) -> Self {
+    pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {
         Self { engine, graph }
     }
 }
@@ -94,8 +94,8 @@ impl Tool for FindCallersTool {
             .unwrap_or(1)
             .min(2) as usize;
 
-        let (callers, caution) = self
-            .graph
+        let graph = self.graph.load_full();
+        let (callers, caution) = graph
             .find_callers(symbol, depth)
             .await
             .map_err(|e| Error::Tool {

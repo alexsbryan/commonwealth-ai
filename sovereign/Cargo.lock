@@ -8031,6 +8031,7 @@ dependencies = [
 name = "sovereign-cli"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "axum",
  "corpus-engine",
@@ -8044,6 +8045,7 @@ dependencies = [
  "sovereign-mesh",
  "sovereign-store",
  "sovereign-tools",
+ "tempfile",
  "tokio",
  "toml 0.8.2",
  "tower-http",
@@ -8186,6 +8188,7 @@ dependencies = [
 name = "sovereign-tools"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "arrow 55.2.0",
  "arrow-array 57.3.0",
  "async-trait",

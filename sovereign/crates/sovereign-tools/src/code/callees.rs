@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
@@ -18,14 +19,19 @@ use corpus_engine::CorpusEngine;
 
 use super::is_valid_symbol_name;
 
+/// A hot-reloadable SCIP graph handle. The server's polling task may swap
+/// the inner `Arc<ScipGraph>` while the tool is executing; every query
+/// does `load_full()` to grab the current graph atomically.
+pub type ScipGraphHandle = Arc<ArcSwap<ScipGraph>>;
+
 pub struct FindCalleesTool {
     #[allow(dead_code)]
     engine: Arc<CorpusEngine>,
-    graph: Arc<ScipGraph>,
+    graph: ScipGraphHandle,
 }
 
 impl FindCalleesTool {
-    pub fn new(engine: Arc<CorpusEngine>, graph: Arc<ScipGraph>) -> Self {
+    pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {
         Self { engine, graph }
     }
 }
@@ -84,8 +90,8 @@ impl Tool for FindCalleesTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("missing 'symbol'".to_string()))?;
 
-        let (callees, caution) = self
-            .graph
+        let graph = self.graph.load_full();
+        let (callees, caution) = graph
             .find_callees(symbol)
             .await
             .map_err(|e| Error::Tool {

@@ -38,7 +38,7 @@ pub use recent_changes::RecentChangesTool;
 pub use symbol_lookup::SymbolLookupTool;
 
 #[cfg(feature = "treesitter")]
-pub use callees::FindCalleesTool;
+pub use callees::{FindCalleesTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]
 pub use callers::FindCallersTool;
 

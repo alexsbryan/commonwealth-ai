@@ -21,4 +21,8 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
+arc-swap = { workspace = true }
 dirs = "5"
+
+[dev-dependencies]
+tempfile = "3"

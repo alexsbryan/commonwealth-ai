@@ -5,9 +5,12 @@
 //! graph, `.claude/settings.json`, `SOVEREIGN.md`, git hooks, and a
 //! filesystem watcher. Two minutes from first run to fully working tools.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
+use arc_swap::ArcSwap;
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
 
 // ─── Dispatch ────────────────────────────────────────────────
@@ -23,6 +26,7 @@ pub async fn run_project(args: &[String]) -> i32 {
         "status" => cmd_status(&args[1..]).await,
         "refresh" => cmd_refresh(&args[1..]).await,
         "serve" => cmd_serve(&args[1..]).await,
+        "install-hooks" => cmd_install_hooks(&args[1..]).await,
         "help" | "--help" | "-h" => {
             print_usage();
             0
@@ -54,6 +58,8 @@ Commands:
   serve               Start a lightweight MCP server (no model required)
     --port <port>     Listen port (default: 8080)
     --data-dir <dir>  Index directory (default: ~/.sovereign/indexes)
+  install-hooks       Upgrade (or install) the post-commit hook in this repo
+                      without re-running init
   help                Show this help"
     );
 }
@@ -649,12 +655,14 @@ async fn cmd_status(args: &[String]) -> i32 {
     // Git hook
     let hook_path = repo_root.join(".git").join("hooks").join("post-commit");
     if hook_path.exists() {
-        let has_sovereign = std::fs::read_to_string(&hook_path)
-            .ok()
-            .map(|s| s.contains("sovereign project refresh"))
-            .unwrap_or(false);
-        if has_sovereign {
-            println!("  Git hook      \u{2713} installed");
+        let contents = std::fs::read_to_string(&hook_path).unwrap_or_default();
+        if contents.contains(SOVEREIGN_HOOK_MARKER) {
+            println!("  Git hook      \u{2713} installed (v2: symbols + SCIP)");
+        } else if contents.contains("sovereign") && contents.contains("project refresh") {
+            println!(
+                "  Git hook      \u{26a0} prior version (refreshes SCIP only) — run \
+                 `sovereign project install-hooks` to upgrade"
+            );
         } else {
             println!("  Git hook      \u{2717} exists but missing sovereign refresh");
         }
@@ -888,54 +896,20 @@ async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!();
     eprintln!("  Call graph:");
 
-    let merged_graph = Arc::new(
-        corpus_engine::ScipGraph::open_in_memory("merged")
-            .expect("in-memory ScipGraph"),
-    );
+    let (initial_graph, _summary) = load_merged_graph(&data_dir, true).await;
+    let merged_graph: sovereign_tools::ScipGraphHandle =
+        Arc::new(ArcSwap::from_pointee(initial_graph));
 
-    let mut total_symbols = 0usize;
-    let mut total_refs = 0usize;
-    let mut graphs_found = 0;
-
-    if let Ok(entries) = std::fs::read_dir(&data_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            let scip_path = path.join("scip_graph.db");
-            if scip_path.exists() {
-                let corpus_name = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("?");
-                match merged_graph.import_from_path(&scip_path).await {
-                    Ok((syms, refs)) => {
-                        if syms > 0 || refs > 0 {
-                            eprintln!(
-                                "    \u{2713} {corpus_name}: {} symbols, {} edges",
-                                syms, refs
-                            );
-                            total_symbols += syms;
-                            total_refs += refs;
-                            graphs_found += 1;
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("    \u{2717} {corpus_name}: {e}");
-                    }
-                }
-            }
-        }
-    }
-
-    if graphs_found == 0 {
-        eprintln!("    (none — run `sovereign project init` with SCIP exporters)");
-    } else {
-        eprintln!(
-            "    Total: {} symbols, {} edges across {} projects",
-            total_symbols, total_refs, graphs_found
-        );
+    // Spawn the background reloader: every 30s, stat each scip_graph.db,
+    // and if any mtime changed (or a file appeared/disappeared) rebuild the
+    // merged graph and swap it in atomically. Tools grab `load_full()` per
+    // query so the swap is lock-free.
+    {
+        let handle = Arc::clone(&merged_graph);
+        let dir = data_dir.clone();
+        tokio::spawn(async move {
+            scip_graph_reloader(handle, dir).await;
+        });
     }
 
     // ── Register tools ──────────────────────────────────────────
@@ -998,6 +972,155 @@ async fn cmd_serve(args: &[String]) -> i32 {
     }
 
     0
+}
+
+// ─── SCIP graph loading & hot-reload ──────────────────────────
+
+/// Summary returned by [`load_merged_graph`] — aggregated counts for the
+/// startup banner and structured logging.
+#[derive(Debug, Clone, Copy, Default)]
+struct MergedGraphSummary {
+    #[allow(dead_code)]
+    graphs_found: usize,
+    #[allow(dead_code)]
+    total_symbols: usize,
+    #[allow(dead_code)]
+    total_refs: usize,
+}
+
+/// Walk `data_dir/*/scip_graph.db` and merge each into a fresh in-memory
+/// ScipGraph. If `verbose`, prints a per-graph line to stderr (used for
+/// the startup banner); reloads pass `false`.
+async fn load_merged_graph(
+    data_dir: &Path,
+    verbose: bool,
+) -> (corpus_engine::ScipGraph, MergedGraphSummary) {
+    let merged = corpus_engine::ScipGraph::open_in_memory("merged")
+        .expect("in-memory ScipGraph");
+
+    let mut summary = MergedGraphSummary::default();
+
+    if let Ok(entries) = std::fs::read_dir(data_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let scip_path = path.join("scip_graph.db");
+            if !scip_path.exists() {
+                continue;
+            }
+            let corpus_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("?");
+            match merged.import_from_path(&scip_path).await {
+                Ok((syms, refs)) => {
+                    if syms > 0 || refs > 0 {
+                        if verbose {
+                            eprintln!(
+                                "    \u{2713} {corpus_name}: {} symbols, {} edges",
+                                syms, refs
+                            );
+                        }
+                        summary.total_symbols += syms;
+                        summary.total_refs += refs;
+                        summary.graphs_found += 1;
+                    }
+                }
+                Err(e) => {
+                    if verbose {
+                        eprintln!("    \u{2717} {corpus_name}: {e}");
+                    } else {
+                        tracing::warn!(
+                            corpus = %corpus_name,
+                            error = %e,
+                            "scip reload: import_from_path failed"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    if verbose {
+        if summary.graphs_found == 0 {
+            eprintln!("    (none — run `sovereign project init` with SCIP exporters)");
+        } else {
+            eprintln!(
+                "    Total: {} symbols, {} edges across {} projects",
+                summary.total_symbols, summary.total_refs, summary.graphs_found
+            );
+        }
+    }
+
+    (merged, summary)
+}
+
+/// Collect the current mtimes of every `scip_graph.db` file under `data_dir`.
+/// Missing files are simply not represented in the map. A reload is
+/// triggered whenever this map changes (a key appears, disappears, or its
+/// mtime advances).
+fn snapshot_graph_mtimes(data_dir: &Path) -> HashMap<PathBuf, SystemTime> {
+    let mut out = HashMap::new();
+    if let Ok(entries) = std::fs::read_dir(data_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let scip_path = path.join("scip_graph.db");
+            if let Ok(md) = std::fs::metadata(&scip_path) {
+                if let Ok(mtime) = md.modified() {
+                    out.insert(scip_path, mtime);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Poll `data_dir` for SCIP graph file changes every 30 seconds. On any
+/// change, rebuild the merged graph out-of-band and atomically swap it
+/// into `handle`. Tools (FindCalleesTool, FindCallersTool) pick up the
+/// new graph on their next `load_full()`.
+async fn scip_graph_reloader(
+    handle: sovereign_tools::ScipGraphHandle,
+    data_dir: PathBuf,
+) {
+    const POLL_INTERVAL: Duration = Duration::from_secs(30);
+
+    let mut last_seen = snapshot_graph_mtimes(&data_dir);
+    tracing::debug!(
+        watched = last_seen.len(),
+        "scip reloader: polling scip_graph.db files every 30s"
+    );
+
+    loop {
+        tokio::time::sleep(POLL_INTERVAL).await;
+
+        let current = snapshot_graph_mtimes(&data_dir);
+        if current == last_seen {
+            continue;
+        }
+
+        tracing::info!(
+            prev_graphs = last_seen.len(),
+            current_graphs = current.len(),
+            "scip reloader: change detected, rebuilding merged graph"
+        );
+
+        let (fresh, summary) = load_merged_graph(&data_dir, false).await;
+        handle.store(Arc::new(fresh));
+        last_seen = current;
+
+        tracing::info!(
+            graphs = summary.graphs_found,
+            symbols = summary.total_symbols,
+            edges = summary.total_refs,
+            "scip reloader: merged graph swapped"
+        );
+    }
 }
 
 // ─── Lightweight MCP server ──────────────────────────────────
@@ -1503,9 +1626,11 @@ the patterns you're matching are not.
 
 ## Server lifecycle
 
-After running `sovereign project refresh`, restart
-`sovereign project serve` if it's running. The server loads
-SCIP graphs into memory at startup and does not hot-reload.
+`sovereign project serve` polls the on-disk SCIP graph files every
+30 seconds and hot-reloads automatically. Post-commit hooks keep
+both the symbol index and SCIP graph fresh — no manual refresh
+or restart required. If something seems stale, check
+`~/.sovereign/hooks.log` for the most recent post-commit run.
 
 ## Session start
 
@@ -1676,7 +1801,46 @@ fn update_gitignore(root: &Path) -> std::io::Result<()> {
     std::fs::write(&gitignore_path, content)
 }
 
+// ─── Install hooks (standalone upgrade path) ──────────────────
+
+/// Upgrade (or install) the post-commit hook in the current repo without
+/// running the full `project init` pipeline. Safe to re-run; detects and
+/// rewrites prior-version hook blocks in place.
+async fn cmd_install_hooks(_args: &[String]) -> i32 {
+    let repo_root = match find_repo_root() {
+        Some(r) => r,
+        None => {
+            eprintln!("error: not inside a git repository");
+            return 1;
+        }
+    };
+
+    if !repo_root.join(".git").exists() {
+        eprintln!("error: {} is not a git repo root", repo_root.display());
+        return 1;
+    }
+
+    match install_post_commit_hook(&repo_root, "") {
+        Ok(()) => {
+            println!(
+                "  \u{2713} Installed post-commit hook at {}/.git/hooks/post-commit",
+                repo_root.display()
+            );
+            println!("    Output streams to ~/.sovereign/hooks.log after each commit.");
+            0
+        }
+        Err(e) => {
+            eprintln!("error: failed to install hook: {e}");
+            1
+        }
+    }
+}
+
 // ─── Git hooks ───────────────────────────────────────────────
+
+/// Marker line that identifies a Sovereign-managed hook block. Used to
+/// detect and upgrade prior-version hook installs in place.
+const SOVEREIGN_HOOK_MARKER: &str = "# SOVEREIGN_HOOK_V2";
 
 fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()> {
     let hook_path = root.join(".git/hooks/post-commit");
@@ -1689,36 +1853,99 @@ fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()>
     let current_exe = std::env::current_exe()
         .ok()
         .and_then(|p| p.canonicalize().ok());
+
+    // The hook runs BOTH passes so every tool stays fresh:
+    //   1. `project init --no-scip` — re-ingests symbols so symbol_lookup,
+    //      code_search, and recent_changes return up-to-date results.
+    //   2. `project refresh` — exports SCIP + call graph so find_callers
+    //      and find_callees reflect the new commit.
+    //
+    // Output is redirected to ~/.sovereign/hooks.log so failures are
+    // visible (a silent `&` swallows errors and leaves the user
+    // wondering why MCP still serves stale data).
+    //
+    // `setsid sh -c '...' < /dev/null > /dev/null 2>&1 &` fully detaches
+    // the subshell from git's process group so git exiting doesn't
+    // SIGHUP the refresh mid-flight.
     let hook_block = if let Some(ref exe) = current_exe {
         format!(
-            r#"# Sovereign: refresh call graph after commit
-if [ -x "{exe}" ]; then
-  "{exe}" project refresh --quiet &
-elif command -v sovereign >/dev/null 2>&1; then
-  sovereign project refresh --quiet &
+            r#"{marker}
+# Sovereign: keep code intelligence fresh after each commit.
+# Runs `project init --no-scip` (symbols) + `project refresh` (SCIP) in
+# the background; output streams to ~/.sovereign/hooks.log.
+LOG="$HOME/.sovereign/hooks.log"
+mkdir -p "$(dirname "$LOG")"
+SOVEREIGN="{exe}"
+if [ ! -x "$SOVEREIGN" ]; then
+  command -v sovereign >/dev/null 2>&1 || exit 0
+  SOVEREIGN=sovereign
 fi
+setsid sh -c '
+  printf "[%s] post-commit refresh (pid $$)\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "'"$LOG"'"
+  "'"$SOVEREIGN"'" project init --no-scip --no-hooks --no-claude-config >> "'"$LOG"'" 2>&1
+  status_init=$?
+  "'"$SOVEREIGN"'" project refresh --quiet >> "'"$LOG"'" 2>&1
+  status_refresh=$?
+  printf "[%s] done — init=%d refresh=%d\n\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status_init" "$status_refresh" >> "'"$LOG"'"
+' < /dev/null > /dev/null 2>&1 &
 "#,
+            marker = SOVEREIGN_HOOK_MARKER,
             exe = exe.display()
         )
     } else {
-        "# Sovereign: refresh call graph after commit\nsovereign project refresh --quiet &\n"
-            .to_string()
+        // Fall back to PATH lookup for global installs.
+        format!(
+            r#"{marker}
+# Sovereign: keep code intelligence fresh after each commit.
+LOG="$HOME/.sovereign/hooks.log"
+mkdir -p "$(dirname "$LOG")"
+command -v sovereign >/dev/null 2>&1 || exit 0
+setsid sh -c '
+  printf "[%s] post-commit refresh (pid $$)\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "'"$LOG"'"
+  sovereign project init --no-scip --no-hooks --no-claude-config >> "'"$LOG"'" 2>&1
+  status_init=$?
+  sovereign project refresh --quiet >> "'"$LOG"'" 2>&1
+  status_refresh=$?
+  printf "[%s] done — init=%d refresh=%d\n\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status_init" "$status_refresh" >> "'"$LOG"'"
+' < /dev/null > /dev/null 2>&1 &
+"#,
+            marker = SOVEREIGN_HOOK_MARKER
+        )
     };
 
     if hook_path.exists() {
         let existing = std::fs::read_to_string(&hook_path)?;
-        if existing.contains("sovereign") && existing.contains("project refresh") {
-            // Already installed — don't duplicate.
+
+        if existing.contains(SOVEREIGN_HOOK_MARKER) {
+            // Already on the current version — idempotent no-op.
             return Ok(());
         }
-        // Append to existing hook.
-        let mut content = existing;
-        if !content.ends_with('\n') {
+
+        if existing.contains("sovereign") && existing.contains("project refresh") {
+            // Prior-version hook present; rewrite it by stripping the
+            // Sovereign block and appending the new one. The "prior block"
+            // is everything from the `# Sovereign: refresh` comment to the
+            // first blank line after the closing `fi`.
+            let rewritten = strip_prior_sovereign_block(&existing);
+            let mut content = rewritten;
+            if !content.is_empty() && !content.ends_with('\n') {
+                content.push('\n');
+            }
+            if !content.is_empty() {
+                content.push('\n');
+            }
+            content.push_str(&hook_block);
+            std::fs::write(&hook_path, content)?;
+        } else {
+            // Foreign hook — append ours without touching theirs.
+            let mut content = existing;
+            if !content.ends_with('\n') {
+                content.push('\n');
+            }
             content.push('\n');
+            content.push_str(&hook_block);
+            std::fs::write(&hook_path, content)?;
         }
-        content.push('\n');
-        content.push_str(&hook_block);
-        std::fs::write(&hook_path, content)?;
     } else {
         let content = format!("#!/bin/sh\n{hook_block}");
         std::fs::write(&hook_path, content)?;
@@ -1734,6 +1961,36 @@ fi
     }
 
     Ok(())
+}
+
+/// Remove the Sovereign-managed block from a prior-version hook so we
+/// can rewrite it without clobbering user-added content. The prior block
+/// starts at the `# Sovereign: refresh` comment and runs until the `fi`
+/// that closes the if/elif statement (or EOF, whichever comes first).
+fn strip_prior_sovereign_block(existing: &str) -> String {
+    let mut out = Vec::new();
+    let mut inside = false;
+    for line in existing.lines() {
+        let trimmed = line.trim_start();
+        if !inside && trimmed.starts_with("# Sovereign: refresh") {
+            inside = true;
+            continue;
+        }
+        if inside {
+            // The prior block ends with `fi` on its own line.
+            if trimmed == "fi" {
+                inside = false;
+                continue;
+            }
+            continue;
+        }
+        out.push(line);
+    }
+    // Drop trailing blank lines we may have left behind.
+    while out.last().map(|l| l.is_empty()).unwrap_or(false) {
+        out.pop();
+    }
+    out.join("\n")
 }
 
 // ─── MCP check ───────────────────────────────────────────────
@@ -1800,5 +2057,53 @@ fn format_age(unix_ts: u64) -> String {
         format!("{} hours ago", diff / 3600)
     } else {
         format!("{} days ago", diff / 86400)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_prior_removes_old_sovereign_block() {
+        let existing = r#"#!/bin/sh
+# existing user hook content
+echo "user step"
+
+# Sovereign: refresh call graph after commit
+if [ -x "/path/to/sovereign-cli" ]; then
+  "/path/to/sovereign-cli" project refresh --quiet &
+elif command -v sovereign >/dev/null 2>&1; then
+  sovereign project refresh --quiet &
+fi
+"#;
+        let stripped = strip_prior_sovereign_block(existing);
+        assert!(!stripped.contains("project refresh"));
+        assert!(stripped.contains("echo \"user step\""));
+    }
+
+    #[test]
+    fn strip_prior_no_op_when_no_sovereign_block() {
+        let existing = "#!/bin/sh\necho hello\n";
+        let stripped = strip_prior_sovereign_block(existing);
+        assert_eq!(stripped, "#!/bin/sh\necho hello");
+    }
+
+    #[tokio::test]
+    async fn snapshot_graph_mtimes_tracks_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let corpus_dir = tmp.path().join("test-corpus");
+        std::fs::create_dir(&corpus_dir).unwrap();
+        let graph_path = corpus_dir.join("scip_graph.db");
+        std::fs::write(&graph_path, b"stub").unwrap();
+
+        let snap = snapshot_graph_mtimes(tmp.path());
+        assert_eq!(snap.len(), 1);
+        assert!(snap.contains_key(&graph_path));
+
+        // Empty dir → empty snapshot.
+        let empty_tmp = tempfile::tempdir().unwrap();
+        let empty_snap = snapshot_graph_mtimes(empty_tmp.path());
+        assert!(empty_snap.is_empty());
     }
 }

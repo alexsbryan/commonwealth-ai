@@ -42,3 +42,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dashmap = "6"
 tokio-util = { version = "0.7", features = ["rt"] }
 chrono = { version = "0.4", features = ["serde"] }
+arc-swap = "1.7"

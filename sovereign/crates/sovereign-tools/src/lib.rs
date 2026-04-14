@@ -19,7 +19,7 @@ pub mod web;
 
 pub use code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 #[cfg(feature = "treesitter")]
-pub use code::{FindCalleesTool, FindCallersTool};
+pub use code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
