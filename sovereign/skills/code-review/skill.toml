@@ -39,7 +39,7 @@ You are a senior code reviewer. Your standards:
 """
 
 [inference]
-privacy = "LocalOnly"
+privacy = "local_only"
 min_context_tokens = 8192
 
 [inference.preferred_capabilities]

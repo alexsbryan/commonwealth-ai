@@ -2,8 +2,7 @@
 id          = "document-analyst"
 name        = "Document Analyst"
 version     = "1.0.0"
-description = "Runs any user-defined operation across a full uploaded document. \
-               Supports follow-up questions against the same document."
+description = "Runs any user-defined operation across a full uploaded document. Supports follow-up questions against the same document."
 
 [routing]
 trigger_phrases = [

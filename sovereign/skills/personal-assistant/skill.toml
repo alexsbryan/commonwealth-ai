@@ -36,7 +36,7 @@ You are a personal assistant. Your standards:
 """
 
 [inference]
-privacy = "LocalOnly"
+privacy = "local_only"
 
 [inference.preferred_capabilities]
 general = 2

@@ -87,7 +87,7 @@ materially improve the answer, return {"has_gap": false}.
 """
 
 [inference]
-privacy = "MeshAllowed"
+privacy = "mesh_allowed"
 min_context_tokens = 16384
 
 [inference.preferred_capabilities]

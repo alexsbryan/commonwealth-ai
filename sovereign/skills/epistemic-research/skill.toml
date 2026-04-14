@@ -105,7 +105,7 @@ confidence_decay_per_month = 0.05
 prune_threshold = 0.1
 
 [inference]
-privacy = "MeshAllowed"
+privacy = "mesh_allowed"
 min_context_tokens = 16384
 
 [inference.preferred_capabilities]

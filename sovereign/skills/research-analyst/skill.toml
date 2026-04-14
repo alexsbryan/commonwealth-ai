@@ -107,7 +107,7 @@ If any of these fail, explain which one and why.
 """
 
 [inference]
-privacy = "MeshAllowed"
+privacy = "mesh_allowed"
 min_context_tokens = 16384
 
 [inference.preferred_capabilities]

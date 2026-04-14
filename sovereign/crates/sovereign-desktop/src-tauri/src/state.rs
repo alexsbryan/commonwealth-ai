@@ -740,14 +740,24 @@ provider = "duckduckgo"
     #[test]
     fn builtin_skills_all_parse() {
         // include_str! paths are resolved at compile time, but the
-        // skill.toml contents must still parse at runtime. If someone
-        // commits a malformed built-in skill, we want the test suite
-        // to catch it — not the user's Settings panel.
+        // skill.toml contents must still parse at runtime. Require
+        // that EVERY built-in skill parses — a malformed one would
+        // silently be skipped at runtime and the user would see a
+        // shorter-than-expected Skills list with no explanation.
+        //
+        // A previous build had 7/8 TOMLs using PascalCase privacy
+        // variants that serde (`rename_all = "snake_case"`) rejected;
+        // `builtin_skills_all_parse` with a `>= 1` assertion let the
+        // bug ship. Keep this strict.
         let mut reg = sovereign_core::SkillRegistry::new();
         register_builtin_skills(&mut reg);
-        assert!(
-            !reg.list().is_empty(),
-            "expected at least one built-in skill to parse; got none"
+        assert_eq!(
+            reg.list().len(),
+            BUILTIN_SKILLS.len(),
+            "every built-in skill.toml must parse successfully; \
+             registered {} of {} — check logs for the malformed entries",
+            reg.list().len(),
+            BUILTIN_SKILLS.len(),
         );
     }
 }
