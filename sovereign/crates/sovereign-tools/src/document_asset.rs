@@ -333,7 +333,23 @@ impl DocumentAssetManager {
         request: &str,
         on_progress: impl Fn(OperationProgress) + Send + Sync,
     ) -> Result<(String, DocumentAssetOperation, Vec<String>)> {
+        let start = std::time::Instant::now();
+        tracing::info!(
+            asset_id = %asset.id,
+            title = %asset.title,
+            doc_type = ?asset.document_type,
+            has_skeleton = asset.skeleton.is_some(),
+            request_chars = request.len(),
+            "DocumentAssetManager::ask — begin"
+        );
+
         let operation = self.route(asset, request).await?;
+
+        tracing::info!(
+            asset_id = %asset.id,
+            operation = %operation.label(),
+            "DocumentAssetManager::ask — routed"
+        );
 
         on_progress(OperationProgress::Routing {
             operation: operation.label().to_string(),
@@ -342,6 +358,15 @@ impl DocumentAssetManager {
         let (response, sources) = self
             .execute_operation(asset, request, &operation, &on_progress)
             .await?;
+
+        tracing::info!(
+            asset_id = %asset.id,
+            operation = %operation.label(),
+            response_chars = response.len(),
+            source_count = sources.len(),
+            total_latency_ms = start.elapsed().as_millis() as u64,
+            "DocumentAssetManager::ask — done"
+        );
 
         Ok((response, operation, sources))
     }
@@ -372,6 +397,8 @@ impl DocumentAssetManager {
         asset: &DocumentAsset,
         request: &str,
     ) -> Result<DocumentAssetOperation> {
+        tracing::debug!(asset_id = %asset.id, "document_asset::route — begin");
+
         let overview = asset
             .skeleton
             .as_ref()
@@ -383,6 +410,12 @@ impl DocumentAssetManager {
             .as_ref()
             .map(|s| s.main_entities.iter().map(|e| e.name.clone()).collect())
             .unwrap_or_default();
+
+        tracing::debug!(
+            overview_chars = overview.len(),
+            entity_count = entity_names.len(),
+            "document_asset::route — classifying"
+        );
 
         let prompt = format!(
             "You are a document operation router. Given a user's question about a document, \
@@ -471,6 +504,12 @@ impl DocumentAssetManager {
         query: &str,
         original_request: &str,
     ) -> Result<(String, Vec<String>)> {
+        tracing::info!(
+            source_id = %source_id,
+            query_chars = query.len(),
+            "execute_rag — begin"
+        );
+
         let query_embedding = self.inference.embed(query).await?;
         let results = self
             .store
@@ -483,7 +522,17 @@ impl DocumentAssetManager {
             .filter(|c| c.source == source_id)
             .collect();
 
+        tracing::debug!(
+            total_results = results.len(),
+            relevant_count = relevant.len(),
+            "execute_rag — retrieval done"
+        );
+
         if relevant.is_empty() {
+            tracing::warn!(
+                source_id = %source_id,
+                "execute_rag — no relevant passages found for this document"
+            );
             return Ok((
                 "No relevant passages found for this question.".to_string(),
                 vec![],
@@ -535,10 +584,24 @@ impl DocumentAssetManager {
         entities: &[String],
         original_request: &str,
     ) -> Result<(String, Vec<String>)> {
+        tracing::info!(
+            asset_id = %asset.id,
+            focus_chars = focus.len(),
+            entity_count = entities.len(),
+            "execute_synthesis — begin"
+        );
+
         let source_id = asset.source_key();
         let all_chunks = self.store.get_chunks_by_source(&source_id).await?;
 
+        tracing::debug!(
+            total_chunks = all_chunks.len(),
+            has_skeleton = asset.skeleton.is_some(),
+            "execute_synthesis — chunks loaded"
+        );
+
         if all_chunks.is_empty() {
+            tracing::warn!(asset_id = %asset.id, "execute_synthesis — document has no indexed content");
             return Ok(("Document has no indexed content.".to_string(), vec![]));
         }
 
@@ -568,6 +631,12 @@ impl DocumentAssetManager {
             .filter_map(|&i| all_chunks.get(i))
             .take(30) // Cap to avoid prompt overflow.
             .collect();
+
+        tracing::debug!(
+            selected_count = selected.len(),
+            relevant_indices_count = relevant_indices.len(),
+            "execute_synthesis — chunks selected"
+        );
 
         let passages: String = selected
             .iter()
@@ -638,6 +707,12 @@ impl DocumentAssetManager {
         query: &str,
         original_request: &str,
     ) -> Result<(String, Vec<String>)> {
+        tracing::info!(
+            source_id = %source_id,
+            query_chars = query.len(),
+            "execute_aggregation — begin"
+        );
+
         let all_chunks = self.store.get_chunks_by_source(source_id).await?;
 
         // Simple keyword/embedding scan over all chunks.
@@ -647,9 +722,16 @@ impl DocumentAssetManager {
             .filter(|c| c.content.to_lowercase().contains(&query_lower))
             .collect();
 
+        tracing::debug!(
+            total_chunks = all_chunks.len(),
+            matching_count = matching.len(),
+            "execute_aggregation — keyword scan done"
+        );
+
         let sources: Vec<String> = matching.iter().map(|c| c.content.clone()).collect();
 
         if matching.is_empty() {
+            tracing::warn!(query = %query, "execute_aggregation — no matches found");
             return Ok((
                 format!("No instances of \"{query}\" found in the document."),
                 vec![],
@@ -700,6 +782,12 @@ impl DocumentAssetManager {
         source_id: &str,
         request: &str,
     ) -> Result<(String, Vec<String>)> {
+        tracing::info!(
+            source_id = %source_id,
+            request_chars = request.len(),
+            "execute_transformation — begin"
+        );
+
         let all_chunks = self.store.get_chunks_by_source(source_id).await?;
         let full_text: String = all_chunks
             .iter()
@@ -707,6 +795,13 @@ impl DocumentAssetManager {
             .map(|c| c.content.as_str())
             .collect::<Vec<_>>()
             .join("\n\n");
+
+        tracing::debug!(
+            total_chunks = all_chunks.len(),
+            used_chunks = all_chunks.len().min(20),
+            full_text_chars = full_text.len(),
+            "execute_transformation — text assembled"
+        );
 
         let prompt = format!(
             "Apply the following transformation to the document text:\n\n\
@@ -779,7 +874,7 @@ async fn detect_document_type(
         })
         .await;
 
-    match response {
+    let detected = match response {
         Ok(r) => match r.text.trim().to_lowercase().as_str() {
             "narrative" => DocumentTypeTag::Narrative,
             "argument" => DocumentTypeTag::Argument,
@@ -788,8 +883,13 @@ async fn detect_document_type(
             "technical" => DocumentTypeTag::Technical,
             _ => DocumentTypeTag::Unknown,
         },
-        Err(_) => DocumentTypeTag::Unknown,
-    }
+        Err(e) => {
+            tracing::warn!(error = %e, "detect_document_type — inference failed, defaulting to Unknown");
+            DocumentTypeTag::Unknown
+        }
+    };
+    tracing::info!(detected = ?detected, "detect_document_type — classified");
+    detected
 }
 
 /// Build the structural skeleton by processing chunks in batches

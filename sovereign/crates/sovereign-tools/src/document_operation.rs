@@ -119,9 +119,11 @@ impl DocumentOperationTool {
         let map_start = std::time::Instant::now();
         let mut batches_done = 0usize;
 
-        eprintln!(
-            "  [document_operation] Map: {} batches in {} groups of {} (parallel dispatch)",
-            total_batches, total_groups, N_PARALLEL,
+        tracing::info!(
+            total_batches,
+            total_groups,
+            parallel = N_PARALLEL,
+            "document_operation: map phase starting"
         );
         self.emit(DocOpProgress::MapStarting { total_batches });
 
@@ -165,10 +167,10 @@ impl DocumentOperationTool {
 
             if batches_done == 0 {
                 if let Some(first) = responses.first() {
-                    eprintln!(
-                        "  [document_operation] First batch completed. Model: {}, latency: {}ms",
-                        first.model_id,
-                        first.latency_ms,
+                    tracing::info!(
+                        model = %first.model_id,
+                        latency_ms = first.latency_ms,
+                        "document_operation: first map batch completed"
                     );
                 }
             }
@@ -185,14 +187,15 @@ impl DocumentOperationTool {
             let rate = if elapsed > 0 { batches_done as f32 / elapsed as f32 } else { 0.0 };
             let remaining = total_batches - batches_done;
             let eta = if rate > 0.0 { (remaining as f32 / rate) as u64 } else { 0 };
-            eprintln!(
-                "  [document_operation] Map group {}/{} ({} batches) | {:.1} batch/s | ETA {}m{}s",
-                group_idx + 1,
+            tracing::debug!(
+                group = group_idx + 1,
                 total_groups,
                 group_size,
-                rate,
-                eta / 60,
-                eta % 60,
+                batches_done,
+                total_batches,
+                rate_per_s = format!("{rate:.1}"),
+                eta_secs = eta,
+                "document_operation: map group done"
             );
             self.emit(DocOpProgress::MapProgress {
                 batches_done,
@@ -219,19 +222,20 @@ impl DocumentOperationTool {
             }
 
             if fragments.len() <= REDUCE_BATCH_SIZE {
-                eprintln!(
-                    "  [document_operation] Final reduce (depth {}, {} fragments) — using primary model",
-                    depth, fragments.len(),
+                tracing::info!(
+                    depth,
+                    fragments = fragments.len(),
+                    "document_operation: final reduce — using primary model"
                 );
                 self.emit(DocOpProgress::Synthesising);
                 // Final merge uses the primary model for quality synthesis.
                 return self.reduce_final(fragments, reduce_prompt).await;
             }
 
-            eprintln!(
-                "  [document_operation] Reduce pass {} ({} fragments)",
-                depth + 1,
-                fragments.len(),
+            tracing::info!(
+                pass = depth + 1,
+                fragments = fragments.len(),
+                "document_operation: reduce pass starting"
             );
             self.emit(DocOpProgress::ReduceProgress { depth });
 
@@ -249,9 +253,13 @@ impl DocumentOperationTool {
                 let rate = if elapsed > 0 { (i + 1) as f32 / elapsed as f32 } else { 0.0 };
                 let remaining = total_reduce - i - 1;
                 let eta = if rate > 0.0 { (remaining as f32 / rate) as u64 } else { 0 };
-                eprintln!(
-                    "  [document_operation] Reduce batch {}/{} (depth {}) | {:.1}/s | ETA {}m{}s",
-                    i + 1, total_reduce, depth, rate, eta / 60, eta % 60,
+                tracing::debug!(
+                    batch = i + 1,
+                    total = total_reduce,
+                    depth,
+                    rate_per_s = format!("{rate:.1}"),
+                    eta_secs = eta,
+                    "document_operation: reduce batch done"
                 );
             }
 
@@ -505,12 +513,12 @@ impl DocumentOperationTool {
     ) -> Result<StepOutput> {
         let word_count: usize = chunks.iter().map(|c| c.content.split_whitespace().count()).sum();
 
-        eprintln!(
-            "[document_operation] '{}': {} chunks, ~{} words, operation: {}",
-            source,
-            chunks.len(),
-            word_count,
-            operation,
+        tracing::info!(
+            source = %source,
+            chunks = chunks.len(),
+            words = word_count,
+            operation = %operation,
+            "document_operation: run_operation — begin"
         );
         self.emit(DocOpProgress::Resolving {
             source: source.to_string(),

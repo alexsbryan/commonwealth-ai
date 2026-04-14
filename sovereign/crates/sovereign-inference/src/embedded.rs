@@ -77,12 +77,12 @@ impl ModelSlot {
                 .map_err(|e| Error::Inference(format!("Failed to create context: {e}")))?
         };
 
-        eprintln!(
-            "Slot loaded: {} ({} params, {} layers, {}MB)",
-            model_id,
-            model.n_params(),
-            model.n_layer(),
-            model.size() / (1024 * 1024),
+        tracing::info!(
+            model_id = %model_id,
+            params = model.n_params(),
+            layers = model.n_layer(),
+            size_mb = model.size() / (1024 * 1024),
+            "ModelSlot::load — slot ready"
         );
 
         Ok(Self {
@@ -420,11 +420,13 @@ impl EmbedSlot {
             Some(PoolingStrategy::Cls)  => "cls",
             _                           => "mean",
         };
-        eprintln!(
-            "Embed slot loaded: {} dims, {} layers, {}MB, pooling={pooling_name}, n_ctx={max_tokens}",
-            n_embd,
-            model.n_layer(),
-            model.size() / (1024 * 1024),
+        tracing::info!(
+            dims = n_embd,
+            layers = model.n_layer(),
+            size_mb = model.size() / (1024 * 1024),
+            pooling = pooling_name,
+            n_ctx = max_tokens,
+            "EmbedSlot::load — slot ready"
         );
 
         Ok(Self {
@@ -732,13 +734,14 @@ impl EmbeddedLlamaCpp {
         backend.void_logs(); // suppress llama.cpp/ggml C-level stderr noise
         let backend = Arc::new(backend);
 
-        eprintln!("Loading fast slot ({fast_family:?})...");
+        tracing::info!(slot = "fast", family = ?fast_family, "loading slot");
         let fast = Arc::new(ModelSlot::load(
             &backend,
             fast_model_path,
             context_size,
             n_gpu_layers,
         )?);
+        tracing::info!(slot = "fast", family = ?fast_family, "slot loaded");
 
         // Embedding models are usually small (~100-500 MB) and we want
         // them resident any time corpus ingestion or search runs, so we
@@ -747,11 +750,19 @@ impl EmbeddedLlamaCpp {
         // `embed()` will return a clear error.
         let embed_slot = match embed_model_path {
             Some(path) => {
-                eprintln!("Loading embed slot from {} ({embed_family:?})...", path.display());
+                tracing::info!(
+                    slot = "embed",
+                    path = %path.display(),
+                    family = ?embed_family,
+                    "loading slot"
+                );
                 match EmbedSlot::load(&backend, path, n_gpu_layers, embed_quirks) {
-                    Ok(slot) => Some(Arc::new(slot)),
+                    Ok(slot) => {
+                        tracing::info!(slot = "embed", "slot loaded");
+                        Some(Arc::new(slot))
+                    }
                     Err(e) => {
-                        eprintln!("Failed to load embed slot: {e}. Embedding will be unavailable.");
+                        tracing::warn!(slot = "embed", error = %e, "slot load failed — embedding unavailable");
                         None
                     }
                 }
@@ -798,7 +809,11 @@ impl EmbeddedLlamaCpp {
                 if should_unload {
                     let mut primary = this.primary.lock().await;
                     if primary.is_some() {
-                        eprintln!("Primary slot idle for {}s, unloading.", timeout_secs);
+                        tracing::info!(
+                            slot = "primary",
+                            idle_secs = timeout_secs,
+                            "unloading slot (idle timeout)"
+                        );
                         *primary = None;
                         *this.last_primary_use.lock().await = None;
                     }
@@ -821,6 +836,20 @@ impl EmbeddedLlamaCpp {
 impl InferenceProvider for EmbeddedLlamaCpp {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let use_primary = self.select_slot_for_speed(request.preferred_speed);
+        let slot_name = if use_primary { "primary" } else { "fast" };
+        let prompt_chars = request.prompt.len();
+        let system_chars = request.system_message.as_ref().map(|s| s.len()).unwrap_or(0);
+
+        tracing::debug!(
+            slot = slot_name,
+            speed = ?request.preferred_speed,
+            prompt_chars,
+            system_chars,
+            max_tokens = ?request.max_tokens,
+            think_budget = ?request.think_budget,
+            temperature = ?request.temperature,
+            "inference.complete: call"
+        );
 
         if use_primary {
             // Load primary if needed.
@@ -833,13 +862,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let request = request.clone();
             let quirks = self.primary_quirks.clone();
 
-            tokio::task::spawn_blocking(move || {
+            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
                 let start = Instant::now();
 
                 // Ensure primary is loaded.
                 let mut primary = primary_lock.blocking_lock();
                 if primary.is_none() {
-                    eprintln!("Loading primary slot...");
+                    tracing::info!(slot = "primary", "loading slot (first use)");
                     let slot = ModelSlot::load(&backend, &primary_path, ctx_size, gpu_layers)?;
                     *primary = Some(slot);
                 }
@@ -854,8 +883,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 let (text, tokens_used) = match result {
                     Ok(Ok(r)) => r,
-                    Ok(Err(e)) => return Err(e),
+                    Ok(Err(e)) => {
+                        tracing::warn!(slot = "primary", error = %e, "inference error");
+                        return Err(e);
+                    }
                     Err(_) => {
+                        tracing::error!(slot = "primary", "inference panicked — likely context overflow");
                         return Err(Error::Inference(
                             "Model inference failed: prompt may exceed the model's context window. \
                              Try a shorter message or reduce conversation history.".to_string(),
@@ -876,14 +909,26 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 })
             })
             .await
-            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?
+            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+
+            if let Ok(ref resp) = result {
+                tracing::info!(
+                    slot = "primary",
+                    model = %resp.model_id,
+                    latency_ms = resp.latency_ms,
+                    tokens_used = resp.tokens_used,
+                    response_chars = resp.text.len(),
+                    "inference.complete: done"
+                );
+            }
+            result
         } else {
             // Use fast slot.
             let slot = Arc::clone(&self.fast);
             let request = request.clone();
             let quirks = self.fast_quirks.clone();
 
-            tokio::task::spawn_blocking(move || {
+            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
 
@@ -894,8 +939,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 let (text, tokens_used) = match result {
                     Ok(Ok(r)) => r,
-                    Ok(Err(e)) => return Err(e),
+                    Ok(Err(e)) => {
+                        tracing::warn!(slot = "fast", error = %e, "inference error");
+                        return Err(e);
+                    }
                     Err(_) => {
+                        tracing::error!(slot = "fast", "inference panicked — likely context overflow");
                         return Err(Error::Inference(
                             "Model inference failed: prompt may exceed the model's context window. \
                              Try a shorter message or reduce conversation history.".to_string(),
@@ -914,7 +963,19 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 })
             })
             .await
-            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?
+            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+
+            if let Ok(ref resp) = result {
+                tracing::info!(
+                    slot = "fast",
+                    model = %resp.model_id,
+                    latency_ms = resp.latency_ms,
+                    tokens_used = resp.tokens_used,
+                    response_chars = resp.text.len(),
+                    "inference.complete: done"
+                );
+            }
+            result
         }
     }
 
@@ -923,6 +984,17 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         let use_primary = self.select_slot_for_speed(request.preferred_speed);
+        let slot_name = if use_primary { "primary" } else { "fast" };
+
+        tracing::debug!(
+            slot = slot_name,
+            speed = ?request.preferred_speed,
+            prompt_chars = request.prompt.len(),
+            system_chars = request.system_message.as_ref().map(|s| s.len()).unwrap_or(0),
+            max_tokens = ?request.max_tokens,
+            "inference.complete_stream: call"
+        );
+
         let request = request.clone();
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(32);
 
@@ -936,12 +1008,14 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let quirks = self.primary_quirks.clone();
 
             tokio::task::spawn_blocking(move || {
+                let start = Instant::now();
                 let mut primary = primary_lock.blocking_lock();
                 if primary.is_none() {
-                    eprintln!("Loading primary slot for streaming...");
+                    tracing::info!(slot = "primary", "loading slot (first use, streaming)");
                     match ModelSlot::load(&backend, &primary_path, ctx_size, gpu_layers) {
                         Ok(slot) => *primary = Some(slot),
                         Err(e) => {
+                            tracing::error!(slot = "primary", error = %e, "slot load failed");
                             let _ = tx.blocking_send(Err(e));
                             return;
                         }
@@ -953,18 +1027,33 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) =
                     ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks)
                 {
+                    tracing::warn!(slot = "primary", error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
+                } else {
+                    tracing::info!(
+                        slot = "primary",
+                        latency_ms = start.elapsed().as_millis() as u64,
+                        "inference.complete_stream: done"
+                    );
                 }
             });
         } else {
             let slot = Arc::clone(&self.fast);
             let quirks = self.fast_quirks.clone();
             tokio::task::spawn_blocking(move || {
+                let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
                 if let Err(e) =
                     ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks)
                 {
+                    tracing::warn!(slot = "fast", error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
+                } else {
+                    tracing::info!(
+                        slot = "fast",
+                        latency_ms = start.elapsed().as_millis() as u64,
+                        "inference.complete_stream: done"
+                    );
                 }
             });
         }
@@ -981,9 +1070,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             )
         })?;
         let slot = Arc::clone(slot);
+        let text_len = text.len();
         let text = text.to_string();
 
+        tracing::debug!(text_chars = text_len, "inference.embed: call");
+
         tokio::task::spawn_blocking(move || {
+            let start = Instant::now();
             let mut ctx_lock = slot.contexts[0].blocking_lock();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_sync(
@@ -996,12 +1089,25 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 )
             }));
             match result {
-                Ok(Ok(v)) => Ok(v),
-                Ok(Err(e)) => Err(e),
-                Err(_) => Err(Error::Inference(
-                    "Embedding inference panicked — input may be malformed or \
-                     the embed model is incompatible.".to_string(),
-                )),
+                Ok(Ok(v)) => {
+                    tracing::debug!(
+                        dims = v.len(),
+                        latency_ms = start.elapsed().as_millis() as u64,
+                        "inference.embed: done"
+                    );
+                    Ok(v)
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!(error = %e, "embed error");
+                    Err(e)
+                }
+                Err(_) => {
+                    tracing::error!("embed panicked — input may be malformed");
+                    Err(Error::Inference(
+                        "Embedding inference panicked — input may be malformed or \
+                         the embed model is incompatible.".to_string(),
+                    ))
+                }
             }
         })
         .await

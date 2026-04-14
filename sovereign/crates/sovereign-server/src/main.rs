@@ -44,8 +44,15 @@ fn print_usage() {
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "sovereign_server=info,tower_http=info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                "sovereign_server=info,\
+                 sovereign_core=debug,\
+                 sovereign_tools=debug,\
+                 sovereign_inference=debug,\
+                 corpus_engine=info,\
+                 tower_http=info"
+                    .into()
+            }),
         )
         .init();
 

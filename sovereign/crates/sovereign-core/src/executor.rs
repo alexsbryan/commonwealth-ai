@@ -79,12 +79,22 @@ impl ApprovalChannel for AutoApprovalChannel {
         let status = match output {
             StepOutput::Text(_) | StepOutput::Json(_) | StepOutput::ReasonWithToolsResult { .. } => "done",
             StepOutput::Jump(t) => {
-                eprintln!("  [step {}] {} → jump to {t}", step.id, step.description);
+                tracing::info!(
+                    step_id = step.id,
+                    description = %step.description,
+                    jump_to = t,
+                    "executor: step jump"
+                );
                 return;
             }
             StepOutput::Skipped => "skipped",
         };
-        eprintln!("  [step {}] {} [{status}]", step.id, step.description);
+        tracing::info!(
+            step_id = step.id,
+            description = %step.description,
+            status,
+            "executor: step progress"
+        );
     }
 }
 
@@ -286,6 +296,39 @@ impl Executor {
         completed: &HashMap<usize, StepOutput>,
         task: &Task,
     ) -> Result<StepOutput> {
+        let step_start = std::time::Instant::now();
+        let kind_name = match &step.kind {
+            StepKind::Reason { .. } => "Reason",
+            StepKind::Tool { .. } => "Tool",
+            StepKind::ReasonWithTools { .. } => "ReasonWithTools",
+            StepKind::Branch { .. } => "Branch",
+            StepKind::UserInput { .. } => "UserInput",
+        };
+        tracing::info!(
+            step_id = step.id,
+            kind = kind_name,
+            description = %step.description,
+            "executor: step begin"
+        );
+
+        let result = self.execute_step_inner(step, completed, task).await;
+
+        tracing::info!(
+            step_id = step.id,
+            kind = kind_name,
+            success = result.is_ok(),
+            latency_ms = step_start.elapsed().as_millis() as u64,
+            "executor: step done"
+        );
+        result
+    }
+
+    async fn execute_step_inner(
+        &self,
+        step: &Step,
+        completed: &HashMap<usize, StepOutput>,
+        task: &Task,
+    ) -> Result<StepOutput> {
         match &step.kind {
             StepKind::Reason {
                 prompt_template,
@@ -446,9 +489,12 @@ impl Executor {
                             .get(attempt - 1)
                             .copied()
                             .unwrap_or(3000);
-                        eprintln!(
-                            "[executor] Tool '{}' retry {}/{} after {}ms",
-                            tool_id, attempt, retry.max_retries, delay
+                        tracing::info!(
+                            tool_id = %tool_id,
+                            attempt,
+                            max_retries = retry.max_retries,
+                            delay_ms = delay,
+                            "executor: tool retry"
                         );
                         tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
                     }
@@ -880,7 +926,10 @@ When ready to answer (without a <tool_call>):
             }
 
             if retry >= eval_config.max_retries {
-                eprintln!("[executor] Evaluation failed after {} retries, accepting output", retry);
+                tracing::warn!(
+                    retries = retry,
+                    "executor: evaluation failed after retries, accepting output"
+                );
                 return Ok(output);
             }
 

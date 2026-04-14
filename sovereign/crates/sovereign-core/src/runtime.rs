@@ -546,7 +546,7 @@ impl Runtime {
         )
         .await?;
 
-        eprintln!("[memory] Extracted {} memories", extracted.len());
+        tracing::info!(count = extracted.len(), "memory: extracted long-term memories");
         for mem in extracted {
             memory::save_with_contradiction_check(
                 self.inference.as_ref(),
@@ -560,7 +560,7 @@ impl Runtime {
             .await
             .unwrap_or(0);
         if pruned > 0 {
-            eprintln!("[memory] Pruned {pruned} decayed memories");
+            tracing::info!(pruned, "memory: pruned decayed memories");
         }
 
         Ok(())
@@ -575,13 +575,25 @@ impl Runtime {
     ///
     /// Returns [`Error::NotImplemented`] for ComplexTask intents — callers
     /// should fall back to [`Self::handle_message`] in that case.
+    #[tracing::instrument(
+        name = "runtime.handle_message_stream",
+        skip(self, message),
+        fields(conversation_id = %conversation_id, message_chars = message.len())
+    )]
     pub async fn handle_message_stream(
         &self,
         message: &str,
         conversation_id: &str,
     ) -> Result<StreamHandle> {
+        tracing::info!("runtime: stream turn begin");
         // 1. Build context.
         let mut context = build_context(self.store.as_ref(), conversation_id, message).await?;
+        tracing::debug!(
+            messages = context.conversation.messages.len(),
+            memories = context.memories.len(),
+            installed_corpora = context.installed_corpora.len(),
+            "runtime: stream context built"
+        );
 
         let working_memory = memory::compress_working_memory(
             self.inference.as_ref(),
@@ -623,10 +635,21 @@ impl Runtime {
             .classify(message, &context, &tool_descriptors)
             .await?;
 
+        tracing::info!(
+            intent = ?intent,
+            coarse = ?coarse_intent,
+            self_assessment = ?self_assessment,
+            "runtime: stream routed"
+        );
+
         // Document attached or ComplexTask → fall back to non-streaming.
         if message.starts_with("[Document attached: ")
             || matches!(intent, Intent::ComplexTask | Intent::KnowledgeQuery)
         {
+            tracing::info!(
+                intent = ?intent,
+                "runtime: stream not supported for this intent — falling back"
+            );
             return Err(Error::NotImplemented(
                 "Streaming not supported for this intent".into(),
             ));
@@ -736,13 +759,32 @@ impl Runtime {
         Ok(StreamHandle { message_id, stream })
     }
 
+    #[tracing::instrument(
+        name = "runtime.handle_message",
+        skip(self, message),
+        fields(conversation_id = %conversation_id, message_chars = message.len())
+    )]
     pub async fn handle_message(
         &self,
         message: &str,
         conversation_id: &str,
     ) -> Result<Response> {
+        let turn_start = std::time::Instant::now();
+        let has_doc_prefix = message.starts_with("[Document attached: ");
+        tracing::info!(
+            has_doc_prefix,
+            "runtime: turn begin"
+        );
+
         // 1. Build context from store (use message text for memory retrieval).
         let mut context = build_context(self.store.as_ref(), conversation_id, message).await?;
+        tracing::debug!(
+            messages = context.conversation.messages.len(),
+            memories = context.memories.len(),
+            installed_corpora = context.installed_corpora.len(),
+            has_document_session = context.document_session.is_some(),
+            "runtime: context built"
+        );
 
         // 1b. Compress working memory from conversation history.
         let working_memory = memory::compress_working_memory(
@@ -780,10 +822,17 @@ impl Runtime {
 
         // 3. Route.
         let tool_descriptors = self.tools.descriptors();
-        let RoutingOutcome { mut intent, coarse_intent, self_assessment } = self
+        let RoutingOutcome { intent, coarse_intent, self_assessment } = self
             .router
             .classify(message, &context, &tool_descriptors)
             .await?;
+
+        tracing::info!(
+            intent = ?intent,
+            coarse = ?coarse_intent,
+            self_assessment = ?self_assessment,
+            "runtime: routed"
+        );
 
         // When a document is attached, bypass the planner entirely and
         // call document_operation directly. The user's message is the
@@ -793,7 +842,12 @@ impl Runtime {
             if let Some(end) = rest.find(']') {
                 let source = rest[..end].to_string();
                 let user_query = rest[end + 1..].trim().to_string();
-                return self
+                tracing::info!(
+                    source = %source,
+                    user_query_chars = user_query.len(),
+                    "runtime: dispatching to handle_document_operation"
+                );
+                let result = self
                     .handle_document_operation(
                         &source,
                         &user_query,
@@ -802,11 +856,24 @@ impl Runtime {
                         &context,
                     )
                     .await;
+                tracing::info!(
+                    success = result.is_ok(),
+                    total_latency_ms = turn_start.elapsed().as_millis() as u64,
+                    "runtime: turn end (document_operation)"
+                );
+                return result;
             }
         }
 
         // 4. Dispatch based on intent.
-        match intent {
+        let dispatch = match intent {
+            Intent::ComplexTask => "handle_complex_task",
+            Intent::KnowledgeQuery => "handle_knowledge_query",
+            _ => "handle_simple",
+        };
+        tracing::info!(dispatch, "runtime: dispatching");
+
+        let result = match intent {
             Intent::ComplexTask => {
                 self.handle_complex_task(message, conversation_id, &context, &tool_descriptors)
                     .await
@@ -823,7 +890,15 @@ impl Runtime {
                 )
                 .await
             }
-        }
+        };
+
+        tracing::info!(
+            dispatch,
+            success = result.is_ok(),
+            total_latency_ms = turn_start.elapsed().as_millis() as u64,
+            "runtime: turn end"
+        );
+        result
     }
 
     /// Handle SimpleQuery, DeepQuery, and other non-plan intents.
@@ -913,6 +988,8 @@ impl Runtime {
     ) -> Result<Response> {
         use std::cmp::Ordering;
 
+        tracing::info!(message_chars = message.len(), "handle_knowledge_query: begin");
+
         // 1. Embed the query using the query-side function (applies instruction prefix
         //    for asymmetric models like Qwen3-Embedding).
         let t_search = std::time::Instant::now();
@@ -926,6 +1003,12 @@ impl Runtime {
         // 3. Sort by score, keep top 8.
         chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
         chunks.truncate(8);
+
+        tracing::info!(
+            chunks_found = chunks.len(),
+            search_ms = t_search.elapsed().as_millis() as u64,
+            "handle_knowledge_query: corpus search done"
+        );
 
         // 4a. Empty results path — answer from parametric knowledge.
         if chunks.is_empty() {
@@ -1069,7 +1152,7 @@ impl Runtime {
         conversation_id: &str,
         context: &ConversationContext,
     ) -> Result<Response> {
-        eprintln!("[runtime] Document operation: resolving source...");
+        tracing::info!(source_hint = %source_hint, "runtime: document_operation — resolving source");
 
         // 1. Resolve actual source path from the store.
         let sources = self.store.list_sources().await.unwrap_or_default();
@@ -1080,6 +1163,12 @@ impl Runtime {
             .cloned()
             .unwrap_or_else(|| source_hint.to_string());
 
+        tracing::debug!(
+            resolved_source = %resolved_source,
+            available_sources = sources.len(),
+            "runtime: document_operation — source resolved"
+        );
+
         // Get chunk count for the prompt.
         let chunks = self.store.get_chunks_by_source(&resolved_source).await.unwrap_or_default();
         let chunk_count = chunks.len();
@@ -1087,6 +1176,10 @@ impl Runtime {
         drop(chunks);
 
         if chunk_count == 0 {
+            tracing::warn!(
+                source = %resolved_source,
+                "runtime: document_operation — no chunks found for source"
+            );
             let assistant_msg = Message {
                 id: uuid::Uuid::new_v4().to_string(),
                 conversation_id: conversation_id.to_string(),
@@ -1103,9 +1196,12 @@ impl Runtime {
             return Ok(Response { message: assistant_msg, task: None });
         }
 
-        eprintln!(
-            "[runtime] Document: {} ({} chunks, ~{} words). Generating prompts...",
-            resolved_source, chunk_count, word_count
+        tracing::info!(
+            source = %resolved_source,
+            chunks = chunk_count,
+            words = word_count,
+            user_query_chars = user_query.len(),
+            "runtime: document_operation — generating map/reduce prompts"
         );
 
         // 2. Generate map/reduce prompts with a single focused inference call.
@@ -1209,9 +1305,12 @@ impl Runtime {
             }
         };
 
-        eprintln!("[runtime] Map prompt: {}...{}", &map_prompt[..80.min(map_prompt.len())], if map_prompt.len() > 80 { " (truncated)" } else { "" });
-        eprintln!("[runtime] Reduce prompt: {}...{}", &reduce_prompt[..80.min(reduce_prompt.len())], if reduce_prompt.len() > 80 { " (truncated)" } else { "" });
-        eprintln!("[runtime] Running document_operation...");
+        tracing::debug!(
+            map_prompt_chars = map_prompt.len(),
+            reduce_prompt_chars = reduce_prompt.len(),
+            "runtime: document_operation — prompts generated"
+        );
+        tracing::info!("runtime: document_operation — invoking map/reduce");
 
         // 3. Call document_operation tool directly.
         let tool = self.tools.get("document_operation")?;
@@ -1237,7 +1336,10 @@ impl Runtime {
             _ => String::new(),
         };
 
-        eprintln!("[runtime] Document operation complete ({} chars output)", result_text.len());
+        tracing::info!(
+            output_chars = result_text.len(),
+            "runtime: document_operation — complete"
+        );
 
         // 4. Build response.
         let provenance = ResponseProvenance {
@@ -1286,18 +1388,23 @@ impl Runtime {
         // Document-attached messages are handled by handle_document_operation
         // before reaching this point. This path is for non-document ComplexTasks.
 
-        eprintln!("[runtime] Generating plan...");
+        tracing::info!("runtime: complex_task — generating plan");
         let plan = self
             .planner
             .plan(message, context, tool_descriptors)
             .await?;
 
-        eprintln!(
-            "[runtime] Plan: {} steps",
-            plan.steps.len(),
+        tracing::info!(
+            steps = plan.steps.len(),
+            "runtime: complex_task — plan generated"
         );
         for step in &plan.steps {
-            eprintln!("  [step {}] {}", step.id, step.description);
+            tracing::debug!(
+                step_id = step.id,
+                description = %step.description,
+                kind = ?std::mem::discriminant(&step.kind),
+                "runtime: complex_task — step"
+            );
         }
 
         // 2. Create task.
@@ -1332,9 +1439,10 @@ impl Runtime {
 
         // 4. Replan on failure (one retry).
         if let Some(ref error) = result.error {
-            eprintln!(
-                "[runtime] Step {} failed: {}. Attempting replan...",
-                error.step_id, error.message
+            tracing::warn!(
+                step_id = error.step_id,
+                error = %error.message,
+                "runtime: complex_task — step failed, attempting replan"
             );
 
             let completed_vec: Vec<(usize, StepOutput)> =
@@ -1342,7 +1450,10 @@ impl Runtime {
 
             match self.planner.replan(&plan, &completed_vec, error).await {
                 Ok(new_plan) => {
-                    eprintln!("[runtime] Replan: {} steps", new_plan.steps.len());
+                    tracing::info!(
+                        steps = new_plan.steps.len(),
+                        "runtime: complex_task — replan generated"
+                    );
                     task.plan = new_plan.clone();
                     task.status = TaskStatus::Running;
                     task.updated_at = now();
@@ -1355,11 +1466,11 @@ impl Runtime {
                     result = executor.run(&new_plan, &mut retry_ctx).await?;
 
                     if result.error.is_some() {
-                        eprintln!("[runtime] Replan also failed.");
+                        tracing::warn!("runtime: complex_task — replan also failed");
                     }
                 }
                 Err(e) => {
-                    eprintln!("[runtime] Replan failed: {e}");
+                    tracing::warn!(error = %e, "runtime: complex_task — replan failed");
                 }
             }
         }

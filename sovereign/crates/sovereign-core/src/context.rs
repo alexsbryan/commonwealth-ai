@@ -74,6 +74,13 @@ pub async fn update_topic_context(
     previous: Option<&ConversationTopicContext>,
     document_session: Option<&DocumentSession>,
 ) -> Result<ConversationTopicContext> {
+    tracing::debug!(
+        messages = messages.len(),
+        has_previous = previous.is_some(),
+        has_document_session = document_session.is_some(),
+        "context: update_topic_context — begin"
+    );
+
     // Need at least one user message to extract a topic.
     let recent: Vec<_> = messages
         .iter()
@@ -85,6 +92,7 @@ pub async fn update_topic_context(
         .collect();
 
     if recent.is_empty() {
+        tracing::debug!("context: update_topic_context — no messages, returning default");
         return Ok(ConversationTopicContext::default());
     }
 
@@ -180,6 +188,14 @@ pub async fn update_topic_context(
         tracing::debug!(raw = %raw, "Failed to parse topic context JSON — using default");
         ConversationTopicContext::default()
     };
+
+    tracing::debug!(
+        topic = ?topic.topic,
+        domain = ?topic.domain,
+        anchored_source = ?topic.anchored_source,
+        turn_depth = topic.turn_depth,
+        "context: update_topic_context — done"
+    );
 
     Ok(topic)
 }

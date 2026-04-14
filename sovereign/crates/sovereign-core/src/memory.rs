@@ -21,7 +21,14 @@ pub async fn compress_working_memory(
     messages: &[Message],
     previous: Option<&WorkingMemory>,
 ) -> Result<WorkingMemory> {
+    tracing::debug!(
+        messages = messages.len(),
+        has_previous = previous.is_some(),
+        "memory: compress_working_memory — begin"
+    );
+
     if messages.len() < 2 {
+        tracing::debug!("memory: compress_working_memory — not enough messages, skipping");
         return Ok(previous.cloned().unwrap_or(WorkingMemory {
             current_goal: None,
             facts: Vec::new(),
@@ -84,7 +91,15 @@ pub async fn compress_working_memory(
     };
 
     let response = inference.complete(&request).await?;
-    parse_working_memory(&response.text, previous)
+    let result = parse_working_memory(&response.text, previous);
+    if let Ok(ref wm) = result {
+        tracing::debug!(
+            has_goal = wm.current_goal.is_some(),
+            fact_count = wm.facts.len(),
+            "memory: compress_working_memory — done"
+        );
+    }
+    result
 }
 
 /// Parse working memory from LLM response, with fallback.
@@ -155,7 +170,13 @@ pub async fn extract_long_term_memories(
     messages: &[Message],
     memory_rules: &MergedMemoryConfig,
 ) -> Result<Vec<Memory>> {
+    tracing::debug!(
+        messages = messages.len(),
+        "memory: extract_long_term_memories — begin"
+    );
+
     if messages.len() < 4 {
+        tracing::debug!("memory: extract_long_term_memories — not enough messages, skipping");
         return Ok(Vec::new());
     }
 
@@ -208,7 +229,14 @@ pub async fn extract_long_term_memories(
     };
 
     let response = inference.complete(&request).await?;
-    parse_extracted_memories(&response.text)
+    let result = parse_extracted_memories(&response.text);
+    if let Ok(ref memories) = result {
+        tracing::info!(
+            extracted = memories.len(),
+            "memory: extract_long_term_memories — done"
+        );
+    }
+    result
 }
 
 /// Parse extracted memories from LLM response.

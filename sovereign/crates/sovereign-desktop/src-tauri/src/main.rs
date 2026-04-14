@@ -14,10 +14,24 @@ use crate::state::AppState;
 
 #[cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 fn main() {
+    // Default filter gives glass-box visibility into every inference path.
+    // Set RUST_LOG to override (e.g. RUST_LOG=sovereign_core=debug for more detail).
+    //
+    // Levels chosen so a standard run emits:
+    //   - turn-level events (info): routing decisions, dispatch, inference calls,
+    //     document operations, slot loads/unloads
+    //   - per-inference details (debug on core/tools/inference): prompt sizes,
+    //     chunk counts, latencies, topic context updates
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "sovereign_desktop=info,sovereign_core=info,corpus_engine=debug".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                "sovereign_desktop=info,\
+                 sovereign_core=debug,\
+                 sovereign_tools=debug,\
+                 sovereign_inference=debug,\
+                 corpus_engine=debug"
+                    .into()
+            }),
         )
         .init();
 
