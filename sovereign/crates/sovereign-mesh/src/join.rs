@@ -97,8 +97,15 @@ pub enum JoinError {
     /// No peer on the LAN accepted the join (either none advertised
     /// the expected mesh_name in `timeout`, or every one rejected
     /// the join key as invalid).
-    #[error("no peer on this network accepted the join key for mesh '{mesh_name}'")]
-    NoPeerFound { mesh_name: String },
+    #[error("no peer on this network accepted the join key for mesh '{mesh_name}'{direct_hint_msg}")]
+    NoPeerFound {
+        mesh_name: String,
+        /// Appended to the error when a direct-peer hint was
+        /// provided AND failed — the user needs to see the precise
+        /// TCP-level reason (especially "No route to host", which
+        /// is the diagnostic signature of WiFi AP isolation).
+        direct_hint_msg: String,
+    },
 
     /// An accepting peer returned a malformed response. Rare; usually
     /// a version mismatch between the founder and joiner binaries.
@@ -107,6 +114,40 @@ pub enum JoinError {
         address: SocketAddr,
         reason: String,
     },
+}
+
+/// Flatten an error's `source()` chain into a Vec of messages —
+/// reqwest's top-level `Display` drops the underlying hyper/io
+/// cause ("No route to host", "Connection refused") that actually
+/// pinpoints the failure.
+fn collect_error_chain(e: &(dyn std::error::Error + 'static)) -> Vec<String> {
+    let mut chain = Vec::new();
+    let mut current: Option<&dyn std::error::Error> = Some(e);
+    while let Some(err) = current {
+        chain.push(err.to_string());
+        current = err.source();
+    }
+    chain
+}
+
+/// Classify a reqwest error into a coarse failure mode so the log
+/// line at the call site can render it at a glance without parsing
+/// the cause chain. Worth the dozen lines because "connect vs
+/// timeout vs body vs tls" drives very different user fixes.
+fn classify_reqwest_error(e: &reqwest::Error) -> &'static str {
+    if e.is_connect() {
+        "connect_refused_or_unreachable"
+    } else if e.is_timeout() {
+        "timeout"
+    } else if e.is_request() {
+        "request_builder"
+    } else if e.is_body() {
+        "body_stream"
+    } else if e.is_decode() {
+        "decode"
+    } else {
+        "other"
+    }
 }
 
 /// Normalise a URL-provided peer hint to a `host:port` string that
@@ -149,7 +190,13 @@ async fn try_single_peer(
     let response = match http.post(&url).json(body).send().await {
         Ok(r) => r,
         Err(e) => {
-            warn!(peer = %authority, error = %e, "handshake: POST failed");
+            let causes = collect_error_chain(&e);
+            warn!(
+                peer = %authority,
+                kind = ?classify_reqwest_error(&e),
+                causes = ?causes,
+                "handshake: POST failed"
+            );
             return None;
         }
     };
@@ -210,14 +257,75 @@ pub async fn perform_join(
     // Headscale / VPN) users don't wait for an mDNS loop that will
     // never find anything. On success we're done; on failure we fall
     // through to the mDNS loop so the hint remains purely additive.
+    // We also keep the failure reason to attach to the final error
+    // if everything fails — "No route to host" is the user-visible
+    // signal for WiFi AP isolation, which they'd otherwise have to
+    // dig out of the terminal logs.
+    let mut direct_failure: Option<String> = None;
     if let Some(raw) = direct_peer_hint {
         if let Some(authority) = normalise_peer_hint(raw) {
             info!(peer = %authority, "handshake_sent: direct-peer hint, POST /internal/join");
-            if let Some(parsed) = try_single_peer(&http, &authority, &body).await {
-                return Ok(JoinHandshakeResult {
-                    mesh: parsed.mesh.into_mesh(),
-                    assigned_node_id: parsed.assigned_node_id,
-                });
+            match http.post(&format!("http://{authority}/internal/join"))
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        match response.json::<JoinResponseWire>().await {
+                            Ok(parsed) => {
+                                info!(
+                                    peer = %authority,
+                                    assigned_node_id = %parsed.assigned_node_id,
+                                    "handshake_accepted: joined mesh via direct hint"
+                                );
+                                return Ok(JoinHandshakeResult {
+                                    mesh: parsed.mesh.into_mesh(),
+                                    assigned_node_id: parsed.assigned_node_id,
+                                });
+                            }
+                            Err(e) => {
+                                direct_failure = Some(format!(
+                                    "peer at {authority} returned a malformed response: {e}"
+                                ));
+                            }
+                        }
+                    } else if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+                        direct_failure = Some(format!(
+                            "peer at {authority} rejected the join key (401) — \
+                             check the URL matches the founder's mesh"
+                        ));
+                    } else {
+                        direct_failure = Some(format!(
+                            "peer at {authority} returned unexpected status {}",
+                            response.status()
+                        ));
+                    }
+                }
+                Err(e) => {
+                    let causes = collect_error_chain(&e);
+                    let kind = classify_reqwest_error(&e);
+                    warn!(
+                        peer = %authority,
+                        kind,
+                        causes = ?causes,
+                        "handshake: direct-hint POST failed"
+                    );
+                    // Prefer the deepest cause message for the
+                    // user-facing error — that's the one that says
+                    // "No route to host" / "Connection refused" etc.
+                    let deepest = causes
+                        .last()
+                        .cloned()
+                        .unwrap_or_else(|| "unknown reason".into());
+                    direct_failure = Some(format!(
+                        "couldn't reach {authority}: {deepest} \
+                         (kind: {kind}). If you see \"No route to host\" \
+                         on the same WiFi, your router likely has client \
+                         isolation enabled — try a Tailscale ?relay=… or \
+                         a different network."
+                    ));
+                }
             }
             debug!(
                 peer = %authority,
@@ -328,8 +436,14 @@ pub async fn perform_join(
         );
     }
 
+    let direct_hint_msg = match direct_failure {
+        Some(msg) => format!(". Direct relay also failed: {msg}"),
+        None => String::new(),
+    };
+
     Err(JoinError::NoPeerFound {
         mesh_name: mesh_name.to_string(),
+        direct_hint_msg,
     })
 }
 
