@@ -195,6 +195,25 @@ async fn main() {
     if let Some(first) = raw_args.first() {
         match first.as_str() {
             "mesh" => {
+                // The mesh subcommand drives network I/O whose only
+                // user-visible signal is tracing output. Without a
+                // subscriber, `tracing::info!("handshake_sent …")`
+                // vanishes into the void and mesh failures look
+                // identical from outside. Honour RUST_LOG if set,
+                // otherwise show all mesh-layer info lines.
+                tracing_subscriber::fmt()
+                    .with_env_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| {
+                                "sovereign_cli=info,\
+                                 sovereign_mesh=info,\
+                                 commonwealth_discovery=info,\
+                                 commonwealth_api=info"
+                                    .into()
+                            }),
+                    )
+                    .with_target(false)
+                    .init();
                 let code = mesh_cmd::run_mesh(&raw_args[1..]).await;
                 std::process::exit(code);
             }

@@ -434,6 +434,20 @@ impl EmbeddedDaemon {
 
             info!("Commonwealth daemon started (client: {client_addr}, internal: {internal_addr})");
 
+            // Enumerate local non-loopback IPs and log them so the
+            // founder can copy one into a `?relay=<IP>` query param
+            // if mDNS doesn't reach the joiner (e.g. WiFi AP
+            // isolation, router multicast filtering, different
+            // subnets). Matches the exact workaround documented in
+            // the Tailscale section of the crate README.
+            for iface in local_ip_candidates() {
+                info!(
+                    ip = %iface,
+                    "mesh: reachable at this address — share as \
+                     `?relay={iface}:9742` if mDNS fails"
+                );
+            }
+
             tokio::select! {
                 _ = axum::serve(client_listener, client_router) => {}
                 _ = axum::serve(internal_listener, internal_router) => {}
@@ -455,6 +469,41 @@ impl EmbeddedDaemon {
 
         Ok(())
     }
+}
+
+/// Best-effort list of the host's externally-reachable IPs, so the
+/// founder can copy one into `?relay=<ip>:9742` when mDNS is blocked
+/// (WiFi AP isolation, multicast filtering, cross-subnet LANs).
+///
+/// Uses the portable "UDP-connect to a public IP without sending"
+/// trick: kernel updates `local_addr` on the socket to reflect the
+/// preferred outbound source address. No packets are actually sent.
+/// Returns the IPv4 default-route source and, if dual-stack, the
+/// IPv6 one. Skips loopback. Not exhaustive (won't enumerate VPN
+/// interfaces that aren't the default route) but covers the common
+/// home-WiFi and Tailscale cases.
+fn local_ip_candidates() -> Vec<std::net::IpAddr> {
+    let mut ips = Vec::new();
+    if let Ok(sock) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if sock.connect("1.1.1.1:80").is_ok() {
+            if let Ok(addr) = sock.local_addr() {
+                if !addr.ip().is_loopback() {
+                    ips.push(addr.ip());
+                }
+            }
+        }
+    }
+    if let Ok(sock) = std::net::UdpSocket::bind("[::]:0") {
+        if sock.connect("[2606:4700:4700::1111]:80").is_ok() {
+            if let Ok(addr) = sock.local_addr() {
+                let ip = addr.ip();
+                if !ip.is_loopback() && !ips.contains(&ip) {
+                    ips.push(ip);
+                }
+            }
+        }
+    }
+    ips
 }
 
 impl Default for EmbeddedDaemon {

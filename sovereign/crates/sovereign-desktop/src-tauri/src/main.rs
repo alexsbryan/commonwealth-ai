@@ -25,10 +25,17 @@ fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                // Mesh-related crates default to info so join/discovery
+                // logs surface without the user setting RUST_LOG. The
+                // alternative (silent tracing calls) made every mesh
+                // failure look identical from the user's perspective.
                 "sovereign_desktop=info,\
                  sovereign_core=debug,\
                  sovereign_tools=debug,\
                  sovereign_inference=debug,\
+                 sovereign_mesh=info,\
+                 commonwealth_discovery=info,\
+                 commonwealth_api=info,\
                  corpus_engine=debug"
                     .into()
             }),
