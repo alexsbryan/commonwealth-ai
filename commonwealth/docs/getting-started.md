@@ -72,13 +72,13 @@ Commonwealth nodes need to be able to reach each other directly. There are two s
 
 If everyone is on the same Wi-Fi or Ethernet network — a house, an office, a hackerspace — Commonwealth discovers peers automatically via mDNS. **No extra setup needed.** Skip to Step 3.
 
-### Different Networks (Use Tailscale)
+### Different Networks (Use Tailscale / Headscale)
 
-If your friends are in different locations, you need a VPN so the machines can talk directly. [Tailscale](https://tailscale.com/) is by far the easiest option — it's free for personal use and takes about 5 minutes to set up.
+If your friends are in different locations — or you're on a WiFi with client isolation enabled, which looks the same from Commonwealth's perspective — you need a VPN overlay so the machines can reach each other directly. [Tailscale](https://tailscale.com/) is the easiest; [Headscale](https://github.com/juanfont/headscale) is the self-hosted equivalent. Either works; the Commonwealth side is identical.
 
 **On each machine:**
 
-1. **Install Tailscale:**
+1. **Install Tailscale** (same client for both Tailscale cloud and Headscale):
    ```bash
    # macOS
    brew install tailscale
@@ -87,30 +87,69 @@ If your friends are in different locations, you need a VPN so the machines can t
    curl -fsSL https://tailscale.com/install.sh | sh
    ```
 
-2. **Start and authenticate:**
+2. **Join the tailnet:**
+
+   **For Tailscale's hosted service:**
    ```bash
    sudo tailscale up
    ```
-   This opens a browser for you to log in. Everyone should use **the same Tailscale account** (or use Tailscale's sharing feature).
+   Opens a browser to log in. Everyone should use the same Tailscale account (or use its sharing feature).
 
-3. **Verify connectivity:**
+   **For self-hosted Headscale** — see [Appendix A](#appendix-a-headscale-setup) for server setup, then on each client:
    ```bash
-   # On Alice's machine, ping Bob's Tailscale IP
-   tailscale status        # Shows all connected machines
-   ping 100.x.y.z          # Bob's Tailscale IP
+   sudo tailscale up \
+     --login-server https://headscale.your-domain.com \
+     --authkey <your-preauth-key>
    ```
 
-4. **Tell Commonwealth about the VPN interface:**
-   Create `~/.commonwealth/config.toml`:
-   ```toml
-   [node]
-   name = "Alice's Desktop"
-
-   [network]
-   vpn_interface = "tailscale0"   # or "utun3" on macOS — check with `ifconfig`
+3. **Verify the tailnet is working:**
+   ```bash
+   tailscale status        # Shows all connected machines + their 100.x IPs
+   tailscale ping <peer>   # Confirm direct connectivity
    ```
 
-> **Want to self-host instead of using Tailscale's cloud?** See [Appendix A: Headscale Setup](#appendix-a-headscale-setup) at the bottom of this guide. From the Commonwealth side, the only difference is one extra flag during `tailscale up`. Everything else in this guide is identical.
+### Joining over Tailscale / Headscale
+
+Commonwealth's discovery layer uses mDNS multicast, which Tailscale/Headscale **do not forward over the overlay** — that's an intentional WireGuard design choice, not a Commonwealth limitation. To join across a tailnet, append the founder's tailnet address to the join URL as a `?relay=` query parameter. The joiner tries the address directly before falling back to mDNS, so the hint is purely additive and doesn't change anything for on-LAN users.
+
+**Workflow:**
+
+1. **Founder** creates the mesh in the usual way and copies the join URL it generates. Looks like:
+   ```
+   sovereign://join/cwth-d26f-cae1-65c6?name=Lab+Squad
+   ```
+
+2. **Founder** grabs their tailnet address:
+   ```bash
+   tailscale ip -4
+   # → 100.64.0.5
+   ```
+   Or the MagicDNS name:
+   ```bash
+   tailscale status | head -1
+   # → machine-a.tailnet-abc123.ts.net
+   ```
+
+3. **Founder** appends `&relay=<address>` before sharing:
+   ```
+   sovereign://join/cwth-d26f-cae1-65c6?name=Lab+Squad&relay=100.64.0.5
+   ```
+   Or with a hostname:
+   ```
+   sovereign://join/cwth-d26f-cae1-65c6?name=Lab+Squad&relay=machine-a.tailnet-abc123.ts.net
+   ```
+   Port `9742` is the default — only append `:<port>` if you've changed the internal API bind.
+
+4. **Joiner** pastes the modified URL into Settings → Mesh (desktop) or via the CLI:
+   ```bash
+   sovereign mesh join 'sovereign://join/cwth-d26f-cae1-65c6?name=Lab+Squad&relay=100.64.0.5'
+   ```
+
+**Gotchas:**
+
+- **First-time firewall prompt on the founder.** macOS's application firewall will ask to allow the binary the first time a tailnet peer reaches `0.0.0.0:9742`. Allow it. If you dismissed the prompt, re-allow under System Settings → Network → Firewall → Options.
+- **mDNS still runs locally.** Even with a `?relay=` hint, the joiner's daemon advertises on the LAN's `_commonwealth._tcp.local.` channel. If you happen to be on both the tailnet AND the same LAN, you may see the same peer twice in diagnostics — cosmetic, not a bug.
+- **Headscale requires TLS-terminated connectivity to the coordination server**, not to the peers. Your actual mesh traffic still flows peer-to-peer over WireGuard; the Headscale server just tells nodes about each other.
 
 ---
 
@@ -333,20 +372,23 @@ index_dir = "~/.commonwealth/indexes"
 
 [fairness]
 policy = { type = "transparent" }
-
-[network]
-vpn_interface = "tailscale0"
 ```
 
-Most fields have sensible defaults. The only required field is `[node] name`.
+Most fields have sensible defaults. The only required field is `[node] name`. Network-level configuration (Tailscale, Headscale, direct LAN) isn't expressed in this file — the daemon binds `0.0.0.0:9742` unconditionally, and cross-tailnet routing is supplied per-join via the `?relay=<address>` query parameter on the join URL. See Step 2 for the full workflow.
 
 ---
 
 ## Troubleshooting
 
-**Nodes can't find each other**
-- Same network: check that mDNS is not blocked by your firewall (port 5353 UDP)
-- Different networks: verify Tailscale connectivity with `tailscale ping <peer>`
+**Nodes can't find each other (same WiFi)**
+- Check that mDNS is not blocked by your firewall (port 5353 UDP)
+- If the founder's logs show `mDNS service registered` but the joiner sees zero peers, and `ping <founder-ip>` also fails from the joiner, your router has **WiFi client isolation** (also called "AP isolation" or "guest isolation") enabled. It blocks both multicast and unicast between WiFi clients. Disable it in the router's wireless-advanced settings, or fall back to Tailscale — see Step 2's [Joining over Tailscale / Headscale](#different-networks-use-tailscale--headscale).
+- `No route to host (os error 65)` in the handshake log is the same symptom at the TCP layer — same fix.
+- First-time launch on macOS may silently drop incoming connections until the firewall prompt is answered. Re-allow via System Settings → Network → Firewall → Options.
+
+**Nodes can't find each other (different networks)**
+- Verify the overlay is up with `tailscale ping <peer>`
+- Ensure the founder's join URL includes `&relay=<founder-tailnet-ip>` — without it, the joiner only tries mDNS, which doesn't cross the tailnet
 - Check `commonwealth logs` for discovery messages
 
 **Model won't load**
@@ -433,9 +475,9 @@ You need a machine with a public IP address. A cheap VPS (Hetzner, DigitalOcean,
 
 ### What everyone does (including the host)
 
-The only difference from the Tailscale instructions in Step 2 is one extra flag during `tailscale up`:
+Point the standard Tailscale client at your Headscale server and Commonwealth runs on top unchanged.
 
-1. **Install Tailscale** (same as before — Headscale uses the standard Tailscale client):
+1. **Install Tailscale** (same as before — Headscale uses the stock Tailscale client):
    ```bash
    # macOS
    brew install tailscale
@@ -444,31 +486,31 @@ The only difference from the Tailscale instructions in Step 2 is one extra flag 
    curl -fsSL https://tailscale.com/install.sh | sh
    ```
 
-2. **Connect to your Headscale server instead of Tailscale's cloud:**
+2. **Connect to your Headscale server** (the `--login-server` flag is the only difference from vanilla Tailscale):
    ```bash
    sudo tailscale up \
      --login-server https://headscale.your-domain.com \
      --authkey 1234abcd5678efgh
    ```
 
-   That `--login-server` flag is the entire difference. Everything else — the VPN interface, the IP addresses, the connectivity — works identically to Tailscale.
-
-3. **Verify connectivity** (same as before):
+3. **Verify connectivity:**
    ```bash
-   tailscale status
-   ping 100.x.y.z     # Another member's IP
+   tailscale status             # All Headscale peers + their 100.x IPs
+   tailscale ping <peer-ip>     # RTT over the WireGuard tunnel
    ```
 
-4. **Configure Commonwealth** (same as before):
-   ```toml
-   [node]
-   name = "Alice's Desktop"
-
-   [network]
-   vpn_interface = "tailscale0"
+4. **Use the tailnet address in the join URL.** This is the entire integration point on the Commonwealth side. The founder reads their tailnet address:
+   ```bash
+   tailscale ip -4
+   # → 100.64.0.5
    ```
+   …and shares a join URL with `&relay=<that address>` appended:
+   ```
+   sovereign://join/cwth-d26f-cae1-65c6?name=Lab+Squad&relay=100.64.0.5
+   ```
+   Joiners use the modified URL in the desktop app (Settings → Mesh → paste) or via the CLI (`sovereign mesh join '<url>'`). Commonwealth's daemon never needs to know which coordination server you're using — it just needs an address to POST the handshake at.
 
-That's it. From this point forward, the rest of the Getting Started guide is identical whether you're using Tailscale or Headscale. Commonwealth doesn't know or care which coordination server your VPN uses — it just needs the machines to be able to reach each other.
+That's the entire integration. From this point forward the rest of this guide applies unchanged regardless of which coordination server you run. See the [Joining over Tailscale / Headscale](#different-networks-use-tailscale--headscale) section in Step 2 for the full per-join workflow and the gotchas around macOS's application firewall.
 
 ### Headscale vs Tailscale: which to choose?
 
