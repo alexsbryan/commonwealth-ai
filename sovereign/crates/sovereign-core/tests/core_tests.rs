@@ -1310,3 +1310,124 @@ async fn executor_user_input_step() {
         Some(StepOutput::Text(t)) if t == "42"
     ));
 }
+
+// ─── AwaitUserInfo Step Tests ──────────────────────────────────
+
+/// Approval channel that returns a canned `request_information` response.
+/// Used to drive the AwaitUserInfo step deterministically.
+struct InfoApprovalChannel {
+    canned: Option<String>,
+}
+
+#[async_trait]
+impl ApprovalChannel for InfoApprovalChannel {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+        Ok(true)
+    }
+    async fn ask_user(&self, _question: &str) -> Result<String> {
+        Ok(String::new())
+    }
+    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
+    async fn request_information(
+        &self,
+        _request: &sovereign_core::types::InformationRequest,
+    ) -> Option<String> {
+        self.canned.clone()
+    }
+}
+
+fn await_user_info_plan() -> (Plan, Task) {
+    let request = sovereign_core::types::InformationRequest {
+        current_understanding: "agent thinks X".to_string(),
+        gap: "verify Y".to_string(),
+        relevance: "Y decides the answer".to_string(),
+        satisfying_source: "a 2024 paper".to_string(),
+        search_hints: vec!["NEJM 2024".to_string()],
+        task_id: String::new(),
+        step_id: 0,
+    };
+    let plan = Plan {
+        id: "info-test".to_string(),
+        goal: "collaborate".to_string(),
+        steps: vec![Step {
+            id: 0,
+            description: "Surface info request".to_string(),
+            kind: StepKind::AwaitUserInfo { request },
+            requires_approval: false,
+            inputs: vec![],
+            sampling: None,
+            evaluation: None,
+        }],
+        edges: vec![],
+    };
+    let task = Task {
+        id: "info-task".to_string(),
+        conversation_id: "c1".to_string(),
+        goal: "collaborate".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: now(),
+        updated_at: now(),
+        version: 0,
+    };
+    (plan, task)
+}
+
+#[tokio::test]
+async fn await_user_info_yields_user_content_on_fulfill() {
+    let inference = Arc::new(MockInference::new("unused"));
+    let store = Arc::new(MockStore::new());
+    let (plan, task) = await_user_info_plan();
+
+    let executor = Executor::new(
+        inference,
+        Arc::new(ToolRegistry::new()),
+        store,
+        Arc::new(InfoApprovalChannel {
+            canned: Some("here is a relevant paragraph from a 2024 paper".to_string()),
+        }),
+        Arc::new(SkillRegistry::new()),
+    );
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    assert!(result.error.is_none());
+    match result.completed.get(&0) {
+        Some(StepOutput::Text(t)) => {
+            assert!(t.contains("2024 paper"));
+        }
+        other => panic!("expected Text, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn await_user_info_yields_empty_on_skip() {
+    let inference = Arc::new(MockInference::new("unused"));
+    let store = Arc::new(MockStore::new());
+    let (plan, task) = await_user_info_plan();
+
+    let executor = Executor::new(
+        inference,
+        Arc::new(ToolRegistry::new()),
+        store,
+        Arc::new(InfoApprovalChannel { canned: None }),
+        Arc::new(SkillRegistry::new()),
+    );
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.unwrap();
+    assert!(result.error.is_none());
+    match result.completed.get(&0) {
+        Some(StepOutput::Text(t)) => assert_eq!(t, ""),
+        other => panic!("expected empty Text, got {other:?}"),
+    }
+}

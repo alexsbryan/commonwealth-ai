@@ -25,12 +25,14 @@
     DocOpProgress,
     DocumentAsset,
     DocumentOperationPayload,
+    InformationRequestPayload,
   } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { insightStore } from "../stores/insights.svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import TaskProgress from "./TaskProgress.svelte";
   import ApprovalCard from "./ApprovalCard.svelte";
+  import InformationRequestCard from "./InformationRequestCard.svelte";
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
   import AttachmentBanner from "./AttachmentBanner.svelte";
   import DocumentPicker from "./DocumentPicker.svelte";
@@ -87,6 +89,12 @@
   let unlistenDocProgress: UnlistenFn | null = null;
   let unlistenDocOp: UnlistenFn | null = null;
   let unlistenSkeletonRebuilt: UnlistenFn | null = null;
+  let unlistenInfoRequest: UnlistenFn | null = null;
+
+  // Pending information-request from the agent (collaborative-research mode).
+  // Rendered as a dedicated card below the conversation. Cleared when the
+  // user submits or skips, or when the conversation changes.
+  let pendingInfoRequest: InformationRequestPayload | null = $state(null);
 
   $effect(() => {
     if (conversationId !== activeConversationId) {
@@ -190,6 +198,18 @@
         }
       },
     );
+
+    // Collaborative-research mode: the executor surfaces an
+    // InformationRequest when it suspends a task to ask for external
+    // evidence. We render a dedicated card; the user pastes content
+    // (or skips) and the executor resumes.
+    unlistenInfoRequest = await listen<InformationRequestPayload>(
+      "information-request",
+      (event) => {
+        pendingInfoRequest = event.payload;
+        scrollToBottom();
+      },
+    );
   });
 
   onDestroy(() => {
@@ -199,6 +219,7 @@
     unlistenDocProgress?.();
     unlistenDocOp?.();
     unlistenSkeletonRebuilt?.();
+    unlistenInfoRequest?.();
   });
 
   function docProgressLabel(p: DocOpProgress): string {
@@ -510,6 +531,11 @@
         inputRequest={pendingInput}
         {onApprovalHandled}
         {onInputHandled}
+      />
+
+      <InformationRequestCard
+        request={pendingInfoRequest}
+        onHandled={() => { pendingInfoRequest = null; }}
       />
 
       {#if isLoading}

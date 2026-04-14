@@ -594,6 +594,23 @@ pub async fn submit_input(
     Ok(state.approval.submit_input(&key, response).await)
 }
 
+/// Resolve a pending information-request the agent surfaced via an
+/// `AwaitUserInfo` step. `content = None` means the user pressed skip;
+/// `Some(text)` means they pasted a passage / paragraph / source.
+/// Returns true when the key was matched, false when no pending request
+/// exists for that key (e.g. stale UI submission).
+#[tauri::command]
+pub async fn submit_information_response(
+    state: State<'_, Arc<AppState>>,
+    key: String,
+    content: Option<String>,
+) -> Result<bool, String> {
+    Ok(state
+        .approval
+        .submit_information_response(&key, content)
+        .await)
+}
+
 #[tauri::command]
 pub async fn list_skills(state: State<'_, Arc<AppState>>) -> Result<Vec<SkillEntry>, String> {
     let guard = require_runtime!(state);

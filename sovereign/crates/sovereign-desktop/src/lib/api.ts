@@ -96,6 +96,16 @@ export async function submitInput(
   return invoke("submit_input", { key, response });
 }
 
+/** Resolve a pending information-request the agent surfaced via a
+ *  collaboration step. Pass `null` for content to skip; pass a string
+ *  to provide pasted content. */
+export async function submitInformationResponse(
+  key: string,
+  content: string | null,
+): Promise<boolean> {
+  return invoke("submit_information_response", { key, content });
+}
+
 export async function listSkills(): Promise<SkillEntry[]> {
   return invoke("list_skills");
 }

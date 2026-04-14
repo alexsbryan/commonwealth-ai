@@ -303,6 +303,7 @@ impl Executor {
             StepKind::ReasonWithTools { .. } => "ReasonWithTools",
             StepKind::Branch { .. } => "Branch",
             StepKind::UserInput { .. } => "UserInput",
+            StepKind::AwaitUserInfo { .. } => "AwaitUserInfo",
         };
         tracing::info!(
             step_id = step.id,
@@ -525,6 +526,28 @@ impl Executor {
                 let resolved = resolve_inputs(question, &step.inputs, completed)?;
                 let answer = self.approval.ask_user(&resolved).await?;
                 Ok(StepOutput::Text(answer))
+            }
+
+            StepKind::AwaitUserInfo { request } => {
+                // Stamp the executor-known task/step ids so the UI can
+                // correlate the request back to the suspended task.
+                let mut req = request.clone();
+                req.task_id = task.id.clone();
+                req.step_id = step.id;
+                tracing::info!(
+                    step_id = step.id,
+                    gap_chars = req.gap.len(),
+                    "executor: awaiting user info"
+                );
+                let resolved = self.approval.request_information(&req).await;
+                let content = resolved.unwrap_or_default();
+                tracing::info!(
+                    step_id = step.id,
+                    skipped = content.is_empty(),
+                    content_chars = content.len(),
+                    "executor: user info resolved"
+                );
+                Ok(StepOutput::Text(content))
             }
 
             StepKind::ReasonWithTools {

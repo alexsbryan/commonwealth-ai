@@ -120,6 +120,7 @@ fn main() {
             commands::search_messages,
             commands::submit_approval,
             commands::submit_input,
+            commands::submit_information_response,
             commands::list_skills,
             commands::toggle_skill,
             commands::get_config,

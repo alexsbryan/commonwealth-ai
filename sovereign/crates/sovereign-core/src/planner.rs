@@ -172,6 +172,7 @@ STEP KINDS:
 - "reason": Thinking/analysis. Requires "prompt" and "speed" ("fast" or "slow").
 - "tool": Execute a tool. Requires "tool_id" (must match an available tool name) and "params" (JSON object passed to the tool).
 - "reason_with_tools": Iterative research. The model thinks, searches, examines results, and searches again as needed. Requires "prompt", "speed", "tools" (list of tool IDs like ["search"]), and "max_iterations" (number, typically 6). Use for complex questions needing multiple searches.
+- "await_user_info": Suspend the task and surface a structured information request to the user. The output is whatever content the user pastes back (or empty on skip). Use when the corpus is genuinely insufficient and a specific external source would resolve the question. Optionally include a pre-filled "request" object with fields {current_understanding, gap, relevance, satisfying_source, search_hints}.
 
 RULES:
 - Step IDs start at 0 and increment by 1
@@ -376,6 +377,34 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                     available_tools: tools,
                     max_iterations: max_iter,
                 }
+            }
+            "await_user_info" => {
+                // The planner can either pre-fill the request from the
+                // skill template, or leave it as a placeholder that gets
+                // populated from a previous step's gap-assessment output.
+                // Either way, the executor stamps task_id/step_id at
+                // dispatch time.
+                let request_obj = step_obj
+                    .get("request")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Object(Default::default()));
+                let request: crate::types::InformationRequest =
+                    serde_json::from_value(request_obj).unwrap_or(
+                        crate::types::InformationRequest {
+                            current_understanding: String::new(),
+                            gap: step_obj
+                                .get("gap")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or(&description)
+                                .to_string(),
+                            relevance: String::new(),
+                            satisfying_source: String::new(),
+                            search_hints: Vec::new(),
+                            task_id: String::new(),
+                            step_id: 0,
+                        },
+                    );
+                StepKind::AwaitUserInfo { request }
             }
             _ => {
                 // Default to Reason.

@@ -330,6 +330,19 @@ pub trait ApprovalChannel: Send + Sync {
     async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool>;
     async fn ask_user(&self, question: &str) -> Result<String>;
     fn emit_progress(&self, step: &Step, output: &StepOutput);
+
+    /// Surface a structured information request to the user and wait
+    /// asynchronously for them to either paste content or skip.
+    ///
+    /// `Some(content)` — user pasted a passage / paragraph / source.
+    /// `None` — user pressed skip; the caller should proceed with current
+    /// knowledge.
+    ///
+    /// Default impl returns `None` so non-interactive contexts (tests,
+    /// automation, server runs without a UI) don't block.
+    async fn request_information(&self, _request: &InformationRequest) -> Option<String> {
+        None
+    }
 }
 
 // ─── 7. Insight Storage ──────────────────────────────────────

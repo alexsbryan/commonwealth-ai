@@ -122,6 +122,20 @@ export interface UserInputRequestPayload {
   question: string;
 }
 
+/** Sent on `information-request` when the agent suspends a research task
+ *  to ask the user for a specific external piece of evidence. Renders as
+ *  a dedicated card (not a chat bubble) — see InformationRequestCard.svelte. */
+export interface InformationRequestPayload {
+  task_id: string;
+  step_id: number;
+  key: string;
+  current_understanding: string;
+  gap: string;
+  relevance: string;
+  satisfying_source: string;
+  search_hints: string[];
+}
+
 export interface ErrorPayload {
   message: string;
 }

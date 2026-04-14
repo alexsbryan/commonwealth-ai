@@ -332,6 +332,48 @@ pub enum StepKind {
         available_tools: Vec<ToolId>,
         max_iterations: usize,
     },
+    /// Asynchronously surface a structured information request to the user
+    /// and suspend the task until the user either pastes relevant content
+    /// or skips. Unlike `UserInput` (which asks a short free-form question),
+    /// this step presents a multi-field card describing the agent's current
+    /// understanding, the precise gap, why it matters, and what kind of
+    /// source would satisfy it.
+    ///
+    /// Step output is `StepOutput::Text(user_content)` when the user pastes
+    /// content, or `StepOutput::Text("")` on skip. Subsequent steps can
+    /// `{stepN.output}` the content into their prompts.
+    AwaitUserInfo {
+        request: InformationRequest,
+    },
+}
+
+/// Structured information request surfaced when the agent has a specific,
+/// nameable gap that the local corpus can't fill. Rendered in the UI as a
+/// dedicated card (not a chat bubble) with the four fields spelled out.
+///
+/// See `sovereign-core/src/gap.rs::identify_gap` for how these are produced
+/// and `StepKind::AwaitUserInfo` for how they're surfaced.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InformationRequest {
+    /// What the agent currently believes, with appropriate uncertainty.
+    pub current_understanding: String,
+    /// The precise gap as a specific question or claim to verify.
+    pub gap: String,
+    /// Why resolving the gap would change or sharpen the final answer.
+    pub relevance: String,
+    /// What kind of source would satisfy the request (a paper, a stat,
+    /// a primary document, etc.). Concrete enough that the user knows
+    /// when they've found the right thing.
+    pub satisfying_source: String,
+    /// Optional places to look or search terms to try.
+    #[serde(default)]
+    pub search_hints: Vec<String>,
+    /// Task / step this request blocks. Populated by the executor before
+    /// emitting — not required from the planner.
+    #[serde(default)]
+    pub task_id: String,
+    #[serde(default)]
+    pub step_id: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

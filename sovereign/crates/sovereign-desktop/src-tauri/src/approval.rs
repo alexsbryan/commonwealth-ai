@@ -45,6 +45,21 @@ pub struct UserInputRequestPayload {
     pub question: String,
 }
 
+/// Sent to the frontend when the agent suspends the task to ask the user
+/// for a specific external piece of information. Rendered as a card, not
+/// a chat bubble — see InformationRequestCard.svelte.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InformationRequestPayload {
+    pub task_id: String,
+    pub step_id: usize,
+    pub key: String,
+    pub current_understanding: String,
+    pub gap: String,
+    pub relevance: String,
+    pub satisfying_source: String,
+    pub search_hints: Vec<String>,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ErrorPayload {
     pub message: String,
@@ -56,6 +71,10 @@ pub struct TauriApprovalChannel {
     app_handle: tauri::AppHandle,
     pending_approvals: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     pending_inputs: Arc<RwLock<HashMap<String, oneshot::Sender<String>>>>,
+    /// Pending info-request waits, keyed by `{task_id}:info:{step_id}`.
+    /// The Option<String> is None when the user pressed skip,
+    /// Some(content) when they pasted something.
+    pending_info: Arc<RwLock<HashMap<String, oneshot::Sender<Option<String>>>>>,
     task_id: RwLock<String>,
 }
 
@@ -65,6 +84,7 @@ impl TauriApprovalChannel {
             app_handle,
             pending_approvals: Arc::new(RwLock::new(HashMap::new())),
             pending_inputs: Arc::new(RwLock::new(HashMap::new())),
+            pending_info: Arc::new(RwLock::new(HashMap::new())),
             task_id: RwLock::new(String::new()),
         }
     }
@@ -85,6 +105,21 @@ impl TauriApprovalChannel {
     pub async fn submit_input(&self, key: &str, response: String) -> bool {
         if let Some(sender) = self.pending_inputs.write().await.remove(key) {
             let _ = sender.send(response);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Resolve a pending information-request. `content = None` means the
+    /// user pressed skip; `Some(text)` means they pasted something.
+    pub async fn submit_information_response(
+        &self,
+        key: &str,
+        content: Option<String>,
+    ) -> bool {
+        if let Some(sender) = self.pending_info.write().await.remove(key) {
+            let _ = sender.send(content);
             true
         } else {
             false
@@ -151,6 +186,39 @@ impl ApprovalChannel for TauriApprovalChannel {
             .insert(key, tx);
 
         rx.await.map_err(|_| Error::Cancelled)
+    }
+
+    async fn request_information(&self, request: &InformationRequest) -> Option<String> {
+        // Prefer the request's task_id (stamped by the executor) but fall
+        // back to the channel's last set_task_id call if it's empty.
+        let task_id = if request.task_id.is_empty() {
+            self.task_id.read().await.clone()
+        } else {
+            request.task_id.clone()
+        };
+        let key = format!("{task_id}:info:{}", request.step_id);
+
+        self.emit(
+            "information-request",
+            InformationRequestPayload {
+                task_id,
+                step_id: request.step_id,
+                key: key.clone(),
+                current_understanding: request.current_understanding.clone(),
+                gap: request.gap.clone(),
+                relevance: request.relevance.clone(),
+                satisfying_source: request.satisfying_source.clone(),
+                search_hints: request.search_hints.clone(),
+            },
+        );
+
+        let (tx, rx) = oneshot::channel();
+        self.pending_info.write().await.insert(key, tx);
+
+        // If the receiver errors (channel dropped, e.g. app shutdown),
+        // treat as skip rather than propagating an error — the executor
+        // can fall through to a corpus-only synthesis.
+        rx.await.unwrap_or(None)
     }
 
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
