@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { produce } from "immer";
   import { open } from "@tauri-apps/plugin-dialog";
   import {
     sendMessageStream,
@@ -115,7 +116,15 @@
         if (flushed !== null) {
           const idx = messages.findIndex((m) => m.id === p.message_id);
           if (idx !== -1) {
-            messages[idx].content += flushed;
+            // See the note on the message-complete handler below. Same
+            // reasoning: nested mutation of a $state proxy doesn't
+            // invalidate $derived closures that already read the prop
+            // on the consumer. `produce()` returns a new top-level array
+            // with a new message object at `idx`, which forces the prop
+            // reference to change and downstream reactivity to fire.
+            messages = produce(messages, (draft) => {
+              draft[idx].content += flushed;
+            });
           }
           scrollToBottom();
         }
@@ -129,22 +138,25 @@
         if (p.message_id !== streamingMessageId) return;
         const idx = messages.findIndex((m) => m.id === p.message_id);
         if (idx !== -1) {
-          // Flush remaining buffered text.
           const remaining = wordBuffer.flush();
-          if (remaining) {
-            messages[idx].content += remaining;
-          }
-          // For non-streaming fallback, the placeholder may be empty.
-          if (messages[idx].content.length === 0) {
-            messages[idx].content = p.full_text;
-          }
-          // Apply metadata (provenance, retrieved_chunks) — now delivered
-          // with the message-complete event after the backend saves the message.
-          if (p.metadata) {
-            messages[idx].metadata = p.metadata;
-          }
-          // Trigger Svelte 5 reactivity by reassigning the array.
-          messages = [...messages];
+          // Fold all updates into a single `produce()` call so the
+          // resulting array is reassigned exactly once. The previous
+          // "nested mutate then spread the outer array" pattern caused
+          // the provenance bug: the metadata prop kept pointing at the
+          // same object reference, so `$derived(metadata?.provenance)`
+          // in AssistantMessage.svelte never re-ran until the
+          // conversation was cycled and the messages were rehydrated
+          // from disk with fresh object references.
+          messages = produce(messages, (draft) => {
+            if (remaining) draft[idx].content += remaining;
+            // Non-streaming fallback: placeholder may be empty.
+            if (draft[idx].content.length === 0) {
+              draft[idx].content = p.full_text;
+            }
+            // Provenance / retrieved_chunks arrive with message-complete
+            // after the backend persists the message.
+            if (p.metadata) draft[idx].metadata = p.metadata;
+          });
         }
         streamingMessageId = null;
         isLoading = false;
@@ -157,8 +169,10 @@
       if (!streamingMessageId) return;
       const idx = messages.findIndex((m) => m.id === streamingMessageId);
       if (idx !== -1) {
-        messages[idx].content =
-          messages[idx].content + `\n\nError: ${event.payload.message}`;
+        const errMsg = event.payload.message;
+        messages = produce(messages, (draft) => {
+          draft[idx].content = `${draft[idx].content}\n\nError: ${errMsg}`;
+        });
       }
       streamingMessageId = null;
       isLoading = false;
@@ -223,7 +237,9 @@
         if (p.conversation_id !== activeConversationId) return;
         const idx = messages.findIndex((m) => m.id === p.message_id);
         if (idx !== -1) {
-          messages[idx].content = p.new_content;
+          messages = produce(messages, (draft) => {
+            draft[idx].content = p.new_content;
+          });
           scrollToBottom();
         }
       },

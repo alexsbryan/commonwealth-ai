@@ -1,80 +1,66 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { useMachine } from "@xstate/svelte";
+  import { fromPromise } from "xstate";
   import { listSkills, toggleSkill } from "../api";
-  import type { SkillEntry } from "../types";
+  import { skillsMachine } from "../machines/skills.machine";
 
-  let skills: SkillEntry[] = $state([]);
-  let toggling: string | null = $state(null);
-  // Three UI states: "loading" (initial fetch in flight / backend still
-  // bootstrapping), "ready" (fetch succeeded), "error" (fetch failed for
-  // reasons other than backend-loading). Distinct from skills.length === 0
-  // because "no skills installed" and "can't see skills yet" look the
-  // same to the user and the old UI conflated them.
-  type Status = "loading" | "ready" | "error";
-  let status: Status = $state("loading");
-  let errorMessage = $state("");
+  // Provide the real Tauri-backed actor implementations to the machine
+  // here, at the component boundary. The machine itself (and its tests)
+  // never see `invoke()` — the side effects are pluggable. Any future
+  // changes to the API client (retries, batching) happen here, not in
+  // the state machine.
+  const machine = skillsMachine.provide({
+    actors: {
+      fetchSkills: fromPromise(() => listSkills()),
+      toggleSkill: fromPromise(
+        ({ input }: { input: { id: string; active: boolean } }) =>
+          toggleSkill(input.id, input.active),
+      ),
+    },
+  });
+
+  const { snapshot, send } = useMachine(machine);
+
+  // `backend-ready` is Tauri's signal that the Rust runtime has finished
+  // bootstrap. Forwarded into the machine as BOOTSTRAP_COMPLETE so the
+  // `waitingForBackend` state can fast-path into `loading` without
+  // having to wait for the 2s polling fallback.
+  //
+  // Tauri events aren't replayed — if the event fires before this
+  // listener attaches (e.g. the user opens Settings long after the app
+  // has warmed up), we miss it. That's fine: the machine's polling
+  // fallback covers that case. The listener is pure optimization.
   let unlistenBackendReady: UnlistenFn | null = null;
 
-  async function fetchSkills() {
-    try {
-      skills = await listSkills();
-      status = "ready";
-      errorMessage = "";
-    } catch (e) {
-      // Runtime not yet installed — bootstrap is still running. Stay in
-      // "loading" state and wait for `backend-ready` to refetch rather
-      // than displaying the misleading "No skills found" on a cold start.
-      const msg = String(e);
-      if (msg.toLowerCase().includes("backend is still loading")) {
-        status = "loading";
-      } else {
-        console.error("Failed to load skills:", e);
-        status = "error";
-        errorMessage = msg;
-      }
-    }
-  }
-
   onMount(async () => {
-    // If the user opens Settings → Skills before bootstrap finishes, the
-    // first fetch returns "Backend is still loading." Listen for
-    // `backend-ready` and refetch so the list populates automatically
-    // without the user having to close and reopen the panel.
     unlistenBackendReady = await listen("backend-ready", () => {
-      fetchSkills();
+      send({ type: "BOOTSTRAP_COMPLETE" });
     });
-    await fetchSkills();
   });
 
   onDestroy(() => {
     unlistenBackendReady?.();
   });
-
-  async function handleToggle(skill: SkillEntry) {
-    if (toggling) return;
-    toggling = skill.id;
-    try {
-      await toggleSkill(skill.id, !skill.active);
-      skill.active = !skill.active;
-      skills = [...skills]; // Trigger reactivity.
-    } catch (e) {
-      console.error("Failed to toggle skill:", e);
-    }
-    toggling = null;
-  }
 </script>
 
 <div class="skill-manager">
   <h3>Skills</h3>
-  {#if status === "loading"}
+  {#if $snapshot.matches("loading") || $snapshot.matches("waitingForBackend")}
     <p class="empty">Loading skills…</p>
-  {:else if status === "error"}
-    <p class="empty">Could not load skills: {errorMessage}</p>
-  {:else if skills.length === 0}
+  {:else if $snapshot.matches("error")}
+    <p class="empty">
+      Could not load skills: {$snapshot.context.errorMessage}
+      <button
+        class="retry"
+        onclick={() => send({ type: "RETRY" })}
+      >Retry</button>
+    </p>
+  {:else if $snapshot.context.skills.length === 0}
     <p class="empty">No skills found. Place skill directories in your skills folder.</p>
   {:else}
-    {#each skills as skill (skill.id)}
+    {#each $snapshot.context.skills as skill (skill.id)}
       <div class="skill-item">
         <div class="skill-info">
           <span class="skill-name">
@@ -93,8 +79,14 @@
           <input
             type="checkbox"
             checked={skill.active}
-            onchange={() => handleToggle(skill)}
-            disabled={toggling === skill.id}
+            onchange={() =>
+              send({
+                type: "TOGGLE_SKILL",
+                id: skill.id,
+                active: !skill.active,
+              })}
+            disabled={$snapshot.matches("toggling") &&
+              $snapshot.context.togglingId === skill.id}
           />
           <span class="slider"></span>
         </label>
@@ -116,6 +108,21 @@
   .empty {
     color: var(--text-muted);
     font-size: 0.9rem;
+  }
+
+  .retry {
+    margin-left: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 2px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+  .retry:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary, var(--text-secondary));
   }
 
   .skill-item {

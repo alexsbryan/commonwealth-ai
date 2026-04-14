@@ -1,6 +1,11 @@
+import { produce } from "immer";
 import type { InsightNodeDto } from "../types";
 import { listInsights, deleteInsight } from "../api";
 
+// All writes go through `produce()` so the array reference changes on
+// every mutation — see docs/frontend-state.md. Today the mutators here
+// all rewrite the whole array, so the discipline is cheap; it becomes
+// load-bearing once we add nested fields or partial updates.
 let _nodes: InsightNodeDto[] = $state([]);
 let _loading = $state(false);
 
@@ -35,12 +40,17 @@ export const insightStore = {
 
   /** Called immediately after a clip action — node already persisted. */
   add(node: InsightNodeDto) {
-    _nodes = [node, ..._nodes];
+    _nodes = produce(_nodes, (draft) => {
+      draft.unshift(node);
+    });
   },
 
   /** Remove an insight by ID. */
   async remove(id: string) {
     await deleteInsight(id);
-    _nodes = _nodes.filter((n) => n.id !== id);
+    _nodes = produce(_nodes, (draft) => {
+      const idx = draft.findIndex((n) => n.id === id);
+      if (idx !== -1) draft.splice(idx, 1);
+    });
   },
 };

@@ -11,7 +11,13 @@
     "strict": true,
     "noEmit": true,
     "moduleResolution": "bundler",
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    // `skipLibCheck` skips type checking of declaration files under
+    // node_modules. Without it, Vitest's transitive `.d.ts` files
+    // reference Node globals (`NodeJS.*`, `node:worker_threads`) that
+    // our browser-targeted tsconfig doesn't know about, and
+    // `svelte-check` reports 50+ phantom errors on them.
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts", "src/**/*.svelte"]
 }
