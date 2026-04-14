@@ -26,6 +26,59 @@ use sovereign_core::types::*;
 use crate::rag::chunk::{chunk_text, TextChunk};
 use crate::rag::parse::parse_file;
 
+// ─── Self-reference detection ────────────────────────────────
+
+/// Lowercase substrings that unambiguously mark a question as directed at
+/// the attached document. Matching any of these short-circuits the
+/// LLM-based router — we don't need a Fast-slot call to know that
+/// "summarize this document" is about the document.
+///
+/// Kept as a flat list rather than regex for predictability and cost:
+/// a substring scan over ~100 chars is microseconds; a regex is overkill.
+const SELF_REFERENCE_PHRASES: &[&str] = &[
+    // "this <thing>" phrasings
+    "this document",
+    "this doc",
+    "this pdf",
+    "this file",
+    "this text",
+    "this paper",
+    "this article",
+    "this book",
+    "this chapter",
+    "this essay",
+    "this report",
+    // "the <thing>" phrasings — risk of false positive is low because
+    // general-knowledge questions rarely mention "the document" etc.
+    "the document",
+    "the text",
+    "the paper",
+    "the article",
+    "the book",
+    "the chapter",
+    "the essay",
+    "the report",
+    "the attached",
+    // imperative summary/analysis phrasings
+    "summarize this",
+    "summarise this",
+    "summary of this",
+    "summarize the",
+    "summarise the",
+    // open-ended "what does/is this" patterns
+    "what is this about",
+    "what's this about",
+    "what is this document",
+    "what does this",
+];
+
+/// Return true when `request` explicitly references the attached document.
+/// Case-insensitive substring match against [`SELF_REFERENCE_PHRASES`].
+fn detect_self_reference(request: &str) -> bool {
+    let q = request.to_lowercase();
+    SELF_REFERENCE_PHRASES.iter().any(|p| q.contains(p))
+}
+
 // ─── Progress types ──────────────────────────────────────────
 
 /// Progress updates emitted during document ingest. The frontend
@@ -508,6 +561,28 @@ impl DocumentAssetManager {
     ) -> Result<DocumentAssetOperation> {
         tracing::debug!(asset_id = %asset.id, "document_asset::route — begin");
 
+        // Deterministic pre-check: if the question explicitly references the
+        // attached document ("this document", "summarize this paper", etc.)
+        // we don't need an LLM to tell us the user wants a document answer.
+        // Skip the Fast-slot call and go straight to Synthesis — which works
+        // whether or not the skeleton has been built (execute_synthesis
+        // samples chunks evenly when the skeleton is absent).
+        //
+        // Without this check, a skeleton-less asset would have a placeholder
+        // overview ("Document structure not yet available.") and the Fast
+        // classifier would often default to off_topic even for clearly
+        // document-directed questions like "summarize this document".
+        if detect_self_reference(request) {
+            tracing::info!(
+                asset_id = %asset.id,
+                "document_asset::route — self-reference detected, defaulting to Synthesis"
+            );
+            return Ok(DocumentAssetOperation::Synthesis {
+                focus: request.to_string(),
+                entities: Vec::new(),
+            });
+        }
+
         let overview = asset
             .skeleton
             .as_ref()
@@ -546,12 +621,15 @@ impl DocumentAssetManager {
                the full document (character arcs, argument development, thematic evolution).\n\
              - Use \"aggregation\" for \"find every mention of X\" or \"list all instances of Y\".\n\
              - Use \"transformation\" for rewriting, editing, or extracting structured data.\n\
-             - Use \"off_topic\" when the question has no clear relationship to the \
-               document's overview, entities, or type — for example, asking about \
-               Buddhism when the document is about physics, or asking a general \
-               knowledge question that doesn't reference the document at all. \
-               Prefer off_topic over rag when you're unsure whether the topic is in \
-               the document.\n\n\
+             - Use \"off_topic\" when the question is clearly about a different \
+               domain AND makes no reference to the attached document — for \
+               example, the document is about physics and the user asks about \
+               Buddhism without mentioning the document. A question that says \
+               \"this document\", \"this text\", \"the paper\", \"summarize this\", \
+               or similar self-referential phrasing is NEVER off_topic.\n\
+             - When you're unsure whether the topic is in the document, prefer \
+               \"synthesis\" over \"off_topic\". Synthesis still works when the \
+               document hasn't been fully analysed yet, so it's the safer default.\n\n\
              Respond with only the JSON object, no other text.",
             entities = entity_names.join(", "),
             doc_type = asset.document_type.label(),
@@ -1467,6 +1545,48 @@ mod tests {
             }
             other => panic!("expected Rag, got {other:?}"),
         }
+    }
+
+    // ── Self-reference detection ────────────────────────────────
+
+    #[test]
+    fn self_reference_matches_common_phrasings() {
+        for q in &[
+            "Can you summarize this document?",
+            "What is this paper about?",
+            "summarize the text",
+            "What does this say about consciousness?",
+            "give me a summary of this",
+            "Tell me what the attached is about",
+            "what's this about?",
+            "Summarize the article please",
+        ] {
+            assert!(
+                detect_self_reference(q),
+                "expected self-reference match for {q:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn self_reference_rejects_off_topic_questions() {
+        for q in &[
+            "What is the difference between Theravada and Zen buddhism?",
+            "Explain quantum superposition",
+            "Who was Erwin Schrödinger?",
+            "Give me a recipe for banana bread",
+        ] {
+            assert!(
+                !detect_self_reference(q),
+                "expected NO self-reference match for {q:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn self_reference_is_case_insensitive() {
+        assert!(detect_self_reference("SUMMARIZE THIS DOCUMENT"));
+        assert!(detect_self_reference("What Is This Paper About?"));
     }
 
     #[test]
