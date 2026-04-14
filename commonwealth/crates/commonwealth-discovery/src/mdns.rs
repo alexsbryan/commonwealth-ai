@@ -110,6 +110,11 @@ impl MdnsDiscovery {
         let discovered = Arc::clone(&self.discovered);
         let own_instance = self.instance_name.clone();
 
+        info!(
+            service_type = SERVICE_TYPE,
+            "mDNS browse subscribed — waiting for peer advertisements"
+        );
+
         let handle = tokio::spawn(async move {
             loop {
                 match tokio::time::timeout(
