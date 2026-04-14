@@ -118,6 +118,18 @@ resolve, we still fall back to mDNS.
   tailnet and the LAN, you may see the same peer twice in the
   diagnostics panel — cosmetic, not a bug.
 
+## Persistence
+
+The running mesh is serialised to `<data_dir>/mesh.json` (macOS:
+`~/Library/Application Support/sovereign/mesh.json`) after a
+successful `create_mesh` or `join_mesh`. On app start, bootstrap
+calls `EmbeddedDaemon::try_resume()` — if the file is present the
+daemon starts again with that mesh, so mDNS advertises and joiners
+can find you without you having to recreate. Clicking **Leave** in
+Settings → Mesh deletes the file. The format is a flat JSON blob
+(members as an array, not a HashMap — NodeId doesn't round-trip as
+a JSON object key).
+
 ## Out of scope (v1)
 
 - **True rendezvous-based discovery.** Tailscale works (see above)

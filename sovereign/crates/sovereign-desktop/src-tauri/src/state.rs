@@ -222,6 +222,11 @@ pub struct AppState {
 impl AppState {
     pub fn new(approval: Arc<TauriApprovalChannel>) -> Self {
         let config = DesktopConfig::load();
+        // The mesh daemon persists its running-mesh state into
+        // `<data_dir>/mesh.json` so a create/join survives an app
+        // restart — otherwise the founder loses their mesh on quit
+        // and would-be joiners get "no peer on this network".
+        let mesh_data_dir = config.data_dir.clone();
         Self {
             runtime: RwLock::new(None),
             approval,
@@ -230,7 +235,7 @@ impl AppState {
             store: RwLock::new(None),
             corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
-            mesh: Arc::new(sovereign_mesh::EmbeddedDaemon::new()),
+            mesh: Arc::new(sovereign_mesh::EmbeddedDaemon::new(mesh_data_dir)),
             health_monitor: RwLock::new(None),
             health_shutdown: CancellationToken::new(),
             insight_service: RwLock::new(None),
@@ -603,6 +608,16 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     .with_corpus_engine(Arc::clone(&corpus_engine));
 
     *state.runtime.write().await = Some(Arc::new(runtime));
+
+    // Auto-resume a previously-persisted mesh so the founder sees
+    // their mesh on restart and existing joiners pick up where they
+    // left off. Fails soft — a missing or corrupt mesh.json never
+    // blocks startup.
+    match state.mesh.try_resume().await {
+        Ok(true) => tracing::info!("mesh: resumed from persisted state"),
+        Ok(false) => tracing::debug!("mesh: no persisted state, starting fresh"),
+        Err(e) => tracing::warn!(error = %e, "mesh: try_resume failed"),
+    }
 
     // Background startup task: verify per-corpus vector index readiness and
     // write results to the store so handle_knowledge_query can gate correctly.

@@ -27,3 +27,6 @@ hex = "0.4"
 # records; pulling reqwest once across the crate is simpler than
 # threading it through Phase B piecewise.
 reqwest = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

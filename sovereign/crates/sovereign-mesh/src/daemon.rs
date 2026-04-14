@@ -4,6 +4,7 @@
 //! It starts when the user creates or joins a mesh, and stops when they leave.
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
@@ -16,11 +17,15 @@ use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 
 use crate::deep_link::DeepLink;
+use crate::persist;
 use crate::state::MeshState;
 
 /// The embedded Commonwealth daemon, managed by Sovereign's UI.
 pub struct EmbeddedDaemon {
     state: Arc<RwLock<DaemonState>>,
+    /// Where to persist `mesh.json` so the daemon can auto-resume on
+    /// app restart. Set once at construction.
+    data_dir: PathBuf,
 }
 
 enum DaemonState {
@@ -55,10 +60,58 @@ pub struct JoinMeshResult {
 }
 
 impl EmbeddedDaemon {
-    pub fn new() -> Self {
+    /// Construct a daemon that persists its running-mesh state to
+    /// `data_dir/mesh.json`. Call [`try_resume`](Self::try_resume)
+    /// once at app start to re-attach to a previously-created mesh.
+    pub fn new(data_dir: PathBuf) -> Self {
         Self {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
+            data_dir,
         }
+    }
+
+    /// Legacy constructor that doesn't persist — use only in tests
+    /// where a tempdir isn't worth setting up. Production code must
+    /// prefer `new(data_dir)`.
+    pub fn new_in_memory() -> Self {
+        Self {
+            state: Arc::new(RwLock::new(DaemonState::Stopped)),
+            data_dir: PathBuf::new(),
+        }
+    }
+
+    fn persistence_enabled(&self) -> bool {
+        !self.data_dir.as_os_str().is_empty()
+    }
+
+    /// If a mesh has been persisted from a previous session, start
+    /// the daemon with that mesh so mDNS advertises immediately and
+    /// existing members can reconnect without the user recreating.
+    /// No-op if no persisted file exists or if persistence is
+    /// disabled (the `new_in_memory` constructor).
+    pub async fn try_resume(&self) -> Result<bool, MeshError> {
+        if !self.persistence_enabled() {
+            return Ok(false);
+        }
+        if self.is_running().await {
+            return Ok(false);
+        }
+        let loaded = match persist::load(&self.data_dir) {
+            Ok(Some(p)) => p,
+            Ok(None) => return Ok(false),
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "mesh.json failed to load — ignoring, starting clean"
+                );
+                return Ok(false);
+            }
+        };
+        let (mesh, self_node_id) = loaded.into_live();
+        let mesh_name = mesh.name.clone();
+        self.start_daemon(mesh, self_node_id).await?;
+        info!(mesh_name, "resumed mesh from persisted state");
+        Ok(true)
     }
 
     /// Whether the daemon is currently running.
@@ -96,6 +149,17 @@ impl EmbeddedDaemon {
         );
 
         self.start_daemon(mesh, node_id).await?;
+
+        // Persist *after* start_daemon succeeds so we never leave a
+        // mesh.json that points at a daemon that never bound.
+        if self.persistence_enabled() {
+            if let DaemonState::Running { app_state, .. } = &*self.state.read().await {
+                let live = app_state.inner.mesh.read().await.clone();
+                if let Err(e) = persist::save(&self.data_dir, &live, node_id) {
+                    warn!(error = %e, "mesh.json write failed — mesh is in-memory only");
+                }
+            }
+        }
 
         info!(mesh_name, "mesh created, daemon started");
 
@@ -212,6 +276,18 @@ impl EmbeddedDaemon {
             }
         }
 
+        // Persist the adopted mesh so the next app start resumes
+        // automatically. Without this, joiners would have to paste
+        // the link again every launch.
+        if self.persistence_enabled() {
+            if let DaemonState::Running { app_state, .. } = &*self.state.read().await {
+                let live = app_state.inner.mesh.read().await.clone();
+                if let Err(e) = persist::save(&self.data_dir, &live, adopted_node_id) {
+                    warn!(error = %e, "mesh.json write failed — joined mesh is in-memory only");
+                }
+            }
+        }
+
         info!(mesh_name, node_id = %adopted_node_id, "joined mesh, daemon started");
 
         Ok(JoinMeshResult {
@@ -220,13 +296,27 @@ impl EmbeddedDaemon {
         })
     }
 
-    /// Stop the daemon and leave the mesh.
+    /// Leave the mesh: stop the daemon AND delete the persisted
+    /// state so the next app start doesn't auto-resume. This is
+    /// what the UI's "Leave" button calls.
     pub async fn stop(&self) -> Result<(), MeshError> {
         let mut state = self.state.write().await;
         match std::mem::replace(&mut *state, DaemonState::Stopped) {
             DaemonState::Running { _shutdown_tx, .. } => {
                 // Dropping the sender signals the daemon to shut down.
                 drop(_shutdown_tx);
+                // Drop the write guard before touching the filesystem
+                // — persistence shouldn't gate the in-memory stop.
+                drop(state);
+                if self.persistence_enabled() {
+                    if let Err(e) = persist::clear(&self.data_dir) {
+                        warn!(
+                            error = %e,
+                            "mesh.json could not be deleted on leave; \
+                             it may auto-resume on next launch"
+                        );
+                    }
+                }
                 info!("mesh daemon stopped");
                 Ok(())
             }
@@ -361,8 +451,11 @@ impl EmbeddedDaemon {
 }
 
 impl Default for EmbeddedDaemon {
+    /// In-memory default — useful for tests and quick scripts, but
+    /// never used from the desktop app which calls
+    /// `EmbeddedDaemon::new(data_dir)` to get persistence.
     fn default() -> Self {
-        Self::new()
+        Self::new_in_memory()
     }
 }
 
