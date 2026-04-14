@@ -200,6 +200,11 @@ impl InferenceProvider for AlwaysSearchInference {
 pub struct TestHarness {
     pub runtime: Runtime,
     pub store: Arc<SqliteStateStore>,
+    /// Concrete approval channel for collaborate harnesses. `None` for
+    /// the default harness (which uses `AutoApprovalChannel`). Tests
+    /// that need to inspect `emit_message_refined` calls reach into
+    /// this field.
+    pub scripted_approval: Option<Arc<ScriptedApprovalChannel>>,
 }
 
 impl TestHarness {
@@ -232,6 +237,7 @@ impl TestHarness {
         Self {
             runtime,
             store: shared_store,
+            scripted_approval: None,
         }
     }
 
@@ -268,6 +274,50 @@ impl TestHarness {
         match self.store.get_conversation(conversation_id).await {
             Ok(conv) => conv.messages.len(),
             Err(_) => 0,
+        }
+    }
+
+    /// Build a harness with `auto_collaborate=true`, a scriptable
+    /// inference provider (for gap/refinement responses) and a
+    /// scripted approval channel (for the user's pasted content).
+    /// The caller owns the scripts and can mutate them between sends.
+    pub fn new_with_collaborate(
+        gap: GapScript,
+        refine: RefineScript,
+        info_response: InfoResponseScript,
+    ) -> Self {
+        let scriptable = Arc::new(ScriptableInference::new(gap, refine));
+        let inference: Arc<dyn InferenceProvider> = scriptable.clone();
+        let shared_store = Arc::new(SqliteStateStore::open_in_memory().unwrap());
+        let store_trait: Arc<dyn StateStore> = Arc::clone(&shared_store) as Arc<dyn StateStore>;
+
+        let skills = Arc::new(SkillRegistry::new());
+        let router: Box<dyn sovereign_core::traits::Router> =
+            Box::new(PassthroughRouter);
+        let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
+        let tools = Arc::new(ToolRegistry::new());
+        let scripted_approval = Arc::new(ScriptedApprovalChannel::new(info_response));
+        let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =
+            Arc::clone(&scripted_approval) as Arc<dyn sovereign_core::traits::ApprovalChannel>;
+
+        let mut config = sovereign_core::types::InferenceConfig::default();
+        config.auto_collaborate = true;
+
+        let runtime = Runtime::new(
+            inference,
+            router,
+            Box::new(planner),
+            tools,
+            store_trait,
+            skills,
+            approval,
+            config,
+        );
+
+        Self {
+            runtime,
+            store: shared_store,
+            scripted_approval: Some(scripted_approval),
         }
     }
 
@@ -309,5 +359,203 @@ impl TestHarness {
             })
             .await
             .unwrap();
+    }
+}
+
+// ─── Auto-Collaborate Test Doubles ───────────────────────────
+//
+// Tiny scriptable test doubles for Phase 2 auto-collaboration tests.
+// The tests configure these before invoking the runtime, then assert
+// on the resulting assistant-message content.
+//
+// Not intended as a general-purpose mock — every field encodes a
+// narrow test scenario. Keep the surface small.
+
+/// What the scriptable inference should return for a gap-check prompt
+/// (one whose text contains "single most valuable").
+#[derive(Clone)]
+pub enum GapScript {
+    /// Return `{"has_gap": false}` — auto-collaborate should pass the
+    /// original answer through unchanged.
+    NoGap,
+    /// Return a full gap JSON with the provided `gap` field. Uses
+    /// stubbed values for the other fields.
+    Gap { gap: String },
+    /// Simulate a transient inference failure. The helper is
+    /// documented to fall back to the original answer on error.
+    Error,
+}
+
+/// What the scriptable inference should return for a refinement
+/// prompt (one whose text contains "Refine the answer to integrate").
+#[derive(Clone)]
+pub enum RefineScript {
+    /// Return this exact string as the refined answer.
+    Text(String),
+    /// Should not be called in this scenario — panics if invoked.
+    Unused,
+}
+
+/// What the scripted approval channel should return for
+/// `request_information`. Encodes the user's three choices:
+/// paste content, skip, or (indirectly) ignore.
+#[derive(Clone)]
+pub enum InfoResponseScript {
+    /// User pasted this exact text.
+    Pasted(String),
+    /// User pressed Skip — returns `None`.
+    Skip,
+    /// Should not be called in this scenario — panics if invoked.
+    Unused,
+}
+
+pub struct ScriptableInference {
+    fallback: DeterministicInference,
+    gap: GapScript,
+    refine: RefineScript,
+}
+
+impl ScriptableInference {
+    pub fn new(gap: GapScript, refine: RefineScript) -> Self {
+        Self {
+            fallback: DeterministicInference,
+            gap,
+            refine,
+        }
+    }
+}
+
+#[async_trait]
+impl InferenceProvider for ScriptableInference {
+    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
+        let p = &request.prompt;
+
+        // Gap-check prompt? See gap.rs — the prompt always contains
+        // "single most valuable".
+        if p.contains("single most valuable") {
+            return match &self.gap {
+                GapScript::NoGap => Ok(CompletionResponse {
+                    text: r#"{"has_gap": false}"#.to_string(),
+                    tokens_used: 5,
+                    model_id: "scriptable-gap".to_string(),
+                    latency_ms: 1,
+                    oicp_meta: None,
+                }),
+                GapScript::Gap { gap } => {
+                    let body = format!(
+                        r#"{{"has_gap": true, "current_understanding": "cu", "gap": "{gap}", "relevance": "r", "satisfying_source": "s", "search_hints": ["h"]}}"#,
+                        gap = gap.replace('"', "\\\""),
+                    );
+                    Ok(CompletionResponse {
+                        text: body,
+                        tokens_used: 20,
+                        model_id: "scriptable-gap".to_string(),
+                        latency_ms: 1,
+                        oicp_meta: None,
+                    })
+                }
+                GapScript::Error => Err(Error::Inference(
+                    "scripted gap-check failure".to_string(),
+                )),
+            };
+        }
+
+        // Refinement prompt? See runtime.rs::maybe_collaborate.
+        if p.contains("Refine the answer to integrate") {
+            return match &self.refine {
+                RefineScript::Text(t) => Ok(CompletionResponse {
+                    text: t.clone(),
+                    tokens_used: 15,
+                    model_id: "scriptable-refine".to_string(),
+                    latency_ms: 1,
+                    oicp_meta: None,
+                }),
+                RefineScript::Unused => panic!(
+                    "refinement invoked unexpectedly; test configured RefineScript::Unused"
+                ),
+            };
+        }
+
+        // Everything else — defer to the deterministic baseline so the
+        // surrounding pipeline (routing, memory, titles, synthesis)
+        // behaves exactly as in the existing tests.
+        self.fallback.complete(request).await
+    }
+
+    async fn complete_stream(
+        &self,
+        _request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        Err(Error::NotImplemented(
+            "Streaming not supported in scriptable inference".to_string(),
+        ))
+    }
+
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+        Ok(vec![0.0; 8])
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 4096,
+            supports_structured_output: false,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Moderate,
+        }
+    }
+}
+
+pub struct ScriptedApprovalChannel {
+    response: InfoResponseScript,
+    /// Records every `emit_message_refined` call so tests can assert
+    /// that post-stream refinement actually fired. Uses std::sync::Mutex
+    /// since the trait method is synchronous.
+    refined_emissions: std::sync::Mutex<Vec<MessageRefinedPayload>>,
+}
+
+impl ScriptedApprovalChannel {
+    pub fn new(response: InfoResponseScript) -> Self {
+        Self {
+            response,
+            refined_emissions: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Snapshot of `message-refined` events emitted so far. Used by
+    /// streaming-path tests to verify both the content and the id of
+    /// the refined message.
+    pub fn refined_emissions(&self) -> Vec<MessageRefinedPayload> {
+        self.refined_emissions.lock().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl ApprovalChannel for ScriptedApprovalChannel {
+    async fn request_approval(
+        &self,
+        _step: &Step,
+        _preview: &ActionPreview,
+    ) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn ask_user(&self, _question: &str) -> Result<String> {
+        Ok(String::new())
+    }
+
+    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
+
+    fn emit_message_refined(&self, payload: MessageRefinedPayload) {
+        self.refined_emissions.lock().unwrap().push(payload);
+    }
+
+    async fn request_information(&self, _request: &InformationRequest) -> Option<String> {
+        match &self.response {
+            InfoResponseScript::Pasted(c) => Some(c.clone()),
+            InfoResponseScript::Skip => None,
+            InfoResponseScript::Unused => panic!(
+                "request_information invoked unexpectedly; test configured InfoResponseScript::Unused"
+            ),
+        }
     }
 }

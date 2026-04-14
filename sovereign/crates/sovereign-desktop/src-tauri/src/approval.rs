@@ -244,4 +244,10 @@ impl ApprovalChannel for TauriApprovalChannel {
             },
         );
     }
+
+    fn emit_message_refined(&self, payload: MessageRefinedPayload) {
+        // The frontend listens for "message-refined" in ChatView and
+        // replaces the existing bubble's content with `new_content`.
+        self.emit("message-refined", payload);
+    }
 }

@@ -156,7 +156,7 @@
     { id: "models",    label: "Models"    },
     { id: "knowledge", label: "Knowledge" },
     { id: "mesh",      label: "Mesh"      },
-    { id: "tools",     label: "Tools"     },
+    { id: "tools",     label: "Skills"    },
     { id: "paths",     label: "Paths"     },
     { id: "recipes",   label: "Recipes"   },
   ];

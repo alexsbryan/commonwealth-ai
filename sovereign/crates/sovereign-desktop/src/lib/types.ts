@@ -136,6 +136,15 @@ export interface InformationRequestPayload {
   search_hints: string[];
 }
 
+/** Emitted when the agent re-synthesises an already-streamed assistant
+ *  message with user-supplied content. The UI replaces the message's
+ *  `content` in place (identified by `message_id`). */
+export interface MessageRefinedPayload {
+  conversation_id: string;
+  message_id: string;
+  new_content: string;
+}
+
 export interface ErrorPayload {
   message: string;
 }

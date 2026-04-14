@@ -160,12 +160,178 @@ fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize)
     }
 }
 
+/// Shared body of [`Runtime::maybe_collaborate`]. Factored out so the
+/// streaming spawn (which doesn't hold a live `&self`) can invoke the
+/// same logic via owned `Arc`s. See the method's doc comment for
+/// behaviour; this function is called whether or not `auto_collaborate`
+/// is enabled — it no-ops when disabled.
+pub(crate) async fn run_collaboration(
+    inference: &dyn InferenceProvider,
+    approval: &dyn ApprovalChannel,
+    inference_config: &InferenceConfig,
+    conversation_id: &str,
+    question: &str,
+    response: &str,
+    evidence: &str,
+) -> String {
+    if !inference_config.auto_collaborate {
+        return response.to_string();
+    }
+
+    let t_start = std::time::Instant::now();
+
+    // 1. Ask the gap-identifier whether anything external would sharpen
+    //    the answer. Conservative on any error — we never want this
+    //    hook to fail the turn.
+    let gap = match crate::gap::identify_gap(inference, question, response, evidence).await {
+        Ok(Some(req)) => req,
+        Ok(None) => {
+            tracing::info!(
+                latency_ms = t_start.elapsed().as_millis() as u64,
+                "maybe_collaborate: no gap identified — passing through"
+            );
+            return response.to_string();
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "maybe_collaborate: gap check failed — passing through"
+            );
+            return response.to_string();
+        }
+    };
+
+    // 2. Stamp task/step on the request so the UI can correlate it
+    //    with the current conversation.
+    let mut req = gap;
+    req.task_id = conversation_id.to_string();
+    req.step_id = 0;
+
+    tracing::info!(
+        gap_chars = req.gap.len(),
+        "maybe_collaborate: surfacing information request"
+    );
+
+    // 3. Surface the card and wait for the user.
+    let user_content = approval.request_information(&req).await;
+    let content = match user_content {
+        Some(c) if !c.trim().is_empty() => c,
+        _ => {
+            tracing::info!(
+                latency_ms = t_start.elapsed().as_millis() as u64,
+                "maybe_collaborate: user skipped or provided no content"
+            );
+            return response.to_string();
+        }
+    };
+
+    // 4. Refinement synthesis — integrate the user's source. The prompt
+    //    asks the model to distinguish corpus-derived content from
+    //    user-provided content so provenance stays visible.
+    let refine_prompt = format!(
+        "The user asked: {question}\n\n\
+         Your initial answer (drawn from the local corpus):\n{response}\n\n\
+         Additional source the user provided:\n{content}\n\n\
+         Refine the answer to integrate the user's source. Be explicit \
+         about what came from the corpus vs. what came from the user's \
+         source. Mark anything that remains uncertain."
+    );
+
+    let refine_req = CompletionRequest {
+        prompt: refine_prompt,
+        system_message: None,
+        preferred_speed: Speed::Slow,
+        max_tokens: Some(inference_config.max_tokens),
+        temperature: Some(inference_config.temperature),
+        think_budget: Some(inference_config.think_budget),
+        structured_output: None,
+        top_k: inference_config.top_k,
+        top_p: None,
+        oicp: None,
+    };
+
+    match inference.complete(&refine_req).await {
+        Ok(c) => {
+            tracing::info!(
+                had_user_content = true,
+                latency_ms = t_start.elapsed().as_millis() as u64,
+                refined_chars = c.text.len(),
+                "maybe_collaborate: refined answer produced"
+            );
+            c.text
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "maybe_collaborate: refinement inference failed — falling back to original"
+            );
+            response.to_string()
+        }
+    }
+}
+
+/// Post-stream refinement primitive: run the gap check and, if the
+/// user provides content, overwrite the saved assistant message and
+/// emit `message-refined`. Called both from `handle_message_stream`'s
+/// spawn (which has owned `Arc`s but no live `&self`) and from the
+/// corresponding method on `Runtime`.
+pub(crate) async fn run_post_stream_refinement(
+    inference: &dyn InferenceProvider,
+    approval: &dyn ApprovalChannel,
+    store: &dyn StateStore,
+    inference_config: &InferenceConfig,
+    conversation_id: &str,
+    message_id: &str,
+    question: &str,
+    original_content: &str,
+    evidence: &str,
+    original_metadata: Option<serde_json::Value>,
+) -> Option<String> {
+    let refined = run_collaboration(
+        inference,
+        approval,
+        inference_config,
+        conversation_id,
+        question,
+        original_content,
+        evidence,
+    )
+    .await;
+    if refined == original_content {
+        return None;
+    }
+
+    let updated = Message {
+        id: message_id.to_string(),
+        conversation_id: conversation_id.to_string(),
+        role: Role::Assistant,
+        content: refined.clone(),
+        created_at: now(),
+        metadata: original_metadata,
+        version: now(),
+    };
+    if let Err(e) = store.save_message(&updated).await {
+        tracing::warn!(
+            error = %e,
+            message_id = %message_id,
+            "post-stream refinement: save_message failed"
+        );
+        return None;
+    }
+
+    approval.emit_message_refined(MessageRefinedPayload {
+        conversation_id: conversation_id.to_string(),
+        message_id: message_id.to_string(),
+        new_content: refined.clone(),
+    });
+    Some(refined)
+}
+
 /// Pre-computed knowledge context shared between streaming and non-streaming
 /// response paths. Produced by [`Runtime::prepare_knowledge_context`] so the
 /// two paths cannot diverge in how they search, build prompts, or report
 /// provenance.
 struct KnowledgeContext {
-    #[allow(dead_code)]
     chunks: Vec<corpus_engine::ScoredChunk>,
     prompt: String,
     system: String,
@@ -554,6 +720,75 @@ impl Runtime {
         )
     }
 
+    /// Epistemic humility hook: audit the just-produced answer against
+    /// its evidence and, if the model judges a specific external source
+    /// would materially sharpen the answer, surface an
+    /// [`InformationRequest`] card via the approval channel. If the
+    /// user pastes content, re-synthesise the answer with that content
+    /// folded in. Otherwise return the original response unchanged.
+    ///
+    /// **Pure-additive**: never makes the answer worse than the
+    /// corpus-only baseline — any failure (inference error, parse
+    /// failure, user skip) falls back to `response` unchanged. Gated
+    /// by `InferenceConfig::auto_collaborate` (default on) so the
+    /// whole path is a no-op when disabled.
+    ///
+    /// Callers pass `evidence` as a plain-text summary of whatever
+    /// corpus material grounded the original answer. Empty string is
+    /// acceptable (e.g. when corpus retrieval returned nothing).
+    pub async fn maybe_collaborate(
+        &self,
+        conversation_id: &str,
+        question: &str,
+        response: &str,
+        evidence: &str,
+    ) -> String {
+        run_collaboration(
+            self.inference.as_ref(),
+            self.approval.as_ref(),
+            &self.inference_config,
+            conversation_id,
+            question,
+            response,
+            evidence,
+        )
+        .await
+    }
+
+    /// Post-stream refinement hook: runs the gap check against the
+    /// already-streamed answer; if the user pastes content, overwrites
+    /// the saved assistant message and emits a `message-refined` event
+    /// so the UI can replace the bubble. Returns `Some(refined_text)`
+    /// when refinement produced new content, `None` otherwise.
+    ///
+    /// Delegates to `run_post_stream_refinement` so the streaming
+    /// spawn (which doesn't hold `&self`) and tests share one code
+    /// path.
+    pub async fn apply_post_stream_refinement(
+        &self,
+        conversation_id: &str,
+        message_id: &str,
+        question: &str,
+        original_content: &str,
+        evidence: &str,
+        original_metadata: Option<serde_json::Value>,
+    ) -> Option<String> {
+        run_post_stream_refinement(
+            self.inference.as_ref(),
+            self.approval.as_ref(),
+            self.store.as_ref(),
+            &self.inference_config,
+            conversation_id,
+            message_id,
+            question,
+            original_content,
+            evidence,
+            original_metadata,
+        )
+        .await
+    }
+
+
     /// Extract long-term memories from a conversation and save them.
     /// Call this when a conversation ends (user quits or session ends).
     pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
@@ -710,12 +945,20 @@ impl Runtime {
         let sources = kc.sources;
         let retrieved_chunks = kc.retrieved_chunks;
 
+        // Format the corpus evidence now so the post-stream epistemic-
+        // humility hook can feed it to the gap checker. Moved into the
+        // streaming spawn; not used before the synthesis completes.
+        let evidence = format_scored_chunks(&kc.chunks, MAX_KNOWLEDGE_CHARS);
+        let question = message.to_string();
+
         let intent_label = format!("{intent:?}");
         let message_id = uuid::Uuid::new_v4().to_string();
 
         // 5. Spawn streaming task.
         let inference = Arc::clone(&self.inference);
         let store = Arc::clone(&self.store);
+        let approval = Arc::clone(&self.approval);
+        let inference_config = self.inference_config.clone();
         let conversation_id_owned = conversation_id.to_string();
         let message_id_owned = message_id.clone();
 
@@ -761,20 +1004,52 @@ impl Runtime {
                 coarse_intent,
                 self_assessment,
             };
+            let metadata_json = serde_json::json!({
+                "streamed": true,
+                "provenance": provenance,
+                "retrieved_chunks": retrieved_chunks,
+            });
             let assistant_msg = Message {
-                id: message_id_owned,
+                id: message_id_owned.clone(),
                 conversation_id: conversation_id_owned.clone(),
                 role: Role::Assistant,
-                content: full_text,
+                content: full_text.clone(),
                 created_at: now(),
-                metadata: Some(serde_json::json!({
-                    "streamed": true,
-                    "provenance": provenance,
-                    "retrieved_chunks": retrieved_chunks,
-                })),
+                metadata: Some(metadata_json.clone()),
                 version: now(),
             };
             let _ = store.save_message(&assistant_msg).await;
+
+            // Epistemic-humility hook (post-stream): audit the streamed
+            // answer and, if the user provides additional content, rewrite
+            // the persisted message and emit a `message-refined` event so
+            // the UI can update the bubble in place. Runs concurrently
+            // with auto-title so neither blocks the other.
+            let collab_inference = Arc::clone(&inference);
+            let collab_store = Arc::clone(&store);
+            let collab_approval = Arc::clone(&approval);
+            let collab_config = inference_config.clone();
+            let collab_cid = conversation_id_owned.clone();
+            let collab_mid = message_id_owned.clone();
+            let collab_question = question.clone();
+            let collab_evidence = evidence.clone();
+            let collab_original = full_text.clone();
+            let collab_metadata = metadata_json;
+            tokio::spawn(async move {
+                run_post_stream_refinement(
+                    collab_inference.as_ref(),
+                    collab_approval.as_ref(),
+                    collab_store.as_ref(),
+                    &collab_config,
+                    &collab_cid,
+                    &collab_mid,
+                    &collab_question,
+                    &collab_original,
+                    &collab_evidence,
+                    Some(collab_metadata),
+                )
+                .await;
+            });
 
             // Auto-title after first exchange. Non-blocking; the stream has
             // already delivered the response to the user.
@@ -1008,6 +1283,15 @@ impl Runtime {
 
         let completion = self.inference.complete(&request).await?;
 
+        // Epistemic-humility hook (see Runtime::maybe_collaborate).
+        // No-ops when disabled. Evidence is the same formatted-chunks text
+        // that was injected into the synthesis prompt (or empty if no
+        // corpus material was retrieved).
+        let evidence = format_scored_chunks(&kc.chunks, MAX_KNOWLEDGE_CHARS);
+        let final_content = self
+            .maybe_collaborate(conversation_id, message, &completion.text, &evidence)
+            .await;
+
         let provenance = ResponseProvenance {
             intent: format!("{intent:?}"),
             search_method: kc.search_method,
@@ -1028,7 +1312,7 @@ impl Runtime {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
             role: Role::Assistant,
-            content: completion.text.clone(),
+            content: final_content,
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "model": completion.model_id,
@@ -1109,11 +1393,19 @@ impl Runtime {
                 oicp: None,
             };
             let completion = self.inference.complete(&request).await?;
+
+            // Auto-collaboration hook: corpus was empty so the evidence
+            // string is empty too — this is the strongest case for asking
+            // the user to supply something.
+            let final_content = self
+                .maybe_collaborate(conversation_id, message, &completion.text, "")
+                .await;
+
             let assistant_msg = Message {
                 id: uuid::Uuid::new_v4().to_string(),
                 conversation_id: conversation_id.to_string(),
                 role: Role::Assistant,
-                content: completion.text.clone(),
+                content: final_content,
                 created_at: now(),
                 metadata: Some(serde_json::json!({
                     "model": completion.model_id,
@@ -1161,6 +1453,12 @@ impl Runtime {
 
         let completion = self.inference.complete(&request).await?;
 
+        // Auto-collaboration hook: re-use the same formatted-chunks text
+        // that was fed to synthesis as the evidence for the gap check.
+        let final_content = self
+            .maybe_collaborate(conversation_id, message, &completion.text, &doc_context)
+            .await;
+
         let mut source_map: HashMap<String, usize> = HashMap::new();
         for c in &chunks {
             *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
@@ -1188,7 +1486,7 @@ impl Runtime {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
             role: Role::Assistant,
-            content: completion.text.clone(),
+            content: final_content,
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "model": completion.model_id,
@@ -1679,11 +1977,19 @@ impl Runtime {
             self_assessment: None,
         };
 
+        // Epistemic-humility hook (see Runtime::maybe_collaborate).
+        // Evidence is the same `step_summaries` the synthesis prompt saw
+        // — keeps the gap check grounded in exactly what the model had.
+        let evidence = step_summaries.join("\n\n");
+        let final_content = self
+            .maybe_collaborate(conversation_id, message, &synthesis.text, &evidence)
+            .await;
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
             role: Role::Assistant,
-            content: synthesis.text.clone(),
+            content: final_content,
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "model": synthesis.model_id,

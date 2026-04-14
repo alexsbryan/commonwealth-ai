@@ -69,6 +69,18 @@ pub struct DesktopConfig {
     /// Bundled with `temperature` in the Creativity preset selector.
     #[serde(default)]
     pub top_k: Option<u32>,
+    /// Epistemic humility mode. When true, the runtime audits each
+    /// answer for thin evidence and surfaces an `InformationRequest`
+    /// card asking the user to paste a source. Default **on**; see
+    /// `sovereign_core::types::InferenceConfig::auto_collaborate` for
+    /// the full story. Named `#[serde(default = …)]` so existing
+    /// saved configs without the field also upgrade to on.
+    #[serde(default = "default_auto_collaborate")]
+    pub auto_collaborate: bool,
+}
+
+fn default_auto_collaborate() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -139,6 +151,7 @@ impl Default for DesktopConfig {
             max_tokens: default_max_tokens(),
             think_budget: default_think_budget(),
             top_k: None,
+            auto_collaborate: default_auto_collaborate(),
         }
     }
 }
@@ -307,15 +320,39 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         }
     };
 
-    // Load skills.
+    // Load skills. Two sources:
+    //
+    //   1. **Built-in skills** — shipped with the binary via
+    //      `include_str!` (see `BUILTIN_SKILLS` below). Always
+    //      available regardless of install / CWD / Tauri resource
+    //      resolution. The whole point: the Settings → Skills panel
+    //      should never read "No skills found." on a fresh install.
+    //
+    //   2. **User skills dir** — `config.skills_dir` (e.g. on macOS
+    //      `~/Library/Application Support/sovereign/skills`). Loaded
+    //      after built-ins so user versions can override built-ins
+    //      with the same id (SkillRegistry keeps the last registered).
+    //
+    // Debug-mode escape hatch: when the workspace `skills/` directory
+    // exists (we're running `cargo tauri dev` from the repo), load
+    // anything we haven't already embedded — makes iterating on new
+    // built-ins painless without recompiling the binary.
     let mut skills = SkillRegistry::new();
-    if config.skills_dir.exists() {
-        skills.load_and_register(&config.skills_dir);
+    register_builtin_skills(&mut skills);
+    #[cfg(debug_assertions)]
+    {
+        if let Some(workspace_skills) = dev_workspace_skills_dir() {
+            if workspace_skills.exists() {
+                tracing::info!(
+                    "Loading dev-only skills overlay from {}",
+                    workspace_skills.display()
+                );
+                skills.load_and_register(&workspace_skills);
+            }
+        }
     }
-    // Also load bundled skills from the working directory.
-    let bundled = std::env::current_dir().unwrap_or_default().join("skills");
-    if bundled.exists() && bundled != config.skills_dir {
-        skills.load_and_register(&bundled);
+    if config.skills_dir.exists() && config.skills_dir != std::path::PathBuf::new() {
+        skills.load_and_register(&config.skills_dir);
     }
     // Activate configured skills (or all if none specified).
     if config.active_skills.is_empty() {
@@ -549,6 +586,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             max_tokens: cfg.max_tokens as usize,
             think_budget: cfg.think_budget as usize,
             top_k: cfg.top_k,
+            auto_collaborate: cfg.auto_collaborate,
         }
     };
 
@@ -604,4 +642,112 @@ pub async fn rebuild_runtime(state: &AppState) -> Result<(), String> {
     // Drop existing runtime first to release Arc references.
     *state.runtime.write().await = None;
     bootstrap(state).await
+}
+
+/// Skills shipped with the binary. Each entry is the raw `skill.toml`
+/// contents embedded at compile time via `include_str!`. This keeps
+/// the Settings → Skills panel populated on every fresh install
+/// regardless of filesystem layout, and survives Tauri bundle
+/// repackaging without needing `bundle.resources` plumbing.
+///
+/// To add a new built-in skill:
+///   1. Drop a `skill.toml` under `<repo>/skills/<name>/`.
+///   2. Add a matching `include_str!("../../../../skills/<name>/skill.toml")`
+///      entry here.
+/// User-created skills live under `config.skills_dir` and are loaded
+/// alongside these at runtime.
+const BUILTIN_SKILLS: &[&str] = &[
+    include_str!("../../../../skills/collaborative-research/skill.toml"),
+    include_str!("../../../../skills/code-review/skill.toml"),
+    include_str!("../../../../skills/codebase-navigator/skill.toml"),
+    include_str!("../../../../skills/document-analyst/skill.toml"),
+    include_str!("../../../../skills/epistemic-research/skill.toml"),
+    include_str!("../../../../skills/inner-work/skill.toml"),
+    include_str!("../../../../skills/personal-assistant/skill.toml"),
+    include_str!("../../../../skills/research-analyst/skill.toml"),
+];
+
+fn register_builtin_skills(skills: &mut SkillRegistry) {
+    for (idx, toml) in BUILTIN_SKILLS.iter().enumerate() {
+        match sovereign_core::skills::parse_skill_toml(toml) {
+            Some(skill) => skills.register(skill),
+            None => tracing::warn!(
+                idx,
+                "built-in skill #{idx}: failed to parse skill.toml — skipping"
+            ),
+        }
+    }
+}
+
+/// Debug-only: look up the workspace `skills/` directory so developers
+/// running `cargo tauri dev` can add a new skill TOML without needing
+/// to rebuild the binary with a new `include_str!` entry. Returns
+/// `None` outside the workspace layout (e.g. an installed debug build).
+#[cfg(debug_assertions)]
+fn dev_workspace_skills_dir() -> Option<PathBuf> {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    Some(
+        manifest
+            .parent()? // crates/sovereign-desktop/
+            .parent()? // crates/
+            .parent()? // <repo root>
+            .join("skills"),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_config_without_auto_collaborate_upgrades_to_on() {
+        // Users who upgraded from the Phase 2 build have a TOML config
+        // that omits `auto_collaborate`. Without the named-default
+        // serde helper they'd silently get `false` (bool::default()),
+        // losing the feature. Guard against that regression.
+        let legacy = r#"
+model_path = "/some/model.gguf"
+data_dir = "/some/data"
+skills_dir = "/some/skills"
+active_skills = []
+enabled_tools = []
+context_size = 2048
+setup_complete = true
+temperature = 0.7
+max_tokens = 2048
+think_budget = 512
+
+[search_backend]
+provider = "duckduckgo"
+"#;
+        let cfg: DesktopConfig = toml::from_str(legacy)
+            .expect("legacy config should deserialize");
+        assert!(
+            cfg.auto_collaborate,
+            "legacy config (no auto_collaborate field) must upgrade to true"
+        );
+    }
+
+    #[test]
+    fn default_desktop_config_has_auto_collaborate_on() {
+        let cfg = DesktopConfig::default();
+        assert!(
+            cfg.auto_collaborate,
+            "DesktopConfig::default().auto_collaborate must be true"
+        );
+    }
+
+    #[test]
+    fn builtin_skills_all_parse() {
+        // include_str! paths are resolved at compile time, but the
+        // skill.toml contents must still parse at runtime. If someone
+        // commits a malformed built-in skill, we want the test suite
+        // to catch it — not the user's Settings panel.
+        let mut reg = sovereign_core::SkillRegistry::new();
+        register_builtin_skills(&mut reg);
+        assert!(
+            !reg.list().is_empty(),
+            "expected at least one built-in skill to parse; got none"
+        );
+    }
 }

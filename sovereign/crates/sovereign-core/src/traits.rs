@@ -343,6 +343,12 @@ pub trait ApprovalChannel: Send + Sync {
     async fn request_information(&self, _request: &InformationRequest) -> Option<String> {
         None
     }
+
+    /// Notify the UI that an already-streamed assistant message has
+    /// been re-synthesised (see `Runtime::maybe_collaborate`). The
+    /// default impl is a no-op — non-UI surfaces simply let the
+    /// new content land in the store on the next read.
+    fn emit_message_refined(&self, _payload: MessageRefinedPayload) {}
 }
 
 // ─── 7. Insight Storage ──────────────────────────────────────

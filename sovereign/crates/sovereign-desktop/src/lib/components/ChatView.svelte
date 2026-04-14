@@ -26,6 +26,7 @@
     DocumentAsset,
     DocumentOperationPayload,
     InformationRequestPayload,
+    MessageRefinedPayload,
   } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { insightStore } from "../stores/insights.svelte";
@@ -90,8 +91,9 @@
   let unlistenDocOp: UnlistenFn | null = null;
   let unlistenSkeletonRebuilt: UnlistenFn | null = null;
   let unlistenInfoRequest: UnlistenFn | null = null;
+  let unlistenMessageRefined: UnlistenFn | null = null;
 
-  // Pending information-request from the agent (collaborative-research mode).
+  // Pending information-request from the agent (epistemic humility mode).
   // Rendered as a dedicated card below the conversation. Cleared when the
   // user submits or skips, or when the conversation changes.
   let pendingInfoRequest: InformationRequestPayload | null = $state(null);
@@ -199,15 +201,31 @@
       },
     );
 
-    // Collaborative-research mode: the executor surfaces an
-    // InformationRequest when it suspends a task to ask for external
-    // evidence. We render a dedicated card; the user pastes content
-    // (or skips) and the executor resumes.
+    // Epistemic humility mode: the runtime surfaces an
+    // InformationRequest when its evidence is thin. We render a
+    // dedicated card; the user pastes content (or skips) and the
+    // runtime either refines the answer or moves on.
     unlistenInfoRequest = await listen<InformationRequestPayload>(
       "information-request",
       (event) => {
         pendingInfoRequest = event.payload;
         scrollToBottom();
+      },
+    );
+
+    // Post-stream refinement: the runtime has re-synthesised a
+    // previously-streamed assistant message with user-supplied
+    // content. Replace the bubble's content in place.
+    unlistenMessageRefined = await listen<MessageRefinedPayload>(
+      "message-refined",
+      (event) => {
+        const p = event.payload;
+        if (p.conversation_id !== activeConversationId) return;
+        const idx = messages.findIndex((m) => m.id === p.message_id);
+        if (idx !== -1) {
+          messages[idx].content = p.new_content;
+          scrollToBottom();
+        }
       },
     );
   });
@@ -220,6 +238,7 @@
     unlistenDocOp?.();
     unlistenSkeletonRebuilt?.();
     unlistenInfoRequest?.();
+    unlistenMessageRefined?.();
   });
 
   function docProgressLabel(p: DocOpProgress): string {

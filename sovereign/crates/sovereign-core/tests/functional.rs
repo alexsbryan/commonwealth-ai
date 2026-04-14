@@ -1,6 +1,6 @@
 mod harness;
 
-use harness::TestHarness;
+use harness::{GapScript, InfoResponseScript, RefineScript, TestHarness};
 use sovereign_core::skills::parse_skill_toml;
 use sovereign_core::traits::*;
 use sovereign_core::types::*;
@@ -927,3 +927,280 @@ async fn reason_with_tools_caps_at_max_iterations() {
         other => panic!("Expected ReasonWithToolsResult, got {:?}", std::mem::discriminant(other)),
     }
 }
+
+// ─── Auto-Collaborate (Phase 2) ──────────────────────────────
+//
+// These tests exercise `Runtime::maybe_collaborate` via the SimpleQuery
+// path (PassthroughRouter sends everything to SimpleQuery). The
+// ScriptableInference + ScriptedApprovalChannel doubles control the
+// gap-check output, the refinement output, and the user's choice.
+
+#[tokio::test]
+async fn auto_collaborate_off_passes_through_unchanged() {
+    // With auto_collaborate disabled (TestHarness::new uses default config),
+    // the SimpleQuery path must never call the gap checker or approval
+    // channel. `RefineScript::Unused` / `InfoResponseScript::Unused` would
+    // panic if touched — we use the regular harness here to keep things
+    // explicit about "this path doesn't even reach the scriptable code".
+    let h = TestHarness::new();
+    let resp = h.send("What is epistemology?").await;
+
+    // Message is the deterministic echo; no refinement happened.
+    assert!(
+        !resp.message.content.contains("refined"),
+        "auto_collaborate=false must not alter the answer"
+    );
+}
+
+#[tokio::test]
+async fn auto_collaborate_on_with_no_gap_returns_original_answer() {
+    let h = TestHarness::new_with_collaborate(
+        GapScript::NoGap,
+        RefineScript::Unused,
+        InfoResponseScript::Unused,
+    );
+    let resp = h.send("What is epistemology?").await;
+
+    // Gap check ran, reported no gap → no info request, no refinement.
+    // The message should be whatever the deterministic synthesis produced
+    // (an echo of the prompt). The absence of panic is the main signal —
+    // Unused scripts panic if invoked.
+    assert!(
+        !resp.message.content.is_empty(),
+        "synthesis still produces a message when no gap is identified"
+    );
+}
+
+#[tokio::test]
+async fn auto_collaborate_on_with_gap_and_user_content_returns_refined_answer() {
+    let h = TestHarness::new_with_collaborate(
+        GapScript::Gap {
+            gap: "Need a 2024 pharmaceutical R&D statistic".to_string(),
+        },
+        RefineScript::Text(
+            "REFINED: integrates user source on pharma R&D post-IRA.".to_string(),
+        ),
+        InfoResponseScript::Pasted(
+            "Per NEJM 2024: post-IRA R&D investment fell 12%.".to_string(),
+        ),
+    );
+    let resp = h.send("What is the evidence on IRA's innovation effects?").await;
+
+    assert!(
+        resp.message.content.starts_with("REFINED:"),
+        "expected refined answer, got: {}",
+        resp.message.content
+    );
+}
+
+#[tokio::test]
+async fn auto_collaborate_on_with_user_skip_returns_original_answer() {
+    let h = TestHarness::new_with_collaborate(
+        GapScript::Gap {
+            gap: "Need a primary source".to_string(),
+        },
+        // User pressed Skip → refinement must not be called.
+        RefineScript::Unused,
+        InfoResponseScript::Skip,
+    );
+    let resp = h.send("What is the evidence on IRA's innovation effects?").await;
+
+    // The original corpus-only answer stays put; no panic from Unused script.
+    assert!(
+        !resp.message.content.starts_with("REFINED:"),
+        "skip must preserve the original answer; got: {}",
+        resp.message.content
+    );
+}
+
+#[tokio::test]
+async fn auto_collaborate_on_with_inference_error_returns_original_answer() {
+    let h = TestHarness::new_with_collaborate(
+        // Gap-check inference fails — the helper is documented to fall back
+        // to the original response rather than propagate the error.
+        GapScript::Error,
+        RefineScript::Unused,
+        InfoResponseScript::Unused,
+    );
+    let resp = h.send("What is epistemology?").await;
+
+    // Turn must still succeed — the gap-check error is swallowed.
+    assert!(
+        !resp.message.content.is_empty(),
+        "gap-check error must not fail the turn"
+    );
+    assert!(
+        !resp.message.content.starts_with("REFINED:"),
+        "no refinement should happen when gap check errored"
+    );
+}
+
+// ─── Epistemic Humility: default-on invariants (Phase 3) ─────
+
+#[test]
+fn default_inference_config_has_epistemic_humility_on() {
+    // If someone accidentally flips this back to false, every new
+    // install loses the feature silently. This test stands guard.
+    let cfg = sovereign_core::types::InferenceConfig::default();
+    assert!(
+        cfg.auto_collaborate,
+        "InferenceConfig::default().auto_collaborate must be true"
+    );
+}
+
+// ─── Epistemic Humility: streaming path (Phase 3) ─────────────
+//
+// `handle_message_stream` would be cumbersome to drive end-to-end from
+// a pure unit test (needs a streaming inference provider, a running
+// tokio task consuming the Receiver, and a way to await the post-
+// stream spawn). Instead we exercise `apply_post_stream_refinement`
+// directly — it's the exact function the streaming spawn calls, so
+// covering it covers the behaviour users feel.
+
+#[tokio::test]
+async fn post_stream_refinement_rewrites_message_and_emits_event() {
+    let h = TestHarness::new_with_collaborate(
+        GapScript::Gap {
+            gap: "Need a 2024 primary source".to_string(),
+        },
+        RefineScript::Text("REFINED: streamed answer with user source.".to_string()),
+        InfoResponseScript::Pasted("Paragraph from a relevant paper.".to_string()),
+    );
+
+    // Persist an initial "streamed" assistant message. The real
+    // streaming spawn does this exact shape before calling the
+    // refinement hook.
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let msg_id = uuid::Uuid::new_v4().to_string();
+    let original = "Initial streamed answer from the corpus.";
+    let meta = serde_json::json!({
+        "streamed": true,
+        "provenance": {},
+    });
+    let initial = Message {
+        id: msg_id.clone(),
+        conversation_id: conv_id.clone(),
+        role: Role::Assistant,
+        content: original.to_string(),
+        created_at: 0,
+        metadata: Some(meta.clone()),
+        version: 0,
+    };
+    h.store.save_message(&initial).await.unwrap();
+
+    let refined = h
+        .runtime
+        .apply_post_stream_refinement(
+            &conv_id,
+            &msg_id,
+            "What's the current evidence?",
+            original,
+            "evidence text",
+            Some(meta),
+        )
+        .await;
+
+    assert!(refined.is_some(), "refinement should have fired");
+    assert!(
+        refined.as_deref().unwrap().starts_with("REFINED:"),
+        "refined text should come from the scripted refine response"
+    );
+
+    // The persisted message should now carry the refined content.
+    let conv = h.store.get_conversation(&conv_id).await.unwrap();
+    let msg = conv
+        .messages
+        .iter()
+        .find(|m| m.id == msg_id)
+        .expect("message should still exist");
+    assert!(
+        msg.content.starts_with("REFINED:"),
+        "store should reflect the refined content, got: {}",
+        msg.content
+    );
+
+    // And the approval channel should have emitted exactly one
+    // message-refined event with the matching id.
+    let events = h
+        .scripted_approval
+        .as_ref()
+        .expect("collaborate harness sets scripted_approval")
+        .refined_emissions();
+    assert_eq!(events.len(), 1, "exactly one emission expected");
+    assert_eq!(events[0].message_id, msg_id);
+    assert_eq!(events[0].conversation_id, conv_id);
+    assert!(events[0].new_content.starts_with("REFINED:"));
+}
+
+#[tokio::test]
+async fn post_stream_refinement_noops_when_no_gap() {
+    let h = TestHarness::new_with_collaborate(
+        GapScript::NoGap,
+        // Refine must not be called when there's no gap.
+        RefineScript::Unused,
+        InfoResponseScript::Unused,
+    );
+
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let msg_id = uuid::Uuid::new_v4().to_string();
+    let original = "Initial streamed answer with sufficient evidence.";
+    let initial = Message {
+        id: msg_id.clone(),
+        conversation_id: conv_id.clone(),
+        role: Role::Assistant,
+        content: original.to_string(),
+        created_at: 0,
+        metadata: None,
+        version: 0,
+    };
+    h.store.save_message(&initial).await.unwrap();
+
+    let refined = h
+        .runtime
+        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", None)
+        .await;
+
+    assert!(refined.is_none(), "should no-op when gap check says no gap");
+
+    let events = h.scripted_approval.as_ref().unwrap().refined_emissions();
+    assert!(events.is_empty(), "no refinement event should be emitted");
+}
+
+#[tokio::test]
+async fn post_stream_refinement_noops_when_user_skips() {
+    let h = TestHarness::new_with_collaborate(
+        GapScript::Gap {
+            gap: "something".to_string(),
+        },
+        RefineScript::Unused,
+        InfoResponseScript::Skip,
+    );
+
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let msg_id = uuid::Uuid::new_v4().to_string();
+    let original = "Initial streamed answer.";
+    let initial = Message {
+        id: msg_id.clone(),
+        conversation_id: conv_id.clone(),
+        role: Role::Assistant,
+        content: original.to_string(),
+        created_at: 0,
+        metadata: None,
+        version: 0,
+    };
+    h.store.save_message(&initial).await.unwrap();
+
+    let refined = h
+        .runtime
+        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", None)
+        .await;
+
+    assert!(refined.is_none(), "skip → no-op");
+    assert!(h
+        .scripted_approval
+        .as_ref()
+        .unwrap()
+        .refined_emissions()
+        .is_empty());
+}
+

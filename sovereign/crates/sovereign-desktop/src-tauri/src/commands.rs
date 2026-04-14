@@ -1625,6 +1625,26 @@ pub async fn ask_document(
         .map(|c| c.content.clone())
         .collect();
 
+    // Epistemic-humility hook: the runtime audits the document-op answer
+    // against its citations and may surface an InformationRequestCard so
+    // the user can paste additional context. Evidence is the concatenated
+    // citation content already shown to the model.
+    let final_content = {
+        let runtime_guard = state.runtime.read().await;
+        if let Some(runtime) = runtime_guard.as_ref() {
+            // Make sure the approval channel stamps this conversation id
+            // onto any info-request so the frontend can route the response
+            // back to the right pending oneshot.
+            state.approval.set_task_id(&conversation_id).await;
+            let evidence = sources_content.join("\n\n");
+            runtime
+                .maybe_collaborate(&conversation_id, &question, &output.text, &evidence)
+                .await
+        } else {
+            output.text.clone()
+        }
+    };
+
     // Persist the assistant response with document operation metadata
     // (legacy `operation` / `sources` fields) plus the new rich
     // `provenance` / `retrieved_chunks` shape the AssistantMessage
@@ -1633,7 +1653,7 @@ pub async fn ask_document(
         id: assistant_message_id.clone(),
         conversation_id: conversation_id.clone(),
         role: sovereign_core::types::Role::Assistant,
-        content: output.text.clone(),
+        content: final_content.clone(),
         created_at: now_epoch(),
         metadata: Some(serde_json::json!({
             "attached_asset_id": asset_id,
@@ -1681,7 +1701,7 @@ pub async fn ask_document(
     let _ = app_handle.emit("conversations:changed", ());
 
     Ok(DocumentAskResponse {
-        response: output.text,
+        response: final_content,
         operation: Some(operation),
         sources: sources_content,
     })

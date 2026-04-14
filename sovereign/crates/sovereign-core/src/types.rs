@@ -40,6 +40,25 @@ pub struct InferenceConfig {
     /// Top-k sampling parameter. `None` defers to the model family default
     /// in `ModelQuirks::default_top_k` (or the sampler's hard fallback of 40).
     pub top_k: Option<u32>,
+    /// Epistemic humility mode.
+    ///
+    /// After each synthesis the runtime audits its own answer: if the
+    /// model judges that a specific external source would materially
+    /// sharpen the response, it surfaces an `InformationRequest` card
+    /// asking the user to paste one. On paste, the answer is re-
+    /// synthesised with the source folded in; on skip, the original
+    /// corpus-only answer stands.
+    ///
+    /// Costs one Fast-slot call (~200–500ms) per synthesis. The Slow-
+    /// slot refinement only runs when the user actually provides
+    /// content. Default **on**; retained as a flag so power users can
+    /// disable it for cost or testing.
+    #[serde(default = "default_auto_collaborate")]
+    pub auto_collaborate: bool,
+}
+
+fn default_auto_collaborate() -> bool {
+    true
 }
 
 impl Default for InferenceConfig {
@@ -49,6 +68,7 @@ impl Default for InferenceConfig {
             max_tokens: 2048,
             think_budget: 512,
             top_k: None,
+            auto_collaborate: default_auto_collaborate(),
         }
     }
 }
@@ -374,6 +394,17 @@ pub struct InformationRequest {
     pub task_id: String,
     #[serde(default)]
     pub step_id: usize,
+}
+
+/// Emitted after an already-streamed assistant message has been
+/// re-synthesised with user-supplied content (see
+/// `Runtime::maybe_collaborate`). The UI uses `message_id` to find
+/// the existing bubble and replace its content in place.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageRefinedPayload {
+    pub conversation_id: String,
+    pub message_id: String,
+    pub new_content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
