@@ -116,6 +116,7 @@ fn main() {
             commands::list_conversations,
             commands::get_conversation,
             commands::delete_conversation,
+            commands::rename_conversation,
             commands::search_messages,
             commands::submit_approval,
             commands::submit_input,

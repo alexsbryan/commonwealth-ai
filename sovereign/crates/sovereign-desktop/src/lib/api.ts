@@ -71,6 +71,13 @@ export async function deleteConversation(
   return invoke("delete_conversation", { conversationId });
 }
 
+export async function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<void> {
+  return invoke("rename_conversation", { conversationId, title });
+}
+
 export async function searchMessages(query: string): Promise<SearchResult[]> {
   return invoke("search_messages", { query });
 }
@@ -286,8 +293,9 @@ export async function uploadDocumentAsset(
 export async function askDocument(
   assetId: string,
   question: string,
+  conversationId: string,
 ): Promise<DocumentAskResponse> {
-  return invoke("ask_document", { assetId, question });
+  return invoke("ask_document", { assetId, question, conversationId });
 }
 
 export async function listDocumentAssets(): Promise<DocumentAsset[]> {

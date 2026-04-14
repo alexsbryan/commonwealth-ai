@@ -116,6 +116,9 @@ impl ConversationStore for MockStore {
     async fn delete_conversation(&self, _id: &str) -> Result<()> {
         Ok(())
     }
+    async fn update_conversation_title(&self, _id: &str, _title: &str) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]

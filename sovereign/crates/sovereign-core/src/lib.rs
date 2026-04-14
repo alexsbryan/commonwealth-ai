@@ -13,6 +13,7 @@ pub mod router;
 pub mod runtime;
 pub mod skills;
 pub mod stubs;
+pub mod title;
 pub mod traits;
 pub mod types;
 

@@ -439,6 +439,174 @@ async fn topic_context_tracks_across_turns() {
 //
 // Expected: block is PRESERVED (substantive philosophical reasoning)
 
+// ─── Rename & Auto-Title ────────────────────────────────────
+
+#[tokio::test]
+async fn rename_updates_title_and_persists() {
+    let h = TestHarness::new();
+    let conv_id = "rename-test";
+
+    // Seed a conversation by sending any message (this creates the row via
+    // save_message upsert).
+    h.send_in("Hello", conv_id).await;
+
+    // Rename it.
+    h.store
+        .update_conversation_title(conv_id, "My custom title")
+        .await
+        .expect("rename should succeed");
+
+    let reloaded = h.store.get_conversation(conv_id).await.unwrap();
+    assert_eq!(reloaded.title.as_deref(), Some("My custom title"));
+}
+
+#[tokio::test]
+async fn rename_nonexistent_returns_not_found() {
+    let h = TestHarness::new();
+    let result = h
+        .store
+        .update_conversation_title("does-not-exist", "anything")
+        .await;
+    assert!(
+        result.is_err(),
+        "renaming a missing conversation should return NotFound"
+    );
+}
+
+#[tokio::test]
+async fn auto_title_no_op_when_conversation_missing() {
+    let h = TestHarness::new();
+    // Conversation doesn't exist — try_auto_title should fail cleanly (NotFound).
+    let result = sovereign_core::title::try_auto_title(
+        std::sync::Arc::new(harness::DeterministicInference).as_ref(),
+        h.store.as_ref() as &dyn sovereign_core::traits::StateStore,
+        "ghost-convo",
+    )
+    .await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn auto_title_gated_by_message_count() {
+    let h = TestHarness::new();
+    let conv_id = "gate-test";
+    let inference: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
+        std::sync::Arc::new(harness::DeterministicInference);
+    let store_ref: &dyn sovereign_core::traits::StateStore = h.store.as_ref();
+
+    // Zero messages: conversation row doesn't exist — skip this branch, we
+    // test the gate from one-message state upward.
+
+    // Save just a user message — no assistant yet.
+    let user_only = Message {
+        id: "m1".to_string(),
+        conversation_id: conv_id.to_string(),
+        role: Role::User,
+        content: "Hi".to_string(),
+        created_at: 0,
+        metadata: None,
+        version: 0,
+    };
+    h.store.save_message(&user_only).await.unwrap();
+
+    // Only 1 message: should return None (no full exchange yet).
+    let result = sovereign_core::title::try_auto_title(inference.as_ref(), store_ref, conv_id)
+        .await
+        .expect("gate check should not error");
+    assert!(
+        result.is_none(),
+        "auto-title should skip with only a user message"
+    );
+
+    // Confirm no title was saved.
+    let convo = h.store.get_conversation(conv_id).await.unwrap();
+    assert!(convo.title.is_none());
+
+    // Add the assistant response.
+    let assistant = Message {
+        id: "m2".to_string(),
+        conversation_id: conv_id.to_string(),
+        role: Role::Assistant,
+        content: "Hello! How can I help?".to_string(),
+        created_at: 1,
+        metadata: None,
+        version: 0,
+    };
+    h.store.save_message(&assistant).await.unwrap();
+
+    // Now auto-title should run and persist.
+    let result = sovereign_core::title::try_auto_title(inference.as_ref(), store_ref, conv_id)
+        .await
+        .expect("generation should succeed");
+    assert_eq!(
+        result.as_deref(),
+        Some("Test conversation title"),
+        "auto-title should produce the deterministic harness output"
+    );
+
+    let convo = h.store.get_conversation(conv_id).await.unwrap();
+    assert_eq!(convo.title.as_deref(), Some("Test conversation title"));
+}
+
+#[tokio::test]
+async fn auto_title_skips_when_title_already_set() {
+    let h = TestHarness::new();
+    let conv_id = "already-titled";
+    let inference: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
+        std::sync::Arc::new(harness::DeterministicInference);
+    let store_ref: &dyn sovereign_core::traits::StateStore = h.store.as_ref();
+
+    // Seed with an exchange and a user-set title.
+    h.send_in("hello", conv_id).await;
+    h.store
+        .update_conversation_title(conv_id, "User picked this name")
+        .await
+        .unwrap();
+
+    let result = sovereign_core::title::try_auto_title(inference.as_ref(), store_ref, conv_id)
+        .await
+        .expect("should not error");
+    assert!(
+        result.is_none(),
+        "auto-title must not overwrite an existing title"
+    );
+
+    let convo = h.store.get_conversation(conv_id).await.unwrap();
+    assert_eq!(convo.title.as_deref(), Some("User picked this name"));
+}
+
+#[tokio::test]
+async fn auto_title_skips_when_only_assistant_messages() {
+    // Edge case: somehow a conversation has only assistant messages (shouldn't
+    // happen in practice, but the gate should guard against it).
+    let h = TestHarness::new();
+    let conv_id = "assistant-only";
+    let inference: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
+        std::sync::Arc::new(harness::DeterministicInference);
+
+    for i in 0..3 {
+        let msg = Message {
+            id: format!("a{i}"),
+            conversation_id: conv_id.to_string(),
+            role: Role::Assistant,
+            content: format!("assistant {i}"),
+            created_at: i as i64,
+            metadata: None,
+            version: 0,
+        };
+        h.store.save_message(&msg).await.unwrap();
+    }
+
+    let result = sovereign_core::title::try_auto_title(
+        inference.as_ref(),
+        h.store.as_ref() as &dyn sovereign_core::traits::StateStore,
+        conv_id,
+    )
+    .await
+    .expect("should not error");
+    assert!(result.is_none(), "need both a user and assistant message");
+}
+
 // ─── ReasonWithTools ─────────────────────────────────────────
 
 use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};

@@ -303,6 +303,22 @@ impl ConversationStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+
+    async fn update_conversation_title(&self, id: &str, title: &str) -> Result<()> {
+        let conn = self.conn.lock().await;
+        let ts = now();
+        let rows = conn
+            .execute(
+                "UPDATE conversations SET title = ?2, updated_at = ?3, version = ?3 \
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                rusqlite::params![id, title, ts],
+            )
+            .map_err(map_db)?;
+        if rows == 0 {
+            return Err(Error::NotFound(format!("conversation {id}")));
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]

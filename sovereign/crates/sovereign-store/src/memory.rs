@@ -111,6 +111,18 @@ impl ConversationStore for InMemoryStateStore {
             .collect())
     }
 
+    async fn update_conversation_title(&self, id: &str, title: &str) -> Result<()> {
+        let mut convos = self.conversations.write().await;
+        match convos.get_mut(id) {
+            Some(c) => {
+                c.title = Some(title.to_string());
+                c.updated_at = now();
+                Ok(())
+            }
+            None => Err(Error::NotFound(format!("Conversation {id}"))),
+        }
+    }
+
     async fn delete_conversation(&self, id: &str) -> Result<()> {
         self.conversations.write().await.remove(id);
         self.messages

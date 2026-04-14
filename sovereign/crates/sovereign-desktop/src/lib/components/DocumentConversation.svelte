@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen } from "@tauri-apps/api/event";
-  import { askDocument } from "../api";
+  import { askDocument, createConversation } from "../api";
   import type {
     DocumentAsset,
     DocumentAssetOperation,
@@ -30,6 +30,7 @@
   let isLoading = $state(false);
   let currentOp: string | null = $state(null);
   let unlisten: (() => void) | undefined;
+  let conversationId: string | null = $state(null);
 
   onMount(async () => {
     unlisten = await listen<DocumentOperationPayload>(
@@ -39,6 +40,13 @@
       },
     );
   });
+
+  async function ensureConversation(): Promise<string> {
+    if (conversationId) return conversationId;
+    const created = await createConversation();
+    conversationId = created.id;
+    return conversationId;
+  }
 
   onDestroy(() => unlisten?.());
 
@@ -62,7 +70,8 @@
     messages = [...messages, { role: "user", content: text }];
 
     try {
-      const result = await askDocument(asset.id, text);
+      const convoId = await ensureConversation();
+      const result = await askDocument(asset.id, text, convoId);
       messages = [
         ...messages,
         {

@@ -334,6 +334,8 @@ pub async fn send_message_stream(
                         metadata,
                     },
                 );
+                // Sidebar: updated_at bumped; title may auto-update shortly.
+                let _ = app.emit("conversations:changed", ());
             });
 
             Ok(StreamStartedResponse {
@@ -382,6 +384,8 @@ pub async fn send_message_stream(
                         );
                     }
                 }
+                // Sidebar refresh for both branches.
+                let _ = app.emit("conversations:changed", ());
                 drop(pending_clone);
             });
 
@@ -395,6 +399,7 @@ pub async fn send_message_stream(
 
 #[tauri::command]
 pub async fn send_message(
+    app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     message: String,
     conversation_id: String,
@@ -408,6 +413,12 @@ pub async fn send_message(
         .handle_message(&message, &conversation_id)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Notify the sidebar — updated_at bumped, title may be auto-generated
+    // asynchronously. A second event fires when the title lands (runtime
+    // spawns the auto-title task independently, but we emit conservatively
+    // here so list ordering refreshes immediately).
+    let _ = app_handle.emit("conversations:changed", ());
 
     let task_summary = response.task.map(|t| TaskSummary {
         id: t.id,
@@ -508,6 +519,37 @@ pub async fn delete_conversation(
         .delete_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn rename_conversation(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    conversation_id: String,
+    title: String,
+) -> Result<(), String> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Err("Title cannot be empty".to_string());
+    }
+    // Guard against unreasonably long titles.
+    let title = if trimmed.chars().count() > 200 {
+        trimmed.chars().take(200).collect::<String>()
+    } else {
+        trimmed.to_string()
+    };
+
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap();
+
+    runtime
+        .store
+        .update_conversation_title(&conversation_id, &title)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("conversations:changed", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -1376,6 +1418,7 @@ pub async fn ask_document(
     state: State<'_, Arc<AppState>>,
     asset_id: String,
     question: String,
+    conversation_id: String,
 ) -> Result<DocumentAskResponse, String> {
     let store = {
         let guard = state.store.read().await;
@@ -1402,8 +1445,31 @@ pub async fn ask_document(
         ));
     }
 
+    // Persist the user's question first. This also upserts the conversations
+    // row so the conversation survives navigation and restart. Without this,
+    // the conversation never gets stored and vanishes when the user switches
+    // tabs or restarts the app.
+    let user_msg = sovereign_core::types::Message {
+        id: uuid::Uuid::new_v4().to_string(),
+        conversation_id: conversation_id.clone(),
+        role: sovereign_core::types::Role::User,
+        content: question.clone(),
+        created_at: now_epoch(),
+        metadata: Some(serde_json::json!({
+            "attached_asset_id": asset_id,
+        })),
+        version: now_epoch(),
+    };
+    store
+        .save_message(&user_msg)
+        .await
+        .map_err(|e| format!("Failed to save user message: {e}"))?;
+
     let manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store.clone());
+        sovereign_tools::document_asset::DocumentAssetManager::new(
+            Arc::clone(&inference),
+            store.clone(),
+        );
 
     let handle = app_handle.clone();
     let start = std::time::Instant::now();
@@ -1415,10 +1481,60 @@ pub async fn ask_document(
         .map_err(|e| format!("Query failed: {e}"))?;
 
     let duration_ms = start.elapsed().as_millis() as u64;
-    let message_id = uuid::Uuid::new_v4().to_string();
+    let assistant_message_id = uuid::Uuid::new_v4().to_string();
+
+    // Persist the assistant response.
+    let assistant_msg = sovereign_core::types::Message {
+        id: assistant_message_id.clone(),
+        conversation_id: conversation_id.clone(),
+        role: sovereign_core::types::Role::Assistant,
+        content: response.clone(),
+        created_at: now_epoch(),
+        metadata: Some(serde_json::json!({
+            "attached_asset_id": asset_id,
+            "operation": operation,
+            "sources": sources,
+            "duration_ms": duration_ms,
+        })),
+        version: now_epoch(),
+    };
+    store
+        .save_message(&assistant_msg)
+        .await
+        .map_err(|e| format!("Failed to save assistant message: {e}"))?;
+
+    // Record the operation for the badge and analytics.
     let _ = store
-        .save_document_operation(&message_id, &asset_id, &operation, duration_ms)
+        .save_document_operation(&assistant_message_id, &asset_id, &operation, duration_ms)
         .await;
+
+    // Fire auto-title in the background after the first exchange.
+    // Non-blocking — user sees the response before the title appears.
+    {
+        let inf = Arc::clone(&inference);
+        let s = store.clone();
+        let cid = conversation_id.clone();
+        let app = app_handle.clone();
+        tokio::spawn(async move {
+            match sovereign_core::title::try_auto_title(inf.as_ref(), s.as_ref(), &cid).await {
+                Ok(Some(_)) => {
+                    let _ = app.emit("conversations:changed", ());
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        conversation_id = %cid,
+                        error = %e,
+                        "auto-title: generation failed (ask_document)"
+                    );
+                }
+            }
+        });
+    }
+
+    // Notify the list immediately so updated_at sorting is reflected.
+    // The auto-title task above emits another event if it sets the title.
+    let _ = app_handle.emit("conversations:changed", ());
 
     Ok(DocumentAskResponse {
         response,

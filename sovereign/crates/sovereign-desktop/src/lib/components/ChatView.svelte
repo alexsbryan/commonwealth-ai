@@ -300,7 +300,7 @@
       scrollToBottom();
 
       try {
-        const result = await askDocument(asset.id, text);
+        const result = await askDocument(asset.id, text, convoId);
         const assistantMsg: MessageEntry = {
           id: crypto.randomUUID(),
           role: "assistant",

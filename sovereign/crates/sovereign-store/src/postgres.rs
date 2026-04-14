@@ -279,6 +279,22 @@ impl ConversationStore for PostgresStateStore {
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
+
+    async fn update_conversation_title(&self, id: &str, title: &str) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let ts = Self::now();
+        let rows = client
+            .execute(
+                "UPDATE conversations SET title = $2, updated_at = $3 WHERE id = $1",
+                &[&id, &title, &ts],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        if rows == 0 {
+            return Err(Error::NotFound(format!("conversation {id}")));
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]

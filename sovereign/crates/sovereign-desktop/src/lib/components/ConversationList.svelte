@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import {
     listConversations,
     createConversation,
     deleteConversation,
+    renameConversation,
   } from "../api";
   import type { ConversationEntry } from "../types";
   import MeshStatusIndicator from "./MeshStatusIndicator.svelte";
@@ -18,9 +20,23 @@
 
   let conversations: ConversationEntry[] = $state([]);
 
-  onMount(() => {
-    loadConversations();
+  // Inline-rename state: at most one item is being edited at a time.
+  let editingId: string | null = $state(null);
+  let editingTitle: string = $state("");
+
+  let unlisten: (() => void) | undefined;
+
+  onMount(async () => {
+    await loadConversations();
+    // Keep the list in sync with backend changes (new messages, rename,
+    // auto-generated titles). The Tauri backend emits this event after any
+    // conversation mutation.
+    unlisten = await listen("conversations:changed", () => {
+      loadConversations();
+    });
   });
+
+  onDestroy(() => unlisten?.());
 
   export async function loadConversations() {
     try {
@@ -45,6 +61,54 @@
       onSelect(created.id);
     } catch (e) {
       console.error("Failed to create conversation:", e);
+    }
+  }
+
+  function startRename(convo: ConversationEntry, event: Event) {
+    event.stopPropagation();
+    editingId = convo.id;
+    editingTitle = convo.title ?? "";
+  }
+
+  /** Svelte action: focus the input on mount and select its content. */
+  function focusOnMount(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
+  function cancelRename() {
+    editingId = null;
+    editingTitle = "";
+  }
+
+  async function commitRename(id: string) {
+    const next = editingTitle.trim();
+    // Stop editing regardless of outcome — prevent double-submit via blur+Enter.
+    editingId = null;
+    if (!next) {
+      editingTitle = "";
+      return;
+    }
+    try {
+      await renameConversation(id, next);
+      // Optimistic local update; the listener on `conversations:changed`
+      // will reconcile with the authoritative list.
+      conversations = conversations.map((c) =>
+        c.id === id ? { ...c, title: next } : c,
+      );
+    } catch (e) {
+      console.error("Failed to rename conversation:", e);
+    }
+    editingTitle = "";
+  }
+
+  function onRenameKeydown(event: KeyboardEvent, id: string) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitRename(id);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      cancelRename();
     }
   }
 
@@ -106,9 +170,28 @@
         onkeydown={(e) => e.key === "Enter" && onSelect(convo.id)}
       >
         <div class="convo-body">
-          <span class="convo-title">
-            {convo.title || "New conversation"}
-          </span>
+          {#if editingId === convo.id}
+            <input
+              class="convo-title-input"
+              bind:value={editingTitle}
+              onkeydown={(e) => onRenameKeydown(e, convo.id)}
+              onblur={() => commitRename(convo.id)}
+              onclick={(e) => e.stopPropagation()}
+              use:focusOnMount
+              spellcheck="false"
+              maxlength="200"
+            />
+          {:else}
+            <span
+              class="convo-title"
+              role="button"
+              tabindex="-1"
+              ondblclick={(e) => startRename(convo, e)}
+              title="Double-click to rename"
+            >
+              {convo.title || "New conversation"}
+            </span>
+          {/if}
           <span class="convo-meta">
             {formatTime(convo.updated_at)}
           </span>
@@ -259,6 +342,21 @@
 
   .convo-item.selected .convo-title {
     color: var(--accent);
+  }
+
+  .convo-title-input {
+    display: block;
+    width: 100%;
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: var(--text-primary, var(--text-secondary));
+    background: var(--bg-input, var(--bg));
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    padding: 1px 4px;
+    margin: -2px -5px -2px -5px;
+    outline: none;
+    font-family: inherit;
   }
 
   .convo-meta {

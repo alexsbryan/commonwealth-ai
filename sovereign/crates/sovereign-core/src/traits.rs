@@ -134,6 +134,9 @@ pub trait ConversationStore: Send + Sync {
     async fn list_conversations(&self, limit: usize, offset: usize) -> Result<Vec<Conversation>>;
     async fn search_messages(&self, query: &str) -> Result<Vec<Message>>;
     async fn delete_conversation(&self, id: &str) -> Result<()>;
+    /// Update the conversation's display title and bump `updated_at`.
+    /// Used by both auto-title generation and user rename actions.
+    async fn update_conversation_title(&self, id: &str, title: &str) -> Result<()>;
 }
 
 #[async_trait]

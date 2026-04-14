@@ -497,6 +497,30 @@ impl Runtime {
         Some(req.with_latency(latency))
     }
 
+    /// Spawn a background task that generates an auto-title for the
+    /// conversation if one isn't already set. Non-blocking — failures are
+    /// logged and do not affect the caller.
+    ///
+    /// `try_auto_title` is idempotent: safe to call after every assistant
+    /// message save. It exits early when the title is already set or the
+    /// conversation doesn't have enough messages yet.
+    fn spawn_auto_title(&self, conversation_id: &str) {
+        let inference = Arc::clone(&self.inference);
+        let store = Arc::clone(&self.store);
+        let cid = conversation_id.to_string();
+        tokio::spawn(async move {
+            if let Err(e) =
+                crate::title::try_auto_title(inference.as_ref(), store.as_ref(), &cid).await
+            {
+                tracing::warn!(
+                    conversation_id = %cid,
+                    error = %e,
+                    "auto-title: generation failed"
+                );
+            }
+        });
+    }
+
     /// Build a system message that includes memory context.
     fn build_system_message(&self, base: &str, context: &ConversationContext) -> String {
         let mut parts = vec![base.to_string()];
@@ -739,7 +763,7 @@ impl Runtime {
             };
             let assistant_msg = Message {
                 id: message_id_owned,
-                conversation_id: conversation_id_owned,
+                conversation_id: conversation_id_owned.clone(),
                 role: Role::Assistant,
                 content: full_text,
                 created_at: now(),
@@ -751,6 +775,27 @@ impl Runtime {
                 version: now(),
             };
             let _ = store.save_message(&assistant_msg).await;
+
+            // Auto-title after first exchange. Non-blocking; the stream has
+            // already delivered the response to the user.
+            let title_inference = Arc::clone(&inference);
+            let title_store = Arc::clone(&store);
+            let title_cid = conversation_id_owned.clone();
+            tokio::spawn(async move {
+                if let Err(e) = crate::title::try_auto_title(
+                    title_inference.as_ref(),
+                    title_store.as_ref(),
+                    &title_cid,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        conversation_id = %title_cid,
+                        error = %e,
+                        "auto-title: generation failed (stream path)"
+                    );
+                }
+            });
         });
 
         let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
@@ -970,6 +1015,7 @@ impl Runtime {
             version: now(),
         };
         self.store.save_message(&assistant_msg).await?;
+        self.spawn_auto_title(conversation_id);
 
         Ok(Response {
             message: assistant_msg,
@@ -1055,6 +1101,7 @@ impl Runtime {
                 version: now(),
             };
             self.store.save_message(&assistant_msg).await?;
+            self.spawn_auto_title(conversation_id);
             return Ok(Response { message: assistant_msg, task: None });
         }
 
@@ -1130,6 +1177,7 @@ impl Runtime {
             version: now(),
         };
         self.store.save_message(&assistant_msg).await?;
+        self.spawn_auto_title(conversation_id);
 
         Ok(Response {
             message: assistant_msg,
@@ -1193,6 +1241,7 @@ impl Runtime {
                 version: now(),
             };
             self.store.save_message(&assistant_msg).await?;
+            self.spawn_auto_title(conversation_id);
             return Ok(Response { message: assistant_msg, task: None });
         }
 
@@ -1371,6 +1420,7 @@ impl Runtime {
             version: now(),
         };
         self.store.save_message(&assistant_msg).await?;
+        self.spawn_auto_title(conversation_id);
 
         Ok(Response {
             message: assistant_msg,
@@ -1621,6 +1671,7 @@ impl Runtime {
             version: now(),
         };
         self.store.save_message(&assistant_msg).await?;
+        self.spawn_auto_title(conversation_id);
 
         Ok(Response {
             message: assistant_msg,
