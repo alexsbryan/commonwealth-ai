@@ -46,6 +46,7 @@ pub fn client_router(state: AppState) -> Router {
 pub fn internal_router(state: AppState) -> Router {
     Router::new()
         .route("/internal/gossip", post(routes_internal::gossip))
+        .route("/internal/join", post(routes_internal::join))
         .route(
             "/internal/scheduling/intent",
             post(routes_internal::scheduling_intent),
@@ -288,6 +289,14 @@ mod tests {
             available_on: HashMap::new(),
             oicp_capabilities: caps,
             quantization: "Q4_K_M".into(),
+            // Fields added after the adaptive-mesh-scheduler change —
+            // all have `#[serde(default)]` on the struct, so
+            // defaults here are fine. Keeping them explicit documents
+            // the shape the test expects.
+            min_memory_gb: 0,
+            preferred_memory_gb: 0,
+            supports_parallel_instances: false,
+            supports_pipeline_shard: false,
         };
         state.register_model(model);
 

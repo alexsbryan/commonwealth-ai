@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 commonwealth-core = { workspace = true }
+commonwealth-discovery = { workspace = true }
 commonwealth-inference = { workspace = true }
 commonwealth-knowledge = { workspace = true }
 commonwealth-app = { workspace = true }
@@ -23,6 +24,7 @@ hex = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
+commonwealth-discovery = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tower = "0.5"
 http-body-util = "0.1"

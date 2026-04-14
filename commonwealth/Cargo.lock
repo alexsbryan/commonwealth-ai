@@ -813,6 +813,7 @@ dependencies = [
  "bytes",
  "commonwealth-app",
  "commonwealth-core",
+ "commonwealth-discovery",
  "commonwealth-inference",
  "commonwealth-knowledge",
  "commonwealth-state",
