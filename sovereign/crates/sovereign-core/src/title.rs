@@ -239,7 +239,12 @@ fn sanitize_title(raw: &str) -> String {
 ///
 /// Repeated blocks are all removed. Case-sensitive match on `<think>` /
 /// `</think>` since the model families we use emit them in lowercase.
-fn strip_think_blocks(raw: &str) -> String {
+///
+/// Public so other modules that parse Fast-slot output can reuse this
+/// helper — thinking-enabled models (Qwen 3.5) emit `<think>` blocks even
+/// with `think_budget: Some(0)`, so anywhere we pattern-match on the
+/// response text needs to strip them first.
+pub fn strip_think_blocks(raw: &str) -> String {
     const OPEN: &str = "<think>";
     const CLOSE: &str = "</think>";
 

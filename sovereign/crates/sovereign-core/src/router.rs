@@ -232,6 +232,10 @@ ACTION
   Examples: "Search the web for today's Arsenal news",
             "Send an email to my team",
             "What time is it in Tokyo right now?"
+  NOT ACTION: processing content that's already in the prompt or
+  conversation is REASONING. "Summarize this", "Explain this passage",
+  "Paraphrase the excerpt", "Compare these sections" are REASONING,
+  not ACTION, even though they use imperative verbs.
 
 Conversation context: {context_str}
 User message: "{message}"{corrections_note}{skill_hints}
@@ -427,6 +431,46 @@ Reply with ONLY the letter: A, B, or C"#
         let has_search_request = search_keywords.iter().any(|kw| lower.contains(kw));
 
         has_recent_year || has_temporal || has_search_request
+    }
+
+    /// Heuristic check: is this message asking the model to *process* content
+    /// it already has (summarize, explain, compare, paraphrase, etc.) rather
+    /// than reach outside to fetch or mutate something?
+    ///
+    /// Small Fast-slot models occasionally latch onto imperative verbs like
+    /// "summarize this document" and classify them as ACTION (shell/file-system
+    /// category) with high confidence. This pre-check short-circuits that:
+    /// these are reasoning operations, full stop.
+    fn looks_like_content_processing(message: &str) -> bool {
+        let lower = message.to_lowercase();
+
+        // Verb phrases that signal the user wants the model to operate on
+        // content in the prompt or the conversation, not reach outside.
+        //
+        // A trailing space or punctuation in the pattern forces a word
+        // boundary on the right — `describe ` doesn't match `described`,
+        // `explain ` doesn't match `explainer`.
+        const CONTENT_VERBS: &[&str] = &[
+            "summarize",
+            "summarise",
+            "summary of",
+            "paraphrase",
+            "rephrase",
+            "explain ",
+            "explain the ",
+            "explain this ",
+            "describe ",
+            "analyse",
+            "analyze",
+            "compare ",
+            "contrast ",
+            "critique ",
+            "interpret ",
+            "outline ",
+            "elaborate",
+        ];
+
+        CONTENT_VERBS.iter().any(|v| lower.contains(v))
     }
 
     /// Call the fast model with a classification prompt.
@@ -744,14 +788,25 @@ impl Router for LlmRouter {
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
         let force_action = has_search && Self::needs_current_info(message);
 
-        // Pre-check 2: deep reasoning signal → force REASONING before the LLM sees it.
+        // Pre-check 2: content-processing signal → force REASONING. Catches
+        // "summarize this", "explain this passage", "compare these sections"
+        // etc. which the Fast model sometimes misreads as ACTION because of
+        // the imperative verb. Content processing never needs external reach.
+        let force_content_reasoning = !force_action
+            && Self::looks_like_content_processing(message);
+
+        // Pre-check 3: deep reasoning signal → force REASONING before the LLM sees it.
         // This catches philosophical, analytical, and compatibility questions that
         // small fast models frequently mis-classify as SimpleQuery.
-        let force_deep = !force_action && Self::needs_deep_reasoning(message);
+        let force_deep = !force_action
+            && !force_content_reasoning
+            && Self::needs_deep_reasoning(message);
 
         // Pass 1: Coarse classification (skipped for pre-checked cases).
         let coarse = if force_action {
             CoarseClassification { intent: "ACTION".to_string(), confidence: 1.0 }
+        } else if force_content_reasoning {
+            CoarseClassification { intent: "REASONING".to_string(), confidence: 1.0 }
         } else if force_deep {
             CoarseClassification { intent: "REASONING".to_string(), confidence: 1.0 }
         } else {
@@ -974,6 +1029,53 @@ mod tests {
         assert!(!LlmRouter::needs_current_info("Explain photosynthesis"));
         assert!(!LlmRouter::needs_current_info("Hello, how are you?"));
         assert!(!LlmRouter::needs_current_info("Write a poem about the ocean"));
+    }
+
+    // ── looks_like_content_processing ───────────────────────────
+
+    #[test]
+    fn content_processing_catches_summarize_variants() {
+        assert!(LlmRouter::looks_like_content_processing(
+            "Can you summarize this document?"
+        ));
+        assert!(LlmRouter::looks_like_content_processing(
+            "SUMMARISE the argument"
+        ));
+        assert!(LlmRouter::looks_like_content_processing(
+            "Give me a summary of this paper"
+        ));
+    }
+
+    #[test]
+    fn content_processing_catches_explain_and_analyse() {
+        assert!(LlmRouter::looks_like_content_processing(
+            "Explain this code snippet"
+        ));
+        assert!(LlmRouter::looks_like_content_processing(
+            "Analyse these passages and tell me what stands out"
+        ));
+        assert!(LlmRouter::looks_like_content_processing(
+            "compare contrast these two sections"
+        ));
+        assert!(LlmRouter::looks_like_content_processing(
+            "paraphrase the opening paragraph"
+        ));
+    }
+
+    #[test]
+    fn content_processing_rejects_action_verbs() {
+        assert!(!LlmRouter::looks_like_content_processing(
+            "run my linter on these files"
+        ));
+        assert!(!LlmRouter::looks_like_content_processing(
+            "send an email to my team"
+        ));
+        assert!(!LlmRouter::looks_like_content_processing(
+            "search the web for today's Arsenal news"
+        ));
+        assert!(!LlmRouter::looks_like_content_processing(
+            "what is the capital of France"
+        ));
     }
 
     // ── has_enumerable_markers ──────────────────────────────────

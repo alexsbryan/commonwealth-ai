@@ -1538,7 +1538,7 @@ pub async fn ask_document(
     // Document operation path.
     let handle = app_handle.clone();
     let start = std::time::Instant::now();
-    let (response, sources) = manager
+    let output = manager
         .execute_operation(&asset, &question, &operation, &move |progress| {
             let _ = handle.emit("document:operation", &progress);
         })
@@ -1548,12 +1548,12 @@ pub async fn ask_document(
     // RAG safety net: if retrieval returned zero matching chunks, the router
     // mis-classified. Fall through to the runtime pipeline the same way
     // OffTopic does. `execute_rag` signals this by returning an empty
-    // response + empty sources.
+    // ExecutionOutput.
     if matches!(
         operation,
         sovereign_core::types::DocumentAssetOperation::Rag { .. }
-    ) && sources.is_empty()
-        && response.is_empty()
+    ) && output.citations.is_empty()
+        && output.text.is_empty()
     {
         tracing::info!(
             asset_id = %asset_id,
@@ -1565,18 +1565,66 @@ pub async fn ask_document(
     let duration_ms = start.elapsed().as_millis() as u64;
     let assistant_message_id = uuid::Uuid::new_v4().to_string();
 
-    // Persist the assistant response with document operation metadata.
+    // Build the `retrieved_chunks` + `provenance` shape the frontend expects
+    // for the routing-meta bar and rich citation popovers. The frontend
+    // matches `[Source: <label>]` spans in the prose against each chunk's
+    // `title`, so we use the citation label as the title here.
+    let retrieved_chunks: Vec<serde_json::Value> = output
+        .citations
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "title": c.label,
+                "corpus_id": asset.title,
+                "url": serde_json::Value::Null,
+                "snippet": c.snippet,
+                "provenance_tier": "document",
+            })
+        })
+        .collect();
+
+    let provenance = sovereign_core::types::ResponseProvenance {
+        intent: format!("DocumentAsk:{}", operation.label()),
+        search_method: Some("document".to_string()),
+        sources: vec![sovereign_core::types::SourceSummary {
+            origin: asset.title.clone(),
+            count: output.citations.len(),
+        }],
+        inference_backend: if output.model_id.is_empty() {
+            "local".to_string()
+        } else {
+            output.model_id.clone()
+        },
+        oicp_match: None,
+        total_latency_ms: duration_ms,
+        tokens_used: output.tokens_used,
+        coarse_intent: None,
+        self_assessment: None,
+    };
+
+    let sources_content: Vec<String> = output
+        .citations
+        .iter()
+        .map(|c| c.content.clone())
+        .collect();
+
+    // Persist the assistant response with document operation metadata
+    // (legacy `operation` / `sources` fields) plus the new rich
+    // `provenance` / `retrieved_chunks` shape the AssistantMessage
+    // component reads for the routing-meta bar and citation popovers.
     let assistant_msg = sovereign_core::types::Message {
         id: assistant_message_id.clone(),
         conversation_id: conversation_id.clone(),
         role: sovereign_core::types::Role::Assistant,
-        content: response.clone(),
+        content: output.text.clone(),
         created_at: now_epoch(),
         metadata: Some(serde_json::json!({
             "attached_asset_id": asset_id,
             "operation": operation,
-            "sources": sources,
+            "sources": sources_content,
             "duration_ms": duration_ms,
+            "provenance": provenance,
+            "retrieved_chunks": retrieved_chunks,
         })),
         version: now_epoch(),
     };
@@ -1616,9 +1664,9 @@ pub async fn ask_document(
     let _ = app_handle.emit("conversations:changed", ());
 
     Ok(DocumentAskResponse {
-        response,
+        response: output.text,
         operation: Some(operation),
-        sources,
+        sources: sources_content,
     })
 }
 

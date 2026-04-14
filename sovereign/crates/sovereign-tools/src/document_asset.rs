@@ -79,6 +79,148 @@ fn detect_self_reference(request: &str) -> bool {
     SELF_REFERENCE_PHRASES.iter().any(|p| q.contains(p))
 }
 
+/// Common English function words + digit-only tokens are dropped when
+/// extracting filename keywords — a question that mentions "the" or "2024"
+/// is not meaningfully "about" the attached document.
+const FILENAME_STOPWORDS: &[&str] = &[
+    "the", "and", "for", "but", "not", "you", "are", "with", "this", "that",
+    "from", "into", "onto", "upon", "have", "had", "has", "was", "were", "been",
+    "being", "its", "their", "them", "they", "our", "his", "her", "what", "which",
+    "who", "whom", "when", "where", "why", "how", "too", "also", "just", "only",
+    "pdf", "doc", "docx", "txt", "pages", "page", "chapter", "part", "vol", "volume",
+    "edition", "copy", "draft", "final", "version", "revised",
+];
+
+/// ASCII-fold a string: strip diacritics so `"Schrödinger"` and
+/// `"schrodinger"` compare equal. Lightweight char-by-char mapping that
+/// covers the common Latin-1 Supplement range; sufficient for English
+/// filenames with occasional accented loanwords.
+fn ascii_fold(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => 'a',
+            'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' => 'A',
+            'ç' => 'c', 'Ç' => 'C',
+            'è' | 'é' | 'ê' | 'ë' => 'e',
+            'È' | 'É' | 'Ê' | 'Ë' => 'E',
+            'ì' | 'í' | 'î' | 'ï' => 'i',
+            'Ì' | 'Í' | 'Î' | 'Ï' => 'I',
+            'ñ' => 'n', 'Ñ' => 'N',
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => 'o',
+            'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' => 'O',
+            'ù' | 'ú' | 'û' | 'ü' => 'u',
+            'Ù' | 'Ú' | 'Û' | 'Ü' => 'U',
+            'ý' | 'ÿ' => 'y',
+            'Ý' => 'Y',
+            'ß' => 's',
+            other => other,
+        })
+        .collect()
+}
+
+/// Extract content-word tokens from a document's title + filename.
+///
+/// Splits on any non-alphabetic character (so `11._Erwin_Schrodinger_-_What_is_Life__1944_.pdf`
+/// yields `["erwin", "schrodinger", "what", "is", "life"]`), lowercases,
+/// ASCII-folds diacritics, drops tokens shorter than 3 chars, drops
+/// stopwords, de-duplicates.
+fn filename_tokens(asset: &DocumentAsset) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    let sources = [asset.title.as_str(), asset.filename.as_str()];
+    for s in sources {
+        let folded = ascii_fold(&s.to_lowercase());
+        for tok in folded.split(|c: char| !c.is_ascii_alphabetic()) {
+            if tok.len() < 3 {
+                continue;
+            }
+            if FILENAME_STOPWORDS.contains(&tok) {
+                continue;
+            }
+            if seen.insert(tok.to_string()) {
+                out.push(tok.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Represents one chunk that contributed to an answer, with enough
+/// metadata for the frontend to render a rich citation popover.
+///
+/// The `label` is the string the model uses when citing this chunk —
+/// `"§4"` for a synthesis section, `"passage 2"` for a RAG match, etc.
+/// The frontend matches it against `[Source: <label>]` spans in the
+/// prose and, on click, shows the `snippet` in a popover keyed by
+/// `corpus_id` (which the Tauri handler fills with the document title).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CitedChunk {
+    pub label: String,
+    pub chunk_index: usize,
+    pub content: String,
+    pub snippet: String,
+}
+
+/// The full execution result handed back to `ask_document`. Bundles
+/// everything needed to persist a rich assistant message — response
+/// text, citation metadata, and the inference backend's own provenance
+/// (model id + token count) which would otherwise be dropped on the
+/// floor by `execute_*`.
+#[derive(Debug, Clone)]
+pub struct ExecutionOutput {
+    pub text: String,
+    pub citations: Vec<CitedChunk>,
+    pub model_id: String,
+    pub tokens_used: usize,
+    pub latency_ms: u64,
+}
+
+impl ExecutionOutput {
+    /// Sentinel used when a path decides there's nothing to do — e.g.
+    /// `execute_rag` finds zero relevant chunks and signals the caller
+    /// to fall through to the runtime pipeline.
+    fn empty() -> Self {
+        Self {
+            text: String::new(),
+            citations: Vec::new(),
+            model_id: String::new(),
+            tokens_used: 0,
+            latency_ms: 0,
+        }
+    }
+}
+
+/// First `max` chars of `content`, trimmed at a word boundary when possible.
+/// Matches the snippet format used elsewhere in the codebase so citation
+/// popovers look consistent with knowledge-query popovers.
+fn short_snippet(content: &str, max: usize) -> String {
+    if content.len() <= max {
+        return content.to_string();
+    }
+    let truncated = &content[..max];
+    match truncated.rfind(char::is_whitespace) {
+        Some(pos) if pos > 0 => format!("{}...", &truncated[..pos]),
+        _ => format!("{truncated}..."),
+    }
+}
+
+/// True when `request` mentions any of `tokens` as a whole word. The
+/// question is ASCII-folded + lowercased before comparison so e.g. the
+/// token `"schrodinger"` matches `"Schrödinger"` in the user's question.
+fn mentions_document(tokens: &[String], request: &str) -> bool {
+    if tokens.is_empty() {
+        return false;
+    }
+    let q = ascii_fold(&request.to_lowercase());
+    // Split query into alphabetic words; a token matches if it appears
+    // as one of those words. Avoids `"life"` false-matching in `"wildlife"`.
+    let words: std::collections::HashSet<&str> = q
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .filter(|w| !w.is_empty())
+        .collect();
+    tokens.iter().any(|t| words.contains(t.as_str()))
+}
+
 // ─── Progress types ──────────────────────────────────────────
 
 /// Progress updates emitted during document ingest. The frontend
@@ -512,20 +654,29 @@ impl DocumentAssetManager {
             operation: operation.label().to_string(),
         });
 
-        let (response, sources) = self
+        let output = self
             .execute_operation(asset, request, &operation, &on_progress)
             .await?;
 
         tracing::info!(
             asset_id = %asset.id,
             operation = %operation.label(),
-            response_chars = response.len(),
-            source_count = sources.len(),
+            response_chars = output.text.len(),
+            source_count = output.citations.len(),
             total_latency_ms = start.elapsed().as_millis() as u64,
             "DocumentAssetManager::ask — done"
         );
 
-        Ok((response, operation, sources))
+        // `ask()` stays on its old 3-tuple API for HTTP callers that only
+        // need raw content strings. Tauri callers use `execute_operation`
+        // directly and get the full `ExecutionOutput`.
+        let sources: Vec<String> = output
+            .citations
+            .iter()
+            .map(|c| c.content.clone())
+            .collect();
+
+        Ok((output.text, operation, sources))
     }
 
     /// Delete an asset and its chunks.
@@ -576,6 +727,25 @@ impl DocumentAssetManager {
             tracing::info!(
                 asset_id = %asset.id,
                 "document_asset::route — self-reference detected, defaulting to Synthesis"
+            );
+            return Ok(DocumentAssetOperation::Synthesis {
+                focus: request.to_string(),
+                entities: Vec::new(),
+            });
+        }
+
+        // Filename / title grounding: if the question mentions a content
+        // word from the document's filename or title (author name, key
+        // concept, etc.), the user is almost certainly asking about this
+        // document. Route to Synthesis without a Fast-slot classification
+        // call — more reliable than depending on the model's judgment when
+        // the skeleton isn't built yet.
+        let tokens = filename_tokens(asset);
+        if mentions_document(&tokens, request) {
+            tracing::info!(
+                asset_id = %asset.id,
+                tokens = ?tokens.iter().take(5).collect::<Vec<_>>(),
+                "document_asset::route — filename grounding matched, defaulting to Synthesis"
             );
             return Ok(DocumentAssetOperation::Synthesis {
                 focus: request.to_string(),
@@ -668,7 +838,7 @@ impl DocumentAssetManager {
         request: &str,
         operation: &DocumentAssetOperation,
         on_progress: &(dyn Fn(OperationProgress) + Send + Sync),
-    ) -> Result<(String, Vec<String>)> {
+    ) -> Result<ExecutionOutput> {
         let source_id = asset.source_key();
 
         match operation {
@@ -723,7 +893,7 @@ impl DocumentAssetManager {
         source_id: &str,
         query: &str,
         original_request: &str,
-    ) -> Result<(String, Vec<String>)> {
+    ) -> Result<ExecutionOutput> {
         tracing::info!(
             source_id = %source_id,
             query_chars = query.len(),
@@ -757,24 +927,37 @@ impl DocumentAssetManager {
                 source_id = %source_id,
                 "execute_rag — no relevant passages; caller should fall back to runtime"
             );
-            return Ok((String::new(), Vec::new()));
+            return Ok(ExecutionOutput::empty());
         }
 
-        let passages: String = relevant
+        // Build labeled passages. Each citation label ("passage 1") is what
+        // the model will emit as [Source: passage 1] in its answer, and also
+        // what the frontend matches against `retrieved_chunks[].title` when
+        // rendering popovers.
+        let citations: Vec<CitedChunk> = relevant
             .iter()
             .enumerate()
-            .map(|(i, c)| format!("[{}] {}", i + 1, c.content))
+            .map(|(i, c)| CitedChunk {
+                label: format!("passage {}", i + 1),
+                chunk_index: c.chunk_index,
+                snippet: short_snippet(&c.content, 200),
+                content: c.content.clone(),
+            })
+            .collect();
+
+        let passages: String = citations
+            .iter()
+            .map(|c| format!("[Source: {}] {}", c.label, c.content))
             .collect::<Vec<_>>()
             .join("\n\n");
-
-        let sources: Vec<String> = relevant.iter().map(|c| c.content.clone()).collect();
 
         let prompt = format!(
             "Answer the user's question based on these passages from the document.\n\n\
              Passages:\n{passages}\n\n\
              Question: {original_request}\n\n\
-             Cite passage numbers [1], [2], etc. when referencing specific content. \
-             If the passages don't contain enough information, say so honestly."
+             Cite using [Source: passage N] notation — matching the labels above — \
+             when referencing specific content. If the passages don't contain \
+             enough information, say so honestly."
         );
 
         let response = self
@@ -793,7 +976,13 @@ impl DocumentAssetManager {
             })
             .await?;
 
-        Ok((response.text, sources))
+        Ok(ExecutionOutput {
+            text: response.text,
+            citations,
+            model_id: response.model_id,
+            tokens_used: response.tokens_used,
+            latency_ms: response.latency_ms,
+        })
     }
 
     /// Synthesis: trace an entity or theme across the full document
@@ -804,7 +993,7 @@ impl DocumentAssetManager {
         focus: &str,
         entities: &[String],
         original_request: &str,
-    ) -> Result<(String, Vec<String>)> {
+    ) -> Result<ExecutionOutput> {
         tracing::info!(
             asset_id = %asset.id,
             focus_chars = focus.len(),
@@ -823,7 +1012,13 @@ impl DocumentAssetManager {
 
         if all_chunks.is_empty() {
             tracing::warn!(asset_id = %asset.id, "execute_synthesis — document has no indexed content");
-            return Ok(("Document has no indexed content.".to_string(), vec![]));
+            return Ok(ExecutionOutput {
+                text: "Document has no indexed content.".to_string(),
+                citations: Vec::new(),
+                model_id: String::new(),
+                tokens_used: 0,
+                latency_ms: 0,
+            });
         }
 
         // Use the skeleton entity index to find relevant chunk indices.
@@ -859,19 +1054,34 @@ impl DocumentAssetManager {
             "execute_synthesis — chunks selected"
         );
 
-        let passages: String = selected
+        // Build citation metadata alongside the prompt. Each chunk gets a
+        // label `§<chunk_index>` that serves as both the prompt marker
+        // AND the `title` the frontend matches against when rendering
+        // [Source: §N] popovers.
+        let citations: Vec<CitedChunk> = selected
             .iter()
             .map(|c| {
-                format!(
-                    "[section {}] {}",
-                    c.chunk_index,
-                    &c.content[..c.content.len().min(500)]
-                )
+                let truncated = short_snippet(&c.content, 500);
+                CitedChunk {
+                    label: format!("§{}", c.chunk_index),
+                    chunk_index: c.chunk_index,
+                    snippet: short_snippet(&c.content, 200),
+                    content: truncated, // prompt-sized copy
+                }
             })
+            .collect();
+
+        let passages: String = citations
+            .iter()
+            .map(|c| format!("[Source: {}] {}", c.label, c.content))
             .collect::<Vec<_>>()
             .join("\n\n");
 
-        let sources: Vec<String> = selected.iter().map(|c| c.content.clone()).collect();
+        // Keep the full content around for the assistant-message's
+        // `sources` field (legacy UI), separate from the prompt-trimmed
+        // text inside `citations`.
+        let full_sources: Vec<String> =
+            selected.iter().map(|c| c.content.clone()).collect();
 
         let skeleton_context = asset
             .skeleton
@@ -881,7 +1091,7 @@ impl DocumentAssetManager {
                     .structural_moments
                     .iter()
                     .take(10)
-                    .map(|m| format!("- Section {}: {}", m.chunk_index, m.description))
+                    .map(|m| format!("- §{}: {}", m.chunk_index, m.description))
                     .collect::<Vec<_>>()
                     .join("\n");
                 format!(
@@ -898,7 +1108,9 @@ impl DocumentAssetManager {
              Relevant sections (in document order):\n{passages}\n\n\
              Question: {original_request}\n\n\
              Draw on observations from early, middle, and late sections. \
-             Cite section numbers when referencing specific content."
+             Cite sections using [Source: §N] notation — use the exact \
+             labels shown above (e.g. [Source: §4], [Source: §16]) when \
+             referencing specific content."
         );
 
         let response = self
@@ -917,7 +1129,25 @@ impl DocumentAssetManager {
             })
             .await?;
 
-        Ok((response.text, sources))
+        // Swap the prompt-trimmed `content` on each citation back out for
+        // the full chunk content so the Tauri handler persists the real
+        // source text alongside the snippet.
+        let citations: Vec<CitedChunk> = citations
+            .into_iter()
+            .zip(full_sources.into_iter())
+            .map(|(mut c, full)| {
+                c.content = full;
+                c
+            })
+            .collect();
+
+        Ok(ExecutionOutput {
+            text: response.text,
+            citations,
+            model_id: response.model_id,
+            tokens_used: response.tokens_used,
+            latency_ms: response.latency_ms,
+        })
     }
 
     /// Aggregation: search every section for all instances matching
@@ -927,7 +1157,7 @@ impl DocumentAssetManager {
         source_id: &str,
         query: &str,
         original_request: &str,
-    ) -> Result<(String, Vec<String>)> {
+    ) -> Result<ExecutionOutput> {
         tracing::info!(
             source_id = %source_id,
             query_chars = query.len(),
@@ -949,23 +1179,39 @@ impl DocumentAssetManager {
             "execute_aggregation — keyword scan done"
         );
 
-        let sources: Vec<String> = matching.iter().map(|c| c.content.clone()).collect();
-
         if matching.is_empty() {
             tracing::warn!(query = %query, "execute_aggregation — no matches found");
-            return Ok((
-                format!("No instances of \"{query}\" found in the document."),
-                vec![],
-            ));
+            return Ok(ExecutionOutput {
+                text: format!("No instances of \"{query}\" found in the document."),
+                citations: Vec::new(),
+                model_id: String::new(),
+                tokens_used: 0,
+                latency_ms: 0,
+            });
         }
 
-        let matches_text: String = matching
+        // Build citations for the first 50 matches. Each gets a label
+        // `match N` that the model will cite as [Source: match N].
+        let citations: Vec<CitedChunk> = matching
             .iter()
             .take(50)
             .enumerate()
-            .map(|(i, c)| {
-                let excerpt = &c.content[..c.content.len().min(300)];
-                format!("[{}] Section {}: ...{}...", i + 1, c.chunk_index, excerpt)
+            .map(|(i, c)| CitedChunk {
+                label: format!("match {}", i + 1),
+                chunk_index: c.chunk_index,
+                snippet: short_snippet(&c.content, 200),
+                content: c.content.clone(),
+            })
+            .collect();
+
+        let matches_text: String = citations
+            .iter()
+            .map(|c| {
+                let excerpt = short_snippet(&c.content, 300);
+                format!(
+                    "[Source: {}] §{}: ...{}...",
+                    c.label, c.chunk_index, excerpt
+                )
             })
             .collect::<Vec<_>>()
             .join("\n\n");
@@ -974,7 +1220,7 @@ impl DocumentAssetManager {
             "The user asked: {original_request}\n\n\
              Found {} instances across the document:\n\n{matches_text}\n\n\
              Summarise the findings. Group by theme or chronology if appropriate. \
-             Cite instance numbers.",
+             Cite using [Source: match N] notation — matching the labels above.",
             matching.len(),
         );
 
@@ -994,7 +1240,13 @@ impl DocumentAssetManager {
             })
             .await?;
 
-        Ok((response.text, sources))
+        Ok(ExecutionOutput {
+            text: response.text,
+            citations,
+            model_id: response.model_id,
+            tokens_used: response.tokens_used,
+            latency_ms: response.latency_ms,
+        })
     }
 
     /// Transformation: apply a user-requested transformation.
@@ -1002,7 +1254,7 @@ impl DocumentAssetManager {
         &self,
         source_id: &str,
         request: &str,
-    ) -> Result<(String, Vec<String>)> {
+    ) -> Result<ExecutionOutput> {
         tracing::info!(
             source_id = %source_id,
             request_chars = request.len(),
@@ -1046,7 +1298,16 @@ impl DocumentAssetManager {
             })
             .await?;
 
-        Ok((response.text, vec![]))
+        // Transformations consume the whole document; we don't surface
+        // per-chunk citations because the output is the transformed text,
+        // not a referenced answer.
+        Ok(ExecutionOutput {
+            text: response.text,
+            citations: Vec::new(),
+            model_id: response.model_id,
+            tokens_used: response.tokens_used,
+            latency_ms: response.latency_ms,
+        })
     }
 
 }
@@ -1096,14 +1357,22 @@ async fn detect_document_type(
         .await;
 
     let detected = match response {
-        Ok(r) => match r.text.trim().to_lowercase().as_str() {
-            "narrative" => DocumentTypeTag::Narrative,
-            "argument" => DocumentTypeTag::Argument,
-            "evidence" => DocumentTypeTag::Evidence,
-            "chronicle" => DocumentTypeTag::Chronicle,
-            "technical" => DocumentTypeTag::Technical,
-            _ => DocumentTypeTag::Unknown,
-        },
+        Ok(r) => {
+            // Strip `<think>...</think>` blocks first — Qwen thinking
+            // models emit them even when `think_budget: Some(0)` is set,
+            // and without stripping the raw text looks like
+            // `"<think>\n</think>\n\nArgument"` which never matches any
+            // category and always falls through to Unknown.
+            let cleaned = sovereign_core::title::strip_think_blocks(&r.text);
+            match cleaned.trim().to_lowercase().as_str() {
+                "narrative" => DocumentTypeTag::Narrative,
+                "argument" => DocumentTypeTag::Argument,
+                "evidence" => DocumentTypeTag::Evidence,
+                "chronicle" => DocumentTypeTag::Chronicle,
+                "technical" => DocumentTypeTag::Technical,
+                _ => DocumentTypeTag::Unknown,
+            }
+        }
         Err(e) => {
             tracing::warn!(error = %e, "detect_document_type — inference failed, defaulting to Unknown");
             DocumentTypeTag::Unknown
@@ -1587,6 +1856,117 @@ mod tests {
     fn self_reference_is_case_insensitive() {
         assert!(detect_self_reference("SUMMARIZE THIS DOCUMENT"));
         assert!(detect_self_reference("What Is This Paper About?"));
+    }
+
+    // ── Filename grounding ───────────────────────────────────────
+
+    fn test_asset(title: &str, filename: &str) -> DocumentAsset {
+        DocumentAsset {
+            id: "t".to_string(),
+            title: title.to_string(),
+            filename: filename.to_string(),
+            file_size_mb: 0.0,
+            word_count: 0,
+            chunk_count: 0,
+            document_type: DocumentTypeTag::Unknown,
+            ingested_at: chrono::Utc::now(),
+            index_id: "t".to_string(),
+            skeleton: None,
+            state: AssetState::PartiallyReady,
+        }
+    }
+
+    #[test]
+    fn filename_tokens_drops_stopwords_numbers_short_tokens() {
+        let asset = test_asset(
+            "11. Erwin Schrodinger   What is Life  1944",
+            "11._Erwin_Schrodinger_-_What_is_Life__1944_.pdf",
+        );
+        let toks = filename_tokens(&asset);
+        assert!(toks.contains(&"erwin".to_string()));
+        assert!(toks.contains(&"schrodinger".to_string()));
+        assert!(toks.contains(&"life".to_string()));
+        // stopwords dropped
+        assert!(!toks.iter().any(|t| t == "the" || t == "is"));
+        // short / digit-only tokens dropped
+        assert!(!toks.iter().any(|t| t == "11" || t == "1944"));
+        // extensions stripped by the stopword list
+        assert!(!toks.contains(&"pdf".to_string()));
+    }
+
+    #[test]
+    fn mentions_document_matches_author_name() {
+        let asset = test_asset(
+            "Erwin Schrodinger - What is Life",
+            "Erwin_Schrodinger_What_is_Life.pdf",
+        );
+        let toks = filename_tokens(&asset);
+        assert!(mentions_document(
+            &toks,
+            "What does Schrödinger say about consciousness?"
+        ));
+        assert!(mentions_document(&toks, "Explain Erwin's thesis"));
+    }
+
+    #[test]
+    fn mentions_document_rejects_unrelated_question() {
+        let asset = test_asset(
+            "Erwin Schrodinger - What is Life",
+            "Erwin_Schrodinger_What_is_Life.pdf",
+        );
+        let toks = filename_tokens(&asset);
+        assert!(!mentions_document(
+            &toks,
+            "What is the difference between Theravada and Zen buddhism?"
+        ));
+        assert!(!mentions_document(&toks, "Who won the 2018 World Cup?"));
+    }
+
+    #[test]
+    fn mentions_document_unicode_folds_to_ascii() {
+        let asset = test_asset("Erwin Schrödinger", "Erwin_Schrodinger.pdf");
+        let toks = filename_tokens(&asset);
+        // Token is folded when extracted — "schrödinger" → "schrodinger".
+        assert!(toks.contains(&"schrodinger".to_string()));
+        // Question with the accented form still matches because the query
+        // is ASCII-folded at match time.
+        assert!(mentions_document(
+            &toks,
+            "What did Schrödinger argue?"
+        ));
+    }
+
+    #[test]
+    fn short_snippet_truncates_at_word_boundary() {
+        let content = "The aperiodic crystal described by Schrödinger is a molecular \
+                       structure found in chromosomes that differs radically from periodic \
+                       crystals studied by physicists. It stores hereditary information.";
+        let snip = short_snippet(content, 60);
+        assert!(snip.ends_with("..."));
+        assert!(!snip.contains("Schrödinger")
+            || snip.len() <= 60 + "...".len() + 10 /* slack */);
+        // Snippet ends on a word boundary — no mid-word cut before the ellipsis.
+        let pre = snip.trim_end_matches("...");
+        assert!(pre.ends_with(|c: char| c.is_ascii_alphanumeric() || c == ','));
+    }
+
+    #[test]
+    fn short_snippet_returns_input_when_under_max() {
+        assert_eq!(short_snippet("hello", 100), "hello");
+    }
+
+    #[test]
+    fn mentions_document_word_boundary_avoids_partial_matches() {
+        // Token "life" must not match inside "wildlife".
+        let asset = test_asset("What is Life", "What_is_Life.pdf");
+        let toks = filename_tokens(&asset);
+        assert!(toks.contains(&"life".to_string()));
+        assert!(!mentions_document(
+            &toks,
+            "Tell me about the wildlife of Africa"
+        ));
+        // But "life" as a standalone word still matches.
+        assert!(mentions_document(&toks, "Explain the meaning of life"));
     }
 
     #[test]
