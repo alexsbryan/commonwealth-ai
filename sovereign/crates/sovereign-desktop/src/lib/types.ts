@@ -318,6 +318,21 @@ export interface MeshCorpus {
   status: CorpusInstallStatus | string;
 }
 
+/** A peer the daemon has spotted on the local network via mDNS.
+ *  Surfaces in the MeshDiagnosticsPanel so users can verify that
+ *  cross-machine LAN discovery is actually working. */
+export interface DiscoveredPeerDto {
+  node_id: string;
+  mesh_id_hex: string;
+  name: string;
+  address: string;
+}
+
+export interface MeshDiagnostics {
+  discovered_peers: DiscoveredPeerDto[];
+  daemon_running: boolean;
+}
+
 export interface ContributionSummary {
   compute_hours_contributed: number;
   compute_hours_used: number;

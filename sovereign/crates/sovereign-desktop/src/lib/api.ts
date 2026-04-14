@@ -233,6 +233,10 @@ export async function meshLeave(): Promise<void> {
   return invoke("mesh_leave");
 }
 
+export async function meshDiagnostics(): Promise<import("./types").MeshDiagnostics> {
+  return invoke("mesh_diagnostics");
+}
+
 export async function recipeValidate(
   recipePath: string,
   offline: boolean,

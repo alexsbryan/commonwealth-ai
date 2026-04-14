@@ -21,3 +21,9 @@ tokio = { workspace = true }
 axum = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+hex = "0.4"
+# For the join-handshake client (Phase B). Added now because the
+# daemon already needs it to serialise mesh_id as hex for mDNS TXT
+# records; pulling reqwest once across the crate is simpler than
+# threading it through Phase B piecewise.
+reqwest = { workspace = true }

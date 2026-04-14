@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { listen } from "@tauri-apps/api/event";
-  import { onMount, onDestroy } from "svelte";
-  import type { DocumentAsset, AssetState, DocumentProgressPayload } from "../types";
+  import { onMount } from "svelte";
+  import { documentIngestionStore } from "../stores/documentIngestion.svelte";
+  import type { DocumentAsset, AssetState } from "../types";
 
   interface Props {
     asset: DocumentAsset;
@@ -9,41 +9,23 @@
 
   let { asset }: Props = $props();
 
-  let assetState: AssetState = $state(asset.state);
-  let ragReady = $state(false);
-  let unlisten: (() => void) | undefined;
+  // Read ingestion state from the singleton store; fall back to the
+  // asset's initial `state` field before any progress event has
+  // arrived for this id. `ragReady` derives from the state rather
+  // than a separate flag — PartiallyReady means the RAG path is up.
+  let assetState: AssetState = $derived(
+    documentIngestionStore.state(asset.id) ?? asset.state,
+  );
+  let ragReady = $derived(
+    assetState === "PartiallyReady" ||
+      (typeof assetState === "object" &&
+        assetState !== null &&
+        "BuildingSkeleton" in assetState),
+  );
 
   onMount(async () => {
-    unlisten = await listen<DocumentProgressPayload>(
-      "document:progress",
-      ({ payload }) => {
-        if (payload.asset_id && payload.asset_id !== asset.id) return;
-
-        if (payload.type === "RagAvailable") {
-          ragReady = true;
-          assetState = "PartiallyReady";
-        } else if (payload.type === "BuildingSkeleton") {
-          assetState = {
-            BuildingSkeleton: {
-              chunks_done: payload.done ?? 0,
-              chunks_total: payload.total ?? 1,
-            },
-          };
-        } else if (payload.type === "Indexing") {
-          assetState = {
-            Indexing: {
-              chunks_done: payload.done ?? 0,
-              chunks_total: payload.total ?? 1,
-            },
-          };
-        } else if (payload.type === "Ready") {
-          assetState = "Ready";
-        }
-      },
-    );
+    await documentIngestionStore.init();
   });
-
-  onDestroy(() => unlisten?.());
 
   function progressFraction(s: AssetState): number {
     if (typeof s === "object" && "Indexing" in s) {

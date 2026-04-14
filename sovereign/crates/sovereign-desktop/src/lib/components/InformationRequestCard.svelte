@@ -120,6 +120,16 @@
     border-radius: var(--radius-lg);
     margin-bottom: 12px;
     overflow: hidden;
+    /* `.messages` is a `flex-direction: column` container. `overflow:
+     * hidden` (above, needed so children's square borders get clipped
+     * to the rounded corners) disables flex's `min-height: auto`
+     * default, so without an explicit `flex-shrink: 0` the card
+     * collapses to zero height whenever the messages above fill the
+     * viewport — and `scrollToBottom()` then can't scroll to a card
+     * whose scrollHeight reports 0. `flex-shrink: 0` keeps the card
+     * at its natural content height; the outer `.messages` container
+     * remains the scroll surface. */
+    flex-shrink: 0;
   }
 
   .info-header {

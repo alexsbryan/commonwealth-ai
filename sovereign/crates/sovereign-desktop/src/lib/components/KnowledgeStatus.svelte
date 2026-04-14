@@ -2,15 +2,18 @@
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { listCorpora, installCorpus, removeCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures } from "../api";
-  import type { CorpusEntry, CorpusProgressPayload, CorpusHealthDetail } from "../types";
+  import { corpusProgressStore } from "../stores/corpusProgress.svelte";
+  import type { CorpusEntry, CorpusHealthDetail } from "../types";
 
   let corpora: CorpusEntry[] = $state([]);
-  let progress: Record<string, CorpusProgressPayload> = $state({});
+  // Progress payloads come from the singleton `corpusProgressStore` —
+  // don't attach a second listener here. The store's `byId` record
+  // is reactive; `$derived` picks up every progress event.
+  let progress = $derived(corpusProgressStore.byId);
   let expanded: Set<string> = $state(new Set());
   let health: Record<string, CorpusHealthDetail> = $state({});
   let repairing: Set<string> = $state(new Set());
   let building: Set<string> = $state(new Set());
-  let unlisten: UnlistenFn | null = null;
   let unlistenBuildComplete: UnlistenFn | null = null;
   let unlistenBuildError: UnlistenFn | null = null;
 
@@ -40,16 +43,22 @@
 
   onMount(async () => {
     await refresh();
-    unlisten = await listen<CorpusProgressPayload>(
-      "corpus-progress",
-      (event) => {
-        const p = event.payload;
-        progress = { ...progress, [p.corpus_id]: p };
-        if (p.phase === "complete" || p.phase === "failed") {
+    await corpusProgressStore.init();
+    // The store handles incoming progress events; we still want to
+    // refetch the full corpus list on terminal transitions so
+    // `corpora.status` reflects the new installed/not_installed state.
+    // Watch the store for those and debounce-refresh.
+    $effect.root(() => {
+      $effect(() => {
+        const entries = Object.values(corpusProgressStore.byId);
+        if (
+          entries.some((p) => p.phase === "complete" || p.phase === "failed")
+        ) {
           refresh();
         }
-      },
-    );
+      });
+      return () => {};
+    });
     unlistenBuildComplete = await listen<{ corpus_id: string }>(
       "index-build-complete",
       (event) => {
@@ -69,7 +78,6 @@
   });
 
   onDestroy(() => {
-    if (unlisten) unlisten();
     if (unlistenBuildComplete) unlistenBuildComplete();
     if (unlistenBuildError) unlistenBuildError();
   });

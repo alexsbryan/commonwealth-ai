@@ -2,9 +2,9 @@
   import { onMount } from "svelte";
   import { initEventListeners } from "./lib/events";
   import { isSetupComplete } from "./lib/api";
+  import { approvalStore } from "./lib/stores/approval.svelte";
+  import { joinLinkStore } from "./lib/stores/joinLink.svelte";
   import type {
-    ApprovalRequestPayload,
-    UserInputRequestPayload,
     StepDonePayload,
     TaskStep,
   } from "./lib/types";
@@ -24,13 +24,16 @@
   let showSettings = $state(false);
   let showInsights = $state(false);
 
-  // Deep-link join dialog state.
-  let pendingJoinLink: string | null = $state(null);
+  // Deep-link join dialog state — sourced from `joinLinkStore`. Two
+  // writers: the Tauri `deep-link-received` listener (release builds)
+  // and the MeshSettings paste-link input (dev builds where the OS
+  // scheme isn't registered).
+  let pendingJoinLink = $derived(joinLinkStore.pending);
 
-  // Task progress state (shared across chat).
+  // Task progress state (shared across chat). Approval + input state
+  // moved to the `approvalStore` singleton — every consumer reads it
+  // directly, so no prop drilling.
   let taskSteps: TaskStep[] = $state([]);
-  let pendingApproval: ApprovalRequestPayload | null = $state(null);
-  let pendingInput: UserInputRequestPayload | null = $state(null);
 
   onMount(async () => {
     await initEventListeners({
@@ -60,18 +63,18 @@
           ];
         }
       },
-      onApprovalRequest: (payload: ApprovalRequestPayload) => {
-        pendingApproval = payload;
+      onApprovalRequest: (payload) => {
+        approvalStore.send({ type: "APPROVAL_REQUEST_ARRIVED", payload });
       },
-      onUserInputRequest: (payload: UserInputRequestPayload) => {
-        pendingInput = payload;
+      onUserInputRequest: (payload) => {
+        approvalStore.send({ type: "INPUT_REQUEST_ARRIVED", payload });
       },
       onError: (payload) => {
         console.error("Backend error:", payload.message);
       },
       onDeepLink: (url: string) => {
         if (url.startsWith("sovereign://join/")) {
-          pendingJoinLink = url;
+          joinLinkStore.set(url);
         }
       },
     });
@@ -108,8 +111,11 @@
 
   function clearTaskState() {
     taskSteps = [];
-    pendingApproval = null;
-    pendingInput = null;
+    // Approval + input cards clear themselves when the user actually
+    // submits/skips — leaving them pending across a task switch
+    // (e.g. user navigates away mid-approval) is the right default.
+    // If we later want "conversation switch cancels pending" we can
+    // add a CLEAR_ALL event to approvalMachine.
   }
 
   let conversationListRef: ConversationList;
@@ -164,11 +170,7 @@
         <ChatView
           conversationId={selectedConversationId}
           {taskSteps}
-          {pendingApproval}
-          {pendingInput}
           onClearTask={clearTaskState}
-          onApprovalHandled={() => (pendingApproval = null)}
-          onInputHandled={() => (pendingInput = null)}
           onOpenSettings={() => (showSettings = true)}
           onToggleInsights={() => (showInsights = !showInsights)}
           onConversationCreated={handleConversationCreated}
@@ -191,9 +193,9 @@
 {#if pendingJoinLink}
   <MeshJoinDialog
     link={pendingJoinLink}
-    onClose={() => (pendingJoinLink = null)}
+    onClose={() => joinLinkStore.clear()}
     onJoined={() => {
-      pendingJoinLink = null;
+      joinLinkStore.clear();
       showSettings = true;
     }}
   />

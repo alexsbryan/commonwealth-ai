@@ -156,6 +156,7 @@ fn main() {
             mesh_commands::mesh_get_state,
             mesh_commands::mesh_is_running,
             mesh_commands::mesh_leave,
+            mesh_commands::mesh_diagnostics,
             insight_commands::clip_insight,
             insight_commands::list_insights,
             insight_commands::search_insights,

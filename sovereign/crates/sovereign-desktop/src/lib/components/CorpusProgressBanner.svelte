@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import type { CorpusProgressPayload } from "../types";
+  import { onMount } from "svelte";
+  import { corpusProgressStore } from "../stores/corpusProgress.svelte";
 
   interface Props {
     onOpenSettings?: () => void;
@@ -9,9 +8,12 @@
 
   let { onOpenSettings }: Props = $props();
 
-  // Track the most recent in-progress install per corpus.
-  let active: Record<string, CorpusProgressPayload> = $state({});
-  let unlisten: UnlistenFn | null = null;
+  // Single shared listener lives in the store; this component just
+  // reads from it. Multiple instances of the banner (or KnowledgeStatus
+  // mounted in parallel) subscribe to the same underlying source.
+  onMount(async () => {
+    await corpusProgressStore.init();
+  });
 
   // Friendly display names for known corpus IDs.
   const NAMES: Record<string, string> = {
@@ -23,33 +25,7 @@
     crs_reports: "CRS Reports",
   };
 
-  // Visible entries: anything not yet complete or failed.
-  let visible = $derived(
-    Object.values(active).filter(
-      (p) => p.phase !== "complete" && p.phase !== "failed",
-    ),
-  );
-
-  onMount(async () => {
-    unlisten = await listen<CorpusProgressPayload>(
-      "corpus-progress",
-      (event) => {
-        const p = event.payload;
-        if (p.phase === "complete" || p.phase === "failed") {
-          // Remove from active.
-          const next = { ...active };
-          delete next[p.corpus_id];
-          active = next;
-        } else {
-          active = { ...active, [p.corpus_id]: p };
-        }
-      },
-    );
-  });
-
-  onDestroy(() => {
-    if (unlisten) unlisten();
-  });
+  let visible = $derived(corpusProgressStore.active);
 
   function phaseLabel(phase: string): string {
     switch (phase) {

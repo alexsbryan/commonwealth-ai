@@ -1,46 +1,42 @@
 <script lang="ts">
-  import { submitApproval, submitInput } from "../api";
-  import type {
-    ApprovalRequestPayload,
-    UserInputRequestPayload,
-  } from "../types";
+  import { approvalStore } from "../stores/approval.svelte";
 
-  interface Props {
-    approval: ApprovalRequestPayload | null;
-    inputRequest: UserInputRequestPayload | null;
-    onApprovalHandled: () => void;
-    onInputHandled: () => void;
-  }
+  // Reads both slots and the in-flight submission state directly
+  // from the singleton approvalMachine — no props, no parent
+  // coordination. Submitting a decision dispatches an event;
+  // approvalMachine handles the Tauri invoke and clears the slot
+  // on success or failure.
+  let approval = $derived(approvalStore.pendingApproval);
+  let inputRequest = $derived(approvalStore.pendingInput);
 
-  let { approval, inputRequest, onApprovalHandled, onInputHandled }: Props =
-    $props();
+  // The machine's submitting state is region-specific; surface both
+  // so each card can independently disable its buttons.
+  let approvalSubmitting = $derived(
+    approvalStore.snapshot.matches({ approval: "submitting" }),
+  );
+  let inputSubmitting = $derived(
+    approvalStore.snapshot.matches({ input: "submitting" }),
+  );
 
   let inputValue = $state("");
-  let submitting = $state(false);
 
-  async function handleApproval(approved: boolean) {
-    if (!approval || submitting) return;
-    submitting = true;
-    try {
-      await submitApproval(approval.key, approved);
-    } catch (e) {
-      console.error("Failed to submit approval:", e);
-    }
-    submitting = false;
-    onApprovalHandled();
+  function handleApproval(approved: boolean) {
+    if (!approval || approvalSubmitting) return;
+    approvalStore.send({
+      type: "APPROVAL_SUBMIT",
+      key: approval.key,
+      approved,
+    });
   }
 
-  async function handleInput() {
-    if (!inputRequest || submitting || !inputValue.trim()) return;
-    submitting = true;
-    try {
-      await submitInput(inputRequest.key, inputValue.trim());
-    } catch (e) {
-      console.error("Failed to submit input:", e);
-    }
-    submitting = false;
+  function handleInput() {
+    if (!inputRequest || inputSubmitting || !inputValue.trim()) return;
+    approvalStore.send({
+      type: "INPUT_SUBMIT",
+      key: inputRequest.key,
+      response: inputValue.trim(),
+    });
     inputValue = "";
-    onInputHandled();
   }
 </script>
 
@@ -64,14 +60,14 @@
       <button
         class="btn deny"
         onclick={() => handleApproval(false)}
-        disabled={submitting}
+        disabled={approvalSubmitting}
       >
         Deny
       </button>
       <button
         class="btn approve"
         onclick={() => handleApproval(true)}
-        disabled={submitting}
+        disabled={approvalSubmitting}
       >
         Allow
       </button>
@@ -89,14 +85,14 @@
         bind:value={inputValue}
         placeholder="Type your response..."
         onkeydown={(e) => e.key === "Enter" && handleInput()}
-        disabled={submitting}
+        disabled={inputSubmitting}
       />
     </div>
     <div class="card-actions">
       <button
         class="btn approve"
         onclick={handleInput}
-        disabled={submitting || !inputValue.trim()}
+        disabled={inputSubmitting || !inputValue.trim()}
       >
         Submit
       </button>
@@ -111,6 +107,13 @@
     border-radius: var(--radius-lg);
     margin-bottom: 12px;
     overflow: hidden;
+    /* Parent `.messages` is a flex column; combined with `overflow:
+     * hidden` above (needed for rounded-corner clipping), flex's
+     * `min-height: auto` no longer expands to content. Without
+     * `flex-shrink: 0` the card collapses to zero height whenever
+     * messages fill the viewport. See the matching note in
+     * InformationRequestCard.svelte. */
+    flex-shrink: 0;
   }
 
   .card-header {

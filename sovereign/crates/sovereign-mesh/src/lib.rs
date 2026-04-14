@@ -12,6 +12,7 @@
 
 pub mod daemon;
 pub mod deep_link;
+pub mod join;
 pub mod state;
 pub mod types;
 

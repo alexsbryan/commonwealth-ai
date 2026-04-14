@@ -1,6 +1,12 @@
 <script lang="ts">
+  import { useMachine } from "@xstate/svelte";
+  import { fromPromise } from "xstate";
   import { completeSetup } from "../api";
   import type { SetupConfig } from "../types";
+  import {
+    setupWizardMachine,
+    type Persona,
+  } from "../machines/setupWizard.machine";
   import ResearchSetup from "./ResearchSetup.svelte";
   import AssistantSetup from "./AssistantSetup.svelte";
   import DeveloperSetup from "./DeveloperSetup.svelte";
@@ -13,70 +19,67 @@
 
   let { onComplete }: Props = $props();
 
-  type Persona = "research" | "assistant" | "developer";
-  type Step = "persona" | "persona-setup" | "knowledge" | "websearch" | "finishing";
+  // The wizard's state — persona, accumulated config, current step,
+  // and error message — lives on `setupWizardMachine`. The component
+  // reads `$snapshot` and dispatches events; the only side effect it
+  // keeps is the `onComplete` callback, wired to the machine's `done`
+  // terminal state via a subscription below.
+  const machine = setupWizardMachine.provide({
+    actors: {
+      completeSetup: fromPromise(
+        async ({ input }: { input: { config: SetupConfig } }) => {
+          await completeSetup(input.config);
+        },
+      ),
+    },
+  });
+  const { snapshot, send, actorRef } = useMachine(machine);
 
-  let selectedPersona: Persona | null = $state(null);
-  let step: Step = $state("persona");
-  let partialConfig: SetupConfig | null = $state(null);
-  let submitting = $state(false);
-  let error = $state("");
+  // Fire `onComplete` exactly once when the machine reaches `done`.
+  // Using `actorRef.subscribe` rather than a reactive $effect because
+  // the final state is a one-shot transition — we don't want to
+  // refire if the snapshot store emits an unrelated re-read.
+  let hasCompleted = false;
+  actorRef.subscribe((s) => {
+    if (!hasCompleted && s.matches("done")) {
+      hasCompleted = true;
+      onComplete();
+    }
+  });
+
+  // Selected persona surfaces from machine context for step numbering.
+  let selectedPersona: Persona | null = $derived($snapshot.context.persona);
+  let error = $derived($snapshot.context.errorMessage);
 
   let stepNum = $derived(
-    step === "persona" ? 1 :
-    step === "persona-setup" ? 2 :
-    step === "knowledge" ? 3 : 4
+    $snapshot.matches("persona")
+      ? 1
+      : $snapshot.matches("personaSetup")
+        ? 2
+        : $snapshot.matches("knowledge")
+          ? 3
+          : 4,
   );
-
   let totalSteps = $derived(selectedPersona === "developer" ? 3 : 4);
 
   function handlePersonaNext(config: SetupConfig) {
-    partialConfig = config;
-    step = "knowledge";
+    send({ type: "PERSONA_CONFIGURED", config });
   }
 
   function handleKnowledgeSelect(tierId: string) {
-    if (partialConfig) partialConfig.selected_tier = tierId;
-    if (selectedPersona === "developer") {
-      finishSetup();
-    } else {
-      step = "websearch";
-    }
+    send({ type: "TIER_SELECTED", tierId });
   }
 
   function handleKnowledgeSkip() {
-    if (selectedPersona === "developer") {
-      finishSetup();
-    } else {
-      step = "websearch";
-    }
+    send({ type: "SKIP_KNOWLEDGE" });
   }
 
   function handleWebConfigure(provider: string, apiKey: string | null) {
-    if (partialConfig) {
-      partialConfig.search_provider = provider !== "duckduckgo" ? provider : undefined;
-      partialConfig.search_api_key = apiKey ?? undefined;
-    }
-    finishSetup();
+    send({ type: "WEB_CONFIGURED", provider, apiKey });
   }
 
   function handleWebSkip() {
-    finishSetup();
-  }
-
-  async function finishSetup() {
-    if (!partialConfig) return;
-    step = "finishing";
-    submitting = true;
-    error = "";
-    try {
-      await completeSetup(partialConfig);
-      onComplete();
-    } catch (e) {
-      error = `Setup failed: ${e}`;
-      step = "knowledge";
-    }
-    submitting = false;
+    send({ type: "SKIP_WEBSEARCH" });
   }
 </script>
 
@@ -89,7 +92,7 @@
       <span class="wizard-name">SOVEREIGN</span>
     </div>
 
-    {#if step !== "finishing"}
+    {#if !$snapshot.matches("finishing") && !$snapshot.matches("done")}
       <nav class="step-track" aria-label="Setup progress, step {stepNum} of {totalSteps}">
         {#each Array(totalSteps) as _, i}
           {#if i > 0}
@@ -107,7 +110,7 @@
   </header>
 
   <!-- ── Persona selection — two-column layout ── -->
-  {#if step === "persona"}
+  {#if $snapshot.matches("persona")}
     <div class="persona-step">
 
       <!-- Left ambient panel -->
@@ -136,7 +139,7 @@
 
             <button
               class="persona-card research"
-              onclick={() => { selectedPersona = "research"; step = "persona-setup"; }}
+              onclick={() => send({ type: "PERSONA_SELECTED", persona: "research" })}
             >
               <div class="card-stripe"></div>
               <div class="card-body">
@@ -158,7 +161,7 @@
 
             <button
               class="persona-card assistant"
-              onclick={() => { selectedPersona = "assistant"; step = "persona-setup"; }}
+              onclick={() => send({ type: "PERSONA_SELECTED", persona: "assistant" })}
             >
               <div class="card-stripe"></div>
               <div class="card-body">
@@ -178,7 +181,7 @@
 
             <button
               class="persona-card developer"
-              onclick={() => { selectedPersona = "developer"; step = "persona-setup"; }}
+              onclick={() => send({ type: "PERSONA_SELECTED", persona: "developer" })}
             >
               <div class="card-stripe"></div>
               <div class="card-body">
@@ -204,30 +207,33 @@
     </div>
 
   <!-- ── Form steps ── -->
-  {:else if step === "persona-setup" || step === "knowledge" || step === "websearch"}
+  {:else if $snapshot.matches("personaSetup") || $snapshot.matches("knowledge") || $snapshot.matches("websearch")}
     <div class="step-body">
-      {#if step === "persona-setup" && selectedPersona === "research"}
+      {#if $snapshot.matches("personaSetup") && selectedPersona === "research"}
         <ResearchSetup
           onNext={handlePersonaNext}
-          onBack={() => { step = "persona"; selectedPersona = null; }}
+          onBack={() => send({ type: "BACK_TO_PERSONA" })}
         />
-      {:else if step === "persona-setup" && selectedPersona === "assistant"}
+      {:else if $snapshot.matches("personaSetup") && selectedPersona === "assistant"}
         <AssistantSetup
           onNext={handlePersonaNext}
-          onBack={() => { step = "persona"; selectedPersona = null; }}
+          onBack={() => send({ type: "BACK_TO_PERSONA" })}
         />
-      {:else if step === "persona-setup" && selectedPersona === "developer"}
+      {:else if $snapshot.matches("personaSetup") && selectedPersona === "developer"}
         <DeveloperSetup
           onNext={handlePersonaNext}
-          onBack={() => { step = "persona"; selectedPersona = null; }}
+          onBack={() => send({ type: "BACK_TO_PERSONA" })}
         />
-      {:else if step === "knowledge" && selectedPersona}
+      {:else if $snapshot.matches("knowledge") && selectedPersona}
+        {#if error}
+          <p class="finishing-error" style="margin-bottom: 12px;">{error}</p>
+        {/if}
         <KnowledgeBaseSetup
           persona={selectedPersona}
           onSelect={handleKnowledgeSelect}
           onSkip={handleKnowledgeSkip}
         />
-      {:else if step === "websearch"}
+      {:else if $snapshot.matches("websearch")}
         <WebSearchSetup
           onConfigure={handleWebConfigure}
           onSkip={handleWebSkip}
@@ -236,11 +242,10 @@
     </div>
 
   <!-- ── Finishing ── -->
-  {:else if step === "finishing"}
+  {:else if $snapshot.matches("finishing")}
     <div class="finishing-screen">
       {#if error}
         <p class="finishing-error">{error}</p>
-        <button class="finishing-back" onclick={() => { step = "knowledge"; }}>Go back</button>
       {:else}
         <div class="finishing-mark-wrap" aria-hidden="true">
           <div class="f-ring f-ring-1"></div>
@@ -670,17 +675,4 @@
     line-height: 1.5;
   }
 
-  .finishing-back {
-    padding: 8px 20px;
-    border: 1px solid var(--border-mid);
-    border-radius: var(--radius);
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    transition: border-color 0.2s, color 0.2s;
-  }
-
-  .finishing-back:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
 </style>

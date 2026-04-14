@@ -6,11 +6,24 @@
     meshIsRunning,
     meshLeave,
   } from "../api";
+  import { joinLinkStore } from "../stores/joinLink.svelte";
+  import MeshDiagnosticsPanel from "./MeshDiagnosticsPanel.svelte";
   import type {
     CreateMeshResponse,
     MeshStateResponse,
     MeshMember,
   } from "../types";
+
+  // `sovereign://join/cwth-XXXX-XXXX-XXXX` with optional query params.
+  // Cheap client-side guard; the real parser lives in
+  // `commonwealth-discovery::deep_link::parse_deep_link`. Kept in sync
+  // with `membership::generate_join_key`'s 3×4-hex-segment format.
+  const JOIN_LINK_PATTERN =
+    /^sovereign:\/\/join\/cwth-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}(\?.*)?$/i;
+
+  // Paste-link form state — dev-mode bypass for the OS scheme handler.
+  let joinLinkInput = $state("");
+  let joinLinkError = $state("");
 
   // ── State ───────────────────────────────────────────────
   let running = $state(false);
@@ -72,6 +85,26 @@
     showCreateForm = true;
     meshNameInput = "";
     createResult = null;
+  }
+
+  /** Validate then hand a pasted `sovereign://join/...` URL to the
+   *  `joinLinkStore` — App.svelte picks it up and pops
+   *  `MeshJoinDialog`, reusing the exact flow the OS deep-link
+   *  listener drives in release builds. */
+  function submitJoinLink() {
+    joinLinkError = "";
+    const link = joinLinkInput.trim();
+    if (!link) {
+      joinLinkError = "Paste a join link first.";
+      return;
+    }
+    if (!JOIN_LINK_PATTERN.test(link)) {
+      joinLinkError =
+        "That doesn't look like a Sovereign join link. Expected `sovereign://join/cwth-xxxx-xxxx-xxxx`.";
+      return;
+    }
+    joinLinkStore.set(link);
+    joinLinkInput = "";
   }
 
   function cancelCreate() {
@@ -173,10 +206,27 @@
       </p>
       <div class="actions">
         <button class="primary" onclick={openCreateForm}>Create a mesh</button>
+      </div>
+
+      <div class="join-section">
+        <p class="section-label">Joining a friend's mesh?</p>
         <p class="hint">
-          Want to join a friend's mesh instead? Open the
-          <code>sovereign://join/…</code> link they shared with you.
+          Open the <code>sovereign://join/…</code> link they shared, or
+          paste it below (useful when running from source).
         </p>
+        <div class="join-row">
+          <input
+            type="text"
+            class="join-input"
+            placeholder="sovereign://join/cwth-xxxx-xxxx-xxxx"
+            bind:value={joinLinkInput}
+            onkeydown={(e) => e.key === "Enter" && submitJoinLink()}
+          />
+          <button class="primary" onclick={submitJoinLink}>Preview</button>
+        </div>
+        {#if joinLinkError}
+          <div class="alert error small">{joinLinkError}</div>
+        {/if}
       </div>
     </div>
   {/if}
@@ -351,6 +401,10 @@
       </div>
     </div>
   {/if}
+
+  <!-- Network diagnostics — always shown so the user can see
+       whether their daemon is up and what peers mDNS has found. -->
+  <MeshDiagnosticsPanel />
 </div>
 
 <style>
@@ -406,6 +460,49 @@
     padding: 1px 5px;
     border-radius: 3px;
     font-size: 0.78rem;
+  }
+
+  .join-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .section-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .join-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .join-input {
+    flex: 1;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.85rem;
+    outline: none;
+  }
+  .join-input:focus {
+    border-color: var(--accent);
+  }
+
+  .alert.small {
+    font-size: 0.78rem;
+    padding: 6px 10px;
   }
 
   /* ── Buttons ─────────────────────────────────────── */

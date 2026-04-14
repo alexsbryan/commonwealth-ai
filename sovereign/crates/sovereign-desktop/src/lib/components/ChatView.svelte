@@ -43,11 +43,7 @@
   interface Props {
     conversationId: string | null;
     taskSteps: TaskStep[];
-    pendingApproval: ApprovalRequestPayload | null;
-    pendingInput: UserInputRequestPayload | null;
     onClearTask: () => void;
-    onApprovalHandled: () => void;
-    onInputHandled: () => void;
     onOpenSettings?: () => void;
     onToggleInsights?: () => void;
     onConversationCreated?: (id: string) => void;
@@ -56,11 +52,7 @@
   let {
     conversationId,
     taskSteps,
-    pendingApproval,
-    pendingInput,
     onClearTask,
-    onApprovalHandled,
-    onInputHandled,
     onOpenSettings,
     onToggleInsights,
     onConversationCreated,
@@ -573,12 +565,7 @@
 
       <TaskProgress steps={taskSteps} />
 
-      <ApprovalCard
-        approval={pendingApproval}
-        inputRequest={pendingInput}
-        {onApprovalHandled}
-        {onInputHandled}
-      />
+      <ApprovalCard />
 
       <InformationRequestCard
         request={pendingInfoRequest}

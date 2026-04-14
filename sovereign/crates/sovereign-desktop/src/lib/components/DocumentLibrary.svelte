@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
   import {
     listDocumentAssets,
     uploadDocumentAsset,
     deleteDocumentAsset,
   } from "../api";
-  import type { DocumentAsset, AssetState, DocumentProgressPayload } from "../types";
+  import { documentIngestionStore } from "../stores/documentIngestion.svelte";
+  import type { DocumentAsset, AssetState } from "../types";
 
   interface Props {
     onOpen: (asset: DocumentAsset) => void;
@@ -16,7 +16,7 @@
   let { onOpen }: Props = $props();
 
   let documents: DocumentAsset[] = $state([]);
-  let unlisten: (() => void) | undefined;
+  let unsubscribeTerminal: (() => void) | undefined;
 
   onMount(async () => {
     try {
@@ -25,23 +25,19 @@
       console.error("Failed to load documents:", e);
     }
 
-    unlisten = await listen<DocumentProgressPayload>(
-      "document:progress",
-      ({ payload }) => {
-        if (
-          payload.type === "Ready" ||
-          payload.type === "RagAvailable" ||
-          payload.type === "Failed"
-        ) {
-          listDocumentAssets()
-            .then((docs) => (documents = docs))
-            .catch(() => {});
-        }
-      },
-    );
+    // One shared `document:progress` listener lives in the store.
+    // We only need to know about terminal transitions here (to
+    // refetch the server-side asset list + pick up any late metadata
+    // the progress stream didn't carry).
+    await documentIngestionStore.init();
+    unsubscribeTerminal = documentIngestionStore.onTerminal(() => {
+      listDocumentAssets()
+        .then((docs) => (documents = docs))
+        .catch(() => {});
+    });
   });
 
-  onDestroy(() => unlisten?.());
+  onDestroy(() => unsubscribeTerminal?.());
 
   async function handleAdd() {
     const selected = await open({

@@ -105,6 +105,51 @@ pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     state.mesh.stop().await.map_err(|e| e.to_string())
 }
 
+// ── Diagnostics ──────────────────────────────────────────
+//
+// Surfaces the mDNS discovery table to the UI so the user can
+// visually confirm that two machines on the same LAN can see each
+// other. Without this, a join failure is indistinguishable from a
+// successful join with silent peer invisibility.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveredPeerDto {
+    pub node_id: String,
+    pub mesh_id_hex: String,
+    pub name: String,
+    pub address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeshDiagnostics {
+    pub discovered_peers: Vec<DiscoveredPeerDto>,
+    pub daemon_running: bool,
+}
+
+/// Snapshot of mDNS-discovered peers and daemon health. Polled by
+/// the MeshDiagnosticsPanel every few seconds.
+#[tauri::command]
+pub async fn mesh_diagnostics(
+    state: State<'_, Arc<AppState>>,
+) -> Result<MeshDiagnostics, String> {
+    let peers = state
+        .mesh
+        .discovered_peers()
+        .await
+        .into_iter()
+        .map(|p| DiscoveredPeerDto {
+            node_id: p.node_id.to_string(),
+            mesh_id_hex: p.mesh_id_hex,
+            name: p.name,
+            address: p.address.to_string(),
+        })
+        .collect();
+    Ok(MeshDiagnostics {
+        discovered_peers: peers,
+        daemon_running: state.mesh.is_running().await,
+    })
+}
+
 // ── Serializable wrappers for MeshState ──────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
