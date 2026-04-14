@@ -4,7 +4,18 @@
 //! or database — they manage the embedded Commonwealth daemon and corpus
 //! indexes.
 
+use std::path::PathBuf;
+
 use sovereign_mesh::{parse_deep_link, EmbeddedDaemon};
+
+/// Same location the desktop app uses: `<data_dir>/sovereign/`.
+/// Sharing the path means a mesh created from the CLI is picked up
+/// by the next desktop launch (and vice versa).
+fn mesh_data_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("sovereign")
+}
 
 /// Run a mesh subcommand. Returns the exit code.
 pub async fn run_mesh(args: &[String]) -> i32 {
@@ -109,7 +120,7 @@ async fn cmd_create(args: &[String]) -> i32 {
 
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
-    let daemon = EmbeddedDaemon::new();
+    let daemon = EmbeddedDaemon::new(mesh_data_dir());
     match daemon.create_mesh(&mesh_name, &node_name).await {
         Ok(result) => {
             println!();
@@ -146,7 +157,7 @@ async fn cmd_join(args: &[String]) -> i32 {
     };
 
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
-    let daemon = EmbeddedDaemon::new();
+    let daemon = EmbeddedDaemon::new(mesh_data_dir());
 
     match daemon.join_mesh(&link, &node_name).await {
         Ok(result) => {
