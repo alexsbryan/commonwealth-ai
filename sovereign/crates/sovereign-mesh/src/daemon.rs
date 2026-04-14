@@ -134,12 +134,12 @@ impl EmbeddedDaemon {
             return Err(MeshError::AlreadyRunning);
         }
 
-        let (join_key, url_mesh_name) = match link {
+        let (join_key, url_mesh_name, relay_hint) = match link {
             DeepLink::Join {
                 join_key,
                 mesh_name,
-                ..
-            } => (join_key.clone(), mesh_name.clone()),
+                relay_hint,
+            } => (join_key.clone(), mesh_name.clone(), relay_hint.clone()),
         };
         let mesh_name = url_mesh_name
             .clone()
@@ -180,6 +180,7 @@ impl EmbeddedDaemon {
             &join_key,
             node_name,
             vec![addr],
+            relay_hint.as_deref(),
             mdns.as_ref(),
             std::time::Duration::from_secs(5),
         )

@@ -70,14 +70,65 @@ Expected sequence on the joiner: `mDNS service registered` →
 `handshake_accepted`. Absence of `discovered peer` means mDNS is
 blocked (firewall, VPN, different subnets).
 
+## Joining over Tailscale / Headscale (or any overlay VPN)
+
+Tailscale gives every tailnet peer a `100.x.x.x` address and
+encrypted point-to-point routing, but it does **not forward UDP
+multicast** — so our mDNS-based discovery fails silently across a
+tailnet even though the HTTP route is reachable. Workaround: include
+the founder's tailnet address in the join URL as a `?relay=` hint.
+The joiner tries the hint directly before (and independently of) the
+mDNS loop, and it remains a pure addition — if the hint doesn't
+resolve, we still fall back to mDNS.
+
+### Workflow
+
+1. On Machine A, find its tailnet IP (`tailscale ip -4`) or the
+   MagicDNS hostname (e.g. `machine-a.tailnet-abc123.ts.net`).
+2. Create the mesh in the desktop app. You'll get a URL like:
+   ```
+   sovereign://join/cwth-d26f-cae1-65c6?name=The+Masonics
+   ```
+3. **Append the address as a `relay` param** before sharing:
+   ```
+   sovereign://join/cwth-d26f-cae1-65c6?name=The+Masonics&relay=100.64.0.5
+   ```
+   The port defaults to `9742` — append `:<port>` only if you've
+   changed the internal API bind. Hostnames work too:
+   ```
+   …&relay=machine-a.tailnet-abc123.ts.net
+   ```
+4. On Machine B (also on the tailnet), paste the modified URL into
+   Settings → Mesh. Within a couple of seconds you'll see
+   `handshake_sent: direct-peer hint, POST /internal/join` followed
+   by `handshake_accepted`.
+
+### Gotchas
+
+- **Firewall on Machine A.** The internal API binds `0.0.0.0:9742`,
+  but macOS's application firewall will prompt to allow the binary
+  the first time it's reached from a tailnet peer. Allow it.
+- **`relay_hint` is a misleading name**, kept for URL-scheme stability
+  (the `relay_hint` field in `DeepLink` is parsed by older builds
+  too). Today it's treated as "try this peer directly" rather than
+  "use this rendezvous service"; true relay discovery is still
+  future work.
+- **mDNS happens anyway.** Even with a `relay=` hint, mDNS starts up
+  and will discover LAN peers. If you run one machine both on the
+  tailnet and the LAN, you may see the same peer twice in the
+  diagnostics panel — cosmetic, not a bug.
+
 ## Out of scope (v1)
 
-- **Off-LAN / relay-based discovery.** `relay_hint` is parsed from
-  the deep link but goes nowhere today. Needs a rendezvous service.
+- **True rendezvous-based discovery.** Tailscale works (see above)
+  because the joiner already knows the founder's stable address.
+  Bootstrapping across the public internet without a side channel
+  (shared link + reachable host) still needs a rendezvous service
+  — future work.
 - **Plain HTTP on the join handshake.** The join_key is exposed on
-  the LAN during the handshake. Acceptable trust model for v1
-  ("shared via trusted chat"). Gossip uses mutual TLS post-handshake
-  via the existing `TrustStore`.
+  whatever network the handshake traverses (LAN, tailnet). Acceptable
+  trust model for v1 ("shared via trusted chat"). Gossip uses mutual
+  TLS post-handshake via the existing `TrustStore`.
 - **Persistent mesh state across restarts.** `Mesh` lives in
   memory; quit the app and rejoin to rebuild.
 - **CLI `sovereign mesh join <url>`.** The command works but its
