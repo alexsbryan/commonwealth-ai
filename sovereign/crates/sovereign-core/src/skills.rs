@@ -344,8 +344,24 @@ impl SkillRegistry {
         }
     }
 
+    /// Register a skill by id, **replacing** any existing skill with
+    /// the same id. "Later wins" — important because callers chain
+    /// registrations from multiple sources (built-in `include_str!`
+    /// defaults, workspace dev overlay, user skills dir) and expect
+    /// the last-loaded version to be the one that takes effect.
+    ///
+    /// Previously this was a naive `push`, which meant a skill loaded
+    /// twice (e.g. a built-in that also exists in the dev workspace
+    /// overlay) produced duplicate ids in `list()`. The Svelte UI's
+    /// keyed `{#each (skill.id)}` block then crashed with a
+    /// duplicate-key error and bailed mid-render, freezing the panel
+    /// on its previous state ("Loading skills…").
     pub fn register(&mut self, skill: Skill) {
-        self.skills.push(skill);
+        if let Some(existing) = self.skills.iter_mut().find(|s| s.id == skill.id) {
+            *existing = skill;
+        } else {
+            self.skills.push(skill);
+        }
     }
 
     /// Load skills from a directory and register them all.

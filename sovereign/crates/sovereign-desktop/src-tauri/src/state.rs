@@ -760,4 +760,32 @@ provider = "duckduckgo"
             BUILTIN_SKILLS.len(),
         );
     }
+
+    #[test]
+    fn registering_same_skill_twice_does_not_duplicate() {
+        // In dev builds, `bootstrap()` first registers built-ins via
+        // `include_str!` and then loads the workspace `skills/` directory
+        // as a live overlay. If these two paths register the same skill
+        // id, the registry must treat the second as an *override*, not
+        // an append. Svelte's `{#each (skill.id)}` crashes on duplicate
+        // keys and bails mid-render — users saw "Loading skills…"
+        // freeze on screen in browser console `each_key_duplicate`.
+        let mut reg = sovereign_core::SkillRegistry::new();
+        register_builtin_skills(&mut reg);
+        register_builtin_skills(&mut reg); // duplicate pass
+        assert_eq!(
+            reg.list().len(),
+            BUILTIN_SKILLS.len(),
+            "registering the same built-ins twice must not double the count"
+        );
+        let mut ids: Vec<&str> = reg.list().iter().map(|s| s.id.as_str()).collect();
+        ids.sort();
+        let before_dedupe = ids.len();
+        ids.dedup();
+        assert_eq!(
+            ids.len(),
+            before_dedupe,
+            "registry must contain no duplicate ids after double-registration"
+        );
+    }
 }
