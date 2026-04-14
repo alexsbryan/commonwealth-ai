@@ -18,6 +18,15 @@ const SERVICE_TYPE: &str = "_commonwealth._tcp.local.";
 pub struct DiscoveredPeer {
     pub node_id: NodeId,
     pub mesh_id_hex: String,
+    /// The peer's *mesh* name (e.g. "Masonic Mesh") — what the
+    /// joiner matches on to decide whether this is the right mesh
+    /// to handshake with. May be empty for peers advertising via
+    /// older builds that only broadcast `name` as the node name.
+    pub mesh_name: String,
+    /// The peer's *node* name — the human-readable label of the
+    /// machine itself (usually the system hostname or the
+    /// `node_name` the founder supplied). Used for display in
+    /// diagnostics, not for mesh membership decisions.
     pub name: String,
     pub address: SocketAddr,
 }
@@ -31,9 +40,18 @@ pub struct MdnsDiscovery {
 
 impl MdnsDiscovery {
     /// Register this node on the local network via mDNS.
+    ///
+    /// `node_name` is the human label for this machine (hostname or
+    /// the user-supplied node name). `mesh_name` is the name of the
+    /// mesh this node belongs to — used by the joiner to filter
+    /// candidates. They were historically conflated into a single
+    /// `name` TXT field, which meant the joiner's filter
+    /// `peer.name == mesh_name` never matched; `perform_join`
+    /// unconditionally timed out with `NoPeerFound`.
     pub fn new(
         node_id: NodeId,
         mesh_id_hex: &str,
+        mesh_name: &str,
         node_name: &str,
         internal_port: u16,
     ) -> Result<Self> {
@@ -46,6 +64,9 @@ impl MdnsDiscovery {
         let mut properties = HashMap::new();
         properties.insert("node_id".to_string(), format!("{node_id}"));
         properties.insert("mesh_id".to_string(), mesh_id_hex.to_string());
+        properties.insert("mesh_name".to_string(), mesh_name.to_string());
+        // Keep `name` for backwards compat with older peers that
+        // treated it as the node name.
         properties.insert("name".to_string(), node_name.to_string());
 
         let service = ServiceInfo::new(
@@ -66,6 +87,8 @@ impl MdnsDiscovery {
             node_id = %node_id,
             service_type = SERVICE_TYPE,
             port = internal_port,
+            mesh_name,
+            node_name,
             "mDNS service registered"
         );
 
@@ -113,6 +136,8 @@ impl MdnsDiscovery {
                                     props.get_property_val_str("node_id").unwrap_or_default();
                                 let mesh_id_hex =
                                     props.get_property_val_str("mesh_id").unwrap_or_default();
+                                let mesh_name =
+                                    props.get_property_val_str("mesh_name").unwrap_or_default();
                                 let name = props.get_property_val_str("name").unwrap_or_default();
 
                                 // Pick the first address.
@@ -121,10 +146,12 @@ impl MdnsDiscovery {
 
                                 if let Some(ip) = addr {
                                     let socket_addr = SocketAddr::new(ip, port);
-                                    debug!(
+                                    info!(
                                         peer_name = name,
+                                        mesh_name = mesh_name,
+                                        mesh_id = %mesh_id_hex,
                                         address = %socket_addr,
-                                        "discovered peer via mDNS"
+                                        "mDNS: discovered peer"
                                     );
 
                                     // We can't easily parse NodeId from display string,
@@ -134,6 +161,7 @@ impl MdnsDiscovery {
                                         // from the gossip handshake.
                                         node_id: NodeId::generate(),
                                         mesh_id_hex: mesh_id_hex.to_string(),
+                                        mesh_name: mesh_name.to_string(),
                                         name: name.to_string(),
                                         address: socket_addr,
                                     };
