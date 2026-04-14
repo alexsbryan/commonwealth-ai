@@ -1,17 +1,54 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { listSkills, toggleSkill } from "../api";
   import type { SkillEntry } from "../types";
 
   let skills: SkillEntry[] = $state([]);
   let toggling: string | null = $state(null);
+  // Three UI states: "loading" (initial fetch in flight / backend still
+  // bootstrapping), "ready" (fetch succeeded), "error" (fetch failed for
+  // reasons other than backend-loading). Distinct from skills.length === 0
+  // because "no skills installed" and "can't see skills yet" look the
+  // same to the user and the old UI conflated them.
+  type Status = "loading" | "ready" | "error";
+  let status: Status = $state("loading");
+  let errorMessage = $state("");
+  let unlistenBackendReady: UnlistenFn | null = null;
 
-  onMount(async () => {
+  async function fetchSkills() {
     try {
       skills = await listSkills();
+      status = "ready";
+      errorMessage = "";
     } catch (e) {
-      console.error("Failed to load skills:", e);
+      // Runtime not yet installed — bootstrap is still running. Stay in
+      // "loading" state and wait for `backend-ready` to refetch rather
+      // than displaying the misleading "No skills found" on a cold start.
+      const msg = String(e);
+      if (msg.toLowerCase().includes("backend is still loading")) {
+        status = "loading";
+      } else {
+        console.error("Failed to load skills:", e);
+        status = "error";
+        errorMessage = msg;
+      }
     }
+  }
+
+  onMount(async () => {
+    // If the user opens Settings → Skills before bootstrap finishes, the
+    // first fetch returns "Backend is still loading." Listen for
+    // `backend-ready` and refetch so the list populates automatically
+    // without the user having to close and reopen the panel.
+    unlistenBackendReady = await listen("backend-ready", () => {
+      fetchSkills();
+    });
+    await fetchSkills();
+  });
+
+  onDestroy(() => {
+    unlistenBackendReady?.();
   });
 
   async function handleToggle(skill: SkillEntry) {
@@ -30,7 +67,11 @@
 
 <div class="skill-manager">
   <h3>Skills</h3>
-  {#if skills.length === 0}
+  {#if status === "loading"}
+    <p class="empty">Loading skills…</p>
+  {:else if status === "error"}
+    <p class="empty">Could not load skills: {errorMessage}</p>
+  {:else if skills.length === 0}
     <p class="empty">No skills found. Place skill directories in your skills folder.</p>
   {:else}
     {#each skills as skill (skill.id)}
