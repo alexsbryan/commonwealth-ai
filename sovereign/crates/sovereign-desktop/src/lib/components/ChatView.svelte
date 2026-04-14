@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { produce } from "immer";
+  import { useMachine } from "@xstate/svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import {
     sendMessageStream,
@@ -30,6 +30,7 @@
     MessageRefinedPayload,
   } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
+  import { chatMachine } from "../machines/chat.machine";
   import { insightStore } from "../stores/insights.svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import TaskProgress from "./TaskProgress.svelte";
@@ -65,26 +66,60 @@
     onConversationCreated,
   }: Props = $props();
 
-  let messages: MessageEntry[] = $state([]);
+  // ── chatMachine — owns messages, streaming, info-request state ─
+  //
+  // Everything in the conversation pane that used to live as separate
+  // $state vars (messages, streamingMessageId, pendingInfoRequest,
+  // activeConversationId) now lives as chatMachine context. Updates
+  // go through `send(event)` and hit immer's produce() internally, so
+  // a class of "shallow mutation doesn't propagate to consumers" bugs
+  // — notably the provenance-doesn't-appear-until-chat-cycled one —
+  // is structurally impossible. See docs/frontend-state.md.
+  const { snapshot, send } = useMachine(chatMachine);
+
+  // ── Purely-local UI state (no cross-component coordination) ──
   let inputText = $state("");
-  let isLoading = $state(false);
   let messagesContainer: HTMLDivElement;
 
-  // Document attachment state.
+  // Document attachment (picker / legacy ingest). Kept local: nothing
+  // else in the app reads it, and it's discarded at send time.
   let attachment = $state<{
     source: string;
     filePath: string;
     chunksCreated: number;
   } | null>(null);
   let isIngesting = $state(false);
-
-  // Document asset picker state.
   let showDocPicker = $state(false);
   let attachedAsset: DocumentAsset | null = $state(null);
-  let activeConversationId: string | null = $state(null);
-  let streamingMessageId: string | null = $state(null);
+
+  // Tracks whether a non-streaming API call (askDocument, searchWeb)
+  // is currently in flight. Merged with the machine's streaming state
+  // to produce the unified `isLoading` derived below.
+  let docOpInFlight = $state(false);
+
+  // Transient doc-progress / doc-op progress text. Not worth modelling
+  // as state — it's label soup emitted by the tools layer.
   let docProgressText: string | null = $state(null);
+
+  // WordBufferedStream prevents mid-word rendering during streaming.
+  // Component-local (one instance per ChatView mount) because it holds
+  // no semantic state — only output-smoothing.
   let wordBuffer = new WordBufferedStream();
+
+  // Unified loading flag surfaced to the template. `streaming` covers
+  // the Tauri stream case; `docOpInFlight` covers non-streaming API
+  // calls. Either implies we're waiting on the backend.
+  let isLoading = $derived(
+    $snapshot.matches({ turn: "streaming" }) || docOpInFlight,
+  );
+
+  // Convenience snapshot accessors. Svelte 5 re-derives whenever
+  // `$snapshot` changes (which is on every event send).
+  let messages = $derived($snapshot.context.messages);
+  let streamingMessageId = $derived($snapshot.context.streamingMessageId);
+  let pendingInfoRequest = $derived($snapshot.context.pendingInfoRequest);
+  let activeConversationId = $derived($snapshot.context.conversationId);
+
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenComplete: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
@@ -94,38 +129,27 @@
   let unlistenInfoRequest: UnlistenFn | null = null;
   let unlistenMessageRefined: UnlistenFn | null = null;
 
-  // Pending information-request from the agent (epistemic humility mode).
-  // Rendered as a dedicated card below the conversation. Cleared when the
-  // user submits or skips, or when the conversation changes.
-  let pendingInfoRequest: InformationRequestPayload | null = $state(null);
-
+  // Sync the external `conversationId` prop into the machine. `HYDRATE`
+  // loads the conversation (or resets to empty). Runs whenever the
+  // parent changes the selected conversation.
   $effect(() => {
     if (conversationId !== activeConversationId) {
-      activeConversationId = conversationId;
-      loadConversation();
+      loadConversation(conversationId);
     }
   });
 
   onMount(async () => {
+    // Stream handlers now forward into the machine. The wordBuffer
+    // stays component-local (pure output smoothing) — only flushed
+    // words are sent as MESSAGE_CHUNK, so the machine never has to
+    // know about buffering.
     unlistenChunk = await listen<MessageChunkPayload>(
       "message-chunk",
       (event) => {
         const p = event.payload;
-        if (p.message_id !== streamingMessageId) return;
         const flushed = wordBuffer.push(p.chunk);
         if (flushed !== null) {
-          const idx = messages.findIndex((m) => m.id === p.message_id);
-          if (idx !== -1) {
-            // See the note on the message-complete handler below. Same
-            // reasoning: nested mutation of a $state proxy doesn't
-            // invalidate $derived closures that already read the prop
-            // on the consumer. `produce()` returns a new top-level array
-            // with a new message object at `idx`, which forces the prop
-            // reference to change and downstream reactivity to fire.
-            messages = produce(messages, (draft) => {
-              draft[idx].content += flushed;
-            });
-          }
+          send({ type: "MESSAGE_CHUNK", messageId: p.message_id, text: flushed });
           scrollToBottom();
         }
       },
@@ -135,47 +159,21 @@
       "message-complete",
       (event) => {
         const p = event.payload;
-        if (p.message_id !== streamingMessageId) return;
-        const idx = messages.findIndex((m) => m.id === p.message_id);
-        if (idx !== -1) {
-          const remaining = wordBuffer.flush();
-          // Fold all updates into a single `produce()` call so the
-          // resulting array is reassigned exactly once. The previous
-          // "nested mutate then spread the outer array" pattern caused
-          // the provenance bug: the metadata prop kept pointing at the
-          // same object reference, so `$derived(metadata?.provenance)`
-          // in AssistantMessage.svelte never re-ran until the
-          // conversation was cycled and the messages were rehydrated
-          // from disk with fresh object references.
-          messages = produce(messages, (draft) => {
-            if (remaining) draft[idx].content += remaining;
-            // Non-streaming fallback: placeholder may be empty.
-            if (draft[idx].content.length === 0) {
-              draft[idx].content = p.full_text;
-            }
-            // Provenance / retrieved_chunks arrive with message-complete
-            // after the backend persists the message.
-            if (p.metadata) draft[idx].metadata = p.metadata;
-          });
-        }
-        streamingMessageId = null;
-        isLoading = false;
+        const pendingText = wordBuffer.flush();
+        send({
+          type: "MESSAGE_COMPLETE",
+          messageId: p.message_id,
+          fullText: p.full_text,
+          pendingText,
+          metadata: p.metadata,
+        });
         docProgressText = null;
         scrollToBottom();
       },
     );
 
     unlistenError = await listen<ErrorPayload>("message-error", (event) => {
-      if (!streamingMessageId) return;
-      const idx = messages.findIndex((m) => m.id === streamingMessageId);
-      if (idx !== -1) {
-        const errMsg = event.payload.message;
-        messages = produce(messages, (draft) => {
-          draft[idx].content = `${draft[idx].content}\n\nError: ${errMsg}`;
-        });
-      }
-      streamingMessageId = null;
-      isLoading = false;
+      send({ type: "MESSAGE_ERROR", error: event.payload.message });
       docProgressText = null;
     });
 
@@ -215,33 +213,31 @@
       },
     );
 
-    // Epistemic humility mode: the runtime surfaces an
-    // InformationRequest when its evidence is thin. We render a
-    // dedicated card; the user pastes content (or skips) and the
-    // runtime either refines the answer or moves on.
+    // Epistemic humility mode — forwarded into the machine's parallel
+    // infoRequest region. Conversation-switch clearing is handled by
+    // HYDRATE/RESET inside the machine, not the listener.
     unlistenInfoRequest = await listen<InformationRequestPayload>(
       "information-request",
       (event) => {
-        pendingInfoRequest = event.payload;
+        send({ type: "INFO_REQUEST_ARRIVED", payload: event.payload });
         scrollToBottom();
       },
     );
 
-    // Post-stream refinement: the runtime has re-synthesised a
-    // previously-streamed assistant message with user-supplied
-    // content. Replace the bubble's content in place.
+    // Post-stream refinement. The machine's guard drops the event
+    // when the conversation id has moved on (user switched chats
+    // mid-refinement).
     unlistenMessageRefined = await listen<MessageRefinedPayload>(
       "message-refined",
       (event) => {
         const p = event.payload;
-        if (p.conversation_id !== activeConversationId) return;
-        const idx = messages.findIndex((m) => m.id === p.message_id);
-        if (idx !== -1) {
-          messages = produce(messages, (draft) => {
-            draft[idx].content = p.new_content;
-          });
-          scrollToBottom();
-        }
+        send({
+          type: "MESSAGE_REFINED",
+          conversationId: p.conversation_id,
+          messageId: p.message_id,
+          newContent: p.new_content,
+        });
+        scrollToBottom();
       },
     );
   });
@@ -296,17 +292,25 @@
     }
   }
 
-  async function loadConversation() {
-    messages = [];
+  async function loadConversation(targetId: string | null) {
     onClearTask();
-    if (!activeConversationId) return;
+    if (!targetId) {
+      send({ type: "RESET" });
+      return;
+    }
 
     try {
-      const detail = await getConversation(activeConversationId);
-      messages = detail.messages;
+      const detail = await getConversation(targetId);
+      send({
+        type: "HYDRATE",
+        conversationId: targetId,
+        messages: detail.messages,
+      });
       scrollToBottom();
     } catch {
-      // New conversation — no history yet.
+      // New conversation — no history yet. HYDRATE with an empty
+      // array so the machine still transitions conversationId.
+      send({ type: "HYDRATE", conversationId: targetId, messages: [] });
     }
   }
 
@@ -342,122 +346,130 @@
     }
   }
 
+  /** Ensure there's an active conversation before sending. Returns the
+   *  id. If none exists we create one, then hydrate the machine with
+   *  empty history + the new id so subsequent MESSAGE_* events have
+   *  somewhere to land. */
+  async function ensureConversation(): Promise<string> {
+    if (activeConversationId) return activeConversationId;
+    const created = await createConversation();
+    send({ type: "HYDRATE", conversationId: created.id, messages: [] });
+    onConversationCreated?.(created.id);
+    return created.id;
+  }
+
   async function handleSend() {
     let text = inputText.trim();
     if (!text || isLoading) return;
 
-    // ── Document asset path ─────────────────────────────────
+    // ── Document asset path (non-streaming) ─────────────────
     // When a DocumentAsset is attached, route through the
-    // DocumentAssetManager (ask_document) instead of the legacy
-    // [Document attached:] prefix. This gives us routing,
-    // operation badges, and the skeleton-aware synthesis path.
+    // DocumentAssetManager (ask_document). Returns a fully-formed
+    // assistant message rather than streaming chunks, so we forward
+    // it as a single ASSISTANT_MESSAGE_RECEIVED event.
     if (attachedAsset) {
       const asset = attachedAsset;
+      const convoId = await ensureConversation();
 
-      // Create conversation if none selected (same as legacy path).
-      let convoId = activeConversationId;
-      if (!convoId) {
-        const created = await createConversation();
-        convoId = created.id;
-        activeConversationId = convoId;
-        onConversationCreated?.(convoId);
-      }
-
-      const userMsg: MessageEntry = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: text,
-        created_at: Math.floor(Date.now() / 1000),
-      };
-      messages = [...messages, userMsg];
+      send({
+        type: "ASSISTANT_MESSAGE_RECEIVED",
+        message: {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: text,
+          created_at: Math.floor(Date.now() / 1000),
+        },
+      });
       inputText = "";
       attachment = null;
-      // Keep attachedAsset so subsequent messages go through the same path.
-      isLoading = true;
+      docOpInFlight = true;
       onClearTask();
       scrollToBottom();
 
       try {
         const result = await askDocument(asset.id, text, convoId);
-        const assistantMsg: MessageEntry = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: result.response,
-          created_at: Math.floor(Date.now() / 1000),
-          metadata: { operation: result.operation, sources: result.sources },
-        };
-        messages = [...messages, assistantMsg];
+        send({
+          type: "ASSISTANT_MESSAGE_RECEIVED",
+          message: {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: result.response,
+            created_at: Math.floor(Date.now() / 1000),
+            metadata: { operation: result.operation, sources: result.sources },
+          },
+        });
       } catch (e) {
-        messages = [
-          ...messages,
-          {
+        send({
+          type: "ASSISTANT_MESSAGE_RECEIVED",
+          message: {
             id: crypto.randomUUID(),
             role: "assistant",
             content: `Error: ${e}`,
             created_at: Math.floor(Date.now() / 1000),
           },
-        ];
+        });
       } finally {
-        isLoading = false;
+        docOpInFlight = false;
         docProgressText = null;
         scrollToBottom();
       }
       return;
     }
 
-    // ── Legacy path: no asset, or old-style attachment ─────
-    // If a legacy attachment is set (no DocumentAsset), use the
-    // original [Document attached:] prefix.
+    // ── Legacy attachment path (text prefix) ────────────────
     if (attachment && !attachedAsset) {
       text = `[Document attached: ${attachment.source}]\n\n${text}`;
     }
 
-    // Create a conversation if none selected.
-    let convoId = activeConversationId;
-    if (!convoId) {
-      const created = await createConversation();
-      convoId = created.id;
-      activeConversationId = convoId;
-      onConversationCreated?.(convoId);
-    }
+    const convoId = await ensureConversation();
 
-    // Add user message optimistically.
+    // ── Streaming path ──────────────────────────────────────
+    // SEND_START optimistically appends both the user message and the
+    // assistant placeholder so the bubble appears instantly. The
+    // machine stays in `sending` conceptually (we're in streaming
+    // with an empty placeholder) until the first chunk.
     const userMsg: MessageEntry = {
       id: crypto.randomUUID(),
       role: "user",
       content: text,
       created_at: Math.floor(Date.now() / 1000),
     };
-    messages = [...messages, userMsg];
     inputText = "";
     attachment = null;
-    isLoading = true;
     onClearTask();
-    scrollToBottom();
 
     try {
       const started = await sendMessageStream(text, convoId);
-      streamingMessageId = started.message_id;
       wordBuffer.reset();
-      // Add empty placeholder; chunks will append to it.
-      const placeholder: MessageEntry = {
-        id: started.message_id,
-        role: "assistant",
-        content: "",
-        created_at: Math.floor(Date.now() / 1000),
-      };
-      messages = [...messages, placeholder];
+      send({
+        type: "SEND_START",
+        userMessage: userMsg,
+        assistantMessageId: started.message_id,
+      });
       scrollToBottom();
-      // isLoading stays true until message-complete arrives.
+      // Streaming continues via MESSAGE_CHUNK / MESSAGE_COMPLETE.
     } catch (e) {
-      const errorMsg: MessageEntry = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: `Error: ${e}`,
-        created_at: Math.floor(Date.now() / 1000),
-      };
-      messages = [...messages, errorMsg];
-      isLoading = false;
+      // sendMessageStream itself errored — surface via a one-shot
+      // assistant message. No placeholder to clear; SEND_START never
+      // ran.
+      send({
+        type: "ASSISTANT_MESSAGE_RECEIVED",
+        message: {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: text,
+          created_at: Math.floor(Date.now() / 1000),
+        },
+      });
+      send({
+        type: "ASSISTANT_MESSAGE_RECEIVED",
+        message: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Error: ${e}`,
+          created_at: Math.floor(Date.now() / 1000),
+        },
+      });
       scrollToBottom();
     }
   }
@@ -466,48 +478,48 @@
     const text = inputText.trim();
     if (!text || isLoading) return;
 
-    let convoId = activeConversationId;
-    if (!convoId) {
-      const created = await createConversation();
-      convoId = created.id;
-      activeConversationId = convoId;
-      onConversationCreated?.(convoId);
-    }
+    const convoId = await ensureConversation();
 
-    const userMsg: MessageEntry = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      created_at: Math.floor(Date.now() / 1000),
-    };
-    messages = [...messages, userMsg];
+    send({
+      type: "ASSISTANT_MESSAGE_RECEIVED",
+      message: {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: text,
+        created_at: Math.floor(Date.now() / 1000),
+      },
+    });
     inputText = "";
     attachment = null;
-    isLoading = true;
+    docOpInFlight = true;
     onClearTask();
     scrollToBottom();
 
     try {
       const response = await searchWeb(text, convoId);
-      const assistantMsg: MessageEntry = {
-        id: response.message_id,
-        role: "assistant",
-        content: response.content,
-        created_at: Math.floor(Date.now() / 1000),
-      };
-      messages = [...messages, assistantMsg];
+      send({
+        type: "ASSISTANT_MESSAGE_RECEIVED",
+        message: {
+          id: response.message_id,
+          role: "assistant",
+          content: response.content,
+          created_at: Math.floor(Date.now() / 1000),
+        },
+      });
     } catch (e) {
-      const errorMsg: MessageEntry = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: `Search error: ${e}`,
-        created_at: Math.floor(Date.now() / 1000),
-      };
-      messages = [...messages, errorMsg];
+      send({
+        type: "ASSISTANT_MESSAGE_RECEIVED",
+        message: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Search error: ${e}`,
+          created_at: Math.floor(Date.now() / 1000),
+        },
+      });
+    } finally {
+      docOpInFlight = false;
+      scrollToBottom();
     }
-
-    isLoading = false;
-    scrollToBottom();
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -570,7 +582,7 @@
 
       <InformationRequestCard
         request={pendingInfoRequest}
-        onHandled={() => { pendingInfoRequest = null; }}
+        onHandled={() => send({ type: "CLEAR_INFO" })}
       />
 
       {#if isLoading}
