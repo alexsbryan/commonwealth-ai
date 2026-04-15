@@ -22,6 +22,7 @@ pub mod recipe;
 pub mod registry;
 pub mod safety;
 pub mod sharding;
+pub mod sovereign_config;
 pub mod testing;
 pub mod types;
 pub mod update;
@@ -33,6 +34,12 @@ pub mod scip_graph;
 pub mod scip_export;
 #[cfg(feature = "treesitter")]
 mod scip_proto;
+
+// Test / lint result stores (use rusqlite, gated alongside SCIP).
+#[cfg(feature = "treesitter")]
+pub mod test_results;
+#[cfg(feature = "treesitter")]
+pub mod lint_results;
 
 // ─── Public API Re-exports ──────────────────────────────
 
@@ -52,6 +59,7 @@ pub use testing::{
     FailedRecord, SampleChunk, TestOptions, TestQueryResult, TestReport,
     ValidationResult,
 };
+pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
     InferenceFn, IngestResult, ScoredChunk, ShardInfo,
@@ -59,3 +67,17 @@ pub use types::{
 
 #[cfg(feature = "treesitter")]
 pub use scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord};
+
+#[cfg(feature = "treesitter")]
+pub use update::watcher_coordinator::{
+    BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherStatus,
+};
+
+#[cfg(feature = "treesitter")]
+pub use test_results::TestResultStore;
+#[cfg(feature = "treesitter")]
+pub use lint_results::LintResultStore;
+#[cfg(feature = "treesitter")]
+pub use update::test_watcher::TestWatcher;
+#[cfg(feature = "treesitter")]
+pub use update::lint_watcher::LintWatcher;

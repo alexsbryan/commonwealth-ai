@@ -20,6 +20,7 @@ thiserror = "2"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+async-trait = "0.1"
 
 # Logging
 tracing = "0.1"
@@ -112,3 +113,7 @@ treesitter = [
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
 tempfile = "3"
+
+# Fast dev builds: skip debug symbols (biggest single speedup for cargo check).
+[profile.dev]
+debug = 0

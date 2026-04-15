@@ -731,6 +731,7 @@ dependencies = [
  "arrow",
  "arrow-array",
  "arrow-schema",
+ "async-trait",
  "blake3",
  "bzip2",
  "chrono",
