@@ -396,10 +396,10 @@ mod tests {
 
     fn registry_with_code_tools() -> ToolRegistry {
         let engine = empty_engine();
-        let graph = Arc::new(
+        let graph: sovereign_tools::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
             corpus_engine::ScipGraph::open_in_memory("test")
                 .expect("in-memory ScipGraph"),
-        );
+        ));
         let mut registry = ToolRegistry::new();
         registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
             Arc::clone(&engine),
@@ -462,14 +462,44 @@ mod tests {
     }
 
     #[test]
-    fn mcp_exposed_tools_are_the_five_v2_tools() {
+    fn mcp_exposed_tools_are_declared() {
+        // This test is the guard against accidental drift. When you add or remove
+        // a tool from MCP_EXPOSED_TOOLS, update this list too.
+        let expected: &[&str] = &[
+            // Code index
+            "symbol_lookup", "code_search", "recent_changes",
+            // SCIP call graph
+            "find_callees", "find_callers",
+            // Test watcher
+            "test_status", "run_tests", "get_run_output",
+            // Lint watcher
+            "lint_status", "get_lint_output",
+            // Working notes
+            "write_note", "read_notes", "delete_note",
+            // Blast radius + project context
+            "blast_radius", "project_context",
+        ];
+        for tool in expected {
+            assert!(
+                MCP_EXPOSED_TOOLS.contains(tool),
+                "Expected tool `{tool}` missing from MCP_EXPOSED_TOOLS"
+            );
+        }
         assert_eq!(
-            MCP_EXPOSED_TOOLS,
-            &["symbol_lookup", "code_search", "recent_changes", "find_callees", "find_callers"]
+            MCP_EXPOSED_TOOLS.len(),
+            expected.len(),
+            "MCP_EXPOSED_TOOLS has {} entries but test expects {} — update the test when adding/removing tools",
+            MCP_EXPOSED_TOOLS.len(),
+            expected.len(),
         );
     }
 
-    // ─── T-15: tools/list returns exactly the five code tools ─
+    // ─── T-15: tools/list returns exactly the registered code tools ─
+    //
+    // This test registry only has the 5 code intelligence tools registered.
+    // `handle_tools_list` returns the intersection of (registered tools) and
+    // (MCP_EXPOSED_TOOLS), so the list will contain exactly those 5.
+    // The full production server registers more (test/lint/notes tools).
 
     #[tokio::test]
     async fn t15_tools_list_complete_and_bounded() {
@@ -483,7 +513,7 @@ mod tests {
             .filter_map(|t| t["name"].as_str())
             .collect();
 
-        // All five v2 tools must be present
+        // All five code intelligence tools must be present
         for required in &[
             "symbol_lookup", "code_search", "recent_changes",
             "find_callees", "find_callers",
@@ -509,8 +539,9 @@ mod tests {
             );
         }
 
-        // Exactly 5 tools — no stragglers.
-        assert_eq!(tools.len(), 5, "expected exactly 5 MCP tools");
+        // Only the 5 registered code tools — the others aren't in this
+        // test registry so they don't appear in the list.
+        assert_eq!(tools.len(), 5, "expected exactly 5 MCP tools from this test registry");
     }
 
     // ─── T-16: Honest refusal for unsupported tools ──────────

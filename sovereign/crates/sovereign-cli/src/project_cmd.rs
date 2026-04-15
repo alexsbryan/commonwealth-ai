@@ -692,7 +692,7 @@ async fn cmd_status(args: &[String]) -> i32 {
     if hook_path.exists() {
         let contents = std::fs::read_to_string(&hook_path).unwrap_or_default();
         if contents.contains(SOVEREIGN_HOOK_MARKER) {
-            println!("  Git hook      \u{2713} installed (v2: symbols + SCIP)");
+            println!("  Git hook      \u{2713} installed (v3: symbols + SCIP)");
         } else if contents.contains("sovereign") && contents.contains("project refresh") {
             println!(
                 "  Git hook      \u{26a0} prior version (refreshes SCIP only) — run \
@@ -2053,7 +2053,7 @@ async fn cmd_install_hooks(_args: &[String]) -> i32 {
 
 /// Marker line that identifies a Sovereign-managed hook block. Used to
 /// detect and upgrade prior-version hook installs in place.
-const SOVEREIGN_HOOK_MARKER: &str = "# SOVEREIGN_HOOK_V2";
+const SOVEREIGN_HOOK_MARKER: &str = "# SOVEREIGN_HOOK_V3";
 
 fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()> {
     let hook_path = root.join(".git/hooks/post-commit");
@@ -2077,9 +2077,11 @@ fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()>
     // visible (a silent `&` swallows errors and leaves the user
     // wondering why MCP still serves stale data).
     //
-    // `setsid sh -c '...' < /dev/null > /dev/null 2>&1 &` fully detaches
-    // the subshell from git's process group so git exiting doesn't
-    // SIGHUP the refresh mid-flight.
+    // We use a POSIX group command `{ ... } </dev/null &` rather than
+    // `setsid` because setsid is Linux-only (util-linux) and not available
+    // on macOS. The group command backgrounded with `&` is sufficient to
+    // prevent git from waiting on the refresh, and `/dev/null` on stdin
+    // prevents any accidental blocking reads.
     let hook_block = if let Some(ref exe) = current_exe {
         format!(
             r#"{marker}
@@ -2093,14 +2095,14 @@ if [ ! -x "$SOVEREIGN" ]; then
   command -v sovereign >/dev/null 2>&1 || exit 0
   SOVEREIGN=sovereign
 fi
-setsid sh -c '
-  printf "[%s] post-commit refresh (pid $$)\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "'"$LOG"'"
-  "'"$SOVEREIGN"'" project init --no-scip --no-hooks --no-claude-config >> "'"$LOG"'" 2>&1
+{{
+  printf "[%s] post-commit refresh (pid $$)\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOG"
+  "$SOVEREIGN" project init --no-scip --no-hooks --no-claude-config >> "$LOG" 2>&1
   status_init=$?
-  "'"$SOVEREIGN"'" project refresh --quiet >> "'"$LOG"'" 2>&1
+  "$SOVEREIGN" project refresh --quiet >> "$LOG" 2>&1
   status_refresh=$?
-  printf "[%s] done — init=%d refresh=%d\n\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status_init" "$status_refresh" >> "'"$LOG"'"
-' < /dev/null > /dev/null 2>&1 &
+  printf "[%s] done — init=%d refresh=%d\n\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status_init" "$status_refresh" >> "$LOG"
+}} </dev/null &
 "#,
             marker = SOVEREIGN_HOOK_MARKER,
             exe = exe.display()
@@ -2113,14 +2115,14 @@ setsid sh -c '
 LOG="$HOME/.sovereign/hooks.log"
 mkdir -p "$(dirname "$LOG")"
 command -v sovereign >/dev/null 2>&1 || exit 0
-setsid sh -c '
-  printf "[%s] post-commit refresh (pid $$)\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "'"$LOG"'"
-  sovereign project init --no-scip --no-hooks --no-claude-config >> "'"$LOG"'" 2>&1
+{{
+  printf "[%s] post-commit refresh (pid $$)\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOG"
+  sovereign project init --no-scip --no-hooks --no-claude-config >> "$LOG" 2>&1
   status_init=$?
-  sovereign project refresh --quiet >> "'"$LOG"'" 2>&1
+  sovereign project refresh --quiet >> "$LOG" 2>&1
   status_refresh=$?
-  printf "[%s] done — init=%d refresh=%d\n\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status_init" "$status_refresh" >> "'"$LOG"'"
-' < /dev/null > /dev/null 2>&1 &
+  printf "[%s] done — init=%d refresh=%d\n\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status_init" "$status_refresh" >> "$LOG"
+}} </dev/null &
 "#,
             marker = SOVEREIGN_HOOK_MARKER
         )
@@ -2183,23 +2185,49 @@ setsid sh -c '
 fn strip_prior_sovereign_block(existing: &str) -> String {
     let mut out = Vec::new();
     let mut inside = false;
+    let mut is_v1 = false;
+    let mut saw_background = false;
+
     for line in existing.lines() {
         let trimmed = line.trim_start();
-        if !inside && trimmed.starts_with("# Sovereign: refresh") {
+
+        // Start of any Sovereign hook block: V1 used a comment without a version
+        // marker; V2+ use `# SOVEREIGN_HOOK_V<N>`.
+        if !inside
+            && (trimmed.starts_with("# SOVEREIGN_HOOK_V")
+                || trimmed.starts_with("# Sovereign: refresh"))
+        {
             inside = true;
+            is_v1 = trimmed.starts_with("# Sovereign: refresh");
+            saw_background = false;
             continue;
         }
+
         if inside {
-            // The prior block ends with `fi` on its own line.
-            if trimmed == "fi" {
-                inside = false;
+            if is_v1 {
+                // V1 blocks end at `fi` on its own line.
+                if trimmed == "fi" {
+                    inside = false;
+                }
+                continue;
+            } else {
+                // V2+ blocks end with a background job line (`... &`) followed
+                // by a blank line.  The blank line after `&` is the terminator.
+                if trimmed.ends_with('&') {
+                    saw_background = true;
+                    continue;
+                }
+                if saw_background && trimmed.is_empty() {
+                    inside = false;
+                    continue; // consume the blank terminator line
+                }
                 continue;
             }
-            continue;
         }
         out.push(line);
     }
-    // Drop trailing blank lines we may have left behind.
+
+    // Drop trailing blank lines left behind by stripping.
     while out.last().map(|l| l.is_empty()).unwrap_or(false) {
         out.pop();
     }
@@ -2300,6 +2328,15 @@ fi
         let existing = "#!/bin/sh\necho hello\n";
         let stripped = strip_prior_sovereign_block(existing);
         assert_eq!(stripped, "#!/bin/sh\necho hello");
+    }
+
+    #[test]
+    fn strip_prior_removes_v2_sovereign_block() {
+        let existing = "#!/bin/sh\n# user hook\necho \"user step\"\n\n# SOVEREIGN_HOOK_V2\n# Sovereign: keep code intelligence fresh after each commit.\nLOG=\"$HOME/.sovereign/hooks.log\"\nmkdir -p \"$(dirname \"$LOG\")\"\nSOVEREIGN=\"/path/to/sovereign-cli\"\nif [ ! -x \"$SOVEREIGN\" ]; then\n  command -v sovereign >/dev/null 2>&1 || exit 0\n  SOVEREIGN=sovereign\nfi\nsetsid sh -c 'printf \"hi\" >> \"$LOG\"' < /dev/null > /dev/null 2>&1 &\n\n";
+        let stripped = strip_prior_sovereign_block(existing);
+        assert!(!stripped.contains("SOVEREIGN_HOOK_V2"), "V2 marker should be stripped");
+        assert!(!stripped.contains("setsid"), "setsid line should be stripped");
+        assert!(stripped.contains("echo \"user step\""), "user content preserved");
     }
 
     #[tokio::test]
