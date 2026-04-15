@@ -339,10 +339,17 @@ impl Drop for BrowseHandle {
 }
 
 /// Get the local hostname (best-effort).
+///
+/// `HOSTNAME` / `COMPUTERNAME` env vars are unreliable — macOS
+/// doesn't export HOSTNAME to launched apps by default, so the old
+/// fallback to "commonwealth-node" was hitting for every mDNS
+/// registration. Use the cross-platform `hostname` crate (wraps
+/// `gethostname(2)` / `GetComputerNameW`) instead.
 fn hostname() -> String {
-    std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("COMPUTERNAME"))
-        .unwrap_or_else(|_| "commonwealth-node".to_string())
+    ::hostname::get()
+        .ok()
+        .and_then(|h| h.into_string().ok())
+        .unwrap_or_else(|| "commonwealth-node".to_string())
 }
 
 /// Convert an app_id to a valid mDNS label (lowercase, dots → dashes).

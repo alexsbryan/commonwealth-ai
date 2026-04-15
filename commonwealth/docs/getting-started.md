@@ -70,7 +70,7 @@ Commonwealth nodes need to be able to reach each other directly. There are two s
 
 ### Same Local Network (Easiest)
 
-If everyone is on the same Wi-Fi or Ethernet network — a house, an office, a hackerspace — Commonwealth discovers peers automatically via mDNS. **No extra setup needed.** Skip to Step 3.
+If everyone is on the same Wi-Fi or Ethernet network — a house, an office, a hackerspace — Commonwealth discovers peers automatically via mDNS (assuming client isolation is disabled on your router). **No extra setup needed.** Skip to Step 3.
 
 ### Different Networks (Use Tailscale / Headscale)
 

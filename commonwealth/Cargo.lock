@@ -886,6 +886,7 @@ dependencies = [
  "commonwealth-core",
  "getrandom 0.3.4",
  "hex",
+ "hostname",
  "mdns-sd",
  "rand 0.9.2",
  "rcgen",

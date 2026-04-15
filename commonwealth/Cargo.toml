@@ -43,6 +43,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # External
 corpus-engine = { path = "../corpus-engine" }
+# Portable hostname resolution for mDNS / node-name defaults.
+hostname = "0.4"
 
 # Internal crates
 commonwealth-core = { path = "crates/commonwealth-core" }
