@@ -17,6 +17,7 @@ use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 
 use crate::deep_link::DeepLink;
+use crate::gossip::{self, GossipHandle};
 use crate::persist;
 use crate::state::MeshState;
 
@@ -42,6 +43,11 @@ enum DaemonState {
         /// Underscore-prefixed because it's held purely for its Drop
         /// impl.
         _browse_handle: BrowseHandle,
+        /// Aborts the gossip heartbeat loop on Drop. Same pattern
+        /// as `_browse_handle` — tying the task's lifetime to the
+        /// Running variant means stopping the daemon also stops
+        /// gossip; no explicit teardown.
+        _gossip_handle: GossipHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
     },
 }
@@ -111,6 +117,12 @@ impl EmbeddedDaemon {
         let mesh_name = mesh.name.clone();
         self.start_daemon(mesh, self_node_id).await?;
         info!(mesh_name, "resumed mesh from persisted state");
+        // A resumed mesh may have peers cached from a prior session.
+        // Kick off an immediate gossip sweep so their `last_seen`
+        // gets refreshed (or decayed) within ~2s of the app opening,
+        // rather than showing the user a stale roster for the first
+        // DEFAULT_GOSSIP_INTERVAL.
+        self.trigger_initial_sync().await;
         Ok(true)
     }
 
@@ -162,6 +174,11 @@ impl EmbeddedDaemon {
         }
 
         info!(mesh_name, "mesh created, daemon started");
+        // On create there are no peers yet, but fire initial_sync
+        // anyway — it touches our own last_seen to "now" so the
+        // very first gossip exchange we later receive has a fresh
+        // self record to merge against.
+        self.trigger_initial_sync().await;
 
         Ok(CreateMeshResult {
             mesh_name: mesh_name.to_string(),
@@ -289,6 +306,11 @@ impl EmbeddedDaemon {
         }
 
         info!(mesh_name, node_id = %adopted_node_id, "joined mesh, daemon started");
+        // Fire a gossip round immediately so the founder (and any
+        // other existing members in the adopted snapshot) learn
+        // about us right away — the handshake registered us on
+        // the founder, but other peers still need to find out.
+        self.trigger_initial_sync().await;
 
         Ok(JoinMeshResult {
             mesh_name,
@@ -483,6 +505,16 @@ impl EmbeddedDaemon {
             }
         });
 
+        // Spawn the gossip heartbeat task. It uses `app_state` via a
+        // clone (cheap Arc bump) so it stays live independently of
+        // the Running variant's ownership. Aborted on daemon stop by
+        // the `_gossip_handle: Drop` → `JoinHandle::abort()`.
+        let gossip_handle = gossip::spawn_gossip_loop(
+            app_state.clone(),
+            gossip::DEFAULT_GOSSIP_INTERVAL,
+            gossip::DEFAULT_OFFLINE_THRESHOLD,
+        );
+
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
             app_state,
@@ -490,10 +522,28 @@ impl EmbeddedDaemon {
             client_addr,
             mdns,
             _browse_handle: browse_handle,
+            _gossip_handle: gossip_handle,
             _shutdown_tx: shutdown_tx,
         };
 
         Ok(())
+    }
+
+    /// Fire a bounded initial gossip round so a freshly-resumed or
+    /// freshly-joined daemon reconciles with peers within ~2s
+    /// instead of waiting a full `DEFAULT_GOSSIP_INTERVAL`. Callers
+    /// invoke this after each of `create_mesh` / `join_mesh` /
+    /// `try_resume` returns.
+    async fn trigger_initial_sync(&self) {
+        let state = self.state.read().await;
+        if let DaemonState::Running { app_state, .. } = &*state {
+            gossip::initial_sync(
+                app_state,
+                gossip::DEFAULT_OFFLINE_THRESHOLD,
+                std::time::Duration::from_secs(2),
+            )
+            .await;
+        }
     }
 }
 

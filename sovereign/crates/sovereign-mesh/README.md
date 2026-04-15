@@ -118,6 +118,42 @@ resolve, we still fall back to mDNS.
   tailnet and the LAN, you may see the same peer twice in the
   diagnostics panel — cosmetic, not a bug.
 
+## Gossip
+
+After the initial `/internal/join` handshake, each member runs a
+periodic **push-pull gossip** loop (`src/gossip.rs`, spawned by
+`EmbeddedDaemon::start_daemon`).
+
+**Cadence:** every 10s by default. Each round:
+
+1. Bump our own `last_seen` to `now`.
+2. Pick up to 2 non-self members at random and POST our `Mesh`
+   snapshot to their `/internal/gossip`.
+3. Merge their reply into ours via `Mesh::merge_from` — per-member
+   last-writer-wins by `last_seen`.
+4. Mark any peer whose `last_seen` is older than 60s as `Offline`.
+
+**Convergence:** pairwise in one round. For a 3+ member mesh, state
+propagates transitively — anything that reaches one member appears
+at every other member within a couple of rounds.
+
+**Fast initial sync:** after `create_mesh`, `join_mesh`, or
+`try_resume`, one gossip round fires immediately (bounded to 2s).
+That's why a restart reconciles with the rest of the mesh in under
+a couple of seconds instead of waiting a full interval.
+
+**Auth boundary:** `/internal/gossip` rejects any incoming
+`Mesh` whose `mesh_id` or `join_key_hash` doesn't match ours. Same
+trust model as the join handshake — if you can spoof the
+`join_key_hash`, you already have the join key and could just do a
+real join.
+
+**Not gossiped (yet):** capabilities, app state, knowledge-shard
+plans, inference plans. The `commonwealth-discovery::GossipState`
+scaffolding (three-phase Digest/Delta/Response protocol, KV layer)
+is the intended home for those; for v1 we only gossip membership
+via full-snapshot push-pull.
+
 ## Persistence
 
 The running mesh is serialised to `<data_dir>/mesh.json` (macOS:

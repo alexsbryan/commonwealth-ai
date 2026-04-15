@@ -12,6 +12,7 @@
 
 pub mod daemon;
 pub mod deep_link;
+pub mod gossip;
 pub mod join;
 pub mod persist;
 pub mod state;

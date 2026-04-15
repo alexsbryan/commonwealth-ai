@@ -27,6 +27,9 @@ hex = "0.4"
 # records; pulling reqwest once across the crate is simpler than
 # threading it through Phase B piecewise.
 reqwest = { workspace = true }
+# Random peer selection for each gossip round. Matches the version
+# already in commonwealth-discovery to keep linking simple.
+rand = "0.9"
 
 [dev-dependencies]
 tempfile = "3"
