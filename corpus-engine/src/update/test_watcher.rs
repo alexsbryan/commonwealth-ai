@@ -174,6 +174,7 @@ async fn run_subprocess(
     let start = Instant::now();
     let mut child_cmd = Command::new("sh");
     child_cmd.arg("-c").arg(&command);
+    child_cmd.kill_on_drop(true); // kill child when task is aborted or runtime drops
     child_cmd.stdout(std::process::Stdio::piped());
     child_cmd.stderr(std::process::Stdio::piped());
 

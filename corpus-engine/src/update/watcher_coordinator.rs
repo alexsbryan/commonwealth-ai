@@ -294,12 +294,26 @@ async fn run_coordinator_loop(
 }
 
 /// Collect source-file paths from an event that live under any watched root.
+///
+/// Paths inside `target/`, `.git/`, `node_modules/`, or any hidden directory
+/// component are excluded — build artifacts and VCS internals trigger constant
+/// events during compilation and would cause the background runners to abort
+/// and restart in an infinite loop.
 fn interesting_coordinator_paths(event: &Event, roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for path in &event.paths {
         let is_delete = matches!(event.kind, EventKind::Remove(_));
         let keep = is_delete || is_source_file(path);
         if !keep {
+            continue;
+        }
+        // Skip build artifacts and VCS / dependency caches.
+        let in_ignored_dir = path.components().any(|c| {
+            let s = c.as_os_str().to_string_lossy();
+            matches!(s.as_ref(), "target" | ".git" | "node_modules")
+                || (s.starts_with('.') && s.len() > 1)
+        });
+        if in_ignored_dir {
             continue;
         }
         let under_any_root = roots.iter().any(|r| path.starts_with(r));

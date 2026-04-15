@@ -47,6 +47,43 @@ precise definitions.
 Call `recent_changes(hours: 24)` at session start to see which
 subsystems are active before diving into code.
 
+## Mandatory checks
+
+These are easy to forget and expensive when skipped:
+
+**Before adding a method to a trait:**
+Call `find_callers("TraitName")` to find ALL implementors and
+usage sites. The impl blocks show up as refs from the module
+where the impl lives. Every impl must be updated or the build
+breaks. Find them before you start writing.
+
+**Before using a type from another crate:**
+Call `symbol_lookup("TypeName")` to confirm it exists, see its
+fields, and verify it's in scope. This is faster and more reliable
+than grepping Cargo.toml for dependency availability.
+
+**Before modifying a function signature:**
+Call `find_callers("function_name")` first. If it has 20 callers,
+you need a different strategy than if it has 2. Know the blast
+radius before you touch it.
+
+## When MCP tools add less value
+
+For **greenfield additions** (new types, new tables, new files),
+the MCP tools don't help with the writing — but you still read
+existing code to match patterns. When you need to check a type's
+fields, a constructor's arguments, or an API's return type, use
+`symbol_lookup` even during greenfield work. The writing is new;
+the patterns you're matching are not.
+
+## Server lifecycle
+
+`sovereign project serve` polls the on-disk SCIP graph files every
+30 seconds and hot-reloads automatically. Post-commit hooks keep
+both the symbol index and SCIP graph fresh — no manual refresh
+or restart required. If something seems stale, check
+`~/.sovereign/hooks.log` for the most recent post-commit run.
+
 ## Session start
 
 1. Call `recent_changes(hours: 24)` to see what's active
@@ -55,10 +92,8 @@ subsystems are active before diving into code.
 
 ## Call graph
 
-`find_callers` and `find_callees` use the SCIP graph.
-New symbols have no graph entries until the next git commit
-(the post-commit hook keeps this current automatically).
-To refresh manually: `sovereign project refresh`
+Call graph tools are not available (no SCIP exporter found).
+Install a SCIP exporter and run `sovereign project refresh` to enable.
 
 ## Project-specific invariants
 

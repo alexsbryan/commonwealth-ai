@@ -318,17 +318,23 @@ impl TestResultStore {
         Ok(count > 0)
     }
 
-    /// Returns true if a run is currently in progress (started but not finished).
+    /// Returns true if the most recent run is still in progress.
+    ///
+    /// Checks only the latest row — abandoned runs (task aborted before
+    /// `finish_run` was called) leave orphaned NULL rows that would otherwise
+    /// make this return true forever.
     pub async fn run_in_progress(&self) -> Result<bool> {
         let conn = self.conn.lock().await;
-        let count: i64 = conn
+        // None → no runs at all; Some(None) → latest run not finished; Some(Some(_)) → finished.
+        let finished_at: Option<Option<i64>> = conn
             .query_row(
-                "SELECT COUNT(*) FROM test_runs WHERE finished_at IS NULL",
+                "SELECT finished_at FROM test_runs ORDER BY id DESC LIMIT 1",
                 [],
                 |r| r.get(0),
             )
+            .optional()
             .map_err(sqlite_err)?;
-        Ok(count > 0)
+        Ok(matches!(finished_at, Some(None)))
     }
 }
 

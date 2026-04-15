@@ -28,6 +28,7 @@ pub struct ScipExporterConfig {
     /// The command to invoke for SCIP export.
     pub command: &'static str,
     /// Arguments. `{output}` is replaced with the output path.
+    /// `{config}` is replaced with a temp config file path (written from `config_json`).
     pub args: &'static [&'static str],
     /// File extensions this exporter covers.
     pub extensions: &'static [&'static str],
@@ -35,6 +36,10 @@ pub struct ScipExporterConfig {
     pub workspace_level: bool,
     /// Install hint shown when the binary is missing.
     pub install_hint: &'static str,
+    /// Optional JSON configuration written to a temp file before the export
+    /// command runs. When set, `{config}` in `args` is replaced with the
+    /// temp file path, which is deleted after the command completes.
+    pub config_json: Option<&'static str>,
 }
 
 /// All supported SCIP exporters. Order matters: first match wins for a
@@ -44,10 +49,14 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
         ScipExporterConfig {
             language_id: "rust",
             command: "rust-analyzer",
-            args: &["scip", ".", "--output", "{output}"],
+            // `--config-path {config}` tells rust-analyzer to use all cargo features so
+            // that feature-gated modules (e.g. `#[cfg(feature = "treesitter")]`) are
+            // included in the SCIP output and visible to find_callers / find_callees.
+            args: &["scip", ".", "--config-path", "{config}", "--output", "{output}"],
             extensions: &["rs"],
             workspace_level: true,
             install_hint: "Install via rustup: rustup component add rust-analyzer",
+            config_json: Some(r#"{"cargo":{"features":"all"}}"#),
         },
         ScipExporterConfig {
             language_id: "go",
@@ -56,6 +65,7 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
             extensions: &["go"],
             workspace_level: true,
             install_hint: "Install with: go install github.com/sourcegraph/scip-go@latest",
+            config_json: None,
         },
         ScipExporterConfig {
             language_id: "typescript",
@@ -64,6 +74,7 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
             extensions: &["ts", "tsx", "js", "jsx"],
             workspace_level: true,
             install_hint: "Install with: npm install -g @sourcegraph/scip-typescript",
+            config_json: None,
         },
         ScipExporterConfig {
             language_id: "python",
@@ -72,6 +83,7 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
             extensions: &["py"],
             workspace_level: true,
             install_hint: "Install with: pip install scip-python",
+            config_json: None,
         },
         ScipExporterConfig {
             language_id: "java",
@@ -80,6 +92,7 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
             extensions: &["java"],
             workspace_level: true,
             install_hint: "See https://sourcegraph.github.io/scip-java/",
+            config_json: None,
         },
     ]
 }
@@ -170,10 +183,30 @@ pub async fn export_all(
 
         let scip_path = output_dir.join(format!("{}.scip", exporter.language_id));
 
+        // Write a temp config file if the exporter needs one (e.g. rust-analyzer
+        // uses a JSON config to enable all Cargo features so feature-gated modules
+        // appear in the SCIP output).
+        let config_file: Option<tempfile::NamedTempFile> = if let Some(json) = exporter.config_json {
+            let mut f = tempfile::NamedTempFile::new()
+                .map_err(|e| Error::Io(e))?;
+            std::io::Write::write_all(&mut f, json.as_bytes())
+                .map_err(|e| Error::Io(e))?;
+            Some(f)
+        } else {
+            None
+        };
+        let config_path_str = config_file
+            .as_ref()
+            .map(|f| f.path().to_str().unwrap_or("").to_owned())
+            .unwrap_or_default();
+
         let args: Vec<String> = exporter
             .args
             .iter()
-            .map(|a| a.replace("{output}", scip_path.to_str().unwrap_or("")))
+            .map(|a| {
+                a.replace("{output}", scip_path.to_str().unwrap_or(""))
+                 .replace("{config}", &config_path_str)
+            })
             .collect();
 
         let output = tokio::process::Command::new(exporter.command)
@@ -184,6 +217,8 @@ pub async fn export_all(
             .output()
             .await
             .map_err(|e| Error::Io(e))?;
+
+        // Config file is deleted when `config_file` drops at end of loop iteration.
         let status = output.status;
 
         if !status.success() {
@@ -480,6 +515,20 @@ mod tests {
             .expect("rust exporter not found");
         assert!(rust.extensions.contains(&"rs"));
         assert_eq!(rust.command, "rust-analyzer");
+        // config_json enables all Cargo features so treesitter-gated code appears in SCIP.
+        assert!(
+            rust.config_json.is_some(),
+            "rust exporter must supply a config_json to enable all features"
+        );
+        assert!(
+            rust.config_json.unwrap().contains("\"features\""),
+            "rust config_json must configure cargo features"
+        );
+        // args must reference {config} so the temp config file path is substituted.
+        assert!(
+            rust.args.contains(&"{config}"),
+            "rust exporter args must contain {{config}} placeholder"
+        );
     }
 
     #[test]
