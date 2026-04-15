@@ -22,6 +22,11 @@ thiserror = { workspace = true }
 bytes = { workspace = true }
 hex = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
+# `LocalInferenceService` is an async trait with streaming return
+# types; needs async-trait for the sugar and futures for the
+# Stream alias used in the handler's SSE wrapper.
+async-trait = "0.1"
+futures = "0.3"
 
 [dev-dependencies]
 commonwealth-discovery = { workspace = true }

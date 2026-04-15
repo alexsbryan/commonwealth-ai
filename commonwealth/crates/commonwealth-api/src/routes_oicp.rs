@@ -10,6 +10,28 @@ use crate::state::AppState;
 
 /// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
 pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifest> {
+    // If we have a local inference service (Sovereign's
+    // EmbeddedLlamaCpp), prefer its manifest — that's the one
+    // that actually reflects what we can serve. The scheduler-
+    // based manifest below is for the standalone Commonwealth
+    // daemon where llama-servers are spawned by the orchestrator;
+    // in the Sovereign+mesh embed, those are empty.
+    if let Some(local) = state.inner.local_inference.as_ref() {
+        if let Some(mut manifest) = local.provider_manifest() {
+            // Enrich provider name with the mesh name so peer
+            // MeshAwareSelector can tell "this is BeefyMac's
+            // Sovereign" vs a generic provider.
+            let mesh = state.inner.mesh.read().await;
+            if manifest.provider.is_none() {
+                manifest.provider = Some(ProviderInfo {
+                    name: Some(mesh.name.clone()),
+                    provider_type: Some(ProviderType::Mesh),
+                });
+            }
+            return Json(manifest);
+        }
+    }
+
     let mesh = state.inner.mesh.read().await;
     let models = state.inner.inference_store.list_models();
     let plan = state.inner.inference_store.get_plan().unwrap_or_default();

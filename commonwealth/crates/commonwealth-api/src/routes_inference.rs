@@ -1,8 +1,10 @@
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use tracing::{debug, warn};
+use futures::StreamExt;
+use tracing::{debug, info, warn};
 
 use commonwealth_core::ids::ModelId;
 use commonwealth_inference::oicp::{self, CapabilityRequirements, ShardingPrivacy};
@@ -31,6 +33,27 @@ pub async fn chat_completions(
                 ),
             )
                 .into_response();
+        }
+    }
+
+    // --- Priority 0: in-process local inference ---
+    //
+    // When the daemon is embedded in Sovereign (sovereign-mesh),
+    // `local_inference` wraps the same `EmbeddedLlamaCpp` the user
+    // would use for a direct chat. Serve peer requests from it
+    // first — cuts out the orchestrator path entirely and skips
+    // the need for spawned llama-server processes.
+    if let Some(service) = state.inner.local_inference.as_ref() {
+        let want_stream = request.stream.unwrap_or(false);
+        info!(
+            want_stream,
+            has_oicp = request.oicp.is_some(),
+            "chat_completions: serving via local_inference"
+        );
+        if want_stream {
+            return serve_local_stream(service.clone(), request).await;
+        } else {
+            return serve_local_non_stream(service.clone(), request).await;
         }
     }
 
@@ -262,4 +285,129 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
         object: "list".into(),
         data,
     })
+}
+
+// ── Local-inference serving helpers ────────────────────────────
+//
+// Delegate chat-completions to the AppState's `local_inference`
+// hook (when present). Two shapes:
+//
+//   • non-streaming: hook returns `ChatCompletionResponse`, we emit
+//     it verbatim as JSON. Matches the OpenAI baseline.
+//   • streaming: hook returns `Stream<Item = Result<String>>` of
+//     partial token chunks; we wrap each chunk in an OpenAI-format
+//     SSE `data:` event with a `delta.content` payload. A final
+//     `[DONE]` sentinel closes the stream, per the OpenAI spec.
+//
+// Streaming is mandatory because Sovereign's runtime uses
+// `complete_stream` on the wire — without SSE here, the Joiner's
+// `RemoteApiProvider::complete_stream` would error on parse.
+
+async fn serve_local_non_stream(
+    service: std::sync::Arc<dyn crate::state::LocalInferenceService>,
+    request: ChatCompletionRequest,
+) -> Response {
+    match service.chat_completion(request).await {
+        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
+        Err(e) => {
+            warn!(error = %e, "chat_completions: local inference failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(
+                    serde_json::to_value(ErrorResponse::new(
+                        format!("local inference failed: {e}"),
+                        "backend_error",
+                    ))
+                    .unwrap(),
+                ),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn serve_local_stream(
+    service: std::sync::Arc<dyn crate::state::LocalInferenceService>,
+    request: ChatCompletionRequest,
+) -> Response {
+    // `id` / `created` are placeholders that would match the
+    // non-streaming response — clients that care about stable ids
+    // can set them on their side; we follow the OpenAI convention
+    // of `chatcmpl-*` + unix timestamp.
+    let id = format!(
+        "chatcmpl-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    );
+    let created = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let model = request.model.clone().unwrap_or_else(|| "local".into());
+
+    let token_stream = match service.chat_completion_stream(request).await {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(error = %e, "chat_completions: local stream failed to start");
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(
+                    serde_json::to_value(ErrorResponse::new(
+                        format!("local stream failed: {e}"),
+                        "backend_error",
+                    ))
+                    .unwrap(),
+                ),
+            )
+                .into_response();
+        }
+    };
+
+    // Translate token chunks → SSE events in the OpenAI
+    // `chat.completion.chunk` shape. Per-frame allocation is fine:
+    // at a few kilobytes per chunk for a handful of chunks per
+    // second this is well inside what reqwest + axum handle.
+    let id_for_stream = id.clone();
+    let model_for_stream = model.clone();
+    let sse_events = token_stream.map(move |item| match item {
+        Ok(delta) => {
+            let chunk = serde_json::json!({
+                "id": id_for_stream,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model_for_stream,
+                "choices": [{
+                    "index": 0,
+                    "delta": { "content": delta },
+                    "finish_reason": null
+                }]
+            });
+            Ok::<_, std::convert::Infallible>(
+                Event::default().data(chunk.to_string()),
+            )
+        }
+        Err(e) => {
+            // Surface the error as a final event then let the
+            // stream close — clients handle the abrupt end.
+            warn!(error = %e, "chat_completions: local stream chunk error");
+            Ok(Event::default().data(format!(
+                "{{\"error\":{{\"message\":\"{}\"}}}}",
+                e.replace('"', "\\\"")
+            )))
+        }
+    });
+
+    // Append the OpenAI `[DONE]` sentinel so the consumer knows
+    // the stream ended cleanly. `RemoteApiProvider::complete_stream`
+    // explicitly breaks its loop on this marker.
+    let done = futures::stream::once(async move {
+        Ok::<_, std::convert::Infallible>(Event::default().data("[DONE]"))
+    });
+    let combined = sse_events.chain(done);
+
+    Sse::new(combined)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }

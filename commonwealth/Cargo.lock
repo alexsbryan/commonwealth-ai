@@ -809,6 +809,7 @@ dependencies = [
 name = "commonwealth-api"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "bytes",
  "commonwealth-app",
@@ -818,6 +819,7 @@ dependencies = [
  "commonwealth-knowledge",
  "commonwealth-state",
  "corpus-engine",
+ "futures",
  "hex",
  "http-body-util",
  "reqwest",

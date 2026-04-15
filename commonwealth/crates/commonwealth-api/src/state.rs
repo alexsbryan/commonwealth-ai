@@ -2,15 +2,58 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use std::pin::Pin;
+
+use async_trait::async_trait;
 use commonwealth_app::registry::AppRegistry;
 use commonwealth_app::proxy::AppPortMap;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{Mesh, NodeStatus};
+use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::model_aliases::ModelAliasTable;
 use commonwealth_inference::store_adapter::InferenceStateStore;
 use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
 use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
+use futures::Stream;
+
+use crate::openai_types::{ChatCompletionRequest, ChatCompletionResponse};
+
+/// In-process inference service that fulfils chat-completions
+/// requests without spawning separate `llama-server` processes.
+/// The Sovereign desktop embeds its local `EmbeddedLlamaCpp` as
+/// one of these — so when a peer POSTs `/v1/chat/completions` at
+/// our `:9741`, we reply with model output from Sovereign's own
+/// loaded weights, same as if the user had typed the query
+/// locally. The standalone Commonwealth daemon leaves this `None`
+/// and uses the orchestrator-spawned llama-server path instead.
+#[async_trait]
+pub trait LocalInferenceService: Send + Sync {
+    /// One-shot chat completion (non-streaming). Called when the
+    /// incoming request did NOT set `stream: true`.
+    async fn chat_completion(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<ChatCompletionResponse, String>;
+
+    /// Streaming chat completion. Each yielded item is a partial
+    /// text delta (as the LLM emits tokens). The handler turns the
+    /// stream into SSE frames for the wire.
+    async fn chat_completion_stream(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>,
+        String,
+    >;
+
+    /// Provider manifest for `/oicp/v1/capabilities`. Peers fetch
+    /// this to know what capabilities this node advertises — the
+    /// MeshAwareSelector on the client side uses it to pick a
+    /// backend. Returning `None` falls through to the scheduler-
+    /// based manifest path.
+    fn provider_manifest(&self) -> Option<ProviderManifest>;
+}
 
 /// Callback the route handlers fire whenever they mutate `Mesh` —
 /// `/internal/join` (accepting a new member), `/internal/gossip`
@@ -50,6 +93,13 @@ pub struct AppStateInner {
     /// tick). `None` in tests and in the standalone Commonwealth
     /// daemon, where persistence is managed elsewhere.
     pub on_mesh_mutation: Option<MeshMutationHook>,
+    /// Optional in-process inference service. When Sovereign embeds
+    /// the daemon, this is a wrapper over its `EmbeddedLlamaCpp` so
+    /// `/v1/chat/completions` serves peer requests from the same
+    /// model the local user would use. `None` in the standalone
+    /// Commonwealth daemon — that path routes via the orchestrator
+    /// to spawned `llama-server` processes instead.
+    pub local_inference: Option<std::sync::Arc<dyn LocalInferenceService>>,
 }
 
 impl AppState {
@@ -105,8 +155,32 @@ impl AppState {
                 app_registry,
                 app_port_map: AppPortMap::new(),
                 on_mesh_mutation: None,
+                local_inference: None,
             }),
         }
+    }
+
+    /// Install the in-process inference service. Same Arc-get_mut
+    /// contract as `with_mesh_mutation_hook` — call before cloning
+    /// AppState into the HTTP servers.
+    pub fn with_local_inference(
+        mut self,
+        service: std::sync::Arc<dyn LocalInferenceService>,
+    ) -> Self {
+        match Arc::get_mut(&mut self.inner) {
+            Some(inner) => {
+                inner.local_inference = Some(service);
+            }
+            None => {
+                tracing::warn!(
+                    "with_local_inference called on shared AppState; \
+                     local inference service not installed — \
+                     /v1/chat/completions will fall through to \
+                     orchestrator routing"
+                );
+            }
+        }
+        self
     }
 
     /// Install the mutation hook on an Arc not yet cloned. Called
