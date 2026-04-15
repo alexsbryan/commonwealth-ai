@@ -292,9 +292,24 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         ));
     }
 
-    // Load inference (reuse if already loaded). Loads up to three slots:
-    // fast (always), primary (optional, lazy), embed (optional, eager).
-    let inference: Arc<dyn InferenceProvider> = {
+    // Load inference. We end up with two distinct provider Arcs:
+    //
+    //   • `raw_inference` — the plain `EmbeddedLlamaCpp`. Handed to
+    //     the embedded Commonwealth daemon so when a PEER POSTs
+    //     `/v1/chat/completions` to our `:9741`, their request is
+    //     served by this raw local model. NEVER the mesh wrapper,
+    //     or a peer hitting us would trigger our own re-routing
+    //     loop.
+    //
+    //   • `inference` — `raw_inference` wrapped in a
+    //     `MeshInferenceProvider`. Handed to the Runtime. This is
+    //     the one that routes THIS user's synthesis requests to a
+    //     beefier mesh peer when one is online. Fast/Medium stays
+    //     local; only Slow-slot work crosses the wire.
+    //
+    // Both share the same underlying weights — there's no double-
+    // load. The wrapper is a thin router over an Arc clone.
+    let raw_inference: Arc<dyn InferenceProvider> = {
         let existing = state.inference.read().await;
         if let Some(ref inf) = *existing {
             Arc::clone(inf)
@@ -324,11 +339,23 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                 loaded.start_idle_monitor(60);
             }
 
-            let inf: Arc<dyn InferenceProvider> = loaded;
-            *state.inference.write().await = Some(Arc::clone(&inf));
-            inf
+            let raw: Arc<dyn InferenceProvider> = loaded;
+            *state.inference.write().await = Some(Arc::clone(&raw));
+            raw
         }
     };
+
+    // Wrap raw with mesh routing. The wrapper asks the embedded
+    // daemon on every Slow-slot request whether any peer with more
+    // RAM is online; if yes AND privacy isn't LocalOnly, it forwards
+    // over HTTP to `<peer>:9741/v1/chat/completions`. On any remote
+    // error, auto-falls back to `raw_inference`.
+    let inference: Arc<dyn InferenceProvider> = Arc::new(
+        sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+            Arc::clone(&raw_inference),
+            Arc::clone(&state.mesh),
+        ),
+    );
 
     // Open database.
     let store: Arc<dyn StateStore> = {
@@ -516,14 +543,16 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     // `hosted_corpora` and peers wouldn't know we host anything.
     state.mesh.set_corpus_engine(Arc::clone(&corpus_engine)).await;
 
-    // Also hand over our `InferenceProvider` so the daemon can
-    // answer peer `/v1/chat/completions` requests from the same
-    // local model Sovereign uses for its own user's queries. This
-    // is what makes "Joiner's synthesis runs on Founder's beefy
-    // model" physically possible — the Joiner's HybridProvider
-    // will POST to `http://<founder>:9741` and the Founder's
-    // daemon delegates through this adapter to EmbeddedLlamaCpp.
-    state.mesh.set_inference_provider(Arc::clone(&inference)).await;
+    // Also hand over our RAW `InferenceProvider` (the
+    // `EmbeddedLlamaCpp`, NOT the mesh-wrapped one) so when a peer
+    // POSTs `/v1/chat/completions` to our `:9741`, we serve it from
+    // our local model without re-entering the mesh-routing wrapper
+    // and ping-ponging the request back out. This is what makes
+    // "Joiner's synthesis runs on Founder's beefy model" physically
+    // possible: Joiner's `MeshInferenceProvider` POSTs to the
+    // Founder, the Founder's daemon invokes THIS adapter, which
+    // runs inference locally and returns.
+    state.mesh.set_inference_provider(Arc::clone(&raw_inference)).await;
 
     // Startup dimension guard: probe the loaded embed model's actual output
     // size and compare against every installed corpus index. A mismatch means

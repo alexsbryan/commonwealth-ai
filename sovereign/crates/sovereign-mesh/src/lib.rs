@@ -17,6 +17,7 @@ pub mod gossip;
 pub mod inference_adapter;
 pub mod join;
 pub mod knowledge_client;
+pub mod peer_inference;
 pub mod persist;
 pub mod state;
 pub mod types;

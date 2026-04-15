@@ -465,6 +465,59 @@ impl EmbeddedDaemon {
         }
     }
 
+    /// Endpoints for peer nodes that are currently online and
+    /// reachable for federated inference. Each entry lists all of
+    /// the peer's advertised addresses in the order the `MeshInference`
+    /// wrapper should try them (routable IPs first, link-local
+    /// filtered out).
+    ///
+    /// Empty when the daemon is stopped, when we're solo, or when
+    /// every peer is offline — callers should fall back to local
+    /// inference in any of those cases.
+    pub async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+        let state = self.state.read().await;
+        let app_state = match &*state {
+            DaemonState::Running { app_state, .. } => app_state.clone(),
+            DaemonState::Stopped => return Vec::new(),
+        };
+        drop(state);
+        let mesh = app_state.inner.mesh.read().await;
+        let self_id = app_state.inner.self_node_id;
+        mesh.members
+            .values()
+            .filter(|m| m.node_id != self_id)
+            .filter(|m| {
+                matches!(
+                    m.status,
+                    commonwealth_core::mesh::NodeStatus::Online
+                        | commonwealth_core::mesh::NodeStatus::Busy
+                )
+            })
+            .filter(|m| !m.addresses.is_empty())
+            .map(|m| PeerInferenceEndpoint {
+                node_id: m.node_id,
+                name: m.name.clone(),
+                // The client API is on port 9741 on every peer, not
+                // 9742 (which is internal). The gossiped addresses
+                // carry port 9742 (that's what the join handshake
+                // targets). Rewrite to 9741 for inference.
+                base_urls: m
+                    .addresses
+                    .iter()
+                    .map(|addr| {
+                        let ip = addr.ip();
+                        if ip.is_ipv6() {
+                            format!("http://[{ip}]:9741/v1")
+                        } else {
+                            format!("http://{ip}:9741/v1")
+                        }
+                    })
+                    .collect(),
+                system_ram_gb: m.capabilities.hardware.system_ram_gb,
+            })
+            .collect()
+    }
+
     // ── Private ─────────────────────────────────────────
 
     async fn start_daemon(
@@ -704,6 +757,29 @@ impl EmbeddedDaemon {
             .await;
         }
     }
+}
+
+/// A peer's inference service, as seen by the local
+/// `MeshInferenceProvider`. One per online, non-self member at the
+/// moment `peer_inference_endpoints()` was called.
+#[derive(Debug, Clone)]
+pub struct PeerInferenceEndpoint {
+    pub node_id: NodeId,
+    pub name: String,
+    /// Candidate base URLs in try-order. Each is a
+    /// `http://<ip>:9741/v1` prefix ready to hand to
+    /// `RemoteApiProvider::new`. Multiple when the peer is
+    /// dual-homed (WiFi + Tailscale); the wrapper tries them in
+    /// order until one succeeds — same policy as gossip + fan-out.
+    pub base_urls: Vec<String>,
+    /// Peer's gossiped `system_ram_gb`. Used as a crude-but-
+    /// correct-direction signal in the v1 routing heuristic:
+    /// only route synthesis to a peer whose RAM exceeds ours, so
+    /// a big-box Founder+small-box Joiner pair does the right
+    /// thing without us implementing full OICP manifest scoring
+    /// up-front. Proper per-model OICP matching is the Stage 2.1
+    /// follow-up.
+    pub system_ram_gb: u32,
 }
 
 /// Best-effort list of the host's externally-reachable IPs, so the

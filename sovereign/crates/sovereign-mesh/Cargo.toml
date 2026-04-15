@@ -22,6 +22,9 @@ corpus-engine = { workspace = true }
 
 # Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }
+# RemoteApiProvider — synthesised at request time when routing to
+# a peer for federated inference.
+sovereign-inference = { workspace = true }
 # async_trait is needed to impl the (async) MeshKnowledgeSource
 # trait on MeshKnowledgeClient. sovereign-core already uses it.
 async-trait = { workspace = true }
