@@ -481,6 +481,31 @@ impl EmbeddedDaemon {
             corpus_engine,
         );
 
+        // Install a persistence hook that fires on every Mesh
+        // mutation from a route handler (`/internal/join`,
+        // `/internal/gossip`). This closes the race window where
+        // the founder accepts a new member but crashes before the
+        // next 10s gossip-loop re-persist fires, forgetting the
+        // joiner on restart. We do this BEFORE the state is
+        // .clone()'d into the HTTP servers so Arc::get_mut in the
+        // builder succeeds.
+        let app_state = if self.persistence_enabled() {
+            let data_dir = self.data_dir.clone();
+            let hook: commonwealth_api::state::MeshMutationHook = Arc::new(
+                move |mesh: &commonwealth_core::mesh::Mesh, self_id: NodeId| {
+                    if let Err(e) = persist::save(&data_dir, mesh, self_id) {
+                        tracing::warn!(
+                            error = %e,
+                            "mesh_mutation_hook: persist failed"
+                        );
+                    }
+                },
+            );
+            app_state.with_mesh_mutation_hook(hook)
+        } else {
+            app_state
+        };
+
         // Client API stays on localhost — only the in-process Tauri
         // commands call it. Internal API binds to 0.0.0.0 so peers on
         // the LAN can reach it for the join handshake + gossip.
@@ -683,16 +708,19 @@ fn local_ip_candidates() -> Vec<std::net::IpAddr> {
 
     match if_addrs::get_if_addrs() {
         Ok(addrs) => {
-            let mut preferred: Vec<std::net::IpAddr> = Vec::new();
-            let mut secondary: Vec<std::net::IpAddr> = Vec::new();
             for iface in addrs {
                 let ip = iface.ip();
                 if ip.is_loopback() {
                     continue;
                 }
-                // Link-local addresses are typically useless
-                // cross-machine (169.254.x unconfigured DHCP, fe80::
-                // non-routable IPv6). Sort them to the back.
+                // Link-local addresses are useless cross-machine:
+                // 169.254.x is unconfigured DHCP fallback, fe80::
+                // is IPv6 link-local which can't route off the
+                // local segment. Macs have lots of these from
+                // Thunderbolt / virtual interfaces / utun0,1,2...
+                // Including them just spams the startup log and
+                // wastes fan-out attempts (reqwest dials them and
+                // gets EHOSTUNREACH). Drop outright.
                 let is_link_local = match ip {
                     std::net::IpAddr::V4(v4) => {
                         v4.octets()[0] == 169 && v4.octets()[1] == 254
@@ -702,13 +730,10 @@ fn local_ip_candidates() -> Vec<std::net::IpAddr> {
                     }
                 };
                 if is_link_local {
-                    secondary.push(ip);
-                } else {
-                    preferred.push(ip);
+                    continue;
                 }
+                ips.push(ip);
             }
-            ips.extend(preferred);
-            ips.extend(secondary);
         }
         Err(e) => {
             tracing::warn!(
