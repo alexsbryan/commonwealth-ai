@@ -888,10 +888,21 @@ impl Runtime {
             required,
             preferred,
         };
+        // Preserve whatever sharding `from_skills` resolved to —
+        // `SkillRegistry::inference_requirements` defaults to
+        // `MeshAllowed` and flips to `LocalOnly` only when an
+        // active skill has declared `privacy = "local_only"`
+        // (e.g. `inner-work`). Rebuilding via
+        // `InferenceRequirements::new()` would silently reset it
+        // to `LocalOnly` (the OICP spec default) and block every
+        // cross-mesh route, so we copy the skill-resolved value
+        // through.
+        let sharding = from_skills.sharding();
         Some(
             crate::oicp::InferenceRequirements::new()
                 .with_capabilities(caps)
-                .with_latency(latency),
+                .with_latency(latency)
+                .with_sharding(sharding),
         )
     }
 
