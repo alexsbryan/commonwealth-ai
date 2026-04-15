@@ -142,7 +142,7 @@ impl CorpusEngine {
         let chunker = self.make_chunker(&recipe.chunk);
 
         // Open or resume a partial index (supports resuming after process kill).
-        let (index, resume_iter_pos) = CorpusIndex::create_or_resume(
+        let (index, resume_iter_pos) = CorpusIndex::create_or_resume_with_sharing(
             index_path,
             &recipe.corpus.id,
             &recipe.corpus.name,
@@ -151,6 +151,7 @@ impl CorpusEngine {
             &self.expected_embedding_model,
             recipe.index.embedding_dimensions,
             recipe.corpus.mesh_sharing,
+            recipe.corpus.query_sharing,
             &recipe.corpus.license,
         )
         .await?;

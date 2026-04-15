@@ -135,6 +135,11 @@ impl CorpusIndex {
     // ── Construction ───────────────────────────────────────
 
     /// Create a new LanceDB index at the given directory.
+    ///
+    /// Back-compat wrapper: passes `query_sharing = None`, which
+    /// resolves at open-time to whatever `mesh_sharing` is —
+    /// preserving pre-split behavior. New callers who know they want
+    /// a different value should use `create_with_sharing`.
     pub async fn create(
         path: &Path,
         corpus_id: &str,
@@ -142,6 +147,31 @@ impl CorpusIndex {
         embedding_model: &str,
         embedding_dim: usize,
         mesh_sharing: bool,
+        license: &str,
+    ) -> Result<Self> {
+        Self::create_with_sharing(
+            path,
+            corpus_id,
+            corpus_name,
+            embedding_model,
+            embedding_dim,
+            mesh_sharing,
+            None,
+            license,
+        )
+        .await
+    }
+
+    /// Create a new LanceDB index with explicit `query_sharing`.
+    /// Used by the ingest pipeline, which reads the recipe's value.
+    pub async fn create_with_sharing(
+        path: &Path,
+        corpus_id: &str,
+        corpus_name: &str,
+        embedding_model: &str,
+        embedding_dim: usize,
+        mesh_sharing: bool,
+        query_sharing: Option<bool>,
         license: &str,
     ) -> Result<Self> {
         std::fs::create_dir_all(path)?;
@@ -165,6 +195,7 @@ impl CorpusIndex {
             embedding_model: embedding_model.to_string(),
             embedding_dimensions: embedding_dim,
             mesh_sharing,
+            query_sharing,
             license: license.to_string(),
             created_at: now,
             last_updated: now,
@@ -213,6 +244,33 @@ impl CorpusIndex {
         mesh_sharing: bool,
         license: &str,
     ) -> Result<(Self, u64)> {
+        Self::create_or_resume_with_sharing(
+            path,
+            corpus_id,
+            corpus_name,
+            embedding_model,
+            embedding_dim,
+            mesh_sharing,
+            None,
+            license,
+        )
+        .await
+    }
+
+    /// Like `create_or_resume`, but takes an explicit `query_sharing`
+    /// flag — the ingest pipeline passes the recipe's value through
+    /// so SEP (and future cite-but-don't-redistribute corpora) are
+    /// queryable from peers without being replicable.
+    pub async fn create_or_resume_with_sharing(
+        path: &Path,
+        corpus_id: &str,
+        corpus_name: &str,
+        embedding_model: &str,
+        embedding_dim: usize,
+        mesh_sharing: bool,
+        query_sharing: Option<bool>,
+        license: &str,
+    ) -> Result<(Self, u64)> {
         // Resume path: partial index exists from a previous killed run.
         if path.exists() && !Self::is_ingestion_complete(path) {
             match Self::open(path).await {
@@ -240,8 +298,21 @@ impl CorpusIndex {
             }
         }
 
-        // Fresh start.
-        let index = Self::create(path, corpus_id, corpus_name, embedding_model, embedding_dim, mesh_sharing, license).await?;
+        // Fresh start. Pass the resolved query_sharing through so a
+        // freshly-written `_corpus_meta.json` records the recipe's
+        // intent explicitly — no more guessing from mesh_sharing at
+        // open-time for this index.
+        let index = Self::create_with_sharing(
+            path,
+            corpus_id,
+            corpus_name,
+            embedding_model,
+            embedding_dim,
+            mesh_sharing,
+            query_sharing,
+            license,
+        )
+        .await?;
         Ok((index, 0))
     }
 

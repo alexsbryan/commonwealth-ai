@@ -235,6 +235,23 @@ pub struct CorpusMeta {
     pub license: String,
     #[serde(default = "default_true")]
     pub mesh_sharing: bool,
+    /// Whether peers may run federated knowledge-search queries
+    /// against a node that hosts this corpus. Distinct from
+    /// `mesh_sharing`, which governs byte-level redistribution
+    /// (shipping the index to another node for replication).
+    ///
+    /// Example: Stanford Encyclopedia of Philosophy has
+    /// `mesh_sharing = false` because the license prohibits
+    /// redistribution of the text, but `query_sharing = true`
+    /// because returning cited snippets in response to queries
+    /// is fair use (what Google does).
+    ///
+    /// Back-compat default: `None` means "fall back to
+    /// `mesh_sharing`" — preserves the pre-split behavior for
+    /// any recipe or stored index that hasn't been updated.
+    /// Set explicitly to override.
+    #[serde(default)]
+    pub query_sharing: Option<bool>,
     #[serde(default)]
     pub size_compressed_gb: f64,
     #[serde(default)]

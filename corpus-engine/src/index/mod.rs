@@ -164,6 +164,12 @@ struct IndexMeta {
     embedding_model: String,
     embedding_dimensions: usize,
     mesh_sharing: bool,
+    /// Whether peers on a shared Commonwealth mesh may run
+    /// knowledge-search queries against this index. `None` means
+    /// "no explicit value — pre-split index, fall back to
+    /// `mesh_sharing`". Set by the recipe at ingest time.
+    #[serde(default)]
+    query_sharing: Option<bool>,
     license: String,
     created_at: u64,
     last_updated: u64,
@@ -370,6 +376,11 @@ impl CorpusIndex {
             None
         };
 
+        // Resolve the effective `query_sharing` value here so
+        // downstream consumers (capability publisher, UI) get a
+        // single boolean they can trust — the Option/fallback logic
+        // lives in one place.
+        let query_sharing = meta.query_sharing.unwrap_or(meta.mesh_sharing);
         Ok(IndexInfo {
             corpus_id: meta.corpus_id,
             corpus_name: meta.corpus_name,
@@ -381,6 +392,7 @@ impl CorpusIndex {
             embedding_model: meta.embedding_model,
             embedding_dimensions: meta.embedding_dimensions,
             mesh_sharing: meta.mesh_sharing,
+            query_sharing,
             is_shard: meta.is_shard,
             chunk_range,
             chunks_expected: meta.chunks_expected,

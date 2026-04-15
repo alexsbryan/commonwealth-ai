@@ -100,6 +100,13 @@ pub struct IndexInfo {
     pub embedding_model: String,
     pub embedding_dimensions: usize,
     pub mesh_sharing: bool,
+    /// Resolved `query_sharing` flag — whether peers may run
+    /// federated knowledge searches against this corpus. See
+    /// `recipe::CorpusMeta::query_sharing` for the full rationale.
+    /// Always populated at runtime (falls back to `mesh_sharing`
+    /// when the on-disk meta lacks an explicit value).
+    #[serde(default)]
+    pub query_sharing: bool,
     pub is_shard: bool,
     pub chunk_range: Option<ChunkRange>,
 
