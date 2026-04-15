@@ -241,6 +241,8 @@ pub async fn knowledge_search(
             }));
         }
 
+        let mut peers_succeeded = 0usize;
+        let mut peers_failed = 0usize;
         for f in futures {
             match f.await {
                 Ok(PeerOutcome::Served {
@@ -248,6 +250,7 @@ pub async fn knowledge_search(
                     corpora_served,
                     corpora_unavailable: peer_unavailable,
                 }) => {
+                    peers_succeeded += 1;
                     for c in corpora_served {
                         corpora_searched.insert(c);
                     }
@@ -259,15 +262,29 @@ pub async fn knowledge_search(
                 Ok(PeerOutcome::Failed {
                     corpora_unavailable: failed_corpora,
                 }) => {
+                    peers_failed += 1;
                     for c in failed_corpora {
                         corpora_unavailable.insert(c);
                     }
                 }
                 Err(e) => {
+                    peers_failed += 1;
                     tracing::warn!(error = %e, "knowledge: fan-out join failed");
                 }
             }
         }
+        // Single-line summary the operator can grep for: if
+        // peers_succeeded == 0 AND peers_failed > 0, every peer we
+        // tried was unreachable — that's the AP-isolation /
+        // stale-address failure mode. If peers_succeeded > 0 but
+        // corpora_unavailable is non-empty, specific corpora were
+        // missing on each peer tried.
+        tracing::info!(
+            peers_succeeded,
+            peers_failed,
+            corpora_unavailable = ?corpora_unavailable,
+            "knowledge: fan-out complete"
+        );
     }
 
     build_response(all_results, corpora_searched, corpora_unavailable, limit)
@@ -366,7 +383,12 @@ async fn fanout_one_peer(
                 );
             }
             Err(e) => {
-                tracing::debug!(
+                // Info-level (was debug) — this is the log the user
+                // needs to see when "I can tell my Founder has SEP,
+                // so why aren't we fetching it?" The common cause is
+                // the advertised peer address being unreachable from
+                // here (AP isolation, stale cached address, VPN down).
+                tracing::info!(
                     peer = %node_id,
                     addr = %addr,
                     error = %e,
