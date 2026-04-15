@@ -62,15 +62,30 @@ pub async fn build_local_capabilities(
 }
 
 /// Map each installed index to a `CorpusShardInfo` that peers can
-/// route on. A Sovereign user can flip `mesh_sharing = false` on any
-/// recipe to keep a local-only corpus off the wire; we honour that
-/// by filtering here rather than downstream — if we never publish
-/// it, no peer ever asks for it.
+/// route on.
+///
+/// We filter on `query_sharing`, NOT `mesh_sharing`. The two flags
+/// are semantically distinct:
+///
+///   - `mesh_sharing=false` means "don't let peers replicate my
+///     bytes" (gates the scheduler's `/internal/index/transfer`).
+///   - `query_sharing=false` means "don't let peers run federated
+///     searches against my copy" (gates THIS path — advertising in
+///     `hosted_corpora`).
+///
+/// For SEP: `mesh_sharing=false, query_sharing=true` — the license
+/// forbids redistribution, but returning cited snippets in response
+/// to queries is fair use (what Google does). For a private
+/// `codebase` corpus: both false.
+///
+/// `IndexInfo.query_sharing` is resolved at open-time — an index
+/// whose on-disk meta predates this split falls back to
+/// `mesh_sharing` automatically, preserving pre-split behavior.
 async fn build_hosted_corpora(engine: &CorpusEngine) -> Vec<CorpusShardInfo> {
     match engine.installed_indexes().await {
         Ok(indexes) => indexes
             .into_iter()
-            .filter(|idx| idx.mesh_sharing)
+            .filter(|idx| idx.query_sharing)
             .map(|idx| CorpusShardInfo {
                 corpus_id: idx.corpus_id,
                 // `corpus_engine::ChunkRange` and

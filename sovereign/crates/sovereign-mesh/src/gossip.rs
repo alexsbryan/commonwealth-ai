@@ -127,6 +127,22 @@ pub async fn run_one_round(
         now,
     )
     .await;
+    // Glass-box log: this is what the rest of the mesh will see as
+    // OUR `hosted_corpora` after this round. If you're expecting
+    // peers to fetch your SEP index and they aren't, the first
+    // diagnostic is to check this line — an empty list means this
+    // node has no completed indexes to share (partial ingestions
+    // are filtered out on purpose). Info-level so it shows under
+    // the default filter, once per gossip tick (every 10s).
+    tracing::info!(
+        hosted_corpora = ?fresh_caps
+            .hosted_corpora
+            .iter()
+            .map(|c| &c.corpus_id)
+            .collect::<Vec<_>>(),
+        system_ram_gb = fresh_caps.hardware.system_ram_gb,
+        "gossip: publishing local capabilities"
+    );
 
     // Step 1: touch self + decay stale peers. One write-lock window.
     let candidates: Vec<(NodeId, Vec<std::net::SocketAddr>)> = {

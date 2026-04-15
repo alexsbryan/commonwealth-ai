@@ -550,6 +550,28 @@ impl Runtime {
             };
             let (local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
             local_hits = local_scored.len();
+            // Glass-box log: how many hits from local vs. mesh, and
+            // which corpora did mesh claim to serve? If mesh_hits > 0
+            // but `peer_tagged` is 0, the mesh is only round-tripping
+            // local corpora — meaning no peer actually hosts anything
+            // we're missing. If both are 0 with a live mesh, the
+            // handler on :9741 is either not running or returning
+            // empty. Reading this line is how you tell.
+            let peer_tagged = mesh_scored
+                .iter()
+                .filter(|h| h.peer_name.is_some())
+                .count();
+            let mesh_corpora: std::collections::BTreeSet<&str> = mesh_scored
+                .iter()
+                .map(|h| h.corpus_id.as_str())
+                .collect();
+            tracing::info!(
+                local_hits = local_scored.len(),
+                mesh_hits = mesh_scored.len(),
+                mesh_peer_tagged = peer_tagged,
+                mesh_corpora = ?mesh_corpora,
+                "runtime: knowledge fan-out summary"
+            );
             all_chunks.extend(local_scored);
 
             // Fold mesh hits in, tagging peer attribution per corpus.
