@@ -20,6 +20,10 @@ pub mod web;
 pub use code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 #[cfg(feature = "treesitter")]
 pub use code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
+#[cfg(feature = "treesitter")]
+pub use code::{GetRunOutputTool, RunTestsTool, TestStatusTool};
+#[cfg(feature = "treesitter")]
+pub use code::{GetLintOutputTool, LintStatusTool};
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};

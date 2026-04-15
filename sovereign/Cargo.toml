@@ -46,3 +46,7 @@ arc-swap = "1.7"
 # Portable `gethostname()` wrapper used as the default node name in
 # mesh create/join. Cheap, zero-runtime, no build-script dependencies.
 hostname = "0.4"
+
+# Fast dev builds: skip debug symbols (biggest single speedup for cargo check).
+[profile.dev]
+debug = 0

@@ -111,6 +111,60 @@ fn truncate_chunk_content(content: &str) -> String {
     }
 }
 
+/// Rescale each chunk's `score` by the max score observed in its
+/// own corpus. Result: every corpus's top hit lands at 1.0,
+/// lower-ranked hits scale proportionally within their corpus, and
+/// cross-corpus comparison becomes meaningful.
+///
+/// Why this is needed: FTS5 BM25 scores depend on corpus-specific
+/// IDF weights and document-length statistics. On a two-corpus
+/// setup where one is a 1k-row code index and the other is a
+/// 188k-row SEP prose index, a query like
+/// *"is free will compatible with determinism?"* can score a code
+/// test function at 21 (because the test name's underscore-split
+/// tokens are rare enough in the small corpus to fire high IDF)
+/// while SEP's genuine `compatibilism` match scores 19. Naive
+/// `sort_by(score)` then ranks the test function above the
+/// philosophy passage — visible in the UI as a top-listed code
+/// chunk for a pure-philosophy query.
+///
+/// Max-based normalisation is the least-surgical fix. Alternatives
+/// considered and rejected:
+///   * **Round-robin by corpus**: loses score fidelity; a corpus
+///     with only mediocre hits gets equal billing to one with
+///     strong hits.
+///   * **Z-score**: needs mean + stddev, which are unreliable on
+///     5-to-8-element distributions.
+///   * **Query/corpus classifier**: the "right" answer, but needs
+///     labelled training data and a judgement model.
+///
+/// This is a heuristic: it doesn't *know* philosophy queries should
+/// prefer SEP, but it does prevent one outlier in a small corpus
+/// from monopolising the top-N. In-context, that's enough — the
+/// synthesis model sees evidence from every corpus that had a real
+/// match, weighted by within-corpus rank.
+pub(crate) fn normalise_scores_per_corpus(chunks: &mut [corpus_engine::ScoredChunk]) {
+    use std::collections::HashMap;
+    let mut max_per_corpus: HashMap<String, f32> = HashMap::new();
+    for c in chunks.iter() {
+        let entry = max_per_corpus.entry(c.corpus_id.clone()).or_insert(c.score);
+        if c.score > *entry {
+            *entry = c.score;
+        }
+    }
+    for c in chunks.iter_mut() {
+        if let Some(&max) = max_per_corpus.get(&c.corpus_id) {
+            if max > 0.0 {
+                c.score /= max;
+            }
+        }
+    }
+    tracing::debug!(
+        corpora = ?max_per_corpus.keys().collect::<Vec<_>>(),
+        "runtime: normalised per-corpus scores before global merge"
+    );
+}
+
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// grouped by provenance tier (corpus vs web) and staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
@@ -678,6 +732,15 @@ impl Runtime {
                 }
             }
         }
+
+        // Put chunks on a comparable score scale before the global
+        // merge. See `normalise_scores_per_corpus` for the full
+        // rationale — short version: raw BM25 scores aren't
+        // comparable across corpora, and on a philosophy query
+        // that landed on both a large SEP prose corpus and a small
+        // code corpus, the code corpus can produce an outlier
+        // score that drowns out the real semantic matches.
+        normalise_scores_per_corpus(&mut all_chunks);
 
         // Dedupe by (corpus_id, content) before truncating so a
         // corpus that appears both locally and via mesh doesn't
@@ -2262,5 +2325,121 @@ impl Runtime {
             message: assistant_msg,
             task: Some(task),
         })
+    }
+}
+
+#[cfg(test)]
+mod score_normalisation_tests {
+    use super::normalise_scores_per_corpus;
+    use corpus_engine::ScoredChunk;
+    use std::collections::HashMap;
+
+    fn chunk(corpus: &str, content: &str, score: f32) -> ScoredChunk {
+        ScoredChunk {
+            content: content.into(),
+            title: Some(content.into()),
+            url: None,
+            corpus_id: corpus.into(),
+            score,
+            metadata: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn sep_beats_code_after_normalisation() {
+        // Reconstruct the observed scenario from the 08:40 demo
+        // logs: a BM25 outlier from a small code corpus (score
+        // 21.37) was out-ranking SEP's genuine top match (19.25)
+        // in the merged list even though SEP had 8 consistently-
+        // strong hits and code had 1 outlier + a long tail.
+        //
+        // After per-corpus max normalisation the code outlier
+        // reduces to 1.0, SEP's top also reduces to 1.0, but
+        // SEP's *second* chunk at 0.954 outranks code's *second*
+        // chunk at 0.700 — so top-8 ends up dominated by SEP.
+        let mut chunks = vec![
+            // SEP: 8 strong, clustered hits (realistic shape).
+            chunk("sep", "compatibilism", 19.25),
+            chunk("sep", "incompatibilism-arguments-1", 18.37),
+            chunk("sep", "locke-freedom", 18.16),
+            chunk("sep", "providence-divine", 16.95),
+            chunk("sep", "incompatibilism-arguments-2", 16.83),
+            chunk("sep", "incompatibilism-arguments-3", 16.57),
+            chunk("sep", "frankfurt-aim", 15.65),
+            chunk("sep", "moral-responsibility", 15.48),
+            // corpus-engine: 1 spurious outlier + long tail.
+            chunk("corpus-engine", "extract_questions_prefers_canonical", 21.37),
+            chunk("corpus-engine", "test_skeleton", 14.96),
+            chunk("corpus-engine", "mock_inference_fn", 14.80),
+            // lcol-llm: a code corpus with middling matches.
+            chunk("lcol-llm", "needs_deep_reasoning", 16.44),
+            chunk("lcol-llm", "LlmRouter", 12.91),
+        ];
+
+        normalise_scores_per_corpus(&mut chunks);
+        chunks.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let top8: Vec<&str> = chunks
+            .iter()
+            .take(8)
+            .map(|c| c.corpus_id.as_str())
+            .collect();
+
+        // The code outlier still appears (score 1.0, tied for
+        // top) — that's correct: it IS its corpus's top hit, so
+        // the merge can't hide it without losing evidence from
+        // that corpus entirely. But SEP should contribute at
+        // least 5 of the top 8, because its within-corpus ranks
+        // 2..=6 all score above code's rank 2 after rescaling.
+        let sep_count = top8.iter().filter(|&&c| c == "sep").count();
+        assert!(
+            sep_count >= 5,
+            "expected SEP to dominate top-8 after normalisation; \
+             got corpus list {top8:?}"
+        );
+    }
+
+    #[test]
+    fn preserves_within_corpus_ranking() {
+        // Within a single corpus, the rescaling must not reorder
+        // hits — just compress the scale to [0, 1].
+        let mut chunks = vec![
+            chunk("one", "best", 20.0),
+            chunk("one", "mid", 10.0),
+            chunk("one", "worst", 5.0),
+        ];
+        normalise_scores_per_corpus(&mut chunks);
+        assert_eq!(chunks[0].content, "best");
+        assert!((chunks[0].score - 1.0).abs() < 1e-6);
+        assert!((chunks[1].score - 0.5).abs() < 1e-6);
+        assert!((chunks[2].score - 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn empty_input_is_a_noop() {
+        // Guard against divide-by-zero or panic on empty slice —
+        // `search_corpus_indexes` can legitimately return zero
+        // hits when the query embedding is empty AND FTS returns
+        // nothing.
+        let mut chunks: Vec<ScoredChunk> = Vec::new();
+        normalise_scores_per_corpus(&mut chunks);
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn single_corpus_zero_max_stays_zero() {
+        // If every hit in a corpus scored 0.0 (shouldn't happen
+        // in practice — ScoredChunk implies at least a bare
+        // match), the rescaler must not divide by zero.
+        let mut chunks = vec![
+            chunk("empty", "a", 0.0),
+            chunk("empty", "b", 0.0),
+        ];
+        normalise_scores_per_corpus(&mut chunks);
+        assert_eq!(chunks[0].score, 0.0);
+        assert_eq!(chunks[1].score, 0.0);
     }
 }

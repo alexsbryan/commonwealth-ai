@@ -56,8 +56,9 @@ Commands:
   refresh             Update the call graph (runs automatically on commit)
     --quiet           Suppress progress output
   serve               Start a lightweight MCP server (no model required)
-    --port <port>     Listen port (default: 8080)
-    --data-dir <dir>  Index directory (default: ~/.sovereign/indexes)
+    --port <port>         Listen port (default: 8080)
+    --data-dir <dir>      Index directory (default: ~/.sovereign/indexes)
+    --sovereign-dir <dir> Path to .sovereign/ dir (default: nearest ancestor with .sovereign/)
   install-hooks       Upgrade (or install) the post-commit hook in this repo
                       without re-running init
   help                Show this help"
@@ -428,6 +429,40 @@ vector = false
     ) {
         eprintln!("    \u{2717} Cannot write project.json: {e}");
         // Non-fatal — status/refresh will just need flags.
+    }
+
+    // .sovereign/sovereign.toml — starter config for background watchers.
+    // Only written if the file doesn't already exist (preserve user edits).
+    let toml_path = sovereign_dir.join("sovereign.toml");
+    if !toml_path.exists() {
+        let abs_root = repo_root
+            .canonicalize()
+            .unwrap_or_else(|_| repo_root.clone());
+        let toml_stub = format!(
+            "# sovereign.toml — background watcher config for `sovereign project serve`.\n\
+             #\n\
+             # Uncomment and fill in test_runner / lint_runner to enable the\n\
+             # test_status, run_tests, lint_status MCP tools.\n\
+             # Commands must emit Tier 2 JSONL on stdout (see SOVEREIGN.md).\n\
+             \n\
+             # [test_runner]\n\
+             # command = \"cargo test 2>&1\"\n\
+             # working_dir = \"{root}\"\n\
+             # timeout_secs = 300\n\
+             # debounce_ms = 2000\n\
+             \n\
+             # [lint_runner]\n\
+             # command = \"cargo check --message-format json 2>&1 | sovereign-cargo-check-adapter\"\n\
+             # working_dir = \"{root}\"\n\
+             # timeout_secs = 120\n\
+             # debounce_ms = 1000\n",
+            root = abs_root.display()
+        );
+        if let Err(e) = std::fs::write(&toml_path, &toml_stub) {
+            eprintln!("    \u{26a0} Could not write sovereign.toml: {e}");
+        } else {
+            println!("    \u{2713} .sovereign/sovereign.toml (starter config)");
+        }
     }
 
     // .claude/settings.json
@@ -824,6 +859,7 @@ async fn cmd_refresh(args: &[String]) -> i32 {
 async fn cmd_serve(args: &[String]) -> i32 {
     let mut port: u16 = 8080;
     let mut data_dir: Option<PathBuf> = None;
+    let mut sovereign_dir_arg: Option<PathBuf> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -843,6 +879,10 @@ async fn cmd_serve(args: &[String]) -> i32 {
             "--data-dir" => {
                 i += 1;
                 data_dir = args.get(i).map(PathBuf::from);
+            }
+            "--sovereign-dir" => {
+                i += 1;
+                sovereign_dir_arg = args.get(i).map(PathBuf::from);
             }
             _ => {}
         }
@@ -912,6 +952,104 @@ async fn cmd_serve(args: &[String]) -> i32 {
         });
     }
 
+    // ── Repo root + sovereign config ────────────────────────────
+    //
+    // Priority: nearest ancestor with .sovereign/ > git root > cwd.
+    // This allows `sovereign project serve` to be launched from a monorepo
+    // root that is not itself a git repository.
+
+    let cwd = std::env::current_dir().ok().unwrap_or_else(|| PathBuf::from("."));
+    let sovereign_dir = sovereign_dir_arg
+        .map(|p| if p.is_absolute() { p } else { cwd.join(p) })
+        .or_else(|| find_sovereign_dir(&cwd))
+        .or_else(|| find_repo_root().map(|r| r.join(".sovereign")))
+        .unwrap_or_else(|| cwd.join(".sovereign"));
+    let repo_root = sovereign_dir
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| cwd.clone());
+    let sovereign_cfg = corpus_engine::SovereignConfig::load_or_default(&sovereign_dir);
+
+    // ── Open result stores (SQLite, always-on) ──────────────────
+
+    let test_store = match corpus_engine::TestResultStore::open(
+        &data_dir.join("test_results.db"),
+    ) {
+        Ok(s) => {
+            eprintln!("  test_results.db  ✓");
+            Arc::new(s)
+        }
+        Err(e) => {
+            eprintln!("  warning: could not open test results DB: {e}");
+            Arc::new(
+                corpus_engine::TestResultStore::open(std::path::Path::new(":memory:"))
+                    .expect("in-memory test store"),
+            )
+        }
+    };
+
+    let lint_store = match corpus_engine::LintResultStore::open(
+        &data_dir.join("lint_results.db"),
+    ) {
+        Ok(s) => {
+            eprintln!("  lint_results.db  ✓");
+            Arc::new(s)
+        }
+        Err(e) => {
+            eprintln!("  warning: could not open lint results DB: {e}");
+            Arc::new(
+                corpus_engine::LintResultStore::open(std::path::Path::new(":memory:"))
+                    .expect("in-memory lint store"),
+            )
+        }
+    };
+
+    // ── Build background watchers ───────────────────────────────
+
+    let test_watcher: Option<Arc<corpus_engine::TestWatcher>> =
+        sovereign_cfg.test_runner.as_ref().map(|cfg| {
+            let working_dir = cfg.working_dir.as_ref().map(|d| {
+                let p = PathBuf::from(d);
+                if p.is_absolute() { p } else { repo_root.join(p) }
+            });
+            eprintln!(
+                "  test_runner      ✓  {}",
+                cfg.command.chars().take(60).collect::<String>()
+            );
+            Arc::new(corpus_engine::TestWatcher::new(
+                &cfg.command,
+                working_dir,
+                cfg.timeout_secs.unwrap_or(300),
+                Arc::clone(&test_store),
+            ))
+        });
+
+    let lint_watcher: Option<Arc<corpus_engine::LintWatcher>> =
+        sovereign_cfg.lint_runner.as_ref().map(|cfg| {
+            let working_dir = cfg.working_dir.as_ref().map(|d| {
+                let p = PathBuf::from(d);
+                if p.is_absolute() { p } else { repo_root.join(p) }
+            });
+            eprintln!(
+                "  lint_runner      ✓  {}",
+                cfg.command.chars().take(60).collect::<String>()
+            );
+            Arc::new(corpus_engine::LintWatcher::new(
+                &cfg.command,
+                working_dir,
+                cfg.timeout_secs.unwrap_or(120),
+                Arc::clone(&lint_store),
+            ))
+        });
+
+    if test_watcher.is_none() && lint_watcher.is_none() {
+        eprintln!(
+            "  warning: no watchers configured — add [test_runner] / [lint_runner] \
+             to {}",
+            sovereign_dir.join("sovereign.toml").display()
+        );
+    }
+
     // ── Register tools ──────────────────────────────────────────
 
     let mut tools = sovereign_core::ToolRegistry::new();
@@ -932,6 +1070,59 @@ async fn cmd_serve(args: &[String]) -> i32 {
         Arc::clone(&engine),
         Arc::clone(&merged_graph),
     )));
+
+    // ── Test / lint watcher tools ───────────────────────────────
+
+    tools.register(Box::new(sovereign_tools::TestStatusTool::new(
+        Arc::clone(&test_store),
+    )));
+    if let Some(ref watcher) = test_watcher {
+        tools.register(Box::new(sovereign_tools::RunTestsTool::new(
+            Arc::clone(watcher),
+        )));
+    }
+    tools.register(Box::new(sovereign_tools::GetRunOutputTool::new(
+        Arc::clone(&test_store),
+    )));
+
+    tools.register(Box::new(sovereign_tools::LintStatusTool::new(
+        Arc::clone(&lint_store),
+    )));
+    tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
+        Arc::clone(&lint_store),
+    )));
+
+    // ── Start watcher coordinator ───────────────────────────────
+
+    let debounce_ms = sovereign_cfg
+        .test_runner
+        .as_ref()
+        .and_then(|c| c.debounce_ms)
+        .or_else(|| sovereign_cfg.lint_runner.as_ref().and_then(|c| c.debounce_ms))
+        .unwrap_or(500);
+
+    let mut coordinator = corpus_engine::WatcherCoordinator::new(debounce_ms);
+    if let Some(ref w) = test_watcher {
+        coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
+    }
+    if let Some(ref w) = lint_watcher {
+        coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
+    }
+
+    let _coordinator_handle = if !coordinator.registered_ids().is_empty() {
+        match coordinator.start(vec![repo_root.clone()]).await {
+            Ok(handle) => {
+                eprintln!("  Watcher started (watching {})", repo_root.display());
+                Some(handle)
+            }
+            Err(e) => {
+                eprintln!("  warning: could not start watcher: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     let tools = Arc::new(tools);
     eprintln!();
@@ -1199,8 +1390,14 @@ mod mcp_server {
     }
 
     const MCP_TOOLS: &[&str] = &[
+        // Code index
         "symbol_lookup", "code_search", "recent_changes",
+        // SCIP call graph
         "find_callees", "find_callers",
+        // Test watcher
+        "test_status", "run_tests", "get_run_output",
+        // Lint watcher
+        "lint_status", "get_lint_output",
     ];
 
     pub fn router(tools: Arc<ToolRegistry>) -> Router {
@@ -1493,6 +1690,22 @@ fn has_ext_inner(dir: &Path, ext: &str, depth: usize, max_depth: usize) -> bool 
 }
 
 // ─── Git helpers ─────────────────────────────────────────────
+
+/// Walk upward from `start` looking for the first directory that contains a
+/// `.sovereign/` subdirectory. Returns the `.sovereign/` path if found.
+fn find_sovereign_dir(start: &Path) -> Option<PathBuf> {
+    let mut current = start.to_path_buf();
+    loop {
+        let candidate = current.join(".sovereign");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        match current.parent() {
+            Some(p) => current = p.to_path_buf(),
+            None => return None,
+        }
+    }
+}
 
 fn find_repo_root() -> Option<PathBuf> {
     let output = std::process::Command::new("git")

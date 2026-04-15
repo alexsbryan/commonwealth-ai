@@ -216,11 +216,28 @@ async fn mcp_message(
 /// a tool here without also implementing it would be a trust violation,
 /// so the list is colocated with the handler and tested against the spec.
 const MCP_EXPOSED_TOOLS: &[&str] = &[
+    // Code index tools (LanceDB)
     "symbol_lookup",
     "code_search",
     "recent_changes",
+    // SCIP call-graph tools
     "find_callees",
     "find_callers",
+    // Test watcher tools
+    "test_status",
+    "run_tests",
+    "get_run_output",
+    // Lint watcher tools
+    "lint_status",
+    "get_lint_output",
+    // Working notes tools
+    "write_note",
+    "read_notes",
+    "delete_note",
+    // Blast radius
+    "blast_radius",
+    // Project context
+    "project_context",
 ];
 
 pub(crate) fn handle_tools_list(registry: &ToolRegistry, id: Value) -> JsonRpcResponse {

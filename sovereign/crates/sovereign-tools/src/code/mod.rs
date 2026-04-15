@@ -33,6 +33,20 @@ pub mod callees;
 #[cfg(feature = "treesitter")]
 pub mod callers;
 
+// Test watcher MCP tools (require treesitter for SQLite types).
+#[cfg(feature = "treesitter")]
+pub mod test_status;
+#[cfg(feature = "treesitter")]
+pub mod run_tests;
+#[cfg(feature = "treesitter")]
+pub mod get_run_output;
+
+// Lint watcher MCP tools.
+#[cfg(feature = "treesitter")]
+pub mod lint_status;
+#[cfg(feature = "treesitter")]
+pub mod get_lint_output;
+
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
 pub use symbol_lookup::SymbolLookupTool;
@@ -41,6 +55,18 @@ pub use symbol_lookup::SymbolLookupTool;
 pub use callees::{FindCalleesTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]
 pub use callers::FindCallersTool;
+
+#[cfg(feature = "treesitter")]
+pub use test_status::TestStatusTool;
+#[cfg(feature = "treesitter")]
+pub use run_tests::RunTestsTool;
+#[cfg(feature = "treesitter")]
+pub use get_run_output::GetRunOutputTool;
+
+#[cfg(feature = "treesitter")]
+pub use lint_status::LintStatusTool;
+#[cfg(feature = "treesitter")]
+pub use get_lint_output::GetLintOutputTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

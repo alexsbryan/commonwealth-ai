@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# sovereign-mypy-adapter — translates mypy output to Tier 2 lint events.
+#
+# Usage: mypy --no-error-summary . | sovereign-mypy-adapter
+#
+# mypy output format: file:line: error: message  [error-code]
+#                     file:line: note: message
+
+set -uo pipefail
+
+python3 -c "
+import sys, re
+
+fail_count = 0
+warn_count = 0
+pass_count = 0
+
+# Pattern: path:line: (error|warning|note): message  [code]
+pattern = re.compile(r'^(.+?):(\d+):(?:\d+:)? (error|warning|note): (.+)$')
+
+for raw_line in sys.stdin:
+    line = raw_line.rstrip()
+    if not line:
+        continue
+    m = pattern.match(line)
+    if not m:
+        continue
+    file_path, lineno, level, msg = m.groups()
+    if level == 'error':
+        import json
+        event = {'t': 'fail', 'n': file_path, 'out': msg, 'line': int(lineno)}
+        print(json.dumps(event))
+        fail_count += 1
+    elif level == 'warning':
+        import json
+        event = {'t': 'warn', 'n': file_path, 'out': msg, 'line': int(lineno)}
+        print(json.dumps(event))
+        warn_count += 1
+    # notes are informational, skip
+
+import json
+print(json.dumps({'t': 'summary', 'pass': pass_count, 'fail': fail_count, 'warn': warn_count, 'ms': 0}))
+sys.exit(1 if fail_count > 0 else 0)
+"

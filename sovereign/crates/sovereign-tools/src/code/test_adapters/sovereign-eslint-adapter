@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# sovereign-eslint-adapter — translates `eslint --format json` output to
+# Tier 2 lint events.
+#
+# Usage: eslint --format json . | sovereign-eslint-adapter
+
+set -uo pipefail
+
+python3 -c "
+import sys, json
+
+data = json.load(sys.stdin)
+fail_count = 0
+warn_count = 0
+pass_count = 0
+
+for file_result in data:
+    file_path = file_result.get('filePath', 'unknown')
+    messages = file_result.get('messages', [])
+    if not messages:
+        print(json.dumps({'t': 'pass', 'n': file_path}))
+        pass_count += 1
+        continue
+    for msg in messages:
+        severity = msg.get('severity', 1)  # 1=warn, 2=error
+        t = 'fail' if severity == 2 else 'warn'
+        out_msg = msg.get('message', '')
+        rule = msg.get('ruleId', '')
+        if rule:
+            out_msg = f'[{rule}] {out_msg}'
+        event = {'t': t, 'n': file_path, 'out': out_msg}
+        line = msg.get('line')
+        col = msg.get('column')
+        if line is not None:
+            event['line'] = line
+        if col is not None:
+            event['col'] = col
+        print(json.dumps(event))
+        if t == 'fail':
+            fail_count += 1
+        else:
+            warn_count += 1
+
+print(json.dumps({'t': 'summary', 'pass': pass_count, 'fail': fail_count, 'warn': warn_count, 'ms': 0}))
+sys.exit(1 if fail_count > 0 else 0)
+"
