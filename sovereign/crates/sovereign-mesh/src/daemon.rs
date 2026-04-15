@@ -575,10 +575,21 @@ impl EmbeddedDaemon {
         // NEITHER means the binary predates this code and a rebuild
         // is required.
         info!("spawning gossip loop");
+        // Hand `data_dir` to the gossip loop so it can re-persist
+        // mesh.json after every round — catching the Founder's
+        // /internal/join mutation (which mutates in-memory but used
+        // to leave the on-disk snapshot stale, so a Founder restart
+        // forgot every Joiner and Joiners had to rejoin each time).
+        let persist_dir = if self.persistence_enabled() {
+            Some(self.data_dir.clone())
+        } else {
+            None
+        };
         let gossip_handle = gossip::spawn_gossip_loop(
             app_state.clone(),
             gossip::DEFAULT_GOSSIP_INTERVAL,
             gossip::DEFAULT_OFFLINE_THRESHOLD,
+            persist_dir,
         );
 
         let mut state = self.state.write().await;
@@ -649,26 +660,84 @@ fn reachable_addresses(port: u16) -> Vec<SocketAddr> {
 }
 
 fn local_ip_candidates() -> Vec<std::net::IpAddr> {
-    let mut ips = Vec::new();
-    if let Ok(sock) = std::net::UdpSocket::bind("0.0.0.0:0") {
-        if sock.connect("1.1.1.1:80").is_ok() {
-            if let Ok(addr) = sock.local_addr() {
-                if !addr.ip().is_loopback() {
-                    ips.push(addr.ip());
+    // Two-tier strategy:
+    //
+    //   Tier 1: enumerate EVERY local non-loopback interface via
+    //   `if-addrs`. This is what we actually want — on a machine
+    //   with both WiFi (192.168.x) and Tailscale (100.x) up, both
+    //   addresses need to be published so peers can reach us via
+    //   whichever one they can route to. The old default-route
+    //   trick missed Tailscale entirely on dual-homed machines,
+    //   which is EXACTLY the Commonwealth LAN-+-VPN topology.
+    //
+    //   Tier 2 (fallback): the "UDP-connect to a public IP without
+    //   sending" trick. Kept for cases where `if-addrs` errors out
+    //   (should never happen on darwin/linux but the contract is
+    //   best-effort). Never used in practice.
+    //
+    // Ordering: preferred routable IPs first — link-local addresses
+    // (169.254.x, fe80::) and private-ranges come after globals.
+    // Rationale: the peer tries addresses in list order, so putting
+    // the most reliable ones first shortens the mean fan-out path.
+    let mut ips: Vec<std::net::IpAddr> = Vec::new();
+
+    match if_addrs::get_if_addrs() {
+        Ok(addrs) => {
+            let mut preferred: Vec<std::net::IpAddr> = Vec::new();
+            let mut secondary: Vec<std::net::IpAddr> = Vec::new();
+            for iface in addrs {
+                let ip = iface.ip();
+                if ip.is_loopback() {
+                    continue;
+                }
+                // Link-local addresses are typically useless
+                // cross-machine (169.254.x unconfigured DHCP, fe80::
+                // non-routable IPv6). Sort them to the back.
+                let is_link_local = match ip {
+                    std::net::IpAddr::V4(v4) => {
+                        v4.octets()[0] == 169 && v4.octets()[1] == 254
+                    }
+                    std::net::IpAddr::V6(v6) => {
+                        v6.segments()[0] & 0xffc0 == 0xfe80
+                    }
+                };
+                if is_link_local {
+                    secondary.push(ip);
+                } else {
+                    preferred.push(ip);
+                }
+            }
+            ips.extend(preferred);
+            ips.extend(secondary);
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "if_addrs::get_if_addrs failed — falling back to \
+                 UDP-connect default-route detection"
+            );
+            if let Ok(sock) = std::net::UdpSocket::bind("0.0.0.0:0") {
+                if sock.connect("1.1.1.1:80").is_ok() {
+                    if let Ok(addr) = sock.local_addr() {
+                        if !addr.ip().is_loopback() {
+                            ips.push(addr.ip());
+                        }
+                    }
+                }
+            }
+            if let Ok(sock) = std::net::UdpSocket::bind("[::]:0") {
+                if sock.connect("[2606:4700:4700::1111]:80").is_ok() {
+                    if let Ok(addr) = sock.local_addr() {
+                        let ip = addr.ip();
+                        if !ip.is_loopback() && !ips.contains(&ip) {
+                            ips.push(ip);
+                        }
+                    }
                 }
             }
         }
     }
-    if let Ok(sock) = std::net::UdpSocket::bind("[::]:0") {
-        if sock.connect("[2606:4700:4700::1111]:80").is_ok() {
-            if let Ok(addr) = sock.local_addr() {
-                let ip = addr.ip();
-                if !ip.is_loopback() && !ips.contains(&ip) {
-                    ips.push(ip);
-                }
-            }
-        }
-    }
+
     ips
 }
 

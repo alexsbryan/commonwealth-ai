@@ -63,21 +63,44 @@ impl Drop for GossipHandle {
 }
 
 /// Spawn the periodic gossip task. Call once per daemon start.
+///
+/// `persist_dir` is the directory containing `mesh.json`. When
+/// provided, every round re-persists the current mesh snapshot so
+/// that mutations from any source — the `/internal/join` handler,
+/// `merge_from` via gossip, `last_seen` bumps, status decays —
+/// survive a daemon restart without needing a per-handler persist
+/// callback. Costs one JSON file write per 10s (trivial). `None`
+/// (test harnesses, CLI without persistence) skips persistence.
 pub fn spawn_gossip_loop(
     app_state: AppState,
     interval: Duration,
     offline_threshold: Duration,
+    persist_dir: Option<std::path::PathBuf>,
 ) -> GossipHandle {
     let task = tokio::spawn(async move {
         info!(
             interval_secs = interval.as_secs(),
             offline_threshold_secs = offline_threshold.as_secs(),
+            persistence = persist_dir.is_some(),
             "gossip: loop started"
         );
         loop {
             tokio::time::sleep(interval).await;
             if let Err(e) = run_one_round(&app_state, offline_threshold).await {
                 warn!(error = %e, "gossip: round errored");
+            }
+            if let Some(dir) = persist_dir.as_deref() {
+                let mesh = app_state.inner.mesh.read().await.clone();
+                let self_id = app_state.inner.self_node_id;
+                if let Err(e) = crate::persist::save(dir, &mesh, self_id) {
+                    // Don't spam — persistence failure is rarely
+                    // fatal to the running session, but the operator
+                    // should know their mesh won't survive restart.
+                    warn!(
+                        error = %e,
+                        "gossip: mesh.json re-persist failed"
+                    );
+                }
             }
         }
     });

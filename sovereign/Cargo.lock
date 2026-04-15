@@ -8145,6 +8145,7 @@ dependencies = [
  "commonwealth-state",
  "corpus-engine",
  "hex",
+ "if-addrs",
  "rand 0.9.2",
  "reqwest 0.12.28",
  "serde",
