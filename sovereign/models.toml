@@ -18,6 +18,15 @@
 # Optional [profiles.X.Y.quirks_override] tables override individual
 # fields from the family's default_quirks(). Only specify what differs.
 #
+# Optional [profiles.X.Y.capabilities] tables declare the slot's OICP
+# capability profile (per spec §2.4, levels 0..=4 = none/basic/moderate/
+# strong/exceptional). Consumed by `sovereign-mesh` to score backends
+# when routing synthesis across a Commonwealth mesh — a Joiner running
+# a 1.7B picks the Founder's 27B for `Analysis ≥ 3` requests, etc.
+# Absent = BYOM / legacy: mesh routing falls back to conservative
+# defaults. Capabilities: general, code, analysis, math, creative,
+# instruction, multilingual, vision, long_context (snake_case keys).
+#
 # ── Fast slot notes ──────────────────────────────────────────────────────────
 # Stays on Qwen3 (not Qwen3.5) across all profiles. Reasons:
 #   1. Qwen3.5 small models (0.8B, 2B) show thinking-loop instability
@@ -53,6 +62,12 @@ quant    = "Q4_K_M"
 size_gb  = 0.4
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF"
+# Fast slot only does intent classification + JSON routing. We don't
+# advertise it as a synthesis candidate; mesh routing filters it
+# out as a "no peer should ever prefer this" floor.
+[profiles.cpu_only.fast.capabilities]
+general     = 1
+instruction = 2
 
 [profiles.cpu_only.thoughtful]
 repo     = "Qwen/Qwen3-4B-GGUF"
@@ -62,6 +77,14 @@ quant    = "Q4_K_M"
 size_gb  = 2.6
 thinking = false  # thinking=false on CPU: latency renders it unusable
 hf_url   = "https://huggingface.co/Qwen/Qwen3-4B-GGUF"
+# 4B at Q4 on CPU — competent floor for general Q&A but below
+# the threshold where it measurably outperforms bigger quants.
+[profiles.cpu_only.thoughtful.capabilities]
+general     = 2
+analysis    = 1
+code        = 1
+instruction = 2
+math        = 1
 
 [profiles.cpu_only.embed]
 repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
@@ -86,6 +109,9 @@ quant    = "Q8_0"
 size_gb  = 0.6
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF"
+[profiles.low_mem.fast.capabilities]
+general     = 1
+instruction = 2
 
 [profiles.low_mem.thoughtful]
 repo     = "Qwen/Qwen3.5-4B-GGUF"
@@ -95,6 +121,14 @@ quant    = "Q4_K_M"
 size_gb  = 2.6
 thinking = true
 hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF"
+# Qwen3.5-4B with thinking-mode on a GPU: solid small-model
+# reasoning. Outpaces Qwen3-4B on instruction following.
+[profiles.low_mem.thoughtful.capabilities]
+general     = 2
+analysis    = 2
+code        = 2
+instruction = 2
+math        = 1
 
 [profiles.low_mem.embed]
 repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
@@ -119,6 +153,9 @@ quant    = "Q4_K_M"
 size_gb  = 1.1
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+[profiles.default.fast.capabilities]
+general     = 1
+instruction = 2
 
 [profiles.default.thoughtful]
 repo     = "bartowski/Qwen_Qwen3.5-9B-GGUF"
@@ -128,6 +165,15 @@ quant    = "Q4_K_M"
 size_gb  = 5.5
 thinking = true
 hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF"
+# Qwen3.5-9B at Q4_K_M: measurably outperforms Qwen3-8B on
+# GPQA Diamond and BFCL-V4 (per Qwen's own evals). Strong
+# general + analysis; competent code + math.
+[profiles.default.thoughtful.capabilities]
+general     = 3
+analysis    = 3
+code        = 3
+instruction = 3
+math        = 2
 
 [profiles.default.embed]
 repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
@@ -154,6 +200,9 @@ quant    = "Q8_0"
 size_gb  = 1.9
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+[profiles.high.fast.capabilities]
+general     = 1
+instruction = 2
 
 [profiles.high.thoughtful]
 repo     = "bartowski/Qwen_Qwen3.5-27B-GGUF"
@@ -163,6 +212,18 @@ quant    = "Q4_K_M"
 size_gb  = 16.5
 thinking = true
 hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-27B-GGUF"
+# Qwen3.5-27B with thinking: flagship open-weight reasoning
+# model below the 70B tier. Strong across analysis + math +
+# code; creative writing and long-form instruction are
+# reliably coherent. This is the tier where the mesh starts
+# paying off — a Joiner should route here for DeepQuery.
+[profiles.high.thoughtful.capabilities]
+general     = 3
+analysis    = 4
+code        = 3
+instruction = 4
+math        = 3
+creative    = 3
 
 [profiles.high.embed]
 repo    = "Mungert/Qwen3-Embedding-4B-GGUF"
@@ -187,6 +248,9 @@ quant    = "Q8_0"
 size_gb  = 1.9
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+[profiles.very_high.fast.capabilities]
+general     = 1
+instruction = 2
 
 [profiles.very_high.thoughtful]
 repo     = "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF"
@@ -196,6 +260,16 @@ quant    = "Q4_K_M"
 size_gb  = 18.5
 thinking = true
 hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF"
+# Qwen3.5-35B-A3B: sparse MoE that matches Qwen3-235B-A22B on
+# benchmarks with only 3B active params. Analysis exceptional,
+# everything else strong. Top tier for federated synthesis.
+[profiles.very_high.thoughtful.capabilities]
+general     = 4
+analysis    = 4
+code        = 3
+instruction = 4
+math        = 3
+creative    = 3
 
 [profiles.very_high.embed]
 repo    = "Mungert/Qwen3-Embedding-4B-GGUF"

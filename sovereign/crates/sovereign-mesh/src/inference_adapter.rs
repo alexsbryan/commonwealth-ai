@@ -33,35 +33,11 @@ use sovereign_core::types::{CompletionRequest, Speed};
 /// thread-safe.
 pub struct SovereignInferenceAdapter {
     provider: Arc<dyn InferenceProvider>,
-    /// Name of the GGUF model currently loaded, used in response
-    /// `model` fields and in the `ProviderManifest`. Populated at
-    /// construction time from `InferenceProvider::model_id_for` or
-    /// a fallback string if the provider can't report one yet.
-    model_name: String,
 }
 
 impl SovereignInferenceAdapter {
     pub fn new(provider: Arc<dyn InferenceProvider>) -> Self {
-        // Report the Slow-slot model by default — that's what
-        // DeepQuery synthesis uses, and it's the one peers benefit
-        // from most. `model_id_for` returns an empty string or
-        // "unknown" when the slot isn't loaded, which is a fine
-        // placeholder — we don't need strict model identity here.
-        let slow = provider.model_id_for(Speed::Slow);
-        let model_name = if slow.is_empty() || slow == "unknown" {
-            let fast = provider.model_id_for(Speed::Fast);
-            if fast.is_empty() || fast == "unknown" {
-                "sovereign-local".to_string()
-            } else {
-                fast
-            }
-        } else {
-            slow
-        };
-        Self {
-            provider,
-            model_name,
-        }
+        Self { provider }
     }
 
     /// Flatten an OpenAI-style message list into a single prompt.
@@ -202,40 +178,83 @@ impl LocalInferenceService for SovereignInferenceAdapter {
     }
 
     fn provider_manifest(&self) -> Option<ProviderManifest> {
-        // Advertise one model with a conservative default
-        // capability profile. Proper per-model OICP profiles will
-        // come once the `models.toml` capability annotations are
-        // wired through; for now, "General" at a moderate level so
-        // peers don't reject us outright.
-        // `ProficiencyLevel` is a u8 (0..=4): None/Basic/Moderate/
-        // Strong/Exceptional per OICP spec §2.4. 2 = Moderate, a
-        // conservative honest default without known per-model
-        // profiling. Will be replaced by richer per-model data
-        // once we wire `models.toml` capability annotations here.
-        let mut capabilities = std::collections::HashMap::new();
-        capabilities.insert(Capability::General, 2u8);
-        Some(ProviderManifest {
-            oicp_version: OICP_VERSION.to_string(),
-            provider: Some(ProviderInfo {
-                name: Some(self.model_name.clone()),
-                provider_type: Some(ProviderType::Mesh),
-            }),
-            models: vec![ProviderModel {
-                id: self.model_name.clone(),
-                base_model: None,
-                quantization: None,
-                capabilities,
-                context_tokens: 32_768,
-                status: ModelStatus {
-                    available: true,
-                    loaded: true,
-                    estimated_tokens_per_sec: None,
-                    estimated_ttft_ms: None,
-                    estimated_load_time_sec: None,
-                },
-            }],
-            knowledge: None,
-            federation: None,
-        })
+        Some(build_self_manifest(self.provider.as_ref()))
+    }
+}
+
+/// Resolve a single human-readable model name from a provider,
+/// preferring the Slow (synthesis) slot. Used by both the adapter
+/// (so peer-side manifest and response `model` fields agree) and
+/// by `MeshInferenceProvider` (so local-side scoring uses the same
+/// identity the peer would see).
+pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
+    let slow = provider.model_id_for(Speed::Slow);
+    if !slow.is_empty() && slow != "unknown" {
+        return slow;
+    }
+    let fast = provider.model_id_for(Speed::Fast);
+    if !fast.is_empty() && fast != "unknown" {
+        return fast;
+    }
+    "sovereign-local".to_string()
+}
+
+/// Build this node's OICP `ProviderManifest` — one model with the
+/// capability profile declared for it in `lcol-llm/models.toml`.
+/// Shared between the server adapter (what peers fetch at
+/// `/oicp/v1/capabilities`) and the client-side
+/// `MeshInferenceProvider` (what local scores itself against), so
+/// the two never disagree about our own declared capabilities.
+///
+/// Capability resolution:
+///   1. Match the loaded model's filename against every slot in
+///      the bundled `ModelsManifest`. A user on the `default`
+///      profile with Qwen3.5-9B picks up `general=3, analysis=3,
+///      ...` from the manifest automatically.
+///   2. Fall back to `General=2, Analysis=2` (Moderate) when the
+///      loaded model isn't in the manifest. That's the BYOM path
+///      — the user pointed Sovereign at their own GGUF we don't
+///      have profiling data for. Conservative but honest.
+pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest {
+    let model_name = resolve_primary_model_name(provider);
+    let capabilities = sovereign_core::models_manifest::DEFAULT_MANIFEST
+        .capabilities_for_file(&model_name)
+        .unwrap_or_else(|| {
+            tracing::debug!(
+                model = %model_name,
+                "build_self_manifest: no OICP entry in models.toml — using defaults"
+            );
+            let mut caps = std::collections::HashMap::new();
+            caps.insert(Capability::General, 2u8);
+            caps.insert(Capability::Analysis, 2u8);
+            caps
+        });
+    tracing::info!(
+        model = %model_name,
+        caps = ?capabilities,
+        "build_self_manifest: advertised capabilities"
+    );
+    ProviderManifest {
+        oicp_version: OICP_VERSION.to_string(),
+        provider: Some(ProviderInfo {
+            name: Some(model_name.clone()),
+            provider_type: Some(ProviderType::Mesh),
+        }),
+        models: vec![ProviderModel {
+            id: model_name,
+            base_model: None,
+            quantization: None,
+            capabilities,
+            context_tokens: 32_768,
+            status: ModelStatus {
+                available: true,
+                loaded: true,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+        }],
+        knowledge: None,
+        federation: None,
     }
 }

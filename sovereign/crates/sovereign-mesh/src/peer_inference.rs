@@ -1,130 +1,296 @@
 //! `MeshInferenceProvider` — the Joiner-side wrapper that routes
-//! synthesis-slot (`Speed::Slow`) inference to the best available
-//! mesh peer, with automatic fallback to local on any remote error.
+//! synthesis to the best-scoring mesh peer for a given OICP request,
+//! with automatic fallback to local on any remote error.
 //!
-//! Wrapping design (vs. extending `HybridProvider`): the mesh peer
-//! set is dynamic — peers join and leave, addresses rotate — but
-//! `HybridProvider` takes a static backend list. Instead of rewiring
-//! its guts, we put a thin router in front that asks the live
-//! `EmbeddedDaemon` on every request whether any peer is reachable,
-//! and synthesises a `RemoteApiProvider` on-demand when one is.
+//! Design invariant: the routing decision is driven by OICP, not by
+//! ad-hoc proxies like RAM or model size. The active skills on the
+//! local side declare their `InferenceRequirements` (required +
+//! preferred capabilities, latency, privacy); the Runtime stamps
+//! these onto every `CompletionRequest` via `build_oicp`. On the
+//! peer side, each node advertises a `ProviderManifest` at
+//! `/oicp/v1/capabilities` derived from its local inference stack
+//! (`sovereign_mesh::inference_adapter::build_self_manifest`).
 //!
-//! Routing rules (v1, intentionally simple):
+//! This wrapper is the point where the request's requirements meet
+//! the available manifests and a single best backend is chosen:
 //!
-//! 1. `embed` / `embed_query` — always local. Corpus retrieval is
-//!    per-query and latency-critical; peer embeddings would dwarf
-//!    the retrieval budget.
-//! 2. `request.oicp.sharding == LocalOnly` — always local. This is
-//!    the `inner-work` skill path ("privacy = local_only") and the
-//!    contract is explicit.
-//! 3. `request.preferred_speed == Speed::Slow` — try peer. Slow is
-//!    the Primary synthesis slot (DeepQuery / ComplexTask), exactly
-//!    what federated inference is for. On peer error, fall back to
-//!    local so a flaky peer doesn't tank the whole UX.
-//! 4. `Speed::Fast` / `Speed::Medium` — local. Router, compression,
-//!    title generation — latency-sensitive and not worth shipping
-//!    over the network.
+//!   1. No OICP on the request, or `sharding == LocalOnly` → local.
+//!      "No contract" means no reason to cross the network; `LocalOnly`
+//!      is explicit opt-out (e.g. the `inner-work` skill).
+//!   2. Score local's manifest against the request's
+//!      required+preferred profile (`oicp::satisfies_required` +
+//!      `oicp::score_preferred`). Local is always a candidate — we
+//!      never fail over to a peer we can't outperform.
+//!   3. For every online non-self peer, fetch (and cache for 60s)
+//!      their `ProviderManifest` over `http://<peer>:9741/oicp/v1/capabilities`.
+//!      Score the same way.
+//!   4. Pick the highest-scoring candidate. Local wins ties — a
+//!      matching local score doesn't justify a round-trip.
+//!   5. On peer routing: iterate the peer's advertised base URLs
+//!      (WiFi / Tailscale / ULA) in order, same "first reachable
+//!      wins" policy as gossip and knowledge fan-out. Only fall
+//!      back to local when every URL has failed.
 //!
-//! Stage 2.1 will layer OICP capability scoring on top of this; for
-//! now the "is the peer online?" signal gets us the user-visible
-//! win (Joiner's 3B synthesis → Founder's 27B synthesis).
+//! Embed calls stay local unconditionally — retrieval is latency-
+//! critical and not a capability the selector has visibility into.
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::error::Result;
-use sovereign_core::oicp::ShardingPrivacy;
+use sovereign_core::oicp::{
+    self, CapabilityProfile, ProviderManifest, ShardingPrivacy,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
 use sovereign_inference::remote::RemoteApiProvider;
+use tokio::sync::RwLock;
 
 use crate::daemon::{EmbeddedDaemon, PeerInferenceEndpoint};
+use crate::inference_adapter::build_self_manifest;
 
-/// Wraps a local `InferenceProvider` and, when a peer is reachable
-/// and the request is synthesis-slot non-local-only, delegates to
-/// a `RemoteApiProvider` pointed at the peer's `:9741`.
+/// How long to trust a fetched peer manifest before re-fetching.
+/// OICP capabilities don't change request-to-request — a model
+/// either has a level or it doesn't — so a minute of staleness
+/// is cheap insurance against hammering `/oicp/v1/capabilities`
+/// on every Slow-slot call.
+const MANIFEST_TTL: Duration = Duration::from_secs(60);
+
+/// Per-peer HTTP timeout for the manifest fetch. Short enough that
+/// an unreachable peer doesn't add meaningful latency to the
+/// selection path; long enough that a Tailscale relay round-trip
+/// under load completes comfortably.
+const MANIFEST_FETCH_TIMEOUT: Duration = Duration::from_millis(800);
+
+struct CachedManifest {
+    manifest: ProviderManifest,
+    fetched_at: Instant,
+}
+
 pub struct MeshInferenceProvider {
     local: Arc<dyn InferenceProvider>,
     mesh: Arc<EmbeddedDaemon>,
-    /// This host's `system_ram_gb`, captured at construction so
-    /// `pick_peer_provider` can compare gossiped peer RAM against
-    /// ours without re-probing hardware every request. Set via
-    /// `commonwealth_discovery::hardware::detect_hardware()` — the
-    /// exact source as the capability publisher, so comparisons
-    /// are apples-to-apples.
-    local_ram_gb: u32,
+    /// Our own manifest, built once at construction. The wrapper
+    /// doesn't recompute it — Sovereign's loaded model set is
+    /// effectively static within a process lifetime, and the
+    /// `SovereignInferenceAdapter` on the server side uses the
+    /// same `build_self_manifest` helper so peer-fetched and
+    /// local-scored views of us are identical.
+    self_manifest: ProviderManifest,
+    /// Per-peer manifest cache keyed by peer `node_id` (as string
+    /// — `NodeId` doesn't impl `Hash` across crate boundaries
+    /// cleanly in all our versions, and the string form is stable).
+    peer_cache: Arc<RwLock<std::collections::HashMap<String, CachedManifest>>>,
+    /// Shared reqwest client for manifest fetches. Separate from
+    /// the per-request `RemoteApiProvider` clients so manifest
+    /// polling doesn't inherit inference-length timeouts.
+    http: reqwest::Client,
 }
 
 impl MeshInferenceProvider {
     pub fn new(local: Arc<dyn InferenceProvider>, mesh: Arc<EmbeddedDaemon>) -> Self {
-        let local_ram_gb =
-            commonwealth_discovery::hardware::detect_hardware().system_ram_gb;
+        let self_manifest = build_self_manifest(local.as_ref());
         tracing::info!(
-            local_ram_gb,
-            "mesh-inference: wrapper initialised"
+            models = self_manifest.models.len(),
+            "mesh-inference: wrapper initialised (OICP-driven)"
         );
+        let http = reqwest::Client::builder()
+            .timeout(MANIFEST_FETCH_TIMEOUT)
+            .build()
+            .unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "mesh-inference: reqwest client build failed — using default");
+                reqwest::Client::new()
+            });
         Self {
             local,
             mesh,
-            local_ram_gb,
+            self_manifest,
+            peer_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            http,
         }
     }
 
-    fn should_route_remote(&self, request: &CompletionRequest) -> bool {
-        if request.preferred_speed != Speed::Slow {
-            return false;
+    /// Pull required + preferred profiles out of the request's
+    /// OICP envelope. Returns `None` when either the envelope is
+    /// missing or the capability section is empty — both signal
+    /// "no contract, stay local".
+    fn extract_caps(
+        request: &CompletionRequest,
+    ) -> Option<(CapabilityProfile, CapabilityProfile)> {
+        let oicp = request.oicp.as_ref()?;
+        let caps = oicp.capabilities.as_ref()?;
+        if caps.required.is_empty() && caps.preferred.is_empty() {
+            return None;
         }
-        if let Some(oicp) = &request.oicp {
-            if oicp.sharding() == ShardingPrivacy::LocalOnly {
-                return false;
+        Some((caps.required.clone(), caps.preferred.clone()))
+    }
+
+    /// Score a manifest's best-fitting model against the request.
+    /// `Some(score)` when at least one model satisfies `required`;
+    /// `None` when no model in the manifest can serve this request.
+    fn score_manifest(
+        manifest: &ProviderManifest,
+        required: &CapabilityProfile,
+        preferred: &CapabilityProfile,
+    ) -> Option<f32> {
+        let mut best: Option<f32> = None;
+        for model in &manifest.models {
+            if !oicp::satisfies_required(&model.capabilities, required) {
+                continue;
             }
+            let score = oicp::score_preferred(&model.capabilities, preferred);
+            best = Some(best.map(|b| b.max(score)).unwrap_or(score));
         }
-        true
+        best
     }
 
-    /// Try to build a `RemoteApiProvider` for the first reachable
-    /// peer. `None` when no peer is online or when the mesh is
-    /// stopped. The choice here is naive (first online peer) —
-    /// a follow-up pass will rank by OICP score / model size.
-    async fn pick_peer_provider(
+    /// Fetch a peer's OICP manifest, honouring the 60s cache. On
+    /// fetch failure, returns `None` — caller treats the peer as
+    /// not a candidate this turn (next request retries).
+    async fn get_peer_manifest(
         &self,
-    ) -> Option<(PeerInferenceEndpoint, Arc<RemoteApiProvider>)> {
-        let peers = self.mesh.peer_inference_endpoints().await;
-        // Only route to peers that are strictly beefier than us by
-        // RAM — a Founder (64GB) offloading synthesis to a Joiner
-        // (32GB) would be a regression. Pick the single peer with
-        // the most RAM above ours; ties broken by first-seen.
-        let best = peers
-            .into_iter()
-            .filter(|p| p.system_ram_gb > self.local_ram_gb)
-            .max_by_key(|p| p.system_ram_gb);
-        let peer = match best {
-            Some(p) => p,
-            None => {
-                tracing::debug!(
-                    local_ram_gb = self.local_ram_gb,
-                    "mesh-inference: no peer with more RAM than us — staying local"
-                );
-                return None;
+        peer: &PeerInferenceEndpoint,
+    ) -> Option<ProviderManifest> {
+        let key = peer.node_id.to_string();
+        // Cache hit.
+        {
+            let cache = self.peer_cache.read().await;
+            if let Some(entry) = cache.get(&key) {
+                if entry.fetched_at.elapsed() < MANIFEST_TTL {
+                    return Some(entry.manifest.clone());
+                }
             }
-        };
-        if let Some(url) = peer.base_urls.first() {
-            // `RemoteApiProvider::new` is infallible; reachability
-            // errors surface at request time, not construction.
-            // Multi-URL retry on connect failure is a future
-            // polish — today we pick the first advertised URL
-            // (routable IPs first thanks to link-local filtering).
-            let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
-            return Some((peer, Arc::new(rp)));
+        }
+        // Cache miss or stale — try each URL until one resolves.
+        // The manifest endpoint is the same origin the inference
+        // endpoint lives on, so whichever URL works here is the
+        // URL the subsequent chat-completion request will work on.
+        for base in &peer.base_urls {
+            let url = format!("{}/oicp/v1/capabilities", base.trim_end_matches('/'));
+            match self.http.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    match resp.json::<ProviderManifest>().await {
+                        Ok(m) => {
+                            tracing::debug!(
+                                peer = %peer.name,
+                                url = %url,
+                                models = m.models.len(),
+                                "mesh-inference: fetched peer manifest"
+                            );
+                            let mut cache = self.peer_cache.write().await;
+                            cache.insert(
+                                key,
+                                CachedManifest {
+                                    manifest: m.clone(),
+                                    fetched_at: Instant::now(),
+                                },
+                            );
+                            return Some(m);
+                        }
+                        Err(e) => {
+                            tracing::debug!(
+                                peer = %peer.name,
+                                url = %url,
+                                error = %e,
+                                "mesh-inference: peer manifest parse failed"
+                            );
+                        }
+                    }
+                }
+                Ok(resp) => {
+                    tracing::debug!(
+                        peer = %peer.name,
+                        url = %url,
+                        status = %resp.status(),
+                        "mesh-inference: peer manifest non-success"
+                    );
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        peer = %peer.name,
+                        url = %url,
+                        error = %e,
+                        "mesh-inference: peer manifest fetch transport error"
+                    );
+                }
+            }
         }
         None
     }
 
+    /// OICP-driven selection. Given a request with capability
+    /// requirements, returns the peer to route to, or `None` to
+    /// stay local. Local always competes with peers — we never
+    /// route unless a peer strictly outscores local.
+    async fn select_peer(
+        &self,
+        request: &CompletionRequest,
+    ) -> Option<PeerInferenceEndpoint> {
+        let (required, preferred) = Self::extract_caps(request)?;
+        if let Some(oicp) = &request.oicp {
+            if oicp.sharding() == ShardingPrivacy::LocalOnly {
+                return None;
+            }
+        }
+        // Also: if this isn't a synthesis-class request, keep it
+        // local regardless of capabilities — Fast/Medium slots
+        // are latency-critical (router, compression, title gen)
+        // and peer round-trip costs dominate the inference time.
+        if request.preferred_speed != Speed::Slow {
+            return None;
+        }
+
+        // Local is always a candidate. A score of NEG_INFINITY
+        // means local can't satisfy `required` (peer must win).
+        let local_score =
+            Self::score_manifest(&self.self_manifest, &required, &preferred)
+                .unwrap_or(f32::NEG_INFINITY);
+
+        let peers = self.mesh.peer_inference_endpoints().await;
+        let mut best_peer: Option<(PeerInferenceEndpoint, f32)> = None;
+        for peer in peers {
+            let manifest = match self.get_peer_manifest(&peer).await {
+                Some(m) => m,
+                None => continue,
+            };
+            let score = match Self::score_manifest(&manifest, &required, &preferred) {
+                Some(s) => s,
+                None => continue,
+            };
+            match &best_peer {
+                None => best_peer = Some((peer, score)),
+                Some((_, cur)) if score > *cur => best_peer = Some((peer, score)),
+                _ => {}
+            }
+        }
+
+        match best_peer {
+            // Strict > : local wins ties. Only cross the network
+            // when a peer is measurably better on preferred caps.
+            Some((peer, peer_score)) if peer_score > local_score => {
+                tracing::info!(
+                    peer = %peer.name,
+                    peer_score,
+                    local_score,
+                    "mesh-inference: peer selected by OICP score"
+                );
+                Some(peer)
+            }
+            _ => {
+                tracing::debug!(
+                    local_score,
+                    "mesh-inference: local wins on OICP score"
+                );
+                None
+            }
+        }
+    }
+
     /// Stamp the response's `model_id` with a peer-attribution
-    /// suffix so `ResponseProvenance.inference_backend` becomes
-    /// e.g. `Qwen3.5-27B.Q8_0 @ peer BeefyMac`. `RoutingMeta.svelte`
-    /// renders it verbatim.
+    /// suffix so `ResponseProvenance.inference_backend` reads
+    /// e.g. `Qwen3.5-9B.Q8_0 @ peer BeefyMac`.
     fn annotate(mut resp: CompletionResponse, peer_name: &str) -> CompletionResponse {
         resp.model_id = format!("{} @ peer {}", resp.model_id, peer_name);
         resp
@@ -134,27 +300,30 @@ impl MeshInferenceProvider {
 #[async_trait]
 impl InferenceProvider for MeshInferenceProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
-        if self.should_route_remote(request) {
-            if let Some((peer, rp)) = self.pick_peer_provider().await {
-                tracing::info!(
-                    peer = %peer.name,
-                    speed = ?request.preferred_speed,
-                    "mesh-inference: routing complete() to peer"
-                );
+        if let Some(peer) = self.select_peer(request).await {
+            tracing::info!(
+                peer = %peer.name,
+                addrs = peer.base_urls.len(),
+                "mesh-inference: routing complete() to peer"
+            );
+            for url in &peer.base_urls {
+                let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
                 match rp.complete(request).await {
                     Ok(resp) => return Ok(Self::annotate(resp, &peer.name)),
                     Err(e) => {
-                        // Fall back to local on any remote error —
-                        // flaky peer shouldn't break UX. Info-level
-                        // so you can see WHY we ended up local.
                         tracing::info!(
                             peer = %peer.name,
+                            url = %url,
                             error = %e,
-                            "mesh-inference: peer complete() failed, falling back to local"
+                            "mesh-inference: peer complete() transport error, trying next address"
                         );
                     }
                 }
             }
+            tracing::info!(
+                peer = %peer.name,
+                "mesh-inference: all peer addresses failed, falling back to local"
+            );
         }
         self.local.complete(request).await
     }
@@ -163,30 +332,35 @@ impl InferenceProvider for MeshInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        if self.should_route_remote(request) {
-            if let Some((peer, rp)) = self.pick_peer_provider().await {
-                tracing::info!(
-                    peer = %peer.name,
-                    speed = ?request.preferred_speed,
-                    "mesh-inference: routing complete_stream() to peer"
-                );
+        if let Some(peer) = self.select_peer(request).await {
+            tracing::info!(
+                peer = %peer.name,
+                addrs = peer.base_urls.len(),
+                "mesh-inference: routing complete_stream() to peer"
+            );
+            for url in &peer.base_urls {
+                let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
                 match rp.complete_stream(request).await {
                     Ok(stream) => return Ok(stream),
                     Err(e) => {
                         tracing::info!(
                             peer = %peer.name,
+                            url = %url,
                             error = %e,
-                            "mesh-inference: peer complete_stream() failed, falling back to local"
+                            "mesh-inference: peer complete_stream() transport error, trying next address"
                         );
                     }
                 }
             }
+            tracing::info!(
+                peer = %peer.name,
+                "mesh-inference: all peer addresses failed, falling back to local"
+            );
         }
         self.local.complete_stream(request).await
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        // Embeddings stay local — see module header, rule 1.
         self.local.embed(text).await
     }
 
@@ -198,19 +372,11 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.embed_query(text).await
     }
 
-    /// Match the Slow-slot model name to the local provider's so
-    /// the Runtime's provenance still shows a meaningful model
-    /// name when the request is served locally. When a peer serves
-    /// it, `annotate` above overrides this with the peer-attribution
-    /// suffix before the response hits the Runtime.
     fn model_id_for(&self, speed: Speed) -> String {
         self.local.model_id_for(speed)
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
-        // Honest floor: whatever local can do. Mesh peers may add
-        // more reach dynamically but that's a moving target we
-        // can't summarise in a sync call.
         self.local.capabilities()
     }
 }
