@@ -1,0 +1,1215 @@
+# Commonwealth AI — System Overview
+
+A technical record of the as-built system, intended as a single entry point for
+developers joining the project. This document describes what currently exists in
+the workspace, not the original design documents from which it grew. For
+historical design rationale see each repo's `ARCHITECTURE.md` and
+`IMPLEMENTATION_PLAN.md`.
+
+---
+
+## 1. The Four Projects
+
+The workspace contains four projects that compose into one coherent system:
+
+```
+commonwealth-ai/
+├── oicp-types/          # Shared OICP type definitions (no other deps)
+├── corpus-engine/       # Shared knowledge layer (no dependencies on the others)
+├── sovereign-recipes/   # Corpus recipe definitions + registry catalog
+├── lcol-llm/            # Sovereign — single-machine local AI assistant
+└── commonwealth/        # Commonwealth — multi-machine inference + knowledge mesh
+```
+
+| Project             | Role                                     | Dependents              |
+|---------------------|------------------------------------------|-------------------------|
+| `oicp-types`        | OICP v0.2 type definitions + helpers     | Sovereign + Commonwealth|
+| `corpus-engine`     | Ingest, index, search, and shard corpora | Sovereign + Commonwealth|
+| `sovereign-recipes` | Declarative corpus recipe TOML files     | corpus-engine (compile-time snapshot) |
+| `lcol-llm`          | Local agent runtime (Sovereign)          | Standalone or + mesh    |
+| `commonwealth`      | Mesh coordination daemon                 | Standalone or + Sovereign|
+
+The dependency direction is one-way: `oicp-types` and `corpus-engine` know
+nothing about the other projects; both Sovereign and Commonwealth consume them
+as path dependencies. `sovereign-recipes` is a pure-data repository consumed
+by `corpus-engine` via a bundled snapshot at compile time. Sovereign optionally
+embeds Commonwealth in-process via the `sovereign-mesh` crate, which is the
+only point where the two upstream projects directly meet.
+
+```
+       ┌──────────────────┐          ┌────────────────────┐
+       │   oicp-types     │          │ sovereign-recipes  │
+       │ (OICP v0.2 types)│          │ (recipe TOML files)│
+       └──────┬───────────┘          └────────┬───────────┘
+              │                               │ registry_snapshot.toml
+              │                    ┌──────────▼──────────┐
+              │                    │   corpus-engine     │  (LanceDB + Tantivy)
+              │                    └──────────┬──────────┘
+              │                               │ EmbedFn / InferenceFn
+              │                               │ + 3-op shard contract
+              ├───────────┬───────────────────┼─────────────┐
+              │           │                   │             │
+       ┌──────▼──────┐   │    ┌──────────────▼──────┐  ┌──▼───────────┐
+       │  Sovereign  │   │    │     Both call       │  │ Commonwealth │
+       │  (lcol-llm) │◄──┤    │  identical public   ├─►│              │
+       │             │   │    │  API                 │  │              │
+       └──────┬──────┘   │    └─────────────────────┘  └──────┬───────┘
+              │          │                                    │
+              │          └────────────────────────────────────┘
+              │   sovereign-mesh embeds                       │
+              └───────────────► commonwealth ◄────────────────┘
+                          (in-process daemon)
+```
+
+Sovereign and Commonwealth share two protocols via the **`oicp-types`** crate:
+**OICP** (Open Inference Capabilities Protocol — capability-aware model routing)
+and the **`EmbedFn`/`InferenceFn` injection contract** for the corpus engine.
+OICP has a canonical specification at `commonwealth/docs/oicp-v0.2.md`; the
+shared types live in `oicp-types/src/lib.rs` and are re-exported as
+`sovereign_core::oicp` and `commonwealth_core::oicp` so both projects share
+the same wire format. The `EmbedFn` contract is defined once in `corpus-engine`
+and each project implements its own closure over the same type.
+
+---
+
+## 2. Repository Map
+
+### corpus-engine/
+
+```
+src/
+├── lib.rs                    # Public API re-exports
+├── engine/
+│   ├── mod.rs                # CorpusEngine facade
+│   ├── ingest.rs             # Ingestion pipeline (acquire → extract → chunk → embed → index)
+│   └── reindex.rs            # Per-file incremental re-index (called by CodeWatcher)
+├── recipe.rs                 # Recipe TOML schema + builtin recipes
+├── registry.rs               # RecipeRegistry: bundled snapshot + remote fetch
+├── types.rs                  # EmbedFn, InferenceFn, ChunkRange, IndexInfo, ScoredChunk
+├── error.rs
+├── progress.rs               # IngestProgress + ProgressCallback
+├── safety.rs                 # robots.txt, rate limiting, scope enforcement
+├── sharding.rs               # extract_shard / merge_shards
+├── index/
+│   ├── mod.rs                # CorpusIndex (LanceDB + Tantivy)
+│   ├── create.rs             # Index creation + resume
+│   ├── search.rs             # Hybrid search (vector + FTS5)
+│   ├── write.rs              # Batch insert + delete
+│   └── enrichment.rs         # Enrichment data storage
+├── testing.rs                # Recipe test harness (acquisition, extraction, chunking, search)
+├── acquirers/
+│   ├── bulk_download.rs      # Resumable HTTP download
+│   ├── huggingface.rs        # HF dataset acquirer
+│   └── local_file.rs
+├── extractors/
+│   ├── xml.rs                # MediaWiki, Stack Exchange
+│   ├── wikipedia_structured.rs
+│   ├── wikipedia_jsonl.rs    # Wikipedia JSONL (section-level with metadata)
+│   ├── wikipedia_types.rs    # WikipediaChunkMetadata, WikiLink
+│   ├── json.rs               # JSONL, OpenAlex inverted index reconstruction
+│   ├── html.rs
+│   ├── csv.rs
+│   ├── parquet.rs            # Parquet columnar (+ OpenAlex inverted-index transform)
+│   ├── plaintext.rs
+│   └── code/mod.rs           # Tree-sitter symbol extraction (Rust/TS/JS/Go/Python)
+├── chunkers/
+│   ├── paragraph.rs          # Hierarchical fallback splitter
+│   ├── sentence.rs
+│   ├── fixed.rs
+│   └── semantic.rs           # Heading-aware
+├── enrichment/
+│   ├── field_engine.rs       # FieldModelEngine: 5-phase enrichment coordinator
+│   ├── clustering.rs         # HDBSCAN-based chunk clustering
+│   ├── skeleton.rs           # FieldSkeleton, CanonicalQuestion, PartialSkeleton
+│   ├── alignment.rs          # Cluster-to-skeleton alignment
+│   ├── fault_lines.rs        # Fault line detection between positions
+│   ├── open_questions.rs     # Open question detection
+│   ├── checkpoint.rs         # Resumable enrichment checkpointing
+│   ├── domain.rs             # Domain trait — single extension point
+│   ├── filter.rs             # Chunk eligibility filtering
+│   └── domains/
+│       ├── philosophy.rs     # Fully implemented (423 lines)
+│       ├── multi.rs          # Wikipedia multi-domain
+│       ├── science.rs        # Stub
+│       ├── policy.rs         # Stub
+│       ├── legal.rs          # Stub
+│       └── community.rs      # Stub
+├── scip_graph.rs             # ScipGraph: SCIP call graph (SQLite, staleness tracking)
+├── scip_export.rs            # Language-agnostic SCIP exporter dispatch
+├── scip_proto.rs             # Minimal SCIP protobuf types (prost)
+└── update/
+    ├── watch.rs              # CodeWatcher: filesystem watcher → reindex + staleness
+    └── delta.rs              # Incremental index updates (version manifests, resumable)
+
+registry_snapshot.toml        # Bundled recipe catalog (compiled via include_str!)
+xtask/                        # cargo xtask update-registry-snapshot
+
+tests/
+├── ingest_failure_modes.rs
+├── parquet_ingest_e2e.rs
+└── watcher_e2e.rs            # Filesystem watcher E2E tests
+```
+
+### lcol-llm/ (Sovereign)
+
+```
+crates/
+├── sovereign-core/           # Traits, types, runtime, planner, executor,
+│   src/                      #   router, memory, skills, OICP, model families
+│   ├── traits.rs             # 5 trait boundaries
+│   ├── types.rs              # ~700 lines of domain types
+│   ├── runtime.rs            # Runtime orchestrator
+│   ├── router.rs             # LlmRouter (two-pass classification)
+│   ├── planner.rs            # LlmPlanner (DAG generation)
+│   ├── executor.rs           # Step DAG executor with sampling/eval/tool loop
+│   ├── memory.rs             # Working-memory compression, decay
+│   ├── context.rs            # Context assembly
+│   ├── skills.rs             # Skill loader + registry
+│   ├── model_family.rs       # Per-family quirks (Qwen3, Gemma3, Llama3, ...)
+│   ├── oicp.rs               # Capability profiles, requirements, manifest
+│   ├── registry.rs           # ToolRegistry
+│   └── stubs.rs
+│
+├── sovereign-inference/      # Inference providers
+│   ├── embedded.rs           # llama.cpp via llama-cpp-2 FFI, dual-slot loader
+│   ├── remote.rs             # OpenAI-compatible HTTP client
+│   ├── hybrid.rs             # Multi-backend with health + failover
+│   ├── selector.rs           # CapabilityAwareSelector / PrioritySelector
+│   ├── health.rs             # EWMA latency, 3-strike availability
+│   └── hardware.rs           # HardwareProfile detection (CPU/Low/Default/High/VeryHigh)
+│
+├── sovereign-store/          # Persistence
+│   ├── sqlite.rs             # rusqlite + tokio Mutex, full StateStore impl
+│   ├── postgres.rs           # tokio-postgres + deadpool, full StateStore impl
+│   ├── memory.rs             # In-memory store for tests
+│   └── migrations.rs         # Schema, FTS5 indices, soft-delete, sync columns
+│
+├── sovereign-tools/          # Built-in tools
+│   ├── search.rs             # SearchTool: local + coverage assessment + web fallback
+│   ├── web/{search.rs,extract.rs,mod.rs}   # DuckDuckGo / Brave / Tavily
+│   ├── knowledge.rs          # Direct corpus query tool
+│   ├── document.rs           # Map-reduce document summarizer
+│   ├── epistemic.rs          # ClaimSearchTool, EpistemicLandscapeTool
+│   ├── code/                 # Code Intelligence tools
+│   │   ├── symbol_lookup.rs  #   Exact symbol-name lookup (LanceDB filter)
+│   │   ├── code_search.rs    #   Semantic code search (vector + FTS fallback)
+│   │   ├── recent_changes.rs #   Symbols modified in last N hours (mtime)
+│   │   ├── callees.rs        #   SCIP call graph: what does this function call?
+│   │   └── callers.rs        #   SCIP call graph: what calls this function?
+│   ├── corpus/               # Corpus install + parsers (Wiki, OpenAlex, SEP,
+│   │                         #   StackExchange, Gutenberg, Parquet, HTML, CRS)
+│   ├── rag/{ingest.rs,parse.rs,chunk.rs}   # User-document RAG
+│   ├── mcp/                  # Model Context Protocol client (stdio + HTTP+SSE)
+│   ├── shell.rs file.rs email.rs calendar.rs compute.rs
+│
+├── sovereign-cli/            # Terminal REPL + mesh subcommands
+├── sovereign-server/         # Axum REST + WebSocket, multi-tenant, approvals
+├── sovereign-desktop/        # Tauri 2 + Svelte 5 native app
+└── sovereign-mesh/           # In-process Commonwealth daemon embed
+    ├── capabilities.rs       # build_local_capabilities — hosted_corpora + hardware for gossip
+    ├── daemon.rs             # EmbeddedDaemon lifecycle (starts mDNS + Axum on 9742, client API on 9741)
+    ├── deep_link.rs          # sovereign:// URL parser
+    ├── gossip.rs             # Push-pull member-state gossip; re-publishes live capabilities per round
+    ├── inference_adapter.rs  # SovereignInferenceAdapter: peers fetch /oicp/v1/capabilities from here; serves /v1/chat/completions
+    ├── join.rs               # Same-LAN join handshake client (POSTs /internal/join)
+    ├── knowledge_client.rs   # MeshKnowledgeClient — Runtime calls this to federate search
+    ├── oicp_select.rs        # Shared OICP scoring + (score, size_gb) tie-break; pick_slot_for_oicp
+    ├── peer_inference.rs     # MeshInferenceProvider — wraps local InferenceProvider, OICP-routes to peers
+    ├── persist.rs            # mesh.json on-disk persistence
+    ├── state.rs              # MeshState wrapper
+    └── types.rs              # UI-friendly mesh types
+
+skills/
+├── research-analyst/skill.toml
+├── epistemic-research/skill.toml
+├── codebase-navigator/skill.toml  # 5 code tools, call graph tracing, security review
+├── code-review/skill.toml
+├── personal-assistant/skill.toml
+└── inner-work/skill.toml          # privacy = "local_only"
+
+data/corpora.toml                  # Compiled-in corpus + tier registry
+models.toml                        # Per-hardware-profile model manifest
+```
+
+### commonwealth/
+
+```
+crates/
+├── commonwealth-core/        # Shared types (re-exports oicp-types as oicp)
+│   ├── ids.rs                # MeshId, NodeId, ModelId, ProcessId (16-byte)
+│   ├── mesh.rs               # Mesh, MemberRecord, NodeStatus, MeshPeering
+│   ├── capabilities.rs       # NodeCapabilities, HardwareProfile, GpuInfo
+│   ├── model.rs              # ModelInfo, ModelArchitecture, ModelAvailability
+│   ├── scheduler.rs          # ShardPlan, ShardAssignment, LayerRange
+│   ├── knowledge.rs          # KnowledgeShardPlan, ChunkRange
+│   ├── ledger.rs ledger_store.rs    # Append-only contribution ledger
+│   ├── oicp_registry.rs      # OICP capability profile registry
+│   ├── latency.rs            # LatencyMatrix
+│   ├── config.rs             # DaemonConfig (TOML)
+│   ├── model_aliases.rs      # Glob pattern → OICP synthesis
+│   └── glob.rs default_aliases.toml
+│
+├── commonwealth-discovery/   # Membership and topology
+│   ├── membership.rs         # generate_join_key (cwth-XXXX-...), BLAKE3 hash
+│   ├── mdns.rs               # _commonwealth._tcp.local
+│   ├── gossip.rs gossip_service.rs   # 10s epidemic gossip, LWW
+│   ├── latency_probe.rs      # UDP RTT, EWMA α=0.3
+│   ├── hardware.rs           # nvidia-smi → rocm-smi → Metal
+│   ├── monitor.rs threshold.rs       # Resource polling + change detection
+│   ├── tls.rs                # rcgen per-session certs + pinning
+│   └── peering.rs            # Mesh-to-mesh trust establishment
+│
+├── commonwealth-inference/   # Scheduling, orchestration, inference plans
+│   ├── inference_plan.rs     # InferencePlan, ShardPlan, ShardAssignment, LayerRange
+│   ├── model.rs              # ModelInfo, ModelArchitecture, ModelAvailability
+│   ├── model_aliases.rs      # Glob pattern → OICP synthesis
+│   ├── ledger.rs ledger_store.rs     # Append-only contribution ledger
+│   ├── oicp_registry.rs      # OICP profile registry
+│   ├── store_adapter.rs      # InferenceStateStore persistence adapter
+│   ├── scheduler/
+│   │   ├── layer_assignment.rs   # Proportional, contiguous, topology-aware
+│   │   ├── plan_builder.rs       # build_shard_plan, build_inference_plan
+│   │   ├── knowledge_assignment.rs   # Greedy by free storage + replicas
+│   │   ├── leader.rs             # Deterministic per-decision (lowest NodeId)
+│   │   ├── oicp_cache.rs         # Hashed-requirement → ModelId cache
+│   │   ├── portfolio.rs          # ModelPortfolio + transition state machine
+│   │   └── usage_predictor.rs    # Weekday/hour capability distribution
+│   └── orchestrator/
+│       ├── orchestrator.rs       # apply_shard_plan, event emission
+│       ├── process.rs            # ManagedProcess, ProcessState, spawn helpers
+│       ├── health.rs             # HealthTracker, latency window, status enum
+│       ├── fault.rs              # FaultDetector, FaultEvent
+│       └── departure.rs          # Graceful 30s countdown state machine
+│
+├── commonwealth-api/         # HTTP servers
+│   ├── server.rs             # Dual listeners: client (9741) + internal (9742, mTLS)
+│   ├── routes_inference.rs   # /v1/chat/completions, /v1/models (OICP-aware routing)
+│   ├── routes_knowledge.rs   # /v1/knowledge/search (fan-out + merge)
+│   ├── routes_status.rs      # /status
+│   ├── routes_oicp.rs        # /oicp/v1/capabilities provider manifest
+│   ├── routes_internal.rs    # /internal/{gossip,scheduling,model,index,knowledge,latency}
+│   ├── openai_types.rs knowledge_types.rs state.rs
+│
+├── commonwealth-knowledge/   # corpus-engine integration
+│   ├── mesh_corpus.rs        # MeshCorpusManager (install/list/remove)
+│   ├── shard_manager.rs      # prepare_shards / install_received_shard / consolidate_shards
+│   ├── embed_http.rs         # http_embed_fn → /v1/embeddings client
+│   ├── grounding.rs          # System-prompt knowledge injection
+│   └── store_adapter.rs      # KnowledgeStateStore persistence adapter
+│
+├── commonwealth-app/         # Mesh application platform
+│   ├── manifest.rs           # MeshAppManifest, AppPermissions, RequiredCapabilities
+│   ├── lifecycle.rs          # AppProcess, AppStatus state machine
+│   ├── registry.rs           # AppRegistry (in-memory)
+│   └── proxy.rs              # AppPortMap, HTTP reverse-proxy helpers
+│
+├── commonwealth-state/       # Distributed KV store
+│   ├── store.rs              # MeshStore (SQLite + LWW conflict resolution)
+│   ├── backend.rs            # SqliteBackend (WAL mode)
+│   └── gc.rs                 # RetentionGc (TTL-based garbage collection)
+│
+├── commonwealth-daemon/      # CLI entry point + signal handling
+└── commonwealth-test-harness/        # SimulatedMesh, SimulatedNode, MockLlamaServer
+
+contrib/
+├── install.sh                # Curl installer
+├── systemd/commonwealth.service      # systemd unit file
+└── launchd/com.commonwealth.daemon.plist  # macOS launchd plist
+```
+
+### sovereign-recipes/
+
+```
+registry.toml                 # Recipe catalog (schema_version 1, 6 entries)
+├── wikipedia/recipe.toml     # Wikipedia English (HF dataset, 6.7M articles)
+├── sep/recipe.toml           # Stanford Encyclopedia of Philosophy
+├── stackexchange/recipe.toml # Stack Exchange Q&A
+├── openalex/recipe.toml      # OpenAlex scholarly metadata
+├── gutenberg/recipe.toml     # Project Gutenberg books
+└── crs_reports/recipe.toml   # Congressional Research Service reports
+```
+
+---
+
+## 3. corpus-engine — The Shared Knowledge Layer
+
+`corpus-engine` is a self-contained Rust library that owns everything between
+"raw source data on the internet" and "ranked search hits with provenance."
+Both upstream projects use it through the same public API and the same on-disk
+index format. Neither knows the other exists.
+
+### 3.1 Pipeline
+
+```
+Acquirer  →  Extractor  →  Chunker  →  Embedder  →  Index
+                                          (caller-supplied)
+```
+
+Each stage is a trait implementation that the engine dispatches to based on a
+**Recipe** — a TOML file describing one corpus's pipeline end-to-end.
+
+| Stage      | Implementations                                                |
+|------------|----------------------------------------------------------------|
+| Acquirer   | `bulk_download` (resumable HTTP), `huggingface`, `local_file`  |
+| Extractor  | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `html`, `csv`, `parquet`, `plaintext`, `wikipedia_structured` |
+| Chunker    | `paragraph`, `sentence`, `fixed`, `semantic` (heading-aware)   |
+| Index      | `CorpusIndex` over LanceDB (IVF-PQ) + Tantivy FTS              |
+
+### 3.2 Storage
+
+- **LanceDB** for vectors (IVF-PQ, memory-mapped from SSD).
+- **Tantivy** for keyword full-text search, native to Lance.
+- One on-disk directory per corpus, structurally identical whether full or
+  shard. `_corpus_meta.json` is the authoritative metadata file.
+
+```
+~/.sovereign/indexes/
+├── wikipedia/
+│   ├── _corpus_meta.json
+│   └── chunks.lance/{_versions, data, _indices, _latest.manifest}
+└── stackexchange-shard-0-6200000/   # shard — same schema as a full index
+```
+
+### 3.3 The injection contract
+
+`corpus-engine` never embeds or generates text itself. Two function types are
+injected by the caller:
+
+```rust
+pub type EmbedFn = Arc<
+    dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>>
+        + Send + Sync,
+>;
+
+pub type InferenceFn = Arc<
+    dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
+        + Send + Sync,
+>;
+```
+
+| Caller        | `EmbedFn`                              | `InferenceFn` (optional, for enrichment) |
+|---------------|----------------------------------------|------------------------------------------|
+| Sovereign     | Wraps local Embed slot (Qwen3-Embedding via llama.cpp) | Wraps Primary slot (Slow speed)          |
+| Commonwealth  | `http_embed_fn()` → POST `/v1/embeddings` | Mesh inference endpoint                  |
+| Tests         | Mock returning zero vectors            | Mock returning canned JSON               |
+
+The default expected embedding model is `nomic-embed-text-v2` (768 dims).
+Indexes record their embedding model in `_corpus_meta.json`; opening an index
+with a different model fails with `Error::IncompatibleEmbedding`.
+
+### 3.4 The three-operation sharding contract
+
+Everything Commonwealth needs from `corpus-engine` to distribute knowledge
+across nodes fits in three operations:
+
+| Operation                      | Effect                                      |
+|--------------------------------|---------------------------------------------|
+| `index_stats(corpus_id)`       | Returns total chunks, ID range, size on disk|
+| `extract_shard(corpus_id, range, dir)` | Builds a new index containing only chunks in `range` |
+| `merge_shards(dirs, dir)`      | Reconstitutes a complete index from N shards |
+
+Because a shard is structurally identical to a complete index,
+`CorpusIndex::search()` does not know or care which kind it is operating on.
+That Liskov property is the reason the contract stays at three operations.
+
+### 3.5 Enrichment (optional)
+
+`enrichment/` adds an LLM-driven post-indexing pass called the **field model
+enrichment system**. Instead of extracting claims from individual chunks, it
+analyzes the corpus as a whole in five phases:
+
+1. **Skeleton extraction** — Identifies canonical questions and positions from overview chunks using domain-specific LLM prompts
+2. **HDBSCAN clustering** — Clusters chunk embeddings (no inference required), then labels clusters via LLM
+3. **Alignment** — Maps clusters to skeleton positions using embedding similarity + LLM verification
+4. **Fault line detection** — Identifies substantive disagreements between aligned positions
+5. **Open question detection** — Surfaces questions where the corpus has gaps
+
+The `Domain` trait (`enrichment/domain.rs`) is the single extension point for
+generalizing across knowledge fields. It defines epistemic vocabulary, overview
+document filters, all LLM prompts, and clustering/alignment configuration. Six
+domain implementations exist: `philosophy` (fully implemented, 423 lines),
+`multi` (Wikipedia multi-domain, 81 lines), and `science`, `policy`, `legal`,
+`community` (stubs, 21 lines each).
+
+`FieldModelEngine` orchestrates all five phases with checkpoint-based
+resumability (`checkpoint.rs`). It contains zero domain-specific logic — the
+only `match` on domain strings is the factory method `from_recipe()`.
+
+This pass is opt-in per recipe (`[enrichment] enabled = true, domain =
+"philosophy"`). Without an `InferenceFn`, the engine logs a warning and skips
+enrichment without failing ingestion.
+
+### 3.6 Safety
+
+Hardcoded, not configurable from recipes:
+
+- robots.txt compliance on web crawls
+- 1-second minimum delay per domain
+- User-Agent: `CorpusEngine/0.1 (+https://sovereign.dev/corpus-engine)`
+- Crawl scope enforced against seed URL domain
+- Download size warnings at 1.5× estimate
+
+### 3.7 Recipes and the recipe registry
+
+Six corpora ship as built-in recipes: Wikipedia, Stanford Encyclopedia of
+Philosophy, OpenAlex, Stack Exchange, Project Gutenberg, and CRS Reports.
+Recipe TOML files live in the `sovereign-recipes` repository and are consumed
+by `corpus-engine` via `RecipeRegistry` (`src/registry.rs`):
+
+- **Bundled snapshot** — `registry_snapshot.toml` is compiled into the crate
+  via `include_str!` so the engine works fully offline.
+- **Live refresh** — `RecipeRegistry::refresh()` fetches the latest
+  `registry.toml` from GitHub. Each entry has a `toml_url` field pointing to
+  the raw recipe on GitHub.
+- **Resolution order** — local override on disk → fetch from `toml_url` → error.
+- **SHA-256 verification** — when the registry entry's `sha256` field is
+  non-empty, the fetched recipe is verified before use.
+- **`cargo xtask update-registry-snapshot`** refreshes the bundled snapshot
+  from the live registry.
+
+User recipes can be dropped into the local recipes directory and discovered
+via `engine.discover_recipes()`.
+
+### 3.8 Delta updates
+
+`update/delta.rs` supports incremental index updates via version manifests:
+
+- `VersionManifest` tracks per-document revision IDs.
+- `ManifestDiff` computes additions, updates, and deletions between two manifests.
+- Updates apply in three phases: deletions → updates (delete-then-re-add) → additions.
+- Resumability via `_update_progress.json` so interrupted updates can continue.
+
+---
+
+## 4. Sovereign (`lcol-llm`) — The Local Agent
+
+A single-machine local AI assistant. Runs as a desktop app, CLI, or HTTP server
+against the same `Runtime`. No data leaves the machine unless the user opts in
+to web search or to a Commonwealth mesh.
+
+### 4.1 Trait architecture
+
+`sovereign-core/src/traits.rs` defines five async trait boundaries that the
+entire runtime is built against. Every component is swappable for tests or
+alternate implementations.
+
+| Trait               | Surface                                                          |
+|---------------------|------------------------------------------------------------------|
+| `InferenceProvider` | `complete`, `complete_stream`, `embed`, `embed_query`, `capabilities` |
+| `Router`            | `classify(message) → Intent`                                    |
+| `Planner`           | `plan(goal, context, tools) → Plan`, `replan(...)`              |
+| `Tool`              | `descriptor`, `execute`, `validate`, `retry_config`, `required_permissions` |
+| `StateStore`        | ~25 methods: conversations, messages, tasks, memories, documents, corpus state, search budget, permissions, routing log |
+
+A sixth trait, `ApprovalChannel`, exists for human-in-the-loop tool approval.
+Implementations: `CliApprovalChannel`, `TauriApprovalChannel`,
+`ServerApprovalChannel`, `AutoApprovalChannel` (tests).
+
+### 4.2 Runtime data flow
+
+```
+User message
+  → Router.classify   (Fast slot, two-pass coarse-then-refine)
+       → SimpleQuery / DeepQuery / KnowledgeQuery → search → synthesize
+       → ComplexTask  → Planner.plan (Primary slot)
+                      → Executor (topological batches)
+                          ├─ ReasonWithTools loop (iterative tool use)
+                          ├─ Best-of-N sampling (LlmJudge / Random / Best)
+                          ├─ Evaluation passes (eval prompt → retry on fail)
+                          └─ Tool steps with permission checks + approval
+                      → synthesize from step outputs
+  → Provenance recorded into Message.metadata
+  → Memory extraction on conversation end
+```
+
+`Plan` is a flat JSON DAG: `steps` (each with `kind`, `inputs`, optional
+`sampling`, optional `evaluation`) plus `edges` for the dependency graph.
+`StepKind` variants: `Reason`, `Tool`, `UserInput`, `Branch`, `ReasonWithTools`.
+
+The planner emits `[sample:N:method]` and `[eval:name]` annotations directly in
+its skill template DSL; the executor parses them into `SamplingConfig` and
+`EvaluationConfig`.
+
+### 4.3 Inference
+
+`sovereign-inference/embedded.rs` wraps `llama-cpp-2` with a dual-slot loader:
+
+| Slot       | Purpose                          | Typical model              |
+|------------|----------------------------------|----------------------------|
+| Fast       | Routing, working-memory compression, query reformulation | Qwen3-0.6B–1.7B |
+| Primary    | Planning, synthesis, evaluation  | Qwen3.5-4B/9B/27B          |
+| Embed      | Vector embeddings                | Qwen3-Embedding-0.6B/4B    |
+
+`models.toml` is the source of truth: five hardware profiles
+(`cpu_only`, `low_mem`, `default`, `high`, `very_high`) each declare three
+slots with `repo`, `file`, `family`, `quant`, `size_gb`, `thinking`. Per-slot
+`quirks_override` lets profiles tune family defaults without redeclaring them.
+
+`model_family.rs` encodes per-family quirks (`Qwen3`, `Qwen35`, `Qwen3Embedding`,
+`Gemma3`, `Llama3`, `Phi4`, `Phi4Reasoning`, `SmolLM3`, `Unknown`):
+
+- `ThinkingControl` — `SystemPromptToken { enable, disable }`, `AlwaysOn`, `None`
+- Sampling defaults — temperature, top-k, top-p, presence penalty
+- `EmbedQuirks` — `PoolingStrategy`, `NormalizationStrategy`, `query_instruction` prefix (asymmetric retrieval)
+
+`hybrid.rs` is a multi-backend `InferenceProvider`:
+
+- `BackendEntry { name, health_tracker, priority, cost_per_token, is_local, oicp_manifest }`
+- `BackendSelector` trait → `CapabilityAwareSelector` (OICP scoring) →
+  fallback `PrioritySelector` (highest-priority healthy backend)
+- Per-backend `HealthTracker`: EWMA latency (α=0.3), 3-strike availability mark
+- Background health loop refreshes OICP manifests for remote backends
+- Up to 2 retries on failure with the next-best backend
+
+`remote.rs` is an OpenAI-compatible client that speaks to anything wearing the
+schema (vLLM, Ollama, llama.cpp server, TGI, **Commonwealth**).
+
+### 4.4 Tools
+
+| Tool                 | What it does                                                   |
+|----------------------|---------------------------------------------------------------|
+| `SearchTool`         | Embeds query, vector + FTS5 over local store, scores against thresholds (`SUFFICIENT=0.85`, `LOW=0.3`), falls back to web if configured |
+| `WebSearchTool`      | NL → keywords (Fast slot), search backend, fetch top 3, extract, synthesize with citations |
+| `WebFetchTool`       | Single-URL fetch + HTML→text                                  |
+| `KnowledgeTool`      | Direct corpus query against installed `corpus-engine` indexes |
+| `ClaimSearchTool`    | Search enriched corpora by epistemic status                   |
+| `EpistemicLandscapeTool` | Map positions and disagreements on a topic               |
+| `SymbolLookupTool`   | Exact symbol-name lookup against tree-sitter-indexed code (LanceDB filter pushdown) |
+| `CodeSearchTool`     | Semantic code search (vector + FTS fallback); results always labelled approximate |
+| `RecentChangesTool`  | Symbols modified within last N hours, grouped by file (mtime) |
+| `FindCalleesTool`    | What does this function call? SCIP call graph, compiler-resolved. Staleness-aware |
+| `FindCallersTool`    | What calls this function? Depth 1–2 traversal. Staleness-aware |
+| `DocumentTool`       | Map-reduce summarize/analyze (4 chunks per batch, 8K reduce window) |
+| `ShellTool`          | `sh -c` with 30s timeout, `Shell` permission + per-call approval |
+| `FileTool`           | Read/write/list, sandboxed to data dir                        |
+| `EmailTool`          | SMTP via `lettre` (feature-gated)                            |
+| `CalendarTool`       | Read/create events                                            |
+| `ComputeTool`        | Cost estimation for mesh contribution accounting              |
+| `McpClient` + `McpToolAdapter` | stdio JSON-RPC client wraps remote MCP servers as native tools |
+
+**Code Intelligence** is the five tools from `SymbolLookupTool` through
+`FindCallersTool`. The first three query LanceDB indexes built by tree-sitter
+extraction (`sovereign code index <path>`). The call graph tools query a
+separate SQLite database (`ScipGraph`) populated by SCIP exports from
+language-specific analyzers (`rust-analyzer`, `scip-typescript`, etc.). A
+filesystem watcher (`CodeWatcher`) re-indexes modified files and marks them
+stale in the call graph so query results carry calibrated confidence:
+
+| Staleness level | Trigger | User sees |
+|-----------------|---------|-----------|
+| None            | Graph < 1 hour old, no modified files | Nothing — no noise for fresh results |
+| SomeCallSitesMayBeStale | File modified since last SCIP export | Quiet note naming the specific files |
+| GraphIsAging    | 1–24 hours since export | Quiet note with age |
+| GraphIsStale    | > 24 hours since export | Prominent warning with `sovereign corpus scip` refresh command |
+| LanguageNotIndexed | SCIP exporter not installed for this language | Note with install hint |
+
+All five tools are exposed via the MCP server at `POST /mcp/message` for
+integration with Claude Code, Cursor, Cline, and other MCP-compatible agents.
+The `codebase-navigator` skill configures planner templates for call graph
+tracing and security review workflows.
+
+`SearchTool` is the unified pipeline: local FTS5 + vector → coverage assessment
+→ optional web fallback → cited synthesis. Web backends: DuckDuckGo (free
+HTML), Brave (API), Tavily (API). Budget tracking gates web usage so the
+system stays usable offline.
+
+### 4.5 State
+
+`sovereign-store` provides three `StateStore` implementations against the
+same trait: `SqliteStateStore` (default, `rusqlite` bundled), `PostgresStateStore`
+(deadpool + tokio-postgres), `MemoryStateStore` (tests).
+
+Schema (defined in `migrations.rs`):
+
+- `conversations`, `messages` (+ FTS5 on content)
+- `tasks` (plan JSON, status, completed_steps)
+- `memories` (content, source, confidence, embedding BLOB, FTS5)
+- `documents` (chunk_index, embedding BLOB, source_type, FTS5)
+- `corpus_states` (corpus_id, tier, installed_at, indexed_at, sync_ready)
+- `routing_log` (message_hash, classified_as, was_correct, latency_ms)
+- `search_budget` (per backend, queries_used, reset_at)
+- `permissions` (tool_id, scope, granted)
+
+Every record carries a Lamport `version` and soft-deletable rows have
+`deleted_at`. Reads filter `WHERE deleted_at IS NULL`. This is sync-ready: two
+StateStores can merge by union + timestamp resolution without schema migration.
+
+### 4.6 Memory
+
+- **Working memory** — compressed every message via `memory::compress_working_memory` (Fast slot, max 200 tokens) into `{ current_goal, facts, active_documents }`.
+- **Long-term memory** — extracted at conversation end. Each `Memory` has `confidence` (0..1), `created_at`, `last_used`. Retrieved by FTS5 keyword search on content.
+- **Decay** — exponential monthly decay (default 10%, overridable per skill via `confidence_decay_per_month`). Pruned below `prune_threshold`.
+- **Routing-correction memory** — `RoutingCorrection { message_hash, classified_as, was_correct }` is fed into the router's Pass-1 prompt as "avoid these mistakes."
+
+### 4.7 Skills
+
+Skills are TOML files. `SkillRegistry` loads them from `skills/` and merges
+their routing hints, planner templates, prompt overrides, memory rules, and
+OICP requirements into the runtime. Bundled:
+
+| Skill              | Highlights                                                 |
+|--------------------|-----------------------------------------------------------|
+| `research-analyst` | Multi-source research with citations, Slow synthesis, 5%/month decay |
+| `epistemic-research` | Debate mapping; uses `ClaimSearchTool` + `EpistemicLandscapeTool`; requires `analysis≥2` |
+| `code-review`      | Structured code analysis; `privacy = local_only`         |
+| `personal-assistant`| General-purpose                                          |
+| `inner-work`       | Reflective/Socratic; `privacy = local_only` enforced regardless of available remote backends |
+
+Skill TOML structure:
+
+```toml
+[skill]                       id, name, version, description
+[routing]                     trigger_phrases, default_intent, min_confidence
+[[planner.templates]]         name, trigger, steps (with [sample:N:method] / [eval:name])
+[tools]                       required, optional, tool_settings
+[prompts]                     synthesis override
+[memory]                      extract_prompt_addendum, confidence_decay_per_month, prune_threshold
+[inference]                   privacy, min_context_tokens, [inference.preferred_capabilities]
+```
+
+Skills carry `signature` and `signed_by` fields and a derived
+`TrustLevel { CommunityReviewed, AuthorSigned, Unsigned }` so the UI can
+distinguish them.
+
+### 4.8 OICP
+
+Sovereign's `oicp.rs` is the canonical OICP v0.2.0 implementation per
+`commonwealth/docs/oicp-v0.2.md`, with matching types in
+`commonwealth-core::oicp`. The module defines:
+
+- `Capability` — `General, Code, Analysis, Math, Creative, Instruction, Multilingual, Vision, LongContext`, plus `Unknown` for `#[serde(other)]` ignorance-safety per spec §2.4
+- `ProficiencyLevel` — 0–4 scale (`None`, `Basic`, `Moderate`, `Strong`, `Exceptional`)
+- `CapabilityProfile` — type alias for `HashMap<Capability, ProficiencyLevel>`
+- `InferenceRequirements { oicp_version, capabilities, context, performance, privacy, request_id }` — nested per spec §3
+- Nested groups: `CapabilityRequirements { required, preferred }`, `ContextRequirements { min_tokens, preferred_tokens }`, `PerformanceRequirements { latency }`, `PrivacyRequirements { sharding }`
+- `LatencyPreference` — `Interactive, Throughput, Background, BestEffort` (default)
+- `ShardingPrivacy` — `LocalOnly` (default), `MeshAllowed`
+- `ProviderManifest` — what a backend advertises (§4), including the optional `knowledge` and `federation` sections
+- `OicpResponseMeta` — response metadata (§5.2) with `match_quality` and `degraded_capabilities`
+- `KnowledgeSearchRequest`/`KnowledgeSearchResponse`/`KnowledgeResult` — knowledge search API (§6)
+- Builder methods on `InferenceRequirements` (`with_latency`, `with_sharding`, `with_capabilities`, `with_context`, `with_request_id`) and accessor helpers (`latency()`, `sharding()`, `required()`, `preferred()`, `min_tokens()`) so callers don't have to assemble the nested structure by hand.
+
+Skills declare their requirements in `[inference]`. The hybrid provider's
+`CapabilityAwareSelector` filters backends by `required` and ranks remaining
+candidates using the shared `oicp::satisfies_required` / `oicp::score_preferred`
+helpers.
+
+The spec default for `privacy.sharding` is `LocalOnly`, so any request that
+reaches a mesh provider without an explicit `mesh_allowed` opt-in is rejected
+with HTTP 400 by Commonwealth.
+
+### 4.9 Frontends
+
+| Frontend     | Purpose                                                       |
+|--------------|--------------------------------------------------------------|
+| `sovereign-cli`     | Interactive REPL; flags: `--model`, `--primary-model`, `--data-dir`, `--skills-dir`, `--router`, `--ingest`, `--brave-api-key`, `--tavily-api-key`. Includes `/mesh` subcommands (create, join, status, members, leave). |
+| `sovereign-server`  | Axum REST + WebSocket on configurable port. Multi-tenant via `tenant.rs`. SSE streaming via `/v1/conversations/{id}/messages/stream`. WS streaming via `/v1/ws/{conversation_id}`. Server-side `ApprovalChannel` stores requests in DB and exposes `/v1/tasks/{id}/approve`. |
+| `sovereign-desktop` | Tauri 2 + Svelte 5. Setup wizard (persona, hardware-driven model selection, knowledge tier, optional web search keys). Chat with streaming + source attribution. Knowledge base management (`KnowledgeStatus`, `CorpusProgressBanner`). Skill manager. Mesh status/settings UI. Deep-link handler for `sovereign://` URLs. System tray. |
+
+### 4.10 Deep links
+
+`sovereign-mesh/deep_link.rs` parses `sovereign://create?name=<name>` and
+`sovereign://join?key=<key>` URLs, including relay hints for NAT traversal.
+The desktop app registers as the system handler for the scheme so a join key
+can be sent as a clickable link.
+
+### 4.11 Knowledge integration
+
+Sovereign hands `corpus-engine` an `EmbedFn` that wraps its local Embed slot,
+and (optionally) an `InferenceFn` wrapping the Primary slot in Fast mode with a
+768-token budget for claim/relationship extraction. `data/corpora.toml` is the
+manifest the desktop app uses for tier-driven install:
+
+| Tier      | Size  | Corpora                                       |
+|-----------|-------|-----------------------------------------------|
+| Essential | 55 GB | Wikipedia                                     |
+| Research  | 105 GB| Wikipedia + SEP + OpenAlex + CRS              |
+| Technical | 95 GB | Wikipedia + Stack Exchange                    |
+| Full      | 170 GB| All six                                       |
+
+---
+
+## 5. Commonwealth — The Coordination Daemon
+
+A symmetric daemon. Every machine runs the same binary. There is no master.
+Members find each other via mDNS on the LAN or transitively over a VPN
+(Tailscale/WireGuard) and converge on a shared view of the mesh through gossip.
+
+### 5.1 What it does in one sentence
+
+Translates a request like "complete this chat with model X" into a concrete
+plan that spawns `llama-server` on one node and `rpc-server` on the others,
+holds the resulting OpenAI-compatible HTTP endpoint open for clients, and
+keeps the plan healthy as nodes come and go.
+
+### 5.2 Discovery and membership
+
+- **Join keys** — `cwth-XXXX-XXXX-XXXX`. `membership::generate_join_key` produces a key, stores its BLAKE3 hash, and discards the plaintext. `verify_join_key` is constant-time. The first node calls `init_mesh`; subsequent nodes call `accept_join` to add themselves to the `Mesh`.
+- **mDNS** — Each daemon advertises `_commonwealth._tcp.local` with `node_id`, `mesh_id`, `name`. `MdnsDiscovery::browse` populates a `DiscoveredPeer` map.
+- **Gossip** — `gossip_service.rs` runs a 10-second epidemic loop, picking 2–3 random peers per round. `GossipMessage` is a three-phase digest/delta/response exchange. Conflicts resolved by timestamp (last-write-wins). Payload kinds: `MemberState`, `InferencePlan`, `KnowledgePlan`, `LedgerEntry`, `MeshConfig`.
+- **Latency probing** — UDP RTT every 30s with the magic bytes `CWLP` and EWMA smoothing (α=0.3). The resulting `LatencyMatrix` is shared via gossip and consumed by the scheduler for topology-aware layer ordering.
+- **Hardware detection** — `discovery/hardware.rs` tries `nvidia-smi`, then `rocm-smi`, then Metal. Outputs `HardwareProfile { gpus, ram_gb, storage_gb, cpus }` with `GpuInfo { name, vram_gb, compute_type, tflops }`.
+- **TLS** — `tls.rs` generates per-session certificates with `rcgen` and pins them on the internal API.
+- **Mesh peering** — `peering.rs` lets two meshes establish federation via out-of-band key exchange. Two `PeerTrustLevel`s: `ModelAndKnowledgeSharing`, `Full`.
+
+### 5.3 Scheduling
+
+`commonwealth-inference/scheduler` is a pure-functional layer over the gossiped state. A
+deterministic per-decision leader (lowest `NodeId`) prevents thrash without
+needing consensus.
+
+| Module                   | Algorithm                                                |
+|--------------------------|---------------------------------------------------------|
+| `layer_assignment.rs`    | Proportional VRAM allocation, contiguous ranges per node, topology-aware ordering using `LatencyMatrix`, privacy-aware entry-node preference |
+| `plan_builder.rs`        | `build_shard_plan` (single model) and `build_inference_plan` (multiple models), with `estimate_performance` for TPS / TTFT estimates |
+| `knowledge_assignment.rs`| Greedy by free storage; whole-corpus if it fits, otherwise `ChunkRange` split; replicas placed on different nodes; respects per-corpus `mesh_sharing` flag |
+| `oicp_cache.rs`          | Hashes `CapabilityRequirements` to a `(ModelId, score)` cache keyed by portfolio version, invalidated on portfolio change |
+| `portfolio.rs`           | `ModelPortfolio` with `ModelTransition` state machine (`Loading → Ready → Complete`); `SWAP_THRESHOLD = 0.3` decides whether to evict |
+| `usage_predictor.rs`     | Counts requests by `(weekday, hour, CapabilityCategory)` to predict dominant capability for preemptive loading |
+
+### 5.4 Orchestration
+
+`commonwealth-inference/orchestrator` is the side-effect layer that turns scheduler
+output into running processes.
+
+- `Orchestrator::apply_shard_plan` spawns `llama-server` on the entry node
+  (allocating sequentially from `next_llama_port`) and `rpc-server` on remote
+  nodes that hold layer subsets.
+- `ManagedProcess` tracks `id`, `kind` (`LlamaServer | RpcServer`), `state`
+  (`Starting | Running | Unhealthy | Failed | Stopped`), `pid`, `child`,
+  `listen_address`, `spawned_at`. `stop()` does graceful SIGTERM with a
+  configurable timeout, then SIGKILL.
+- `HealthTracker` polls every 5s by default (HTTP for llama-server, TCP for
+  rpc-server), keeps a 20-sample latency history, marks `Unresponsive` after 3
+  consecutive failures. Statuses: `Healthy, Degraded { reason }, Unresponsive,
+  Dead, Unknown`.
+- `GracefulDeparture` is a 30-second countdown state machine
+  (`Announced → Rebalancing → Draining → Complete`) so a node can leave
+  without dropping in-flight requests.
+- `FaultDetector` collapses health changes into `FaultEvent`s that the daemon
+  can act on.
+
+### 5.5 HTTP API
+
+Two listeners, two trust domains.
+
+**Client API — port 9741, no mTLS**
+
+| Method | Path                              | Notes                                         |
+|--------|----------------------------------|-----------------------------------------------|
+| POST   | `/v1/chat/completions`           | OpenAI-compatible. Routing priority: OICP requirements → exact model name → glob alias (via `model_aliases.rs`) → default. `LocalOnly` privacy is rejected (400). |
+| GET    | `/v1/models`                     | Loaded models with capabilities and performance estimates |
+| POST   | `/v1/knowledge/search`           | Determines target corpora, fans out to shard nodes, merges, reranks. Wired to `corpus-engine` (search call site landed; cross-node fan-out is the active integration point). |
+| GET    | `/status`                        | Comprehensive node/mesh/inference/knowledge/contribution summary |
+| GET    | `/oicp/v1/capabilities`          | Provider manifest + federation info           |
+
+**Internal API — port 9742, mTLS**
+
+| Path                                 | Purpose                          |
+|--------------------------------------|---------------------------------|
+| `POST /internal/gossip`              | Gossip exchange                 |
+| `POST /internal/scheduling/intent`   | Scheduling decision notification|
+| `POST /internal/scheduling/plan`     | New shard plan distribution     |
+| `POST /internal/model/transfer`      | Model file transfer (peer-to-peer) |
+| `POST /internal/index/transfer`      | Corpus shard transfer           |
+| `POST /internal/knowledge/search`    | Inter-node shard query (fan-out target) |
+| `GET  /internal/latency/probe`       | Latency probe response          |
+
+### 5.6 Knowledge
+
+`commonwealth-knowledge` wraps `corpus-engine`:
+
+- `MeshCorpusManager` — install / list / remove corpora.
+- `ShardManager` — `prepare_shards` extracts per-node shards for distribution; `install_received_shard` takes a transferred shard and integrates it locally; `consolidate_shards` merges all local shards into a complete index.
+- `embed_http::http_embed_fn` — builds an `EmbedFn` that POSTs to a remote `/v1/embeddings` endpoint (default model `nomic-embed-text-v2`). This is how a node without a local embed model still ingests via the engine.
+- `grounding.rs` — `GroundingConfig { enabled, corpora, max_chunks, max_context_tokens, min_relevance, citation_instructions }` and `search_for_grounding` / `format_knowledge_context` for system-prompt injection with citation markers.
+
+### 5.7 Ledger and fairness
+
+- `LedgerStore` is append-only. Entries are `LedgerEntryKind { Contributed { served_request_from }, Consumed { served_by } }` with units `GpuSeconds | StorageGbDays | BandwidthGb`.
+- `NodeBalance` rolls a 30-day window into `compute_hours, storage_gb_days, bandwidth_gb, balance`.
+- `FairnessPolicy` is a per-mesh choice: `Transparent` (everyone sees the ledger, social pressure), `SoftThrottle { threshold_hours, priority_reduction }`, or `HardCap { threshold_hours }`. Decisions emerge as `FairnessDecision { Allow, Throttle, Deny }`.
+
+### 5.8 Test harness
+
+`commonwealth-test-harness` provides the integration story:
+
+- `SimulatedMesh` — orchestrates many `SimulatedNode`s in-process, each with its own `AppState` and HTTP listeners on random ports.
+- `SimulatedNodeBuilder` — fluent builder for hardware profiles.
+- `MockLlamaServer` — Axum app responding to `/v1/chat/completions` and `/health` with canned responses, request counting via `Arc<AtomicU64>`.
+- `fixtures.rs` — reusable hardware profiles, models, capability profiles.
+
+`tests/integration.rs` covers mesh formation, gossip convergence, layer
+assignment correctness, inference E2E through the mock llama-server, fault
+recovery, graceful pause/resume, OICP routing, multi-model portfolio,
+knowledge query fan-out, ledger accuracy, fairness throttling. All tests run
+in deterministic time with no real 10-second gossip waits.
+
+### 5.9 CLI
+
+`commonwealth-daemon` defines the CLI structure with `clap`:
+
+```
+commonwealth init --name "..."          Create a mesh, get a join key
+commonwealth join <key>                 Join an existing mesh
+commonwealth status                     Mesh state, members, models, capacity
+commonwealth balance                    Contribution ledger
+commonwealth models                     Available and loaded models
+commonwealth corpora                    Hosted knowledge bases
+commonwealth corpus install/remove/update/list/consolidate
+commonwealth pause / resume             Graceful departure and return
+commonwealth leave                      Permanent departure
+commonwealth logs [--follow]            Daemon logs
+commonwealth mesh members               List members with status
+commonwealth mesh set <key> <value>     Propose config change
+commonwealth mesh revoke <node>         Propose removing a member
+commonwealth mesh peer <key>            Establish peering with another mesh
+commonwealth daemon start/stop/status   Daemon lifecycle
+```
+
+`init` and `join` are wired through to `discovery::membership`. The remaining
+commands are scaffolded; the daemon orchestration loop that ties config
+loading, signal handling, and component startup into a single long-running
+process is the active surface.
+
+### 5.10 Applications (`commonwealth-app`)
+
+The mesh application platform enables third-party apps to run on the mesh:
+
+- `MeshAppManifest` — static app description gossiped across nodes: `app_id`, `version`, `entrypoint`, `permissions`, `required_capabilities`
+- `AppPermissions` — declares `mesh_store_read`, `mesh_store_write`, `inference_access`, `knowledge_access`
+- `AppRegistry` — in-memory registry of known apps
+- `AppProcess` — lifecycle state machine (`Stopped → Starting → Running → Failed`)
+- `AppPortMap` + `forward()` — HTTP reverse-proxy helpers for routing traffic to mesh-hosted app processes
+
+### 5.11 Distributed State (`commonwealth-state`)
+
+`MeshStore` is a gossip-replicated distributed key-value store backed by SQLite (WAL mode):
+
+- Entries are `StoreEntry { app_id, key, value: Bytes, timestamp, origin: NodeId }`
+- Scoped by `app_id` so different mesh apps have isolated key namespaces
+- Last-write-wins (LWW) conflict resolution using Unix-second timestamps
+- `merge_entry()` accepts entries from gossip and resolves by timestamp
+- `all_entries_for_gossip()` exports the full store for broadcast
+- `RetentionGc` provides TTL-based garbage collection
+
+### 5.12 Deployment
+
+`contrib/` contains platform service files:
+
+- `install.sh` — curl installer script
+- `systemd/commonwealth.service` — systemd unit file for Linux
+- `launchd/com.commonwealth.daemon.plist` — macOS launchd plist
+
+---
+
+## 6. How the Four Projects Fit Together
+
+### 6.1 Sovereign standalone
+
+Sovereign runs by itself with no mesh. Inference is local via
+`EmbeddedLlamaCpp`. Knowledge bases are installed via `MeshCorpusManager` (the
+crate is named for the mesh case but works fine without one) and indexed by
+`corpus-engine`. The `EmbedFn` injected into the engine wraps Sovereign's
+local Embed slot directly. This is the default configuration of the desktop
+app and CLI.
+
+### 6.2 Commonwealth standalone
+
+Commonwealth runs as a daemon serving `localhost:9741`. Any OpenAI-compatible
+client (Open WebUI, LiteLLM, `curl`) points at it and gets distributed
+inference for free. Knowledge ingestion uses `embed_http::http_embed_fn` to
+call a local or remote embeddings endpoint, so the daemon can index without
+shipping its own embedding model.
+
+### 6.3 Sovereign + Commonwealth (the integrated case)
+
+Sovereign embeds Commonwealth in-process via `sovereign-mesh::EmbeddedDaemon`.
+When the user clicks "Create mesh" or accepts a `sovereign://join` deep link,
+the daemon spins up inside the Sovereign process (internal port 9742, client
+API 9741) with no separate binary. The Runtime's `inference` field is wrapped
+in `sovereign_mesh::peer_inference::MeshInferenceProvider`, which routes
+synthesis calls to peers when OICP scoring favours them:
+
+```
+User → Sovereign Runtime → Router → Planner → Executor
+                                       │
+                                       └─► MeshInferenceProvider
+                                              │
+                                              ├─ pick_better(local_manifest,
+                                              │              peer_manifests...)  ← OICP score
+                                              │                                    then size_gb
+                                              ├─ if local wins → EmbeddedLlamaCpp
+                                              └─ if peer wins  → POST /v1/chat/completions
+                                                                 to that peer's :9741
+                                                                 (their SovereignInferenceAdapter
+                                                                  re-applies OICP to pick Fast vs Slow slot)
+```
+
+Both sides consult the same scoring primitives in `sovereign_mesh::oicp_select`
+so the Joiner's selected model and the Founder's served slot can't drift.
+Streaming calls use `complete_stream_with_id` — a companion to `complete_stream`
+that returns the model attribution alongside the stream, so peer-served
+completions show up in `ResponseProvenance.inference_backend` as
+`"Qwen3.5-9B.Q8_0 @ peer BeefyMac"` rather than the local model name.
+
+A skill that declares `privacy = "local_only"` (e.g. `inner-work`) sets
+`ShardingPrivacy::LocalOnly` on the outgoing OICP envelope; the wrapper
+honours this by short-circuiting to the local provider regardless of score.
+
+Knowledge bases follow the same pattern: Sovereign owns the local index,
+Commonwealth distributes shards across nodes via `ShardManager`, and both use
+the same `corpus-engine` schema so a shard transferred between nodes is
+immediately searchable through `CorpusIndex::search` with no migration step.
+
+### 6.4 Shared protocols
+
+Two protocols cross the Sovereign/Commonwealth boundary:
+
+- **OICP** — The canonical specification lives at
+  `commonwealth/docs/oicp-v0.2.md`. The Rust implementation lives in
+  `oicp-types/src/lib.rs` — a standalone crate at the workspace root that
+  both projects consume via path dependency. It is re-exported as
+  `sovereign_core::oicp` and `commonwealth_core::oicp` so downstream code
+  uses familiar module paths. A request produced by one project serializes
+  through `serde` round-trips into the other without translation.
+- **`EmbedFn` injection** — `corpus-engine::EmbedFn` is the only contract
+  between the corpus layer and any embedding backend. Sovereign and
+  Commonwealth implement different concrete closures over the same type.
+
+---
+
+## 7. Build, Test, Run
+
+### 7.1 Prerequisites
+
+- Rust toolchain (stable)
+- `cmake` (llama.cpp build)
+- `protoc` (LanceDB pulls in `lance-table` which needs protobuf)
+  - macOS: `brew install protobuf`
+  - Debian: `apt install protobuf-compiler`
+- For Commonwealth: `llama-server` and `rpc-server` binaries from the
+  `llama.cpp` project on `PATH`
+- For desktop: Node.js + Tauri 2 prerequisites (`cargo install tauri-cli --version "^2"`)
+
+### 7.2 Build
+
+Each project is its own Cargo workspace.
+
+```sh
+# corpus-engine
+cd corpus-engine && cargo build --release
+
+# Sovereign — all crates
+cd lcol-llm && cargo build --release
+
+# Commonwealth — all crates
+cd commonwealth && cargo build --release
+```
+
+### 7.3 Test
+
+```sh
+cd corpus-engine && cargo test                # ~95 tests
+cd lcol-llm     && cargo test --workspace     # ~289 tests
+cd commonwealth && cargo test --workspace     # ~222 unit + integration tests
+```
+
+No tests require a GPU, model file, or network access. Sovereign uses
+`DeterministicInference` + in-memory SQLite + real FTS5 for functional tests.
+Commonwealth's `commonwealth-test-harness` runs simulated meshes with mock
+llama-servers under deterministic timing.
+
+### 7.4 Run
+
+```sh
+# Sovereign desktop
+cd lcol-llm/crates/sovereign-desktop && npm install && cargo tauri dev
+
+# Sovereign CLI
+cd lcol-llm && cargo run --release -p sovereign-cli -- \
+  --model models/qwen3-1.7b.gguf --primary-model models/qwen3.5-9b.gguf
+
+# Sovereign HTTP server
+cd lcol-llm && cargo run --release -p sovereign-server -- --config sovereign-server.toml
+
+# Commonwealth daemon
+cd commonwealth && cargo run --release -p commonwealth-daemon -- init --name "Co-op"
+cd commonwealth && cargo run --release -p commonwealth-daemon -- daemon start
+```
+
+Default ports:
+
+| Port  | Service                                     |
+|-------|---------------------------------------------|
+| 9741  | Commonwealth client API (OpenAI-compatible) |
+| 9742  | Commonwealth internal API (mTLS)            |
+| 9743+ | `llama-server` instances                    |
+| 50051+| `rpc-server` instances for layer shards     |
+| 8080  | Sovereign HTTP server (configurable)        |
+
+---
+
+## 8. Deployment Topologies
+
+| Topology                 | What it looks like                                                                                                                                                          |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Sovereign desktop, alone | Tauri app, embedded llama.cpp, SQLite, local corpus indexes. No network required after model download.                                                                      |
+| Sovereign CLI, alone     | Same as desktop minus the GUI.                                                                                                                                              |
+| Sovereign server         | Axum REST + WebSocket, multi-tenant via `tenant.rs`, SQLite or PostgreSQL store. Suitable as an internal team endpoint.                                                     |
+| Commonwealth daemon, alone | Standalone OpenAI-compatible endpoint backed by a mesh. Any compliant client works.                                                                                       |
+| Sovereign + embedded mesh | Sovereign desktop with `sovereign-mesh::EmbeddedDaemon` running in-process. The user creates or joins a mesh through the desktop UI; deep links handle invitation flow.    |
+| Mesh of meshes           | Two Commonwealth meshes establish peering via `peering.rs` with a chosen `PeerTrustLevel`. Internal model and index transfer routes carry the federation traffic.           |
+
+All topologies share the same on-disk index format, the same OICP capability
+matching, and the same skill manifests. A skill written for desktop Sovereign
+runs unmodified against a Commonwealth-backed remote.
+
+---
+
+## 9. Project Status (as built)
+
+| Subsystem                                 | State                                              |
+|-------------------------------------------|---------------------------------------------------|
+| corpus-engine pipeline (acquire/extract/chunk/index) | Production                                |
+| corpus-engine sharding (3-op contract)    | Production                                        |
+| corpus-engine enrichment (field model, domain-extensible) | Production, opt-in per recipe    |
+| corpus-engine recipe registry + snapshot  | Production                                        |
+| corpus-engine delta updates               | Production                                        |
+| sovereign-recipes registry catalog        | Production                                        |
+| Sovereign trait architecture + Runtime    | Production                                        |
+| Sovereign embedded llama.cpp (dual-slot)  | Production                                        |
+| Sovereign hybrid provider + OICP selector | Production                                        |
+| Sovereign SQLite/Postgres/in-mem stores   | Production                                        |
+| Sovereign tools (search, web, RAG, document, MCP, shell, file) | Production                  |
+| Sovereign code intelligence (5 tools, SCIP graph, staleness, MCP) | Production               |
+| Sovereign epistemic tools                 | Production (against enriched corpora)             |
+| Sovereign skills + planner templates      | Production                                        |
+| Sovereign desktop (Tauri 2 + Svelte 5)    | Production for single-user                         |
+| Sovereign HTTP server (multi-tenant)      | Production                                        |
+| Sovereign mesh embed (`sovereign-mesh`)   | Functional                                        |
+| Commonwealth core types + ledger          | Production                                        |
+| Commonwealth discovery (mDNS, gossip, latency, hardware, TLS, peering) | Production           |
+| Commonwealth inference (scheduler + orchestrator) | Production                                |
+| Commonwealth API (client + internal)      | Production                                        |
+| Commonwealth ledger + fairness policies   | Production                                        |
+| Commonwealth knowledge fan-out            | Active integration — types and shard pipeline complete; cross-node fan-out + merge is the current edge |
+| Commonwealth mesh peering federation      | Trust establishment + record types complete; cross-mesh model/index transfer routes are stubs |
+| Commonwealth app platform (`commonwealth-app`) | Functional                                  |
+| Commonwealth distributed state (`commonwealth-state`) | Production                           |
+| Commonwealth daemon CLI (lifecycle wiring)| Init/join wired; long-running daemon orchestration loop is the active edge |
+| OICP shared types (`oicp-types`)          | Production                                        |
+
+The pieces marked "active integration" or "active edge" are where development
+is currently happening. Everything above them is stable and covered by tests.
+
+---
+
+## 10. Where to Look for What
+
+| You want to                           | Read                                                 |
+|---------------------------------------|------------------------------------------------------|
+| Understand the agent runtime          | `lcol-llm/crates/sovereign-core/src/runtime.rs`     |
+| See how plans are executed            | `lcol-llm/crates/sovereign-core/src/executor.rs`    |
+| Add a tool                            | `lcol-llm/crates/sovereign-core/src/traits.rs` then a new file under `sovereign-tools/src/` |
+| Add a corpus parser                   | `corpus-engine/src/extractors/` then register in `engine/ingest.rs` |
+| Write a recipe                        | `sovereign-recipes/<id>/recipe.toml` then add entry to `registry.toml` |
+| Write a skill                         | `lcol-llm/skills/<id>/skill.toml`                    |
+| Understand code intelligence tools    | `lcol-llm/crates/sovereign-tools/src/code/mod.rs`   |
+| Understand the SCIP call graph        | `corpus-engine/src/scip_graph.rs` (schema, staleness, queries) |
+| Add a SCIP language exporter          | `corpus-engine/src/scip_export.rs` → `all_exporters()` |
+| See the MCP server (tool hosting)     | `lcol-llm/crates/sovereign-server/src/routes_mcp.rs` |
+| Tune model selection per hardware     | `lcol-llm/models.toml`                               |
+| Trace a Commonwealth scheduling decision | `commonwealth/crates/commonwealth-inference/src/scheduler/plan_builder.rs` |
+| Trace a Commonwealth shard plan       | `commonwealth/crates/commonwealth-inference/src/scheduler/layer_assignment.rs` |
+| Trace process spawning                | `commonwealth/crates/commonwealth-inference/src/orchestrator/process.rs` |
+| Add an internal mesh route            | `commonwealth/crates/commonwealth-api/src/routes_internal.rs` |
+| Stand up a multi-node test            | `commonwealth/crates/commonwealth-test-harness/`     |
+| See OICP routing logic                | `lcol-llm/crates/sovereign-inference/src/selector.rs` and `commonwealth/crates/commonwealth-api/src/routes_inference.rs` |
+| See OICP type definitions             | `oicp-types/src/lib.rs`                              |
+| Understand index storage on disk      | `corpus-engine/src/index/mod.rs`                     |
+| Understand the embedding injection    | `corpus-engine/src/types.rs` (`EmbedFn`) and `commonwealth/crates/commonwealth-knowledge/src/embed_http.rs` |
+| Understand enrichment domains         | `corpus-engine/src/enrichment/domain.rs` and `enrichment/domains/` |
+| Understand the recipe registry        | `corpus-engine/src/registry.rs`                      |
+| Understand delta updates              | `corpus-engine/src/update/delta.rs`                  |
+
+---
+
+## 11. Glossary
+
+- **OICP** — Open Inference Capabilities Protocol. A schema for declaring what
+  a model is good at (`Code`, `Analysis`, ...) at a 0–4 proficiency level, plus
+  required vs preferred constraints, latency preferences, and privacy
+  restrictions. Defined in `oicp-types`, re-exported by both Sovereign and
+  Commonwealth.
+- **Recipe** — A TOML file in `sovereign-recipes` that describes how to ingest
+  one corpus end-to-end (acquire, extract, chunk, index, optionally enrich).
+- **Registry** — The recipe catalog in `sovereign-recipes/registry.toml`.
+  `corpus-engine` ships a compile-time bundled snapshot and can refresh from
+  GitHub for the latest recipes.
+- **Field Model** — The enrichment system's approach: five phases (skeleton
+  extraction, HDBSCAN clustering, alignment, fault lines, open questions)
+  that analyze a corpus holistically rather than per-chunk.
+- **Domain** — A `corpus-engine` trait (`enrichment/domain.rs`) encoding the
+  epistemic conventions of a field of knowledge (philosophy, science, etc.).
+  The single extension point for the field model enrichment system.
+- **SCIP** — Source Code Intelligence Protocol, a language-neutral format for
+  symbol definitions and references. `scip_graph.rs` stores SCIP data in SQLite;
+  `scip_export.rs` dispatches to language-specific analyzers (`rust-analyzer`,
+  `scip-typescript`, etc.) to produce the data.
+- **ScipGraph** — The SQLite database storing symbol definitions, call-site
+  references, and staleness metadata. Queried by `find_callees` and
+  `find_callers`. Staleness is tracked per-file via `CodeWatcher` integration.
+- **Shard** — A `corpus-engine` index containing only a contiguous chunk-ID
+  range. Structurally identical to a complete index.
+- **Skill** — A TOML file in Sovereign that configures routing triggers,
+  planner templates, prompt overrides, memory rules, and OICP requirements
+  for a class of work. No code required.
+- **Slot** — One of the three model loading positions in Sovereign's embedded
+  inference: Fast (router/compression), Primary (planning/synthesis), Embed
+  (vector embeddings).
+- **Mesh** — A closed trust ring of Commonwealth nodes that share inference
+  and knowledge. Joined via a `cwth-XXXX-XXXX-XXXX` key.
+- **Peering** — A trust relationship between two distinct meshes that lets
+  them exchange models or knowledge under a chosen `PeerTrustLevel`.
+- **CodeWatcher** — Filesystem watcher (`notify` crate) that re-indexes
+  modified source files via `CorpusEngine::reindex_file()` and marks them
+  stale in the `ScipGraph`. 800ms debounce window collapses editor saves.
+- **EmbedFn / InferenceFn** — The two function types `corpus-engine` accepts
+  from its caller for embedding text and (optionally) running an LLM during
+  enrichment. Keeps the engine free of any specific runtime.
+
+---
+
+## 12. Architecture Roadmap
+
+Future improvement candidates identified through SOLID analysis. These are
+proposals, not active work.
+
+### SRP: Large-file decomposition
+
+~~**`corpus-engine/src/engine.rs`**~~ — Done. Split into `engine/mod.rs`
+(facade) + `engine/ingest.rs` (pipeline) + `engine/reindex.rs` (per-file).
+
+~~**`corpus-engine/src/index.rs`**~~ — Done. Split into `index/mod.rs`
+(struct + metadata) + `index/create.rs` + `index/search.rs` + `index/write.rs`
++ `index/enrichment.rs`.
+
+**`corpus-engine/src/enrichment/field_engine.rs`** (1,337 lines) — lighter
+touch: move `get_overview_chunks()` to `filter.rs`, move skeleton parsing to
+`skeleton.rs`, keep the orchestrator method in place.
+
+### OCP: Domain registry pattern
+
+`FieldModelEngine::from_recipe()` uses a `match` on domain ID strings to
+construct domains. Replace with a `DomainRegistry` hashmap so new domains can
+be registered without modifying `field_engine.rs`.
+
+### ISP: StateStore decomposition
+
+`sovereign-core::StateStore` has ~30 methods across 8+ conceptual groups
+(conversations, tasks, memory, routing log, documents, corpus state, search
+budget, permissions). Most callers need only 1–2 groups. Proposed: split into
+focused sub-traits (`ConversationStore`, `MemoryStore`, `DocumentStore`, etc.)
+with a blanket `StateStore` supertrait. Incremental migration — introduce
+sub-traits, blanket-impl `StateStore`, then gradually narrow parameter bounds.
