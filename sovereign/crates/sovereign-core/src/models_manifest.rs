@@ -153,24 +153,52 @@ impl ModelsManifest {
     /// Empty `capabilities` is treated as "no annotation" rather
     /// than "empty profile" — callers get `None` and fall back.
     pub fn capabilities_for_file(&self, filename: &str) -> Option<CapabilityProfile> {
+        self.info_for_file(filename).map(|i| i.capabilities)
+    }
+
+    /// Extended lookup returning both the declared capability
+    /// profile AND the slot's `size_gb`. Same matching rules as
+    /// `capabilities_for_file`; `size_gb == 0.0` (the serde
+    /// default) is normalised to `None` so callers can treat
+    /// "unknown" and "explicitly zero" identically.
+    ///
+    /// Exists because the mesh routing path uses `size_gb` as a
+    /// tiebreaker when two models score equally — picking the
+    /// smaller one is the closest we can get to "pick the faster
+    /// one" without a live latency measurement. Returning
+    /// capabilities + size in one lookup keeps the hot path from
+    /// scanning the manifest twice.
+    pub fn info_for_file(&self, filename: &str) -> Option<SlotInfo> {
         let target = strip_gguf(filename).to_ascii_lowercase();
 
-        // Collect every annotated slot in priority order
-        // (user_slots first, then profile slots). Each becomes a
-        // candidate if its base_name matches or its filename
-        // matches exactly.
-        let mut candidates: Vec<(&str, &CapabilityProfile)> = Vec::new();
+        // Collect every annotated slot in priority order. Each
+        // annotated slot produces one or two patterns (filename +
+        // optional base_name). We now carry size_gb alongside so
+        // the same matching walk surfaces both fields.
+        struct Candidate<'a> {
+            pattern: &'a str,
+            caps: &'a CapabilityProfile,
+            size_gb: f64,
+        }
+        let mut candidates: Vec<Candidate<'_>> = Vec::new();
         for user in &self.user_slots {
             if user.capabilities.is_empty() {
                 continue;
             }
-            candidates.push((&user.file, &user.capabilities));
+            // Base_name candidates come first in priority when
+            // present — matches the existing insert(0, ...) policy.
             if !user.base_name.is_empty() {
-                candidates.insert(
-                    0,
-                    (user.base_name.as_str(), &user.capabilities),
-                );
+                candidates.push(Candidate {
+                    pattern: user.base_name.as_str(),
+                    caps: &user.capabilities,
+                    size_gb: user.size_gb,
+                });
             }
+            candidates.push(Candidate {
+                pattern: user.file.as_str(),
+                caps: &user.capabilities,
+                size_gb: user.size_gb,
+            });
         }
         for profile in self.profiles.values() {
             for slot in [
@@ -184,37 +212,66 @@ impl ModelsManifest {
                 if slot.capabilities.is_empty() {
                     continue;
                 }
-                candidates.push((&slot.file, &slot.capabilities));
+                candidates.push(Candidate {
+                    pattern: slot.file.as_str(),
+                    caps: &slot.capabilities,
+                    size_gb: slot.size_gb,
+                });
                 if !slot.base_name.is_empty() {
-                    candidates.push((slot.base_name.as_str(), &slot.capabilities));
+                    candidates.push(Candidate {
+                        pattern: slot.base_name.as_str(),
+                        caps: &slot.capabilities,
+                        size_gb: slot.size_gb,
+                    });
                 }
             }
         }
 
-        // Pass 1: base_name / partial substring match. Longest
-        // matcher wins — "Qwen3.5-35B-A3B" beats "Qwen3.5-35B" on
-        // a filename that contains both, so the MoE base_name
-        // doesn't get swallowed by a shorter prefix match.
-        let mut best: Option<(usize, &CapabilityProfile)> = None;
-        for (pattern, caps) in &candidates {
-            let pattern_lower = pattern.to_ascii_lowercase();
+        // Matching: exact wins instantly; otherwise longest
+        // substring wins. Mirrors the original algorithm but now
+        // also carries size_gb through.
+        let mut best: Option<(usize, &CapabilityProfile, f64)> = None;
+        for c in &candidates {
+            let pattern_lower = c.pattern.to_ascii_lowercase();
             let pattern_stripped = strip_gguf(&pattern_lower);
-            // Exact match (after .gguf stripping) is the strongest
-            // signal — wins over any substring-only match.
             if pattern_stripped == target {
-                return Some((*caps).clone());
+                return Some(SlotInfo {
+                    capabilities: c.caps.clone(),
+                    size_gb: normalise_size(c.size_gb),
+                });
             }
-            // Substring match — any pattern that appears anywhere
-            // in the target filename.
             if target.contains(pattern_stripped) {
                 let len = pattern_stripped.len();
                 match best {
-                    Some((best_len, _)) if len <= best_len => {}
-                    _ => best = Some((len, *caps)),
+                    Some((best_len, _, _)) if len <= best_len => {}
+                    _ => best = Some((len, c.caps, c.size_gb)),
                 }
             }
         }
-        best.map(|(_, caps)| caps.clone())
+        best.map(|(_, caps, size_gb)| SlotInfo {
+            capabilities: caps.clone(),
+            size_gb: normalise_size(size_gb),
+        })
+    }
+}
+
+/// Result of a `models.toml` lookup — capability profile plus the
+/// declared on-disk size. `size_gb == None` means the manifest
+/// author didn't declare one (or declared zero, which we treat
+/// identically). The OICP tiebreaker treats `None` as "unknown,
+/// sort after any known size" so an unannotated model doesn't
+/// spuriously beat an annotated one in a score tie.
+#[derive(Debug, Clone)]
+pub struct SlotInfo {
+    pub capabilities: CapabilityProfile,
+    pub size_gb: Option<f32>,
+}
+
+fn normalise_size(v: f64) -> Option<f32> {
+    if v <= 0.0 || !v.is_finite() {
+        None
+    } else {
+        Some(v as f32)
     }
 }
 
@@ -366,6 +423,58 @@ file = "some-model.gguf"
         // back to defaults, which is the desired BYOM UX.
         assert!(m.capabilities_for_file("some-model.gguf").is_none());
         assert!(m.capabilities_for_file("nothing-like-that").is_none());
+    }
+
+    #[test]
+    fn info_for_file_returns_size_gb_alongside_caps() {
+        // The mesh-routing tiebreaker depends on `size_gb` being
+        // surfaced from the same lookup that returns capabilities.
+        // Guard the contract with an explicit test — silent
+        // regressions here turn size-based tie-breaking into
+        // "whichever model the HashMap iterates first", which
+        // reliably defeats the point of having a tiebreaker.
+        let src = r#"
+[profiles.default.thoughtful]
+file = "nine-b.gguf"
+base_name = "Qwen3.5-9B"
+size_gb = 5.5
+[profiles.default.thoughtful.capabilities]
+general = 3
+analysis = 3
+
+[profiles.high.thoughtful]
+file = "twenty-seven-b.gguf"
+base_name = "Qwen3.5-27B"
+size_gb = 16.5
+[profiles.high.thoughtful.capabilities]
+general = 3
+analysis = 4
+"#;
+        let m = ModelsManifest::from_toml_str(src).unwrap();
+        let nine = m.info_for_file("Qwen3.5-9B.Q4_K_M.gguf").unwrap();
+        assert_eq!(nine.size_gb, Some(5.5));
+        assert_eq!(nine.capabilities.get(&Capability::Analysis).copied(), Some(3));
+        let twenty_seven = m.info_for_file("Qwen3.5-27B.Q8_0.gguf").unwrap();
+        assert_eq!(twenty_seven.size_gb, Some(16.5));
+        assert_eq!(twenty_seven.capabilities.get(&Capability::Analysis).copied(), Some(4));
+    }
+
+    #[test]
+    fn info_for_file_treats_zero_size_as_unknown() {
+        // BYOM entries routinely omit size_gb; serde fills in
+        // 0.0. Returning Some(0.0) would be misleading — the
+        // tiebreaker would think that model is "smaller than a
+        // 0.4 GB router model". Must be normalised to None.
+        let src = r#"
+[profiles.byom_qwen25.thoughtful]
+file = "qwen2.5-3b-instruct-q4_k_m.gguf"
+base_name = "Qwen2.5-3B"
+[profiles.byom_qwen25.thoughtful.capabilities]
+general = 2
+"#;
+        let m = ModelsManifest::from_toml_str(src).unwrap();
+        let info = m.info_for_file("qwen2.5-3b-instruct-q4_k_m.gguf").unwrap();
+        assert_eq!(info.size_gb, None);
     }
 
     #[test]

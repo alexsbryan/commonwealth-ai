@@ -199,14 +199,28 @@ pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
     "sovereign-local".to_string()
 }
 
-/// Build this node's OICP `ProviderManifest` — one model with the
-/// capability profile declared for it in `lcol-llm/models.toml`.
-/// Shared between the server adapter (what peers fetch at
-/// `/oicp/v1/capabilities`) and the client-side
-/// `MeshInferenceProvider` (what local scores itself against), so
+/// Build this node's OICP `ProviderManifest` — one `ProviderModel`
+/// entry per loaded chat slot (Fast + Slow), each with the
+/// capability profile + size_gb declared for it in
+/// `lcol-llm/models.toml`. Shared between the server adapter (what
+/// peers fetch at `/oicp/v1/capabilities`) and the client-side
+/// `MeshInferenceProvider` (what local scores itself against) so
 /// the two never disagree about our own declared capabilities.
 ///
-/// Capability resolution:
+/// Why both slots: on a Founder running the `high` profile, Fast
+/// is Qwen3-1.7B (routing only) and Slow is Qwen3.5-27B (flagship
+/// synthesis). A Joiner whose preferred profile is `{Analysis:3,
+/// General:3}` should consider the 9B-class `default.thoughtful`
+/// on its own side vs. the 27B on the Founder's — but if the
+/// Founder also has a 9B loaded in the Fast slot and it already
+/// satisfies `preferred`, the smaller/faster 9B should win over
+/// the 27B. That tie-break only works if both are visible in the
+/// manifest. Previously we advertised only the Slow-slot model,
+/// so a Founder with a perfectly-adequate 9B available looked
+/// like it was only offering the 27B, and the selector routed
+/// requests to the bigger model unnecessarily.
+///
+/// Capability resolution (per slot):
 ///   1. Match the loaded model's filename against every slot in
 ///      the bundled `ModelsManifest`. A user on the `default`
 ///      profile with Qwen3.5-9B picks up `general=3, analysis=3,
@@ -215,32 +229,52 @@ pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
 ///      loaded model isn't in the manifest. That's the BYOM path
 ///      — the user pointed Sovereign at their own GGUF we don't
 ///      have profiling data for. Conservative but honest.
+///
+/// The Embed slot is deliberately excluded from the manifest: it
+/// is not a chat-completion candidate and peer selection never
+/// consults it. Duplicate entries (same model id in Fast + Slow
+/// — happens when the provider collapses slots) are coalesced to
+/// one, since the OICP scorer treats identical models identically.
 pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest {
-    let model_name = resolve_primary_model_name(provider);
-    let capabilities = sovereign_core::models_manifest::DEFAULT_MANIFEST
-        .capabilities_for_file(&model_name)
-        .unwrap_or_else(|| {
-            tracing::debug!(
-                model = %model_name,
-                "build_self_manifest: no OICP entry in models.toml — using defaults"
-            );
-            let mut caps = std::collections::HashMap::new();
-            caps.insert(Capability::General, 2u8);
-            caps.insert(Capability::Analysis, 2u8);
-            caps
-        });
-    tracing::info!(
-        model = %model_name,
-        caps = ?capabilities,
-        "build_self_manifest: advertised capabilities"
-    );
-    ProviderManifest {
-        oicp_version: OICP_VERSION.to_string(),
-        provider: Some(ProviderInfo {
-            name: Some(model_name.clone()),
-            provider_type: Some(ProviderType::Mesh),
-        }),
-        models: vec![ProviderModel {
+    let mut seen_ids = std::collections::HashSet::new();
+    let mut models: Vec<ProviderModel> = Vec::new();
+    // Speed::Fast first, then Speed::Slow. Iterating in this order
+    // means that if Fast and Slow resolve to the same underlying
+    // model name (e.g. a stripped-down test harness that only
+    // loads one model), we keep the Fast-labelled one — arbitrary
+    // tie-break; they're the same model either way.
+    for speed in [Speed::Fast, Speed::Slow] {
+        let model_name = provider.model_id_for(speed);
+        if model_name.is_empty() || model_name == "unknown" {
+            continue;
+        }
+        if !seen_ids.insert(model_name.clone()) {
+            continue;
+        }
+        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .info_for_file(&model_name);
+        let (capabilities, size_gb) = match info {
+            Some(slot) => (slot.capabilities, slot.size_gb),
+            None => {
+                tracing::debug!(
+                    model = %model_name,
+                    ?speed,
+                    "build_self_manifest: no OICP entry in models.toml — using defaults"
+                );
+                let mut caps = std::collections::HashMap::new();
+                caps.insert(Capability::General, 2u8);
+                caps.insert(Capability::Analysis, 2u8);
+                (caps, None)
+            }
+        };
+        tracing::info!(
+            model = %model_name,
+            ?speed,
+            caps = ?capabilities,
+            size_gb = ?size_gb,
+            "build_self_manifest: advertised slot"
+        );
+        models.push(ProviderModel {
             id: model_name,
             base_model: None,
             quantization: None,
@@ -253,7 +287,32 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 estimated_ttft_ms: None,
                 estimated_load_time_sec: None,
             },
-        }],
+            size_gb,
+        });
+    }
+    // Provider name still reflects the primary — that's the name
+    // response attribution uses ("qwen3.5-27b @ peer BeefyMac").
+    // Fall back to whatever single model we have, or a sentinel.
+    let provider_name = models
+        .iter()
+        .max_by(|a, b| {
+            // Pick the "biggest" advertised model as the primary
+            // display name. If sizes are unknown, the one that
+            // landed later (Slow) wins via stable ordering.
+            a.size_gb
+                .unwrap_or(0.0)
+                .partial_cmp(&b.size_gb.unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|m| m.id.clone())
+        .unwrap_or_else(|| "sovereign-local".to_string());
+    ProviderManifest {
+        oicp_version: OICP_VERSION.to_string(),
+        provider: Some(ProviderInfo {
+            name: Some(provider_name),
+            provider_type: Some(ProviderType::Mesh),
+        }),
+        models,
         knowledge: None,
         federation: None,
     }

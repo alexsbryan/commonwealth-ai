@@ -150,26 +150,41 @@ pub async fn run_one_round(
         now,
     )
     .await;
-    // Glass-box log: this is what the rest of the mesh will see as
-    // OUR `hosted_corpora` after this round. If you're expecting
-    // peers to fetch your SEP index and they aren't, the first
-    // diagnostic is to check this line — an empty list means this
-    // node has no completed indexes to share (partial ingestions
-    // are filtered out on purpose). Info-level so it shows under
-    // the default filter, once per gossip tick (every 10s).
-    tracing::info!(
-        hosted_corpora = ?fresh_caps
-            .hosted_corpora
-            .iter()
-            .map(|c| &c.corpus_id)
-            .collect::<Vec<_>>(),
-        system_ram_gb = fresh_caps.hardware.system_ram_gb,
-        "gossip: publishing local capabilities"
-    );
-
     // Step 1: touch self + decay stale peers. One write-lock window.
+    // Compare current vs. fresh hosted_corpora so we can log at
+    // info only when the advertised set changed (new corpus
+    // installed, one removed) — the every-10s heartbeat otherwise
+    // logs at debug. Same gating policy as `mesh_state: rebuilt`.
     let candidates: Vec<(NodeId, Vec<std::net::SocketAddr>)> = {
         let mut mesh = app_state.inner.mesh.write().await;
+        let prior_corpora: std::collections::BTreeSet<String> = mesh
+            .members
+            .get(&self_id)
+            .map(|m| {
+                m.capabilities
+                    .hosted_corpora
+                    .iter()
+                    .map(|c| c.corpus_id.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let fresh_corpora: std::collections::BTreeSet<String> = fresh_caps
+            .hosted_corpora
+            .iter()
+            .map(|c| c.corpus_id.clone())
+            .collect();
+        if fresh_corpora != prior_corpora {
+            tracing::info!(
+                hosted_corpora = ?fresh_corpora,
+                system_ram_gb = fresh_caps.hardware.system_ram_gb,
+                "gossip: hosted_corpora set changed — re-publishing"
+            );
+        } else {
+            tracing::debug!(
+                hosted_corpora = ?fresh_corpora,
+                "gossip: publishing (unchanged)"
+            );
+        }
         if let Some(me) = mesh.members.get_mut(&self_id) {
             me.last_seen = now;
             me.status = NodeStatus::Online;
@@ -243,13 +258,20 @@ pub async fn run_one_round(
                 Ok(their_view) => {
                     let mut mesh = app_state.inner.mesh.write().await;
                     let report = mesh.merge_from(self_id, &their_view);
-                    if report.added > 0 || report.updated > 0 {
+                    if report.added > 0 {
                         info!(
                             peer = %peer_id,
                             peer_addr = %addr,
                             added = report.added,
                             updated = report.updated,
-                            "gossip: merged peer's view"
+                            "gossip: member added from peer's view"
+                        );
+                    } else if report.updated > 0 {
+                        tracing::debug!(
+                            peer = %peer_id,
+                            peer_addr = %addr,
+                            updated = report.updated,
+                            "gossip: merged peer's view (last_seen refresh)"
                         );
                     }
                     // Also bump THIS peer's last_seen in case their

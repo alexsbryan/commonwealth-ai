@@ -424,18 +424,30 @@ impl EmbeddedDaemon {
         match &*state {
             DaemonState::Running { app_state, mesh_state, .. } => {
                 let fresh = MeshState::from_app_state(app_state).await;
-                // Observable signal for "the UI just polled and got a
-                // fresh snapshot" — lets the user verify both that the
-                // poll is live AND that any new members are visible on
-                // this side. Info-level so it shows under the default
-                // `sovereign_mesh=info` filter without RUST_LOG
-                // overrides. If this log spam ever becomes annoying,
-                // gate it on a changed-count predicate.
-                tracing::info!(
-                    members = fresh.status.members_total,
-                    online = fresh.status.members_online,
-                    "mesh_state: rebuilt snapshot from live AppState"
-                );
+                // Gated heartbeat: log at info only when the member
+                // count actually changed, else debug. The UI polls
+                // every 5s; an unchanging mesh would spam the info
+                // stream otherwise. The "changed" case is the
+                // operator-meaningful signal — "a member came
+                // online" / "a member went offline" — which stays
+                // visible.
+                let prior = mesh_state.read().await.clone();
+                let changed = prior.status.members_total != fresh.status.members_total
+                    || prior.status.members_online != fresh.status.members_online;
+                if changed {
+                    tracing::info!(
+                        members = fresh.status.members_total,
+                        online = fresh.status.members_online,
+                        prior_online = prior.status.members_online,
+                        "mesh_state: membership or online-count changed"
+                    );
+                } else {
+                    tracing::debug!(
+                        members = fresh.status.members_total,
+                        online = fresh.status.members_online,
+                        "mesh_state: unchanged heartbeat"
+                    );
+                }
                 // Keep the cached snapshot in sync too, so anything
                 // still reading it directly stays current.
                 *mesh_state.write().await = fresh.clone();
