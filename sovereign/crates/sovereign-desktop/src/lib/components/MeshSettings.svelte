@@ -1,15 +1,18 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import {
+    getConfig,
     meshCreate,
     meshGetState,
     meshIsRunning,
     meshLeave,
+    saveConfig,
   } from "../api";
   import { joinLinkStore } from "../stores/joinLink.svelte";
   import MeshDiagnosticsPanel from "./MeshDiagnosticsPanel.svelte";
   import type {
     CreateMeshResponse,
+    DesktopConfig,
     MeshStateResponse,
     MeshMember,
   } from "../types";
@@ -24,6 +27,42 @@
   // Paste-link form state — dev-mode bypass for the OS scheme handler.
   let joinLinkInput = $state("");
   let joinLinkError = $state("");
+
+  // Node name — what this machine advertises to other mesh members.
+  // Loaded lazily from DesktopConfig; empty string means "use system
+  // hostname at join time" (the backend's `resolve_node_name`
+  // helper handles that fallback).
+  let config: DesktopConfig | null = $state(null);
+  let nodeNameInput = $state("");
+  let nodeNameSaving = $state(false);
+  let nodeNameSaved = $state(false);
+
+  async function loadConfig() {
+    try {
+      config = await getConfig();
+      nodeNameInput = config.node_name ?? "";
+    } catch (e) {
+      console.error("Failed to load config for node name:", e);
+    }
+  }
+
+  async function saveNodeName() {
+    if (!config || nodeNameSaving) return;
+    nodeNameSaving = true;
+    nodeNameSaved = false;
+    try {
+      const next: DesktopConfig = { ...config, node_name: nodeNameInput.trim() };
+      await saveConfig(next);
+      config = next;
+      nodeNameSaved = true;
+      // Flash success indicator briefly, then hide.
+      setTimeout(() => { nodeNameSaved = false; }, 2500);
+    } catch (e) {
+      console.error("Failed to save node name:", e);
+    } finally {
+      nodeNameSaving = false;
+    }
+  }
 
   // ── State ───────────────────────────────────────────────
   let running = $state(false);
@@ -47,6 +86,7 @@
   // ── Lifecycle ──────────────────────────────────────────
   onMount(async () => {
     await refresh();
+    await loadConfig();
     // Poll mesh state every 5s while running so the member list and
     // contribution numbers stay current without WebSocket plumbing.
     pollHandle = setInterval(async () => {
@@ -402,6 +442,43 @@
     </div>
   {/if}
 
+  <!-- Node name — shown to other mesh members in their rosters.
+       Persisted to DesktopConfig so it survives restarts. Empty
+       means "use the system hostname"; backend strips `.local`. -->
+  {#if config}
+    <div class="node-name-card">
+      <label class="node-name-label" for="node-name-input">
+        Your node name
+        <span class="node-name-hint">
+          How you appear to other members. Leave blank to use this
+          machine's hostname. Takes effect on the next mesh
+          create/join.
+        </span>
+      </label>
+      <div class="node-name-row">
+        <input
+          id="node-name-input"
+          type="text"
+          class="node-name-input"
+          placeholder="e.g. Alex's MacBook"
+          bind:value={nodeNameInput}
+          onkeydown={(e) => e.key === "Enter" && saveNodeName()}
+          disabled={nodeNameSaving}
+        />
+        <button
+          class="primary"
+          onclick={saveNodeName}
+          disabled={nodeNameSaving || nodeNameInput === (config.node_name ?? "")}
+        >
+          {nodeNameSaving ? "Saving…" : "Save"}
+        </button>
+      </div>
+      {#if nodeNameSaved}
+        <div class="node-name-saved">Saved. Applies next time you create or join a mesh.</div>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Network diagnostics — always shown so the user can see
        whether their daemon is up and what peers mDNS has found. -->
   <MeshDiagnosticsPanel />
@@ -503,6 +580,57 @@
   .alert.small {
     font-size: 0.78rem;
     padding: 6px 10px;
+  }
+
+  /* ── Node name card ───────────────────────────────── */
+  .node-name-card {
+    margin-top: 20px;
+    padding: 14px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .node-name-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .node-name-hint {
+    font-size: 0.78rem;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .node-name-row {
+    display: flex;
+    gap: 8px;
+  }
+  .node-name-input {
+    flex: 1;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+  }
+  .node-name-input:focus {
+    border-color: var(--accent);
+  }
+  .node-name-saved {
+    font-size: 0.78rem;
+    color: var(--success, #22c55e);
   }
 
   /* ── Buttons ─────────────────────────────────────── */

@@ -43,3 +43,6 @@ dashmap = "6"
 tokio-util = { version = "0.7", features = ["rt"] }
 chrono = { version = "0.4", features = ["serde"] }
 arc-swap = "1.7"
+# Portable `gethostname()` wrapper used as the default node name in
+# mesh create/join. Cheap, zero-runtime, no build-script dependencies.
+hostname = "0.4"

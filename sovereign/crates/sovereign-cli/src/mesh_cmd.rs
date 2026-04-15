@@ -237,7 +237,19 @@ async fn cmd_corpus_status() -> i32 {
 // ── Helpers ──────────────────────────────────────────────
 
 fn hostname() -> Option<String> {
-    std::env::var("HOSTNAME")
+    // `HOSTNAME` / `COMPUTERNAME` env vars aren't reliably set in
+    // GUI-launched or systemd-spawned child processes — notably
+    // macOS doesn't export HOSTNAME to `cargo tauri dev`. The
+    // `hostname` crate wraps the real `gethostname(2)` syscall and
+    // returns something useful on every platform we care about.
+    // Strip the `.local` Bonjour suffix so "Alexs-MBP.local" renders
+    // cleanly in the mesh roster.
+    ::hostname::get()
         .ok()
-        .or_else(|| std::env::var("COMPUTERNAME").ok())
+        .and_then(|h| h.into_string().ok())
+        .map(|s| {
+            s.strip_suffix(".local")
+                .map(|t| t.to_string())
+                .unwrap_or(s)
+        })
 }

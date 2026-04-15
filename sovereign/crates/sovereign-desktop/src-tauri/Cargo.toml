@@ -28,6 +28,7 @@ reqwest = { workspace = true, features = ["stream"] }
 futures = { workspace = true }
 walkdir = "2"
 dirs = "6"
+hostname = { workspace = true }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

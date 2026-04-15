@@ -10,7 +10,7 @@ use tauri::State;
 
 use sovereign_mesh::{parse_deep_link, JoinConfirmation, MeshState};
 
-use crate::state::AppState;
+use crate::state::{resolve_node_name, AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateMeshResponse {
@@ -32,7 +32,7 @@ pub async fn mesh_create(
     mesh_name: String,
 ) -> Result<CreateMeshResponse, String> {
     let config = state.config.read().await;
-    let node_name = hostname_or_default();
+    let node_name = resolve_node_name(&config.node_name);
     drop(config);
 
     let result = state
@@ -67,7 +67,10 @@ pub async fn mesh_join(
     link: String,
 ) -> Result<JoinMeshResponse, String> {
     let parsed = parse_deep_link(&link).ok_or_else(|| "Invalid join link".to_string())?;
-    let node_name = hostname_or_default();
+    let node_name = {
+        let config = state.config.read().await;
+        resolve_node_name(&config.node_name)
+    };
 
     let result = state
         .mesh
@@ -178,11 +181,3 @@ impl From<MeshState> for MeshStateResponse {
     }
 }
 
-// ── Helpers ──────────────────────────────────────────────
-
-fn hostname_or_default() -> String {
-    std::env::var("HOSTNAME")
-        .ok()
-        .or_else(|| std::env::var("COMPUTERNAME").ok())
-        .unwrap_or_else(|| "sovereign-node".to_string())
-}

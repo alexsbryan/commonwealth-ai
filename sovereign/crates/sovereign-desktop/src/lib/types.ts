@@ -73,6 +73,11 @@ export interface DesktopConfig {
   max_tokens: number;
   think_budget: number;
   top_k: number | null;
+  /** Override for how this machine identifies itself to other mesh
+   *  members. Empty string → resolved from the system hostname at
+   *  mesh-create/join time. Takes effect on the next join, not
+   *  retroactively. */
+  node_name: string;
 }
 
 export interface SearchBackendConfig {

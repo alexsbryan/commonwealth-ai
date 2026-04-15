@@ -77,10 +77,46 @@ pub struct DesktopConfig {
     /// saved configs without the field also upgrade to on.
     #[serde(default = "default_auto_collaborate")]
     pub auto_collaborate: bool,
+
+    /// Display name used for this node when creating or joining a
+    /// mesh — shows up in other members' mesh rosters. Empty string
+    /// means "use the system hostname at join time". The user can
+    /// override this from Settings → Mesh; changes take effect on
+    /// the next mesh create/join, not retroactively (existing
+    /// `MemberRecord`s stay put until that member rejoins).
+    #[serde(default)]
+    pub node_name: String,
 }
 
 fn default_auto_collaborate() -> bool {
     true
+}
+
+/// Resolve the node name the user sees in others' mesh rosters.
+/// Preference order: explicit config override → system hostname
+/// (via the `hostname` crate, which wraps `gethostname(2)` on
+/// Unix and `GetComputerNameW` on Windows) → literal fallback.
+/// The hostname path handles macOS properly, where `HOSTNAME`
+/// env var isn't exported to launched apps.
+pub fn resolve_node_name(configured: &str) -> String {
+    let trimmed = configured.trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+    match hostname::get() {
+        Ok(os) => os
+            .into_string()
+            .ok()
+            // Strip `.local` Bonjour suffix so "Alexs-MBP.local"
+            // renders as "Alexs-MBP" in the roster.
+            .map(|s| {
+                s.strip_suffix(".local")
+                    .map(|trimmed| trimmed.to_string())
+                    .unwrap_or(s)
+            })
+            .unwrap_or_else(|| "sovereign-node".to_string()),
+        Err(_) => "sovereign-node".to_string(),
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -152,6 +188,7 @@ impl Default for DesktopConfig {
             think_budget: default_think_budget(),
             top_k: None,
             auto_collaborate: default_auto_collaborate(),
+            node_name: String::new(),
         }
     }
 }

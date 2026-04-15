@@ -325,11 +325,25 @@ impl EmbeddedDaemon {
     }
 
     /// Get the current mesh state for UI display.
+    ///
+    /// Rebuilds the snapshot from the live `AppState` on every call
+    /// rather than returning a cached value. The `/internal/join`
+    /// handler on the founder side mutates `app_state.inner.mesh`
+    /// directly — if this returned a stale snapshot (the original
+    /// implementation did) the UI's poll never saw new members land
+    /// until the daemon restarted, which looked exactly like the
+    /// handshake silently failing. Rebuilding is cheap (a walk over
+    /// `mesh.members` + derived aggregations) relative to the poll
+    /// cadence (5s from MeshSettings, 3s from diagnostics).
     pub async fn mesh_state(&self) -> Option<MeshState> {
         let state = self.state.read().await;
         match &*state {
-            DaemonState::Running { mesh_state, .. } => {
-                Some(mesh_state.read().await.clone())
+            DaemonState::Running { app_state, mesh_state, .. } => {
+                let fresh = MeshState::from_app_state(app_state).await;
+                // Keep the cached snapshot in sync too, so anything
+                // still reading it directly stays current.
+                *mesh_state.write().await = fresh.clone();
+                Some(fresh)
             }
             DaemonState::Stopped => None,
         }
