@@ -58,3 +58,7 @@ commonwealth-state = { path = "crates/commonwealth-state" }
 # Platform layer dependencies
 bytes = "1.0"
 rusqlite = { version = "0.35", features = ["bundled"] }
+
+# Fast dev builds: skip debug symbols (biggest single speedup for cargo check).
+[profile.dev]
+debug = 0
