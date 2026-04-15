@@ -63,6 +63,12 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
                     estimated_ttft_ms: shard_plan.map(|p| p.estimated_ttft_ms),
                     estimated_load_time_sec: None,
                 },
+                // Commonwealth's ModelInfo doesn't carry a size_gb
+                // today — it's sourced from runtime discovery, not
+                // a manifest. Leave unpopulated; the OICP tiebreaker
+                // treats unknown sizes as sorted-after any known
+                // size, so this path is safe under mesh routing.
+                size_gb: None,
             }
         })
         .collect();

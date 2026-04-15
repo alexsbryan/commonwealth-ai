@@ -44,12 +44,24 @@ pub async fn gossip(
     }
 
     if report.added > 0 || report.updated > 0 {
-        tracing::info!(
-            added = report.added,
-            updated = report.updated,
-            members = mesh.members.len(),
-            "gossip: merged incoming delta"
-        );
+        // Info only when a NEW member was added. `updated > 0`
+        // alone is the routine last_seen refresh that fires every
+        // 10s — noisy heartbeat, not an event. Debug-level so
+        // operators can still see it with a tighter filter.
+        if report.added > 0 {
+            tracing::info!(
+                added = report.added,
+                updated = report.updated,
+                members = mesh.members.len(),
+                "gossip: member added via incoming delta"
+            );
+        } else {
+            tracing::debug!(
+                updated = report.updated,
+                members = mesh.members.len(),
+                "gossip: merged incoming delta (last_seen refresh)"
+            );
+        }
         // Persist immediately on any added/updated member. The
         // gossip loop re-persists on its own cadence too, but that
         // leaves a 10s window where the founder could restart and
