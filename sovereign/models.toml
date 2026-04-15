@@ -308,6 +308,14 @@ hf_url  = "https://huggingface.co/Mungert/Qwen3-Embedding-4B-GGUF"
 # drives all defaults; quirks_override patches only what differs.
 # ─────────────────────────────────────────────────────────────────────────────
 
+[profiles.byom_qwen25.thoughtful]                                                                             
+file = "qwen2.5-3b-instruct-q4_k_m.gguf"           
+base_name = "Qwen2.5-3B"                                                                                      
+[profiles.byom_qwen25.thoughtful.capabilities]                                                              
+general     = 2                                                                                               
+analysis    = 1                                                                                               
+instruction = 2  
+
 # [[user_slots]]
 # slot    = "thoughtful"
 # repo    = "bartowski/Phi-4-GGUF"

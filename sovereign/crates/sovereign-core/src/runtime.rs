@@ -352,6 +352,62 @@ pub struct StreamHandle {
     pub stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
 }
 
+/// Intent-implied OICP defaults. The classified intent carries a
+/// capability signal — "DeepQuery" literally means "reasoning-
+/// heavy" — and translating it into `CapabilityRequirements` lets
+/// the mesh routing layer pick an appropriate backend even when no
+/// skill has been activated to declare requirements explicitly.
+///
+/// These are `preferred` (not `required`) targets: local models
+/// that don't hit the level get deprioritised against peers that
+/// do, but aren't excluded outright. A Joiner with a 3B can still
+/// answer a DeepQuery locally if no beefier peer is reachable.
+///
+/// Returns `None` for intents that don't imply a capability
+/// profile — small-model defaults (SimpleQuery, Continuation,
+/// SimpleAction) where cross-network latency wouldn't be worth
+/// trading for a marginal quality bump.
+fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequirements> {
+    use crate::oicp::{Capability, CapabilityRequirements, InferenceRequirements};
+    let mut preferred = std::collections::HashMap::new();
+    match intent {
+        Intent::DeepQuery => {
+            // Reasoning-heavy. The user is asking a question that
+            // rewards analytical depth; prefer Analysis ≥ 3 + a
+            // general-purpose floor so the backend can compose
+            // well-structured prose.
+            preferred.insert(Capability::Analysis, 3);
+            preferred.insert(Capability::General, 3);
+        }
+        Intent::ComplexTask => {
+            // Multi-step execution. The planner will decompose,
+            // the executor will run tools; both need strong
+            // instruction-following + analytical grounding to
+            // stay coherent across steps.
+            preferred.insert(Capability::Analysis, 3);
+            preferred.insert(Capability::Instruction, 3);
+        }
+        Intent::KnowledgeQuery => {
+            // Retrieval-driven synthesis. Analysis matters less
+            // than the raw quality of citing retrieved chunks —
+            // moderate Analysis is the floor, with General for
+            // coherent prose over the chunks.
+            preferred.insert(Capability::Analysis, 2);
+            preferred.insert(Capability::General, 2);
+        }
+        Intent::SimpleQuery
+        | Intent::SimpleAction { .. }
+        | Intent::Continuation { .. } => {
+            return None;
+        }
+    }
+    let caps = CapabilityRequirements {
+        required: Default::default(),
+        preferred,
+    };
+    Some(InferenceRequirements::new().with_capabilities(caps))
+}
+
 pub struct Runtime {
     pub inference: Arc<dyn InferenceProvider>,
     pub router: Box<dyn Router>,
@@ -779,18 +835,64 @@ impl Runtime {
         }
     }
 
-    /// Build OICP requirements from active skills for non-Fast requests.
-    /// Returns None if no skills have OICP capability configuration.
+    /// Build OICP requirements for non-Fast requests. Composes two
+    /// sources — active skills' declared requirements and a set of
+    /// intent-implied defaults — and takes the max per-capability so
+    /// a skill can always refine beyond what the intent implies
+    /// (e.g. `code-review` asking for `code=3` on a ComplexTask
+    /// still keeps its `code=3`, and ComplexTask's `Instruction=3`
+    /// merges on top).
+    ///
+    /// Why intent defaults matter: without them, a user asking
+    /// "is free will compatible with determinism?" with no active
+    /// skill would send a bare `CompletionRequest` with no OICP,
+    /// and the mesh `MeshInferenceProvider` would have nothing to
+    /// match against. DeepQuery carries a real capability signal
+    /// ("reasoning-heavy") that the OICP layer should see.
+    ///
+    /// Returns `None` when neither source produces any requirements
+    /// — e.g. SimpleQuery with no skill activation; the caller keeps
+    /// the request local.
     fn build_oicp(
         &self,
         latency: LatencyPreference,
+        intent: &Intent,
     ) -> Option<crate::oicp::InferenceRequirements> {
-        let req = self.skills.inference_requirements();
-        // Skip if there are no capability requirements to express.
-        if req.required().is_empty() && req.preferred().is_empty() {
+        let from_skills = self.skills.inference_requirements();
+        let from_intent = default_oicp_for_intent(intent);
+
+        let skills_empty =
+            from_skills.required().is_empty() && from_skills.preferred().is_empty();
+        let intent_empty = from_intent.is_none();
+        if skills_empty && intent_empty {
             return None;
         }
-        Some(req.with_latency(latency))
+
+        // Merge: max per capability key. Skills are the baseline;
+        // intent defaults fill in capabilities the skills didn't
+        // mention, without ever downgrading a skill-declared level.
+        let mut required = from_skills.required().clone();
+        let mut preferred = from_skills.preferred().clone();
+        if let Some(ref defaults) = from_intent {
+            for (cap, level) in defaults.required().iter() {
+                let entry = required.entry(*cap).or_insert(0);
+                *entry = (*entry).max(*level);
+            }
+            for (cap, level) in defaults.preferred().iter() {
+                let entry = preferred.entry(*cap).or_insert(0);
+                *entry = (*entry).max(*level);
+            }
+        }
+
+        let caps = crate::oicp::CapabilityRequirements {
+            required,
+            preferred,
+        };
+        Some(
+            crate::oicp::InferenceRequirements::new()
+                .with_capabilities(caps)
+                .with_latency(latency),
+        )
     }
 
     /// Spawn a background task that generates an auto-title for the
@@ -1052,7 +1154,7 @@ impl Runtime {
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
         } else {
-            self.build_oicp(LatencyPreference::BestEffort)
+            self.build_oicp(LatencyPreference::BestEffort, &intent)
         };
 
         // Capture model ID before spawning — complete_stream returns no metadata.
@@ -1395,7 +1497,7 @@ impl Runtime {
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
         } else {
-            self.build_oicp(LatencyPreference::BestEffort)
+            self.build_oicp(LatencyPreference::BestEffort, &intent)
         };
 
         let request = CompletionRequest {
@@ -1578,7 +1680,7 @@ impl Runtime {
             structured_output: None,
             top_k: self.inference_config.top_k,
             top_p: None,
-            oicp: self.build_oicp(LatencyPreference::BestEffort),
+            oicp: self.build_oicp(LatencyPreference::BestEffort, &Intent::KnowledgeQuery),
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -2034,7 +2136,7 @@ impl Runtime {
                 structured_output: None,
                 top_k: self.inference_config.top_k,
                 top_p: None,
-                oicp: self.build_oicp(LatencyPreference::Throughput),
+                oicp: self.build_oicp(LatencyPreference::Throughput, &Intent::ComplexTask),
             })
             .await?;
 
