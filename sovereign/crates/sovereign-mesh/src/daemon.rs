@@ -551,12 +551,24 @@ impl EmbeddedDaemon {
             app_state
         };
 
-        // Client API stays on localhost — only the in-process Tauri
-        // commands call it. Internal API binds to 0.0.0.0 so peers on
-        // the LAN can reach it for the join handshake + gossip.
-        // Previously was 127.0.0.1 which made cross-machine join
-        // physically impossible regardless of other logic.
-        let client_addr: SocketAddr = "127.0.0.1:9741".parse().unwrap();
+        // Client API on 0.0.0.0:9741 — this is the OpenAI-compatible
+        // public surface documented in SYSTEM_OVERVIEW.md §5.5.
+        // Peers fetch `/oicp/v1/capabilities` here, the Joiner's
+        // HybridProvider POSTs `/v1/chat/completions` here for
+        // federated inference, and mesh apps can federate via
+        // `/v1/apps/*`. Was 127.0.0.1 for earlier dev builds where
+        // only the in-process Tauri commands called it — that broke
+        // mesh inference federation because peers couldn't reach us.
+        //
+        // Trust boundary: this port has no authentication today.
+        // The Commonwealth security model (per glossary) is "a
+        // closed trust ring" — the join_key_hash gates membership,
+        // and deployment environments (Tailscale ACLs, LAN
+        // firewalls) are expected to bound reachability to mesh
+        // members. A future revision should add per-request auth
+        // against `Mesh.join_key_hash` so a reachable-but-
+        // non-member attacker can't burn our inference budget.
+        let client_addr: SocketAddr = "0.0.0.0:9741".parse().unwrap();
         let internal_addr: SocketAddr = "0.0.0.0:9742".parse().unwrap();
 
         let mesh_state = Arc::new(RwLock::new(MeshState::from_app_state(&app_state).await));
