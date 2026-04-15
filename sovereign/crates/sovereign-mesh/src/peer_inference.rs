@@ -41,7 +41,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{
-    self, CapabilityProfile, ProviderManifest, ShardingPrivacy,
+    CapabilityProfile, ProviderManifest, ShardingPrivacy,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
@@ -69,59 +69,14 @@ struct CachedManifest {
     fetched_at: Instant,
 }
 
-/// A scored model pick from a single manifest. Carried through
-/// selection so tie-breaks can see both the OICP score and the
-/// model's declared size — and so logs can attribute decisions to
-/// a specific model id, not just a numeric score.
-#[derive(Debug, Clone)]
-struct ModelCandidate {
-    score: f32,
-    size_gb: Option<f32>,
-    model_id: String,
-}
-
-/// Score-floor below which score-ties are considered "the same".
-/// Floating-point noise in the OICP scorer (division-by-max-level
-/// produces 1/3, 2/3, 1.0 type values) shouldn't cause spurious
-/// decisions where a 5.5 GB model beats a 16.5 GB model by a
-/// rounding blip.
-const SCORE_TIE_EPSILON: f32 = 1e-3;
-
-/// Compare two `ModelCandidate`s under the OICP selection policy
-/// and return the winner:
-///
-/// 1. Strictly higher `score` wins.
-/// 2. Scores tied (within `SCORE_TIE_EPSILON`): smaller known
-///    `size_gb` wins.
-/// 3. Known size always beats unknown size on a score tie — an
-///    annotated manifest entry represents curated data we trust
-///    over a silent BYOM default.
-/// 4. Full tie (same score bucket, both sizes unknown or equal):
-///    incumbent (`cur`) wins for stability. Caller uses this to
-///    encode "local wins ties" and "earlier peer wins duplicate-
-///    score ties".
-fn pick_better(cur: ModelCandidate, new: ModelCandidate) -> ModelCandidate {
-    if new.score > cur.score + SCORE_TIE_EPSILON {
-        return new;
-    }
-    if cur.score > new.score + SCORE_TIE_EPSILON {
-        return cur;
-    }
-    match (cur.size_gb, new.size_gb) {
-        (Some(c), Some(n)) if n < c => new,
-        (None, Some(_)) => new,
-        _ => cur,
-    }
-}
-
-/// Used to detect "peer pick is identical to local pick" so the
-/// peer-wins check doesn't trip a network hop for a zero-delta
-/// routing decision (e.g. both sides advertise the same Qwen3.5-9B).
-fn candidates_equal(a: &ModelCandidate, b: &ModelCandidate) -> bool {
-    (a.score - b.score).abs() <= SCORE_TIE_EPSILON
-        && a.size_gb == b.size_gb
-        && a.model_id == b.model_id
-}
+// OICP selection primitives live in `crate::oicp_select` so the
+// same scoring + tie-break policy drives both sides of the wire:
+// the Joiner picking a peer (here) AND the peer-side adapter
+// picking which loaded slot to serve the request from. Importing
+// here keeps the rest of this file unchanged.
+use crate::oicp_select::{
+    candidates_equal, pick_better, score_manifest, ModelCandidate,
+};
 
 pub struct MeshInferenceProvider {
     local: Arc<dyn InferenceProvider>,
@@ -179,43 +134,6 @@ impl MeshInferenceProvider {
             return None;
         }
         Some((caps.required.clone(), caps.preferred.clone()))
-    }
-
-    /// Score a manifest's best-fitting model against the request.
-    /// `Some(candidate)` when at least one model satisfies
-    /// `required`; `None` when no model in the manifest can serve
-    /// this request.
-    ///
-    /// "Best" has a tiebreaker: among models with the same score,
-    /// prefer the one with the smallest declared `size_gb`. This
-    /// is the closest proxy we have to "fastest at this capability
-    /// level" without a live latency measurement — a 9B satisfying
-    /// `{Analysis:3, General:3}` is the right pick over a 27B that
-    /// scores identically for the same request. Unknown sizes sort
-    /// after any known size so an unannotated BYOM entry can't
-    /// sneak past an annotated one on a score tie.
-    fn score_manifest(
-        manifest: &ProviderManifest,
-        required: &CapabilityProfile,
-        preferred: &CapabilityProfile,
-    ) -> Option<ModelCandidate> {
-        let mut best: Option<ModelCandidate> = None;
-        for model in &manifest.models {
-            if !oicp::satisfies_required(&model.capabilities, required) {
-                continue;
-            }
-            let score = oicp::score_preferred(&model.capabilities, preferred);
-            let cand = ModelCandidate {
-                score,
-                size_gb: model.size_gb,
-                model_id: model.id.clone(),
-            };
-            best = Some(match best {
-                None => cand,
-                Some(cur) => pick_better(cur, cand),
-            });
-        }
-        best
     }
 
     /// Fetch a peer's OICP manifest, honouring the 60s cache. On
@@ -340,7 +258,7 @@ impl MeshInferenceProvider {
         // (required={}, preferred={Analysis:3,General:3}) local
         // will produce a real 0..1.0 candidate reflecting its
         // capability profile.
-        let local_cand = Self::score_manifest(&self.self_manifest, &required, &preferred);
+        let local_cand = score_manifest(&self.self_manifest, &required, &preferred);
         tracing::info!(
             local_models = self.self_manifest.models.len(),
             local_satisfies_required = local_cand.is_some(),
@@ -359,7 +277,7 @@ impl MeshInferenceProvider {
                 Some(m) => m,
                 None => continue,
             };
-            let cand = match Self::score_manifest(&manifest, &required, &preferred) {
+            let cand = match score_manifest(&manifest, &required, &preferred) {
                 Some(c) => c,
                 None => continue,
             };
@@ -540,181 +458,7 @@ impl InferenceProvider for MeshInferenceProvider {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sovereign_core::oicp::{
-        Capability, CapabilityProfile, ModelStatus, ProviderManifest, ProviderModel,
-        OICP_VERSION,
-    };
-
-    fn cand(score: f32, size_gb: Option<f32>, id: &str) -> ModelCandidate {
-        ModelCandidate { score, size_gb, model_id: id.into() }
-    }
-
-    #[test]
-    fn pick_better_higher_score_wins() {
-        let a = cand(0.5, Some(5.5), "small");
-        let b = cand(1.0, Some(16.5), "big");
-        assert_eq!(pick_better(a, b).model_id, "big");
-    }
-
-    #[test]
-    fn pick_better_score_tied_smaller_size_wins() {
-        // The whole point of the tiebreaker: two models both score
-        // 1.0 against the preferred profile; the smaller one ought
-        // to win. This is the Founder-with-9B-and-27B scenario.
-        let nine = cand(1.0, Some(5.5), "qwen-9b");
-        let twenty_seven = cand(1.0, Some(16.5), "qwen-27b");
-        // Incumbent = 27B; new = 9B → 9B wins.
-        assert_eq!(pick_better(twenty_seven.clone(), nine.clone()).model_id, "qwen-9b");
-        // And the reverse order (incumbent = 9B, new = 27B) keeps 9B.
-        assert_eq!(pick_better(nine, twenty_seven).model_id, "qwen-9b");
-    }
-
-    #[test]
-    fn pick_better_known_size_beats_unknown_on_tie() {
-        // Annotated (size known) outranks BYOM (size unknown) when
-        // scores tie. Reason: an annotated entry represents curated
-        // data we trust; an unannotated one is a null-signal.
-        let annotated = cand(1.0, Some(5.5), "annotated");
-        let unannotated = cand(1.0, None, "byom");
-        assert_eq!(pick_better(unannotated.clone(), annotated.clone()).model_id, "annotated");
-        assert_eq!(pick_better(annotated, unannotated).model_id, "annotated");
-    }
-
-    #[test]
-    fn pick_better_full_tie_keeps_incumbent() {
-        // Same score, same size — stability. Used by the caller
-        // to encode "local wins ties" and "first peer wins dup ties".
-        let a = cand(1.0, Some(5.5), "incumbent");
-        let b = cand(1.0, Some(5.5), "challenger");
-        assert_eq!(pick_better(a, b).model_id, "incumbent");
-    }
-
-    #[test]
-    fn pick_better_epsilon_ignores_floating_point_noise() {
-        // OICP scores are ratios — 2/3 = 0.6666..., 1.0 = 1.0, etc.
-        // A 1e-6 drift between two "identical" scores shouldn't
-        // hand the win to the bigger model.
-        let nine = cand(1.0, Some(5.5), "qwen-9b");
-        let twenty_seven = cand(1.0 - 1e-6, Some(16.5), "qwen-27b");
-        assert_eq!(pick_better(twenty_seven, nine).model_id, "qwen-9b");
-    }
-
-    fn model(id: &str, caps: &[(Capability, u8)], size_gb: Option<f32>) -> ProviderModel {
-        let capabilities: CapabilityProfile = caps.iter().copied().collect();
-        ProviderModel {
-            id: id.into(),
-            base_model: None,
-            quantization: None,
-            capabilities,
-            context_tokens: 32_768,
-            status: ModelStatus {
-                available: true,
-                loaded: true,
-                estimated_tokens_per_sec: None,
-                estimated_ttft_ms: None,
-                estimated_load_time_sec: None,
-            },
-            size_gb,
-        }
-    }
-
-    fn manifest(models: Vec<ProviderModel>) -> ProviderManifest {
-        ProviderManifest {
-            oicp_version: OICP_VERSION.to_string(),
-            provider: None,
-            models,
-            knowledge: None,
-            federation: None,
-        }
-    }
-
-    #[test]
-    fn score_manifest_picks_smaller_model_on_tie() {
-        // This is the demo-scenario guard: Founder's manifest
-        // advertises both Qwen3.5-9B (5.5 GB, analysis=3, general=3)
-        // and Qwen3.5-27B (16.5 GB, analysis=4, general=3). For a
-        // DeepQuery with preferred={Analysis:3, General:3}, both
-        // models satisfy the profile at score 1.0 — the 9B wins
-        // the tiebreaker on size. Previously we'd have picked the
-        // 27B because it was advertised alone, wasting ~3× the
-        // memory for a request the 9B could serve identically.
-        let nine = model(
-            "qwen-9b",
-            &[
-                (Capability::Analysis, 3),
-                (Capability::General, 3),
-                (Capability::Code, 3),
-                (Capability::Instruction, 3),
-                (Capability::Math, 2),
-            ],
-            Some(5.5),
-        );
-        let twenty_seven = model(
-            "qwen-27b",
-            &[
-                (Capability::Analysis, 4),
-                (Capability::General, 3),
-                (Capability::Code, 3),
-                (Capability::Instruction, 4),
-                (Capability::Math, 3),
-                (Capability::Creative, 3),
-            ],
-            Some(16.5),
-        );
-        let m = manifest(vec![twenty_seven, nine]);
-        let preferred: CapabilityProfile =
-            [(Capability::Analysis, 3), (Capability::General, 3)]
-                .into_iter()
-                .collect();
-        let required = CapabilityProfile::new();
-        let winner = MeshInferenceProvider::score_manifest(&m, &required, &preferred)
-            .expect("at least one model satisfies required");
-        assert_eq!(winner.model_id, "qwen-9b");
-        assert_eq!(winner.size_gb, Some(5.5));
-        // And the score should be exactly 1.0 — both models fully
-        // satisfy preferred.
-        assert!((winner.score - 1.0).abs() < 1e-3);
-    }
-
-    #[test]
-    fn score_manifest_picks_higher_score_over_smaller_size() {
-        // The tiebreaker only kicks in on score ties. If a bigger
-        // model strictly outscores a smaller one, the bigger model
-        // wins — size is a tiebreaker, not a cost function.
-        let small_weak = model(
-            "small-weak",
-            &[(Capability::Analysis, 2), (Capability::General, 2)],
-            Some(2.0),
-        );
-        let big_strong = model(
-            "big-strong",
-            &[(Capability::Analysis, 4), (Capability::General, 4)],
-            Some(16.5),
-        );
-        let m = manifest(vec![small_weak, big_strong]);
-        let preferred: CapabilityProfile =
-            [(Capability::Analysis, 4), (Capability::General, 4)]
-                .into_iter()
-                .collect();
-        let winner =
-            MeshInferenceProvider::score_manifest(&m, &CapabilityProfile::new(), &preferred)
-                .expect("at least one model scores");
-        assert_eq!(winner.model_id, "big-strong");
-    }
-
-    #[test]
-    fn score_manifest_returns_none_when_required_unmet() {
-        let weak = model(
-            "weak",
-            &[(Capability::Analysis, 1)],
-            Some(1.0),
-        );
-        let m = manifest(vec![weak]);
-        let required: CapabilityProfile = [(Capability::Analysis, 3)].into_iter().collect();
-        let preferred = CapabilityProfile::new();
-        assert!(MeshInferenceProvider::score_manifest(&m, &required, &preferred).is_none());
-    }
-}
+// Selection primitive tests live in `crate::oicp_select` alongside
+// the primitives themselves; this file only tests the peer-
+// orchestration logic (HTTP manifest fetch, selection loop, etc.)
+// once we need targeted coverage for that layer.

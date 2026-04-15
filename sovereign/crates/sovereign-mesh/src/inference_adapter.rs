@@ -87,12 +87,23 @@ impl SovereignInferenceAdapter {
         (convo, system)
     }
 
+    /// Build the internal `CompletionRequest` a peer-served chat
+    /// completion should carry. The slot (Fast vs Slow) is chosen
+    /// by re-applying OICP scoring against our local manifest —
+    /// see `oicp_select::pick_slot_for_oicp`. Without this, the
+    /// Joiner's OICP selection work stops at our front door: we
+    /// default to Slow and fire up the primary slot regardless of
+    /// whether a smaller, faster slot would already satisfy the
+    /// request's capability requirements.
     fn build_completion_request(
         &self,
         request: &ChatCompletionRequest,
     ) -> CompletionRequest {
         let (prompt, system) = Self::flatten(request);
-        let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Slow);
+        // Build a skeleton request with the OICP envelope attached
+        // BEFORE choosing a slot — the slot picker reads the
+        // envelope to decide.
+        let mut req = CompletionRequest::new(&prompt);
         if let Some(s) = system {
             req = req.with_system(&s);
         }
@@ -102,7 +113,11 @@ impl SovereignInferenceAdapter {
         if let Some(oicp) = &request.oicp {
             req = req.with_oicp(oicp.clone());
         }
-        req
+        let speed = crate::oicp_select::pick_slot_for_oicp(
+            self.provider.as_ref(),
+            &req,
+        );
+        req.with_speed(speed)
     }
 }
 
