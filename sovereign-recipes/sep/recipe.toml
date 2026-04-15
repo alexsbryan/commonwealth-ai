@@ -8,8 +8,14 @@ Includes claim and relationship enrichment for the epistemic-research skill.\
 # SEP entries are authored under Stanford copyright. Use is permitted for
 # educational and research purposes. Do NOT redistribute raw text commercially.
 license = "Copyright Stanford University (educational/research use)"
-# mesh_sharing is disabled because SEP's license does not permit redistribution.
+# mesh_sharing: Stanford's license forbids redistribution of SEP's text,
+# so the scheduler is NOT allowed to replicate this index across peers.
 mesh_sharing = false
+# query_sharing: answering a federated search with cited snippets back
+# to plato.stanford.edu is fair use (same thing a search engine does).
+# Lets peers on the same Commonwealth mesh run `/v1/knowledge/search`
+# against this node's local copy without the bytes ever leaving.
+query_sharing = true
 size_compressed_gb = 1.4
 size_indexed_gb = 6.0
 
