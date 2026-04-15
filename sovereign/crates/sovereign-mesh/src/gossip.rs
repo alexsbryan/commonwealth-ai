@@ -27,6 +27,8 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
+use crate::capabilities::build_local_capabilities;
+
 /// Default: send to at most this many peers per round. Small mesh
 /// sizes make higher fan-out pointless; bandwidth is negligible at
 /// 2 even with full-snapshot gossip.
@@ -116,12 +118,30 @@ pub async fn run_one_round(
     let now = now_secs();
     let threshold = offline_threshold.as_secs();
 
+    // Build a fresh snapshot of our own capabilities BEFORE we take
+    // the mesh write lock — `installed_indexes()` awaits a directory
+    // read, and we don't want to pin the lock across that. The
+    // engine is optional: test daemons and the CLI run without one.
+    let fresh_caps = build_local_capabilities(
+        app_state.inner.corpus_engine.as_ref(),
+        now,
+    )
+    .await;
+
     // Step 1: touch self + decay stale peers. One write-lock window.
     let candidates: Vec<(NodeId, Vec<std::net::SocketAddr>)> = {
         let mut mesh = app_state.inner.mesh.write().await;
         if let Some(me) = mesh.members.get_mut(&self_id) {
             me.last_seen = now;
             me.status = NodeStatus::Online;
+            // Replace capabilities with the freshly-sampled version
+            // every round. This is the mechanism by which a newly-
+            // installed SEP corpus becomes visible to peers within
+            // one gossip interval — without it, `hosted_corpora`
+            // stays frozen at whatever it was when the daemon
+            // started (typically empty, since the user hasn't yet
+            // run the install).
+            me.capabilities = fresh_caps;
         }
         for (id, m) in mesh.members.iter_mut() {
             if *id == self_id {

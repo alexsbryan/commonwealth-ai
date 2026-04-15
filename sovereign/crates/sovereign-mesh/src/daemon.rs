@@ -15,6 +15,7 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
+use corpus_engine::CorpusEngine;
 
 use crate::deep_link::DeepLink;
 use crate::gossip::{self, GossipHandle};
@@ -27,6 +28,18 @@ pub struct EmbeddedDaemon {
     /// Where to persist `mesh.json` so the daemon can auto-resume on
     /// app restart. Set once at construction.
     data_dir: PathBuf,
+    /// The CorpusEngine this daemon consults when peers gossip-query
+    /// our knowledge over `/internal/knowledge/search`, and when we
+    /// publish our own `hosted_corpora` on gossip rounds.
+    ///
+    /// Held in an RwLock<Option<_>> because Sovereign's bootstrap
+    /// constructs the daemon *before* it builds the engine (the
+    /// engine needs an `EmbedFn` that isn't ready until the fast
+    /// model has loaded). The desktop calls `set_corpus_engine`
+    /// during bootstrap just before `try_resume`, so by the time
+    /// the daemon is Running the engine is always present. Tests
+    /// and the CLI's mesh subcommands keep it `None`.
+    corpus_engine: RwLock<Option<Arc<CorpusEngine>>>,
 }
 
 enum DaemonState {
@@ -73,6 +86,7 @@ impl EmbeddedDaemon {
         Self {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
             data_dir,
+            corpus_engine: RwLock::new(None),
         }
     }
 
@@ -83,7 +97,27 @@ impl EmbeddedDaemon {
         Self {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
             data_dir: PathBuf::new(),
+            corpus_engine: RwLock::new(None),
         }
+    }
+
+    /// Install a `CorpusEngine` so that when the daemon starts, its
+    /// `AppState` has something to search — without this, the
+    /// handlers on `/v1/knowledge/search` and
+    /// `/internal/knowledge/search` return 503 and peers asking us
+    /// for philosophy passages see an empty mesh. Call once, during
+    /// Sovereign's bootstrap, *before* `try_resume` / `create_mesh`
+    /// / `join_mesh` so the first gossip round that runs after
+    /// startup already advertises our real `hosted_corpora`.
+    ///
+    /// If called while the daemon is already running, the engine is
+    /// swapped in — useful when bootstrap rebuilds the engine mid-
+    /// session (e.g. the user changes the embed model). Existing
+    /// Arc<AppState> instances captured by running HTTP tasks keep
+    /// the old engine; the next created `AppState` (after a
+    /// `stop` + restart) will pick up the new one.
+    pub async fn set_corpus_engine(&self, engine: Arc<CorpusEngine>) {
+        *self.corpus_engine.write().await = Some(engine);
     }
 
     fn persistence_enabled(&self) -> bool {
@@ -426,7 +460,26 @@ impl EmbeddedDaemon {
             .map(|m| m.name.clone())
             .unwrap_or_else(|| node_id.to_string());
 
-        let app_state = AppState::new(node_id, mesh);
+        // Build an AppState that already knows about our CorpusEngine
+        // (if one was installed via `set_corpus_engine`). Without
+        // this, Commonwealth's knowledge handlers can only return
+        // stubs — the whole reason Peer A couldn't see Peer B's SEP
+        // corpus. The MeshStore is in-memory here; the desktop's
+        // long-term persistence story for mesh state still goes
+        // through `mesh.json` on disk, not through MeshStore.
+        let corpus_engine = self.corpus_engine.read().await.clone();
+        let mesh_store = Arc::new(
+            commonwealth_state::MeshStore::in_memory()
+                .expect("in-memory MeshStore failed"),
+        );
+        let app_registry = Arc::new(commonwealth_app::registry::AppRegistry::new());
+        let app_state = AppState::new_with_platform_and_engine(
+            node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            corpus_engine,
+        );
 
         // Client API stays on localhost — only the in-process Tauri
         // commands call it. Internal API binds to 0.0.0.0 so peers on

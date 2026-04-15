@@ -29,10 +29,19 @@
       .map((s) => s.origin),
   );
 
+  // "sep (6)" for local hits, "sep (6) via BeefyMac" when the
+  // mesh fan-out served this corpus. `from_peer` is stamped by
+  // `prepare_knowledge_context` when the originating corpus_id
+  // isn't present locally — so same-corpus-two-ways never lies
+  // to the user about where a hit came from.
   let corporaDetail = $derived(
     (provenance?.sources ?? [])
       .filter((s) => s.count > 0)
-      .map((s) => `${s.origin} (${s.count})`),
+      .map((s) =>
+        s.from_peer
+          ? `${s.origin} (${s.count}) via ${s.from_peer}`
+          : `${s.origin} (${s.count})`,
+      ),
   );
 
   let elapsedLabel = $derived(

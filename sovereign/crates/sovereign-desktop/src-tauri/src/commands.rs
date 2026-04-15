@@ -1606,6 +1606,7 @@ pub async fn ask_document(
         sources: vec![sovereign_core::types::SourceSummary {
             origin: asset.title.clone(),
             count: output.citations.len(),
+            from_peer: None,
         }],
         inference_backend: if output.model_id.is_empty() {
             "local".to_string()

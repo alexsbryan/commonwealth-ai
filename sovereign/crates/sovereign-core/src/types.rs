@@ -860,6 +860,12 @@ pub struct ResponseProvenance {
 pub struct SourceSummary {
     pub origin: String,
     pub count: usize,
+    /// When set, this corpus's hits came from a mesh peer — the
+    /// string is the peer's human-readable `node_name` (matching what
+    /// the mesh UI shows). Rendered as `"sep (6) via BeefyMac"` by
+    /// `RoutingMeta.svelte`. Locally-hosted corpora leave this `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_peer: Option<String>,
 }
 
 // ─── Action Preview (for approval) ────────────────────────────

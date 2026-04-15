@@ -222,6 +222,47 @@ pub trait BudgetStore: Send + Sync {
     async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()>;
 }
 
+// ─── Mesh knowledge (optional, injected by sovereign-mesh) ────
+//
+// Decouples `sovereign-core::Runtime` from `sovereign-mesh` so the
+// standalone (no-mesh) configuration keeps zero mesh dependencies.
+// `Runtime` accepts an `Option<Arc<dyn MeshKnowledgeSource>>`; the
+// desktop populates it with a client that POSTs to its own local
+// Commonwealth daemon at `127.0.0.1:9741/v1/knowledge/search`.
+//
+// The return type carries peer attribution so `prepare_knowledge_context`
+// can annotate provenance ("sep (6) via BeefyMac") without having to
+// know anything about mesh topology itself.
+
+/// A single retrieval hit from the mesh, possibly tagged with the
+/// peer that served it. `peer_name` is `None` when the hit came
+/// from our own local index served via `/v1/knowledge/search` — a
+/// consequence of fan-out also searching locally.
+#[derive(Debug, Clone)]
+pub struct MeshScoredChunk {
+    pub content: String,
+    pub title: Option<String>,
+    pub corpus_id: String,
+    pub url: Option<String>,
+    pub score: f32,
+    pub peer_name: Option<String>,
+}
+
+#[async_trait]
+pub trait MeshKnowledgeSource: Send + Sync {
+    /// Query the mesh for knowledge. Returns an empty vec when the
+    /// mesh is unreachable, has no corpora, or hasn't converged yet —
+    /// *never* propagates a network error up into query preparation,
+    /// because a broken mesh should degrade gracefully to local-only
+    /// search rather than fail the whole user request.
+    async fn search(
+        &self,
+        query_text: &str,
+        query_embedding: &[f32],
+        limit: usize,
+    ) -> Vec<MeshScoredChunk>;
+}
+
 #[async_trait]
 pub trait PermissionStore: Send + Sync {
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>>;

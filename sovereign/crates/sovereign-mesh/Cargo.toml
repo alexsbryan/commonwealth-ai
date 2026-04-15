@@ -9,10 +9,22 @@ description = "Commonwealth mesh integration layer for Sovereign"
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
+# Needed because `AppState::new_with_platform_and_engine` requires
+# an explicit `MeshStore` / `AppRegistry` — we construct in-memory
+# variants of each when `EmbeddedDaemon` builds its state.
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-app = { path = "../../../commonwealth/crates/commonwealth-app" }
+# KnowledgeSearchRequest / KnowledgeSearchResponse live in oicp-types,
+# re-exported via commonwealth-inference::oicp — we POST/parse those
+# bodies from the mesh knowledge client.
+commonwealth-inference = { path = "../../../commonwealth/crates/commonwealth-inference" }
 corpus-engine = { workspace = true }
 
-# Sovereign core (for InferenceProvider trait)
+# Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }
+# async_trait is needed to impl the (async) MeshKnowledgeSource
+# trait on MeshKnowledgeClient. sovereign-core already uses it.
+async-trait = { workspace = true }
 
 # Shared
 serde = { workspace = true }

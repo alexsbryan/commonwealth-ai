@@ -10,10 +10,12 @@
 //! - Translate mesh state into UI-friendly representations
 //! - Expose mesh operations for both GUI and CLI
 
+pub mod capabilities;
 pub mod daemon;
 pub mod deep_link;
 pub mod gossip;
 pub mod join;
+pub mod knowledge_client;
 pub mod persist;
 pub mod state;
 pub mod types;

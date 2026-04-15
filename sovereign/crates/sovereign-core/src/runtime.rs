@@ -362,6 +362,13 @@ pub struct Runtime {
     pub approval: Arc<dyn ApprovalChannel>,
     pub inference_config: InferenceConfig,
     pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    /// Optional mesh-knowledge client. Populated by the desktop
+    /// bootstrap when an `EmbeddedDaemon` is running — the Runtime
+    /// fans out knowledge queries through its local Commonwealth
+    /// daemon at `127.0.0.1:9741/v1/knowledge/search`, which then
+    /// searches local + peer corpora. `None` means "no mesh" — the
+    /// standalone (pre-mesh) behavior is preserved exactly.
+    pub mesh_knowledge: Option<Arc<dyn crate::traits::MeshKnowledgeSource>>,
 }
 
 impl Runtime {
@@ -385,11 +392,25 @@ impl Runtime {
             approval,
             inference_config,
             corpus_engine: None,
+            mesh_knowledge: None,
         }
     }
 
     pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
         self.corpus_engine = Some(engine);
+        self
+    }
+
+    /// Install a mesh-knowledge client. Only called when the desktop
+    /// has an `EmbeddedDaemon` actually running — tests and the
+    /// bare CLI path leave this `None`, in which case
+    /// `prepare_knowledge_context` behaves exactly as before
+    /// (local-only search, `search_method = "LocalOnly"`).
+    pub fn with_mesh_knowledge(
+        mut self,
+        mesh: Arc<dyn crate::traits::MeshKnowledgeSource>,
+    ) -> Self {
+        self.mesh_knowledge = Some(mesh);
         self
     }
 
@@ -487,6 +508,17 @@ impl Runtime {
         };
 
         let mut all_chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        // corpus_id → human-readable peer name, used at the end to
+        // stamp `SourceSummary.from_peer` on any corpus whose hits
+        // came in via the mesh. Only populated for corpora we
+        // don't host locally (so a corpus present both sides stays
+        // tagged as local — we don't pretend to "serve from
+        // BeefyMac" a corpus we have right here).
+        let mut peer_attribution: HashMap<String, String> = HashMap::new();
+        // How many hits came from local (before mesh). Drives the
+        // computed `search_method` label. `mesh_hits` is derived
+        // later from the peer-attribution map after dedupe.
+        let mut local_hits: usize = 0;
 
         if attached_source.is_some() {
             // Document-attached messages are routed to ComplexTask and should
@@ -502,9 +534,46 @@ impl Runtime {
             // attached via [Document attached: ...].
             let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
             let label = format!("{intent:?}");
-            all_chunks = self
-                .search_corpus_indexes(&corpus_embedding, message, 5, &label)
-                .await;
+
+            // Run the local corpus search and the mesh fan-out
+            // concurrently — the mesh call does HTTP (up to ~3s
+            // budget per peer), the local call is LanceDB disk I/O,
+            // so there's no point serialising them. `tokio::join!`
+            // waits for both.
+            let local_corpora_fut =
+                self.search_corpus_indexes(&corpus_embedding, message, 5, &label);
+            let mesh_fut = async {
+                match &self.mesh_knowledge {
+                    Some(m) => m.search(message, &corpus_embedding, 8).await,
+                    None => Vec::new(),
+                }
+            };
+            let (local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
+            local_hits = local_scored.len();
+            all_chunks.extend(local_scored);
+
+            // Fold mesh hits in, tagging peer attribution per corpus.
+            // A corpus that already appears locally doesn't get
+            // tagged — we own it, mesh is just parroting.
+            let local_corpora_ids: std::collections::HashSet<String> =
+                all_chunks.iter().map(|c| c.corpus_id.clone()).collect();
+            for hit in mesh_scored {
+                if !local_corpora_ids.contains(&hit.corpus_id) {
+                    if let Some(name) = &hit.peer_name {
+                        peer_attribution
+                            .entry(hit.corpus_id.clone())
+                            .or_insert_with(|| name.clone());
+                    }
+                }
+                all_chunks.push(corpus_engine::ScoredChunk {
+                    content: hit.content,
+                    title: hit.title,
+                    url: hit.url,
+                    corpus_id: hit.corpus_id,
+                    score: hit.score,
+                    metadata: HashMap::new(),
+                });
+            }
 
             // Also search StateStore for corpus-type documents (used by test
             // harness and for corpora ingested directly into the store).
@@ -532,12 +601,27 @@ impl Runtime {
             }
         }
 
+        // Dedupe by (corpus_id, content) before truncating so a
+        // corpus that appears both locally and via mesh doesn't
+        // waste context budget on duplicate chunks.
         all_chunks.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        {
+            let mut seen: std::collections::HashSet<(String, String)> =
+                std::collections::HashSet::new();
+            all_chunks.retain(|c| seen.insert((c.corpus_id.clone(), c.content.clone())));
+        }
         all_chunks.truncate(8);
+
+        // Count mesh hits that survived dedupe so the search_method
+        // label reflects what's actually in the prompt.
+        let mesh_hits: usize = all_chunks
+            .iter()
+            .filter(|c| peer_attribution.contains_key(&c.corpus_id))
+            .count();
 
         // 4. Provenance metadata.
         let installed_corpora = self
@@ -547,12 +631,29 @@ impl Runtime {
             .unwrap_or_default();
         let corpora_searched = !installed_corpora.is_empty() || self.corpus_engine.is_some();
 
-        let search_method = if !all_chunks.is_empty() {
-            Some("LocalOnly".to_string())
-        } else if corpora_searched {
-            Some("LocalOnly (no matches)".to_string())
+        // Compose a human-readable label that describes *where* the
+        // hits came from. This replaces the old hardcoded "LocalOnly"
+        // string — the UI surface is unchanged (still a string in
+        // `provenance.search_method`), but the content is now
+        // truthful.
+        let search_method = if all_chunks.is_empty() {
+            if self.mesh_knowledge.is_some() {
+                if corpora_searched {
+                    Some("LocalAndMesh (no matches)".to_string())
+                } else {
+                    Some("Mesh (no matches)".to_string())
+                }
+            } else if corpora_searched {
+                Some("LocalOnly (no matches)".to_string())
+            } else {
+                None
+            }
+        } else if mesh_hits > 0 && local_hits > 0 {
+            Some("LocalAndMesh".to_string())
+        } else if mesh_hits > 0 {
+            Some("MeshOnly".to_string())
         } else {
-            None
+            Some("LocalOnly".to_string())
         };
 
         let mut source_map: HashMap<String, usize> = HashMap::new();
@@ -566,7 +667,14 @@ impl Runtime {
         }
         let sources: Vec<SourceSummary> = source_map
             .into_iter()
-            .map(|(origin, count)| SourceSummary { origin, count })
+            .map(|(origin, count)| {
+                let from_peer = peer_attribution.get(&origin).cloned();
+                SourceSummary {
+                    origin,
+                    count,
+                    from_peer,
+                }
+            })
             .collect();
 
         // 5. Build prompt with knowledge context.
@@ -1468,7 +1576,11 @@ impl Runtime {
             search_method: Some("CorpusEngine".to_string()),
             sources: source_map
                 .into_iter()
-                .map(|(origin, count)| SourceSummary { origin, count })
+                .map(|(origin, count)| SourceSummary {
+                    origin,
+                    count,
+                    from_peer: None,
+                })
                 .collect(),
             inference_backend: completion.model_id.clone(),
             oicp_match: completion
@@ -1720,6 +1832,7 @@ impl Runtime {
             sources: vec![SourceSummary {
                 origin: "user_document".to_string(),
                 count: chunk_count,
+                from_peer: None,
             }],
             inference_backend: prompt_response.model_id.clone(),
             oicp_match: None,
@@ -1931,6 +2044,7 @@ impl Runtime {
                                 all_sources.push(SourceSummary {
                                     origin: origin.to_string(),
                                     count: count as usize,
+                                    from_peer: None,
                                 });
                             }
                         }
@@ -1953,6 +2067,7 @@ impl Runtime {
                         all_sources.push(SourceSummary {
                             origin: tool_id,
                             count,
+                            from_peer: None,
                         });
                     }
                 }

@@ -507,6 +507,15 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     );
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
 
+    // Hand the engine to the embedded Commonwealth daemon so that
+    // when a user creates or joins a mesh, `/v1/knowledge/search` on
+    // port 9741 can search our local corpora and peers gossip-probe
+    // our `hosted_corpora` over `/internal/knowledge/search`. Must
+    // happen BEFORE `try_resume` below — if resume fires first and
+    // starts gossiping, our first few rounds would advertise empty
+    // `hosted_corpora` and peers wouldn't know we host anything.
+    state.mesh.set_corpus_engine(Arc::clone(&corpus_engine)).await;
+
     // Startup dimension guard: probe the loaded embed model's actual output
     // size and compare against every installed corpus index. A mismatch means
     // the user swapped embed models after building their library — retrieval
@@ -632,7 +641,35 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         }
     };
 
-    let runtime = Runtime::new(
+    // Mesh knowledge client — talks to our OWN local Commonwealth
+    // daemon at 127.0.0.1:9741. When no mesh is active, reqwest
+    // immediately gets ECONNREFUSED and the client returns an empty
+    // vec — so installing this unconditionally is safe: the Runtime
+    // path stays identical to the no-mesh world in that case, and
+    // "flips on" automatically the moment the user creates/joins.
+    //
+    // Client construction is infallible in practice (builder only
+    // errors on TLS config, which doesn't apply to localhost HTTP);
+    // if something truly goes wrong, skip mesh injection and log —
+    // the local-only retrieval path is still functional.
+    let mesh_knowledge: Option<
+        Arc<dyn sovereign_core::traits::MeshKnowledgeSource>,
+    > = match sovereign_mesh::knowledge_client::MeshKnowledgeClient::new(
+        "http://127.0.0.1:9741",
+    ) {
+        Ok(c) => {
+            tracing::info!(
+                "mesh knowledge client: wired to http://127.0.0.1:9741"
+            );
+            Some(Arc::new(c))
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "mesh knowledge client build failed; local-only retrieval");
+            None
+        }
+    };
+
+    let mut runtime = Runtime::new(
         inference,
         router,
         Box::new(planner),
@@ -643,6 +680,9 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         inference_config,
     )
     .with_corpus_engine(Arc::clone(&corpus_engine));
+    if let Some(m) = mesh_knowledge {
+        runtime = runtime.with_mesh_knowledge(m);
+    }
 
     *state.runtime.write().await = Some(Arc::new(runtime));
 
