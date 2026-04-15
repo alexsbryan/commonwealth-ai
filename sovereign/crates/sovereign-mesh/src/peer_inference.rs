@@ -78,9 +78,27 @@ use crate::oicp_select::{
     candidates_equal, pick_better, score_manifest, ModelCandidate,
 };
 
+/// Narrow trait the wrapper uses to discover routable peers. The
+/// production implementation is `EmbeddedDaemon` — but factoring
+/// the one call-site out behind a trait lets integration tests
+/// inject a synthetic peer list pointing at a mock HTTP server
+/// without needing to bring up a full daemon (gossip loop, mDNS,
+/// bound ports, etc.) just to exercise the routing path.
+#[async_trait]
+pub trait PeerEndpointSource: Send + Sync {
+    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint>;
+}
+
+#[async_trait]
+impl PeerEndpointSource for EmbeddedDaemon {
+    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+        EmbeddedDaemon::peer_inference_endpoints(self).await
+    }
+}
+
 pub struct MeshInferenceProvider {
     local: Arc<dyn InferenceProvider>,
-    mesh: Arc<EmbeddedDaemon>,
+    mesh: Arc<dyn PeerEndpointSource>,
     /// Our own manifest, built once at construction. The wrapper
     /// doesn't recompute it — Sovereign's loaded model set is
     /// effectively static within a process lifetime, and the
@@ -99,7 +117,22 @@ pub struct MeshInferenceProvider {
 }
 
 impl MeshInferenceProvider {
+    /// Standard constructor — takes the live `EmbeddedDaemon` so
+    /// production wiring is unchanged. Internally upcasts to
+    /// `Arc<dyn PeerEndpointSource>` via the blanket impl above;
+    /// callers don't have to think about the trait.
     pub fn new(local: Arc<dyn InferenceProvider>, mesh: Arc<EmbeddedDaemon>) -> Self {
+        Self::with_peer_source(local, mesh as Arc<dyn PeerEndpointSource>)
+    }
+
+    /// Constructor exposed for tests and alternative wirings: pass
+    /// any `PeerEndpointSource` (typically a stub that returns a
+    /// fixed peer list pointing at a local mock server). Keeps the
+    /// production `new` signature backwards-compatible.
+    pub fn with_peer_source(
+        local: Arc<dyn InferenceProvider>,
+        mesh: Arc<dyn PeerEndpointSource>,
+    ) -> Self {
         let self_manifest = build_self_manifest(local.as_ref());
         tracing::info!(
             models = self_manifest.models.len(),
@@ -234,10 +267,15 @@ impl MeshInferenceProvider {
     /// requirements, returns the peer to route to, or `None` to
     /// stay local. Local always competes with peers — we never
     /// route unless a peer strictly outscores local.
+    /// Returns both the peer to route to AND the specific model id
+    /// that peer advertised as its best fit for this request. The
+    /// caller uses the model id for attribution on the response /
+    /// stream — there's only one place that decision gets made, so
+    /// "which peer" and "which model" can't drift.
     async fn select_peer(
         &self,
         request: &CompletionRequest,
-    ) -> Option<PeerInferenceEndpoint> {
+    ) -> Option<(PeerInferenceEndpoint, ModelCandidate)> {
         let (required, preferred) = Self::extract_caps(request)?;
         if let Some(oicp) = &request.oicp {
             if oicp.sharding() == ShardingPrivacy::LocalOnly {
@@ -345,7 +383,7 @@ impl MeshInferenceProvider {
                         local_size_gb = ?local_for_cmp.size_gb,
                         "mesh-inference: peer selected by OICP (score, then size_gb)"
                     );
-                    Some(peer)
+                    Some((peer, peer_cand))
                 } else {
                     tracing::debug!(
                         local_pick = %local_for_cmp.model_id,
@@ -377,16 +415,27 @@ impl MeshInferenceProvider {
 #[async_trait]
 impl InferenceProvider for MeshInferenceProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
-        if let Some(peer) = self.select_peer(request).await {
+        if let Some((peer, peer_cand)) = self.select_peer(request).await {
             tracing::info!(
                 peer = %peer.name,
                 addrs = peer.base_urls.len(),
+                peer_pick = %peer_cand.model_id,
                 "mesh-inference: routing complete() to peer"
             );
             for url in &peer.base_urls {
                 let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
                 match rp.complete(request).await {
-                    Ok(resp) => return Ok(Self::annotate(resp, &peer.name)),
+                    Ok(mut resp) => {
+                        // Prefer the peer's OICP-advertised model
+                        // id over whatever label the remote wire
+                        // response carried — the advertised id is
+                        // what the selector actually scored, so the
+                        // attribution should match. (On some
+                        // backends the wire response echoes a
+                        // request hint instead of the served model.)
+                        resp.model_id = peer_cand.model_id.clone();
+                        return Ok(Self::annotate(resp, &peer.name));
+                    }
                     Err(e) => {
                         tracing::info!(
                             peer = %peer.name,
@@ -409,16 +458,42 @@ impl InferenceProvider for MeshInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        if let Some(peer) = self.select_peer(request).await {
+        // Kept for trait object compatibility; the richer
+        // `complete_stream_with_id` is what the runtime actually
+        // calls and what carries the peer attribution back out.
+        // Delegate here so any caller using the legacy shape still
+        // gets the same routing behaviour, just without the
+        // attribution string.
+        Ok(self.complete_stream_with_id(request).await?.0)
+    }
+
+    /// Streaming + attribution in one call. Chosen over stashing
+    /// routing state on the provider (Mutex<Option<String>>)
+    /// because multiple in-flight streams share one
+    /// `MeshInferenceProvider`; stashing would race. Returning the
+    /// attribution alongside the stream is the only way to bind
+    /// "this stream came from peer X" to "this stream" without a
+    /// per-request handle. Mirrors the non-streaming `complete()`
+    /// path's `annotate()` behaviour.
+    async fn complete_stream_with_id(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<(Pin<Box<dyn Stream<Item = Result<String>> + Send>>, String)> {
+        if let Some((peer, peer_cand)) = self.select_peer(request).await {
             tracing::info!(
                 peer = %peer.name,
                 addrs = peer.base_urls.len(),
+                peer_pick = %peer_cand.model_id,
                 "mesh-inference: routing complete_stream() to peer"
             );
             for url in &peer.base_urls {
                 let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
                 match rp.complete_stream(request).await {
-                    Ok(stream) => return Ok(stream),
+                    Ok(stream) => {
+                        let model_id =
+                            format!("{} @ peer {}", peer_cand.model_id, peer.name);
+                        return Ok((stream, model_id));
+                    }
                     Err(e) => {
                         tracing::info!(
                             peer = %peer.name,
@@ -434,7 +509,8 @@ impl InferenceProvider for MeshInferenceProvider {
                 "mesh-inference: all peer addresses failed, falling back to local"
             );
         }
-        self.local.complete_stream(request).await
+        let stream = self.local.complete_stream(request).await?;
+        Ok((stream, self.local.model_id_for(request.preferred_speed)))
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {

@@ -1168,9 +1168,12 @@ impl Runtime {
             self.build_oicp(LatencyPreference::BestEffort, &intent)
         };
 
-        // Capture model ID before spawning — complete_stream returns no metadata.
-        let model_id = self.inference.model_id_for(kc.speed);
-
+        // Model ID is captured from `complete_stream_with_id` once
+        // the provider has committed to a routing decision — see
+        // the trait docs on that method. Using the pre-stream sync
+        // `model_id_for` here would miss peer attribution (the
+        // mesh wrapper can only report "I routed to peer X" after
+        // its async `select_peer` pass has run).
         let request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
@@ -1211,27 +1214,28 @@ impl Runtime {
             let started = std::time::Instant::now();
             let mut full_text = String::new();
 
-            let stream_result = inference.complete_stream(&request).await;
-            match stream_result {
-                Ok(mut s) => {
-                    while let Some(item) = s.next().await {
-                        match item {
-                            Ok(chunk) => {
-                                full_text.push_str(&chunk);
-                                if tx.send(Ok(chunk)).await.is_err() {
-                                    return;
-                                }
-                            }
-                            Err(e) => {
-                                let _ = tx.send(Err(e)).await;
-                                return;
-                            }
-                        }
-                    }
-                }
+            let (mut s, model_id) = match inference
+                .complete_stream_with_id(&request)
+                .await
+            {
+                Ok(pair) => pair,
                 Err(e) => {
                     let _ = tx.send(Err(e)).await;
                     return;
+                }
+            };
+            while let Some(item) = s.next().await {
+                match item {
+                    Ok(chunk) => {
+                        full_text.push_str(&chunk);
+                        if tx.send(Ok(chunk)).await.is_err() {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        return;
+                    }
                 }
             }
 

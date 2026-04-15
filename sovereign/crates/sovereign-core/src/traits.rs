@@ -17,6 +17,29 @@ pub trait InferenceProvider: Send + Sync {
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
 
+    /// Streaming variant that also returns the model id actually
+    /// chosen to serve this request. Exists because
+    /// `complete_stream` itself returns only a `Stream<String>` —
+    /// there's nowhere to attach "I routed this to peer BeefyMac's
+    /// Qwen3.5-9B" to, so streaming provenance has historically
+    /// fallen back to the synchronous `model_id_for(Speed)` which
+    /// can't see any routing decision made inside the async call.
+    ///
+    /// Default implementation preserves the legacy behaviour:
+    /// delegate to `complete_stream` and stamp the model_id with
+    /// whatever `model_id_for` reports for the request's speed.
+    /// Mesh-aware wrappers override this to return the peer-
+    /// attributed id (e.g. `"Qwen3.5-9B @ peer BeefyMac"`). All
+    /// pre-existing providers and test mocks keep working
+    /// unmodified.
+    async fn complete_stream_with_id(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<(Pin<Box<dyn Stream<Item = Result<String>> + Send>>, String)> {
+        let stream = self.complete_stream(request).await?;
+        Ok((stream, self.model_id_for(request.preferred_speed)))
+    }
+
     async fn embed(&self, text: &str) -> Result<Vec<f32>>;
 
     /// Embed a batch of texts in a single forward pass when the backend supports it.
