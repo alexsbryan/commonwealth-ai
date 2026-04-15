@@ -509,6 +509,15 @@ impl EmbeddedDaemon {
         // clone (cheap Arc bump) so it stays live independently of
         // the Running variant's ownership. Aborted on daemon stop by
         // the `_gossip_handle: Drop` → `JoinHandle::abort()`.
+        //
+        // Log at spawn site (synchronous to `start_daemon`) — the
+        // matching "gossip: loop started" info inside the task fires
+        // when the runtime first polls the future, which can be
+        // later. Seeing "spawning gossip loop" but NOT "loop
+        // started" means the task is queued but starved; seeing
+        // NEITHER means the binary predates this code and a rebuild
+        // is required.
+        info!("spawning gossip loop");
         let gossip_handle = gossip::spawn_gossip_loop(
             app_state.clone(),
             gossip::DEFAULT_GOSSIP_INTERVAL,
