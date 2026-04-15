@@ -50,6 +50,15 @@ pub async fn gossip(
             members = mesh.members.len(),
             "gossip: merged incoming delta"
         );
+        // Persist immediately on any added/updated member. The
+        // gossip loop re-persists on its own cadence too, but that
+        // leaves a 10s window where the founder could restart and
+        // forget a newly-admitted joiner. Only fire on actual
+        // deltas — no point re-writing mesh.json for a last_seen
+        // bump that changed nothing structural.
+        if let Some(hook) = state.inner.on_mesh_mutation.as_ref() {
+            hook(&*mesh, self_node_id);
+        }
     }
 
     Ok(Json(GossipResponse {
@@ -346,6 +355,14 @@ pub async fn join(
                 joining_name = %req.joining_node_name,
                 "handshake_accepted: admitted new mesh member"
             );
+            // Persist IMMEDIATELY on join accept so the founder
+            // doesn't forget this member if it restarts within the
+            // 10s gossip-loop re-persist window. Hook is `None` in
+            // tests and the standalone daemon, so this is a no-op
+            // where persistence is managed elsewhere.
+            if let Some(hook) = state.inner.on_mesh_mutation.as_ref() {
+                hook(&*mesh, self_node_id);
+            }
             Ok(Json(JoinResponse {
                 assigned_node_id: new_id,
                 mesh: MeshWire::from(&*mesh),

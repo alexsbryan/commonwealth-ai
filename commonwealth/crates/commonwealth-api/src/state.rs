@@ -12,6 +12,16 @@ use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
 use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 
+/// Callback the route handlers fire whenever they mutate `Mesh` —
+/// `/internal/join` (accepting a new member), `/internal/gossip`
+/// (merging a peer's view). `sovereign-mesh::EmbeddedDaemon` installs
+/// a hook that persists `mesh.json` synchronously so a restart within
+/// the gossip interval never forgets a mutation. Tests leave this
+/// `None` and rely on their assertions without touching disk.
+pub type MeshMutationHook = std::sync::Arc<
+    dyn Fn(&Mesh, NodeId) + Send + Sync,
+>;
+
 /// Shared application state for all API handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -33,6 +43,13 @@ pub struct AppStateInner {
     pub app_registry: Arc<AppRegistry>,
     /// Map of locally running app ports for the proxy layer.
     pub app_port_map: AppPortMap,
+    /// Optional callback fired after any `Mesh` mutation by the
+    /// route handlers. Set by the embedded daemon to the
+    /// `persist::save` function so `/internal/join` accepts survive
+    /// a founder restart immediately (not just on the next gossip
+    /// tick). `None` in tests and in the standalone Commonwealth
+    /// daemon, where persistence is managed elsewhere.
+    pub on_mesh_mutation: Option<MeshMutationHook>,
 }
 
 impl AppState {
@@ -87,8 +104,32 @@ impl AppState {
                 mesh_store,
                 app_registry,
                 app_port_map: AppPortMap::new(),
+                on_mesh_mutation: None,
             }),
         }
+    }
+
+    /// Install the mutation hook on an Arc not yet cloned. Called
+    /// by `sovereign-mesh::EmbeddedDaemon` right after constructing
+    /// its `AppState`, before handing the `Clone`d state to the HTTP
+    /// servers. If the Arc has already been cloned (should not
+    /// happen in normal use), this is a no-op with a warning so the
+    /// daemon keeps running rather than panicking.
+    pub fn with_mesh_mutation_hook(mut self, hook: MeshMutationHook) -> Self {
+        match Arc::get_mut(&mut self.inner) {
+            Some(inner) => {
+                inner.on_mesh_mutation = Some(hook);
+            }
+            None => {
+                tracing::warn!(
+                    "with_mesh_mutation_hook called on shared AppState; \
+                     persistence hook not installed — handlers will still \
+                     mutate correctly, but on-join persistence falls back \
+                     to the 10s gossip-loop cadence"
+                );
+            }
+        }
+        self
     }
 
     /// Register a model as available on the mesh.
