@@ -164,16 +164,36 @@ impl MeshInferenceProvider {
             }
         }
         // Cache miss or stale — try each URL until one resolves.
-        // The manifest endpoint is the same origin the inference
-        // endpoint lives on, so whichever URL works here is the
-        // URL the subsequent chat-completion request will work on.
+        // The manifest endpoint is the same origin as the inference
+        // endpoint, but at a DIFFERENT path prefix:
+        //
+        //   /v1/chat/completions   ← inference (under /v1)
+        //   /oicp/v1/capabilities  ← manifest  (at root)
+        //
+        // `peer.base_urls` are shaped for `RemoteApiProvider` which
+        // appends `/chat/completions`, so they end in `/v1`. We
+        // must strip that back off to reach the manifest endpoint.
+        // Getting this wrong silently 404s the fetch and the peer
+        // drops out of scoring — which was the bug that made the
+        // OICP-driven refactor look like it didn't route.
         for base in &peer.base_urls {
-            let url = format!("{}/oicp/v1/capabilities", base.trim_end_matches('/'));
+            let root = base
+                .trim_end_matches('/')
+                .trim_end_matches("/v1")
+                .trim_end_matches('/');
+            let url = format!("{root}/oicp/v1/capabilities");
             match self.http.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     match resp.json::<ProviderManifest>().await {
                         Ok(m) => {
-                            tracing::debug!(
+                            // Info-level so the happy path is
+                            // visible in the default log filter
+                            // alongside the selection decision.
+                            // (Went through a 188s-local incident
+                            // because a silent manifest fetch
+                            // failure looked identical to "no
+                            // peer available.")
+                            tracing::info!(
                                 peer = %peer.name,
                                 url = %url,
                                 models = m.models.len(),
@@ -190,7 +210,7 @@ impl MeshInferenceProvider {
                             return Some(m);
                         }
                         Err(e) => {
-                            tracing::debug!(
+                            tracing::info!(
                                 peer = %peer.name,
                                 url = %url,
                                 error = %e,
@@ -200,19 +220,19 @@ impl MeshInferenceProvider {
                     }
                 }
                 Ok(resp) => {
-                    tracing::debug!(
+                    tracing::info!(
                         peer = %peer.name,
                         url = %url,
                         status = %resp.status(),
-                        "mesh-inference: peer manifest non-success"
+                        "mesh-inference: peer manifest non-success — trying next"
                     );
                 }
                 Err(e) => {
-                    tracing::debug!(
+                    tracing::info!(
                         peer = %peer.name,
                         url = %url,
                         error = %e,
-                        "mesh-inference: peer manifest fetch transport error"
+                        "mesh-inference: peer manifest transport error — trying next"
                     );
                 }
             }
