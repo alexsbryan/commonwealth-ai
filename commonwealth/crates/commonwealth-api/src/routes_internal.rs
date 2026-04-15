@@ -9,7 +9,7 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::membership;
 use commonwealth_inference::inference_plan::InferencePlan;
-use commonwealth_inference::oicp::KnowledgeSearchRequest;
+use commonwealth_inference::oicp::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
 use crate::state::AppState;
 
@@ -117,71 +117,119 @@ pub async fn index_transfer(
 /// POST /internal/knowledge/search — inter-node shard query (fan-out target).
 ///
 /// Peer nodes call this to search corpus shards hosted on this node.
+/// Returns the typed `KnowledgeSearchResponse` from `oicp-types`, the
+/// same shape `/v1/knowledge/search` returns — so when the client-
+/// side handler fans out to multiple peers it can deserialize all of
+/// their replies into one container and merge-rank without a custom
+/// wire format per peer.
 pub async fn knowledge_search(
     State(state): State<AppState>,
     Json(request): Json<KnowledgeSearchRequest>,
-) -> (StatusCode, Json<serde_json::Value>) {
+) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     let engine = match &state.inner.corpus_engine {
         Some(e) => e.clone(),
         None => {
+            // Peers may have gossiped `hosted_corpora` that's since
+            // been removed, or reach us during a brief pre-bootstrap
+            // window; 503 + empty body tells them "not me, try
+            // someone else" without poisoning their merge.
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({ "error": "no corpus engine on this node" })),
+                Json(KnowledgeSearchResponse::default()),
             );
         }
     };
 
-    // Fan-out: search local corpus index for each requested corpus.
     let corpora = request.corpora.as_deref().unwrap_or(&[]);
     let limit = request.effective_limit() as usize;
-    let mut all_results = Vec::new();
 
+    // Resolve the target corpora: either the caller's explicit list
+    // (which MAY include corpora we don't host — we just skip those)
+    // or all locally-installed corpora when the caller sent no
+    // filter. Either way, we filter against what `installed_indexes`
+    // actually reports so we never try to open an index we don't
+    // have.
+    let installed: std::collections::HashSet<String> = engine
+        .installed_indexes()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|i| i.corpus_id)
+        .collect();
     let search_corpora: Vec<String> = if corpora.is_empty() {
-        engine
-            .installed_indexes()
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .map(|i| i.corpus_id)
-            .collect()
+        installed.iter().cloned().collect()
     } else {
-        corpora.to_vec()
+        corpora
+            .iter()
+            .filter(|c| installed.contains(*c))
+            .cloned()
+            .collect()
     };
+    let corpora_unavailable: Vec<String> = corpora
+        .iter()
+        .filter(|c| !installed.contains(*c))
+        .cloned()
+        .collect();
 
+    let mut all_results: Vec<KnowledgeResult> = Vec::new();
     for corpus_id in &search_corpora {
-        if let Ok(index) = engine.open_index_for_corpus(corpus_id).await {
-            if let Ok(results) = index
-                .search(&request.query_embedding, &request.query_text, limit)
-                .await
-            {
-                all_results.extend(results.into_iter().map(|r| {
-                    serde_json::json!({
-                        "content": r.content,
-                        "title": r.title,
-                        "corpus_id": corpus_id,
-                        "url": r.url,
-                        "score": r.score,
-                    })
-                }));
+        match engine.open_index_for_corpus(corpus_id).await {
+            Ok(index) => {
+                match index
+                    .search(&request.query_embedding, &request.query_text, limit)
+                    .await
+                {
+                    Ok(results) => {
+                        all_results.extend(results.into_iter().map(|r| KnowledgeResult {
+                            content: r.content,
+                            title: r.title,
+                            corpus_id: corpus_id.clone(),
+                            url: r.url,
+                            score: r.score,
+                            metadata: Default::default(),
+                        }));
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            corpus = corpus_id,
+                            error = %e,
+                            "internal knowledge_search: search failed"
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    error = %e,
+                    "internal knowledge_search: open_index failed"
+                );
             }
         }
     }
 
     all_results.sort_by(|a, b| {
-        b["score"]
-            .as_f64()
-            .unwrap_or(0.0)
-            .partial_cmp(&a["score"].as_f64().unwrap_or(0.0))
+        b.score
+            .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     all_results.truncate(limit);
 
+    let hit_count = all_results.len();
+    tracing::info!(
+        corpora = ?search_corpora,
+        hits = hit_count,
+        "internal knowledge_search: served"
+    );
+
     (
         StatusCode::OK,
-        Json(serde_json::json!({
-            "results": all_results,
-            "corpora_searched": search_corpora,
-        })),
+        Json(KnowledgeSearchResponse {
+            results: all_results,
+            corpora_searched: search_corpora,
+            corpora_unavailable,
+            total_chunks_searched: None,
+        }),
     )
 }
 

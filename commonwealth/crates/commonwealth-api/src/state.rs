@@ -50,6 +50,30 @@ impl AppState {
         mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
     ) -> Self {
+        Self::new_with_platform_and_engine(
+            self_node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            None,
+        )
+    }
+
+    /// Create state with an optional `CorpusEngine` attached. The
+    /// engine is what the knowledge routes (`/v1/knowledge/search`
+    /// and `/internal/knowledge/search`) query to turn a request
+    /// into scored chunks. When `None` (default), the knowledge
+    /// routes behave as if this node hosts no corpora — the path
+    /// that used to yield the `is_stub: "true"` placeholder. The
+    /// `sovereign-mesh::EmbeddedDaemon` passes `Some(engine)` so
+    /// the in-process daemon has something real to search.
+    pub fn new_with_platform_and_engine(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        mesh_store: Arc<MeshStore>,
+        app_registry: Arc<AppRegistry>,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+    ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let knowledge_store = KnowledgeStateStore::new(Arc::clone(&mesh_store), self_node_id);
         Self {
@@ -59,7 +83,7 @@ impl AppState {
                 inference_store,
                 knowledge_store,
                 model_aliases: ModelAliasTable::default_table(),
-                corpus_engine: None,
+                corpus_engine,
                 mesh_store,
                 app_registry,
                 app_port_map: AppPortMap::new(),
