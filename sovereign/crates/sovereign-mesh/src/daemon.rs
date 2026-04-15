@@ -142,11 +142,14 @@ impl EmbeddedDaemon {
         }
 
         let internal_port = 9742u16;
-        let addr: SocketAddr = format!("0.0.0.0:{internal_port}")
-            .parse()
-            .map_err(|e| MeshError::Config(format!("bad address: {e}")))?;
+        // Use routable local IPs rather than `0.0.0.0:port`. The wildcard
+        // bind is correct for the listener, but storing it on our
+        // `MemberRecord.addresses` means peers receiving our gossip would
+        // try to dial `0.0.0.0`, which on macOS resolves to 127.0.0.1 —
+        // they'd hit themselves instead of us. See `reachable_addresses`.
+        let addrs = reachable_addresses(internal_port);
 
-        let (mesh, join_key) = membership::init_mesh(mesh_name, node_name, vec![addr]);
+        let (mesh, join_key) = membership::init_mesh(mesh_name, node_name, addrs);
         let node_id = mesh
             .members
             .keys()
@@ -230,13 +233,14 @@ impl EmbeddedDaemon {
             .map_err(|e| MeshError::InvalidJoinKey(e.to_string()))?;
 
         let internal_port = 9742u16;
-        let addr: SocketAddr = format!("0.0.0.0:{internal_port}")
-            .parse()
-            .map_err(|e| MeshError::Config(format!("bad address: {e}")))?;
+        // Same rationale as create_mesh: we must advertise routable IPs
+        // in our MemberRecord, not a wildcard, so the founder can reach
+        // us back during gossip rounds after the initial handshake.
+        let addrs = reachable_addresses(internal_port);
 
         // Step 2 — placeholder mesh so mDNS has something to advertise.
         let (placeholder_mesh, _throwaway_key) =
-            membership::init_mesh(&mesh_name, node_name, vec![addr]);
+            membership::init_mesh(&mesh_name, node_name, addrs.clone());
         let placeholder_node_id = placeholder_mesh
             .members
             .keys()
@@ -260,7 +264,7 @@ impl EmbeddedDaemon {
             &mesh_name,
             &join_key,
             node_name,
-            vec![addr],
+            addrs,
             relay_hint.as_deref(),
             mdns.as_ref(),
             std::time::Duration::from_secs(5),
@@ -567,6 +571,30 @@ impl EmbeddedDaemon {
 /// IPv6 one. Skips loopback. Not exhaustive (won't enumerate VPN
 /// interfaces that aren't the default route) but covers the common
 /// home-WiFi and Tailscale cases.
+/// Build the `Vec<SocketAddr>` we'll store in our own `MemberRecord`.
+/// Each local non-loopback IP becomes `ip:port`. If no interface can
+/// be discovered (e.g. no network at all), fall back to the wildcard
+/// `0.0.0.0:port` — worse than useless for cross-machine gossip, but
+/// at least lets a solo-on-localhost founder start up. Peers that
+/// receive a wildcard address will see self-loopback behavior; the
+/// warning log below makes that case visible.
+fn reachable_addresses(port: u16) -> Vec<SocketAddr> {
+    let ips = local_ip_candidates();
+    if ips.is_empty() {
+        warn!(
+            port,
+            "no routable local IPs discovered — falling back to \
+             0.0.0.0:{port} in MemberRecord. Cross-machine gossip \
+             will not work until a network interface is available."
+        );
+        return vec![SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+            port,
+        )];
+    }
+    ips.into_iter().map(|ip| SocketAddr::new(ip, port)).collect()
+}
+
 fn local_ip_candidates() -> Vec<std::net::IpAddr> {
     let mut ips = Vec::new();
     if let Ok(sock) = std::net::UdpSocket::bind("0.0.0.0:0") {
