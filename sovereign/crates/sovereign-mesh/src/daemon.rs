@@ -343,9 +343,11 @@ impl EmbeddedDaemon {
                 // Observable signal for "the UI just polled and got a
                 // fresh snapshot" — lets the user verify both that the
                 // poll is live AND that any new members are visible on
-                // this side. At info so it shows with the default
-                // filter; the message is terse to avoid log spam.
-                tracing::debug!(
+                // this side. Info-level so it shows under the default
+                // `sovereign_mesh=info` filter without RUST_LOG
+                // overrides. If this log spam ever becomes annoying,
+                // gate it on a changed-count predicate.
+                tracing::info!(
                     members = fresh.status.members_total,
                     online = fresh.status.members_online,
                     "mesh_state: rebuilt snapshot from live AppState"
