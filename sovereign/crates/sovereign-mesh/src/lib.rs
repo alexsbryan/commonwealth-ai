@@ -14,6 +14,7 @@ pub mod capabilities;
 pub mod daemon;
 pub mod deep_link;
 pub mod gossip;
+pub mod inference_adapter;
 pub mod join;
 pub mod knowledge_client;
 pub mod persist;

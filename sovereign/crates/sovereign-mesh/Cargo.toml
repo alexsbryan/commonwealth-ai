@@ -25,6 +25,9 @@ sovereign-core = { workspace = true }
 # async_trait is needed to impl the (async) MeshKnowledgeSource
 # trait on MeshKnowledgeClient. sovereign-core already uses it.
 async-trait = { workspace = true }
+# `SovereignInferenceAdapter::chat_completion_stream` forwards the
+# Sovereign provider's stream, mapping its error type.
+futures = { workspace = true }
 
 # Shared
 serde = { workspace = true }

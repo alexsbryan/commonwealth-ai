@@ -10,12 +10,13 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use commonwealth_api::state::AppState;
+use commonwealth_api::state::{AppState, LocalInferenceService};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
+use sovereign_core::traits::InferenceProvider;
 
 use crate::deep_link::DeepLink;
 use crate::gossip::{self, GossipHandle};
@@ -40,6 +41,14 @@ pub struct EmbeddedDaemon {
     /// the daemon is Running the engine is always present. Tests
     /// and the CLI's mesh subcommands keep it `None`.
     corpus_engine: RwLock<Option<Arc<CorpusEngine>>>,
+    /// The Sovereign `InferenceProvider` that answers peer chat
+    /// completions hitting our `/v1/chat/completions`. Same
+    /// injection timing as `corpus_engine`: set during desktop
+    /// bootstrap before the daemon is started. When this is
+    /// absent, the daemon's handler falls through to the
+    /// scheduler/llama-server path (which is empty in the
+    /// Sovereign+mesh embed, so peer inference just 503s).
+    inference_provider: RwLock<Option<Arc<dyn InferenceProvider>>>,
 }
 
 enum DaemonState {
@@ -87,6 +96,7 @@ impl EmbeddedDaemon {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
             data_dir,
             corpus_engine: RwLock::new(None),
+            inference_provider: RwLock::new(None),
         }
     }
 
@@ -98,6 +108,7 @@ impl EmbeddedDaemon {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
             data_dir: PathBuf::new(),
             corpus_engine: RwLock::new(None),
+            inference_provider: RwLock::new(None),
         }
     }
 
@@ -118,6 +129,19 @@ impl EmbeddedDaemon {
     /// `stop` + restart) will pick up the new one.
     pub async fn set_corpus_engine(&self, engine: Arc<CorpusEngine>) {
         *self.corpus_engine.write().await = Some(engine);
+    }
+
+    /// Install the `InferenceProvider` that answers peer chat
+    /// completions. Same injection timing as `set_corpus_engine`:
+    /// call during desktop bootstrap, before any mesh start. The
+    /// same provider Sovereign uses for the local user's chats —
+    /// a peer asking us for synthesis gets the same quality a
+    /// local user would.
+    pub async fn set_inference_provider(
+        &self,
+        provider: Arc<dyn InferenceProvider>,
+    ) {
+        *self.inference_provider.write().await = Some(provider);
     }
 
     fn persistence_enabled(&self) -> bool {
@@ -480,6 +504,27 @@ impl EmbeddedDaemon {
             app_registry,
             corpus_engine,
         );
+
+        // If Sovereign installed an InferenceProvider, wrap it in
+        // the OpenAI-flavour adapter so this node's
+        // `/v1/chat/completions` serves peer requests directly
+        // from the same local model the user would use. Without
+        // this, peer inference requests 503 because the daemon's
+        // scheduler/llama-server path is empty in the embedded
+        // topology.
+        let app_state = if let Some(provider) =
+            self.inference_provider.read().await.as_ref()
+        {
+            let adapter: Arc<dyn LocalInferenceService> = Arc::new(
+                crate::inference_adapter::SovereignInferenceAdapter::new(
+                    provider.clone(),
+                ),
+            );
+            info!("inference adapter: wired into /v1/chat/completions");
+            app_state.with_local_inference(adapter)
+        } else {
+            app_state
+        };
 
         // Install a persistence hook that fires on every Mesh
         // mutation from a route handler (`/internal/join`,

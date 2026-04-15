@@ -516,6 +516,15 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     // `hosted_corpora` and peers wouldn't know we host anything.
     state.mesh.set_corpus_engine(Arc::clone(&corpus_engine)).await;
 
+    // Also hand over our `InferenceProvider` so the daemon can
+    // answer peer `/v1/chat/completions` requests from the same
+    // local model Sovereign uses for its own user's queries. This
+    // is what makes "Joiner's synthesis runs on Founder's beefy
+    // model" physically possible — the Joiner's HybridProvider
+    // will POST to `http://<founder>:9741` and the Founder's
+    // daemon delegates through this adapter to EmbeddedLlamaCpp.
+    state.mesh.set_inference_provider(Arc::clone(&inference)).await;
+
     // Startup dimension guard: probe the loaded embed model's actual output
     // size and compare against every installed corpus index. A mismatch means
     // the user swapped embed models after building their library — retrieval
