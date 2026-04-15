@@ -61,15 +61,22 @@ pub async fn knowledge_search(
     // Step 2: scan live mesh members for peers hosting additional
     // corpora. We clone what we need out of the lock so we can drop
     // the read before firing async HTTP calls.
-    let (peer_offerings, target_corpora_if_unconstrained) = {
+    //
+    // Also collect a "peer roster" log payload — a per-member
+    // (name, status, hosted_corpora) tuple that we emit at info
+    // level so the operator can answer "why isn't my peer serving
+    // hits?" without attaching a debugger. If you see your Founder
+    // listed here with `corpora=[]`, that's the bug: nothing to
+    // federate because no complete corpora are published from that
+    // side. If they're missing from the roster entirely, gossip
+    // hasn't converged yet.
+    let (peer_offerings, target_corpora_if_unconstrained, peer_roster) = {
         let mesh = state.inner.mesh.read().await;
         let mut offerings: Vec<PeerOffering> = Vec::new();
         let mut union: HashSet<String> = local_corpora.clone();
+        let mut roster: Vec<(String, String, Vec<String>)> = Vec::new();
         for (_, member) in mesh.members.iter() {
             if member.node_id == self_id {
-                continue;
-            }
-            if !is_queryable(member) {
                 continue;
             }
             let corpora: Vec<String> = member
@@ -78,6 +85,14 @@ pub async fn knowledge_search(
                 .iter()
                 .map(|c| c.corpus_id.clone())
                 .collect();
+            roster.push((
+                member.name.clone(),
+                format!("{:?}", member.status),
+                corpora.clone(),
+            ));
+            if !is_queryable(member) {
+                continue;
+            }
             for c in &corpora {
                 union.insert(c.clone());
             }
@@ -90,8 +105,15 @@ pub async fn knowledge_search(
                 });
             }
         }
-        (offerings, union)
+        (offerings, union, roster)
     };
+
+    tracing::info!(
+        local_corpora = ?local_corpora,
+        peer_roster = ?peer_roster,
+        offerings = peer_offerings.len(),
+        "knowledge: fan-out plan — peer roster & local view"
+    );
 
     // Step 3: resolve the actual target set. If the caller passed
     // `corpora`, honour it; otherwise search every corpus reachable
