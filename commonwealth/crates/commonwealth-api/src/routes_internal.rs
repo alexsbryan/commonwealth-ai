@@ -14,16 +14,62 @@ use commonwealth_inference::oicp::KnowledgeSearchRequest;
 use crate::state::AppState;
 
 /// POST /internal/gossip — member state exchange.
+///
+/// Push-pull in a single request: the caller ships us their current
+/// `Mesh` view, we merge it into ours via `Mesh::merge_from`
+/// (per-member `last_seen` last-writer-wins), and reply with our
+/// now-updated snapshot so the caller can merge it in turn. After
+/// one round both sides have converged on the pairwise union.
+///
+/// Rejects with 401 when the incoming `Mesh` has a different
+/// `mesh_id` or `join_key_hash` — the auth boundary. Any member
+/// with the join key can gossip freely; outsiders can't inject.
 pub async fn gossip(
-    State(_state): State<AppState>,
-    Json(_payload): Json<serde_json::Value>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    // Gossip exchange will be fully wired in when the gossip transport
-    // is integrated. For now, accept and acknowledge.
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({ "status": "accepted" })),
-    )
+    State(state): State<AppState>,
+    Json(req): Json<GossipRequest>,
+) -> Result<Json<GossipResponse>, (StatusCode, Json<GossipRejection>)> {
+    let incoming = req.mesh.into_mesh();
+    let self_node_id = state.inner.self_node_id;
+    let mut mesh = state.inner.mesh.write().await;
+    let report = mesh.merge_from(self_node_id, &incoming);
+
+    if report.rejected {
+        tracing::warn!("gossip: rejected — mesh_id or join_key_hash mismatch");
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(GossipRejection {
+                reason: "mesh_id or join_key_hash does not match".into(),
+            }),
+        ));
+    }
+
+    if report.added > 0 || report.updated > 0 {
+        tracing::info!(
+            added = report.added,
+            updated = report.updated,
+            members = mesh.members.len(),
+            "gossip: merged incoming delta"
+        );
+    }
+
+    Ok(Json(GossipResponse {
+        mesh: MeshWire::from(&*mesh),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GossipRequest {
+    pub mesh: MeshWire,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GossipResponse {
+    pub mesh: MeshWire,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GossipRejection {
+    pub reason: String,
 }
 
 /// POST /internal/scheduling/intent — scheduling lock acquisition.

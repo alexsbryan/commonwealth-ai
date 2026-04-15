@@ -233,10 +233,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn internal_gossip_endpoint() {
+    async fn internal_gossip_endpoint_rejects_wrong_mesh() {
+        // After the gossip handler was wired for real (replacing the
+        // accept-any-JSON stub), the minimal shape it accepts is a
+        // full `MeshWire` payload. A test AppState has mesh_id=1 and
+        // an all-zero join_key_hash; posting a body with a different
+        // mesh_id proves the auth guard fires. The full "merges
+        // incoming delta" happy path is covered by the dedicated
+        // tests/gossip_route.rs integration file.
         let app = internal_router(test_app_state());
 
-        let body = serde_json::json!({"test": true});
+        // MeshId serializes as a 16-byte array; hash as a 32-byte
+        // array. Both built as vecs so `serde_json::json!` is happy.
+        let mesh_id_bytes = vec![0u8; 16];
+        let hash_bytes = vec![0u8; 32];
+        // Flip one byte in the id to differ from test_app_state()'s
+        // default, so the handler's mesh-id check fires.
+        let mut foreign_id = mesh_id_bytes.clone();
+        foreign_id[0] = 42;
+        let body = serde_json::json!({
+            "mesh": {
+                "id": foreign_id,
+                "name": "Other",
+                "join_key_hash": hash_bytes,
+                "members": [],
+                "peers": []
+            }
+        });
         let response = app
             .oneshot(
                 Request::post("/internal/gossip")
@@ -247,7 +270,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
