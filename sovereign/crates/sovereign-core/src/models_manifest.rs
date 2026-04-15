@@ -67,6 +67,19 @@ pub struct ProfileConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct SlotConfig {
     pub file: String,
+    /// Optional model identity — the stable substring that
+    /// uniquely names this base model across quantisations and
+    /// repo uploads. `"Qwen3.5-27B"` matches both
+    /// `Qwen_Qwen3.5-27B-Q4_K_M.gguf` (bartowski's Q4) and
+    /// `Qwen3.5-27B.Q8_0.gguf` (a local Q8 dump) and any future
+    /// `*-Q5_K_S.gguf`. When absent, capability lookup falls
+    /// back to exact filename match only.
+    ///
+    /// Declaring `base_name` lets a single manifest row cover
+    /// every quantisation of the same weights — capabilities are
+    /// a property of the model, not the quant.
+    #[serde(default)]
+    pub base_name: String,
     #[serde(default)]
     pub family: String,
     #[serde(default)]
@@ -77,10 +90,10 @@ pub struct SlotConfig {
     pub thinking: bool,
     #[serde(default)]
     pub hf_url: String,
-    /// OICP capability declarations for this specific model +
-    /// quantisation. Empty when absent — the mesh routing path
-    /// falls back to conservative defaults for BYOM or legacy
-    /// entries that haven't been annotated yet.
+    /// OICP capability declarations for this base model. Empty
+    /// when absent — the mesh routing path falls back to
+    /// conservative defaults for BYOM or legacy entries that
+    /// haven't been annotated yet.
     #[serde(default)]
     pub capabilities: CapabilityProfile,
 }
@@ -91,6 +104,13 @@ pub struct SlotConfig {
 pub struct UserSlotConfig {
     pub slot: String,
     pub file: String,
+    /// Same semantics as `SlotConfig::base_name` — cross-
+    /// quantisation identity for this model. Particularly useful
+    /// for BYOM users who want their downloads to pick up OICP
+    /// annotations without renaming files to match manifest
+    /// entries exactly.
+    #[serde(default)]
+    pub base_name: String,
     #[serde(default)]
     pub family: String,
     #[serde(default)]
@@ -113,23 +133,43 @@ impl ModelsManifest {
 
     /// Look up capabilities by loaded-model filename.
     ///
-    /// Accepts either the bare stem (`Qwen_Qwen3.5-9B-Q4_K_M`, as
+    /// Accepts either the bare stem (`Qwen3.5-27B.Q8_0`, as
     /// returned by `InferenceProvider::model_id_for`) or the full
-    /// filename with `.gguf`. Matching is case-sensitive because
-    /// HuggingFace / bartowski filenames are — no normalisation.
+    /// filename with `.gguf`. Two-tier matching:
     ///
-    /// Returns `None` when the file isn't in the manifest, which
-    /// callers should treat as "conservative defaults" rather
-    /// than "no capabilities." A user pointing at a downloaded
-    /// BYOM file is the common case here.
+    ///   1. **`base_name` match** (preferred) — any slot whose
+    ///      `base_name` is a case-insensitive substring of the
+    ///      filename is a candidate. Longest matching `base_name`
+    ///      wins (so `"Qwen3.5-35B-A3B"` outranks `"Qwen3.5-35B"`
+    ///      when both would match). This is what makes a single
+    ///      row in `models.toml` cover every quantisation.
+    ///
+    ///   2. **Exact filename match** (fallback) — used when no
+    ///      `base_name` is declared. Back-compat with entries
+    ///      written before the `base_name` field existed.
+    ///
+    /// `user_slots` are always checked before profile slots so a
+    /// user's BYOM declarations outrank the bundled defaults.
+    /// Empty `capabilities` is treated as "no annotation" rather
+    /// than "empty profile" — callers get `None` and fall back.
     pub fn capabilities_for_file(&self, filename: &str) -> Option<CapabilityProfile> {
-        let target = strip_gguf(filename);
-        // user_slots win over profile slots of the same filename:
-        // a user who opts in to BYOM expects their declarations
-        // to take precedence over the bundled manifest.
+        let target = strip_gguf(filename).to_ascii_lowercase();
+
+        // Collect every annotated slot in priority order
+        // (user_slots first, then profile slots). Each becomes a
+        // candidate if its base_name matches or its filename
+        // matches exactly.
+        let mut candidates: Vec<(&str, &CapabilityProfile)> = Vec::new();
         for user in &self.user_slots {
-            if strip_gguf(&user.file) == target && !user.capabilities.is_empty() {
-                return Some(user.capabilities.clone());
+            if user.capabilities.is_empty() {
+                continue;
+            }
+            candidates.push((&user.file, &user.capabilities));
+            if !user.base_name.is_empty() {
+                candidates.insert(
+                    0,
+                    (user.base_name.as_str(), &user.capabilities),
+                );
             }
         }
         for profile in self.profiles.values() {
@@ -141,12 +181,40 @@ impl ModelsManifest {
             .into_iter()
             .flatten()
             {
-                if strip_gguf(&slot.file) == target && !slot.capabilities.is_empty() {
-                    return Some(slot.capabilities.clone());
+                if slot.capabilities.is_empty() {
+                    continue;
+                }
+                candidates.push((&slot.file, &slot.capabilities));
+                if !slot.base_name.is_empty() {
+                    candidates.push((slot.base_name.as_str(), &slot.capabilities));
                 }
             }
         }
-        None
+
+        // Pass 1: base_name / partial substring match. Longest
+        // matcher wins — "Qwen3.5-35B-A3B" beats "Qwen3.5-35B" on
+        // a filename that contains both, so the MoE base_name
+        // doesn't get swallowed by a shorter prefix match.
+        let mut best: Option<(usize, &CapabilityProfile)> = None;
+        for (pattern, caps) in &candidates {
+            let pattern_lower = pattern.to_ascii_lowercase();
+            let pattern_stripped = strip_gguf(&pattern_lower);
+            // Exact match (after .gguf stripping) is the strongest
+            // signal — wins over any substring-only match.
+            if pattern_stripped == target {
+                return Some((*caps).clone());
+            }
+            // Substring match — any pattern that appears anywhere
+            // in the target filename.
+            if target.contains(pattern_stripped) {
+                let len = pattern_stripped.len();
+                match best {
+                    Some((best_len, _)) if len <= best_len => {}
+                    _ => best = Some((len, *caps)),
+                }
+            }
+        }
+        best.map(|(_, caps)| caps.clone())
     }
 }
 
@@ -207,6 +275,82 @@ analysis = 3
         assert_eq!(caps1, caps2);
         assert_eq!(caps1.get(&Capability::General).copied(), Some(3));
         assert_eq!(caps1.get(&Capability::Analysis).copied(), Some(3));
+    }
+
+    #[test]
+    fn base_name_matches_across_quantisations() {
+        // One manifest row should cover Q4, Q8, and whatever a
+        // user dumps locally as `*Qwen3.5-27B*.gguf`.
+        let src = r#"
+[profiles.high.thoughtful]
+file = "Qwen_Qwen3.5-27B-Q4_K_M.gguf"
+base_name = "Qwen3.5-27B"
+family = "Qwen35"
+[profiles.high.thoughtful.capabilities]
+analysis = 4
+math = 3
+"#;
+        let m = ModelsManifest::from_toml_str(src).unwrap();
+        // The actual filename the Founder has:
+        let q8 = m
+            .capabilities_for_file("Qwen3.5-27B.Q8_0.1.gguf")
+            .expect("Q8 variant should match base_name");
+        // And a hypothetical Q5 dump:
+        let q5 = m
+            .capabilities_for_file("Qwen3.5-27B-Q5_K_S.gguf")
+            .expect("Q5 variant should match base_name");
+        // And the original manifest-filename:
+        let q4 = m
+            .capabilities_for_file("Qwen_Qwen3.5-27B-Q4_K_M.gguf")
+            .expect("Q4 variant should match by filename or base_name");
+        assert_eq!(q8.get(&Capability::Analysis).copied(), Some(4));
+        assert_eq!(q5.get(&Capability::Analysis).copied(), Some(4));
+        assert_eq!(q4.get(&Capability::Analysis).copied(), Some(4));
+    }
+
+    #[test]
+    fn longest_base_name_wins() {
+        // Declare two slots whose base_names both appear in the
+        // query filename ("Qwen3.5-35B" and "Qwen3.5-35B-A3B").
+        // Scoring should pick the more specific MoE variant.
+        let src = r#"
+[profiles.dense.thoughtful]
+file = "qwen35-35b-dense.gguf"
+base_name = "Qwen3.5-35B"
+[profiles.dense.thoughtful.capabilities]
+analysis = 3
+
+[profiles.moe.thoughtful]
+file = "qwen35-35b-a3b.gguf"
+base_name = "Qwen3.5-35B-A3B"
+[profiles.moe.thoughtful.capabilities]
+analysis = 4
+"#;
+        let m = ModelsManifest::from_toml_str(src).unwrap();
+        let caps = m
+            .capabilities_for_file("Qwen3.5-35B-A3B.Q8_0.gguf")
+            .expect("MoE-identifying filename should match MoE slot");
+        assert_eq!(
+            caps.get(&Capability::Analysis).copied(),
+            Some(4),
+            "longer base_name 'Qwen3.5-35B-A3B' should outrank 'Qwen3.5-35B'"
+        );
+    }
+
+    #[test]
+    fn case_insensitive_base_name() {
+        let src = r#"
+[profiles.default.thoughtful]
+file = "x.gguf"
+base_name = "Qwen3.5-9B"
+[profiles.default.thoughtful.capabilities]
+general = 3
+"#;
+        let m = ModelsManifest::from_toml_str(src).unwrap();
+        let caps = m
+            .capabilities_for_file("qwen3.5-9b.q8_0.gguf")
+            .expect("lowercase filename should still match mixed-case base_name");
+        assert_eq!(caps.get(&Capability::General).copied(), Some(3));
     }
 
     #[test]

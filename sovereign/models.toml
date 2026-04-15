@@ -27,6 +27,14 @@
 # defaults. Capabilities: general, code, analysis, math, creative,
 # instruction, multilingual, vision, long_context (snake_case keys).
 #
+# Optional `base_name` field identifies the model across quantisation
+# and repo variants. A slot declaring `base_name = "Qwen3.5-27B"` will
+# be used for ANY GGUF whose filename contains that string — so the
+# same capability row covers Q4_K_M, Q8_0, Q5_K_S, bartowski's
+# `Qwen_Qwen3.5-27B-*.gguf`, and a local `Qwen3.5-27B.Q8_0.1.gguf`.
+# Longest base_name match wins when multiple would apply (so
+# `"Qwen3.5-35B-A3B"` outranks `"Qwen3.5-35B"`).
+#
 # ── Fast slot notes ──────────────────────────────────────────────────────────
 # Stays on Qwen3 (not Qwen3.5) across all profiles. Reasons:
 #   1. Qwen3.5 small models (0.8B, 2B) show thinking-loop instability
@@ -65,6 +73,7 @@ hf_url   = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF"
 # Fast slot only does intent classification + JSON routing. We don't
 # advertise it as a synthesis candidate; mesh routing filters it
 # out as a "no peer should ever prefer this" floor.
+base_name = "Qwen3-0.6B"
 [profiles.cpu_only.fast.capabilities]
 general     = 1
 instruction = 2
@@ -79,6 +88,7 @@ thinking = false  # thinking=false on CPU: latency renders it unusable
 hf_url   = "https://huggingface.co/Qwen/Qwen3-4B-GGUF"
 # 4B at Q4 on CPU — competent floor for general Q&A but below
 # the threshold where it measurably outperforms bigger quants.
+base_name = "Qwen3-4B"
 [profiles.cpu_only.thoughtful.capabilities]
 general     = 2
 analysis    = 1
@@ -109,6 +119,7 @@ quant    = "Q8_0"
 size_gb  = 0.6
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF"
+base_name = "Qwen3-0.6B"
 [profiles.low_mem.fast.capabilities]
 general     = 1
 instruction = 2
@@ -123,6 +134,7 @@ thinking = true
 hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF"
 # Qwen3.5-4B with thinking-mode on a GPU: solid small-model
 # reasoning. Outpaces Qwen3-4B on instruction following.
+base_name = "Qwen3.5-4B"
 [profiles.low_mem.thoughtful.capabilities]
 general     = 2
 analysis    = 2
@@ -153,6 +165,7 @@ quant    = "Q4_K_M"
 size_gb  = 1.1
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+base_name = "Qwen3-1.7B"
 [profiles.default.fast.capabilities]
 general     = 1
 instruction = 2
@@ -168,6 +181,7 @@ hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF"
 # Qwen3.5-9B at Q4_K_M: measurably outperforms Qwen3-8B on
 # GPQA Diamond and BFCL-V4 (per Qwen's own evals). Strong
 # general + analysis; competent code + math.
+base_name = "Qwen3.5-9B"
 [profiles.default.thoughtful.capabilities]
 general     = 3
 analysis    = 3
@@ -200,6 +214,7 @@ quant    = "Q8_0"
 size_gb  = 1.9
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+base_name = "Qwen3-1.7B"
 [profiles.high.fast.capabilities]
 general     = 1
 instruction = 2
@@ -217,6 +232,7 @@ hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-27B-GGUF"
 # code; creative writing and long-form instruction are
 # reliably coherent. This is the tier where the mesh starts
 # paying off — a Joiner should route here for DeepQuery.
+base_name = "Qwen3.5-27B"
 [profiles.high.thoughtful.capabilities]
 general     = 3
 analysis    = 4
@@ -248,6 +264,7 @@ quant    = "Q8_0"
 size_gb  = 1.9
 thinking = false
 hf_url   = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF"
+base_name = "Qwen3-1.7B"
 [profiles.very_high.fast.capabilities]
 general     = 1
 instruction = 2
@@ -263,6 +280,9 @@ hf_url   = "https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF"
 # Qwen3.5-35B-A3B: sparse MoE that matches Qwen3-235B-A22B on
 # benchmarks with only 3B active params. Analysis exceptional,
 # everything else strong. Top tier for federated synthesis.
+# `Qwen3.5-35B-A3B` wins over a hypothetical `Qwen3.5-35B`
+# substring match because the longer base_name is preferred.
+base_name = "Qwen3.5-35B-A3B"
 [profiles.very_high.thoughtful.capabilities]
 general     = 4
 analysis    = 4
