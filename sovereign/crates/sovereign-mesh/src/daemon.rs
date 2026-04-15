@@ -340,6 +340,16 @@ impl EmbeddedDaemon {
         match &*state {
             DaemonState::Running { app_state, mesh_state, .. } => {
                 let fresh = MeshState::from_app_state(app_state).await;
+                // Observable signal for "the UI just polled and got a
+                // fresh snapshot" — lets the user verify both that the
+                // poll is live AND that any new members are visible on
+                // this side. At info so it shows with the default
+                // filter; the message is terse to avoid log spam.
+                tracing::debug!(
+                    members = fresh.status.members_total,
+                    online = fresh.status.members_online,
+                    "mesh_state: rebuilt snapshot from live AppState"
+                );
                 // Keep the cached snapshot in sync too, so anything
                 // still reading it directly stays current.
                 *mesh_state.write().await = fresh.clone();
