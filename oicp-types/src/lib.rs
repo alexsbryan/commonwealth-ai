@@ -285,6 +285,17 @@ pub struct ProviderModel {
     pub capabilities: CapabilityProfile,
     pub context_tokens: u32,
     pub status: ModelStatus,
+    /// Approximate on-disk weight size in gigabytes. Used as a
+    /// tiebreaker during OICP backend selection: when two models
+    /// score equally against a request's preferred profile, prefer
+    /// the smaller one (smaller ≈ faster TTFT, lighter memory
+    /// footprint, less energy). Not a routing input on its own —
+    /// capability satisfaction always comes first. Optional because
+    /// providers may not know or want to publish this; absent values
+    /// sort after any known value so an unknown-size model never
+    /// spuriously wins a tie.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_gb: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
