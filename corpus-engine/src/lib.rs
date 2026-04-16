@@ -91,6 +91,6 @@ pub use update::lint_watcher::LintWatcher;
 pub use update::project_index_watcher::ProjectIndexWatcher;
 
 #[cfg(feature = "treesitter")]
-pub use notes::{NoteStore, NoteRow};
+pub use notes::{NoteStore, NoteRow, ToolCallLogRow};
 #[cfg(feature = "treesitter")]
 pub use project_docs::{ProjectDocsStore, DocResult, find_markdown_files};
