@@ -32,6 +32,8 @@ pub use code::BlastRadiusTool;
 pub use code::ProjectContextTool;
 #[cfg(feature = "treesitter")]
 pub use code::SessionReflectionTool;
+#[cfg(feature = "treesitter")]
+pub use code::CheckDocPathsTool;
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};

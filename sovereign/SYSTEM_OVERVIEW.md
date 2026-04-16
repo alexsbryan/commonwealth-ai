@@ -17,7 +17,7 @@ commonwealth-ai/
 ├── oicp-types/          # Shared OICP type definitions (no other deps)
 ├── corpus-engine/       # Shared knowledge layer (no dependencies on the others)
 ├── sovereign-recipes/   # Corpus recipe definitions + registry catalog
-├── lcol-llm/            # Sovereign — single-machine local AI assistant
+├── sovereign/            # Sovereign — single-machine local AI assistant
 └── commonwealth/        # Commonwealth — multi-machine inference + knowledge mesh
 ```
 
@@ -26,7 +26,7 @@ commonwealth-ai/
 | `oicp-types`        | OICP v0.2 type definitions + helpers     | Sovereign + Commonwealth|
 | `corpus-engine`     | Ingest, index, search, and shard corpora | Sovereign + Commonwealth|
 | `sovereign-recipes` | Declarative corpus recipe TOML files     | corpus-engine (compile-time snapshot) |
-| `lcol-llm`          | Local agent runtime (Sovereign)          | Standalone or + mesh    |
+| `sovereign`          | Local agent runtime                      | Standalone or + mesh    |
 | `commonwealth`      | Mesh coordination daemon                 | Standalone or + Sovereign|
 
 The dependency direction is one-way: `oicp-types` and `corpus-engine` know
@@ -51,7 +51,7 @@ only point where the two upstream projects directly meet.
               │           │                   │             │
        ┌──────▼──────┐   │    ┌──────────────▼──────┐  ┌──▼───────────┐
        │  Sovereign  │   │    │     Both call       │  │ Commonwealth │
-       │  (lcol-llm) │◄──┤    │  identical public   ├─►│              │
+       │  (sovereign/)│◄──┤    │  identical public   ├─►│              │
        │             │   │    │  API                 │  │              │
        └──────┬──────┘   │    └─────────────────────┘  └──────┬───────┘
               │          │                                    │
@@ -134,12 +134,21 @@ src/
 │       ├── policy.rs         # Stub
 │       ├── legal.rs          # Stub
 │       └── community.rs      # Stub
+├── notes.rs                  # NoteStore: working notes + session reflections (SQLite, FTS5)
+│                             #   NoteRow, ToolCallLogRow, write_note, write_reflection,
+│                             #   read_notes (retired-aware), retire_by_tool/id,
+│                             #   log_tool_call (10k ring buffer), read_reflections
 ├── scip_graph.rs             # ScipGraph: SCIP call graph (SQLite, staleness tracking)
 ├── scip_export.rs            # Language-agnostic SCIP exporter dispatch
 ├── scip_proto.rs             # Minimal SCIP protobuf types (prost)
 └── update/
+    ├── mod.rs
     ├── watch.rs              # CodeWatcher: filesystem watcher → reindex + staleness
-    └── delta.rs              # Incremental index updates (version manifests, resumable)
+    ├── delta.rs              # Incremental index updates (version manifests, resumable)
+    ├── watcher_coordinator.rs # WatcherCoordinator: debounced multi-watcher lifecycle
+    ├── lint_watcher.rs       # LintWatcher: background cargo check → LintStatus
+    ├── test_watcher.rs       # TestWatcher: background cargo test → TestStatus
+    └── project_index_watcher.rs # ProjectIndexWatcher: SOVEREIGN.md + docs re-index
 
 registry_snapshot.toml        # Bundled recipe catalog (compiled via include_str!)
 xtask/                        # cargo xtask update-registry-snapshot
@@ -150,7 +159,7 @@ tests/
 └── watcher_e2e.rs            # Filesystem watcher E2E tests
 ```
 
-### lcol-llm/ (Sovereign)
+### sovereign/
 
 ```
 crates/
@@ -481,7 +490,7 @@ via `engine.discover_recipes()`.
 
 ---
 
-## 4. Sovereign (`lcol-llm`) — The Local Agent
+## 4. Sovereign — The Local Agent
 
 A single-machine local AI assistant. Runs as a desktop app, CLI, or HTTP server
 against the same `Runtime`. No data leaves the machine unless the user opts in
@@ -579,6 +588,18 @@ schema (vLLM, Ollama, llama.cpp server, TGI, **Commonwealth**).
 | `RecentChangesTool`  | Symbols modified within last N hours, grouped by file (mtime) |
 | `FindCalleesTool`    | What does this function call? SCIP call graph, compiler-resolved. Staleness-aware |
 | `FindCallersTool`    | What calls this function? Depth 1–2 traversal. Staleness-aware |
+| `BlastRadiusTool`    | BFS over call graph to all transitive callers; appends `macro_hints` text scan for macro-invoked symbols not in SCIP |
+| `LintStatusTool`     | Current status of the background `cargo check` watcher (`fresh_passing`, `fresh_failing`, `stale`, `running`, `never_run`) |
+| `GetLintOutputTool`  | Full lint output when `LintStatus.output_truncated = true` |
+| `TestStatusTool`     | Current status of the background `cargo test` watcher |
+| `RunTestsTool`       | Trigger a test run (returns immediately; poll `test_status`) |
+| `GetRunOutputTool`   | Full test output when `TestStatus.output_truncated = true` |
+| `WriteNoteTool`      | Persist a working note (decision, attempt, invariant, todo) to `NoteStore` |
+| `ReadNotesTool`      | FTS + recency search over active notes; hides retired reflections by default |
+| `DeleteNoteTool`     | Remove a note by ID |
+| `ProjectContextTool` | Search `SOVEREIGN.md` and project documentation |
+| `SessionReflectionTool` | Record post-task feedback keyed by tool name; surfaced by `sovereign reflect` |
+| `CheckDocPathsTool`  | Scan a markdown file for backtick path references and verify each exists on disk |
 | `DocumentTool`       | Map-reduce summarize/analyze (4 chunks per batch, 8K reduce window) |
 | `ShellTool`          | `sh -c` with 30s timeout, `Shell` permission + per-call approval |
 | `FileTool`           | Read/write/list, sandboxed to data dir                        |
@@ -587,12 +608,42 @@ schema (vLLM, Ollama, llama.cpp server, TGI, **Commonwealth**).
 | `ComputeTool`        | Cost estimation for mesh contribution accounting              |
 | `McpClient` + `McpToolAdapter` | stdio JSON-RPC client wraps remote MCP servers as native tools |
 
-**Code Intelligence** is the five tools from `SymbolLookupTool` through
-`FindCallersTool`. The first three query LanceDB indexes built by tree-sitter
-extraction (`sovereign code index <path>`). The call graph tools query a
-separate SQLite database (`ScipGraph`) populated by SCIP exports from
-language-specific analyzers (`rust-analyzer`, `scip-typescript`, etc.). A
-filesystem watcher (`CodeWatcher`) re-indexes modified files and marks them
+**Code Intelligence** is a 17-tool MCP server started via `sovereign project serve`.
+Tools fall into six groups:
+
+| Group | Tools |
+|-------|-------|
+| Code index (LanceDB) | `symbol_lookup`, `code_search`, `recent_changes` |
+| SCIP call graph      | `find_callers`, `find_callees`, `blast_radius` |
+| Lint watcher         | `lint_status`, `get_lint_output` |
+| Test watcher         | `test_status`, `run_tests`, `get_run_output` |
+| Working notes        | `write_note`, `read_notes`, `delete_note`, `project_context` |
+| Session reflection   | `session_reflection` |
+| Doc health           | `check_doc_paths` |
+
+The first three groups query either LanceDB indexes (built by tree-sitter via
+`sovereign code index <path>`) or a SQLite `ScipGraph` populated by SCIP exports
+from language-specific analyzers (`rust-analyzer`, `scip-typescript`, etc.).
+
+`blast_radius` performs BFS over the call graph up to `max_depth` and appends a
+supplementary text scan (`macro_hints`) for symbol references inside macro
+invocations and attributes that SCIP does not capture.
+
+`lint_status` / `test_status` expose the output of background `cargo check` /
+`cargo test` watchers so agents can check build state without contending for the
+Cargo file lock.
+
+`write_note` / `read_notes` / `delete_note` persist structured working notes
+(decisions, attempts, invariants, todos) across sessions in `NoteStore` (SQLite,
+FTS5). `project_context` searches `SOVEREIGN.md` and project docs.
+
+`session_reflection` records structured post-task feedback keyed by tool name.
+The developer reads accumulated reflections via `sovereign reflect` and retires
+them once the underlying issue is fixed. Every 10 tool calls in a session the
+server appends a brief reminder to the tool response nudging the agent to call
+`session_reflection`.
+
+A filesystem watcher (`CodeWatcher`) re-indexes modified files and marks them
 stale in the call graph so query results carry calibrated confidence:
 
 | Staleness level | Trigger | User sees |
@@ -603,8 +654,6 @@ stale in the call graph so query results carry calibrated confidence:
 | GraphIsStale    | > 24 hours since export | Prominent warning with `sovereign corpus scip` refresh command |
 | LanguageNotIndexed | SCIP exporter not installed for this language | Note with install hint |
 
-All five tools are exposed via the MCP server at `POST /mcp/message` for
-integration with Claude Code, Cursor, Cline, and other MCP-compatible agents.
 The `codebase-navigator` skill configures planner templates for call graph
 tracing and security review workflows.
 
@@ -651,7 +700,10 @@ OICP requirements into the runtime. Bundled:
 |--------------------|-----------------------------------------------------------|
 | `research-analyst` | Multi-source research with citations, Slow synthesis, 5%/month decay |
 | `epistemic-research` | Debate mapping; uses `ClaimSearchTool` + `EpistemicLandscapeTool`; requires `analysis≥2` |
+| `codebase-navigator` | Call graph tracing, security review workflows; wires all 16 code intelligence tools |
 | `code-review`      | Structured code analysis; `privacy = local_only`         |
+| `collaborative-research` | Multi-turn research with shared context |
+| `document-analyst` | Long-document analysis via map-reduce `DocumentTool` |
 | `personal-assistant`| General-purpose                                          |
 | `inner-work`       | Reflective/Socratic; `privacy = local_only` enforced regardless of available remote backends |
 
@@ -702,7 +754,7 @@ with HTTP 400 by Commonwealth.
 
 | Frontend     | Purpose                                                       |
 |--------------|--------------------------------------------------------------|
-| `sovereign-cli`     | Interactive REPL; flags: `--model`, `--primary-model`, `--data-dir`, `--skills-dir`, `--router`, `--ingest`, `--brave-api-key`, `--tavily-api-key`. Includes `/mesh` subcommands (create, join, status, members, leave). |
+| `sovereign-cli`     | Interactive REPL (default) plus named subcommands: `project` (serve/init/refresh/install-hooks), `code` (index), `mcp` (proxy), `mesh` (create/join/status/members/leave), `recipe` (run), `reflect` (review session reflections, retire fixed ones). Flags: `--model`, `--primary-model`, `--data-dir`, `--skills-dir`, `--router`, `--ingest`, `--brave-api-key`, `--tavily-api-key`. |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port. Multi-tenant via `tenant.rs`. SSE streaming via `/v1/conversations/{id}/messages/stream`. WS streaming via `/v1/ws/{conversation_id}`. Server-side `ApprovalChannel` stores requests in DB and exposes `/v1/tasks/{id}/approve`. |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. Setup wizard (persona, hardware-driven model selection, knowledge tier, optional web search keys). Chat with streaming + source attribution. Knowledge base management (`KnowledgeStatus`, `CorpusProgressBanner`). Skill manager. Mesh status/settings UI. Deep-link handler for `sovereign://` URLs. System tray. |
 
@@ -1001,7 +1053,7 @@ Each project is its own Cargo workspace.
 cd corpus-engine && cargo build --release
 
 # Sovereign — all crates
-cd lcol-llm && cargo build --release
+cd sovereign && cargo build --release
 
 # Commonwealth — all crates
 cd commonwealth && cargo build --release
@@ -1011,7 +1063,7 @@ cd commonwealth && cargo build --release
 
 ```sh
 cd corpus-engine && cargo test                # ~95 tests
-cd lcol-llm     && cargo test --workspace     # ~289 tests
+cd sovereign     && cargo test --workspace     # ~289 tests
 cd commonwealth && cargo test --workspace     # ~222 unit + integration tests
 ```
 
@@ -1024,14 +1076,14 @@ llama-servers under deterministic timing.
 
 ```sh
 # Sovereign desktop
-cd lcol-llm/crates/sovereign-desktop && npm install && cargo tauri dev
+cd sovereign/crates/sovereign-desktop && npm install && cargo tauri dev
 
 # Sovereign CLI
-cd lcol-llm && cargo run --release -p sovereign-cli -- \
+cd sovereign && cargo run --release -p sovereign-cli -- \
   --model models/qwen3-1.7b.gguf --primary-model models/qwen3.5-9b.gguf
 
 # Sovereign HTTP server
-cd lcol-llm && cargo run --release -p sovereign-server -- --config sovereign-server.toml
+cd sovereign && cargo run --release -p sovereign-server -- --config sovereign-server.toml
 
 # Commonwealth daemon
 cd commonwealth && cargo run --release -p commonwealth-daemon -- init --name "Co-op"
@@ -1082,7 +1134,7 @@ runs unmodified against a Commonwealth-backed remote.
 | Sovereign hybrid provider + OICP selector | Production                                        |
 | Sovereign SQLite/Postgres/in-mem stores   | Production                                        |
 | Sovereign tools (search, web, RAG, document, MCP, shell, file) | Production                  |
-| Sovereign code intelligence (5 tools, SCIP graph, staleness, MCP) | Production               |
+| Sovereign code intelligence (17-tool MCP server: symbol index, SCIP call graph, lint/test watchers, notes, session reflection, doc health) | Production |
 | Sovereign epistemic tools                 | Production (against enriched corpora)             |
 | Sovereign skills + planner templates      | Production                                        |
 | Sovereign desktop (Tauri 2 + Svelte 5)    | Production for single-user                         |
@@ -1109,23 +1161,25 @@ is currently happening. Everything above them is stable and covered by tests.
 
 | You want to                           | Read                                                 |
 |---------------------------------------|------------------------------------------------------|
-| Understand the agent runtime          | `lcol-llm/crates/sovereign-core/src/runtime.rs`     |
-| See how plans are executed            | `lcol-llm/crates/sovereign-core/src/executor.rs`    |
-| Add a tool                            | `lcol-llm/crates/sovereign-core/src/traits.rs` then a new file under `sovereign-tools/src/` |
+| Understand the agent runtime          | `sovereign/crates/sovereign-core/src/runtime.rs`     |
+| See how plans are executed            | `sovereign/crates/sovereign-core/src/executor.rs`    |
+| Add a tool                            | `sovereign/crates/sovereign-core/src/traits.rs` then a new file under `sovereign-tools/src/` |
 | Add a corpus parser                   | `corpus-engine/src/extractors/` then register in `engine/ingest.rs` |
 | Write a recipe                        | `sovereign-recipes/<id>/recipe.toml` then add entry to `registry.toml` |
-| Write a skill                         | `lcol-llm/skills/<id>/skill.toml`                    |
-| Understand code intelligence tools    | `lcol-llm/crates/sovereign-tools/src/code/mod.rs`   |
+| Write a skill                         | `sovereign/skills/<id>/skill.toml`                    |
+| Understand code intelligence tools    | `sovereign/crates/sovereign-tools/src/code/mod.rs`   |
 | Understand the SCIP call graph        | `corpus-engine/src/scip_graph.rs` (schema, staleness, queries) |
 | Add a SCIP language exporter          | `corpus-engine/src/scip_export.rs` → `all_exporters()` |
-| See the MCP server (tool hosting)     | `lcol-llm/crates/sovereign-server/src/routes_mcp.rs` |
-| Tune model selection per hardware     | `lcol-llm/models.toml`                               |
+| See the MCP server (code intelligence)| `sovereign/crates/sovereign-cli/src/project_cmd.rs` (`cmd_serve`, inline `mcp_server` module) |
+| See the MCP server (Sovereign HTTP)   | `sovereign/crates/sovereign-server/src/routes_mcp.rs` |
+| Understand session reflections        | `corpus-engine/src/notes.rs` (NoteStore, write_reflection, retire_by_tool) and `sovereign/crates/sovereign-cli/src/reflect_cmd.rs` |
+| Tune model selection per hardware     | `sovereign/models.toml`                               |
 | Trace a Commonwealth scheduling decision | `commonwealth/crates/commonwealth-inference/src/scheduler/plan_builder.rs` |
 | Trace a Commonwealth shard plan       | `commonwealth/crates/commonwealth-inference/src/scheduler/layer_assignment.rs` |
 | Trace process spawning                | `commonwealth/crates/commonwealth-inference/src/orchestrator/process.rs` |
 | Add an internal mesh route            | `commonwealth/crates/commonwealth-api/src/routes_internal.rs` |
 | Stand up a multi-node test            | `commonwealth/crates/commonwealth-test-harness/`     |
-| See OICP routing logic                | `lcol-llm/crates/sovereign-inference/src/selector.rs` and `commonwealth/crates/commonwealth-api/src/routes_inference.rs` |
+| See OICP routing logic                | `sovereign/crates/sovereign-inference/src/selector.rs` and `commonwealth/crates/commonwealth-api/src/routes_inference.rs` |
 | See OICP type definitions             | `oicp-types/src/lib.rs`                              |
 | Understand index storage on disk      | `corpus-engine/src/index/mod.rs`                     |
 | Understand the embedding injection    | `corpus-engine/src/types.rs` (`EmbedFn`) and `commonwealth/crates/commonwealth-knowledge/src/embed_http.rs` |

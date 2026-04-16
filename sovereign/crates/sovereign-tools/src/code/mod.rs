@@ -67,6 +67,10 @@ pub mod project_context;
 #[cfg(feature = "treesitter")]
 pub mod session_reflection;
 
+// Doc path validity checker.
+#[cfg(feature = "treesitter")]
+pub mod check_doc_paths;
+
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
 pub use symbol_lookup::SymbolLookupTool;
@@ -100,6 +104,8 @@ pub use blast_radius::BlastRadiusTool;
 pub use project_context::ProjectContextTool;
 #[cfg(feature = "treesitter")]
 pub use session_reflection::SessionReflectionTool;
+#[cfg(feature = "treesitter")]
+pub use check_doc_paths::CheckDocPathsTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -1307,6 +1307,12 @@ async fn cmd_serve(args: &[String]) -> i32 {
         Arc::clone(&notes_store),
     )));
 
+    // ── Doc path checker ────────────────────────────────────────────────
+    tools.register(Box::new(
+        sovereign_tools::CheckDocPathsTool::new()
+            .with_project_root(repo_root.clone()),
+    ));
+
     // ── Start watcher coordinator ───────────────────────────────
 
     let debounce_ms = sovereign_cfg
@@ -1634,6 +1640,8 @@ mod mcp_server {
         "project_context",
         // Session reflection & feedback loop
         "session_reflection",
+        // Doc path validity checker
+        "check_doc_paths",
     ];
 
     pub fn router(
