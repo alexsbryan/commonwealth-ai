@@ -63,6 +63,10 @@ pub mod blast_radius;
 #[cfg(feature = "treesitter")]
 pub mod project_context;
 
+// Session reflection & feedback loop.
+#[cfg(feature = "treesitter")]
+pub mod session_reflection;
+
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
 pub use symbol_lookup::SymbolLookupTool;
@@ -94,6 +98,8 @@ pub use delete_note::DeleteNoteTool;
 pub use blast_radius::BlastRadiusTool;
 #[cfg(feature = "treesitter")]
 pub use project_context::ProjectContextTool;
+#[cfg(feature = "treesitter")]
+pub use session_reflection::SessionReflectionTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

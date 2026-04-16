@@ -3,6 +3,7 @@ mod mcp_cmd;
 mod mesh_cmd;
 mod project_cmd;
 mod recipe_cmd;
+mod reflect_cmd;
 
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -235,6 +236,10 @@ async fn main() {
             }
             "project" => {
                 let code = project_cmd::run_project(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "reflect" => {
+                let code = reflect_cmd::run_reflect(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             _ => {}

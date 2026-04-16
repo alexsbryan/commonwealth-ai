@@ -45,7 +45,11 @@ impl Tool for BlastRadiusTool {
                           Use before modifying a function signature, removing a method, \
                           or changing a trait definition. Separates production callers \
                           from test callers and groups by module. Backed by the SCIP \
-                          call graph — compiler-resolved, not grep."
+                          call graph — compiler-resolved, not grep. \
+                          IMPORTANT: Before using on a large refactor, call \
+                          read_notes(kinds=[\"reflection\"], query=\"blast_radius\") \
+                          to check for known limitations recorded by previous sessions \
+                          (e.g. macro-generated call sites not traversed by SCIP)."
                 .to_string(),
             parameters: json!({
                 "type": "object",

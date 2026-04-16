@@ -1115,11 +1115,21 @@ async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Notes store ─────────────────────────────────────────────
 
-    let notes_store = match corpus_engine::NoteStore::open(
-        &sovereign_dir.join("notes.db"),
-    ) {
+    let notes_db_path = sovereign_dir.join("notes.db");
+    let notes_store = match corpus_engine::NoteStore::open(&notes_db_path) {
         Ok(s) => {
             eprintln!("  notes.db         ✓");
+            // Write a pointer file so `sovereign reflect` can find this
+            // database from any working directory, regardless of where the
+            // user invokes it from.
+            let pointer_dir = dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join(".sovereign");
+            let _ = std::fs::create_dir_all(&pointer_dir);
+            let _ = std::fs::write(
+                pointer_dir.join("active_notes_db"),
+                notes_db_path.to_string_lossy().as_bytes(),
+            );
             Arc::new(s)
         }
         Err(e) => {
@@ -1291,6 +1301,11 @@ async fn cmd_serve(args: &[String]) -> i32 {
         )));
     }
 
+    // ── Session reflection (feedback loop) ─────────────────────────────
+    tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
+        Arc::clone(&notes_store),
+    )));
+
     // ── Start watcher coordinator ───────────────────────────────
 
     let debounce_ms = sovereign_cfg
@@ -1352,7 +1367,11 @@ async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!("    }}");
     eprintln!();
 
-    let app = mcp_server::router(tools);
+    // Stable session ID for this server run — used by tool_call_log to group
+    // calls from the same sovereign project serve invocation.
+    let mcp_session_id = format!("serve-{}", uuid::Uuid::new_v4());
+
+    let app = mcp_server::router(tools, Arc::clone(&notes_store), mcp_session_id);
 
     let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
         Ok(l) => l,
@@ -1528,6 +1547,7 @@ async fn scip_graph_reloader(
 mod mcp_server {
     use std::convert::Infallible;
     use std::net::SocketAddr;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
 
     use axum::extract::{ConnectInfo, Extension};
@@ -1541,6 +1561,7 @@ mod mcp_server {
     use serde_json::Value;
     use tower_http::cors::CorsLayer;
 
+    use corpus_engine::NoteStore;
     use sovereign_core::registry::ToolRegistry;
     use sovereign_core::types::{StepOutput, ToolContext};
 
@@ -1610,9 +1631,18 @@ mod mcp_server {
         "blast_radius",
         // Project documentation search
         "project_context",
+        // Session reflection & feedback loop
+        "session_reflection",
     ];
 
-    pub fn router(tools: Arc<ToolRegistry>) -> Router {
+    pub fn router(
+        tools: Arc<ToolRegistry>,
+        logger: Arc<NoteStore>,
+        session_id: String,
+    ) -> Router {
+        // Shared per-session call counter. Every REFLECT_HINT_INTERVAL tool
+        // calls we append a brief reminder to write a session_reflection.
+        let call_counter: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
         Router::new()
             // Both URLs accept the full JSON-RPC dispatch.
             // `POST /mcp` is the modern (2025-03-26 Streamable HTTP) entry point.
@@ -1622,8 +1652,14 @@ mod mcp_server {
             .route("/mcp", post(mcp_handle).get(mcp_sse))
             .route("/mcp/message", post(mcp_handle))
             .layer(Extension(tools))
+            .layer(Extension(logger))
+            .layer(Extension(Arc::new(session_id)))
+            .layer(Extension(call_counter))
             .layer(CorsLayer::permissive())
     }
+
+    /// After this many tool calls in a session, append a reflection reminder.
+    const REFLECT_HINT_INTERVAL: u64 = 10;
 
     fn is_localhost(addr: &SocketAddr) -> bool {
         addr.ip().is_loopback()
@@ -1654,6 +1690,9 @@ mod mcp_server {
     async fn mcp_handle(
         ConnectInfo(peer): ConnectInfo<SocketAddr>,
         Extension(tools): Extension<Arc<ToolRegistry>>,
+        Extension(logger): Extension<Arc<NoteStore>>,
+        Extension(session_id): Extension<Arc<String>>,
+        Extension(call_counter): Extension<Arc<AtomicU64>>,
         Json(req): Json<JsonRpcRequest>,
     ) -> axum::response::Response {
         if !is_localhost(&peer) {
@@ -1665,7 +1704,7 @@ mod mcp_server {
                 .into_response();
         }
 
-        match dispatch(req, tools).await {
+        match dispatch(req, tools, logger, session_id, call_counter).await {
             Some(response) => (StatusCode::OK, Json(response)).into_response(),
             None => StatusCode::NO_CONTENT.into_response(),
         }
@@ -1678,6 +1717,9 @@ mod mcp_server {
     async fn dispatch(
         req: JsonRpcRequest,
         tools: Arc<ToolRegistry>,
+        logger: Arc<NoteStore>,
+        session_id: Arc<String>,
+        call_counter: Arc<AtomicU64>,
     ) -> Option<JsonRpcResponse> {
         // Notifications: no id → no response. We still want to accept the
         // method (e.g. `notifications/initialized`) so the client doesn't see
@@ -1712,7 +1754,7 @@ mod mcp_server {
                 }
                 JsonRpcResponse::ok(id, serde_json::json!({ "tools": tool_list }))
             }
-            "tools/call" => handle_tool_call(id, req.params, tools).await,
+            "tools/call" => handle_tool_call(id, req.params, tools, logger, session_id, call_counter).await,
             "ping" => JsonRpcResponse::ok(id, serde_json::json!({})),
             other => JsonRpcResponse::err(id, -32601, format!("method not found: {other}")),
         };
@@ -1720,11 +1762,19 @@ mod mcp_server {
         Some(response)
     }
 
-    /// Execute a `tools/call` request. Returns a response — never a notification.
+    /// Execute a `tools/call` request. Logs the call to the tool_call_log ring
+    /// buffer for pattern analysis by `sovereign reflect`. Log failures are
+    /// silently ignored — they must never affect tool call outcomes.
+    ///
+    /// Every REFLECT_HINT_INTERVAL calls a short reminder is appended to the
+    /// response text nudging the agent to call `session_reflection`.
     async fn handle_tool_call(
         id: Value,
         params: Option<Value>,
         tools: Arc<ToolRegistry>,
+        logger: Arc<NoteStore>,
+        session_id: Arc<String>,
+        call_counter: Arc<AtomicU64>,
     ) -> JsonRpcResponse {
         let Some(params) = params else {
             return JsonRpcResponse::err(id, -32602, "missing params");
@@ -1766,12 +1816,59 @@ mod mcp_server {
             in_reasoning_loop: false,
         };
 
-        match tool.execute(&arguments, &ctx).await {
-            Ok(StepOutput::Text(text)) => JsonRpcResponse::ok(id, call_tool_text(text, false)),
+        let result = tool.execute(&arguments, &ctx).await;
+
+        // Log outcome to ring buffer. Fire-and-forget — a logging failure must
+        // never affect the tool call result.
+        let outcome = match &result {
+            Err(_) => "error",
+            Ok(StepOutput::Json(v)) => {
+                // Detect empty/null results to flag "index missing content" signals.
+                if v.is_null() || *v == serde_json::json!({}) || *v == serde_json::json!([]) {
+                    "empty_result"
+                } else {
+                    "success"
+                }
+            }
+            Ok(_) => "success",
+        };
+        let _ = logger.log_tool_call(&session_id, &name, outcome).await;
+
+        // Increment the session call counter. When it crosses a multiple of
+        // REFLECT_HINT_INTERVAL, append a brief reflection reminder to the
+        // response. Skip the reminder when the tool IS session_reflection
+        // (no need to prompt what was just called) and on error results
+        // (don't dilute the error message).
+        let count = call_counter.fetch_add(1, Ordering::Relaxed) + 1;
+        let reflect_hint = if name != "session_reflection"
+            && count % REFLECT_HINT_INTERVAL == 0
+            && result.is_ok()
+        {
+            Some(format!(
+                "\n\n---\n[sovereign] {count} tool calls this session. \
+                 Consider calling `session_reflection` to record what helped \
+                 and what was missing while context is fresh."
+            ))
+        } else {
+            None
+        };
+
+        match result {
+            Ok(StepOutput::Text(text)) => {
+                let body = match reflect_hint {
+                    Some(hint) => format!("{text}{hint}"),
+                    None => text,
+                };
+                JsonRpcResponse::ok(id, call_tool_text(body, false))
+            }
             Ok(StepOutput::Json(value)) => {
                 let text = serde_json::to_string_pretty(&value)
                     .unwrap_or_else(|_| value.to_string());
-                JsonRpcResponse::ok(id, call_tool_text(text, false))
+                let body = match reflect_hint {
+                    Some(hint) => format!("{text}{hint}"),
+                    None => text,
+                };
+                JsonRpcResponse::ok(id, call_tool_text(body, false))
             }
             Ok(other) => JsonRpcResponse::ok(id, call_tool_text(format!("{other:?}"), false)),
             Err(e) => JsonRpcResponse::ok(
@@ -1990,8 +2087,9 @@ Languages: {langs}
 | `blast_radius` | Transitive impact of a change | BFS up to depth 5 |
 | `project_context` | Project conventions, architecture | FTS5 over markdown docs |
 | `write_note` | Record decisions, invariants, todos | Persists across sessions |
-| `read_notes` | Recall prior decisions | FTS or filter by symbol/file |
+| `read_notes` | Recall prior decisions | FTS or filter by symbol/file/kind |
 | `delete_note` | Remove stale notes | By ID |
+| `session_reflection` | End of significant task — record tool feedback | Feeds `sovereign reflect` |
 | `test_status` | Last test run result | |
 | `run_tests` | Trigger a test run | |
 | `get_run_output` | Test run stdout/stderr | |
@@ -2061,6 +2159,25 @@ Write at the moment of the decision, not at the end.
 - **`invariant`** — a constraint that must never be violated
 - **`todo`** — follow-up work outside the current session's scope
 - **`attempt`** — an approach that was tried and failed; prevents repetition
+
+## Session reflection — at task end
+
+Use `session_reflection` when a significant task is complete (refactor lands, bug fixed, feature shipped). Be specific.
+
+```
+session_reflection(
+  task_summary: "Refactored EmbedFn across 12 call sites",
+  tool_name: "blast_radius",
+  tools_that_helped: ["blast_radius", "lint_status"],
+  manual_work_that_should_be_a_tool: "Had to grep for macro invocations blast_radius missed",
+  wished_i_had_known: "EmbedFn is wrapped in a macro — blast_radius does not surface macro call sites"
+)
+```
+
+**Before using `blast_radius` or `project_context` on a large task:**
+`read_notes(kinds=["reflection"], query="<tool_name>")` — checks for known limitations
+recorded by previous sessions. Limitations disappear from results once the developer
+retires them via `sovereign reflect --retire`.
 
 ## Compilation and test feedback
 
@@ -2178,6 +2295,12 @@ fn generate_claude_settings(
          - kind=invariant: constraint that must never be violated\n\
          - kind=todo: follow-up outside this session's scope\n\
          - kind=attempt: tried and failed; prevents repetition\n\n\
+         SESSION REFLECTION — at the end of a significant task call session_reflection: \
+         record which tools helped, what you had to do manually that a tool should have \
+         handled, and what you wished you had known earlier. Be specific. \
+         Before using blast_radius or project_context on a large task: \
+         read_notes(kinds=[\"reflection\"], query=\"<tool_name>\") to check for known \
+         limitations recorded by previous sessions.\n\n\
          {git_instruction}"
     );
 

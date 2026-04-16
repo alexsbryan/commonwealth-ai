@@ -39,7 +39,10 @@ impl Tool for ProjectContextTool {
                           Use to check architectural decisions, coding conventions, \
                           API contracts, or onboarding guides before making changes. \
                           Results are BM25 keyword-ranked — use specific terms from \
-                          your change context for best results."
+                          your change context for best results. \
+                          If results seem incomplete, call \
+                          read_notes(kinds=[\"reflection\"], query=\"project_context\") \
+                          to check for known gaps recorded by previous sessions."
                 .to_string(),
             parameters: json!({
                 "type": "object",

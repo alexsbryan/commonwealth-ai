@@ -30,6 +30,8 @@ pub use code::{WriteNoteTool, ReadNotesTool, DeleteNoteTool};
 pub use code::BlastRadiusTool;
 #[cfg(feature = "treesitter")]
 pub use code::ProjectContextTool;
+#[cfg(feature = "treesitter")]
+pub use code::SessionReflectionTool;
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};

@@ -59,9 +59,9 @@ impl Tool for ReadNotesTool {
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["decision", "attempt", "invariant", "todo"]
+                            "enum": ["decision", "attempt", "invariant", "todo", "reflection"]
                         },
-                        "description": "Return only notes of these kinds"
+                        "description": "Return only notes of these kinds. Use 'reflection' to read tool calibration notes from prior sessions."
                     },
                     "limit": {
                         "type": "integer",
@@ -104,7 +104,7 @@ impl Tool for ReadNotesTool {
 
         let notes = self
             .store
-            .read_notes(query, &symbols, &files, &kinds, limit)
+            .read_notes(query, &symbols, &files, &kinds, limit, false)
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "read_notes".to_string(),
