@@ -8,3 +8,7 @@ dist*
 # Sovereign code intelligence
 .sovereign/project.json
 .sovereign/scip/
+# SQLite notes database — personal session notes, binary, not for source control
+.sovereign/notes.db
+.sovereign/notes.db-shm
+.sovereign/notes.db-wal
