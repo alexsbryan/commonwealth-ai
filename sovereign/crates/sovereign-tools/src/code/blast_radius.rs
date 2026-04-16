@@ -6,8 +6,23 @@
 //!
 //! Use before modifying a function signature, removing a method, or
 //! changing a trait definition to understand the full scope of impact.
+//!
+//! ## Macro augmentation
+//!
+//! SCIP captures compiler-resolved references in the unexpanded AST. Macro
+//! invocations (`register_tool!(MyType)`, `#[derive(MyTrait)]`, etc.) don't
+//! generate SCIP symbol references, so they are invisible to the SCIP BFS.
+//!
+//! When `with_project_root` is provided, `blast_radius` runs a supplementary
+//! text scan over source files after the SCIP pass. Any line containing the
+//! symbol name AND a macro indicator (`!(` or `#[`) is collected into the
+//! `macro_hints` field with a clear "unverified (text scan)" label. False
+//! positives (e.g. comments) are possible — the label makes the confidence
+//! explicit.
 
 use std::collections::BTreeMap;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -26,11 +41,21 @@ pub type ScipGraphHandleRef = Arc<ArcSwap<ScipGraph>>;
 
 pub struct BlastRadiusTool {
     graph: ScipGraphHandleRef,
+    /// Optional project root for the supplementary macro text scan.
+    project_root: Option<PathBuf>,
 }
 
 impl BlastRadiusTool {
     pub fn new(graph: ScipGraphHandleRef) -> Self {
-        Self { graph }
+        Self { graph, project_root: None }
+    }
+
+    /// Enable the supplementary macro text scan. Call this when the project
+    /// root is known (i.e. from `project serve`). Without it, `macro_hints`
+    /// is absent from the output.
+    pub fn with_project_root(mut self, root: PathBuf) -> Self {
+        self.project_root = Some(root);
+        self
     }
 }
 
@@ -119,8 +144,14 @@ impl Tool for BlastRadiusTool {
                 message: e.to_string(),
             })?;
 
+        // Supplementary macro scan — runs regardless of SCIP results so
+        // agents see macro hints even when SCIP finds callers (the macro
+        // call sites are *additional* to the SCIP ones, not a replacement).
+        let macro_hints = self.project_root.as_ref()
+            .map(|root| macro_scan(symbol, root, 20));
+
         if result.entries.is_empty() {
-            return Ok(StepOutput::Json(json!({
+            let mut obj = json!({
                 "symbol": symbol,
                 "production": {},
                 "tests": {},
@@ -128,8 +159,19 @@ impl Tool for BlastRadiusTool {
                 "capped": false,
                 "depth_reached": 0,
                 "staleness": staleness_label(&result.caution),
-                "hint": "No callers found — symbol may be unused, unexported, or not yet in the call graph. Run `sovereign project refresh` if the graph is stale."
-            })));
+                "hint": "No SCIP callers found — symbol may be unused, unexported, \
+                         or not yet in the call graph. Public symbols with zero SCIP callers \
+                         are often referenced through macros: check macro_hints below, or \
+                         run `sovereign project refresh` if the graph is stale."
+            });
+            if let Some(hints) = macro_hints {
+                obj["macro_hints"] = json!(hints);
+                obj["macro_hints_note"] = json!(
+                    "Unverified (text scan). Lines containing the symbol name adjacent to a \
+                     macro indicator (`!(` or `#[`). May include comments or string literals."
+                );
+            }
+            return Ok(StepOutput::Json(obj));
         }
 
         // Separate production from test callers.
@@ -139,7 +181,7 @@ impl Tool for BlastRadiusTool {
         let production = group_by_module(&prod_entries);
         let tests = group_by_module(&test_entries);
 
-        Ok(StepOutput::Json(json!({
+        let mut obj = json!({
             "symbol": symbol,
             "production": production,
             "tests": tests,
@@ -148,7 +190,17 @@ impl Tool for BlastRadiusTool {
             "depth_reached": result.depth_reached,
             "staleness": staleness_label(&result.caution),
             "staleness_note": result.caution.format_note().trim().to_string()
-        })))
+        });
+        if let Some(hints) = macro_hints {
+            if !hints.is_empty() {
+                obj["macro_hints"] = json!(hints);
+                obj["macro_hints_note"] = json!(
+                    "Unverified (text scan). Lines containing the symbol name adjacent to a \
+                     macro indicator (`!(` or `#[`). May include comments or string literals."
+                );
+            }
+        }
+        Ok(StepOutput::Json(obj))
     }
 }
 
@@ -220,5 +272,143 @@ fn staleness_label(caution: &StalenessCaution) -> &'static str {
         StalenessCaution::GraphIsAging { .. } => "aging",
         StalenessCaution::GraphIsStale { .. } => "stale",
         StalenessCaution::LanguageNotIndexed { .. } => "stale",
+    }
+}
+
+// ─── Macro scan ───────────────────────────────────────────────────────────────
+
+/// Source file extensions we scan for macro references.
+const SOURCE_EXTS: &[&str] = &["rs", "ts", "tsx", "js", "jsx", "py", "go"];
+
+/// Directories to skip entirely during the walk.
+const SKIP_DIRS: &[&str] = &[
+    "target", "node_modules", ".git", ".sovereign",
+    "dist", "build", ".cache", "__pycache__",
+];
+
+/// Walk `root` looking for lines that contain both `symbol` and a macro
+/// indicator (`!(` for invocations, `#[` for attributes). Returns up to
+/// `limit` hits as JSON objects with `file`, `line`, and `context` fields.
+///
+/// Each file is capped at 1 MiB to avoid hanging on generated files.
+/// The walk stops as soon as `limit` hits are collected.
+fn macro_scan(symbol: &str, root: &std::path::Path, limit: usize) -> Vec<serde_json::Value> {
+    let mut hits = Vec::new();
+    walk_source_files(root, &mut |file_path| {
+        if hits.len() >= limit {
+            return false; // signal: stop walking
+        }
+        scan_file_for_macro_refs(file_path, symbol, limit - hits.len(), &mut hits);
+        true // continue
+    });
+    hits
+}
+
+/// Recursive directory walk. `visitor` returns `false` to abort the walk early.
+fn walk_source_files(
+    dir: &std::path::Path,
+    visitor: &mut impl FnMut(&std::path::Path) -> bool,
+) -> bool {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return true,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            if SKIP_DIRS.contains(&name) {
+                continue;
+            }
+            if !walk_source_files(&path, visitor) {
+                return false;
+            }
+        } else if path.is_file() {
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if SOURCE_EXTS.contains(&ext) {
+                if !visitor(&path) {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// Returns `true` if `symbol` appears in `line` as an isolated identifier —
+/// i.e. not as a substring of a longer name like `MySymbolExtra`.
+///
+/// Rust identifier chars: `[A-Za-z0-9_]`. We require the character
+/// immediately before and after the match (if present) to be non-identifier.
+/// This eliminates most string-literal false positives for common short names
+/// while keeping all the actual type/function reference cases.
+fn has_word(line: &str, symbol: &str) -> bool {
+    let bytes = line.as_bytes();
+    let sym = symbol.as_bytes();
+    let sym_len = sym.len();
+    if sym_len == 0 {
+        return false;
+    }
+    let mut pos = 0usize;
+    while pos + sym_len <= bytes.len() {
+        if bytes[pos..pos + sym_len] == *sym {
+            let before_ok = pos == 0 || !is_ident_char(bytes[pos - 1]);
+            let after_ok = pos + sym_len >= bytes.len()
+                || !is_ident_char(bytes[pos + sym_len]);
+            if before_ok && after_ok {
+                return true;
+            }
+        }
+        pos += 1;
+    }
+    false
+}
+
+#[inline]
+fn is_ident_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Scan a single source file for lines containing `symbol` adjacent to a
+/// macro indicator. Appends hits to `out` up to `cap`.
+fn scan_file_for_macro_refs(
+    path: &std::path::Path,
+    symbol: &str,
+    cap: usize,
+    out: &mut Vec<serde_json::Value>,
+) {
+    let file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
+    // Skip files over 1 MiB — they're usually generated.
+    if let Ok(meta) = file.metadata() {
+        if meta.len() > 1_048_576 {
+            return;
+        }
+    }
+
+    let reader = BufReader::new(file);
+    for (idx, line_result) in reader.lines().enumerate() {
+        if out.len() >= cap {
+            break;
+        }
+        let line = match line_result {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        // The line must contain the symbol name as a word boundary AND a
+        // macro indicator (`!(` for invocations, `#[` for attributes).
+        if has_word(&line, symbol) && (line.contains("!(") || line.contains("#[")) {
+            let display_path = path.to_string_lossy();
+            out.push(json!({
+                "file": display_path.as_ref(),
+                "line": idx + 1,
+                "context": line.trim()
+            }));
+        }
     }
 }

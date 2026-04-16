@@ -1292,9 +1292,10 @@ async fn cmd_serve(args: &[String]) -> i32 {
     tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(
         Arc::clone(&notes_store),
     )));
-    tools.register(Box::new(sovereign_tools::BlastRadiusTool::new(
-        Arc::clone(&merged_graph),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
+            .with_project_root(repo_root.clone()),
+    ));
     if let Some(ref ds) = docs_store {
         tools.register(Box::new(sovereign_tools::ProjectContextTool::new(
             Arc::clone(ds),
@@ -2174,10 +2175,36 @@ session_reflection(
 )
 ```
 
-**Before using `blast_radius` or `project_context` on a large task:**
-`read_notes(kinds=["reflection"], query="<tool_name>")` — checks for known limitations
-recorded by previous sessions. Limitations disappear from results once the developer
-retires them via `sovereign reflect --retire`.
+**Before using `blast_radius` or `project_context` on a large task**, check for known limitations first:
+`read_notes(kinds=["reflection"], query="<tool_name>")` — limitations disappear from results
+once the developer retires them via `sovereign reflect --retire`.
+
+When you see `[sovereign] N tool calls this session. Consider calling session_reflection…`
+appended to a tool response, it is a nudge — write one when the work feels significant.
+
+## Developer: reviewing reflections
+
+`sovereign reflect` reads the accumulated backlog from any directory — it finds the active
+database automatically via `~/.sovereign/active_notes_db`.
+
+```bash
+sovereign reflect                          # 30-day summary: signals, what helped, open todos
+sovereign reflect --since 7d              # narrow the window
+sovereign reflect --tool blast_radius     # focus on one tool
+sovereign reflect --raw                   # full prose, ungrouped
+sovereign reflect --todos                 # open todo notes
+sovereign reflect --history               # include retired reflections
+```
+
+**Retiring a fixed limitation** — once resolved, retire the reflection so agents stop seeing
+it as an active warning:
+
+```bash
+sovereign reflect --retire --tool blast_radius --reason "macro scan added in PR #88"
+sovereign reflect --retire --id <uuid>    --reason "no longer relevant"  # add --yes to skip prompt
+```
+
+Retired reflections are hidden from agents but preserved in `--history` for audit.
 
 ## Compilation and test feedback
 

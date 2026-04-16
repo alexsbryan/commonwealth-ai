@@ -67,6 +67,52 @@ Call `find_callers("function_name")` first. If it has 20 callers,
 you need a different strategy than if it has 2. Know the blast
 radius before you touch it.
 
+## Session reflection — at task end
+
+Use `session_reflection` when a significant task is complete (refactor lands, bug fixed, feature shipped).
+
+```
+session_reflection(
+  task_summary: "what you accomplished",
+  tool_name: "blast_radius",           // primary tool this feedback concerns
+  tools_that_helped: ["blast_radius", "lint_status"],
+  manual_work_that_should_be_a_tool: "had to grep for macros blast_radius missed",
+  wished_i_had_known: "EmbedFn is wrapped in a macro — blast_radius misses it"
+)
+```
+
+**Before using `blast_radius` or `project_context` on a large task**, check for known limitations first:
+```
+read_notes(kinds=["reflection"], query="blast_radius")
+```
+
+When you see `[sovereign] N tool calls this session. Consider calling session_reflection…`
+appended to a tool response, it is a nudge — write one when the work feels significant.
+
+## Developer: reviewing reflections
+
+`sovereign reflect` reads the accumulated backlog from any directory — it finds the active
+database automatically via `~/.sovereign/active_notes_db`.
+
+```bash
+sovereign reflect                          # 30-day summary: signals, what helped, open todos
+sovereign reflect --since 7d              # narrow the window
+sovereign reflect --tool blast_radius     # focus on one tool
+sovereign reflect --raw                   # full prose, ungrouped
+sovereign reflect --todos                 # open todo notes
+sovereign reflect --history               # include retired reflections
+```
+
+**Retiring a fixed limitation** — once resolved, retire the reflection so agents stop seeing
+it as an active warning:
+
+```bash
+sovereign reflect --retire --tool blast_radius --reason "macro scan added in PR #88"
+sovereign reflect --retire --id <uuid>    --reason "no longer relevant"  # add --yes to skip prompt
+```
+
+Retired reflections are hidden from agents but preserved in `--history` for audit.
+
 ## When MCP tools add less value
 
 For **greenfield additions** (new types, new tables, new files),
