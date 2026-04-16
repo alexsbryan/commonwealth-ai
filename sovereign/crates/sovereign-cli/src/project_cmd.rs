@@ -45,12 +45,18 @@ fn print_usage() {
 
 Commands:
   init                Set up code intelligence for the current workspace
-    --name <id>       Corpus ID (default: directory name)
-    --no-scip         Skip SCIP call graph export
-    --no-hooks        Skip git hook installation
-    --no-claude-config  Skip writing .claude/settings.json
-    --port <port>     MCP server port (default: 8080)
-    --data-dir <dir>  Index directory (default: ~/.sovereign/indexes)
+    --name <id>           Corpus ID (default: directory name)
+    --no-scip             Skip SCIP call graph export
+    --no-hooks            Skip git hook installation
+    --no-claude-config    Skip writing .claude/settings.json
+    --port <port>         MCP server port (default: 8080)
+    --data-dir <dir>      Index directory (default: ~/.sovereign/indexes)
+    --workspace-root <p>  Monorepo root containing multiple workspace dirs.
+                          When set, sovereign discovers all Cargo/Go/etc.
+                          workspaces under <p> and analyzes them together.
+                          Use this when your project lives alongside sibling
+                          workspaces in a shared parent directory.
+                          Example: sovereign project init --workspace-root ..
 
   status              Show the status of code intelligence
   refresh             Update the call graph (runs automatically on commit)
@@ -74,6 +80,9 @@ async fn cmd_init(args: &[String]) -> i32 {
     let mut no_claude_config = false;
     let mut port: u16 = 8080;
     let mut data_dir: Option<PathBuf> = None;
+    // Monorepo root: when set, sovereign discovers all workspace roots under
+    // this path rather than treating the git root as the sole workspace.
+    let mut workspace_root_arg: Option<PathBuf> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -100,6 +109,10 @@ async fn cmd_init(args: &[String]) -> i32 {
             "--data-dir" => {
                 i += 1;
                 data_dir = args.get(i).map(PathBuf::from);
+            }
+            "--workspace-root" => {
+                i += 1;
+                workspace_root_arg = args.get(i).map(PathBuf::from);
             }
             flag if flag.starts_with('-') => {
                 eprintln!("warning: unknown flag '{flag}' — ignored");
@@ -133,6 +146,25 @@ async fn cmd_init(args: &[String]) -> i32 {
 
     let has_git = repo_root.join(".git").exists();
 
+    // Resolve workspace roots for SCIP export and language detection.
+    // Single-repo (default): just the git root.
+    // Monorepo (--workspace-root): discover sibling workspaces under the given parent.
+    let abs_path = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.clone());
+
+    let scip_workspace_roots: Vec<PathBuf> = if let Some(ref wr) = workspace_root_arg {
+        let canonical_wr = wr.canonicalize().unwrap_or_else(|_| wr.clone());
+        let roots = corpus_engine::scip_export::find_cargo_workspace_roots(&canonical_wr);
+        if roots.is_empty() {
+            vec![canonical_wr]
+        } else {
+            roots
+        }
+    } else {
+        vec![abs_path.clone()]
+    };
+
     // ════════════════════════════════════════════════════════════
     println!();
     println!("  Sovereign Project Intelligence");
@@ -142,7 +174,20 @@ async fn cmd_init(args: &[String]) -> i32 {
     println!();
     println!("  Detecting workspace...");
 
-    let langs = detect_languages(&repo_root);
+    // Detect languages across all workspace roots (handles monorepo).
+    let langs: Vec<DetectedLanguage> = {
+        let mut seen = std::collections::HashSet::new();
+        let mut all = Vec::new();
+        for root in &scip_workspace_roots {
+            for lang in detect_languages(root) {
+                if seen.insert(lang.id) {
+                    all.push(lang);
+                }
+            }
+        }
+        all
+    };
+
     if langs.is_empty() {
         eprintln!("    ! No supported languages detected");
         eprintln!("      Supported: Rust, TypeScript, JavaScript, Go, Python");
@@ -150,6 +195,19 @@ async fn cmd_init(args: &[String]) -> i32 {
     }
     for lang in &langs {
         println!("    \u{2713} {}", lang.display);
+    }
+    if workspace_root_arg.is_some() {
+        println!(
+            "    \u{2713} Monorepo mode ({} workspace{})",
+            scip_workspace_roots.len(),
+            if scip_workspace_roots.len() == 1 { "" } else { "s" }
+        );
+        for root in &scip_workspace_roots {
+            println!(
+                "          {}",
+                root.file_name().and_then(|n| n.to_str()).unwrap_or("?")
+            );
+        }
     }
     if has_git {
         let commit_count = git_commit_count(&repo_root).unwrap_or(0);
@@ -163,10 +221,6 @@ async fn cmd_init(args: &[String]) -> i32 {
     // ── Step 2: Index symbols ───────────────────────────────────
     println!();
     println!("  Indexing symbols...");
-
-    let abs_path = repo_root
-        .canonicalize()
-        .unwrap_or_else(|_| repo_root.clone());
 
     // Remove existing index so re-init is idempotent. The ingest pipeline
     // creates tables from scratch and fails with "table already exists" if
@@ -323,23 +377,23 @@ vector = false
         println!();
         println!("  Building call graph...");
 
-        let exporters = corpus_engine::scip_export::exporters_for_workspace(&abs_path);
+        let exporter_check =
+            corpus_engine::scip_export::check_exporters(&scip_workspace_roots);
 
-        if exporters.is_empty() {
-            println!("    \u{26a0} No SCIP exporters found in PATH");
-            println!("      find_callers and find_callees will not be available");
-            let hints: Vec<&str> = corpus_engine::scip_export::all_exporters()
-                .iter()
-                .filter(|e| {
-                    langs.iter().any(|l| l.id == e.language_id)
-                })
-                .map(|e| e.install_hint)
-                .collect();
-            for hint in hints {
-                println!("      {hint}");
-            }
+        // Surface missing exporters with actionable install instructions.
+        for m in &exporter_check.missing {
+            println!(
+                "    \u{26a0} {} exporter ({}) not found in PATH",
+                m.language_id, m.command
+            );
+            println!("        {}", m.install_hint);
+        }
+
+        if exporter_check.available.is_empty() {
+            println!("    \u{26a0} No SCIP exporters available — find_callers / find_callees will not work");
+            println!("      Install the exporter(s) above then run: sovereign project refresh");
         } else {
-            for exporter in &exporters {
+            for exporter in &exporter_check.available {
                 println!("    Using {}", exporter.command);
             }
 
@@ -376,6 +430,7 @@ vector = false
                 &abs_path,
                 &scip_output_dir,
                 &graph,
+                Some(&scip_workspace_roots),
                 &progress_fn,
             )
             .await
@@ -415,7 +470,19 @@ vector = false
     println!("    \u{2713} .sovereign/SOVEREIGN.md");
 
     // .sovereign/project.json — stores init config for status/refresh
-    let project_config = serde_json::json!({
+    // workspace_roots is only written when --workspace-root was given (monorepo
+    // mode). When absent, refresh falls back to auto-detecting from the git root.
+    let workspace_roots_json: serde_json::Value = if workspace_root_arg.is_some() {
+        serde_json::Value::Array(
+            scip_workspace_roots
+                .iter()
+                .map(|p| serde_json::Value::String(p.to_string_lossy().into_owned()))
+                .collect(),
+        )
+    } else {
+        serde_json::Value::Null
+    };
+    let mut project_config = serde_json::json!({
         "corpus_id": corpus_id,
         "port": port,
         "data_dir": data_dir.to_string_lossy(),
@@ -423,6 +490,9 @@ vector = false
         "hooks_installed": !no_hooks && has_git && !no_scip,
         "claude_config_written": !no_claude_config,
     });
+    if !workspace_roots_json.is_null() {
+        project_config["workspace_roots"] = workspace_roots_json;
+    }
     if let Err(e) = std::fs::write(
         sovereign_dir.join("project.json"),
         serde_json::to_string_pretty(&project_config).unwrap_or_default(),
@@ -769,10 +839,41 @@ async fn cmd_refresh(args: &[String]) -> i32 {
                 .to_string()
         });
 
+    // Workspace roots: read from project.json if stored (monorepo mode set at init).
+    // None means export_all will auto-detect from the git root (single-repo default).
+    let scip_workspace_roots: Option<Vec<PathBuf>> = config
+        .as_ref()
+        .and_then(|c| c["workspace_roots"].as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(PathBuf::from))
+                .collect()
+        });
+
     let scip_graph_path = data_dir.join(&corpus_id).join("scip_graph.db");
 
     if !quiet {
         eprintln!("  Refreshing call graph...");
+    }
+
+    // Surface missing exporters before running so the user gets actionable
+    // guidance rather than a silent empty call graph.
+    {
+        let check_roots: Vec<PathBuf> = scip_workspace_roots
+            .as_deref()
+            .map(|r| r.to_vec())
+            .unwrap_or_else(|| vec![abs_path.clone()]);
+        let check = corpus_engine::scip_export::check_exporters(&check_roots);
+        for m in &check.missing {
+            if !quiet {
+                eprintln!(
+                    "  \u{26a0} {} exporter ({}) not found in PATH",
+                    m.language_id, m.command
+                );
+                eprintln!("    {}", m.install_hint);
+                eprintln!("    Install it and re-run `sovereign project refresh`");
+            }
+        }
     }
 
     let graph = match corpus_engine::ScipGraph::open(&scip_graph_path, &corpus_id) {
@@ -822,8 +923,14 @@ async fn cmd_refresh(args: &[String]) -> i32 {
     };
 
     let start = std::time::Instant::now();
-    match corpus_engine::scip_export::export_all(&abs_path, &scip_output_dir, &graph, &progress_fn)
-        .await
+    match corpus_engine::scip_export::export_all(
+        &abs_path,
+        &scip_output_dir,
+        &graph,
+        scip_workspace_roots.as_deref(),
+        &progress_fn,
+    )
+    .await
     {
         Ok(summary) => {
             let elapsed = start.elapsed().as_secs();
@@ -971,6 +1078,8 @@ async fn cmd_serve(args: &[String]) -> i32 {
     let sovereign_cfg = corpus_engine::SovereignConfig::load_or_default(&sovereign_dir);
 
     // ── Open result stores (SQLite, always-on) ──────────────────
+    eprintln!();
+    eprintln!("  Stores:");
 
     let test_store = match corpus_engine::TestResultStore::open(
         &data_dir.join("test_results.db"),
@@ -1001,6 +1110,76 @@ async fn cmd_serve(args: &[String]) -> i32 {
                 corpus_engine::LintResultStore::open(std::path::Path::new(":memory:"))
                     .expect("in-memory lint store"),
             )
+        }
+    };
+
+    // ── Notes store ─────────────────────────────────────────────
+
+    let notes_store = match corpus_engine::NoteStore::open(
+        &sovereign_dir.join("notes.db"),
+    ) {
+        Ok(s) => {
+            eprintln!("  notes.db         ✓");
+            Arc::new(s)
+        }
+        Err(e) => {
+            eprintln!("  warning: could not open notes DB: {e}");
+            Arc::new(
+                corpus_engine::NoteStore::open(std::path::Path::new(":memory:"))
+                    .expect("in-memory notes store"),
+            )
+        }
+    };
+
+    // Print any open todos from previous sessions at startup.
+    if let Ok(todos) = notes_store.open_todos(5).await {
+        if !todos.is_empty() {
+            eprintln!();
+            eprintln!(
+                "  {} open todo{} from previous sessions:",
+                todos.len(),
+                if todos.len() == 1 { "" } else { "s" }
+            );
+            for t in &todos {
+                let preview: String = t.content.chars().take(80).collect();
+                eprintln!("    [todo] {preview}");
+            }
+            eprintln!("  Use read_notes to retrieve full context.");
+        }
+    }
+
+    // ── Project docs store ───────────────────────────────────────
+
+    let docs_store = match corpus_engine::ProjectDocsStore::open(
+        &data_dir.join("project_docs.db"),
+    ) {
+        Ok(s) => {
+            let store = Arc::new(s);
+            // Index on first run without blocking serve startup.
+            if store.is_empty().await.unwrap_or(true) {
+                let s2 = Arc::clone(&store);
+                let root = repo_root.clone();
+                tokio::spawn(async move {
+                    let files = corpus_engine::find_markdown_files(&root);
+                    let mut count = 0usize;
+                    for f in &files {
+                        count += s2.index_file(f, &root).await.unwrap_or(0);
+                    }
+                    if count > 0 {
+                        tracing::info!(
+                            "indexed {} doc chunks from {} md files",
+                            count,
+                            files.len()
+                        );
+                    }
+                });
+            }
+            eprintln!("  project_docs.db  ✓");
+            Some(store)
+        }
+        Err(e) => {
+            eprintln!("  warning: could not open project docs DB: {e}");
+            None
         }
     };
 
@@ -1092,6 +1271,26 @@ async fn cmd_serve(args: &[String]) -> i32 {
         Arc::clone(&lint_store),
     )));
 
+    // ── Agent partnership tools (notes, blast radius, project context) ──
+
+    tools.register(Box::new(sovereign_tools::WriteNoteTool::new(
+        Arc::clone(&notes_store),
+    )));
+    tools.register(Box::new(sovereign_tools::ReadNotesTool::new(
+        Arc::clone(&notes_store),
+    )));
+    tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(
+        Arc::clone(&notes_store),
+    )));
+    tools.register(Box::new(sovereign_tools::BlastRadiusTool::new(
+        Arc::clone(&merged_graph),
+    )));
+    if let Some(ref ds) = docs_store {
+        tools.register(Box::new(sovereign_tools::ProjectContextTool::new(
+            Arc::clone(ds),
+        )));
+    }
+
     // ── Start watcher coordinator ───────────────────────────────
 
     let debounce_ms = sovereign_cfg
@@ -1107,6 +1306,13 @@ async fn cmd_serve(args: &[String]) -> i32 {
     }
     if let Some(ref w) = lint_watcher {
         coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
+    }
+    if let Some(ref ds) = docs_store {
+        let pw = corpus_engine::ProjectIndexWatcher::new(
+            Arc::clone(ds),
+            repo_root.clone(),
+        );
+        coordinator.register(Arc::new(pw) as Arc<dyn corpus_engine::BackgroundWatcher>);
     }
 
     let _coordinator_handle = if !coordinator.registered_ids().is_empty() {
@@ -1398,6 +1604,12 @@ mod mcp_server {
         "test_status", "run_tests", "get_run_output",
         // Lint watcher
         "lint_status", "get_lint_output",
+        // Working notes
+        "write_note", "read_notes", "delete_note",
+        // Blast radius (transitive impact analysis)
+        "blast_radius",
+        // Project documentation search
+        "project_context",
     ];
 
     pub fn router(tools: Arc<ToolRegistry>) -> Router {
@@ -1768,88 +1980,125 @@ Languages: {langs}
 
 ## Tools
 
-| Tool | When to use | Correctness |
+| Tool | When to use | Notes |
 |---|---|---|
-| `symbol_lookup` | You know the exact name | Always correct |
-| `code_search` | You know the concept, not the name | Approximate |
-| `recent_changes` | Session start — see active subsystems | Always correct |
-| `find_callers` | What calls this function? | SCIP-based |
-| `find_callees` | What does this function call? | SCIP-based |
+| `symbol_lookup` | Know the exact name | Always correct |
+| `code_search` | Know the concept, not the name | Approximate — verify with symbol_lookup |
+| `recent_changes` | Session start / orientation | Always correct |
+| `find_callers` | What calls this function? | SCIP-resolved, catches trait dispatch |
+| `find_callees` | What does this function call? | SCIP-resolved |
+| `blast_radius` | Transitive impact of a change | BFS up to depth 5 |
+| `project_context` | Project conventions, architecture | FTS5 over markdown docs |
+| `write_note` | Record decisions, invariants, todos | Persists across sessions |
+| `read_notes` | Recall prior decisions | FTS or filter by symbol/file |
+| `delete_note` | Remove stale notes | By ID |
+| `test_status` | Last test run result | |
+| `run_tests` | Trigger a test run | |
+| `get_run_output` | Test run stdout/stderr | |
+| `lint_status` | Last lint result | |
+| `get_lint_output` | Lint stdout/stderr | |
 
-## Hybrid strategy — when to use which tool
+## Session start — do these first
 
-Use both the MCP code intelligence tools and built-in file tools
-(Grep, Glob, Read). Each is better at different things:
+1. Read `SYSTEM_OVERVIEW.md` at the repo root — do this every session. It is the authoritative map of what exists and how the pieces connect.
+2. `recent_changes(hours: 24)` — see which subsystems are active
+3. `project_context("<your task>")` — pull relevant conventions and docs
+4. `read_notes(query: "<task area>")` — surface prior decisions
 
-**Discovery** — "What's in this module? What files exist?"
-Use Glob to find files, Grep to search for patterns, Read to scan
-a file. MCP tools need a name to look up; file tools find names.
+## Precision rules — do not skip
 
-**Precision** — "Show me CorpusEngine" / "What are its fields?"
-Call `symbol_lookup("CorpusEngine")`. Returns the exact definition
-with file path and line numbers. Cheaper and faster than reading
-the whole file.
+**DO NOT read an entire file to find a type definition.**
+Call `symbol_lookup("TypeName")` first. It returns the exact definition
+with file path and line numbers in one call. Fall back to Read only when
+you need the surrounding context after locating the symbol.
 
-**Impact** — "What depends on this function?"
-Call `find_callers("reindex_file")` before modifying it. This is
-compiler-resolved (SCIP) — catches trait dispatch and method calls
-that grep misses.
+**DO NOT grep for callers.**
+Call `find_callers("function_name")` — compiler-resolved (SCIP), catches
+trait dispatch that grep misses entirely.
 
-**Patterns** — "How do similar functions work?"
-Call `find_callees("ingest")` to see what an existing function calls,
-then follow the same pattern when implementing a new one.
+**DO NOT guess at fields or constructor arguments.**
+Even during greenfield work, call `symbol_lookup` before assuming a type's
+shape. The writing is new; the patterns you're matching are not.
 
-**Explore then refine** — "How does checkpoint resume work?"
-Start with `code_search("checkpoint resume")` to find relevant
-symbols, then call `symbol_lookup` on each result to get the
-precise definitions.
+## Decision matrix
 
-**Orientation** — "What changed recently?"
-Call `recent_changes(hours: 24)` at session start to see which
-subsystems are active before diving into code.
+| Situation | Tool |
+|---|---|
+| "What files exist in this module?" | Glob + Read |
+| "Show me the Foo struct" | `symbol_lookup("Foo")` |
+| "What calls reindex_file?" | `find_callers("reindex_file")` |
+| "What does ingest() call?" | `find_callees("ingest")` |
+| "How does checkpoint resume work?" | `code_search` → `symbol_lookup` on results |
+| "What changed recently?" | `recent_changes(hours: 24)` |
+| "What are the conventions for X?" | `project_context("X")` |
+| "What decisions were made about Y?" | `read_notes(query: "Y")` |
+| "How many things depend on this?" | `blast_radius("symbol_name")` |
 
-## Mandatory checks
-
-These are easy to forget and expensive when skipped:
+## Mandatory pre-flight checks
 
 **Before adding a method to a trait:**
-Call `find_callers("TraitName")` to find ALL implementors and
-usage sites. The impl blocks show up as refs from the module
-where the impl lives. Every impl must be updated or the build
-breaks. Find them before you start writing.
-
-**Before using a type from another crate:**
-Call `symbol_lookup("TypeName")` to confirm it exists, see its
-fields, and verify it's in scope. This is faster and more reliable
-than grepping Cargo.toml for dependency availability.
+`find_callers("TraitName")` — finds ALL implementors. Every impl must
+be updated or the build breaks. Do this before writing a single line.
 
 **Before modifying a function signature:**
-Call `find_callers("function_name")` first. If it has 20 callers,
-you need a different strategy than if it has 2. Know the blast
-radius before you touch it.
+`find_callers("function_name")` — 20 callers needs a different strategy
+than 2. Know the impact before touching the signature.
 
-## When MCP tools add less value
+**Before any non-trivial change to an existing function:**
+`blast_radius("function_name", max_depth: 2)` — see the transitive
+callers, split by production vs test, grouped by module.
 
-For **greenfield additions** (new types, new tables, new files),
-the MCP tools don't help with the writing — but you still read
-existing code to match patterns. When you need to check a type's
-fields, a constructor's arguments, or an API's return type, use
-`symbol_lookup` even during greenfield work. The writing is new;
-the patterns you're matching are not.
+**Before using a type from another crate:**
+`symbol_lookup("TypeName")` — confirm it exists, see its fields.
+Faster and more reliable than grepping Cargo.toml.
+
+## Writing notes
+
+Use `write_note` to leave durable context for future sessions.
+Write at the moment of the decision, not at the end.
+
+- **`decision`** — chose one approach over alternatives; include the reason
+- **`invariant`** — a constraint that must never be violated
+- **`todo`** — follow-up work outside the current session's scope
+- **`attempt`** — an approach that was tried and failed; prevents repetition
+
+## Compilation and test feedback
+
+**DO NOT run `cargo build`, `cargo check`, or `cargo test` via Bash**
+in this project. Running these directly contends with the background
+watcher for the Cargo file lock — one blocks the other and you idle.
+
+The watcher runs cargo check continuously on file changes. The result
+is usually already cached by the time you finish an edit.
+
+**"Does this compile?"** → `lint_status`
+| Status | Meaning | Action |
+|---|---|---|
+| `fresh_passing` | Clean | Keep going |
+| `fresh_failing` | Errors in response | Fix them |
+| `stale` | Watcher queued | Call again in ~15s |
+| `running` | In progress | Call again in ~15s |
+| `never_run` | Watcher not configured | Fall back to Bash |
+
+**"Do tests pass?"** → `test_status`
+| Status | Meaning | Action |
+|---|---|---|
+| `fresh_passing` | All pass | Safe to proceed |
+| `fresh_failing` | Failures in response | Fix them |
+| `stale` | Files changed since last run | `run_tests`, then poll |
+| `running` | In progress | Poll every ~30s |
+| `never_run` | Watcher not configured | Fall back to Bash |
+
+Call `get_lint_output` / `get_run_output` **only** when
+`output_truncated: true`. The errors are already in the status response.
+Never poll in a tight loop — use a 15-30s gap between checks.
 
 ## Server lifecycle
 
-`sovereign project serve` polls the on-disk SCIP graph files every
-30 seconds and hot-reloads automatically. Post-commit hooks keep
-both the symbol index and SCIP graph fresh — no manual refresh
-or restart required. If something seems stale, check
-`~/.sovereign/hooks.log` for the most recent post-commit run.
-
-## Session start
-
-1. Call `recent_changes(hours: 24)` to see what's active
-2. Call `symbol_lookup` for any type before assuming its shape
-3. Call `find_callers` on a trait before modifying any implementation
+`sovereign project serve` hot-reloads SCIP every 30 seconds. Post-commit
+hooks keep both the symbol index and call graph current automatically.
+If something seems stale, check `~/.sovereign/hooks.log` and run
+`sovereign project install-hooks` if the hook predates recent changes.
 
 {call_graph_section}
 
@@ -1872,12 +2121,15 @@ fn generate_claude_settings(
     has_scip: bool,
 ) -> String {
     let scip_instruction = if has_scip {
-        "Before making significant changes to a function, call \
-         find_callers to understand its impact radius. \
-         Before implementing a function, call find_callees on \
-         similar functions to understand established patterns."
+        "MANDATORY PRE-FLIGHT — before modifying any existing function: \
+         call find_callers to count dependents; call blast_radius for \
+         transitive impact. Before adding a method to a trait: call \
+         find_callers on the trait name to find every implementor — \
+         all must be updated or the build breaks. Before implementing \
+         a new function: call find_callees on a similar function to \
+         see the established pattern."
     } else {
-        "Call graph tools are not available. \
+        "Call graph tools are not available (no SCIP exporter). \
          Use code_search to find usage patterns."
     };
 
@@ -1890,18 +2142,42 @@ fn generate_claude_settings(
 
     let system_prompt = format!(
         "You have access to Sovereign code intelligence for \
-         the {corpus_id} codebase via MCP.\n\n\
-         Read .sovereign/SOVEREIGN.md for the hybrid strategy, \
-         tool reference, and project-specific invariants.\n\n\
-         Use a hybrid approach: Grep/Glob/Read for discovery \
-         (finding files, scanning modules), MCP tools for \
-         precision (exact definitions, call graphs, recent \
-         changes). Start broad, then refine with symbol_lookup.\n\n\
-         AT SESSION START: call recent_changes(hours: 24) \
-         to orient yourself.\n\n\
-         BEFORE ASSUMING A TYPE'S SHAPE: call symbol_lookup. \
-         Do not guess at field names or method signatures.\n\n\
+         the {corpus_id} codebase via MCP. \
+         Read .sovereign/SOVEREIGN.md for the full tool reference \
+         and project-specific invariants.\n\n\
+         SESSION START — run these three calls before anything else:\n\
+         1. recent_changes(hours: 24) — see which subsystems are active\n\
+         2. project_context(\"<user task>\") — pull relevant conventions\n\
+         3. read_notes(query: \"<task area>\") — recall prior decisions\n\n\
+         PRECISION RULES — never skip:\n\
+         - DO NOT read an entire file to find a type definition. \
+           Call symbol_lookup(\"TypeName\") first. Only use Read when \
+           you need the surrounding context after locating the symbol.\n\
+         - DO NOT grep for callers. Call find_callers — it is \
+           compiler-resolved (SCIP) and catches trait dispatch that \
+           grep misses entirely.\n\
+         - DO NOT guess at field names or constructor arguments. \
+           Call symbol_lookup even during greenfield work.\n\n\
          {scip_instruction}\n\n\
+         BUILD & TEST FEEDBACK — never run cargo via Bash in watched \
+         projects; it contends for the Cargo lock and stalls both:\n\
+         - 'Does this compile?' → lint_status (instant, pre-computed)\n\
+           fresh_passing=clean; fresh_failing=errors in response; \
+           stale=watcher queued, check again in ~15s; \
+           running=check again in ~15s; \
+           never_run=watcher not configured, THEN use Bash.\n\
+         - 'Do tests pass?' → test_status (instant, pre-computed)\n\
+           fresh_passing=safe; fresh_failing=failures in response; \
+           stale=call run_tests then poll every ~30s; \
+           running=poll every ~30s; \
+           never_run=watcher not configured, THEN use Bash.\n\
+         - Call get_lint_output / get_run_output only when \
+           output_truncated is true. Never poll in a tight loop.\n\n\
+         WRITING NOTES — use write_note at the moment of the decision:\n\
+         - kind=decision: chose approach X over Y; include the reason\n\
+         - kind=invariant: constraint that must never be violated\n\
+         - kind=todo: follow-up outside this session's scope\n\
+         - kind=attempt: tried and failed; prevents repetition\n\n\
          {git_instruction}"
     );
 

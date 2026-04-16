@@ -208,7 +208,7 @@ sovereign project init
 If you've just cloned the workspace and want to build from source:
 
 ```sh
-cd lcol-llm
+cd sovereign
 cargo build --release -p sovereign-cli
 ```
 
@@ -270,23 +270,23 @@ The call graph (`find_callers`, `find_callees`) requires a language-specific SCI
 
 ### Multi-project ecosystems
 
-This repository is part of a five-project ecosystem (`lcol-llm`, `corpus-engine`, `commonwealth`, `oicp-types`, `sovereign-recipes`), each with its own git repo. All five should be indexed so that `symbol_lookup` and `code_search` work across the entire codebase.
+This repository is part of a five-project ecosystem (`sovereign`, `corpus-engine`, `commonwealth`, `oicp-types`, `sovereign-recipes`), each with its own git repo. All five should be indexed so that `symbol_lookup` and `code_search` work across the entire codebase.
 
-**How it works:** Every project gets its own corpus ID (defaulting to the directory name). All indexes live under the shared `~/.sovereign/indexes/` directory. The tools `symbol_lookup`, `code_search`, and `recent_changes` automatically query every installed index — so `symbol_lookup("InferenceProvider")` finds the Rust definition in `lcol-llm` and `symbol_lookup("EmbedFn")` finds it in `corpus-engine`, regardless of which project you're working in.
+**How it works:** Every project gets its own corpus ID (defaulting to the directory name). All indexes live under the shared `~/.sovereign/indexes/` directory. The tools `symbol_lookup`, `code_search`, and `recent_changes` automatically query every installed index — so `symbol_lookup("InferenceProvider")` finds the Rust definition in `sovereign` and `symbol_lookup("EmbedFn")` finds it in `corpus-engine`, regardless of which project you're working in.
 
-The call graph (`find_callers`, `find_callees`) is per-project — cross-project call edges aren't tracked. This matches reality: `corpus-engine` has no dependency on `lcol-llm`, so there are no cross-project call edges for the compiler to resolve.
+The call graph (`find_callers`, `find_callees`) is per-project — cross-project call edges aren't tracked. This matches reality: `corpus-engine` has no dependency on `sovereign`, so there are no cross-project call edges for the compiler to resolve.
 
 **Index all five projects:**
 
 ```sh
 # Build the CLI once
-cd lcol-llm
+cd sovereign
 cargo build --release -p sovereign-cli
 SOVEREIGN=$PWD/target/release/sovereign-cli
 
 # Init each project (run from the ecosystem root)
 cd ..
-for project in lcol-llm corpus-engine commonwealth oicp-types sovereign-recipes; do
+for project in sovereign corpus-engine commonwealth oicp-types sovereign-recipes; do
   echo "=== $project ==="
   (cd "$project" && $SOVEREIGN project init)
 done
@@ -295,7 +295,7 @@ done
 With a global install this is simpler:
 
 ```sh
-for project in lcol-llm corpus-engine commonwealth oicp-types sovereign-recipes; do
+for project in sovereign corpus-engine commonwealth oicp-types sovereign-recipes; do
   (cd "$project" && sovereign project init)
 done
 ```
@@ -327,14 +327,14 @@ The server prints what it found on startup:
   ──────────────────────────────────────────────────────
 
   Corpora:
-    ✓ lcol-llm (8,402 symbols)
+    ✓ sovereign (8,402 symbols)
     ✓ corpus-engine (3,291 symbols)
     ✓ commonwealth (2,104 symbols)
     ✓ oicp-types (312 symbols)
     ✓ sovereign-recipes (94 symbols)
 
   Call graph:
-    ✓ lcol-llm: 8,402 symbols, 51,203 edges
+    ✓ sovereign: 8,402 symbols, 51,203 edges
     ✓ corpus-engine: 3,291 symbols, 18,447 edges
     ✓ commonwealth: 2,104 symbols, 12,801 edges
     Total: 13,797 symbols, 82,451 edges across 3 projects
@@ -349,18 +349,18 @@ Each project's `.claude/settings.json` (written by `init`) already points to thi
 
 ```sh
 # 1. Build
-cd lcol-llm
+cd sovereign
 cargo build --release -p sovereign-cli
 SOVEREIGN=$PWD/target/release/sovereign-cli
 
 # 2. Index all projects
 cd ..
-for project in lcol-llm corpus-engine commonwealth oicp-types sovereign-recipes; do
+for project in sovereign corpus-engine commonwealth oicp-types sovereign-recipes; do
   (cd "$project" && $SOVEREIGN project init --no-scip)  # fast pass, symbols only
 done
 
 # 3. SCIP export (slower, requires rust-analyzer — do separately)
-for project in lcol-llm corpus-engine commonwealth; do
+for project in sovereign corpus-engine commonwealth; do
   (cd "$project" && $SOVEREIGN project refresh)
 done
 
@@ -371,7 +371,7 @@ $SOVEREIGN project serve
 **Verify everything is indexed:**
 
 ```sh
-for project in lcol-llm corpus-engine commonwealth oicp-types sovereign-recipes; do
+for project in sovereign corpus-engine commonwealth oicp-types sovereign-recipes; do
   echo "=== $project ==="
   (cd "$project" && sovereign project status)
 done

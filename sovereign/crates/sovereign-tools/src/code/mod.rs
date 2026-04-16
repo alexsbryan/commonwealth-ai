@@ -47,6 +47,22 @@ pub mod lint_status;
 #[cfg(feature = "treesitter")]
 pub mod get_lint_output;
 
+// Working notes tools.
+#[cfg(feature = "treesitter")]
+pub mod write_note;
+#[cfg(feature = "treesitter")]
+pub mod read_notes;
+#[cfg(feature = "treesitter")]
+pub mod delete_note;
+
+// Blast radius (transitive impact analysis).
+#[cfg(feature = "treesitter")]
+pub mod blast_radius;
+
+// Project documentation search.
+#[cfg(feature = "treesitter")]
+pub mod project_context;
+
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
 pub use symbol_lookup::SymbolLookupTool;
@@ -67,6 +83,17 @@ pub use get_run_output::GetRunOutputTool;
 pub use lint_status::LintStatusTool;
 #[cfg(feature = "treesitter")]
 pub use get_lint_output::GetLintOutputTool;
+
+#[cfg(feature = "treesitter")]
+pub use write_note::WriteNoteTool;
+#[cfg(feature = "treesitter")]
+pub use read_notes::ReadNotesTool;
+#[cfg(feature = "treesitter")]
+pub use delete_note::DeleteNoteTool;
+#[cfg(feature = "treesitter")]
+pub use blast_radius::BlastRadiusTool;
+#[cfg(feature = "treesitter")]
+pub use project_context::ProjectContextTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

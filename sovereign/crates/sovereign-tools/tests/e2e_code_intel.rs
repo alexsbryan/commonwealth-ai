@@ -614,7 +614,8 @@ fn percentile(times: &[u128], p: usize) -> u128 {
 // Auth demo fixture — SCIP call graph tests (T-21 through T-27)
 // ═══════════════════════════════════════════════════════════════
 
-use sovereign_tools::{FindCalleesTool, FindCallersTool};
+use arc_swap::ArcSwap;
+use sovereign_tools::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 use corpus_engine::scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord};
 
 struct AuthFixture {
@@ -626,7 +627,7 @@ struct AuthFixture {
     search: CodeSearchTool,
     callees: FindCalleesTool,
     callers: FindCallersTool,
-    graph: Arc<ScipGraph>,
+    graph: ScipGraphHandle,
     _tmp: tempfile::TempDir,
 }
 
@@ -704,11 +705,12 @@ vector = false
 
         // ── Populate SCIP call graph (directly, no external exporter) ─
 
-        let graph = Arc::new(ScipGraph::open_in_memory("auth-demo").unwrap());
-        graph
+        let graph_inner = Arc::new(ScipGraph::open_in_memory("auth-demo").unwrap());
+        graph_inner
             .ingest_symbols_and_refs(auth_demo_symbols(), auth_demo_refs())
             .await
             .unwrap();
+        let graph: ScipGraphHandle = Arc::new(ArcSwap::from(Arc::clone(&graph_inner)));
 
         // ── Build tools ──────────────────────────────────────
 
@@ -1067,7 +1069,7 @@ async fn t24_staleness_note_after_file_modification() {
     let h = AuthFixture::setup().await;
 
     // Mark a file as stale — simulating what CodeWatcher would do.
-    h.graph.mark_file_stale("src/auth/tokens.rs").await;
+    h.graph.load_full().mark_file_stale("src/auth/tokens.rs").await;
 
     // Query a symbol whose callees include that file — should show
     // staleness note.

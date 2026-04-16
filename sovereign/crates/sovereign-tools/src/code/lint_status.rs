@@ -38,11 +38,17 @@ impl Tool for LintStatusTool {
         ToolDescriptor {
             id: "lint_status".to_string(),
             name: "Lint Status".to_string(),
-            description: "Return the current lint/type-check status. Reads from a local SQLite \
-                          cache — cheap and instant, never triggers a run. Errors are grouped \
-                          by file; warnings are reported separately and do not affect pass/fail. \
-                          Call before every commit and after structural changes (new imports, \
-                          type edits). Use get_lint_output when output_truncated is true."
+            description: "PREFERRED OVER `cargo check`. Return the current lint/type-check \
+                          status. Reads from a local SQLite cache — instant, zero contention. \
+                          The background watcher runs cargo check automatically on every file \
+                          change; by the time you finish an edit the result is often already \
+                          here. Do NOT run cargo check via Bash — it will contend with the \
+                          watcher for the Cargo lock and block both. Errors are pre-grouped by \
+                          file and included in this response; call get_lint_output only when \
+                          output_truncated is true. Status values: 'fresh_passing' (clean), \
+                          'fresh_failing' (errors in response), 'stale' (watcher queued — \
+                          call again in ~15s), 'running' (in progress — call again shortly), \
+                          'never_run' (watcher not configured — fall back to Bash)."
                 .to_string(),
             parameters: json!({
                 "type": "object",

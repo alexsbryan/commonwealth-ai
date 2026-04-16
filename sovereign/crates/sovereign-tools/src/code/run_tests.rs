@@ -39,11 +39,14 @@ impl Tool for RunTestsTool {
         ToolDescriptor {
             id: "run_tests".to_string(),
             name: "Run Tests".to_string(),
-            description: "Trigger the test suite to run immediately, cancelling any in-progress run. \
-                          Returns immediately — use test_status to poll for results. \
-                          Prefer this over waiting for the file watcher when you need \
-                          a guaranteed fresh run (e.g. before a commit review, or when \
-                          tests failed and you've made a fix)."
+            description: "Force an immediate test run, cancelling any in-progress run. \
+                          Returns immediately — do NOT block waiting for results. \
+                          Call test_status after ~30-60s to check progress; call again \
+                          until status is no longer 'running'. Only needed when test_status \
+                          is 'stale' and you need a guaranteed fresh result (before a \
+                          commit, after a targeted fix). The file watcher triggers runs \
+                          automatically on changes — run_tests is only for when you want \
+                          to force ahead of the watcher's debounce."
                 .to_string(),
             parameters: json!({
                 "type": "object",

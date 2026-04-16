@@ -24,6 +24,12 @@ pub use code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 pub use code::{GetRunOutputTool, RunTestsTool, TestStatusTool};
 #[cfg(feature = "treesitter")]
 pub use code::{GetLintOutputTool, LintStatusTool};
+#[cfg(feature = "treesitter")]
+pub use code::{WriteNoteTool, ReadNotesTool, DeleteNoteTool};
+#[cfg(feature = "treesitter")]
+pub use code::BlastRadiusTool;
+#[cfg(feature = "treesitter")]
+pub use code::ProjectContextTool;
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};

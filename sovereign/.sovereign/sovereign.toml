@@ -18,15 +18,15 @@
 [test_runner]
 # Runs cargo test across corpus-engine and lcol-llm (all workspaces with
 # Rust test suites). Parses per-test pass/fail via sovereign-cargo-test-adapter.
-command = "/Users/alexbryan/dev/commonwealth-ai/scripts/sovereign-test.sh"
-working_dir = "/Users/alexbryan/dev/commonwealth-ai"
+command = "/Users/alexsbryan/dev/commonwealth-ai/scripts/sovereign-test.sh"
+working_dir = "/Users/alexsbryan/dev/commonwealth-ai"
 timeout_secs = 600
 debounce_ms = 2000
 
 [lint_runner]
 # Runs cargo check --features treesitter across corpus-engine, lcol-llm, and
 # commonwealth, translating compiler JSON to Tier 2 lint events.
-command = "/Users/alexbryan/dev/commonwealth-ai/scripts/sovereign-lint.sh"
-working_dir = "/Users/alexbryan/dev/commonwealth-ai"
+command = "/Users/alexsbryan/dev/commonwealth-ai/scripts/sovereign-lint.sh"
+working_dir = "/Users/alexsbryan/dev/commonwealth-ai"
 timeout_secs = 180
 debounce_ms = 1000

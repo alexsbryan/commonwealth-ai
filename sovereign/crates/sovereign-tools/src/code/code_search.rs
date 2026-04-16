@@ -89,11 +89,15 @@ impl Tool for CodeSearchTool {
         ToolDescriptor {
             id: "code_search".to_string(),
             name: "Code Search".to_string(),
-            description: "Semantic search over the local codebase by \
-                          concept or behaviour. Results are APPROXIMATE \
-                          (embedding similarity, not exact match). Use for \
-                          exploration; use symbol_lookup when you know the \
-                          exact name."
+            description: "Semantic search over the indexed codebase. \
+                          PREFER THIS OVER READING FILES when you need to understand \
+                          how something is done, find implementations of a pattern, \
+                          or locate relevant code before making a change. Returns the \
+                          3-5 most relevant chunks — typically 30-50 tokens each — \
+                          versus reading an entire file which may cost 200-500 tokens \
+                          and contain mostly irrelevant content. Use read_file only \
+                          when you need a complete, authoritative view of a specific \
+                          file you have already located."
                 .to_string(),
             parameters: serde_json::json!({
                 "type": "object",

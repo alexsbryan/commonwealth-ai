@@ -35,10 +35,11 @@ impl Tool for SymbolLookupTool {
         ToolDescriptor {
             id: "symbol_lookup".to_string(),
             name: "Symbol Lookup".to_string(),
-            description: "Find a symbol by exact name in the local codebase. \
-                          Fast and always correct — backed by a metadata index, \
-                          not embedding similarity. Use when you know the exact \
-                          name. For exploration, use code_search instead."
+            description: "Exact lookup of a named symbol (function, struct, trait, type). \
+                          Use this when you know the name of what you are looking for. \
+                          Returns definition location, signature, and doc comments. \
+                          Faster and cheaper than grep or file search. \
+                          If you do not know the exact name, use code_search instead."
                 .to_string(),
             parameters: serde_json::json!({
                 "type": "object",

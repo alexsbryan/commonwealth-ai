@@ -53,12 +53,18 @@ impl Tool for TestStatusTool {
         ToolDescriptor {
             id: "test_status".to_string(),
             name: "Test Status".to_string(),
-            description: "Return the current state of the background test runner. \
-                          Cheap — reads from a local SQLite cache, never triggers a run. \
-                          Call this before claiming a change is correct, before committing, \
-                          or any time you need to know whether tests are passing. \
-                          If status is 'stale', files have changed since the last run — \
-                          call run_tests to force a fresh run."
+            description: "PREFERRED OVER `cargo test`. Return the current state of the \
+                          background test runner. Reads from a local SQLite cache — instant, \
+                          zero lock contention. The background watcher runs the test suite \
+                          automatically on file changes; call this before claiming a change \
+                          is correct or before committing. Do NOT run cargo test via Bash — \
+                          it contends with the watcher for the Cargo lock and stalls both. \
+                          Failures are included in this response; call get_run_output only \
+                          when output_truncated is true. Status values: 'fresh_passing' \
+                          (all pass — safe to proceed), 'fresh_failing' (failures in \
+                          response), 'stale' (files changed since last run — call \
+                          run_tests then poll), 'running' (in progress — check again in \
+                          30-60s), 'never_run' (watcher not configured — fall back to Bash)."
                 .to_string(),
             parameters: json!({
                 "type": "object",
