@@ -9,6 +9,7 @@ use corpus_engine::CorpusEngine;
 
 use sovereign_core::health_monitor::{HealthMonitor, MonitorConfig};
 use sovereign_core::insight::{InsightService, InsightSinkRegistry};
+use sovereign_core::model_family::{EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy};
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
@@ -77,6 +78,19 @@ pub struct DesktopConfig {
     /// saved configs without the field also upgrade to on.
     #[serde(default = "default_auto_collaborate")]
     pub auto_collaborate: bool,
+
+    /// Model family of the embed slot. Controls pooling strategy (mean /
+    /// last-token / cls) and instruction prefixes. For most open-weights
+    /// embedding models this should be:
+    ///   - `Qwen3Embedding` for qwen3-embedding-* GGUF files (last-token pooling)
+    ///   - `Unknown` (default) for nomic-embed-text, mxbai, and similar
+    ///     mean-pooling models
+    ///
+    /// Getting this wrong does not prevent ingestion but will produce
+    /// incompatible vectors if you later try to collaborate with a peer
+    /// that has it set correctly.
+    #[serde(default)]
+    pub embed_family: ModelFamily,
 
     /// Display name used for this node when creating or joining a
     /// mesh — shows up in other members' mesh rosters. Empty string
@@ -188,6 +202,7 @@ impl Default for DesktopConfig {
             think_budget: default_think_budget(),
             top_k: None,
             auto_collaborate: default_auto_collaborate(),
+            embed_family: ModelFamily::Unknown,
             node_name: String::new(),
         }
     }
@@ -325,12 +340,15 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                 );
             }
             let loaded = Arc::new(
-                EmbeddedLlamaCpp::load_full(
+                EmbeddedLlamaCpp::load_full_with_families(
                     &config.model_path,
                     config.primary_model_path.as_deref(),
                     config.embed_model_path.as_deref(),
                     config.context_size,
                     None,
+                    ModelFamily::Unknown,               // fast slot
+                    ModelFamily::Unknown,               // primary slot (lazy-loaded)
+                    config.embed_family.clone(),        // embed slot — drives pooling/instructions
                 )
                 .map_err(|e| format!("Failed to load model: {e}"))?,
             );
@@ -558,6 +576,10 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     // size and compare against every installed corpus index. A mismatch means
     // the user swapped embed models after building their library — retrieval
     // will silently return wrong results unless they rebuild.
+    //
+    // The probe also gives us the real dimension count for `EmbedModelInfo`,
+    // which the collaborative ingestion planner uses to validate that peers
+    // are embedding with the same model before assigning them a partition.
     if config.embed_model_path.is_some() {
         match inference.embed("probe").await {
             Ok(probe_vec) => {
@@ -570,6 +592,32 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                         e
                     );
                 }
+
+                // Derive pooling and normalization from the embed family quirks
+                // (set at model-load time). Unknown/mean-pool models have no
+                // quirks entry and correctly default to Mean + Application.
+                let embed_quirks = config.embed_family.default_quirks().embed;
+                let pooling = embed_quirks
+                    .as_ref()
+                    .map(|q| q.pooling)
+                    .unwrap_or(PoolingStrategy::Mean);
+                let normalization = embed_quirks
+                    .as_ref()
+                    .map(|q| q.normalize)
+                    .unwrap_or(NormalizationStrategy::Application);
+                let embed_info = EmbedModelInfo {
+                    model_id: embed_model_name.clone(),
+                    dimensions: dims,
+                    pooling,
+                    normalization,
+                };
+                tracing::info!(
+                    model_id = %embed_info.model_id,
+                    dims,
+                    pooling = ?embed_info.pooling,
+                    "embed model info: advertising to mesh peers"
+                );
+                state.mesh.set_embed_model_info(embed_info).await;
             }
             Err(_) => {} // embed not configured or failed — skip validation
         }

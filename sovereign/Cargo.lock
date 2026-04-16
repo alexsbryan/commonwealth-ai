@@ -1230,6 +1230,7 @@ dependencies = [
  "commonwealth-app",
  "commonwealth-core",
  "commonwealth-state",
+ "corpus-engine",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

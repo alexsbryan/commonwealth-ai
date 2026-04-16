@@ -13,6 +13,7 @@ use tracing::{info, warn};
 use commonwealth_api::state::{AppState, LocalInferenceService};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
+use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
@@ -49,6 +50,12 @@ pub struct EmbeddedDaemon {
     /// scheduler/llama-server path (which is empty in the
     /// Sovereign+mesh embed, so peer inference just 503s).
     inference_provider: RwLock<Option<Arc<dyn InferenceProvider>>>,
+    /// Embedding model metadata advertised to mesh peers for
+    /// collaborative ingestion compatibility checks. Derived at
+    /// bootstrap from the loaded embed slot's actual dimensions,
+    /// pooling strategy, and config-specified `embed_family`.
+    /// `None` when no embed model is configured.
+    embed_model: RwLock<Option<EmbedModelInfo>>,
 }
 
 enum DaemonState {
@@ -97,6 +104,7 @@ impl EmbeddedDaemon {
             data_dir,
             corpus_engine: RwLock::new(None),
             inference_provider: RwLock::new(None),
+            embed_model: RwLock::new(None),
         }
     }
 
@@ -109,6 +117,7 @@ impl EmbeddedDaemon {
             data_dir: PathBuf::new(),
             corpus_engine: RwLock::new(None),
             inference_provider: RwLock::new(None),
+            embed_model: RwLock::new(None),
         }
     }
 
@@ -142,6 +151,14 @@ impl EmbeddedDaemon {
         provider: Arc<dyn InferenceProvider>,
     ) {
         *self.inference_provider.write().await = Some(provider);
+    }
+
+    /// Record the embedding model metadata so that when the daemon starts,
+    /// the Commonwealth `AppState` can advertise the correct model to peers
+    /// evaluating collaborative ingestion compatibility. Call during desktop
+    /// bootstrap, after the embed model has been probed for actual dimensions.
+    pub async fn set_embed_model_info(&self, info: EmbedModelInfo) {
+        *self.embed_model.write().await = Some(info);
     }
 
     fn persistence_enabled(&self) -> bool {
@@ -590,6 +607,20 @@ impl EmbeddedDaemon {
         } else {
             app_state
         };
+
+        // Publish embed model info so the collaborative ingestion planner
+        // can compare this node's embedding model against candidates'.
+        // Without this, `get_local_embed_model()` returns None and the
+        // collaborate handler falls back to the nomic-embed-text-v2 default,
+        // which won't match a peer running a different model.
+        if let Some(embed_info) = self.embed_model.read().await.as_ref() {
+            app_state.inner.inference_store.set_local_embed_model(embed_info);
+            info!(
+                model_id = %embed_info.model_id,
+                dims = embed_info.dimensions,
+                "embed model info: published to inference store"
+            );
+        }
 
         // Install a persistence hook that fires on every Mesh
         // mutation from a route handler (`/internal/join`,

@@ -5,7 +5,9 @@
 //! indexes.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use corpus_engine::{CorpusEngine, ReconstructionMethod};
 use sovereign_mesh::{parse_deep_link, EmbeddedDaemon};
 
 /// Same location the desktop app uses: `<data_dir>/sovereign/`.
@@ -55,6 +57,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "install" => cmd_corpus_install(&args[1..]).await,
         "remove" => cmd_corpus_remove(&args[1..]).await,
         "status" => cmd_corpus_status().await,
+        "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "help" | "--help" | "-h" => {
             print_corpus_usage();
             0
@@ -91,10 +94,16 @@ fn print_corpus_usage() {
 Manage knowledge corpora shared across the mesh.
 
 Subcommands:
-  list                    List installed and available corpora
-  install <id>            Install a corpus (e.g., 'wikipedia')
-  remove <id>             Remove an installed corpus
-  status                  Show shard status for all corpora
+  list                              List installed and available corpora
+  install <id>                      Install a corpus (e.g., 'wikipedia')
+  remove <id>                       Remove an installed corpus
+  status                            Show shard status for all corpora
+  reconstruct-manifest <id>         Reconstruct source-file manifest for a
+                                    mid-flight index (required before
+                                    collaborative ingestion)
+    --source-dir <path>             Directory containing the parquet shards
+                                    (defaults to ~/.sovereign/indexes/_downloads/<id>)
+    --yes                           Skip confirmation prompt
 "
     );
 }
@@ -231,6 +240,142 @@ async fn cmd_corpus_remove(args: &[String]) -> i32 {
 
 async fn cmd_corpus_status() -> i32 {
     println!("(corpus status requires a running daemon)");
+    0
+}
+
+async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
+    // Parse: <corpus_id> [--source-dir <path>] [--yes]
+    let mut corpus_id: Option<String> = None;
+    let mut source_dir: Option<PathBuf> = None;
+    let mut yes = false;
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--source-dir" => {
+                if let Some(p) = iter.next() {
+                    source_dir = Some(PathBuf::from(p));
+                } else {
+                    eprintln!("--source-dir requires a path argument");
+                    return 1;
+                }
+            }
+            "--yes" | "-y" => yes = true,
+            other if !other.starts_with('-') => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(other.to_string());
+                }
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                eprintln!("Usage: sovereign corpus reconstruct-manifest <corpus_id> [--source-dir <path>] [--yes]");
+                return 1;
+            }
+        }
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("Missing corpus ID");
+        eprintln!("Usage: sovereign corpus reconstruct-manifest <corpus_id> [--source-dir <path>] [--yes]");
+        return 1;
+    };
+
+    // Resolve the sovereign index dir: same logic as the daemon uses.
+    let index_dir = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("sovereign")
+        .join("indexes");
+
+    // Build a no-op embed function — reconstruction reads metadata only.
+    let noop_embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
+        Box::pin(async { Ok(vec![0.0_f32; 0]) })
+    });
+
+    let recipes_dir = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("sovereign")
+        .join("recipes");
+
+    let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed);
+
+    let report = match engine.reconstruct_source_manifest(&corpus_id, source_dir.as_deref()) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            return 1;
+        }
+    };
+
+    // Print report.
+    let method_label = match &report.method {
+        ReconstructionMethod::IterPosVerification => "iter-pos verification (parquet row counts)".to_string(),
+        ReconstructionMethod::ChunkCountHeuristic { median_rows_per_file } => {
+            format!("chunk-count heuristic (median {median_rows_per_file} rows/file)")
+        }
+        ReconstructionMethod::SingleFile => "single-file source (no shard splitting)".to_string(),
+    };
+
+    let total = report.manifest.files.len();
+    let complete = report.manifest.files.iter().filter(|f| {
+        matches!(f.status, corpus_engine::SourceFileStatus::Complete { .. })
+    }).count();
+    let in_progress = report.manifest.files.iter().filter(|f| {
+        matches!(f.status, corpus_engine::SourceFileStatus::InProgress { .. })
+    }).count();
+    let pending = report.manifest.files.iter().filter(|f| {
+        matches!(f.status, corpus_engine::SourceFileStatus::Pending)
+    }).count();
+
+    println!();
+    println!("Manifest reconstruction report for '{corpus_id}'");
+    println!("  Method:           {method_label}");
+    println!("  Files total:      {total}");
+    println!("  Complete:         {complete}");
+    println!("  In-progress:      {in_progress}  (reset to Pending — conservative)");
+    println!("  Pending:          {pending}");
+    if report.conservative_reprocessing_count > 0 {
+        println!(
+            "  Re-process count: {} (in-flight at crash time)",
+            report.conservative_reprocessing_count
+        );
+    }
+    if !report.warnings.is_empty() {
+        println!();
+        println!("Warnings:");
+        for w in &report.warnings {
+            println!("  - {w}");
+        }
+    }
+    println!();
+
+    if !yes {
+        eprint!("Write manifest to index? [y/N] ");
+        // Flush stderr before reading stdin.
+        use std::io::Write;
+        let _ = std::io::stderr().flush();
+        let mut input = String::new();
+        if std::io::stdin().read_line(&mut input).is_err() {
+            eprintln!("Could not read input — aborting. Use --yes to skip prompt.");
+            return 1;
+        }
+        if !input.trim().eq_ignore_ascii_case("y") {
+            println!("Aborted.");
+            return 0;
+        }
+    }
+
+    // The manifest has already been written by reconstruct_source_manifest().
+    // Confirm path for the user.
+    let index_path = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("sovereign")
+        .join("indexes")
+        .join(&corpus_id)
+        .join("_source_manifest.json");
+    println!("Manifest written to: {}", index_path.display());
+    println!();
+    println!("Next step: sovereign corpus collaborate {corpus_id}");
+    println!();
     0
 }
 

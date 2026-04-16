@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+// Re-export embed-strategy types from oicp-types so that all crates that
+// depend on sovereign-core continue to find them at their original path.
+pub use oicp_types::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
+
 /// Identifies the behavioural family of a loaded model.
 ///
 /// A new family is added here when it has at least one default quirk that
@@ -87,33 +91,6 @@ pub struct EmbedQuirks {
     /// Output vector dimensionality. Used to validate index compatibility
     /// at open time and to reject mismatched BYOM swaps at startup.
     pub output_dimensions: usize,
-}
-
-/// How token embeddings are pooled into a sequence embedding.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PoolingStrategy {
-    /// Take the last non-padding token's hidden state.
-    /// Required for Qwen3-Embedding.
-    Last,
-    /// Average all non-padding token hidden states.
-    /// Used by nomic-embed-text and mxbai-embed-large.
-    Mean,
-    /// Take the [CLS] token hidden state.
-    /// Used by BERT-style models.
-    Cls,
-}
-
-/// How L2 normalisation is applied to the raw embedding vector.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NormalizationStrategy {
-    /// llama-server handles L2 normalisation via --embd-normalize.
-    /// Safe default for most models in remote/server mode.
-    /// In in-process mode (EmbeddedLlamaCpp), the application normalises
-    /// regardless of this setting.
-    Server,
-    /// The application must L2-normalise the raw vector before returning.
-    /// Required for Qwen3-Embedding when llama-server cannot handle it.
-    Application,
 }
 
 impl ModelFamily {
