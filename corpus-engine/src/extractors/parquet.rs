@@ -96,12 +96,18 @@ impl Extractor for ParquetExtractor {
                 .build()
                 .map_err(|e| Error::Extraction(format!("Failed to build Parquet reader: {e}")))?;
 
+            let source_file = source_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string());
+
             Ok(Box::new(ParquetIterator {
                 reader: Box::new(reader),
                 content_column: self.content_column.clone(),
                 label_column: self.label_column.clone(),
                 url_column: self.url_column.clone(),
                 content_transform: self.content_transform.clone(),
+                source_file,
                 pending: VecDeque::new(),
                 row_counter: 0,
             }))
@@ -112,6 +118,11 @@ impl Extractor for ParquetExtractor {
 /// Lazily chains multiple parquet shards. Opens each file only when the
 /// previous shard is exhausted — only one file handle and one batch buffer
 /// are live at a time regardless of shard count.
+///
+/// Each `ExtractedDoc` produced by this iterator carries `source_file` set
+/// to the shard's filename (e.g. `"train-00021-of-00041.parquet"`).
+/// The ingest pipeline uses this to track per-file commit progress and drive
+/// collaborative ingestion partition boundaries.
 struct MultiShardParquetIterator {
     paths: VecDeque<PathBuf>,
     current: Option<ParquetIterator>,
@@ -136,6 +147,11 @@ impl Iterator for MultiShardParquetIterator {
 
             // Open the next shard.
             let path = self.paths.pop_front()?;
+            let filename = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string());
+
             let file = match File::open(&path) {
                 Ok(f) => f,
                 Err(e) => {
@@ -172,6 +188,7 @@ impl Iterator for MultiShardParquetIterator {
                 label_column: self.label_column.clone(),
                 url_column: self.url_column.clone(),
                 content_transform: self.content_transform.clone(),
+                source_file: filename,
                 pending: VecDeque::new(),
                 row_counter: 0,
             });
@@ -185,6 +202,8 @@ struct ParquetIterator {
     label_column: Option<String>,
     url_column: Option<String>,
     content_transform: Option<String>,
+    /// Filename of this shard, propagated to every `ExtractedDoc::source_file`.
+    source_file: Option<String>,
     pending: VecDeque<ExtractedDoc>,
     row_counter: usize,
 }
@@ -279,6 +298,7 @@ impl Iterator for ParquetIterator {
                     url,
                     source_id,
                     metadata: None,
+                    source_file: self.source_file.clone(),
                 });
                 self.row_counter += 1;
             }

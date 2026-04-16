@@ -639,6 +639,7 @@ pub(crate) async fn run_test(
                             metadata: None,
                             content_hash: Some(blake3_hex(content)),
                             source_doc_id: url.clone(),
+                            source_file: None,
                             code: crate::index::InsertCodeMeta::default(),
                         },
                         emb,
@@ -784,7 +785,7 @@ async fn acquire_for_test(
     download_dir: &Path,
 ) -> Result<PathBuf> {
     match &recipe.acquire {
-        AcquirerConfig::HuggingFaceDataset { repo, subset } => {
+        AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => {
             // Only download the first shard to keep test runs lightweight.
             let acq = HuggingFaceDatasetAcquirer::new(repo, subset.as_deref());
             let client = reqwest::Client::builder()
@@ -836,7 +837,7 @@ async fn acquire_for_test(
 fn acquirer_source_url(recipe: &Recipe) -> String {
     match &recipe.acquire {
         AcquirerConfig::BulkDownload { url, .. } => url.clone(),
-        AcquirerConfig::HuggingFaceDataset { repo, subset } => match subset {
+        AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => match subset {
             Some(s) => format!("https://huggingface.co/datasets/{repo} (subset: {s})"),
             None => format!("https://huggingface.co/datasets/{repo}"),
         },

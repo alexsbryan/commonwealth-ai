@@ -101,6 +101,7 @@ fn process_html_file(label: &str, path: &Path) -> Result<Option<ExtractedDoc>> {
         url: None,
         source_id,
         metadata: Some(serde_json::json!({ "label": label })),
+        source_file: None,
     }))
 }
 

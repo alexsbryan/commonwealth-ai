@@ -385,6 +385,7 @@ fn process_article_line(
                 url: Some(url.clone()),
                 source_id: format!("{}-lead", slug(&title)),
                 metadata: serde_json::to_value(&meta).ok(),
+                source_file: None,
             });
         }
     }
@@ -507,6 +508,7 @@ fn extract_sections_json(
                 url: Some(section_url),
                 source_id: format!("{}-{}", slug(article_title), slug(&name)),
                 metadata: serde_json::to_value(&meta).ok(),
+                source_file: None,
             });
         }
 

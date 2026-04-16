@@ -1,7 +1,10 @@
 //! Ingestion pipeline — acquire, extract, chunk, embed, index.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
+use chrono::Utc;
 
 use crate::acquirers::bulk_download::BulkDownloader;
 use crate::acquirers::huggingface::HuggingFaceDatasetAcquirer;
@@ -10,7 +13,7 @@ use crate::chunkers::{self, Chunker};
 use crate::error::{Error, Result};
 use crate::extractors::{self, Extractor};
 use crate::index::{CorpusIndex, InsertChunk};
-use crate::progress::{IngestProgress, ProgressCallback};
+use crate::progress::{IngestProgress, ProgressCallback, SourceFileManifest, SourceFileStatus};
 use crate::recipe::{AcquirerConfig, ChunkerConfig, ExtractorConfig, Recipe};
 use crate::types::{CorpusSpec, IngestResult};
 
@@ -161,6 +164,27 @@ impl CorpusEngine {
         let mut docs_processed = 0u64; // successful docs in THIS run
         let mut iter_pos = 0u64;       // absolute position in the source iterator
 
+        // ── Source-file manifest tracking ─────────────────────────────────
+        //
+        // When the extractor sets `source_file` on each `ExtractedDoc` (e.g.
+        // the HuggingFace parquet extractor), we track file boundaries and
+        // write `_source_manifest.json` after each tier-2 flush.
+        //
+        // `file_boundary_iter_pos`: maps filename → iter_pos of the last doc
+        // from that file. We populate this when `source_file` transitions from
+        // file A to file B (i.e. file A's last doc was the previous doc).
+        //
+        // After `update_committed_iter_pos(iter_pos)` at each flush, any file
+        // whose `boundary <= iter_pos` is now fully committed to LanceDB.
+        let mut source_manifest: Option<SourceFileManifest> = SourceFileManifest::load(index_path)
+            .unwrap_or(None);
+        let mut file_boundary_iter_pos: HashMap<String, u64> = HashMap::new();
+        let mut prev_source_file: Option<String> = None;
+        // Per-file chunk counters: filename → chunks pushed to pending_chunks.
+        let mut chunks_per_file: HashMap<String, u64> = HashMap::new();
+        // Per-file chunk counters for chunks already flushed (committed to LanceDB).
+        let mut flushed_chunks_per_file: HashMap<String, u64> = HashMap::new();
+
         // Two-tier buffering:
         //  1. pending_chunks/texts: accumulate until EMBED_BATCH_SIZE, then embed
         //  2. index_buffer: accumulate embedded chunks until INDEX_FLUSH_SIZE, then write
@@ -202,6 +226,33 @@ impl CorpusEngine {
                 }
             };
 
+            // ── File-boundary detection ────────────────────────────────
+            // When `source_file` transitions from A → B, file A's last doc
+            // was the previous document (iter_pos - 1). Record that boundary
+            // so we can mark A as Complete after the next tier-2 flush.
+            if let Some(ref sf) = doc.source_file {
+                let file_changed = prev_source_file.as_deref() != Some(sf.as_str());
+                if file_changed {
+                    if let Some(ref old_sf) = prev_source_file.take() {
+                        // iter_pos already incremented at top of loop.
+                        file_boundary_iter_pos.insert(old_sf.clone(), iter_pos - 1);
+                    }
+                    // Transition InProgress state in manifest if present.
+                    if let Some(ref mut manifest) = source_manifest {
+                        if let Some(record) = manifest.files.iter_mut().find(|r| &r.filename == sf) {
+                            if matches!(record.status, SourceFileStatus::Pending) {
+                                record.status = SourceFileStatus::InProgress {
+                                    started_at: Utc::now(),
+                                };
+                                manifest.updated_at = Utc::now();
+                                let _ = manifest.save(index_path);
+                            }
+                        }
+                    }
+                    prev_source_file = Some(sf.clone());
+                }
+            }
+
             docs_processed += 1;
 
             let cleaned_content = normalize_content(&doc.content);
@@ -233,8 +284,13 @@ impl CorpusEngine {
                     content_hash: Some(content_hash),
                     source_doc_id: doc.url.clone()
                         .or_else(|| Some(doc.source_id.clone())),
+                    source_file: doc.source_file.clone(),
                     code,
                 });
+                // Track chunk count per source file for manifest reporting.
+                if let Some(ref sf) = doc.source_file {
+                    *chunks_per_file.entry(sf.clone()).or_insert(0) += 1;
+                }
 
                 // Tier 1: embed when we have enough pending chunks.
                 if pending_chunks.len() >= EMBED_BATCH_SIZE {
@@ -297,7 +353,23 @@ impl CorpusEngine {
                     let insert_ms = insert_start.elapsed().as_millis();
                     let _ = index.update_committed_iter_pos(iter_pos);
                     total_chunks += flush_count as u64;
+
+                    // Tally chunks per file AFTER successful insert, then clear.
+                    for (chunk, _) in &index_buffer {
+                        if let Some(ref sf) = chunk.source_file {
+                            *flushed_chunks_per_file.entry(sf.clone()).or_insert(0) += 1;
+                        }
+                    }
                     index_buffer.clear();
+
+                    // Mark any files whose last doc has now been committed.
+                    mark_complete_files(
+                        iter_pos,
+                        &file_boundary_iter_pos,
+                        &flushed_chunks_per_file,
+                        source_manifest.as_mut(),
+                        index_path,
+                    );
 
                     if insert_ms > 5000 {
                         tracing::warn!(
@@ -337,10 +409,42 @@ impl CorpusEngine {
             total_chunks += flush_count as u64;
             index.insert_batch(&index_buffer).await?;
             let _ = index.update_committed_iter_pos(iter_pos);
+
+            // Tally AFTER successful insert.
+            for (chunk, _) in &index_buffer {
+                if let Some(ref sf) = chunk.source_file {
+                    *flushed_chunks_per_file.entry(sf.clone()).or_insert(0) += 1;
+                }
+            }
             eprintln!(
                 "[{}] Final flush — {flush_count} chunks — {total_chunks} total committed from {} docs",
                 recipe.corpus.id,
                 resume_iter_pos + docs_processed,
+            );
+
+            // The last file in the stream was never "closed" by seeing a
+            // subsequent file — record its boundary now.
+            if let Some(ref last_sf) = prev_source_file {
+                file_boundary_iter_pos.insert(last_sf.clone(), iter_pos);
+            }
+            mark_complete_files(
+                iter_pos,
+                &file_boundary_iter_pos,
+                &flushed_chunks_per_file,
+                source_manifest.as_mut(),
+                index_path,
+            );
+        } else if let Some(ref last_sf) = prev_source_file {
+            // No final flush needed (buffer empty) but we still need to close
+            // the last file if there was one (can happen on resume when all
+            // remaining docs fit in the initial embed pass).
+            file_boundary_iter_pos.insert(last_sf.clone(), iter_pos);
+            mark_complete_files(
+                iter_pos,
+                &file_boundary_iter_pos,
+                &flushed_chunks_per_file,
+                source_manifest.as_mut(),
+                index_path,
             );
         }
 
@@ -531,8 +635,11 @@ impl CorpusEngine {
                 let acq = LocalFileAcquirer::new(path);
                 acq.acquire()
             }
-            AcquirerConfig::HuggingFaceDataset { repo, subset } => {
-                let acq = HuggingFaceDatasetAcquirer::new(repo, subset.as_deref());
+            AcquirerConfig::HuggingFaceDataset { repo, subset, file_indices } => {
+                let mut acq = HuggingFaceDatasetAcquirer::new(repo, subset.as_deref());
+                if let Some(indices) = file_indices {
+                    acq.file_indices = Some(indices.clone());
+                }
                 acq.download(download_dir, &recipe.corpus.id, progress).await
             }
             AcquirerConfig::WebCrawl { .. } => {
@@ -678,6 +785,103 @@ impl CorpusEngine {
                 })
             }
             ChunkerConfig::Passthrough => Box::new(chunkers::passthrough::PassthroughChunker),
+        }
+    }
+
+    /// Ingest a named recipe into a caller-specified output directory, with
+    /// optional file-index filtering for collaborative partitioned ingestion.
+    ///
+    /// Unlike the standard `ingest()`, the output path is provided explicitly
+    /// so partition workers can write to `<corpus_id>-partition-<node_id>`
+    /// rather than `<corpus_id>`. The merge coordinator collects all partition
+    /// directories and calls `merge_partitions()` when they're all complete.
+    ///
+    /// If `file_indices` is `Some`, the recipe's HuggingFace acquirer is
+    /// constrained to download only those shard indices (position in the
+    /// sorted full manifest). A `None` value falls through to the recipe's
+    /// own `file_indices` field, which allows TOML-based partitioning.
+    pub async fn ingest_with_overrides(
+        &self,
+        recipe_id: &str,
+        file_indices: Option<Vec<usize>>,
+        output_path: &Path,
+        progress: Option<ProgressCallback>,
+    ) -> Result<IngestResult> {
+        let mut recipe = self
+            .resolve_recipe(&crate::types::CorpusSpec::Builtin(recipe_id.to_string()))
+            .await?;
+
+        // Override file_indices on the HF acquirer when provided.
+        if let (Some(indices), AcquirerConfig::HuggingFaceDataset { ref mut file_indices, .. }) =
+            (file_indices, &mut recipe.acquire)
+        {
+            *file_indices = Some(indices);
+        }
+
+        // Pre-flight: same embed probe as ingest().
+        std::fs::create_dir_all(output_path.parent().unwrap_or(output_path))?;
+
+        let probe = (self.embed)("probe").await.map_err(|e| {
+            Error::Embed(format!(
+                "Embedding function is not available: {e}. \
+                 Configure an embedding model before installing corpora."
+            ))
+        })?;
+        if probe.is_empty() {
+            return Err(Error::Embed(
+                "Embedding function returned an empty vector.".into(),
+            ));
+        }
+        if recipe.index.embedding_dimensions == 0 {
+            recipe.index.embedding_dimensions = probe.len();
+        }
+
+        self.ingest_inner(&recipe, output_path, &progress).await
+    }
+}
+
+// ─── Source-file manifest helpers ────────────────────────────────────────────
+
+/// After a tier-2 flush, check whether any files have had all their docs
+/// committed to LanceDB and mark them `Complete` in the manifest.
+///
+/// A file is complete when `committed_iter_pos >= file_boundary_iter_pos`:
+/// since `update_committed_iter_pos(iter_pos)` just ran, all documents up to
+/// `iter_pos` are durably written.  If a file's last document was at or before
+/// that position, every chunk from that file is now in the index.
+fn mark_complete_files(
+    committed_iter_pos: u64,
+    file_boundary_iter_pos: &HashMap<String, u64>,
+    flushed_chunks_per_file: &HashMap<String, u64>,
+    manifest: Option<&mut SourceFileManifest>,
+    index_path: &Path,
+) {
+    let Some(manifest) = manifest else { return };
+    let mut changed = false;
+    for (filename, &boundary) in file_boundary_iter_pos {
+        if committed_iter_pos < boundary {
+            continue;
+        }
+        if let Some(record) = manifest.files.iter_mut().find(|r| &r.filename == filename) {
+            if !matches!(record.status, SourceFileStatus::Complete { .. }) {
+                let chunks_indexed = *flushed_chunks_per_file.get(filename).unwrap_or(&0);
+                record.status = SourceFileStatus::Complete {
+                    chunks_indexed,
+                    completed_at: Utc::now(),
+                };
+                tracing::info!(
+                    filename,
+                    chunks_indexed,
+                    "Source file fully committed to index"
+                );
+                changed = true;
+            }
+        }
+    }
+    if changed {
+        manifest.updated_at = Utc::now();
+        if let Err(e) = manifest.save(index_path) {
+            tracing::warn!("Failed to persist source manifest: {e}");
         }
     }
 }

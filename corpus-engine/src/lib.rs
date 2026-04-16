@@ -57,7 +57,10 @@ pub use enrichment::{
 pub use extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
 pub use error::{Error, Result};
 pub use index::{CorpusIndex, InsertChunk, StoredChunk, StoredChunkWithMetadata};
-pub use progress::{IngestProgress, ProgressCallback};
+pub use progress::{
+    IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,
+    SourceFileManifest, SourceFileRecord, SourceFileStatus,
+};
 pub use recipe::{EnrichmentConfig, PrebuiltConfig, Recipe};
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use testing::{

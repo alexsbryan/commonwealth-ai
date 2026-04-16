@@ -475,6 +475,7 @@ impl Extractor for CodeExtractor {
                             url: None,
                             metadata: Some(chunk.metadata_json()),
                             content: chunk.content,
+                            source_file: None,
                         })
                     })
                     .collect::<Vec<_>>()

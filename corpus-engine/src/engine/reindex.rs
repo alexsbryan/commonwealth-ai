@@ -139,6 +139,7 @@ impl CorpusEngine {
                     metadata: Some(metadata_json.to_string()),
                     content_hash: Some(chunk.content_hash.clone()),
                     source_doc_id: Some(rel_path.clone()),
+                    source_file: None,
                     code: InsertCodeMeta {
                         symbol_name: Some(chunk.symbol_name),
                         symbol_kind: Some(chunk.symbol_kind.as_str().to_string()),

@@ -8,7 +8,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
+use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, RecordBatch, StringArray};
+use arrow::compute::filter_record_batch;
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
 
@@ -123,7 +124,13 @@ pub async fn extract_shard(
 }
 
 /// Merge multiple shard directories into a single index.
-/// Chunks are renumbered to form a contiguous ID space.
+///
+/// Chunks are renumbered to form a contiguous ID space.  Duplicate chunks
+/// (same `content_hash`) are silently dropped — this handles the case where
+/// an in-flight file appears in two shards (re-processed on the coordinator
+/// after being assigned to a peer).  Chunks with a `NULL` or absent
+/// `content_hash` are always included (conservative: cannot deduplicate
+/// without a hash).
 pub async fn merge_shards(
     shard_paths: &[PathBuf],
     output_path: &Path,
@@ -151,6 +158,9 @@ pub async fn merge_shards(
 
     let dim = first_info.embedding_dimensions;
     let mut next_id: i64 = 1;
+    // Track seen content_hashes for deduplication.
+    let mut seen_hashes: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut dedup_count: u64 = 0;
 
     for shard_path in shard_paths {
         let shard = CorpusIndex::open(shard_path).await?;
@@ -171,57 +181,87 @@ pub async fn merge_shards(
                 continue;
             }
 
-            // Renumber IDs.
-            let new_ids: Vec<i64> = (0..num_rows)
-                .map(|i| {
-                    let id = next_id + i as i64;
-                    id
+            // ── Content-hash deduplication ────────────────────────────
+            // Build a boolean keep-mask: true for rows whose content_hash
+            // has not been seen in any earlier shard.
+            let hash_col = batch
+                .column_by_name("content_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+            let keep_mask: BooleanArray = (0..num_rows)
+                .map(|row| {
+                    match hash_col {
+                        Some(col) if !col.is_null(row) => {
+                            let h = col.value(row);
+                            if seen_hashes.contains(h) {
+                                dedup_count += 1;
+                                false
+                            } else {
+                                seen_hashes.insert(h.to_string());
+                                true
+                            }
+                        }
+                        // No hash or null — include (cannot deduplicate).
+                        _ => true,
+                    }
                 })
                 .collect();
-            next_id += num_rows as i64;
 
-            // Rebuild batch with new IDs.
+            // Filter the batch to kept rows.
+            let filtered = filter_record_batch(batch, &keep_mask)
+                .map_err(|e| Error::Serialization(format!("dedup filter: {e}")))?;
+
+            let keep_count = filtered.num_rows();
+            if keep_count == 0 {
+                continue;
+            }
+
+            // Renumber IDs for kept rows only.
+            let new_ids: Vec<i64> = (0..keep_count)
+                .map(|i| next_id + i as i64)
+                .collect();
+            next_id += keep_count as i64;
+
+            // Rebuild batch with new IDs and filtered rows.
             // Column order must match corpus_schema() exactly.
             let schema = crate::index::corpus_schema(dim);
             let null_str_col: ArrayRef = Arc::new(
-                StringArray::from(vec![Option::<String>::None; num_rows]),
+                StringArray::from(vec![Option::<String>::None; keep_count]),
             );
             let null_i32_col: ArrayRef = Arc::new(
-                arrow_array::Int32Array::from(vec![Option::<i32>::None; num_rows]),
+                arrow_array::Int32Array::from(vec![Option::<i32>::None; keep_count]),
             );
             let null_i64_col: ArrayRef = Arc::new(
-                Int64Array::from(vec![Option::<i64>::None; num_rows]),
+                Int64Array::from(vec![Option::<i64>::None; keep_count]),
             );
-            // Shards written by older builds may be missing any of the
-            // optional columns — fall back to the typed Null column for
-            // each one.
             let col_or_null_str = |name: &str| {
-                batch
+                filtered
                     .column_by_name(name)
                     .cloned()
                     .unwrap_or_else(|| null_str_col.clone())
             };
             let col_or_null_i32 = |name: &str| {
-                batch
+                filtered
                     .column_by_name(name)
                     .cloned()
                     .unwrap_or_else(|| null_i32_col.clone())
             };
             let col_or_null_i64 = |name: &str| {
-                batch
+                filtered
                     .column_by_name(name)
                     .cloned()
                     .unwrap_or_else(|| null_i64_col.clone())
             };
+
             let new_batch = RecordBatch::try_new(
                 schema.clone(),
                 vec![
                     Arc::new(Int64Array::from(new_ids)),
-                    batch.column_by_name("content").unwrap().clone(),
-                    batch.column_by_name("title").unwrap().clone(),
-                    batch.column_by_name("url").unwrap().clone(),
-                    batch.column_by_name("embedding").unwrap().clone(),
-                    batch.column_by_name("metadata").unwrap().clone(),
+                    filtered.column_by_name("content").unwrap().clone(),
+                    filtered.column_by_name("title").unwrap().clone(),
+                    filtered.column_by_name("url").unwrap().clone(),
+                    filtered.column_by_name("embedding").unwrap().clone(),
+                    filtered.column_by_name("metadata").unwrap().clone(),
                     col_or_null_str("content_hash"),
                     col_or_null_str("source_doc_id"),
                     col_or_null_str("symbol_name"),
@@ -242,6 +282,14 @@ pub async fn merge_shards(
                 .await
                 .map_err(|e| Error::Database(format!("merge insert: {e}")))?;
         }
+    }
+
+    if dedup_count > 0 {
+        tracing::info!(
+            dedup_count,
+            output = %output_path.display(),
+            "Deduplication dropped duplicate chunks during merge"
+        );
     }
 
     merged.info().await
@@ -288,6 +336,7 @@ mod tests {
                         metadata: None,
                         content_hash: None,
                         source_doc_id: None,
+                        source_file: None,
                         code: crate::index::InsertCodeMeta::default(),
                     },
                     make_test_embedding(i as f32),

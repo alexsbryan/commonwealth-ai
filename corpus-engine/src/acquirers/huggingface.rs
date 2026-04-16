@@ -27,6 +27,15 @@ pub(crate) const HF_USER_AGENT: &str = "CorpusEngine/0.1 (+https://sovereign.dev
 pub struct HuggingFaceDatasetAcquirer {
     pub repo: String,
     pub subset: Option<String>,
+    /// Optional subset of shard indices to download.
+    ///
+    /// Indices are 0-based positions in the **sorted** full shard manifest
+    /// (ascending by local filename). Both the coordinator and the peer must
+    /// sort the same full manifest before indexing, so they agree on which
+    /// file each index refers to.
+    ///
+    /// `None` = download all shards (default).
+    pub file_indices: Option<Vec<usize>>,
 }
 
 impl HuggingFaceDatasetAcquirer {
@@ -34,6 +43,7 @@ impl HuggingFaceDatasetAcquirer {
         Self {
             repo: repo.to_string(),
             subset: subset.map(|s| s.to_string()),
+            file_indices: None,
         }
     }
 
@@ -155,17 +165,25 @@ impl HuggingFaceDatasetAcquirer {
     /// 1. Try the siblings API (works for flat repos like `manu/project_gutenberg`).
     /// 2. If no shards found, try the parquet conversion API (works for
     ///    config-based repos like `wikimedia/wikipedia`).
+    ///
+    /// When `self.file_indices` is set, only those positions in the **sorted**
+    /// full shard list are returned.  The sort order is ascending by local
+    /// filename, matching what the parquet extractor uses when opening files
+    /// from a directory — so both acquirer and extractor agree on which
+    /// `file_index` corresponds to which physical file.
     pub(crate) async fn list_shards(&self, client: &reqwest::Client) -> Result<Vec<(String, String)>> {
         // ── Pass 1: siblings API ──────────────────────────────────────
         let siblings_shards = self.list_from_siblings(client).await?;
         if !siblings_shards.is_empty() {
-            return Ok(siblings_shards);
+            return Ok(self.apply_file_indices(siblings_shards));
         }
 
         // ── Pass 2: parquet conversion API ───────────────────────────
         if let Some(ref subset) = self.subset {
             match self.list_from_parquet_api(client, subset).await {
-                Ok(shards) if !shards.is_empty() => return Ok(shards),
+                Ok(shards) if !shards.is_empty() => {
+                    return Ok(self.apply_file_indices(shards));
+                }
                 Ok(_) => {}
                 Err(e) => tracing::debug!(
                     "Parquet API fallback for '{}' config '{}' failed: {e}",
@@ -175,6 +193,31 @@ impl HuggingFaceDatasetAcquirer {
         }
 
         Ok(Vec::new())
+    }
+
+    /// Filter a full sorted shard list to only the positions in `file_indices`.
+    ///
+    /// The input must already be in the canonical sorted order (ascending by
+    /// local filename) so that `file_index` in the manifest matches the same
+    /// physical file on both coordinator and peer.
+    fn apply_file_indices(&self, mut shards: Vec<(String, String)>) -> Vec<(String, String)> {
+        // Sort by local filename first — both acquirer and extractor must use
+        // the same canonical ordering so file_index values stay consistent.
+        shards.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        match &self.file_indices {
+            None => shards,
+            Some(indices) => {
+                use std::collections::HashSet;
+                let index_set: HashSet<usize> = indices.iter().copied().collect();
+                shards
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(i, _)| index_set.contains(i))
+                    .map(|(_, s)| s)
+                    .collect()
+            }
+        }
     }
 
     /// Query `GET /api/datasets/{repo}` and filter `siblings[].rfilename` to

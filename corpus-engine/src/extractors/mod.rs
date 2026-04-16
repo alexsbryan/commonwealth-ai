@@ -21,6 +21,11 @@ pub struct ExtractedDoc {
     pub url: Option<String>,
     pub source_id: String,
     pub metadata: Option<serde_json::Value>,
+    /// The source file this document came from (filename only, e.g.
+    /// `"train-00021-of-00041.parquet"`). Set by multi-shard extractors
+    /// (HuggingFace parquet, JSONL splits) to enable per-file progress
+    /// tracking and collaborative ingestion.  `None` for single-file sources.
+    pub source_file: Option<String>,
 }
 
 /// Trait for extracting documents from source data.

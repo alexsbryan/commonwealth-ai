@@ -208,6 +208,7 @@ impl WikiDumpIterator {
                 url: None,
                 source_id: slug(&title),
                 metadata: None,
+                source_file: None,
             });
         }
     }
@@ -323,6 +324,7 @@ impl Iterator for StackExchangeIterator {
                                 "community": community,
                                 "score": score,
                             })),
+                            source_file: None,
                         });
                         continue;
                     }

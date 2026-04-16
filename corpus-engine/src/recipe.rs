@@ -303,6 +303,16 @@ pub enum AcquirerConfig {
         /// are downloaded.
         #[serde(default)]
         subset: Option<String>,
+        /// Restrict ingestion to a specific subset of shard indices.
+        ///
+        /// Indices refer to position in the **sorted** manifest (ascending by
+        /// filename). Both the coordinator and the peer must sort the same
+        /// full manifest before slicing, so they agree on which file each
+        /// index refers to.
+        ///
+        /// `None` = download all files (default; preserves existing behaviour).
+        #[serde(default)]
+        file_indices: Option<Vec<usize>>,
     },
 }
 
@@ -762,7 +772,7 @@ type = "paragraph"
             .find(|r| r.corpus.id == "gutenberg")
             .expect("gutenberg recipe must exist");
         match &gut.acquire {
-            AcquirerConfig::HuggingFaceDataset { repo, subset } => {
+            AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => {
                 assert_eq!(repo, "manu/project_gutenberg");
                 assert_eq!(subset.as_deref(), Some("en"));
             }
@@ -797,7 +807,7 @@ type = "paragraph"
 "#;
         let recipe = Recipe::from_toml(toml_str).expect("should parse");
         match &recipe.acquire {
-            AcquirerConfig::HuggingFaceDataset { repo, subset } => {
+            AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => {
                 assert_eq!(repo, "manu/project_gutenberg");
                 assert_eq!(subset.as_deref(), Some("en"));
             }

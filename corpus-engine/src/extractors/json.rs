@@ -154,6 +154,7 @@ impl Iterator for JsonlIterator {
                 url: obj.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()),
                 source_id: id,
                 metadata: None,
+                source_file: None,
             });
         }
     }
@@ -235,6 +236,7 @@ fn format_openalex_work(work: &OpenAlexWork) -> Option<ExtractedDoc> {
             "year": year,
             "cited_by_count": cited_by,
         })),
+        source_file: None,
     })
 }
 

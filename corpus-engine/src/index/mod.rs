@@ -63,6 +63,12 @@ pub struct InsertChunk {
     /// Document-level grouping key (article URL, DOI, etc.).
     /// Used by delta updates to delete/replace all chunks from one document.
     pub source_doc_id: Option<String>,
+    /// Source file this chunk came from (filename only, e.g.
+    /// `"train-00021-of-00041.parquet"`). Populated by multi-shard
+    /// extractors. Used to track per-file commit progress and drive
+    /// collaborative ingestion partition boundaries.  `None` for
+    /// single-file and code corpora.
+    pub source_file: Option<String>,
     /// Optional code-intelligence metadata. `Default::default()` means
     /// non-code chunk — all code columns will be Null.
     pub code: InsertCodeMeta,
@@ -574,6 +580,7 @@ mod tests {
                     metadata: Some(r#"{"source":"docs"}"#.into()),
                     content_hash: None,
                     source_doc_id: Some("https://rust-lang.org".into()),
+                    source_file: None,
                     code: InsertCodeMeta::default(),
                 },
                 make_embedding(&[1.0, 0.0, 0.0, 0.0]),
@@ -586,6 +593,7 @@ mod tests {
                     metadata: None,
                     content_hash: None,
                     source_doc_id: None,
+                    source_file: None,
                     code: InsertCodeMeta::default(),
                 },
                 make_embedding(&[0.0, 1.0, 0.0, 0.0]),
@@ -598,6 +606,7 @@ mod tests {
                     metadata: Some(r#"{"source":"wiki"}"#.into()),
                     content_hash: None,
                     source_doc_id: Some("https://sqlite.org".into()),
+                    source_file: None,
                     code: InsertCodeMeta::default(),
                 },
                 make_embedding(&[0.0, 0.0, 1.0, 0.0]),
@@ -610,6 +619,7 @@ mod tests {
                     metadata: None,
                     content_hash: None,
                     source_doc_id: None,
+                    source_file: None,
                     code: InsertCodeMeta::default(),
                 },
                 make_embedding(&[0.9, 0.1, 0.0, 0.0]),
