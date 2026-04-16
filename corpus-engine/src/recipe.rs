@@ -411,6 +411,11 @@ pub enum ExtractorConfig {
         controversy_patterns: Vec<String>,
         #[serde(default = "default_factual_patterns")]
         factual_patterns: Vec<String>,
+        /// Restrict processing to articles `[start, end)` in the JSONL.
+        /// Set by the collaborative ingestion planner to partition the
+        /// single-file Wikipedia JSONL across mesh nodes. `None` = all.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        article_range: Option<(u64, u64)>,
     },
     /// Tree-sitter code extractor. Walks the source directory, parses each
     /// supported file with its grammar, and yields one `ExtractedDoc` per

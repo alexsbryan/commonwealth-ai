@@ -44,6 +44,11 @@ use super::wikipedia_structured::{
 pub struct WikipediaJsonlExtractor {
     pub controversy_patterns: Vec<String>,
     pub factual_patterns: Vec<String>,
+    /// When set by the collaborative ingestion planner, restricts processing
+    /// to articles `[start, end)`. Skipping articles before `start` is done
+    /// without JSON parsing — only the line is read and discarded — so the
+    /// overhead is linear in `start` but CPU-cheap (no deserialization).
+    pub article_range: Option<(u64, u64)>,
 }
 
 impl Default for WikipediaJsonlExtractor {
@@ -56,6 +61,7 @@ impl Default for WikipediaJsonlExtractor {
                 .iter().map(|s| s.to_string()).collect(),
             factual_patterns: DEFAULT_FACTUAL_PATTERNS
                 .iter().map(|s| s.to_string()).collect(),
+            article_range: None,
         }
     }
 }
@@ -78,6 +84,10 @@ impl Extractor for WikipediaJsonlExtractor {
             current: None,
             controversy_patterns: self.controversy_patterns.clone(),
             factual_patterns: self.factual_patterns.clone(),
+            article_range: self.article_range,
+            // Cumulative article offset across shards — starts at 0 and
+            // advances by each shard's article count as shards are opened.
+            article_offset: 0,
         }))
     }
 }
@@ -105,6 +115,11 @@ struct WikipediaJsonlShardIterator {
     current: Option<WikipediaJsonlLineIterator>,
     controversy_patterns: Vec<String>,
     factual_patterns: Vec<String>,
+    article_range: Option<(u64, u64)>,
+    /// Running count of articles yielded by completed shards.
+    /// Passed as `article_offset` to each new shard so article indices
+    /// are globally consistent across multi-shard ZIPs.
+    article_offset: u64,
 }
 
 impl Iterator for WikipediaJsonlShardIterator {
@@ -116,7 +131,16 @@ impl Iterator for WikipediaJsonlShardIterator {
                 if let Some(item) = iter.next() {
                     return Some(item);
                 }
+                // Shard exhausted — advance the global article offset.
+                self.article_offset += iter.article_index;
                 self.current = None;
+            }
+
+            // If the range end is already past, no need to open more shards.
+            if let Some((_, end)) = self.article_range {
+                if self.article_offset >= end {
+                    return None;
+                }
             }
 
             let path = self.paths.pop_front()?;
@@ -124,6 +148,8 @@ impl Iterator for WikipediaJsonlShardIterator {
                 &path,
                 self.controversy_patterns.clone(),
                 self.factual_patterns.clone(),
+                self.article_range,
+                self.article_offset,
             ) {
                 Ok(iter) => self.current = Some(iter),
                 Err(e) => return Some(Err(e)),
@@ -141,6 +167,13 @@ struct WikipediaJsonlLineIterator {
     pending: VecDeque<ExtractedDoc>,
     controversy_patterns: Vec<String>,
     factual_patterns: Vec<String>,
+    /// Global article index (across all shards). Counts lines read, not
+    /// sections yielded. Exported so the shard iterator can advance its
+    /// cumulative offset when a shard is exhausted.
+    pub article_index: u64,
+    /// Global article range `[start, end)` from the planner. Lines before
+    /// `start` are skipped without JSON parsing; iteration stops at `end`.
+    article_range: Option<(u64, u64)>,
 }
 
 impl WikipediaJsonlLineIterator {
@@ -148,6 +181,8 @@ impl WikipediaJsonlLineIterator {
         path: &Path,
         controversy_patterns: Vec<String>,
         factual_patterns: Vec<String>,
+        article_range: Option<(u64, u64)>,
+        article_offset: u64,
     ) -> Result<Self> {
         let file = File::open(path).map_err(|e| {
             Error::Extraction(format!("Failed to open {}: {e}", path.display()))
@@ -176,6 +211,8 @@ impl WikipediaJsonlLineIterator {
             pending: VecDeque::new(),
             controversy_patterns,
             factual_patterns,
+            article_index: article_offset,
+            article_range,
         })
     }
 }
@@ -199,6 +236,19 @@ impl Iterator for WikipediaJsonlLineIterator {
             let line = line.trim();
             if line.is_empty() {
                 continue;
+            }
+
+            let idx = self.article_index;
+            self.article_index += 1;
+
+            if let Some((start, end)) = self.article_range {
+                if idx < start {
+                    // Skip without JSON parsing — cheap line discard.
+                    continue;
+                }
+                if idx >= end {
+                    return None;
+                }
             }
 
             match process_article_line(line, &self.controversy_patterns, &self.factual_patterns) {

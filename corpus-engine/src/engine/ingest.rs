@@ -730,10 +730,12 @@ impl CorpusEngine {
             ExtractorConfig::WikipediaJsonl {
                 controversy_patterns,
                 factual_patterns,
+                article_range,
             } => Box::new(
                 extractors::wikipedia_jsonl::WikipediaJsonlExtractor {
                     controversy_patterns: controversy_patterns.clone(),
                     factual_patterns: factual_patterns.clone(),
+                    article_range: *article_range,
                 },
             ),
             #[cfg(feature = "treesitter")]
@@ -804,6 +806,7 @@ impl CorpusEngine {
         &self,
         recipe_id: &str,
         file_indices: Option<Vec<usize>>,
+        article_range: Option<(u64, u64)>,
         output_path: &Path,
         progress: Option<ProgressCallback>,
     ) -> Result<IngestResult> {
@@ -816,6 +819,13 @@ impl CorpusEngine {
             (file_indices, &mut recipe.acquire)
         {
             *file_indices = Some(indices);
+        }
+
+        // Override article_range on the Wikipedia JSONL extractor when provided.
+        if let (Some(range), ExtractorConfig::WikipediaJsonl { ref mut article_range, .. }) =
+            (article_range, &mut recipe.extract)
+        {
+            *article_range = Some(range);
         }
 
         // Pre-flight: same embed probe as ingest().

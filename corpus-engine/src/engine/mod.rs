@@ -105,6 +105,139 @@ impl CorpusEngine {
         &self.index_dir
     }
 
+    /// Read the `committed_iter_pos` from a corpus's `_corpus_meta.json`.
+    /// Returns 0 when the meta file is absent (corpus not yet started).
+    pub fn corpus_committed_iter_pos(&self, corpus_id: &str) -> u64 {
+        let path = self.index_dir.join(corpus_id).join("_corpus_meta.json");
+        let Ok(content) = std::fs::read_to_string(&path) else { return 0 };
+        serde_json::from_str::<serde_json::Value>(&content)
+            .ok()
+            .and_then(|v| v["committed_iter_pos"].as_u64())
+            .unwrap_or(0)
+    }
+
+    /// Count the total number of articles (non-empty lines) in a Wikipedia
+    /// JSONL corpus cache at `_downloads/{corpus_id}.extracted.jsonl`.
+    ///
+    /// Uses a fast byte-scan rather than line-by-line iteration so it's
+    /// efficient even on 20GB+ JSONL files (~1-2 min on cold I/O).
+    pub fn count_jsonl_articles(&self, corpus_id: &str) -> Result<u64> {
+        let jsonl_path = self
+            .index_dir
+            .join("_downloads")
+            .join(format!("{corpus_id}.extracted.jsonl"));
+        if !jsonl_path.exists() {
+            return Err(Error::Recipe(format!(
+                "JSONL cache not found for corpus '{corpus_id}': \
+                 expected {path}. \
+                 Start or resume ingestion once so the ZIP is extracted.",
+                path = jsonl_path.display()
+            )));
+        }
+        let file = std::fs::File::open(&jsonl_path)?;
+        let mut reader = std::io::BufReader::with_capacity(256 * 1024, file);
+        let mut count = 0u64;
+        let mut buf = Vec::with_capacity(256 * 1024);
+        loop {
+            buf.clear();
+            let n = std::io::BufRead::read_until(&mut reader, b'\n', &mut buf)?;
+            if n == 0 {
+                break;
+            }
+            let trimmed = buf.trim_ascii();
+            if !trimmed.is_empty() {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    /// Estimate how many articles Machine A has already processed for a
+    /// Wikipedia JSONL corpus, given the stored `committed_iter_pos` (which
+    /// counts sections, not articles).
+    ///
+    /// Samples the first `sample_size` articles from the JSONL to derive the
+    /// mean sections-per-article, then extrapolates. Returns `None` when the
+    /// JSONL cache is absent (ingestion not yet started on this node).
+    pub fn estimate_article_pos(
+        &self,
+        corpus_id: &str,
+        committed_iter_pos: u64,
+        sample_size: usize,
+    ) -> Result<Option<u64>> {
+        let jsonl_path = self
+            .index_dir
+            .join("_downloads")
+            .join(format!("{corpus_id}.extracted.jsonl"));
+        if !jsonl_path.exists() {
+            return Ok(None);
+        }
+        if committed_iter_pos == 0 {
+            return Ok(Some(0));
+        }
+
+        // Sample the first `sample_size` articles: parse each line minimally
+        // to count top-level sections, derive mean sections-per-article.
+        let file = std::fs::File::open(&jsonl_path)?;
+        let mut reader = std::io::BufReader::with_capacity(64 * 1024, file);
+        let mut article_count = 0usize;
+        let mut total_sections = 0usize;
+        let mut line = String::new();
+        while article_count < sample_size {
+            line.clear();
+            let n = std::io::BufRead::read_line(&mut reader, &mut line)?;
+            if n == 0 {
+                break;
+            }
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            article_count += 1;
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                let section_count = v["sections"]
+                    .as_array()
+                    .map(|s| s.len())
+                    .unwrap_or(1)
+                    .max(1);
+                total_sections += section_count;
+            } else {
+                total_sections += 5; // fallback estimate
+            }
+        }
+
+        if article_count == 0 || total_sections == 0 {
+            return Ok(Some(committed_iter_pos / 5)); // coarse fallback
+        }
+        let mean_sections = total_sections as f64 / article_count as f64;
+        let estimated = (committed_iter_pos as f64 / mean_sections) as u64;
+        Ok(Some(estimated))
+    }
+
+    /// Return corpus IDs where ingestion has started but not finished
+    /// (`ingestion_in_progress: true` AND `committed_iter_pos > 0`).
+    /// Used by the auto-collaborate loop. Callers should cross-check
+    /// against `AppStateInner::active_ingests` to skip corpora with a
+    /// live ingest task already running.
+    pub fn in_progress_ingestions(&self) -> Vec<String> {
+        let Ok(entries) = std::fs::read_dir(&self.index_dir) else { return vec![] };
+        entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let meta_path = e.path().join("_corpus_meta.json");
+                let content = std::fs::read_to_string(&meta_path).ok()?;
+                let v: serde_json::Value = serde_json::from_str(&content).ok()?;
+                let in_progress = v["ingestion_in_progress"].as_bool() == Some(true);
+                let has_started = v["committed_iter_pos"].as_u64().unwrap_or(0) > 0;
+                if in_progress && has_started {
+                    e.file_name().into_string().ok()
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Return a clone of the embedding function.
     /// Used by `CorpusIndexChecker` to re-embed corrupt chunks.
     pub fn embed_fn(&self) -> crate::types::EmbedFn {
@@ -911,5 +1044,49 @@ mod tests {
         );
         engine.remove_index("test").unwrap();
         assert!(!idx_path.exists());
+    }
+
+    #[test]
+    fn in_progress_ingestions_returns_started_corpora() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":100000}"#,
+        ).unwrap();
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        let result = engine.in_progress_ingestions();
+        assert_eq!(result, vec!["wikipedia"]);
+    }
+
+    #[test]
+    fn in_progress_ingestions_skips_not_yet_started() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        // committed_iter_pos == 0 means still downloading — not eligible
+        std::fs::write(
+            idx_dir.join("wikipedia/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":0}"#,
+        ).unwrap();
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        assert!(engine.in_progress_ingestions().is_empty());
+    }
+
+    #[test]
+    fn in_progress_ingestions_skips_complete_corpora() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":false,"committed_iter_pos":5000000}"#,
+        ).unwrap();
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        assert!(engine.in_progress_ingestions().is_empty());
     }
 }
