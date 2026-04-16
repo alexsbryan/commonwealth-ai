@@ -83,6 +83,32 @@ pub struct Caller {
     pub call_kind: CallKind,
 }
 
+/// A single entry in a blast-radius traversal result.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BlastEntry {
+    /// The symbol that (transitively) calls the changed symbol.
+    pub symbol_name: String,
+    /// File where this call-site lives.
+    pub file_path: String,
+    /// Line number of the reference.
+    pub line: i32,
+    /// True when the file path looks like a test file.
+    pub is_test: bool,
+}
+
+/// Result of [`ScipGraph::blast_radius`].
+#[derive(Debug)]
+pub struct BlastRadiusResult {
+    /// All reachable callers, up to `max_symbols`.
+    pub entries: Vec<BlastEntry>,
+    /// True if the traversal was cut short by `max_symbols`.
+    pub capped: bool,
+    /// How many BFS levels were explored (up to `max_depth`).
+    pub depth_reached: usize,
+    /// Staleness caution for the files in `entries`.
+    pub caution: StalenessCaution,
+}
+
 /// Staleness caution level for a call graph result.
 /// Controls how prominently the tool communicates uncertainty.
 #[derive(Debug, Clone, PartialEq)]
@@ -452,7 +478,26 @@ impl ScipGraph {
             result
         };
 
-        let result_files: Vec<String> = callees.iter().map(|c| c.file_path.clone()).collect();
+        // Collect call-site files (where each call appears) plus the definition
+        // files of each callee symbol.  A stale definition file means the
+        // callee's signature may have changed since the last SCIP export, which
+        // is equally important to surface.
+        let mut result_files: Vec<String> =
+            callees.iter().map(|c| c.file_path.clone()).collect();
+        if !callees.is_empty() {
+            let conn = self.conn.lock().await;
+            for callee in &callees {
+                if let Ok(def_file) = conn.query_row(
+                    "SELECT file_path FROM symbols WHERE name = ? LIMIT 1",
+                    params![callee.symbol_name.as_str()],
+                    |row| row.get::<_, String>(0),
+                ) {
+                    if !result_files.contains(&def_file) {
+                        result_files.push(def_file);
+                    }
+                }
+            }
+        }
         let caution = self.staleness_for(&result_files).await;
 
         Ok((callees, caution))
@@ -696,6 +741,102 @@ impl ScipGraph {
         Ok((sym_count, ref_count))
     }
 
+    /// Compute the transitive blast radius for a symbol: all callers at every
+    /// level up to `max_depth`, with cycle detection.
+    ///
+    /// `max_depth` is capped at 5 internally; `max_symbols` is capped at 200.
+    /// Both `production` and `test` callers are included; the tool layer
+    /// separates them by checking [`BlastEntry::is_test`].
+    pub async fn blast_radius(
+        &self,
+        symbol_name: &str,
+        max_depth: usize,
+        max_symbols: usize,
+    ) -> Result<BlastRadiusResult> {
+        let max_depth = max_depth.min(5).max(1);
+        let max_symbols = max_symbols.min(200).max(1);
+
+        let resolved = self.resolve_symbol(symbol_name).await?;
+        let Some(resolved) = resolved else {
+            return Ok(BlastRadiusResult {
+                entries: vec![],
+                capped: false,
+                depth_reached: 0,
+                caution: StalenessCaution::None,
+            });
+        };
+
+        let mut visited: HashSet<String> = HashSet::new();
+        visited.insert(resolved.clone());
+
+        let mut frontier: Vec<String> = vec![resolved];
+        let mut entries: Vec<BlastEntry> = Vec::new();
+        let mut capped = false;
+        let mut depth_reached = 0usize;
+
+        'outer: for depth in 1..=max_depth {
+            if frontier.is_empty() {
+                break;
+            }
+            let mut next_frontier: Vec<String> = Vec::new();
+
+            for target in &frontier {
+                let rows = {
+                    let conn = self.conn.lock().await;
+                    let mut stmt = conn
+                        .prepare(
+                            "SELECT DISTINCT r.caller_symbol, r.file_path, r.line
+                             FROM refs r
+                             WHERE r.callee_symbol = ?
+                             ORDER BY r.file_path, r.line",
+                        )
+                        .map_err(|e| Error::Database(format!("blast_radius prepare: {e}")))?;
+
+                    let result: Vec<(String, String, i32)> = stmt
+                        .query_map(params![target], |row| {
+                            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                        })
+                        .map_err(|e| Error::Database(format!("blast_radius query: {e}")))?
+                        .filter_map(|r| r.ok())
+                        .collect();
+                    result
+                };
+
+                for (caller, file, line) in rows {
+                    if visited.contains(&caller) {
+                        continue;
+                    }
+                    visited.insert(caller.clone());
+                    entries.push(BlastEntry {
+                        is_test: is_test_path(&file),
+                        symbol_name: caller.clone(),
+                        file_path: file,
+                        line,
+                    });
+                    next_frontier.push(caller);
+                    if entries.len() >= max_symbols {
+                        capped = true;
+                        depth_reached = depth;
+                        break 'outer;
+                    }
+                }
+            }
+
+            depth_reached = depth;
+            frontier = next_frontier;
+        }
+
+        let result_files: Vec<String> = entries.iter().map(|e| e.file_path.clone()).collect();
+        let caution = self.staleness_for(&result_files).await;
+
+        Ok(BlastRadiusResult {
+            entries,
+            capped,
+            depth_reached,
+            caution,
+        })
+    }
+
     /// Get which languages have SCIP coverage.
     pub async fn languages_with_scip(&self) -> Vec<String> {
         let conn = self.conn.lock().await;
@@ -713,6 +854,17 @@ impl ScipGraph {
         })
         .unwrap_or_default()
     }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+/// Returns true when a file path looks like a test file.
+pub(crate) fn is_test_path(path: &str) -> bool {
+    path.contains("/tests/")
+        || path.contains("/test/")
+        || path.ends_with("_test.rs")
+        || path.ends_with("_tests.rs")
+        || path.contains("/test_")
 }
 
 // ─── Tests ───────────────────────────────────────────────────
@@ -1076,5 +1228,141 @@ mod tests {
             let ck = CallKind::from_ref_kind(kind);
             assert_eq!(ck.as_str(), *kind);
         }
+    }
+
+    #[test]
+    fn is_test_path_detection() {
+        assert!(is_test_path("src/tests/foo.rs"));
+        assert!(is_test_path("src/foo_test.rs"));
+        assert!(is_test_path("src/foo_tests.rs"));
+        assert!(is_test_path("crates/bar/test_helpers.rs"));
+        assert!(!is_test_path("src/foo.rs"));
+        assert!(!is_test_path("src/testing_utils.rs")); // doesn't match "test_" prefix
+    }
+
+    #[tokio::test]
+    async fn blast_radius_groups_by_module() {
+        let graph = ScipGraph::open_in_memory("test").unwrap();
+        graph
+            .ingest_symbols_and_refs(test_symbols(), test_refs())
+            .await
+            .unwrap();
+
+        // blast_radius of issue_token_pair should find login_handler and refresh_handler.
+        let result = graph.blast_radius("issue_token_pair", 1, 50).await.unwrap();
+        let names: Vec<&str> = result.entries.iter().map(|e| e.symbol_name.as_str()).collect();
+        assert!(names.contains(&"login_handler"), "expected login_handler");
+        assert!(names.contains(&"refresh_handler"), "expected refresh_handler");
+        assert!(!result.capped);
+        assert_eq!(result.depth_reached, 1);
+    }
+
+    #[tokio::test]
+    async fn blast_radius_cycle_detection() {
+        let graph = ScipGraph::open_in_memory("test").unwrap();
+        // Mutual recursion: a → b → a
+        let symbols = vec![
+            ScipSymbolRecord {
+                name: "a".into(),
+                kind: "function".into(),
+                file_path: "a.rs".into(),
+                line_start: 1,
+                line_end: 5,
+                language: "rust".into(),
+            },
+            ScipSymbolRecord {
+                name: "b".into(),
+                kind: "function".into(),
+                file_path: "b.rs".into(),
+                line_start: 1,
+                line_end: 5,
+                language: "rust".into(),
+            },
+        ];
+        let refs = vec![
+            ScipRefRecord {
+                caller_symbol: "a".into(),
+                callee_symbol: "b".into(),
+                file_path: "a.rs".into(),
+                line: 3,
+                ref_kind: "direct".into(),
+            },
+            ScipRefRecord {
+                caller_symbol: "b".into(),
+                callee_symbol: "a".into(),
+                file_path: "b.rs".into(),
+                line: 3,
+                ref_kind: "direct".into(),
+            },
+        ];
+        graph.ingest_symbols_and_refs(symbols, refs).await.unwrap();
+
+        // Should terminate without infinite loop.
+        let result = graph.blast_radius("b", 5, 50).await.unwrap();
+        // 'a' calls 'b', so 'a' is a depth-1 caller of 'b'.
+        // Then 'b' calls 'a' but 'b' is already visited — cycle cut.
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].symbol_name, "a");
+        assert!(!result.capped);
+    }
+
+    #[tokio::test]
+    async fn blast_radius_cap_respected() {
+        let graph = ScipGraph::open_in_memory("test").unwrap();
+        // Build a star: 25 direct callers of "root" at depth 1.
+        // With max_symbols=10, the traversal should stop after 10 entries.
+        let n = 25usize;
+        let mut symbols = vec![ScipSymbolRecord {
+            name: "root".into(),
+            kind: "function".into(),
+            file_path: "root.rs".into(),
+            line_start: 1,
+            line_end: 5,
+            language: "rust".into(),
+        }];
+        let mut refs = Vec::new();
+        for i in 1..=n {
+            symbols.push(ScipSymbolRecord {
+                name: format!("caller{i}"),
+                kind: "function".into(),
+                file_path: format!("caller{i}.rs"),
+                line_start: 1,
+                line_end: 5,
+                language: "rust".into(),
+            });
+            refs.push(ScipRefRecord {
+                caller_symbol: format!("caller{i}"),
+                callee_symbol: "root".to_string(),
+                file_path: format!("caller{i}.rs"),
+                line: 3,
+                ref_kind: "direct".into(),
+            });
+        }
+        graph.ingest_symbols_and_refs(symbols, refs).await.unwrap();
+
+        let result = graph.blast_radius("root", 1, 10).await.unwrap();
+        assert!(result.capped, "should be capped");
+        assert_eq!(result.entries.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn blast_radius_staleness_propagated() {
+        let graph = ScipGraph::open_in_memory("test").unwrap();
+        graph
+            .ingest_symbols_and_refs(test_symbols(), test_refs())
+            .await
+            .unwrap();
+
+        // Mark the file where callers live as stale.
+        graph.mark_file_stale("src/routes/auth.rs").await;
+
+        let result = graph.blast_radius("issue_token_pair", 1, 50).await.unwrap();
+        assert!(
+            matches!(
+                result.caution,
+                StalenessCaution::SomeCallSitesMayBeStale { .. }
+            ),
+            "expected staleness caution when caller file is stale"
+        );
     }
 }

@@ -11,3 +11,6 @@ pub mod test_watcher;
 
 #[cfg(feature = "treesitter")]
 pub mod lint_watcher;
+
+#[cfg(feature = "treesitter")]
+pub mod project_index_watcher;

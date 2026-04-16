@@ -153,16 +153,163 @@ pub enum ScipProgress<'a> {
 
 // ─── Export runner ───────────────────────────────────────────
 
+/// Find the roots of all Cargo workspaces under `repo_root`.
+///
+/// A workspace root is any directory that contains a `Cargo.toml` with a
+/// `[workspace]` section. We walk only one level deep to avoid false
+/// positives inside `target/` or vendor directories.
+///
+/// **Single-repo case**: if `repo_root` itself has a `[workspace]` Cargo.toml,
+/// it is returned immediately as the sole root.
+///
+/// **Monorepo case**: if `repo_root` contains no top-level `Cargo.toml`, the
+/// function scans one level of subdirectories for workspace roots. This covers
+/// repos whose workspace roots are siblings under a shared parent (e.g.
+/// `corpus-engine/`, `sovereign/`, `commonwealth/` under `commonwealth-ai/`).
+/// To use this path from within a single-workspace sub-repo, pass the monorepo
+/// parent explicitly — see `sovereign project init --workspace-root`.
+pub fn find_cargo_workspace_roots(repo_root: &Path) -> Vec<std::path::PathBuf> {
+    let mut roots = Vec::new();
+
+    // Check repo_root itself first (single-workspace or root-level workspace).
+    let root_cargo = repo_root.join("Cargo.toml");
+    if root_cargo.exists() {
+        if let Ok(s) = std::fs::read_to_string(&root_cargo) {
+            if s.contains("[workspace]") {
+                roots.push(repo_root.to_path_buf());
+                return roots; // single-workspace repo — done
+            }
+        }
+    }
+
+    // No workspace at root — scan one level of subdirectories.
+    if let Ok(entries) = std::fs::read_dir(repo_root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            // Skip common non-workspace directories.
+            if matches!(name, "target" | ".git" | "node_modules" | ".sovereign") {
+                continue;
+            }
+            let cargo_toml = path.join("Cargo.toml");
+            if cargo_toml.exists() {
+                if let Ok(s) = std::fs::read_to_string(&cargo_toml) {
+                    if s.contains("[workspace]") {
+                        roots.push(path);
+                    }
+                }
+            }
+        }
+    }
+
+    roots.sort(); // deterministic order
+    roots
+}
+
+// ─── Exporter diagnostics ────────────────────────────────────
+
+/// A language exporter that is needed for the workspace but not installed.
+pub struct MissingExporter {
+    pub language_id: &'static str,
+    pub command: &'static str,
+    pub install_hint: &'static str,
+}
+
+/// Result of checking exporter availability across a set of workspace roots.
+pub struct ExporterCheck {
+    /// Exporters that are available (binary found in PATH).
+    pub available: Vec<&'static ScipExporterConfig>,
+    /// Exporters that are needed (language files exist) but not installed.
+    pub missing: Vec<MissingExporter>,
+}
+
+/// Check which SCIP exporters are available and which are missing across `roots`.
+///
+/// Unlike [`exporters_for_workspace`], this function surfaces *both* the
+/// available exporters *and* those that are needed but absent — so callers can
+/// show actionable install instructions instead of silently producing an empty
+/// call graph.
+pub fn check_exporters(roots: &[std::path::PathBuf]) -> ExporterCheck {
+    let mut available = Vec::new();
+    let mut missing = Vec::new();
+
+    for exporter in all_exporters() {
+        let has_files = roots.iter().any(|root| {
+            exporter.extensions.iter().any(|ext| {
+                glob::glob(&format!("{}/**/*.{}", root.display(), ext))
+                    .map(|mut g| g.next().is_some())
+                    .unwrap_or(false)
+            })
+        });
+        if !has_files {
+            continue;
+        }
+        if which::which(exporter.command).is_ok() {
+            available.push(exporter);
+        } else {
+            missing.push(MissingExporter {
+                language_id: exporter.language_id,
+                command: exporter.command,
+                install_hint: exporter.install_hint,
+            });
+        }
+    }
+
+    ExporterCheck { available, missing }
+}
+
 /// Run all applicable SCIP exporters and ingest results into the graph.
+///
+/// For `workspace_level` exporters (e.g. rust-analyzer) the exporter is run
+/// once per Cargo workspace root. In the single-repo case this is just the
+/// repo root itself. In the monorepo case, pass the sibling workspace roots
+/// explicitly via `workspace_roots` (discovered with
+/// [`find_cargo_workspace_roots`] at `init` time and stored in `project.json`).
+///
+/// When `workspace_roots` is `None` the roots are auto-detected by calling
+/// [`find_cargo_workspace_roots`] on `repo_root` — appropriate for single-repo
+/// projects and as a fallback.
 ///
 /// Returns a summary of what was exported and what was skipped.
 pub async fn export_all(
     repo_root: &Path,
     output_dir: &Path,
     graph: &ScipGraph,
+    workspace_roots: Option<&[std::path::PathBuf]>,
     progress: &dyn Fn(ScipProgress<'_>),
 ) -> Result<ExportSummary> {
-    let exporters = exporters_for_workspace(repo_root);
+    // Resolve the workspace roots to run exporters in.
+    let owned_auto: Vec<std::path::PathBuf>;
+    let resolved_roots: &[std::path::PathBuf] = match workspace_roots {
+        Some(roots) => roots,
+        None => {
+            owned_auto = {
+                let roots = find_cargo_workspace_roots(repo_root);
+                if roots.is_empty() { vec![repo_root.to_path_buf()] } else { roots }
+            };
+            &owned_auto
+        }
+    };
+
+    // Detect available exporters across all resolved roots.
+    let exporters: Vec<&'static ScipExporterConfig> = {
+        let check = check_exporters(resolved_roots);
+        // Log missing exporters — callers are responsible for surfacing these
+        // to users; this trace is a fallback for automated/non-interactive runs.
+        for m in &check.missing {
+            tracing::warn!(
+                language = m.language_id,
+                command = m.command,
+                "SCIP exporter not found in PATH — {} call graph will be empty. {}",
+                m.language_id, m.install_hint,
+            );
+        }
+        check.available
+    };
+
     let mut summary = ExportSummary::default();
 
     if exporters.is_empty() {
@@ -177,107 +324,140 @@ pub async fn export_all(
         .map_err(|e| Error::Io(e))?;
 
     for exporter in exporters {
-        progress(ScipProgress::Exporting {
-            language: exporter.language_id,
-        });
-
-        let scip_path = output_dir.join(format!("{}.scip", exporter.language_id));
-
-        // Write a temp config file if the exporter needs one (e.g. rust-analyzer
-        // uses a JSON config to enable all Cargo features so feature-gated modules
-        // appear in the SCIP output).
-        let config_file: Option<tempfile::NamedTempFile> = if let Some(json) = exporter.config_json {
-            let mut f = tempfile::NamedTempFile::new()
-                .map_err(|e| Error::Io(e))?;
-            std::io::Write::write_all(&mut f, json.as_bytes())
-                .map_err(|e| Error::Io(e))?;
-            Some(f)
+        // workspace_level exporters run once per Cargo workspace root so that
+        // each workspace's own feature set is applied correctly.
+        let run_dirs: &[std::path::PathBuf] = if exporter.workspace_level {
+            resolved_roots
         } else {
-            None
+            std::slice::from_ref(&resolved_roots[0]) // use first root as cwd
         };
-        let config_path_str = config_file
-            .as_ref()
-            .map(|f| f.path().to_str().unwrap_or("").to_owned())
-            .unwrap_or_default();
 
-        let args: Vec<String> = exporter
-            .args
-            .iter()
-            .map(|a| {
-                a.replace("{output}", scip_path.to_str().unwrap_or(""))
-                 .replace("{config}", &config_path_str)
-            })
-            .collect();
-
-        let output = tokio::process::Command::new(exporter.command)
-            .args(&args)
-            .current_dir(repo_root)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .output()
-            .await
-            .map_err(|e| Error::Io(e))?;
-
-        // Config file is deleted when `config_file` drops at end of loop iteration.
-        let status = output.status;
-
-        if !status.success() {
-            let stderr_tail = String::from_utf8_lossy(&output.stderr);
-            let stderr_last = stderr_tail
-                .lines()
-                .rev()
-                .take(5)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect::<Vec<_>>()
-                .join("\n");
-            tracing::warn!(
-                language = exporter.language_id,
-                stderr = %stderr_last,
-                "SCIP export failed — {} call graph unavailable",
-                exporter.language_id,
-            );
-            summary.languages_skipped.push(SkippedLanguage {
-                language: exporter.language_id.to_string(),
-                reason: format!(
-                    "{} exited with status {}{}",
-                    exporter.command,
-                    status,
-                    if stderr_last.is_empty() {
-                        String::new()
-                    } else {
-                        format!("\n{stderr_last}")
-                    }
-                ),
-                install_hint: exporter.install_hint.to_string(),
+        for run_dir in run_dirs {
+            // Skip this workspace if it has no files for this language.
+            let has_files = exporter.extensions.iter().any(|ext| {
+                glob::glob(&format!("{}/**/*.{}", run_dir.display(), ext))
+                    .map(|mut g| g.next().is_some())
+                    .unwrap_or(false)
             });
-            progress(ScipProgress::Skipped {
+            if !has_files {
+                continue;
+            }
+
+            let ws_label = run_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("?");
+
+            progress(ScipProgress::Exporting {
                 language: exporter.language_id,
-                reason: "export failed",
             });
-            continue;
+
+            // Unique output path per (language, workspace) to avoid collisions
+            // when the same exporter runs in multiple workspaces.
+            let scip_path = output_dir.join(format!(
+                "{}-{}.scip",
+                exporter.language_id, ws_label
+            ));
+
+            // Write a temp config file if the exporter needs one (e.g. rust-analyzer
+            // uses a JSON config to enable all Cargo features so feature-gated modules
+            // appear in the SCIP output).
+            let config_file: Option<tempfile::NamedTempFile> = if let Some(json) = exporter.config_json {
+                let mut f = tempfile::NamedTempFile::new()
+                    .map_err(|e| Error::Io(e))?;
+                std::io::Write::write_all(&mut f, json.as_bytes())
+                    .map_err(|e| Error::Io(e))?;
+                Some(f)
+            } else {
+                None
+            };
+            let config_path_str = config_file
+                .as_ref()
+                .map(|f| f.path().to_str().unwrap_or("").to_owned())
+                .unwrap_or_default();
+
+            let args: Vec<String> = exporter
+                .args
+                .iter()
+                .map(|a| {
+                    a.replace("{output}", scip_path.to_str().unwrap_or(""))
+                     .replace("{config}", &config_path_str)
+                })
+                .collect();
+
+            let output = tokio::process::Command::new(exporter.command)
+                .args(&args)
+                .current_dir(run_dir)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .await
+                .map_err(|e| Error::Io(e))?;
+
+            // Config file is deleted when `config_file` drops at end of loop iteration.
+            let status = output.status;
+
+            if !status.success() {
+                let stderr_tail = String::from_utf8_lossy(&output.stderr);
+                let stderr_last = stderr_tail
+                    .lines()
+                    .rev()
+                    .take(5)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                tracing::warn!(
+                    language = exporter.language_id,
+                    workspace = ws_label,
+                    stderr = %stderr_last,
+                    "SCIP export failed — {} call graph unavailable for {}",
+                    exporter.language_id, ws_label,
+                );
+                summary.languages_skipped.push(SkippedLanguage {
+                    language: format!("{} ({})", exporter.language_id, ws_label),
+                    reason: format!(
+                        "{} exited with status {}{}",
+                        exporter.command,
+                        status,
+                        if stderr_last.is_empty() {
+                            String::new()
+                        } else {
+                            format!("\n{stderr_last}")
+                        }
+                    ),
+                    install_hint: exporter.install_hint.to_string(),
+                });
+                progress(ScipProgress::Skipped {
+                    language: exporter.language_id,
+                    reason: "export failed",
+                });
+                continue;
+            }
+
+            // Parse and ingest this language's SCIP file.
+            let (symbols, refs) = parse_scip_file(&scip_path, exporter.language_id)?;
+            let sym_count = symbols.len();
+            let ref_count = refs.len();
+
+            graph.ingest_symbols_and_refs(symbols, refs).await?;
+
+            if !summary.languages_exported.contains(&exporter.language_id.to_string()) {
+                summary.languages_exported.push(exporter.language_id.to_string());
+            }
+            summary.total_symbols += sym_count;
+            summary.total_refs += ref_count;
+
+            progress(ScipProgress::Ingested {
+                language: exporter.language_id,
+                symbols: sym_count,
+                refs: ref_count,
+            });
+
+            // Clean up the SCIP file.
+            let _ = std::fs::remove_file(&scip_path);
         }
-
-        // Parse and ingest this language's SCIP file.
-        let (symbols, refs) = parse_scip_file(&scip_path, exporter.language_id)?;
-        let sym_count = symbols.len();
-        let ref_count = refs.len();
-
-        graph.ingest_symbols_and_refs(symbols, refs).await?;
-
-        summary.languages_exported.push(exporter.language_id.to_string());
-        summary.total_symbols += sym_count;
-        summary.total_refs += ref_count;
-
-        progress(ScipProgress::Ingested {
-            language: exporter.language_id,
-            symbols: sym_count,
-            refs: ref_count,
-        });
-
-        // Clean up the SCIP file.
-        let _ = std::fs::remove_file(&scip_path);
     }
 
     // Record the export in the graph.

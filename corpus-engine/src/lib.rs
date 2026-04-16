@@ -41,6 +41,12 @@ pub mod test_results;
 #[cfg(feature = "treesitter")]
 pub mod lint_results;
 
+// Working notes and project documentation stores.
+#[cfg(feature = "treesitter")]
+pub mod notes;
+#[cfg(feature = "treesitter")]
+pub mod project_docs;
+
 // ─── Public API Re-exports ──────────────────────────────
 
 pub use engine::CorpusEngine;
@@ -66,7 +72,7 @@ pub use types::{
 };
 
 #[cfg(feature = "treesitter")]
-pub use scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord};
+pub use scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord, BlastEntry, BlastRadiusResult};
 
 #[cfg(feature = "treesitter")]
 pub use update::watcher_coordinator::{
@@ -81,3 +87,10 @@ pub use lint_results::LintResultStore;
 pub use update::test_watcher::TestWatcher;
 #[cfg(feature = "treesitter")]
 pub use update::lint_watcher::LintWatcher;
+#[cfg(feature = "treesitter")]
+pub use update::project_index_watcher::ProjectIndexWatcher;
+
+#[cfg(feature = "treesitter")]
+pub use notes::{NoteStore, NoteRow};
+#[cfg(feature = "treesitter")]
+pub use project_docs::{ProjectDocsStore, DocResult, find_markdown_files};

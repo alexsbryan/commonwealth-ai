@@ -71,6 +71,9 @@ hdbscan = "0.12"
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Unique IDs (used by NoteStore)
+uuid = { version = "1", features = ["v4"] }
+
 # Code intelligence (gated on `treesitter` feature). Tree-sitter and its
 # grammar crates are heavy, so default builds skip them. Enable with
 # `--features treesitter` when indexing source code.
