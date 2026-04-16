@@ -67,6 +67,14 @@ Call `find_callers("function_name")` first. If it has 20 callers,
 you need a different strategy than if it has 2. Know the blast
 radius before you touch it.
 
+## When MCP tools add less value
+
+For **greenfield additions** (new types, new tables, new files),
+the MCP tools don't help with the writing — but you still read
+existing code to match patterns. When you need to check a type's
+fields, a constructor's arguments, or an API's return type, use
+`symbol_lookup` even during greenfield work. The writing is new;
+the patterns you're matching are not.
 
 ## Session reflection — at task end
 
@@ -82,21 +90,37 @@ session_reflection(
 )
 ```
 
-**Before using `blast_radius` or `project_context` on a large task**, check for known limitations:
+**Before using `blast_radius` or `project_context` on a large task**, check for known limitations first:
 ```
 read_notes(kinds=["reflection"], query="blast_radius")
 ```
 
-The developer can see accumulated reflections via `sovereign reflect` and retire them once fixed.
+When you see `[sovereign] N tool calls this session. Consider calling session_reflection…`
+appended to a tool response, it is a nudge — write one when the work feels significant.
 
-## When MCP tools add less value
+## Developer: reviewing reflections
 
-For **greenfield additions** (new types, new tables, new files),
-the MCP tools don't help with the writing — but you still read
-existing code to match patterns. When you need to check a type's
-fields, a constructor's arguments, or an API's return type, use
-`symbol_lookup` even during greenfield work. The writing is new;
-the patterns you're matching are not.
+`sovereign reflect` reads the accumulated backlog from any directory — it finds the active
+database automatically via `~/.sovereign/active_notes_db`.
+
+```bash
+sovereign reflect                          # 30-day summary: signals, what helped, open todos
+sovereign reflect --since 7d              # narrow the window
+sovereign reflect --tool blast_radius     # focus on one tool
+sovereign reflect --raw                   # full prose, ungrouped
+sovereign reflect --todos                 # open todo notes
+sovereign reflect --history               # include retired reflections
+```
+
+**Retiring a fixed limitation** — once resolved, retire the reflection so agents stop seeing
+it as an active warning:
+
+```bash
+sovereign reflect --retire --tool blast_radius --reason "macro scan added in PR #88"
+sovereign reflect --retire --id <uuid>    --reason "no longer relevant"  # add --yes to skip prompt
+```
+
+Retired reflections are hidden from agents but preserved in `--history` for audit.
 
 ## Server lifecycle
 
