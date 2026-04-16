@@ -7,51 +7,175 @@ Languages: rust
 
 ## Tools
 
-| Tool | When to use | Correctness |
+| Tool | When to use | Notes |
 |---|---|---|
-| `symbol_lookup` | You know the exact name | Always correct |
-| `code_search` | You know the concept, not the name | Approximate |
-| `recent_changes` | Session start — see active subsystems | Always correct |
-| `find_callers` | What calls this function? | SCIP-based |
-| `find_callees` | What does this function call? | SCIP-based |
+| `symbol_lookup` | Know the exact name | Always correct |
+| `code_search` | Know the concept, not the name | Approximate — verify with symbol_lookup |
+| `recent_changes` | Session start / orientation | Always correct |
+| `find_callers` | What calls this function? | SCIP-resolved, catches trait dispatch |
+| `find_callees` | What does this function call? | SCIP-resolved |
+| `blast_radius` | Transitive impact of a change | BFS up to depth 5 |
+| `project_context` | Project conventions, architecture | FTS5 over markdown docs |
+| `write_note` | Record decisions, invariants, todos | Persists across sessions |
+| `read_notes` | Recall prior decisions | FTS or filter by symbol/file |
+| `delete_note` | Remove stale notes | By ID |
+| `session_reflection` | End of significant task — record tool feedback | Feeds `sovereign reflect` |
+| `lint_status` | Does this compile? (instant) | Watcher pre-computed; preferred over cargo check |
+| `test_status` | Do tests pass? (instant) | Watcher pre-computed; preferred over cargo test |
+| `run_tests` | Force an immediate test run | Returns at once; poll test_status for results |
+| `get_lint_output` | Full compiler output | Only when output_truncated: true |
+| `get_run_output` | Full test output | Only when output_truncated: true |
 
-## Hybrid strategy — when to use which tool
+## Session start — do these first
 
-Use both the MCP code intelligence tools and built-in file tools
-(Grep, Glob, Read). Each is better at different things:
+1. Read `SYSTEM_OVERVIEW.md` at the repo root — do this every session. It is the authoritative map of what exists and how the pieces connect.
+2. `recent_changes(hours: 24)` — see which subsystems are active
+3. `project_context("<your task>")` — pull relevant conventions and docs
+4. `read_notes(query: "<task area>")` — surface prior decisions
 
-**Discovery** — "What's in this module? What files exist?"
-Use Glob to find files, Grep to search for patterns, Read to scan
-a file. MCP tools need a name to look up; file tools find names.
+## Precision rules — do not skip
 
-**Precision** — "Show me CorpusEngine" / "What are its fields?"
-Call `symbol_lookup("CorpusEngine")`. Returns the exact definition
-with file path and line numbers. Cheaper and faster than reading
-the whole file.
+**DO NOT read an entire file to find a type definition.**
+Call `symbol_lookup("TypeName")` first. It returns the exact definition
+with file path and line numbers in one call. Fall back to Read only when
+you need the surrounding context after locating the symbol.
 
-**Impact** — "What depends on this function?"
-Call `find_callers("reindex_file")` before modifying it. This is
-compiler-resolved (SCIP) — catches trait dispatch and method calls
-that grep misses.
+**DO NOT grep for callers.**
+Call `find_callers("function_name")` — compiler-resolved (SCIP), catches
+trait dispatch that grep misses entirely.
 
-**Patterns** — "How do similar functions work?"
-Call `find_callees("ingest")` to see what an existing function calls,
-then follow the same pattern when implementing a new one.
+**DO NOT guess at fields or constructor arguments.**
+Even during greenfield work, call `symbol_lookup` before assuming a type's
+shape. The writing is new; the patterns you're matching are not.
 
-**Explore then refine** — "How does checkpoint resume work?"
-Start with `code_search("checkpoint resume")` to find relevant
-symbols, then call `symbol_lookup` on each result to get the
-precise definitions.
+## Decision matrix
 
-**Orientation** — "What changed recently?"
-Call `recent_changes(hours: 24)` at session start to see which
-subsystems are active before diving into code.
+| Situation | Tool |
+|---|---|
+| "What files exist in this module?" | Glob + Read |
+| "Show me the Foo struct" | `symbol_lookup("Foo")` |
+| "What calls reindex_file?" | `find_callers("reindex_file")` |
+| "What does ingest() call?" | `find_callees("ingest")` |
+| "How does checkpoint resume work?" | `code_search` → `symbol_lookup` on results |
+| "What changed recently?" | `recent_changes(hours: 24)` |
+| "What are the conventions for X?" | `project_context("X")` |
+| "What decisions were made about Y?" | `read_notes(query: "Y")` |
+| "How many things depend on this?" | `blast_radius("symbol_name")` |
+| "Does this compile?" | `lint_status` |
+| "Do tests pass?" | `test_status` |
 
-## Session start
+## Compilation and test feedback
 
-1. Call `recent_changes(hours: 24)` to see what's active
-2. Call `symbol_lookup` for any type before assuming its shape
-3. Call `find_callers` on a trait before modifying any implementation
+**DO NOT run `cargo build`, `cargo check`, or `cargo test` via Bash**
+in this project. Running these directly contends with the background
+watcher for the Cargo file lock — one blocks the other and you idle.
+
+The watcher runs cargo check continuously on file changes. The result
+is usually already cached by the time you finish an edit.
+
+**"Does this compile?"** → `lint_status`
+| Status | Meaning | Action |
+|---|---|---|
+| `fresh_passing` | Clean | Keep going |
+| `fresh_failing` | Errors in response | Fix them |
+| `stale` | Watcher queued | Call again in ~15s |
+| `running` | In progress | Call again in ~15s |
+| `never_run` | Watcher not configured | Fall back to Bash |
+
+**"Do tests pass?"** → `test_status`
+| Status | Meaning | Action |
+|---|---|---|
+| `fresh_passing` | All pass | Safe to proceed |
+| `fresh_failing` | Failures in response | Fix them |
+| `stale` | Files changed since last run | `run_tests`, then poll |
+| `running` | In progress | Poll every ~30s |
+| `never_run` | Watcher not configured | Fall back to Bash |
+
+Call `get_lint_output` / `get_run_output` **only** when
+`output_truncated: true`. The errors are already in the status response.
+Never poll in a tight loop — use a 15-30s gap between checks.
+
+## Mandatory pre-flight checks
+
+**Before adding a method to a trait:**
+`find_callers("TraitName")` — finds ALL implementors. Every impl must
+be updated or the build breaks. Do this before writing a single line.
+
+**Before modifying a function signature:**
+`find_callers("function_name")` — 20 callers needs a different strategy
+than 2. Know the impact before touching the signature.
+
+**Before any non-trivial change to an existing function:**
+`blast_radius("function_name", max_depth: 2)` — see the transitive
+callers, split by production vs test, grouped by module.
+
+**Before using a type from another crate:**
+`symbol_lookup("TypeName")` — confirm it exists, see its fields.
+Faster and more reliable than grepping Cargo.toml.
+
+## Writing notes
+
+Use `write_note` to leave durable context for future sessions.
+Write at the moment of the decision, not at the end.
+
+- **`decision`** — chose one approach over alternatives; include the reason
+- **`invariant`** — a constraint that must never be violated
+- **`todo`** — follow-up work outside the current session's scope
+- **`attempt`** — an approach that was tried and failed; prevents repetition
+
+
+## Session reflection — at task end
+
+Use `session_reflection` when a significant task is complete (refactor lands, bug fixed, feature shipped).
+
+```
+session_reflection(
+  task_summary: "what you accomplished",
+  tool_name: "blast_radius",           // primary tool this feedback concerns
+  tools_that_helped: ["blast_radius", "lint_status"],
+  manual_work_that_should_be_a_tool: "had to grep for macros blast_radius missed",
+  wished_i_had_known: "EmbedFn is wrapped in a macro — blast_radius misses it"
+)
+```
+
+**Before using `blast_radius` or `project_context` on a large task**, check for known limitations first:
+```
+read_notes(kinds=["reflection"], query="blast_radius")
+```
+
+When you see `[sovereign] N tool calls this session. Consider calling session_reflection…`
+appended to a tool response, it is a nudge — write one when the work feels significant.
+
+## Developer: reviewing reflections
+
+`sovereign reflect` reads the accumulated backlog from any directory — it finds the active
+database automatically via `~/.sovereign/active_notes_db`.
+
+```bash
+sovereign reflect                          # 30-day summary: signals, what helped, open todos
+sovereign reflect --since 7d              # narrow the window
+sovereign reflect --tool blast_radius     # focus on one tool
+sovereign reflect --raw                   # full prose, ungrouped
+sovereign reflect --todos                 # open todo notes
+sovereign reflect --history               # include retired reflections
+```
+
+**Retiring a fixed limitation** — once resolved, retire the reflection so agents stop seeing
+it as an active warning:
+
+```bash
+sovereign reflect --retire --tool blast_radius --reason "macro scan added in PR #88"
+sovereign reflect --retire --id <uuid>    --reason "no longer relevant"  # add --yes to skip prompt
+```
+
+Retired reflections are hidden from agents but preserved in `--history` for audit.
+
+## Server lifecycle
+
+`sovereign project serve` hot-reloads SCIP every 30 seconds. Post-commit
+hooks keep both the symbol index and call graph current automatically.
+If something seems stale, check `~/.sovereign/hooks.log` and run
+`sovereign project install-hooks` if the hook predates recent changes.
 
 ## Call graph
 

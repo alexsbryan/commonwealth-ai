@@ -1,0 +1,17 @@
+# sovereign.toml — background watcher config for `sovereign project serve`.
+#
+# Uncomment and fill in test_runner / lint_runner to enable the
+# test_status, run_tests, lint_status MCP tools.
+# Commands must emit Tier 2 JSONL on stdout (see SOVEREIGN.md).
+
+# [test_runner]
+# command = "cargo test 2>&1"
+# working_dir = "/Users/alexsbryan/dev/commonwealth-ai/oicp-types"
+# timeout_secs = 300
+# debounce_ms = 2000
+
+# [lint_runner]
+# command = "cargo check --message-format json 2>&1 | sovereign-cargo-check-adapter"
+# working_dir = "/Users/alexsbryan/dev/commonwealth-ai/oicp-types"
+# timeout_secs = 120
+# debounce_ms = 1000

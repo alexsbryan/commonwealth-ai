@@ -310,10 +310,56 @@ pub struct ModelStatus {
     pub estimated_load_time_sec: Option<u32>,
 }
 
+// -----------------------------------------------------------------
+// Embed model compatibility (used by collaborative ingestion, §4-ext)
+// -----------------------------------------------------------------
+
+/// How token embeddings are pooled into a single sequence embedding.
+/// Matches the values used by sovereign-core's EmbedQuirks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PoolingStrategy {
+    /// Last non-padding token hidden state (Qwen3-Embedding).
+    Last,
+    /// Average all non-padding hidden states (nomic-embed, mxbai).
+    Mean,
+    /// [CLS] token hidden state (BERT-style models).
+    Cls,
+}
+
+/// Whether L2 normalisation is performed by the server or the application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NormalizationStrategy {
+    /// llama-server normalises via --embd-normalize.
+    Server,
+    /// Application must L2-normalise the raw vector before use.
+    Application,
+}
+
+/// Embedding model identity and output shape.
+/// Two nodes are compatible for collaborative ingestion iff their
+/// `EmbedModelInfo` values are equal (exact match required — cosine
+/// similarity across different embedding spaces is meaningless).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EmbedModelInfo {
+    /// Model identifier, e.g. `"nomic-embed-text-v2"`.
+    pub model_id: String,
+    /// Output vector dimensionality.
+    pub dimensions: usize,
+    pub pooling: PoolingStrategy,
+    pub normalization: NormalizationStrategy,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeManifest {
     pub corpora: Vec<CorpusDescriptor>,
     pub search_endpoint: String,
+    /// Embed model in use on this node. `None` means the node has not
+    /// advertised its embed configuration — exclude from collaborative
+    /// ingestion until this is populated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embed_model: Option<EmbedModelInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
