@@ -161,6 +161,25 @@ impl InferenceStateStore {
             self.node_id,
         );
     }
+
+    // ── Embed model info (for collaborative ingestion) ───────────────
+
+    /// Store the active embedding model's identity and shape.
+    /// Called by the Sovereign side when it loads an embed model slot.
+    pub fn set_local_embed_model(&self, info: &commonwealth_core::oicp::EmbedModelInfo) {
+        if let Ok(bytes) = serde_json::to_vec(info) {
+            let _ = self.store.set(APP_ID, "embed_model", Bytes::from(bytes), self.node_id);
+        }
+    }
+
+    /// Retrieve the stored embed model info, or `None` if not yet set.
+    pub fn get_local_embed_model(&self) -> Option<commonwealth_core::oicp::EmbedModelInfo> {
+        self.store
+            .get(APP_ID, "embed_model")
+            .ok()
+            .flatten()
+            .and_then(|e| serde_json::from_slice(&e.value).ok())
+    }
 }
 
 #[cfg(test)]

@@ -105,6 +105,23 @@ enum CorpusCommands {
     Status,
     /// Merge shard files into a complete index
     Consolidate { id: String },
+    /// Recruit mesh peers to share a mid-flight ingestion.
+    ///
+    /// Requires a source-file manifest (`sovereign corpus
+    /// reconstruct-manifest <id>`).  Divides the remaining parquet
+    /// files across compatible peers and prints the partition plan.
+    Collaborate {
+        /// Corpus ID (e.g., "wikipedia")
+        id: String,
+        /// Recipe ID if different from corpus ID
+        #[arg(long)]
+        recipe: Option<String>,
+    },
+    /// Monitor collaborative ingestion progress
+    CollaborateStatus {
+        /// Corpus ID to monitor
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -196,6 +213,8 @@ fn main() -> Result<()> {
             CorpusCommands::Update { id } => cmd_corpus_update(&id, &config),
             CorpusCommands::Status => cmd_corpus_status(&config),
             CorpusCommands::Consolidate { id } => cmd_corpus_consolidate(&id, &config),
+            CorpusCommands::Collaborate { id, recipe } => cmd_corpus_collaborate(&id, recipe.as_deref(), &config),
+            CorpusCommands::CollaborateStatus { id } => cmd_corpus_collaborate_status(&id, &config),
         },
         Commands::Logs { follow } => cmd_logs(follow, &config),
         Commands::Mesh { command } => match command {
@@ -391,6 +410,73 @@ fn cmd_corpus_status(_config: &Option<DaemonConfig>) -> Result<()> {
 fn cmd_corpus_consolidate(id: &str, _config: &Option<DaemonConfig>) -> Result<()> {
     println!("Consolidating shards for corpus '{id}'...");
     println!("(In production, this would merge all local shard files into a complete index.)");
+    Ok(())
+}
+
+fn cmd_corpus_collaborate(id: &str, recipe: Option<&str>, config: &Option<DaemonConfig>) -> Result<()> {
+    let internal_port = config.as_ref().map(|c| c.node.internal_port).unwrap_or(9742);
+    let url = format!("http://127.0.0.1:{internal_port}/internal/corpus/collaborate");
+
+    println!("Planning collaborative ingestion for corpus '{id}'...");
+    println!("Contacting daemon at {url}");
+    println!();
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to build async runtime")?;
+
+    rt.block_on(async move {
+        let client = reqwest::Client::new();
+        let mut payload = serde_json::json!({ "corpus_id": id });
+        if let Some(r) = recipe {
+            payload["recipe_id"] = serde_json::json!(r);
+        }
+
+        let resp = client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .with_context(|| format!("failed to reach daemon at {url}\nIs it running? Try: commonwealth daemon start"))?;
+
+        let status = resp.status();
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+
+        if status.is_success() {
+            let handoff = &body;
+            let partitions = handoff["partitions"].as_array().cloned().unwrap_or_default();
+            println!("Collaborative ingestion planned.");
+            println!();
+            println!("  Corpus:     {id}");
+            println!("  Handoff ID: {}", handoff["handoff_id"].as_str().unwrap_or("?"));
+            println!("  Partitions: {}", partitions.len());
+            println!();
+            println!("  {:<40} {:>10} {:>12}", "Node", "Files", "Status");
+            println!("  {}", "─".repeat(66));
+            for p in &partitions {
+                let node = p["node_id"].as_str().unwrap_or("?");
+                let files = p["file_indices"].as_array().map(|a| a.len()).unwrap_or(0);
+                let status = p["status"]["state"].as_str().unwrap_or("?");
+                println!("  {:<40} {:>10} {:>12}", node, files, status);
+            }
+            println!();
+            println!("Peers have been notified. Monitor progress with:");
+            println!("  commonwealth corpus collaborate-status {id}");
+        } else {
+            let error = body["error"].as_str().unwrap_or("unknown error");
+            eprintln!("Error: {error}");
+            eprintln!("HTTP {status}");
+            std::process::exit(1);
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+}
+
+fn cmd_corpus_collaborate_status(id: &str, config: &Option<DaemonConfig>) -> Result<()> {
+    let internal_port = config.as_ref().map(|c| c.node.internal_port).unwrap_or(9742);
+    println!("Checking collaborative ingestion status for corpus '{id}'...");
+    println!("(In production, this would read the gossip handoff state from the daemon at localhost:{internal_port}.)");
     Ok(())
 }
 

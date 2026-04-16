@@ -220,6 +220,7 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
             metadata: None,
             content_hash: None,
             source_doc_id: Some("compatibilism".into()),
+            source_file: None,
             code: Default::default(),
         }],
     )

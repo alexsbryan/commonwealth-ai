@@ -54,6 +54,7 @@ define_id!(NodeId, "node");
 define_id!(ModelId, "model");
 define_id!(ProcessId, "proc");
 define_id!(PlanId, "plan");
+define_id!(HandoffId, "handoff");
 
 #[cfg(test)]
 mod tests {

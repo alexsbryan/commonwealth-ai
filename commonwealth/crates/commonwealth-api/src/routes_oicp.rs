@@ -103,6 +103,7 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
         knowledge: Some(KnowledgeManifest {
             corpora: Vec::<CorpusDescriptor>::new(),
             search_endpoint: "/v1/knowledge/search".into(),
+            embed_model: None,
         }),
         federation,
     })

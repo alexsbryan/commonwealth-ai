@@ -6,12 +6,311 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use commonwealth_core::ids::NodeId;
+use commonwealth_core::knowledge::IngestionHandoff;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::membership;
 use commonwealth_inference::inference_plan::InferencePlan;
-use commonwealth_inference::oicp::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
+use commonwealth_inference::oicp::{EmbedModelInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
+use commonwealth_inference::scheduler::knowledge_assignment::{
+    plan_collaborative_ingestion, CollaborativeIngestionError,
+};
 
 use crate::state::AppState;
+
+// ── Collaborative corpus ingestion ────────────────────────
+
+/// POST /internal/corpus/collaborate — kick off collaborative ingestion.
+///
+/// Reads the source-file manifest for `corpus_id`, plans the partition
+/// across compatible mesh peers, notifies each peer via
+/// `POST /internal/corpus/ingest_partition`, and returns the full
+/// `IngestionHandoff` so the CLI can display the partition table.
+pub async fn corpus_collaborate(
+    State(state): State<AppState>,
+    Json(req): Json<CollaborateRequest>,
+) -> Result<Json<IngestionHandoff>, (StatusCode, Json<ErrorBody>)> {
+    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody { error: "no corpus engine available on this node".into() }),
+        )
+    })?;
+
+    // Load remaining source files.
+    let remaining = engine
+        .remaining_source_files(&req.corpus_id)
+        .map_err(|e| {
+            let status = if e.to_string().contains("No index found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(ErrorBody { error: e.to_string() }))
+        })?;
+
+    if remaining.is_empty() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorBody {
+                error: format!("corpus '{}' is already complete — no remaining files", req.corpus_id),
+            }),
+        ));
+    }
+
+    // Build local node view.
+    let mesh = state.inner.mesh.read().await;
+    let self_id = state.inner.self_node_id;
+    let local_member = mesh.members.get(&self_id).cloned().ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { error: "local node not found in mesh".into() }),
+        )
+    })?;
+
+    let candidates: Vec<_> = mesh
+        .members
+        .values()
+        .filter(|m| m.node_id != self_id)
+        .cloned()
+        .collect();
+    drop(mesh);
+
+    // We need the local embed model. For now, read from the OICP capabilities
+    // that the Sovereign side advertises. Fall back to a placeholder derived
+    // from the engine's expected model name when not yet wired through.
+    let local_embed_model = state
+        .inner
+        .inference_store
+        .get_local_embed_model()
+        .unwrap_or_else(|| EmbedModelInfo {
+            model_id: "nomic-embed-text-v2".into(),
+            dimensions: 768,
+            pooling: commonwealth_core::oicp::PoolingStrategy::Mean,
+            normalization: commonwealth_core::oicp::NormalizationStrategy::Server,
+        });
+
+    let recipe_id = req.recipe_id.as_deref().unwrap_or(&req.corpus_id);
+
+    let handoff = plan_collaborative_ingestion(
+        &req.corpus_id,
+        recipe_id,
+        &remaining,
+        &local_member,
+        &candidates,
+        &local_embed_model,
+    )
+    .map_err(|e| {
+        let body = Json(ErrorBody { error: e.to_string() });
+        match e {
+            CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
+            CollaborativeIngestionError::NoManifest(_) => (StatusCode::NOT_FOUND, body),
+            _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
+        }
+    })?;
+
+    // Notify remote peers.  Fire-and-forget with tracing: failing to
+    // reach a peer is logged but doesn't fail the collaborate call —
+    // the partition is still in the handoff, and the peer will pick up
+    // the assignment via gossip.
+    {
+        let mesh = state.inner.mesh.read().await;
+        for partition in &handoff.partitions {
+            if partition.node_id == self_id {
+                continue; // Our own partition — handled locally.
+            }
+            let Some(peer) = mesh.members.get(&partition.node_id) else {
+                tracing::warn!(
+                    node = %partition.node_id,
+                    "collaborate: peer not found in mesh — skipping notification"
+                );
+                continue;
+            };
+            let Some(addr) = peer.addresses.first() else {
+                tracing::warn!(
+                    node = %partition.node_id,
+                    "collaborate: peer has no address — skipping notification"
+                );
+                continue;
+            };
+            let peer_url = format!("http://{}:{}/internal/corpus/ingest_partition", addr.ip(), 9742);
+            let payload = IngestPartitionRequest {
+                handoff_id: format!("{}", handoff.handoff_id),
+                corpus_id: handoff.corpus_id.clone(),
+                recipe_id: handoff.recipe_id.clone(),
+                file_indices: partition.file_indices.clone(),
+                embed_model: handoff.embed_model.clone(),
+            };
+            let peer_url_clone = peer_url.clone();
+            let node_id = partition.node_id;
+            tokio::spawn(async move {
+                let client = reqwest::Client::new();
+                match client.post(&peer_url_clone).json(&payload).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        tracing::info!(node = %node_id, url = %peer_url_clone, "collaborate: peer accepted partition");
+                    }
+                    Ok(resp) => {
+                        tracing::warn!(
+                            node = %node_id,
+                            url = %peer_url_clone,
+                            status = %resp.status(),
+                            "collaborate: peer rejected partition"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            node = %node_id,
+                            url = %peer_url_clone,
+                            error = %e,
+                            "collaborate: could not reach peer"
+                        );
+                    }
+                }
+            });
+        }
+    }
+
+    tracing::info!(
+        corpus = %req.corpus_id,
+        partitions = handoff.partitions.len(),
+        remaining_files = remaining.len(),
+        "corpus_collaborate: handoff planned"
+    );
+
+    Ok(Json(handoff))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CollaborateRequest {
+    pub corpus_id: String,
+    /// Recipe to use. Defaults to `corpus_id` when absent.
+    pub recipe_id: Option<String>,
+}
+
+/// POST /internal/corpus/ingest_partition — start ingesting an assigned partition.
+///
+/// Called by the collaborate coordinator on each peer after planning.
+/// Validates embed model compatibility, then spawns an asynchronous
+/// ingestion task for the specified file indices.
+pub async fn corpus_ingest_partition(
+    State(state): State<AppState>,
+    Json(req): Json<IngestPartitionRequest>,
+) -> (StatusCode, Json<IngestPartitionResponse>) {
+    let _engine = match &state.inner.corpus_engine {
+        Some(e) => e.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(IngestPartitionResponse {
+                    accepted: false,
+                    reason: Some("no corpus engine available on this node".into()),
+                }),
+            );
+        }
+    };
+
+    // Validate embed model compatibility. If no embed model info is stored,
+    // this node hasn't completed bootstrap (or has no embed model configured)
+    // and cannot safely accept a partition — return 503 so the coordinator
+    // skips us rather than assigning work we can't do.
+    let Some(local_embed_model) = state.inner.inference_store.get_local_embed_model() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(IngestPartitionResponse {
+                accepted: false,
+                reason: Some("embed model not configured on this node — cannot accept partition".into()),
+            }),
+        );
+    };
+
+    if local_embed_model != req.embed_model {
+        tracing::warn!(
+            local = ?local_embed_model,
+            requested = ?req.embed_model,
+            "ingest_partition: embed model mismatch — refusing"
+        );
+        return (
+            StatusCode::CONFLICT,
+            Json(IngestPartitionResponse {
+                accepted: false,
+                reason: Some(format!(
+                    "embed model mismatch: local={} requested={}",
+                    local_embed_model.model_id, req.embed_model.model_id
+                )),
+            }),
+        );
+    }
+
+    let corpus_id = req.corpus_id.clone();
+    let recipe_id = req.recipe_id.clone();
+    let file_indices = req.file_indices.clone();
+    let handoff_id = req.handoff_id.clone();
+    let local_node_id = state.inner.self_node_id;
+    let engine = _engine.clone();
+
+    // Spawn ingestion asynchronously — 202 Accepted returns immediately.
+    tokio::spawn(async move {
+        let output_path = engine.index_dir()
+            .join(format!("{corpus_id}-partition-{local_node_id}"));
+
+        tracing::info!(
+            corpus = %corpus_id,
+            recipe = %recipe_id,
+            handoff = %handoff_id,
+            files = file_indices.len(),
+            output = %output_path.display(),
+            "ingest_partition: starting ingestion for assigned files"
+        );
+
+        match engine.ingest_with_overrides(
+            &recipe_id,
+            Some(file_indices),
+            &output_path,
+            None,
+        ).await {
+            Ok(result) => tracing::info!(
+                corpus = %corpus_id,
+                handoff = %handoff_id,
+                chunks = result.chunks_created,
+                "ingest_partition: complete"
+            ),
+            Err(e) => tracing::error!(
+                corpus = %corpus_id,
+                handoff = %handoff_id,
+                error = %e,
+                "ingest_partition: failed"
+            ),
+        }
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(IngestPartitionResponse {
+            accepted: true,
+            reason: None,
+        }),
+    )
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestPartitionRequest {
+    pub handoff_id: String,
+    pub corpus_id: String,
+    pub recipe_id: String,
+    pub file_indices: Vec<usize>,
+    pub embed_model: EmbedModelInfo,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IngestPartitionResponse {
+    pub accepted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ErrorBody {
+    pub error: String,
+}
 
 /// POST /internal/gossip — member state exchange.
 ///
@@ -128,11 +427,142 @@ pub async fn model_transfer(
 }
 
 /// POST /internal/index/transfer — peer-to-peer corpus index transfer.
+///
+/// Receives a tar stream of a corpus shard directory.  The body is the
+/// raw tar bytes; the corpus ID is in the `X-Corpus-Id` request header.
+///
+/// Protocol:
+/// 1. Stream body to `<index_dir>/.incoming/<corpus_id>.tar`
+/// 2. Untar to `<index_dir>/.incoming/<corpus_id>/`
+/// 3. Verify `_corpus_meta.json` exists in the unpacked directory
+/// 4. Atomic rename from `.incoming/<corpus_id>` to `indexes/<corpus_id>`
+///
+/// On crash during steps 1-3 the `.incoming/` dir is left dirty — the
+/// daemon cleans it on next startup.  Step 4 is atomic on POSIX systems
+/// so a completed merge can never see a partially-written index.
 pub async fn index_transfer(
-    State(_state): State<AppState>,
-    Json(_payload): Json<serde_json::Value>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let corpus_id = match headers.get("X-Corpus-Id").and_then(|v| v.to_str().ok()) {
+        Some(id) => id.to_string(),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "missing X-Corpus-Id header"})),
+            );
+        }
+    };
+
+    let engine = match &state.inner.corpus_engine {
+        Some(e) => e.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "no corpus engine on this node"})),
+            );
+        }
+    };
+
+    let index_dir = engine.index_dir().to_path_buf();
+    let incoming_dir = index_dir.join(".incoming");
+    let tarball_path = incoming_dir.join(format!("{corpus_id}.tar"));
+    let unpack_path = incoming_dir.join(&corpus_id);
+
+    if let Err(e) = std::fs::create_dir_all(&incoming_dir) {
+        tracing::error!(error = %e, "index_transfer: failed to create .incoming dir");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        );
+    }
+
+    // Write tarball to disk.
+    if let Err(e) = std::fs::write(&tarball_path, &body) {
+        tracing::error!(error = %e, "index_transfer: failed to write tarball");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        );
+    }
+
+    // Untar.
+    if let Err(e) = std::fs::create_dir_all(&unpack_path) {
+        tracing::error!(error = %e, "index_transfer: failed to create unpack dir");
+        let _ = std::fs::remove_file(&tarball_path);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        );
+    }
+    let tar_status = std::process::Command::new("tar")
+        .args(["xf", &tarball_path.to_string_lossy(), "-C", &unpack_path.to_string_lossy()])
+        .status();
+    let _ = std::fs::remove_file(&tarball_path);
+    match tar_status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            let _ = std::fs::remove_dir_all(&unpack_path);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("tar exited with {s}")})),
+            );
+        }
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&unpack_path);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            );
+        }
+    }
+
+    // Verify the unpacked directory has _corpus_meta.json.
+    if !unpack_path.join("_corpus_meta.json").exists() {
+        tracing::error!(
+            corpus = %corpus_id,
+            path = %unpack_path.display(),
+            "index_transfer: unpacked shard is missing _corpus_meta.json"
+        );
+        let _ = std::fs::remove_dir_all(&unpack_path);
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({"error": "shard missing _corpus_meta.json"})),
+        );
+    }
+
+    // Atomic rename to final location.
+    let final_path = index_dir.join(&corpus_id);
+    if let Err(e) = std::fs::rename(&unpack_path, &final_path) {
+        tracing::error!(
+            error = %e,
+            from = %unpack_path.display(),
+            to = %final_path.display(),
+            "index_transfer: failed to rename to final path"
+        );
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        );
+    }
+
+    let bytes = body.len() as u64;
+    tracing::info!(
+        corpus = %corpus_id,
+        bytes,
+        path = %final_path.display(),
+        "index_transfer: shard installed successfully"
+    );
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "corpus_id": corpus_id,
+            "bytes_received": bytes,
+            "path": final_path.to_string_lossy()
+        })),
+    )
 }
 
 /// POST /internal/knowledge/search — inter-node shard query (fan-out target).

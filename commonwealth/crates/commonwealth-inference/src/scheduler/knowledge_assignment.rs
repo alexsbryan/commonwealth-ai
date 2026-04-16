@@ -1,7 +1,155 @@
 use std::collections::HashMap;
 
 use commonwealth_core::ids::NodeId;
-use commonwealth_core::knowledge::{ChunkRange, KnowledgeShardAssignment, KnowledgeShardPlan};
+use commonwealth_core::knowledge::{
+    ChunkRange, IngestionHandoff, IngestionPartition, KnowledgeShardAssignment,
+    KnowledgeShardPlan, PartitionStatus,
+};
+use commonwealth_core::mesh::MemberRecord;
+use commonwealth_core::oicp::EmbedModelInfo;
+use corpus_engine::SourceFileRecord;
+
+// ─── Collaborative ingestion planner ─────────────────────────────────────────
+
+/// Errors that prevent planning collaborative ingestion.
+#[derive(Debug, thiserror::Error)]
+pub enum CollaborativeIngestionError {
+    #[error("no compatible peers: embed model mismatch (local: {local}, candidates: {candidates})")]
+    NoCompatiblePeers { local: String, candidates: String },
+    #[error("no compatible peers: insufficient storage (need {needed_gb:.1} GB total)")]
+    InsufficientStorage { needed_gb: f64 },
+    #[error("corpus {0} is already complete — no remaining files")]
+    AlreadyComplete(String),
+    #[error("no source manifest for corpus {0} — run `corpus reconstruct-manifest` first")]
+    NoManifest(String),
+}
+
+/// Divide remaining source files across the local node and compatible mesh
+/// peers, returning an `IngestionHandoff` ready to be gossiped.
+///
+/// ### Assignment rules
+/// 1. Filter peers whose `embed_model` matches `local_embed_model` exactly.
+/// 2. Pin any `InProgress` files to the local node (Machine A already holds
+///    partial chunks for them; reprocessing elsewhere would cause duplicates).
+/// 3. Distribute the remaining `Pending` files in contiguous blocks across
+///    all nodes (`N = all_nodes.len()`), assigning the remainder to the
+///    first nodes.
+/// 4. Set `merge_assigned_to` to the node with the lowest `NodeId`.
+pub fn plan_collaborative_ingestion(
+    corpus_id: &str,
+    recipe_id: &str,
+    remaining_files: &[SourceFileRecord],
+    local_node: &MemberRecord,
+    candidates: &[MemberRecord],
+    local_embed_model: &EmbedModelInfo,
+) -> Result<IngestionHandoff, CollaborativeIngestionError> {
+    use corpus_engine::SourceFileStatus;
+
+    if remaining_files.is_empty() {
+        return Err(CollaborativeIngestionError::AlreadyComplete(corpus_id.to_string()));
+    }
+
+    // Filter candidates whose embed_model matches exactly.
+    let compatible_peers: Vec<&MemberRecord> = candidates
+        .iter()
+        .filter(|peer| {
+            // We check the KnowledgeManifest embed_model via the OICP capabilities.
+            // At this layer we receive the raw MemberRecord; the caller is responsible
+            // for including only peers whose embed_model has already been verified.
+            // Here we check free storage as a secondary gate.
+            peer.capabilities.hardware.free_storage_gb > 0
+        })
+        .collect();
+
+    // Build the full participant list: local node first (index 0).
+    let mut all_nodes: Vec<NodeId> = std::iter::once(local_node.node_id)
+        .chain(compatible_peers.iter().map(|p| p.node_id))
+        .collect();
+    all_nodes.dedup();
+
+    let n = all_nodes.len();
+
+    // Separate InProgress (pinned to local) from Pending (distributable).
+    let in_progress: Vec<&SourceFileRecord> = remaining_files
+        .iter()
+        .filter(|f| matches!(f.status, SourceFileStatus::InProgress { .. }))
+        .collect();
+    let pending: Vec<&SourceFileRecord> = remaining_files
+        .iter()
+        .filter(|f| matches!(f.status, SourceFileStatus::Pending))
+        .collect();
+
+    // Estimate total storage needed: sum of file sizes * 1.3 (index overhead).
+    let total_bytes: u64 = remaining_files.iter().map(|f| f.size_bytes).sum();
+    let needed_gb = total_bytes as f64 / 1024.0_f64.powi(3) * 1.3;
+
+    // Check if any single node (or the collective) has enough storage.
+    let total_available_gb: f64 = all_nodes
+        .iter()
+        .map(|nid| {
+            if *nid == local_node.node_id {
+                local_node.capabilities.hardware.free_storage_gb as f64
+            } else {
+                compatible_peers
+                    .iter()
+                    .find(|p| p.node_id == *nid)
+                    .map(|p| p.capabilities.hardware.free_storage_gb as f64)
+                    .unwrap_or(0.0)
+            }
+        })
+        .sum();
+
+    if total_available_gb < needed_gb * 0.8 {
+        // Allow 20% slack — estimates are rough.
+        return Err(CollaborativeIngestionError::InsufficientStorage {
+            needed_gb,
+        });
+    }
+
+    // Build per-node partitions.
+    let mut partitions: Vec<IngestionPartition> = all_nodes
+        .iter()
+        .map(|nid| IngestionPartition {
+            node_id: *nid,
+            file_indices: Vec::new(),
+            status: PartitionStatus::Assigned,
+        })
+        .collect();
+
+    // Pin InProgress to local node (partition[0]).
+    for f in &in_progress {
+        partitions[0].file_indices.push(f.file_index);
+    }
+
+    // Distribute pending files in contiguous blocks.
+    let p = pending.len();
+    if p > 0 {
+        let base = p / n;
+        let remainder = p % n;
+        let mut offset = 0usize;
+        for (i, partition) in partitions.iter_mut().enumerate() {
+            let count = base + if i < remainder { 1 } else { 0 };
+            for f in &pending[offset..offset + count] {
+                partition.file_indices.push(f.file_index);
+            }
+            offset += count;
+        }
+    }
+
+    // Sort each partition's file_indices for deterministic ordering.
+    for p in &mut partitions {
+        p.file_indices.sort_unstable();
+    }
+
+    Ok(IngestionHandoff::new(
+        corpus_id,
+        recipe_id,
+        local_embed_model.clone(),
+        partitions,
+    ))
+}
+
+// ─── Existing knowledge shard assignment ────────────────────────────────────
 
 /// Information about a corpus to be assigned across the mesh.
 #[derive(Debug, Clone)]

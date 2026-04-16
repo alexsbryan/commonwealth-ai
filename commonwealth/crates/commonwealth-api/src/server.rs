@@ -71,6 +71,14 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/latency/probe",
             get(routes_internal::latency_probe),
         )
+        .route(
+            "/internal/corpus/collaborate",
+            post(routes_internal::corpus_collaborate),
+        )
+        .route(
+            "/internal/corpus/ingest_partition",
+            post(routes_internal::corpus_ingest_partition),
+        )
         // App gossip endpoints.
         .route("/internal/app/state", post(routes_app_internal::recv_app_state))
         .route("/internal/app/registry", post(routes_app_internal::recv_app_registry))
