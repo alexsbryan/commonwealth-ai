@@ -5,6 +5,8 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use std::sync::Arc;
+
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::IngestionHandoff;
 use commonwealth_core::mesh::Mesh;
@@ -12,8 +14,9 @@ use commonwealth_discovery::membership;
 use commonwealth_inference::inference_plan::InferencePlan;
 use commonwealth_inference::oicp::{EmbedModelInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 use commonwealth_inference::scheduler::knowledge_assignment::{
-    plan_collaborative_ingestion, CollaborativeIngestionError,
+    plan_collaborative_ingestion, plan_collaborative_ingestion_jsonl, CollaborativeIngestionError,
 };
+use commonwealth_knowledge::shard_manager::ShardManager;
 
 use crate::state::AppState;
 
@@ -36,27 +39,6 @@ pub async fn corpus_collaborate(
         )
     })?;
 
-    // Load remaining source files.
-    let remaining = engine
-        .remaining_source_files(&req.corpus_id)
-        .map_err(|e| {
-            let status = if e.to_string().contains("No index found") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            (status, Json(ErrorBody { error: e.to_string() }))
-        })?;
-
-    if remaining.is_empty() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(ErrorBody {
-                error: format!("corpus '{}' is already complete — no remaining files", req.corpus_id),
-            }),
-        ));
-    }
-
     // Build local node view.
     let mesh = state.inner.mesh.read().await;
     let self_id = state.inner.self_node_id;
@@ -75,38 +57,105 @@ pub async fn corpus_collaborate(
         .collect();
     drop(mesh);
 
-    // We need the local embed model. For now, read from the OICP capabilities
-    // that the Sovereign side advertises. Fall back to a placeholder derived
-    // from the engine's expected model name when not yet wired through.
-    let local_embed_model = state
-        .inner
-        .inference_store
-        .get_local_embed_model()
-        .unwrap_or_else(|| EmbedModelInfo {
-            model_id: "nomic-embed-text-v2".into(),
-            dimensions: 768,
-            pooling: commonwealth_core::oicp::PoolingStrategy::Mean,
-            normalization: commonwealth_core::oicp::NormalizationStrategy::Server,
-        });
+    let local_embed_model = state.inner.inference_store.get_local_embed_model()
+        .ok_or_else(|| (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: "embed model not configured on this node — cannot plan collaboration".into(),
+            }),
+        ))?;
 
     let recipe_id = req.recipe_id.as_deref().unwrap_or(&req.corpus_id);
 
-    let handoff = plan_collaborative_ingestion(
-        &req.corpus_id,
-        recipe_id,
-        &remaining,
-        &local_member,
-        &candidates,
-        &local_embed_model,
-    )
-    .map_err(|e| {
-        let body = Json(ErrorBody { error: e.to_string() });
-        match e {
-            CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
-            CollaborativeIngestionError::NoManifest(_) => (StatusCode::NOT_FOUND, body),
-            _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
+    // Detect whether this is a JSONL corpus (Wikipedia-style BulkDownload) or
+    // an HF parquet corpus.  JSONL corpora have no source-file manifest, so we
+    // use article-range partitioning instead of file-index partitioning.
+    let is_jsonl = engine
+        .source_manifest(&req.corpus_id)
+        .ok()
+        .flatten()
+        .is_none()
+        && engine
+            .count_jsonl_articles(&req.corpus_id)
+            .is_ok();
+
+    let handoff = if is_jsonl {
+        // ── JSONL path (Wikipedia) ──────────────────────────────────────────
+        let total_articles = engine.count_jsonl_articles(&req.corpus_id)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: e.to_string() })))?;
+
+        // Load committed_iter_pos to estimate how far Machine A has gone.
+        let committed_iter_pos = engine.corpus_committed_iter_pos(&req.corpus_id);
+        let current_article = engine
+            .estimate_article_pos(&req.corpus_id, committed_iter_pos, 500)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: e.to_string() })))?
+            .unwrap_or(0);
+
+        tracing::info!(
+            corpus = %req.corpus_id,
+            total_articles,
+            current_article,
+            committed_iter_pos,
+            "collaborate: planning JSONL article-range partition"
+        );
+
+        plan_collaborative_ingestion_jsonl(
+            &req.corpus_id,
+            recipe_id,
+            current_article,
+            total_articles,
+            &local_member,
+            &candidates,
+            &local_embed_model,
+        )
+        .map_err(|e| {
+            let body = Json(ErrorBody { error: e.to_string() });
+            match e {
+                CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
+                _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
+            }
+        })?
+    } else {
+        // ── HF parquet path (Gutenberg, StackExchange, …) ─────────────────
+        let remaining = engine
+            .remaining_source_files(&req.corpus_id)
+            .map_err(|e| {
+                let status = if e.to_string().contains("No index found") {
+                    StatusCode::NOT_FOUND
+                } else if e.to_string().contains("No source manifest") {
+                    StatusCode::UNPROCESSABLE_ENTITY
+                } else {
+                    StatusCode::INTERNAL_SERVER_ERROR
+                };
+                (status, Json(ErrorBody { error: e.to_string() }))
+            })?;
+
+        if remaining.is_empty() {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(ErrorBody {
+                    error: format!("corpus '{}' is already complete — no remaining files", req.corpus_id),
+                }),
+            ));
         }
-    })?;
+
+        plan_collaborative_ingestion(
+            &req.corpus_id,
+            recipe_id,
+            &remaining,
+            &local_member,
+            &candidates,
+            &local_embed_model,
+        )
+        .map_err(|e| {
+            let body = Json(ErrorBody { error: e.to_string() });
+            match e {
+                CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
+                CollaborativeIngestionError::NoManifest(_) => (StatusCode::NOT_FOUND, body),
+                _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
+            }
+        })?
+    };
 
     // Notify remote peers.  Fire-and-forget with tracing: failing to
     // reach a peer is logged but doesn't fail the collaborate call —
@@ -114,9 +163,97 @@ pub async fn corpus_collaborate(
     // the assignment via gossip.
     {
         let mesh = state.inner.mesh.read().await;
+        // Start our own partition in the background.
+        {
+            let local_partition = handoff.partitions.iter()
+                .find(|p| p.node_id == self_id)
+                .cloned();
+            if let Some(partition) = local_partition {
+                if let Some(engine) = state.inner.corpus_engine.clone() {
+                    let corpus_id = handoff.corpus_id.clone();
+                    let recipe_id = handoff.recipe_id.clone();
+                    let handoff_id = handoff.handoff_id;
+                    let mesh_store = Arc::clone(&state.inner.mesh_store);
+                    let state_clone = state.clone();
+                    let peer_urls: Vec<(NodeId, String)> = mesh
+                        .members
+                        .values()
+                        .filter(|m| m.node_id != self_id)
+                        .filter_map(|m| {
+                            m.addresses.first().map(|a| {
+                                (m.node_id, format!("http://{}:9742", a.ip()))
+                            })
+                        })
+                        .collect();
+                    tokio::spawn(async move {
+                        // Resume into the existing partial index if present — preserves
+                        // accumulated chunks instead of writing to a new partition dir.
+                        let original_path = engine.index_dir().join(&corpus_id);
+                        let output_path = if original_path.join("_corpus_meta.json").exists() {
+                            original_path
+                        } else {
+                            engine.index_dir().join(format!("{corpus_id}-partition-{self_id}"))
+                        };
+                        tracing::info!(
+                            corpus = %corpus_id,
+                            files = partition.file_indices.len(),
+                            output = %output_path.display(),
+                            "collaborate: starting local partition"
+                        );
+                        state_clone.inner.active_ingests.write().await
+                            .insert(corpus_id.clone());
+                        let ingest_result = engine.ingest_with_overrides(
+                            &recipe_id,
+                            Some(partition.file_indices),
+                            partition.article_range,
+                            &output_path,
+                            None,
+                        ).await;
+                        state_clone.inner.active_ingests.write().await
+                            .remove(&corpus_id);
+                        match ingest_result {
+                            Ok(result) => {
+                                tracing::info!(
+                                    corpus = %corpus_id,
+                                    chunks = result.chunks_created,
+                                    "collaborate: local partition complete — triggering merge check"
+                                );
+                                let shard_mgr = ShardManager::new(
+                                    Arc::clone(&engine),
+                                    engine.index_dir().to_path_buf(),
+                                    mesh_store,
+                                );
+                                match shard_mgr.coordinate_merge(handoff_id, self_id, &peer_urls).await {
+                                    Ok(Some(info)) => tracing::info!(
+                                        corpus = %corpus_id,
+                                        chunks = info.chunk_count,
+                                        "collaborate: merge complete"
+                                    ),
+                                    Ok(None) => tracing::info!(
+                                        corpus = %corpus_id,
+                                        "collaborate: not merge leader — leader will complete merge"
+                                    ),
+                                    Err(e) => tracing::error!(
+                                        corpus = %corpus_id,
+                                        error = %e,
+                                        "collaborate: merge failed"
+                                    ),
+                                }
+                            }
+                            Err(e) => tracing::error!(
+                                corpus = %corpus_id,
+                                error = %e,
+                                "collaborate: local partition failed"
+                            ),
+                        }
+                    });
+                }
+            }
+        }
+
         for partition in &handoff.partitions {
             if partition.node_id == self_id {
-                continue; // Our own partition — handled locally.
+                continue;
             }
             let Some(peer) = mesh.members.get(&partition.node_id) else {
                 tracing::warn!(
@@ -134,10 +271,11 @@ pub async fn corpus_collaborate(
             };
             let peer_url = format!("http://{}:{}/internal/corpus/ingest_partition", addr.ip(), 9742);
             let payload = IngestPartitionRequest {
-                handoff_id: format!("{}", handoff.handoff_id),
+                handoff_id: handoff.handoff_id,
                 corpus_id: handoff.corpus_id.clone(),
                 recipe_id: handoff.recipe_id.clone(),
                 file_indices: partition.file_indices.clone(),
+                article_range: partition.article_range,
                 embed_model: handoff.embed_model.clone(),
             };
             let peer_url_clone = peer_url.clone();
@@ -172,7 +310,6 @@ pub async fn corpus_collaborate(
     tracing::info!(
         corpus = %req.corpus_id,
         partitions = handoff.partitions.len(),
-        remaining_files = remaining.len(),
         "corpus_collaborate: handoff planned"
     );
 
@@ -243,9 +380,22 @@ pub async fn corpus_ingest_partition(
     let corpus_id = req.corpus_id.clone();
     let recipe_id = req.recipe_id.clone();
     let file_indices = req.file_indices.clone();
-    let handoff_id = req.handoff_id.clone();
+    let article_range = req.article_range;
+    let handoff_id = req.handoff_id;
     let local_node_id = state.inner.self_node_id;
     let engine = _engine.clone();
+    let mesh_store = Arc::clone(&state.inner.mesh_store);
+    let state_clone = state.clone();
+    // Snapshot peer base URLs now — we can't hold the mesh lock across an async task.
+    let peer_urls: Vec<(NodeId, String)> = {
+        let mesh = state.inner.mesh.read().await;
+        mesh.members.values()
+            .filter(|m| m.node_id != local_node_id)
+            .filter_map(|m| m.addresses.first().map(|a| {
+                (m.node_id, format!("http://{}:9742", a.ip()))
+            }))
+            .collect()
+    };
 
     // Spawn ingestion asynchronously — 202 Accepted returns immediately.
     tokio::spawn(async move {
@@ -261,18 +411,48 @@ pub async fn corpus_ingest_partition(
             "ingest_partition: starting ingestion for assigned files"
         );
 
-        match engine.ingest_with_overrides(
+        state_clone.inner.active_ingests.write().await
+            .insert(corpus_id.clone());
+        let ingest_result = engine.ingest_with_overrides(
             &recipe_id,
             Some(file_indices),
+            article_range,
             &output_path,
             None,
-        ).await {
-            Ok(result) => tracing::info!(
-                corpus = %corpus_id,
-                handoff = %handoff_id,
-                chunks = result.chunks_created,
-                "ingest_partition: complete"
-            ),
+        ).await;
+        state_clone.inner.active_ingests.write().await
+            .remove(&corpus_id);
+
+        match ingest_result {
+            Ok(result) => {
+                tracing::info!(
+                    corpus = %corpus_id,
+                    handoff = %handoff_id,
+                    chunks = result.chunks_created,
+                    "ingest_partition: complete — triggering merge check"
+                );
+                let shard_mgr = ShardManager::new(
+                    Arc::clone(&engine),
+                    engine.index_dir().to_path_buf(),
+                    mesh_store,
+                );
+                match shard_mgr.coordinate_merge(handoff_id, local_node_id, &peer_urls).await {
+                    Ok(Some(info)) => tracing::info!(
+                        corpus = %corpus_id,
+                        chunks = info.chunk_count,
+                        "ingest_partition: merge complete"
+                    ),
+                    Ok(None) => tracing::info!(
+                        corpus = %corpus_id,
+                        "ingest_partition: not merge leader — leader will complete merge"
+                    ),
+                    Err(e) => tracing::error!(
+                        corpus = %corpus_id,
+                        error = %e,
+                        "ingest_partition: merge failed"
+                    ),
+                }
+            }
             Err(e) => tracing::error!(
                 corpus = %corpus_id,
                 handoff = %handoff_id,
@@ -293,10 +473,14 @@ pub async fn corpus_ingest_partition(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IngestPartitionRequest {
-    pub handoff_id: String,
+    pub handoff_id: commonwealth_core::ids::HandoffId,
     pub corpus_id: String,
     pub recipe_id: String,
     pub file_indices: Vec<usize>,
+    /// Article range for JSONL corpora (e.g. Wikipedia). Mutually exclusive
+    /// with `file_indices` — exactly one should be non-empty/non-None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub article_range: Option<(u64, u64)>,
     pub embed_model: EmbedModelInfo,
 }
 

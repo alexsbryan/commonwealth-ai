@@ -212,11 +212,21 @@ impl ShardManager {
         // Collect shard directories.
         let mut shard_dirs: Vec<PathBuf> = Vec::new();
 
-        // Local shard.
-        let local_shard = self.engine.index_dir()
-            .join(format!("{}-partition-{}", handoff.corpus_id, local_node_id));
-        if local_shard.exists() {
-            shard_dirs.push(local_shard);
+        // Local shard. Machine A may have ingested into the original corpus
+        // path instead of a partition path (when it had existing partial data).
+        {
+            let partition_path = self.engine.index_dir()
+                .join(format!("{}-partition-{}", handoff.corpus_id, local_node_id));
+            let original_path = self.engine.index_dir().join(&handoff.corpus_id);
+            if partition_path.exists() {
+                shard_dirs.push(partition_path);
+            } else if original_path.join("_corpus_meta.json").exists() {
+                tracing::info!(
+                    corpus = %handoff.corpus_id,
+                    "coordinate_merge: using original index path as local shard"
+                );
+                shard_dirs.push(original_path);
+            }
         }
 
         // Remote shards.

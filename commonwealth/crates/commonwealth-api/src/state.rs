@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
@@ -86,6 +87,10 @@ pub struct AppStateInner {
     pub app_registry: Arc<AppRegistry>,
     /// Map of locally running app ports for the proxy layer.
     pub app_port_map: AppPortMap,
+    /// Corpus IDs currently being actively ingested on this node.
+    /// Prevents the auto-collaborate loop from firing a second
+    /// `collaborate` call while a live ingest task is writing chunks.
+    pub active_ingests: RwLock<HashSet<String>>,
     /// Optional callback fired after any `Mesh` mutation by the
     /// route handlers. Set by the embedded daemon to the
     /// `persist::save` function so `/internal/join` accepts survive
@@ -154,6 +159,7 @@ impl AppState {
                 mesh_store,
                 app_registry,
                 app_port_map: AppPortMap::new(),
+                active_ingests: RwLock::new(HashSet::new()),
                 on_mesh_mutation: None,
                 local_inference: None,
             }),

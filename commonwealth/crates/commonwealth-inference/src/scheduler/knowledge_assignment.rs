@@ -112,6 +112,7 @@ pub fn plan_collaborative_ingestion(
         .map(|nid| IngestionPartition {
             node_id: *nid,
             file_indices: Vec::new(),
+            article_range: None,
             status: PartitionStatus::Assigned,
         })
         .collect();
@@ -140,6 +141,83 @@ pub fn plan_collaborative_ingestion(
     for p in &mut partitions {
         p.file_indices.sort_unstable();
     }
+
+    Ok(IngestionHandoff::new(
+        corpus_id,
+        recipe_id,
+        local_embed_model.clone(),
+        partitions,
+    ))
+}
+
+/// Divide a Wikipedia JSONL corpus across the local node and compatible
+/// mesh peers, returning an `IngestionHandoff` ready to be gossiped.
+///
+/// Unlike `plan_collaborative_ingestion` (which works on HF parquet shards),
+/// this function partitions a single JSONL file by article index range.
+///
+/// ### Arguments
+/// - `current_article_pos`: estimated article index Machine A has already
+///   processed (derived from `committed_iter_pos` via sampling; see
+///   `CorpusEngine::estimate_article_pos`). Machine A's partition starts
+///   here; articles `0..current_article_pos` are already committed.
+/// - `total_articles`: total article count in the JSONL (from
+///   `CorpusEngine::count_jsonl_articles`).
+///
+/// Machine A always gets `[current_article_pos, split)` and Machine B
+/// gets `[split, total_articles)` where split ≈ the midpoint of remaining work.
+pub fn plan_collaborative_ingestion_jsonl(
+    corpus_id: &str,
+    recipe_id: &str,
+    current_article_pos: u64,
+    total_articles: u64,
+    local_node: &MemberRecord,
+    candidates: &[MemberRecord],
+    local_embed_model: &EmbedModelInfo,
+) -> Result<IngestionHandoff, CollaborativeIngestionError> {
+    let remaining = total_articles.saturating_sub(current_article_pos);
+    if remaining == 0 {
+        return Err(CollaborativeIngestionError::AlreadyComplete(corpus_id.to_string()));
+    }
+
+    let compatible_peers: Vec<&MemberRecord> = candidates
+        .iter()
+        .filter(|peer| peer.capabilities.hardware.free_storage_gb > 0)
+        .collect();
+
+    let mut all_nodes: Vec<NodeId> = std::iter::once(local_node.node_id)
+        .chain(compatible_peers.iter().map(|p| p.node_id))
+        .collect();
+    all_nodes.dedup();
+    let n = all_nodes.len() as u64;
+
+    // Divide remaining articles into contiguous blocks, one per node.
+    // Local node (index 0) starts from `current_article_pos`; each
+    // subsequent node takes the next block.
+    let base = remaining / n;
+    let extra = remaining % n;
+    let mut cursor = current_article_pos;
+    let mut partitions: Vec<IngestionPartition> = Vec::with_capacity(all_nodes.len());
+    for (i, nid) in all_nodes.iter().enumerate() {
+        let count = base + if (i as u64) < extra { 1 } else { 0 };
+        let start = cursor;
+        cursor += count;
+        partitions.push(IngestionPartition {
+            node_id: *nid,
+            file_indices: Vec::new(),
+            article_range: Some((start, cursor)),
+            status: PartitionStatus::Assigned,
+        });
+    }
+
+    // Local node's partition carries `current_article_pos` as its start so
+    // the ingest pipeline uses `article_range` + existing `committed_iter_pos`
+    // skip-ahead to resume cleanly from where it left off.
+    debug_assert_eq!(
+        partitions.last().map(|p| p.article_range.unwrap_or((0, 0)).1),
+        Some(total_articles),
+        "partition ranges must cover all remaining articles"
+    );
 
     Ok(IngestionHandoff::new(
         corpus_id,

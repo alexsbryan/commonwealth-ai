@@ -109,7 +109,12 @@ impl IngestionHandoff {
 pub struct IngestionPartition {
     pub node_id: NodeId,
     /// Indices into the sorted HuggingFace parquet shard list.
+    /// Empty for JSONL corpora (use `article_range` instead).
     pub file_indices: Vec<usize>,
+    /// Article range `[start, end)` for JSONL corpora (e.g. Wikipedia).
+    /// `None` for HuggingFace parquet corpora (use `file_indices` instead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub article_range: Option<(u64, u64)>,
     pub status: PartitionStatus,
 }
 
