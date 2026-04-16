@@ -10,6 +10,7 @@
 //! - Translate mesh state into UI-friendly representations
 //! - Expose mesh operations for both GUI and CLI
 
+pub mod auto_ingest;
 pub mod capabilities;
 pub mod daemon;
 pub mod deep_link;

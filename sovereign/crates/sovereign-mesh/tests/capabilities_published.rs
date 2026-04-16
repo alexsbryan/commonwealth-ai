@@ -50,6 +50,7 @@ async fn make_engine_with_sep(dir: &std::path::Path) -> Arc<CorpusEngine> {
                 metadata: None,
                 content_hash: None,
                 source_doc_id: Some("compat".into()),
+                source_file: None,
                 code: Default::default(),
             },
             vec![0.0_f32; 8],

@@ -770,6 +770,8 @@ impl EmbeddedDaemon {
             persist_dir,
         );
 
+        crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), 9742);
+
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
             app_state,
