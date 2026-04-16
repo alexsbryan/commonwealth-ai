@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::IngestionHandoff;
-use commonwealth_core::mesh::Mesh;
+use commonwealth_core::mesh::{Mesh, NodeStatus};
 use commonwealth_discovery::membership;
 use commonwealth_inference::inference_plan::InferencePlan;
 use commonwealth_inference::oicp::{EmbedModelInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
@@ -49,10 +49,13 @@ pub async fn corpus_collaborate(
         )
     })?;
 
+    // Only include online peers — offline members can't accept partitions,
+    // and freshly-joined peers may have NodeStatus::Online before their
+    // capability gossip fully propagates (free_storage_gb may still be 0).
     let candidates: Vec<_> = mesh
         .members
         .values()
-        .filter(|m| m.node_id != self_id)
+        .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
         .cloned()
         .collect();
     drop(mesh);

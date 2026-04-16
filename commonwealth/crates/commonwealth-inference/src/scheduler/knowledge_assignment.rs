@@ -180,13 +180,12 @@ pub fn plan_collaborative_ingestion_jsonl(
         return Err(CollaborativeIngestionError::AlreadyComplete(corpus_id.to_string()));
     }
 
-    let compatible_peers: Vec<&MemberRecord> = candidates
-        .iter()
-        .filter(|peer| peer.capabilities.hardware.free_storage_gb > 0)
-        .collect();
-
+    // All passed candidates are already filtered to Online status by the
+    // caller. Include all of them regardless of free_storage_gb (which may
+    // be 0 on first gossip) — equal distribution doesn't use storage weight,
+    // and the ingest_partition receiver validates embed model compatibility.
     let mut all_nodes: Vec<NodeId> = std::iter::once(local_node.node_id)
-        .chain(compatible_peers.iter().map(|p| p.node_id))
+        .chain(candidates.iter().map(|p| p.node_id))
         .collect();
     all_nodes.dedup();
     let n = all_nodes.len() as u64;
