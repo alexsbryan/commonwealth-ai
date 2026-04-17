@@ -65,6 +65,17 @@ impl CallKind {
     }
 }
 
+/// A single-lock health snapshot of the SCIP graph.
+/// Returned by [`ScipGraph::stats`] to avoid multiple mutex acquisitions.
+#[derive(Debug, Clone)]
+pub struct ScipGraphStats {
+    pub symbol_count: usize,
+    pub ref_count: usize,
+    pub stale_file_count: usize,
+    /// Hours since last successful SCIP export. `None` if never exported.
+    pub export_age_hours: Option<u64>,
+}
+
 /// A function or method that is called by the queried symbol.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Callee {
@@ -635,6 +646,42 @@ impl ScipGraph {
         conn.execute_batch("DELETE FROM refs; DELETE FROM symbols;")
             .map_err(|e| Error::Database(format!("clear: {e}")))?;
         Ok(())
+    }
+
+    /// A single-lock snapshot of graph health metrics.
+    /// Used by IndexHealthChecker to classify staleness without
+    /// acquiring the mutex multiple times per tool call.
+    pub async fn stats(&self) -> ScipGraphStats {
+        let stale_file_count = self.stale_files.read().await.len();
+        let conn = self.conn.lock().await;
+
+        let symbol_count = conn
+            .query_row("SELECT COUNT(*) FROM symbols", [], |r| r.get::<_, usize>(0))
+            .unwrap_or(0);
+
+        let ref_count = conn
+            .query_row("SELECT COUNT(*) FROM refs", [], |r| r.get::<_, usize>(0))
+            .unwrap_or(0);
+
+        let export_age_hours = conn
+            .query_row(
+                "SELECT value FROM scip_meta WHERE key = 'last_export_at'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(&ts).ok())
+            .map(|t| {
+                let age = chrono::Utc::now() - t.with_timezone(&chrono::Utc);
+                age.num_hours().max(0) as u64
+            });
+
+        ScipGraphStats {
+            symbol_count,
+            ref_count,
+            stale_file_count,
+            export_age_hours,
+        }
     }
 
     /// Number of files currently in the stale set.
