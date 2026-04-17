@@ -32,7 +32,7 @@ async fn make_engine_with_sep(dir: &std::path::Path) -> Arc<CorpusEngine> {
         &idx_path,
         "sep",
         "Stanford Encyclopedia of Philosophy",
-        "nomic-embed-text-v2",
+        "qwen3-embedding-0.6b",
         8,
         true,
         "CC-BY-NC",
@@ -60,7 +60,7 @@ async fn make_engine_with_sep(dir: &std::path::Path) -> Arc<CorpusEngine> {
     index.mark_ingestion_complete().unwrap();
     Arc::new(
         CorpusEngine::new(dir.join("recipes"), indexes, mock_embed_fn())
-            .with_embedding_model("nomic-embed-text-v2"),
+            .with_embedding_model("qwen3-embedding-0.6b"),
     )
 }
 

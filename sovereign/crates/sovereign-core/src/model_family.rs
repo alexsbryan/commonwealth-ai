@@ -86,7 +86,7 @@ pub struct EmbedQuirks {
     /// Prepended to document-side inputs at ingestion time.
     pub document_instruction: String,
     /// Whether to append the model's EOS token to every input.
-    /// Required for Qwen3-Embedding; must be false for nomic/mxbai.
+    /// Required for Qwen3-Embedding; must be false for Qwen3-Embedding and similar embedders.
     pub append_eos_token: bool,
     /// Output vector dimensionality. Used to validate index compatibility
     /// at open time and to reject mismatched BYOM swaps at startup.

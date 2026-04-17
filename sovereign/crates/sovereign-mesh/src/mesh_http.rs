@@ -36,6 +36,11 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/join", post(mesh_join))
         .route("/v1/mesh/rotate", post(mesh_rotate))
         .route("/v1/mesh/leave", post(mesh_leave))
+        // Router-level loopback guard — defense in depth on top of
+        // the per-handler `enforce_localhost` checks. Adding a new
+        // route to this module inherits the guard for free; the
+        // per-handler check stays as a secondary barrier.
+        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
         .layer(Extension(daemon))
 }
 

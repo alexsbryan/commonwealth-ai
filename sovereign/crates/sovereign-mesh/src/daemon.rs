@@ -92,6 +92,9 @@ pub struct EmbeddedDaemon {
     /// consumers must `kickstart`/`systemctl restart` to apply config
     /// changes.
     admin_http_router: RwLock<Option<axum::Router>>,
+    /// Same pattern — project_http router for `/v1/projects/*`.
+    /// Owned by the CLI / desktop side which holds the Reindexer.
+    project_http_router: RwLock<Option<axum::Router>>,
     /// In-memory copy of the `SetupConfig` the daemon booted with.
     /// `admin_http::reload` diffs this against the file on disk so it
     /// knows which fields actually changed. Updated in place after a
@@ -156,6 +159,7 @@ impl EmbeddedDaemon {
             mcp: RwLock::new(None),
             mesh_http_router: RwLock::new(None),
             admin_http_router: RwLock::new(None),
+            project_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
         }
@@ -174,6 +178,7 @@ impl EmbeddedDaemon {
             mcp: RwLock::new(None),
             mesh_http_router: RwLock::new(None),
             admin_http_router: RwLock::new(None),
+            project_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
         }
@@ -214,6 +219,13 @@ impl EmbeddedDaemon {
     /// builds `admin_http::admin_router(Arc::clone(&daemon))` and hands
     /// it here. Must be called before `start_daemon` for the route to
     /// be live; a later install affects only the next restart.
+    /// Install the project HTTP router (`GET /v1/projects`,
+    /// register / unregister / rebuild). Same shape as
+    /// [`install_admin_http_router`].
+    pub async fn install_project_http_router(&self, router: axum::Router) {
+        *self.project_http_router.write().await = Some(router);
+    }
+
     pub async fn install_admin_http_router(&self, router: axum::Router) {
         *self.admin_http_router.write().await = Some(router);
     }
@@ -824,7 +836,7 @@ impl EmbeddedDaemon {
         // Publish embed model info so the collaborative ingestion planner
         // can compare this node's embedding model against candidates'.
         // Without this, `get_local_embed_model()` returns None and the
-        // collaborate handler falls back to the nomic-embed-text-v2 default,
+        // collaborate handler falls back to the qwen3-embedding-0.6b default,
         // which won't match a peer running a different model.
         if let Some(embed_info) = self.embed_model.read().await.as_ref() {
             app_state.inner.inference_store.set_local_embed_model(embed_info);
@@ -833,6 +845,18 @@ impl EmbeddedDaemon {
                 dims = embed_info.dimensions,
                 "embed model info: published to inference store"
             );
+        }
+
+        // Register the locally-loaded model slots so `/v1/models`
+        // answers with something meaningful instead of an empty list.
+        // Without this, the OpenAI-compatible models list returns
+        // `{"object":"list","data":[]}` on a freshly-set-up daemon —
+        // confusing for anyone running `curl /v1/models` as a
+        // post-setup health check. We register one `ModelInfo` per
+        // configured slot (primary / fast / embed) with a
+        // deterministic ModelId so reloads don't create duplicates.
+        if let Some(cfg) = self.setup_config.read().await.as_ref() {
+            register_local_model_slots(&app_state, cfg, node_id);
         }
 
         // Install a persistence hook that fires on every Mesh
@@ -913,6 +937,7 @@ impl EmbeddedDaemon {
         let mcp_mount = self.mcp.read().await.clone();
         let mesh_http = self.mesh_http_router.read().await.clone();
         let admin_http = self.admin_http_router.read().await.clone();
+        let project_http = self.project_http_router.read().await.clone();
 
         // Spawn the API servers in the background.
         let app_state_clone = app_state.clone();
@@ -931,6 +956,9 @@ impl EmbeddedDaemon {
             }
             if let Some(admin_http_router) = admin_http {
                 client_router = client_router.merge(admin_http_router);
+            }
+            if let Some(project_http_router) = project_http {
+                client_router = client_router.merge(project_http_router);
             }
             let internal_router =
                 commonwealth_api::server::internal_router(app_state_clone);
@@ -966,8 +994,23 @@ impl EmbeddedDaemon {
                 );
             }
 
+            // CRITICAL: the client router contains handlers that
+            // extract `ConnectInfo<SocketAddr>` (mesh_http, admin_http,
+            // mcp_router) to enforce a loopback-only guard on admin
+            // surfaces. Bare `axum::serve(listener, router)` does NOT
+            // register a ConnectInfo service factory, so every such
+            // handler rejects with 500 "Missing request extension" —
+            // breaking the guards for legitimate localhost callers
+            // AND defeating the security boundary for remote callers
+            // (they also get 500, but the extractor failure is a
+            // foot-gun waiting for a router refactor to flip it to
+            // fail-open). Always use `.into_make_service_with_connect_info`
+            // on this listener. Regression test:
+            // `admin_http::tests::loopback_guard_works_under_production_listener_shape`.
+            let client_service = client_router
+                .into_make_service_with_connect_info::<SocketAddr>();
             tokio::select! {
-                _ = axum::serve(client_listener, client_router) => {}
+                _ = axum::serve(client_listener, client_service) => {}
                 _ = axum::serve(internal_listener, internal_router) => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
@@ -1036,6 +1079,86 @@ impl EmbeddedDaemon {
             )
             .await;
         }
+    }
+}
+
+/// Write minimal `ModelInfo` entries into the inference store for
+/// each configured local slot. The `/v1/models` handler reads from
+/// this store, so without these registrations a freshly-set-up
+/// daemon answers the endpoint with an empty list — misleading for
+/// anyone running it as a smoke check after `sovereign setup`.
+///
+/// The `name` field is the file basename (stripped of `.gguf`)
+/// because OpenAI-compatible clients use it as the user-visible
+/// model id. The `ModelId` is a deterministic hash of the absolute
+/// path so repeated calls (e.g. after an admin/reload) don't
+/// accumulate duplicate entries keyed on different random IDs.
+fn register_local_model_slots(
+    app_state: &AppState,
+    cfg: &SetupConfig,
+    node_id: NodeId,
+) {
+    use commonwealth_inference::model::{ModelArchitecture, ModelInfo};
+    use commonwealth_inference::oicp::CapabilityProfile;
+    use commonwealth_core::ids::ModelId;
+    use std::collections::HashMap;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+
+    let slots: [(&str, &std::path::Path); 3] = [
+        ("primary", cfg.models.primary.as_path()),
+        ("fast", cfg.models.fast.as_path()),
+        ("embed", cfg.models.embed.as_path()),
+    ];
+
+    for (role, path) in slots {
+        let Some(file_name) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let name = file_name.trim_end_matches(".gguf").to_string();
+
+        // Deterministic ID: a 128-bit hash of the absolute path. Two
+        // calls with the same path produce the same ModelId (matters
+        // for reload — we want to update the entry, not add a twin).
+        let mut h = DefaultHasher::new();
+        path.hash(&mut h);
+        let lo = h.finish();
+        let mut h = DefaultHasher::new();
+        role.hash(&mut h);
+        path.hash(&mut h);
+        let hi = h.finish();
+        let id = ModelId::from_u128((u128::from(hi) << 64) | u128::from(lo));
+
+        // Leave `available_on` empty. JSON map keys must be strings,
+        // but `NodeId` serializes as a byte array — populating this
+        // HashMap makes `serde_json::to_vec` (write path) succeed but
+        // `serde_json::from_slice` (read path in `list_models`) fail,
+        // so entries silently vanish from `/v1/models`. The scheduler
+        // recomputes availability from live gossip anyway.
+        let _ = node_id; // keep the parameter meaningful for callers
+        let available_on = HashMap::new();
+
+        let info = ModelInfo {
+            id,
+            name,
+            repo: String::new(), // local file — no upstream repo
+            file: file_name.to_string(),
+            size_bytes: std::fs::metadata(path).map(|m| m.len()).unwrap_or(0),
+            total_layers: 0, // unknown without loading — scheduler tolerates 0
+            architecture: ModelArchitecture::Other,
+            available_on,
+            oicp_capabilities: CapabilityProfile::default(),
+            quantization: String::new(),
+            min_memory_gb: 0,
+            preferred_memory_gb: 0,
+            supports_parallel_instances: false,
+            supports_pipeline_shard: false,
+        };
+        app_state.inner.inference_store.set_model_info(&info);
+        info!(
+            role,
+            name = %info.name,
+            "registered local model in inference_store"
+        );
     }
 }
 
@@ -1185,6 +1308,81 @@ impl Default for EmbeddedDaemon {
     /// `EmbeddedDaemon::new(data_dir)` to get persistence.
     fn default() -> Self {
         Self::new_in_memory()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sovereign_core::setup_config::{
+        DaemonSection, DataSection, ModelsSection, SetupConfig,
+    };
+    use std::path::PathBuf;
+
+    /// Regression for: after `sovereign setup`, `GET /v1/models`
+    /// returned `{"data":[]}`. Root cause was that the daemon never
+    /// registered its loaded model slots into `inference_store`, so
+    /// Commonwealth's handler had nothing to list.
+    #[test]
+    fn register_local_model_slots_writes_info_for_all_three_slots() {
+        use commonwealth_api::state::AppState;
+        use commonwealth_core::mesh::Mesh;
+
+        let mesh = Mesh {
+            id: commonwealth_core::ids::MeshId::generate(),
+            name: "test".into(),
+            join_key_hash: [0u8; 32],
+            members: Default::default(),
+            peers: vec![],
+        };
+        let node_id = commonwealth_core::ids::NodeId::generate();
+        let mesh_store = Arc::new(
+            commonwealth_state::MeshStore::in_memory().unwrap(),
+        );
+        let app_registry = Arc::new(
+            commonwealth_app::registry::AppRegistry::new(),
+        );
+        let app_state = AppState::new_with_platform_and_engine(
+            node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            None,
+        );
+
+        let cfg = SetupConfig {
+            models: ModelsSection {
+                primary: PathBuf::from("/m/qwen3-coder-30b.gguf"),
+                fast: PathBuf::from("/m/qwen3-1.7b.gguf"),
+                embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
+            },
+            daemon: DaemonSection::default(),
+            data: DataSection::default(),
+        };
+
+        register_local_model_slots(&app_state, &cfg, node_id);
+
+        let models = app_state.inner.inference_store.list_models();
+        assert_eq!(
+            models.len(),
+            3,
+            "primary/fast/embed must each produce one ModelInfo"
+        );
+        let names: std::collections::HashSet<String> =
+            models.values().map(|m| m.name.clone()).collect();
+        assert!(names.contains("qwen3-coder-30b"));
+        assert!(names.contains("qwen3-1.7b"));
+        assert!(names.contains("qwen3-embedding-0.6b"));
+
+        // Second call with the same config must not duplicate entries
+        // (deterministic ModelId per slot + path).
+        register_local_model_slots(&app_state, &cfg, node_id);
+        let models2 = app_state.inner.inference_store.list_models();
+        assert_eq!(
+            models2.len(),
+            3,
+            "re-registering same config must upsert, not duplicate"
+        );
     }
 }
 

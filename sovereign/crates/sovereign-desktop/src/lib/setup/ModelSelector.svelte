@@ -34,12 +34,12 @@
 
   const EMBED_MODELS: RecommendedModel[] = [
     {
-      name: "nomic-embed-text-v1.5",
-      file_name: "nomic-embed-text-v1.5.Q4_K_M.gguf",
-      url: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q4_K_M.gguf",
-      size_estimate: "~80 MB",
+      name: "Qwen3-Embedding-0.6B",
+      file_name: "Qwen3-Embedding-0.6B-Q8_0.gguf",
+      url: "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf",
+      size_estimate: "~640 MB",
       ram_minimum: "4 GB",
-      description: "Fast, high-quality 768-dim embeddings. Best default choice.",
+      description: "Purpose-built retrieval model with last-token pooling. Best default choice.",
       min_ram_gb: 2,
     },
     {

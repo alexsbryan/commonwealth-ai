@@ -83,8 +83,8 @@ pub struct DesktopConfig {
     /// last-token / cls) and instruction prefixes. For most open-weights
     /// embedding models this should be:
     ///   - `Qwen3Embedding` for qwen3-embedding-* GGUF files (last-token pooling)
-    ///   - `Unknown` (default) for nomic-embed-text, mxbai, and similar
-    ///     mean-pooling models
+    ///   - `Unknown` (default) for mxbai and similar mean-pooling
+    ///     embedders
     ///
     /// Getting this wrong does not prevent ingestion but will produce
     /// incompatible vectors if you later try to collaborate with a peer
@@ -581,10 +581,10 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&inference));
     let inference_fn =
         sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
-    // Derive the embedding model identifier from the configured file path so
-    // _corpus_meta.json records the actual model rather than the hardcoded
-    // "nomic-embed-text-v2" default.  We use the filename stem (without .gguf)
-    // as a stable, human-readable identifier.
+    // Derive the embedding model identifier from the configured file path
+    // so `_corpus_meta.json` records the actual model rather than the
+    // hardcoded `"qwen3-embedding-0.6b"` default. We use the filename
+    // stem (without .gguf) as a stable, human-readable identifier.
     let embed_model_name = config
         .embed_model_path
         .as_ref()

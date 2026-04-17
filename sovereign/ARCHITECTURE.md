@@ -321,17 +321,17 @@ The system ships with a `models.toml` manifest:
 [profiles.default]
 fast = { repo = "Qwen/Qwen3-1.7B-GGUF", quant = "Q4_K_M", min_ram_gb = 4 }
 primary = { repo = "Qwen/Qwen3-14B-GGUF", quant = "Q4_K_M", min_vram_gb = 10 }
-embed = { repo = "nomic-ai/nomic-embed-text-v2-moe-GGUF", quant = "F16" }
+embed = { repo = "Qwen/Qwen3-Embedding-0.6B-GGUF", quant = "F16" }
 
 [profiles.low_mem]
 fast = { repo = "Qwen/Qwen3-0.6B-GGUF", quant = "Q4_K_M", min_ram_gb = 2 }
 primary = { repo = "Qwen/Qwen3-8B-GGUF", quant = "Q4_K_M", min_vram_gb = 6 }
-embed = { repo = "nomic-ai/nomic-embed-text-v2-moe-GGUF", quant = "Q8_0" }
+embed = { repo = "Qwen/Qwen3-Embedding-0.6B-GGUF", quant = "Q8_0" }
 
 [profiles.cpu_only]
 fast = { repo = "Qwen/Qwen3-0.6B-GGUF", quant = "Q4_K_M" }
 primary = { repo = "Qwen/Qwen3-4B-GGUF", quant = "Q4_K_M" }
-embed = { repo = "nomic-ai/nomic-embed-text-v2-moe-GGUF", quant = "Q4_K_M" }
+embed = { repo = "Qwen/Qwen3-Embedding-0.6B-GGUF", quant = "Q4_K_M" }
 ```
 
 On first launch, the system detects GPU vendor, VRAM, and system RAM. It selects the appropriate profile automatically. Models download from Hugging Face on demand. The user sees a progress bar that says "Setting up your assistant" — not model names, not quantization levels.
@@ -1092,7 +1092,7 @@ keys_file = "/etc/sovereign/keys.toml"
 mode = "local"
 fast_model = "Qwen/Qwen3-1.7B-GGUF"
 primary_model = "Qwen/Qwen3-14B-GGUF"
-embed_model = "nomic-ai/nomic-embed-text-v2-moe-GGUF"
+embed_model = "Qwen/Qwen3-Embedding-0.6B-GGUF"
 
 # Or point at an existing inference endpoint:
 # mode = "remote"

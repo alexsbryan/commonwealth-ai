@@ -38,6 +38,9 @@ pub async fn run(args: &[String]) -> i32 {
     }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(&args[1..]).await,
+        Some("restart") => restart_daemon().await,
+        Some("reload") => reload_daemon().await,
+        Some("status") => status_daemon().await,
         Some(other) => {
             eprintln!("error: unknown daemon subcommand '{other}'");
             crate::util::help::print(&HELP);
@@ -55,13 +58,15 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign daemon",
     summary: "Long-running service managed by launchd (macOS) or systemd (Linux).",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign daemon run"),
+        crate::util::help::HelpSection::Usage("sovereign daemon <subcommand>"),
         crate::util::help::HelpSection::Subcommands(&[
-            ("run", "Run in the foreground; exits on SIGINT/SIGTERM"),
+            ("run",     "Run in the foreground; exits on SIGINT/SIGTERM. Normally the OS service manager invokes this, not you."),
+            ("status",  "Report whether the daemon is running and answering on :9741."),
+            ("reload",  "Apply config changes without a restart (POST /v1/admin/reload). Use this after editing model paths in ~/.config/sovereign/config.toml."),
+            ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests. Use when a model/port/data_dir change requires a full rebind or the daemon is wedged."),
         ]),
         crate::util::help::HelpSection::Notes(
-            "You don't normally invoke this directly. `sovereign setup` registers the\n\
-             service; the OS starts it via `daemon run`. Logs: ~/.sovereign/logs/daemon.log.",
+            "Logs: ~/.sovereign/logs/daemon.log. The daemon was registered by `sovereign setup`.",
         ),
     ],
 };
@@ -157,6 +162,54 @@ async fn run_daemon(_args: &[String]) -> i32 {
     daemon.set_provider_factory(Arc::new(LlamaCppFactory)).await;
     daemon.set_setup_config(config.clone()).await;
 
+    // ── Project freshness pipeline ────────────────────────────────
+    //
+    // The Reindexer owns per-project FS watchers, git-HEAD pollers,
+    // and the coalescing rebuild queue. Each registered project
+    // gets one `ProjectHandle`; the daemon shells out to this
+    // subsystem from HTTP (`/v1/projects/*`) rather than invoking
+    // exporters synchronously. Persisted projects (loaded from
+    // `~/.sovereign/projects.json`) are re-registered at startup
+    // so a daemon restart resumes watching everything without a
+    // user action.
+    let freshness_indexes_dir = data_dir.join("indexes");
+    let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle = {
+        // Reuse the merged ScipGraph we already build for the MCP
+        // tool registry so tool calls and the reindexer see the
+        // same object. `build_tool_registry` below creates its
+        // own copy; we wrap ours in an ArcSwap so the reindexer
+        // can hot-swap after every rebuild.
+        let initial = build_merged_scip_graph(&freshness_indexes_dir).await;
+        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(initial))
+    };
+    let reindexer = sovereign_mesh::reindexer::Reindexer::new(
+        freshness_indexes_dir.clone(),
+        Arc::clone(&merged_handle),
+    );
+    daemon
+        .install_project_http_router(sovereign_mesh::project_http::project_router(Arc::clone(
+            &reindexer,
+        )))
+        .await;
+
+    // Resume any previously-registered projects so FS watchers
+    // come back up without the user running `project register`
+    // again. Missing / unreadable registry is non-fatal — the
+    // daemon runs happily with zero registered projects.
+    let registry = sovereign_mesh::projects::Registry::load().unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "could not load project registry; starting empty");
+        sovereign_mesh::projects::Registry::default()
+    });
+    for entry in registry.entries() {
+        reindexer.register(entry.clone()).await;
+        tracing::info!(corpus = %entry.corpus_id, "resumed registered project");
+    }
+    warn_orphaned_indexes(&freshness_indexes_dir, &registry);
+    // Keep the reindexer alive for the lifetime of the daemon.
+    // The variable binding is load-bearing — dropping the Arc
+    // stops every supervised watcher.
+    let _reindexer_handle = reindexer;
+
     // ── Resume or bootstrap a solo mesh ───────────────────────────
     match daemon.try_resume().await {
         Ok(true) => {
@@ -240,6 +293,36 @@ async fn build_tool_registry(
         &engine,
     ))));
 
+    // Call-graph tools. Merge every `scip_graph.db` under the indexes
+    // directory into a single in-memory graph, then register
+    // find_callers / find_callees / blast_radius. Without this step
+    // agents can't trace references through the daemon — project_serve
+    // had these, the daemon didn't.
+    let merged_graph = build_merged_scip_graph(&indexes_dir).await;
+    let graph_handle: sovereign_tools::ScipGraphHandle =
+        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(merged_graph));
+    let health_checker = Arc::new(
+        sovereign_tools::IndexHealthChecker::new(Arc::clone(&graph_handle)),
+    );
+    tools.register(Box::new(
+        sovereign_tools::FindCallersTool::new(
+            Arc::clone(&engine),
+            Arc::clone(&graph_handle),
+        )
+        .with_health_checker(Arc::clone(&health_checker)),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::FindCalleesTool::new(
+            Arc::clone(&engine),
+            Arc::clone(&graph_handle),
+        )
+        .with_health_checker(Arc::clone(&health_checker)),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
+            .with_health_checker(Arc::clone(&health_checker)),
+    ));
+
     // Notes tools work regardless of indexing state.
     tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
         &notes,
@@ -254,7 +337,248 @@ async fn build_tool_registry(
         Arc::clone(&notes),
     )));
 
+    // Project context — served from `indexes/project_docs.db` if a
+    // project has been init'd. Absent on a bare-setup daemon; that's
+    // fine, just one fewer tool.
+    if let Ok(ds) = corpus_engine::ProjectDocsStore::open(
+        &indexes_dir.join("project_docs.db"),
+    ) {
+        tools.register(Box::new(sovereign_tools::ProjectContextTool::new(
+            Arc::new(ds),
+        )));
+    }
+
+    // Doc-path checker — no state dependency.
+    tools.register(Box::new(sovereign_tools::CheckDocPathsTool::new()));
+
     tools
+}
+
+/// Merge every per-corpus `scip_graph.db` under `indexes_dir` into a
+/// single in-memory graph. Same idea as `project_cmd::load_merged_graph`
+/// but without the operator-facing stdout printing, since the daemon
+/// runs under launchd/systemd.
+async fn build_merged_scip_graph(
+    indexes_dir: &std::path::Path,
+) -> corpus_engine::ScipGraph {
+    let merged = corpus_engine::ScipGraph::open_in_memory("merged")
+        .expect("in-memory ScipGraph");
+    let Ok(entries) = std::fs::read_dir(indexes_dir) else {
+        return merged;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let scip_path = path.join("scip_graph.db");
+        if !scip_path.exists() {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("?")
+            .to_string();
+        match merged.import_from_path(&scip_path).await {
+            Ok((syms, refs)) => {
+                if syms > 0 || refs > 0 {
+                    tracing::info!(
+                        corpus = %name,
+                        symbols = syms,
+                        references = refs,
+                        "merged SCIP graph from corpus"
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %name,
+                    error = %e,
+                    "could not import SCIP graph — skipping"
+                );
+            }
+        }
+    }
+    merged
+}
+
+/// `sovereign daemon restart` — hard-restart the registered service.
+/// Most users reach for this when the daemon feels stuck or after a
+/// change that isn't hot-reloadable (port, data_dir). For model-only
+/// changes, prefer `sovereign daemon reload` — no gap in availability.
+async fn restart_daemon() -> i32 {
+    eprintln!("restarting sovereign daemon …");
+    match crate::service_install::restart_service() {
+        Ok(()) => {
+            // Poll `/v1/models` so we don't hand control back to the
+            // user while the daemon is still respawning. Ready when
+            // we get any 2xx response — even an empty model list
+            // means the router is up.
+            if wait_for_ready(std::time::Duration::from_secs(10)).await {
+                eprintln!("✓ daemon restarted and answering on :9741");
+                0
+            } else {
+                eprintln!(
+                    "⚠ restart command accepted but daemon didn't respond within 10s.\n\
+                     check logs: ~/.sovereign/logs/daemon.log"
+                );
+                1
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            1
+        }
+    }
+}
+
+/// `sovereign daemon reload` — POST /v1/admin/reload. Hot-reloads
+/// changed model paths in place without dropping connections.
+/// Reports which fields hot-reloaded and which require a full
+/// restart; a subsequent `sovereign daemon restart` picks those up.
+async fn reload_daemon() -> i32 {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: build http client: {e}");
+            return 1;
+        }
+    };
+    let resp = client
+        .post("http://127.0.0.1:9741/v1/admin/reload")
+        .json(&serde_json::json!({}))
+        .send()
+        .await;
+    let resp = match resp {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!(
+                "error: could not reach daemon at :9741 ({e}).\n\
+                 hint: is it running? try `sovereign daemon status`."
+            );
+            return 1;
+        }
+    };
+    let status = resp.status();
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .unwrap_or_else(|_| serde_json::json!({"error": "non-JSON response"}));
+    if !status.is_success() {
+        eprintln!("error: admin/reload returned {status}: {body}");
+        return 1;
+    }
+    let reloaded = body
+        .get("reloaded_fields")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let restart_required = body
+        .get("restart_required")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if reloaded.is_empty() && !restart_required {
+        eprintln!("✓ no config changes detected — nothing to reload");
+        return 0;
+    }
+    if !reloaded.is_empty() {
+        let names: Vec<String> = reloaded
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+        eprintln!("✓ hot-reloaded: {}", names.join(", "));
+    }
+    if restart_required {
+        let pending = body
+            .get("restart_required_fields")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        eprintln!(
+            "⚠ these changes need a full restart: {pending}\n\
+             run `sovereign daemon restart` to apply them."
+        );
+    }
+    0
+}
+
+/// `sovereign daemon status` — is the daemon alive and answering?
+async fn status_daemon() -> i32 {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: build http client: {e}");
+            return 1;
+        }
+    };
+    match client
+        .get("http://127.0.0.1:9741/v1/models")
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => {
+            let body: serde_json::Value = r.json().await.unwrap_or_else(|_| {
+                serde_json::json!({"data": []})
+            });
+            let count = body
+                .get("data")
+                .and_then(|d| d.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            eprintln!("✓ daemon running at http://localhost:9741 ({count} models registered)");
+            0
+        }
+        Ok(r) => {
+            eprintln!(
+                "⚠ something is answering on :9741 but returned {}. \
+                 not a sovereign daemon, or in a bad state.",
+                r.status()
+            );
+            1
+        }
+        Err(_) => {
+            eprintln!(
+                "✗ daemon not reachable on :9741.\n\
+                 start it with `sovereign daemon restart` (if installed)\n\
+                 or run `sovereign setup` (if not yet configured)."
+            );
+            1
+        }
+    }
+}
+
+/// Poll `/v1/models` until it returns 2xx or `timeout` elapses.
+/// Returns true when the daemon is answering, false on timeout.
+async fn wait_for_ready(timeout: std::time::Duration) -> bool {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(1))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let start = std::time::Instant::now();
+    while start.elapsed() < timeout {
+        if let Ok(r) = client.get("http://127.0.0.1:9741/v1/models").send().await {
+            if r.status().is_success() {
+                return true;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+    false
 }
 
 /// Rebuilds the embedded llama.cpp provider from a fresh `SetupConfig`.
@@ -316,5 +640,67 @@ async fn wait_for_shutdown() {
     {
         let _ = tokio::signal::ctrl_c().await;
     }
+}
+
+/// Surface orphaned per-corpus SCIP indexes at startup.
+///
+/// On an upgrade from a pre-registry sovereign, `~/.sovereign/
+/// indexes/<corpus>/scip_graph.db` will often exist even though
+/// `projects.json` is empty. The daemon can't safely auto-register
+/// those — we don't know which filesystem path each one came
+/// from, and guessing could point the FS watcher at the wrong
+/// directory. Instead, log a one-shot hint so the operator knows
+/// to re-register each repo manually.
+fn warn_orphaned_indexes(
+    indexes_dir: &std::path::Path,
+    registry: &sovereign_mesh::projects::Registry,
+) {
+    let Ok(entries) = std::fs::read_dir(indexes_dir) else {
+        return;
+    };
+    let registered: std::collections::HashSet<&str> = registry
+        .entries()
+        .iter()
+        .map(|e| e.corpus_id.as_str())
+        .collect();
+    let mut orphans: Vec<String> = Vec::new();
+    for entry in entries.flatten() {
+        let Some(name) = entry
+            .file_name()
+            .to_str()
+            .map(|s| s.to_string())
+        else {
+            continue;
+        };
+        // Skip flat files (project_docs.db, lint_results.db, etc.).
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let scip = entry.path().join("scip_graph.db");
+        if !scip.exists() {
+            continue;
+        }
+        if registered.contains(name.as_str()) {
+            continue;
+        }
+        orphans.push(name);
+    }
+    if orphans.is_empty() {
+        return;
+    }
+    eprintln!();
+    eprintln!(
+        "  \u{26a0} Found {} SCIP index(es) on disk with no registry entry:",
+        orphans.len()
+    );
+    for o in &orphans {
+        eprintln!("      {o}");
+    }
+    eprintln!(
+        "  Run `sovereign project register` in each repo to resume watching.\n\
+         (The daemon won't guess the filesystem path for you — bad guesses\n\
+         point the FS watcher at the wrong directory.)"
+    );
+    eprintln!();
 }
 

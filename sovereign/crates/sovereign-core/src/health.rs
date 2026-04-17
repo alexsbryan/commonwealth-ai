@@ -494,8 +494,8 @@ mod tests {
             },
             HealthIssue::EmbedModelMismatch {
                 corpus_id: "sep".into(),
-                index_model: "nomic-v1".into(),
-                active_model: "qwen3".into(),
+                index_model: "mxbai-embed-large-v1".into(),
+                active_model: "qwen3-embedding-0.6b".into(),
                 index_dims: 768,
                 active_dims: 1024,
             },

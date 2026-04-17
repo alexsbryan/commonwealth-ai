@@ -14,6 +14,28 @@ use std::time::{Duration, SystemTime};
 use arc_swap::ArcSwap;
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
 
+/// Human-readable identifier for the embed model this user has set up,
+/// used as the `expected_embedding_model` on the `CorpusEngine` so the
+/// log line and `_corpus_meta.json` reflect what they actually loaded
+/// (e.g. `qwen3-embedding-0.6b-q8_0`) instead of the engine's default.
+///
+/// Sources `SetupConfig::load()` and falls back to the default when
+/// the user hasn't run `sovereign setup` yet (in which case the
+/// engine's default is harmless — code indexes are FTS-only).
+fn configured_embed_model_name() -> String {
+    if let Ok(cfg) = sovereign_core::setup_config::SetupConfig::load() {
+        if let Some(stem) = cfg
+            .models
+            .embed
+            .file_stem()
+            .and_then(|s| s.to_str())
+        {
+            return stem.to_lowercase();
+        }
+    }
+    "qwen3-embedding-0.6b".to_string()
+}
+
 // ─── Dispatch ────────────────────────────────────────────────
 
 pub async fn run_project(args: &[String]) -> i32 {
@@ -35,6 +57,10 @@ pub async fn run_project(args: &[String]) -> i32 {
         "refresh" => cmd_refresh(&args[1..]).await,
         "serve" => cmd_serve(&args[1..]).await,
         "install-hooks" => cmd_install_hooks(&args[1..]).await,
+        "register" => cmd_register(&args[1..]).await,
+        "unregister" => cmd_unregister(&args[1..]).await,
+        "list" => cmd_list(&args[1..]).await,
+        "watch" => cmd_watch(&args[1..]).await,
         other => {
             eprintln!("Unknown project subcommand: {other}");
             crate::util::help::print(&HELP);
@@ -49,11 +75,15 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage("sovereign project <subcommand> [flags]"),
         crate::util::help::HelpSection::Subcommands(&[
-            ("init",           "Set up code intelligence for the current workspace"),
+            ("init",           "Set up code intelligence for the current workspace (also registers with the daemon)"),
             ("status",         "Show the status of code intelligence"),
-            ("refresh",        "Re-export the SCIP call graph (runs automatically on commit)"),
-            ("serve",          "Start a lightweight MCP server (no model required)"),
-            ("install-hooks",  "Upgrade (or install) the post-commit hook without re-running init"),
+            ("refresh",        "Nudge the daemon to rebuild the SCIP graph now"),
+            ("serve",          "Foreground watcher mode for debugging test/lint scripts"),
+            ("register",       "Tell the daemon to watch this project (run once per repo)"),
+            ("unregister",     "Remove a project from the daemon's watch list"),
+            ("list",           "List every project the daemon is watching"),
+            ("watch",          "Inspect or control watchers: `watch status | restart | logs`"),
+            ("install-hooks",  "Deprecated — the daemon now owns freshness; prints migration hint"),
         ]),
         crate::util::help::HelpSection::Notes(
             "Run `sovereign project <subcommand> --help` for subcommand-specific flags.",
@@ -452,7 +482,8 @@ vector = false
         Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
     });
     let recipes_dir = tempdir.clone();
-    let engine = CorpusEngine::new(recipes_dir, data_dir.clone(), embed);
+    let engine = CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
+        .with_embedding_model(&configured_embed_model_name());
 
     // Progress callback — inline progress bar.
     let progress: corpus_engine::ProgressCallback = Box::new(|p| match p {
@@ -828,20 +859,55 @@ vector = false
         }
     }
 
-    // ── Step 5: Git hooks ───────────────────────────────────────
-    if !no_hooks && has_git && !no_scip {
-        println!();
-        println!("  Installing git hooks...");
-        match install_post_commit_hook(&repo_root, &corpus_id) {
-            Ok(()) => println!("    \u{2713} .git/hooks/post-commit"),
+    // ── Step 5: Legacy git-hook cleanup ─────────────────────────
+    //
+    // Earlier sovereign versions installed a post-commit hook that
+    // shelled out to `sovereign project refresh`. The daemon now
+    // owns freshness (FS watcher + git HEAD poll + startup
+    // catch-up), so the hook is redundant and has been a common
+    // source of silent staleness when the binary path drifted.
+    // Remove any legacy hook we find; never install a new one.
+    if has_git {
+        match remove_legacy_hook(&repo_root) {
+            Ok(true) => {
+                println!();
+                println!("  Cleaned up legacy post-commit hook — the daemon now keeps");
+                println!("  the graph fresh automatically.");
+            }
+            Ok(false) => { /* nothing to remove */ }
             Err(e) => {
-                eprintln!("    \u{2717} Cannot install hook: {e}");
-                eprintln!("      Run `sovereign project refresh` manually after commits.");
+                eprintln!("    \u{26a0} Could not clean up legacy hook: {e}");
+            }
+        }
+        let _ = no_hooks;
+    }
+
+    // ── Step 6: Register with the running daemon ────────────────
+    //
+    // The daemon's Reindexer picks this up immediately — no
+    // restart needed. If the daemon isn't running we fall through
+    // silently; the next `sovereign daemon restart` (or startup)
+    // will pick up the registry entry via `Registry::load()`.
+    if !no_scip {
+        println!();
+        println!("  Registering with daemon...");
+        let register_body = serde_json::json!({
+            "corpus_id": corpus_id,
+            "root": abs_path.display().to_string(),
+        });
+        match daemon_post("/v1/projects/register", register_body).await {
+            Ok(_) => {
+                println!("    \u{2713} Daemon is now watching this project");
+            }
+            Err(e) => {
+                println!("    \u{26a0} Could not reach the daemon ({e}).");
+                println!("      The registry entry was still written; the daemon will");
+                println!("      pick it up on next start. Try `sovereign daemon status`.");
             }
         }
     }
 
-    // ── Step 6: MCP server check ────────────────────────────────
+    // ── Step 7: MCP server check ────────────────────────────────
     println!();
     println!("  MCP server...");
 
@@ -850,8 +916,7 @@ vector = false
         println!("    \u{2713} {mcp_url}");
     } else {
         println!("    \u{26a0} Not running at {mcp_url}");
-        println!("      Start with: sovereign-server --config <config.toml>");
-        println!("      Or configure Claude Code to use stdio transport.");
+        println!("      Start with: sovereign daemon restart");
     }
 
     // ── Done ────────────────────────────────────────────────────
@@ -861,6 +926,7 @@ vector = false
     println!();
     println!("  Quick check:");
     println!("    sovereign project status");
+    println!("    sovereign project watch status");
     println!();
 
     0
@@ -1062,12 +1128,22 @@ async fn cmd_refresh(args: &[String]) -> i32 {
         return 0;
     }
     let mut quiet = false;
+    let mut local = false;
     let mut data_dir: Option<PathBuf> = None;
+    let mut explicit_name: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--quiet" | "-q" => quiet = true,
+            // Escape hatch: run the full in-process export instead
+            // of nudging the daemon. Useful when the daemon is
+            // down or the user is debugging the exporter itself.
+            "--local" => local = true,
+            "--name" => {
+                i += 1;
+                explicit_name = args.get(i).cloned();
+            }
             "--data-dir" => {
                 i += 1;
                 data_dir = args.get(i).map(PathBuf::from);
@@ -1081,6 +1157,40 @@ async fn cmd_refresh(args: &[String]) -> i32 {
         Some(r) => r,
         None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
     };
+
+    // Default path: nudge the running daemon so its Reindexer
+    // handles the rebuild in-process. Coalesces with any FS /
+    // git-poll signals that might have fired concurrently; keeps
+    // the CLI decoupled from the exporter plumbing. Falls back to
+    // the legacy in-process path when --local is set or the
+    // daemon is unreachable.
+    if !local {
+        let corpus_id = explicit_name
+            .clone()
+            .unwrap_or_else(|| derive_corpus_id(&repo_root));
+        match daemon_post(
+            &format!("/v1/projects/{corpus_id}/rebuild"),
+            serde_json::json!({ "reason": "cli refresh" }),
+        )
+        .await
+        {
+            Ok(_) => {
+                if !quiet {
+                    println!("  \u{2713} Rebuild nudged for \"{corpus_id}\".");
+                    println!("    Check progress with `sovereign project watch status {corpus_id}`.");
+                }
+                return 0;
+            }
+            Err(e) => {
+                if !quiet {
+                    eprintln!("  \u{26a0} Daemon nudge failed: {e}");
+                    eprintln!("    Falling back to local in-process rebuild.");
+                }
+                // Fall through to legacy path below.
+            }
+        }
+    }
+    let _ = explicit_name;
 
     let abs_path = repo_root
         .canonicalize()
@@ -1232,6 +1342,32 @@ async fn cmd_serve(args: &[String]) -> i32 {
         crate::util::help::print(&HELP_SERVE);
         return 0;
     }
+
+    // Check whether the daemon already owns :9741. If so, running
+    // the legacy in-process server on top collides (silent bind
+    // failure) and degrades the user's MCP surface. Refuse to
+    // start and redirect to the daemon workflow.
+    if daemon_is_running().await {
+        eprintln!();
+        eprintln!("  `sovereign project serve` is superseded.");
+        eprintln!();
+        eprintln!("  The running sovereign daemon already serves MCP on :9741 and");
+        eprintln!("  owns freshness (FS watcher + git HEAD poll + startup catch-up).");
+        eprintln!("  There's no need to run a second server on top of it.");
+        eprintln!();
+        eprintln!("  To have the daemon watch this project:");
+        eprintln!("    sovereign project register");
+        eprintln!();
+        eprintln!("  To inspect watcher state:");
+        eprintln!("    sovereign project watch status");
+        eprintln!();
+        eprintln!("  If you really want the legacy in-process server (e.g. the daemon");
+        eprintln!("  is broken and you need a fallback), stop the daemon first:");
+        eprintln!("    launchctl stop com.sovereign.daemon   # macOS");
+        eprintln!("    systemctl --user stop sovereign       # Linux");
+        return 1;
+    }
+
     let mut port: u16 = 9741;
     let mut data_dir: Option<PathBuf> = None;
     let mut sovereign_dir_arg: Option<PathBuf> = None;
@@ -1283,14 +1419,20 @@ async fn cmd_serve(args: &[String]) -> i32 {
         Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
     });
     let recipes_dir = data_dir.clone();
-    let engine = Arc::new(CorpusEngine::new(recipes_dir, data_dir.clone(), embed));
+    let engine = Arc::new(
+        CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
+            .with_embedding_model(&configured_embed_model_name()),
+    );
 
     // List discovered indexes.
     match engine.installed_indexes().await {
         Ok(indexes) => {
             let code_indexes: Vec<_> = indexes
                 .iter()
-                .filter(|i| i.embedding_model == "nomic-embed-text-v2" || i.chunk_count > 0)
+                // Accept any index with content — the model string is
+                // informational after setup no longer locks everyone to a
+                // single default.
+                .filter(|i| i.chunk_count > 0)
                 .collect();
             if code_indexes.is_empty() {
                 eprintln!("  warning: no indexes found in {}", data_dir.display());
@@ -2691,6 +2833,11 @@ async fn cmd_install_hooks(args: &[String]) -> i32 {
         crate::util::help::print(&HELP_INSTALL_HOOKS);
         return 0;
     }
+    // Deprecated. The daemon's Reindexer now keeps the graph fresh
+    // via FS watcher + git HEAD poll + startup catch-up, so the old
+    // post-commit hook is no longer useful (and its failure modes
+    // were the reason for the rewrite). Remove any legacy hook we
+    // find and tell the user why.
     let repo_root = match find_repo_root() {
         Some(r) => r,
         None => {
@@ -2698,26 +2845,453 @@ async fn cmd_install_hooks(args: &[String]) -> i32 {
             return 1;
         }
     };
-
-    if !repo_root.join(".git").exists() {
-        eprintln!("error: {} is not a git repo root", repo_root.display());
-        return 1;
-    }
-
-    match install_post_commit_hook(&repo_root, "") {
-        Ok(()) => {
+    match remove_legacy_hook(&repo_root) {
+        Ok(removed) => {
+            if removed {
+                println!(
+                    "  \u{2713} Removed legacy post-commit hook from {}/.git/hooks/post-commit",
+                    repo_root.display()
+                );
+            } else {
+                println!("  No legacy sovereign hook found — nothing to do.");
+            }
             println!(
-                "  \u{2713} Installed post-commit hook at {}/.git/hooks/post-commit",
-                repo_root.display()
+                "\n  The daemon now owns freshness. Register this project with:\n\
+                 \n    sovereign project register\n\n\
+                 The FS watcher + git-HEAD poll keep the graph fresh without a hook.",
             );
-            println!("    Output streams to ~/.sovereign/hooks.log after each commit.");
             0
         }
         Err(e) => {
-            eprintln!("error: failed to install hook: {e}");
+            eprintln!("error: could not clean up hook: {e}");
             1
         }
     }
+}
+
+// ─── Daemon-owned project lifecycle (register / list / watch) ───
+
+/// Base URL the CLI uses to talk to the local daemon. Hardcoded to
+/// `127.0.0.1:9741` — the freshness HTTP surface is loopback-only
+/// by design, so we never talk to a remote host.
+const DAEMON_BASE: &str = "http://127.0.0.1:9741";
+
+async fn cmd_register(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        print_simple_help(
+            "sovereign project register",
+            "Register the current directory with the daemon's freshness pipeline.",
+            &[
+                "sovereign project register",
+                "sovereign project register --root /path/to/repo",
+                "sovereign project register --name my-monorepo",
+            ],
+        );
+        return 0;
+    }
+
+    let mut root: Option<PathBuf> = None;
+    let mut name: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                root = args.get(i).map(PathBuf::from);
+            }
+            "--name" => {
+                i += 1;
+                name = args.get(i).cloned();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let root = root
+        .or_else(find_repo_root)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let root = root.canonicalize().unwrap_or(root);
+    let corpus_id = name.unwrap_or_else(|| derive_corpus_id(&root));
+
+    let body = serde_json::json!({
+        "corpus_id": corpus_id,
+        "root": root.display().to_string(),
+    });
+    match daemon_post("/v1/projects/register", body).await {
+        Ok(resp) => {
+            let created = resp["created"].as_bool().unwrap_or(false);
+            println!(
+                "  \u{2713} {} project \"{}\" at {}",
+                if created { "Registered" } else { "Updated" },
+                corpus_id,
+                root.display()
+            );
+            println!("    The daemon is now watching this project. Use `sovereign project watch status` to inspect.");
+            0
+        }
+        Err(e) => {
+            eprintln!("error: daemon call failed: {e}");
+            eprintln!("hint: is the daemon running? try `sovereign daemon status`.");
+            1
+        }
+    }
+}
+
+async fn cmd_unregister(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        print_simple_help(
+            "sovereign project unregister",
+            "Stop the daemon from watching a project.",
+            &["sovereign project unregister <corpus_id>"],
+        );
+        return 0;
+    }
+    let Some(corpus_id) = args.first().cloned() else {
+        eprintln!("error: missing corpus_id. usage: sovereign project unregister <corpus_id>");
+        return 1;
+    };
+    match daemon_post(&format!("/v1/projects/{corpus_id}/unregister"), serde_json::json!({}))
+        .await
+    {
+        Ok(resp) => {
+            let removed = resp["removed"].as_bool().unwrap_or(false);
+            if removed {
+                println!("  \u{2713} Unregistered \"{corpus_id}\".");
+            } else {
+                println!("  \"{corpus_id}\" was not registered — nothing to do.");
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("error: daemon call failed: {e}");
+            1
+        }
+    }
+}
+
+async fn cmd_list(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        print_simple_help(
+            "sovereign project list",
+            "List every project the daemon is watching.",
+            &["sovereign project list"],
+        );
+        return 0;
+    }
+    match daemon_get("/v1/projects").await {
+        Ok(resp) => {
+            let Some(projects) = resp["projects"].as_array() else {
+                println!("  (empty response)");
+                return 0;
+            };
+            if projects.is_empty() {
+                println!("  No projects registered yet. Run `sovereign project register` in a repo to add one.");
+                return 0;
+            }
+            println!("  Registered projects:");
+            for p in projects {
+                let id = p["corpus_id"].as_str().unwrap_or("?");
+                let root = p["root"].as_str().unwrap_or("?");
+                let age = p["graph_age_secs"].as_u64();
+                let age_str = match age {
+                    Some(s) => format_graph_age(s),
+                    None => "never built".to_string(),
+                };
+                let in_flight = p["rebuild_in_flight"].as_bool().unwrap_or(false);
+                println!(
+                    "    {id}  ({age_str}){}",
+                    if in_flight { "  [rebuilding]" } else { "" }
+                );
+                println!("      root: {root}");
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("error: daemon call failed: {e}");
+            eprintln!("hint: is the daemon running? try `sovereign daemon status`.");
+            1
+        }
+    }
+}
+
+async fn cmd_watch(args: &[String]) -> i32 {
+    if args.is_empty() || crate::util::help::wants_help(args) {
+        print_simple_help(
+            "sovereign project watch",
+            "Inspect or control per-project watchers.",
+            &[
+                "sovereign project watch status [<id>]",
+                "sovereign project watch restart <id> [<watcher>]",
+                "sovereign project watch logs <id> <watcher>",
+            ],
+        );
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    match args[0].as_str() {
+        "status" => cmd_watch_status(&args[1..]).await,
+        "restart" => cmd_watch_restart(&args[1..]).await,
+        "logs" => cmd_watch_logs(&args[1..]).await,
+        other => {
+            eprintln!("Unknown watch subcommand: {other}");
+            1
+        }
+    }
+}
+
+async fn cmd_watch_status(args: &[String]) -> i32 {
+    let target = args.first().cloned();
+    let resp = match daemon_get("/v1/projects").await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: daemon call failed: {e}");
+            return 1;
+        }
+    };
+    let Some(projects) = resp["projects"].as_array() else {
+        return 1;
+    };
+    let filtered: Vec<_> = projects
+        .iter()
+        .filter(|p| match target.as_deref() {
+            Some(id) => p["corpus_id"].as_str() == Some(id),
+            None => true,
+        })
+        .collect();
+    if filtered.is_empty() {
+        if let Some(id) = target {
+            eprintln!("\"{id}\" is not registered. run `sovereign project list` to see registered projects.");
+        } else {
+            println!("  no projects registered yet.");
+        }
+        return 1;
+    }
+    for p in filtered {
+        let id = p["corpus_id"].as_str().unwrap_or("?");
+        println!("  {id}");
+        let Some(status) = p["status"].as_object() else { continue };
+        for (watcher, s) in status {
+            let state = s["state"].as_str().unwrap_or("?");
+            let extra = match state {
+                "crashed" => {
+                    let reason = s["reason"].as_str().unwrap_or("?");
+                    let count = s["count"].as_u64().unwrap_or(0);
+                    format!(" — {count} crashes, last: {reason}")
+                }
+                "disabled" => {
+                    let reason = s["reason"].as_str().unwrap_or("?");
+                    format!(" — {reason}")
+                }
+                _ => String::new(),
+            };
+            println!("    {watcher:8}  {state}{extra}");
+        }
+        if let Some(age) = p["graph_age_secs"].as_u64() {
+            println!("    graph age: {}", format_graph_age(age));
+        }
+    }
+    0
+}
+
+async fn cmd_watch_restart(args: &[String]) -> i32 {
+    let Some(corpus_id) = args.first().cloned() else {
+        eprintln!("error: usage: sovereign project watch restart <corpus_id>");
+        return 1;
+    };
+    // For the MVP, "restart" just means "trigger a rebuild". A
+    // full per-watcher restart (re-spawn a Disabled test runner,
+    // for example) requires state plumbing that lands in a later
+    // step; rebuild is the action users reach for 90% of the time.
+    match daemon_post(
+        &format!("/v1/projects/{corpus_id}/rebuild"),
+        serde_json::json!({ "reason": "manual restart via CLI" }),
+    )
+    .await
+    {
+        Ok(_) => {
+            println!("  \u{2713} Rebuild nudged for \"{corpus_id}\".");
+            println!("    Check progress with `sovereign project watch status {corpus_id}`.");
+            0
+        }
+        Err(e) => {
+            eprintln!("error: daemon call failed: {e}");
+            1
+        }
+    }
+}
+
+async fn cmd_watch_logs(args: &[String]) -> i32 {
+    let Some(corpus_id) = args.first().cloned() else {
+        eprintln!("error: usage: sovereign project watch logs <corpus_id> [<watcher>]");
+        return 1;
+    };
+    let watcher = args.get(1).cloned().unwrap_or_else(|| "scip".to_string());
+    let log_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".sovereign")
+        .join("logs")
+        .join(format!("watch-{corpus_id}-{watcher}.log"));
+    if !log_path.exists() {
+        eprintln!(
+            "no log file at {} — the daemon writes per-watcher logs here once the first cycle runs.",
+            log_path.display()
+        );
+        return 1;
+    }
+    // Print the file contents. `tail -f` semantics would be nicer
+    // but pulling in a tailer adds complexity; reading once and
+    // exiting is predictable and scriptable.
+    match std::fs::read_to_string(&log_path) {
+        Ok(s) => {
+            print!("{s}");
+            0
+        }
+        Err(e) => {
+            eprintln!("error: read {}: {e}", log_path.display());
+            1
+        }
+    }
+}
+
+// ─── Small helpers used by the new subcommands ───────────────
+
+/// Best-guess corpus id for a project root. Matches the logic
+/// `cmd_init` uses so `register` and `init` produce the same
+/// registration key by default.
+fn derive_corpus_id(root: &Path) -> String {
+    root.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("project")
+        .to_string()
+}
+
+/// Render a duration-since in a compact, human-readable form.
+/// Used by `project list` and `project watch status`. Named
+/// `format_graph_age` to avoid colliding with the older helper
+/// in this module that produces a different phrasing.
+fn format_graph_age(secs: u64) -> String {
+    if secs < 60 {
+        format!("{secs}s old")
+    } else if secs < 3600 {
+        format!("{}m old", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h old", secs / 3600)
+    } else {
+        format!("{}d old", secs / 86400)
+    }
+}
+
+async fn daemon_post(
+    path: &str,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let url = format!("{DAEMON_BASE}{path}");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("POST {path}: {e}"))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .unwrap_or(serde_json::json!({"error": "non-JSON response"}));
+    if !status.is_success() {
+        return Err(format!("{status}: {body}"));
+    }
+    Ok(body)
+}
+
+/// Cheap TCP + `GET /v1/models` probe. Matches what the desktop's
+/// bootstrap does (see `sovereign-desktop/src-tauri/src/bootstrap.rs`).
+/// Used by `cmd_serve` to decide whether to refuse the legacy path.
+async fn daemon_is_running() -> bool {
+    let tcp = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        tokio::net::TcpStream::connect(("127.0.0.1", 9741)),
+    )
+    .await
+    .map(|r| r.is_ok())
+    .unwrap_or(false);
+    if !tcp {
+        return false;
+    }
+    match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(1))
+        .build()
+    {
+        Ok(c) => c
+            .get("http://127.0.0.1:9741/v1/models")
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
+async fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
+    let url = format!("{DAEMON_BASE}{path}");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET {path}: {e}"))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .unwrap_or(serde_json::json!({"error": "non-JSON response"}));
+    if !status.is_success() {
+        return Err(format!("{status}: {body}"));
+    }
+    Ok(body)
+}
+
+fn print_simple_help(command: &str, summary: &str, examples: &[&str]) {
+    println!();
+    println!("  {command}");
+    println!("  {}", "─".repeat(50));
+    println!("  {summary}");
+    println!();
+    println!("  Usage:");
+    for ex in examples {
+        println!("    {ex}");
+    }
+    println!();
+}
+
+/// Scan `.git/hooks/post-commit` for a `SOVEREIGN_HOOK_V*` marker
+/// and remove the whole file (we were the sole owner). Returns
+/// `Ok(true)` when a hook was removed, `Ok(false)` when none was
+/// found. If the hook file contains both sovereign content and
+/// other content, we leave it alone — the user is expected to
+/// clean it up manually.
+fn remove_legacy_hook(repo_root: &Path) -> std::io::Result<bool> {
+    let hook_path = repo_root.join(".git/hooks/post-commit");
+    if !hook_path.exists() {
+        return Ok(false);
+    }
+    let content = std::fs::read_to_string(&hook_path)?;
+    let is_sovereign_only = content
+        .lines()
+        .any(|l| l.starts_with("# SOVEREIGN_HOOK_V"))
+        && !content.contains("# non-sovereign");
+    if !is_sovereign_only {
+        return Ok(false);
+    }
+    std::fs::remove_file(&hook_path)?;
+    Ok(true)
 }
 
 // ─── Git hooks ───────────────────────────────────────────────

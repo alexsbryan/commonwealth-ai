@@ -402,7 +402,7 @@ pub type InferenceFn = Arc<
 | Commonwealth  | `http_embed_fn()` → POST `/v1/embeddings` | Mesh inference endpoint                  |
 | Tests         | Mock returning zero vectors            | Mock returning canned JSON               |
 
-The default expected embedding model is `nomic-embed-text-v2` (768 dims).
+The default expected embedding model is `qwen3-embedding-0.6b` (768 dims).
 Indexes record their embedding model in `_corpus_meta.json`; opening an index
 with a different model fails with `Error::IncompatibleEmbedding`.
 
@@ -873,7 +873,7 @@ Two listeners, two trust domains.
 
 - `MeshCorpusManager` — install / list / remove corpora.
 - `ShardManager` — `prepare_shards` extracts per-node shards for distribution; `install_received_shard` takes a transferred shard and integrates it locally; `consolidate_shards` merges all local shards into a complete index.
-- `embed_http::http_embed_fn` — builds an `EmbedFn` that POSTs to a remote `/v1/embeddings` endpoint (default model `nomic-embed-text-v2`). This is how a node without a local embed model still ingests via the engine.
+- `embed_http::http_embed_fn` — builds an `EmbedFn` that POSTs to a remote `/v1/embeddings` endpoint (default model `qwen3-embedding-0.6b`). This is how a node without a local embed model still ingests via the engine.
 - `grounding.rs` — `GroundingConfig { enabled, corpora, max_chunks, max_context_tokens, min_relevance, citation_instructions }` and `search_for_grounding` / `format_knowledge_context` for system-prompt injection with citation markers.
 
 ### 5.7 Ledger and fairness
@@ -1053,6 +1053,34 @@ surfaces, `save_config` falls back to `launchctl kickstart -k
 gui/$(id -u)/com.sovereign.daemon` on macOS or `systemctl --user
 restart sovereign` on Linux. Smoke test at
 `sovereign/scripts/smoke-attach-mode.sh`.
+
+**Security posture on `:9741`.** The client listener binds `0.0.0.0`
+(federated inference needs peers to reach `/v1/chat/completions`), so
+the admin surfaces sharing that port — `/v1/mesh/*`, `/v1/admin/*`,
+`/mcp/*` — are defended in two layers:
+
+1. **Router-level middleware** ([`sovereign_mesh::loopback_guard::loopback_only`](crates/sovereign-mesh/src/loopback_guard.rs))
+   applied via `.layer(axum::middleware::from_fn(..))` on each of
+   `mesh_router`, `admin_router`, and `mcp_router`. Rejects non-
+   loopback peers with 403 before any handler runs, and **fails
+   closed** with 500 when `ConnectInfo` is missing (a wiring bug
+   surface — see point 3).
+2. **Per-handler `enforce_localhost` extraction** of
+   `ConnectInfo<SocketAddr>`. Belt + suspenders: if the middleware
+   layer is ever accidentally stripped, the handler still denies.
+3. **The listener must use
+   `.into_make_service_with_connect_info::<SocketAddr>()`** in
+   `daemon::start_daemon` — bare `axum::serve(listener, router)`
+   leaves `ConnectInfo` absent and breaks the guards for *every*
+   caller (including localhost). Pinned by
+   `admin_http::tests::loopback_guard_works_under_production_listener_shape`.
+
+`/v1/chat/completions` is intentionally left unauthenticated today —
+the Commonwealth "closed trust ring" model assumes network-level ACLs
+(Tailscale, LAN firewall) bound reachability to mesh members. A
+future revision should add per-request auth against
+`Mesh.join_key_hash` so a reachable-but-non-member attacker can't
+burn inference budget.
 
 ### 6.4 Shared protocols
 

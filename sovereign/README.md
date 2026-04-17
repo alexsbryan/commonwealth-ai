@@ -20,7 +20,7 @@ Sovereign runs open-source language models on your hardware and gives you a real
 
 The tools we use to think are becoming infrastructure, and right now that infrastructure is being built to belong to a few companies. We don't think that's the only shape it can take.
 
-Commonwealth is a protocol for small trusted groups to pool machines into a shared mesh — friends, teams, research collectives, households. Run models no one machine could hold. Share knowledge across the group. Route heavy work to whoever's idle. No central server, no billing, no data leaving the ring. A gift economy for compute, among people who already trust each other.
+Commonwealth is a protocol for small trusted groups to pool machines into a shared mesh — friends, teams, research collectives, households. Run models no one machine could hold. Share knowledge across the group. Route heavy work to whoever's idle. No central server, no billing, no data leaving a ring of trust. A gift economy for compute, among people who already trust each other.
 
 Sovereign works alone, and it works well alone. When you want to build something larger with people you trust, we're here.
 

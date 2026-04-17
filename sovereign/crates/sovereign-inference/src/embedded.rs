@@ -343,7 +343,7 @@ impl ModelSlot {
 // ─── EmbedSlot ────────────────────────────────────────────────
 
 /// Dedicated embedding slot. Loads an embedding model (e.g.
-/// `nomic-embed-text-v1.5.Q4_K_M.gguf`) with `embeddings = true` and
+/// `Qwen3-Embedding-0.6B-Q4_K_M.gguf`) with `embeddings = true` and
 /// mean pooling, so a single decode pass yields one normalized
 /// sentence vector.
 ///
@@ -365,7 +365,7 @@ struct EmbedSlot {
     /// truncate long inputs gracefully instead of crashing llama.cpp.
     max_tokens: usize,
     /// Family-specific embedding configuration: pooling strategy,
-    /// instruction prefixes, EOS appending. None = nomic/mxbai-style
+    /// instruction prefixes, EOS appending. None = Qwen3-Embedding and similar
     /// defaults (mean pooling, no instructions, no EOS).
     embed_quirks: Option<EmbedQuirks>,
 }
@@ -1078,7 +1078,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let slot = self.embed_slot.as_ref().ok_or_else(|| {
             Error::Inference(
                 "No embedding model is configured. Open Settings → Embedding model and \
-                 select a GGUF embedding model (e.g. nomic-embed-text-v1.5.Q4_K_M.gguf), \
+                 select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
                  then retry.".to_string(),
             )
         })?;
@@ -1131,7 +1131,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let slot = self.embed_slot.as_ref().ok_or_else(|| {
             Error::Inference(
                 "No embedding model is configured. Open Settings → Embedding model and \
-                 select a GGUF embedding model (e.g. nomic-embed-text-v1.5.Q4_K_M.gguf), \
+                 select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
                  then retry.".to_string(),
             )
         })?;
@@ -1167,7 +1167,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let slot = self.embed_slot.as_ref().ok_or_else(|| {
             Error::Inference(
                 "No embedding model is configured. Open Settings → Embedding model and \
-                 select a GGUF embedding model (e.g. nomic-embed-text-v1.5.Q4_K_M.gguf), \
+                 select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
                  then retry.".to_string(),
             )
         })?;

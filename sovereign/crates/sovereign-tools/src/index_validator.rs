@@ -25,7 +25,7 @@ fn ce(e: corpus_engine::Error) -> Error {
 /// Compared against each `IndexInfo` to detect model-drift.
 #[derive(Debug, Clone)]
 pub struct EmbedSlotConfig {
-    /// Model identifier string (e.g. `"nomic-embed-text-v1.5"`).
+    /// Model identifier string (e.g. `"qwen3-embedding-0.6b"`).
     pub model_id: String,
     /// Number of float32 dimensions this model produces.
     pub output_dims: usize,

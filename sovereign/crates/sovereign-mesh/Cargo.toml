@@ -66,6 +66,22 @@ rand = "0.9"
 # which on an AP-isolated WiFi was unreachable from peers who
 # could only route via Tailscale.
 if-addrs = "0.13"
+# Project registry (~/.sovereign/projects.json) timestamps and
+# default_path resolution.
+chrono = { workspace = true }
+dirs = "6"
+# FS watcher primitives for the Reindexer's freshness pipeline.
+# `notify` drives the kernel-level change events; `ignore` honours
+# .gitignore semantics so we don't fire on target/ or node_modules/.
+notify = "8"
+ignore = "0.4"
+# Holds the Arc<ArcSwap<ScipGraph>> in the Reindexer so rebuilds
+# can atomically swap in a new graph while tool calls keep reading
+# the old one.
+arc-swap = { workspace = true }
+# Staging directory for per-language exporter output during a
+# rebuild. Also used by the integrity tests.
+tempfile = "3"
 
 [dev-dependencies]
 tempfile = "3"

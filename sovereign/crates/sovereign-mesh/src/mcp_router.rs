@@ -122,6 +122,11 @@ pub fn mcp_router(
         .route("/mcp", post(mcp_handle).get(mcp_sse))
         .route("/mcp/message", post(mcp_handle))
         .route("/mcp/stats", axum::routing::get(mcp_stats))
+        // Router-level loopback guard — catches any future MCP route
+        // added here even if the author forgets the per-handler
+        // `is_localhost` check. The per-handler check stays for
+        // defense in depth.
+        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
         .layer(Extension(tools))
         .layer(Extension(logger))
         .layer(Extension(Arc::new(session_id)))

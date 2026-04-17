@@ -55,9 +55,17 @@ pub trait ProviderFactory: Send + Sync {
 
 /// Build the admin HTTP router. Merged into the daemon's client router
 /// next to `mcp_router` and `mesh_router`.
+///
+/// Two layers of loopback enforcement:
+/// 1. Router-level middleware ([`crate::loopback_guard::loopback_only`])
+///    rejects non-loopback callers before any handler runs — so a
+///    future route added here inherits the guard for free.
+/// 2. Per-handler `enforce_localhost` check — belt + suspenders in
+///    case the middleware is ever stripped.
 pub fn admin_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route("/v1/admin/reload", post(admin_reload))
+        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
         .layer(Extension(daemon))
 }
 
@@ -273,6 +281,44 @@ mod tests {
         format!("http://{addr}")
     }
 
+    /// Direct unit test for the guard itself — independent of axum
+    /// extraction. Guards are small; bugs here are quiet, so pin both
+    /// directions (loopback passes, everything else rejected).
+    #[test]
+    fn enforce_localhost_rejects_non_loopback() {
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+        let allowed = [
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9741),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 1, 2, 3)), 9741),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 9741),
+        ];
+        for addr in allowed {
+            assert!(
+                enforce_localhost(&addr).is_ok(),
+                "loopback {addr} must pass"
+            );
+        }
+
+        // Covers the attack scenarios: LAN peer, Tailscale peer, and a
+        // public IP — none should reach the admin handler.
+        let denied = [
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 7)), 9741),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(100, 64, 0, 2)), 9741),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 9741),
+            SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(0x2606, 0, 0, 0, 0, 0, 0, 1)),
+                9741,
+            ),
+        ];
+        for addr in denied {
+            let Err((status, _)) = enforce_localhost(&addr) else {
+                panic!("non-loopback {addr} must be rejected");
+            };
+            assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
+        }
+    }
+
     #[tokio::test]
     async fn reload_is_noop_when_nothing_changed() {
         let tmp = tempfile::tempdir().unwrap();
@@ -381,6 +427,57 @@ mod tests {
             counter.load(Ordering::SeqCst),
             0,
             "port-only change must not rebuild provider"
+        );
+    }
+
+    /// Regression test for the production listener shape.
+    ///
+    /// The daemon's real client listener uses
+    /// `router.into_make_service_with_connect_info::<SocketAddr>()`
+    /// so that `ConnectInfo<SocketAddr>` extractors in mesh_http,
+    /// admin_http, and mcp_router can read the peer address and
+    /// enforce the loopback-only guard. An earlier version of
+    /// `daemon.rs` used bare `axum::serve(listener, router)` which
+    /// made ConnectInfo extraction fail with 500 "Missing request
+    /// extension" — breaking the guards for legitimate localhost
+    /// callers (and, more subtly, defeating them for remote callers).
+    ///
+    /// This test pins the correct shape so a future refactor can't
+    /// silently revert to the bare-serve pattern.
+    #[tokio::test]
+    async fn loopback_guard_works_under_production_listener_shape() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+
+        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
+        daemon.set_setup_config(initial).await;
+
+        let app = admin_router(Arc::clone(&daemon));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            // Exact shape `daemon::start_daemon` uses — if this line
+            // ever drifts from the production call site, the admin
+            // surface breaks for localhost and this test must fail.
+            let service =
+                app.into_make_service_with_connect_info::<SocketAddr>();
+            axum::serve(listener, service).await.ok();
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let resp = reqwest::Client::new()
+            .post(format!("http://{addr}/v1/admin/reload"))
+            .json(&serde_json::json!({ "config_path": path }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(
+            resp.status(),
+            reqwest::StatusCode::OK,
+            "loopback must pass the guard; got body: {}",
+            resp.text().await.unwrap_or_default()
         );
     }
 

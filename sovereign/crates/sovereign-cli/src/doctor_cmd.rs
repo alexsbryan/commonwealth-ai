@@ -114,9 +114,17 @@ async fn check_server_running() -> CheckResult {
 }
 
 async fn check_server_tools() -> CheckResult {
+    // MCP uses JSON-RPC 2.0 over a single `/mcp` endpoint. The previous
+    // version POSTed to `/mcp/tools/list` (non-existent), which either
+    // 404'd or returned an unparseable body — the "Warning:
+    // unparseable" message users saw.
     let resp = http_post_json(
-        "http://localhost:9741/mcp/tools/list",
-        serde_json::json!({}),
+        "http://localhost:9741/mcp",
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+        }),
     )
     .await;
     match resp {
@@ -124,16 +132,22 @@ async fn check_server_tools() -> CheckResult {
             name: "server_tools",
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
-            message: "could not reach tools/list endpoint".into(),
+            message: "could not reach /mcp endpoint".into(),
             repair: Repair::Executable("sovereign project serve".into()),
         },
-        Some(r) => {
-            if let Ok(json) = r.json::<serde_json::Value>().await {
-                let count = json["tools"]
+        Some(r) => match r.json::<serde_json::Value>().await {
+            Ok(json) => {
+                let count = json["result"]["tools"]
                     .as_array()
                     .map(|a| a.len())
                     .unwrap_or(0);
-                if count >= 14 {
+                // Canonical daemon registry is 12 tools (symbol/code
+                // search, recent_changes, callers, callees, blast_radius,
+                // 3× notes, session_reflection, project_context,
+                // check_doc_paths). `sovereign project serve` adds the
+                // watcher-backed set (test_status, lint_status,
+                // run_tests, get_run_output, get_lint_output) for 17.
+                if count >= 12 {
                     CheckResult {
                         name: "server_tools",
                         layer: Layer::Sovereign,
@@ -141,56 +155,90 @@ async fn check_server_tools() -> CheckResult {
                         message: format!("{count} tools registered"),
                         repair: Repair::None,
                     }
+                } else if count > 0 {
+                    CheckResult {
+                        name: "server_tools",
+                        layer: Layer::Sovereign,
+                        status: CheckStatus::Warning,
+                        message: format!(
+                            "only {count} tools registered (expected ≥12) — possible version mismatch"
+                        ),
+                        repair: Repair::Manual(
+                            "Check server logs for tool registration errors".into(),
+                        ),
+                    }
                 } else {
                     CheckResult {
                         name: "server_tools",
                         layer: Layer::Sovereign,
                         status: CheckStatus::Warning,
-                        message: format!("only {count} tools registered (expected ≥14) — possible version mismatch"),
-                        repair: Repair::Manual("Check server logs for tool registration errors".into()),
+                        message: "tools/list returned no tools".into(),
+                        repair: Repair::Manual("Check server logs".into()),
                     }
                 }
-            } else {
-                CheckResult {
-                    name: "server_tools",
-                    layer: Layer::Sovereign,
-                    status: CheckStatus::Warning,
-                    message: "tools/list returned unparseable response".into(),
-                    repair: Repair::Manual("Check server logs".into()),
-                }
             }
-        }
+            Err(_) => CheckResult {
+                name: "server_tools",
+                layer: Layer::Sovereign,
+                status: CheckStatus::Warning,
+                message: "/mcp tools/list returned unparseable response".into(),
+                repair: Repair::Manual("Check server logs".into()),
+            },
+        },
     }
 }
 
 fn check_scip_indexed() -> CheckResult {
-    let db = home_dir()
-        .join(".sovereign")
-        .join("indexes")
-        .join("_scip_graph.db");
-    if db.exists() && db.metadata().map(|m| m.len() > 4096).unwrap_or(false) {
+    // SCIP graphs are per-corpus: `~/.sovereign/indexes/<corpus_id>/scip_graph.db`.
+    // The previous version looked for a top-level `_scip_graph.db`
+    // that never existed. Walk the indexes directory, count any
+    // non-empty scip_graph.db files, and report the total.
+    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let mut populated = Vec::new();
+    let mut empty = 0usize;
+    if let Ok(entries) = std::fs::read_dir(&indexes_dir) {
+        for entry in entries.flatten() {
+            let db = entry.path().join("scip_graph.db");
+            match db.metadata() {
+                Ok(m) if m.len() > 4096 => {
+                    if let Some(name) =
+                        entry.path().file_name().and_then(|n| n.to_str())
+                    {
+                        populated.push(name.to_string());
+                    }
+                }
+                Ok(_) => empty += 1,
+                Err(_) => {}
+            }
+        }
+    }
+    if !populated.is_empty() {
         CheckResult {
             name: "scip_indexed",
             layer: Layer::Sovereign,
             status: CheckStatus::Passed,
-            message: format!("SCIP graph DB present ({})", db.display()),
+            message: format!(
+                "SCIP graph DB present in {} corpus index(es): {}",
+                populated.len(),
+                populated.join(", "),
+            ),
             repair: Repair::None,
         }
-    } else if db.exists() {
+    } else if empty > 0 {
         CheckResult {
             name: "scip_indexed",
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
-            message: "SCIP graph DB is empty — not yet indexed".into(),
-            repair: Repair::Executable("sovereign corpus scip".into()),
+            message: format!("{empty} SCIP graph DB(s) found but empty — not yet indexed"),
+            repair: Repair::Executable("sovereign project refresh".into()),
         }
     } else {
         CheckResult {
             name: "scip_indexed",
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
-            message: "SCIP graph DB not found — call graph tools unavailable".into(),
-            repair: Repair::Executable("sovereign corpus scip".into()),
+            message: "no SCIP graph DB found — call graph tools unavailable".into(),
+            repair: Repair::Executable("sovereign project init".into()),
         }
     }
 }
@@ -242,7 +290,11 @@ fn check_notes_db() -> CheckResult {
 }
 
 fn check_project_indexed() -> CheckResult {
-    let project_db = home_dir().join(".sovereign").join("project_docs.db");
+    // Lives under the indexes directory, not directly in ~/.sovereign/.
+    let project_db = home_dir()
+        .join(".sovereign")
+        .join("indexes")
+        .join("project_docs.db");
     if project_db.exists() {
         CheckResult {
             name: "project_indexed",
@@ -331,20 +383,36 @@ async fn check_daemon_running() -> CheckResult {
     }
 }
 
-async fn check_mesh_member(commonwealth_url: &str) -> CheckResult {
-    let url = format!("{commonwealth_url}/status");
+async fn check_mesh_member(client_url: &str) -> CheckResult {
+    // The real status endpoint lives on the client listener
+    // (`:9741/status`), not the internal port. Shape is
+    // `{node_id, mesh: {name, members_online, members_total, ...}, ...}`.
+    let url = format!("{client_url}/status");
     match http_get_json(&url).await {
         Some(json) => {
-            let member_count = json["members"]
-                .as_array()
-                .map(|a| a.len())
-                .unwrap_or(0);
-            if member_count > 0 {
+            let total = json["mesh"]["members_total"].as_u64().unwrap_or(0);
+            let online = json["mesh"]["members_online"].as_u64().unwrap_or(0);
+            let name = json["mesh"]["name"].as_str().unwrap_or("<unknown>");
+            if total > 1 {
                 CheckResult {
                     name: "mesh_member",
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Passed,
-                    message: format!("node is mesh member ({member_count} peers)"),
+                    message: format!(
+                        "member of \"{name}\" — {online}/{total} online"
+                    ),
+                    repair: Repair::None,
+                }
+            } else if total == 1 {
+                // Solo mesh is the default on a freshly-setup single
+                // machine. Not an error — just informational.
+                CheckResult {
+                    name: "mesh_member",
+                    layer: Layer::Commonwealth,
+                    status: CheckStatus::Passed,
+                    message: format!(
+                        "solo mesh \"{name}\" — run `sovereign mesh create` to invite peers"
+                    ),
                     repair: Repair::None,
                 }
             } else {
@@ -352,8 +420,10 @@ async fn check_mesh_member(commonwealth_url: &str) -> CheckResult {
                     name: "mesh_member",
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Warning,
-                    message: "no mesh peers — node may not have joined yet".into(),
-                    repair: Repair::Manual("Run `commonwealth join <key>` to join a mesh".into()),
+                    message: "daemon running but no mesh formed yet".into(),
+                    repair: Repair::Manual(
+                        "Run `sovereign mesh create` or accept a join link".into(),
+                    ),
                 }
             }
         }
@@ -362,22 +432,38 @@ async fn check_mesh_member(commonwealth_url: &str) -> CheckResult {
             layer: Layer::Commonwealth,
             status: CheckStatus::Failed,
             message: format!("could not reach {url}"),
-            repair: Repair::Executable("commonwealth daemon start".into()),
+            repair: Repair::Executable("sovereign daemon restart".into()),
         },
     }
 }
 
-async fn check_inference_capable(commonwealth_url: &str) -> CheckResult {
-    let url = format!("{commonwealth_url}/status");
+async fn check_inference_capable(client_url: &str) -> CheckResult {
+    // The daemon exposes `inference.loaded_models` on `/status`.
+    // Earlier versions had a flat `inference_capable` bool at the top
+    // level; that field no longer exists — infer capability from the
+    // loaded-models array instead. Empty = cold-start (no model yet
+    // loaded), but `/v1/models` still lists available slots.
+    let url = format!("{client_url}/status");
     match http_get_json(&url).await {
         Some(json) => {
-            let capable = json["inference_capable"].as_bool().unwrap_or(false);
+            let loaded = json["inference"]["loaded_models"]
+                .as_array()
+                .map(|a| a.len())
+                .unwrap_or(0);
+            let models_url = format!("{client_url}/v1/models");
+            let registered = http_get_json(&models_url)
+                .await
+                .and_then(|j| j["data"].as_array().map(|a| a.len()))
+                .unwrap_or(0);
+            let capable = loaded > 0 || registered > 0;
             if capable {
                 CheckResult {
                     name: "inference_capable",
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Passed,
-                    message: "local node reports inference_capable: true".into(),
+                    message: format!(
+                        "{registered} model(s) registered, {loaded} currently resident"
+                    ),
                     repair: Repair::None,
                 }
             } else {
@@ -385,9 +471,9 @@ async fn check_inference_capable(commonwealth_url: &str) -> CheckResult {
                     name: "inference_capable",
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Warning,
-                    message: "local node reports inference_capable: false — this node will not receive inference routing".into(),
-                    repair: Repair::Manual(
-                        "Check daemon startup logs for probe failure reason".into(),
+                    message: "no models registered — /v1/models is empty. restart the daemon after `sovereign setup` completes.".into(),
+                    repair: Repair::Executable(
+                        "sovereign daemon restart".into(),
                     ),
                 }
             }
@@ -402,11 +488,17 @@ async fn check_inference_capable(commonwealth_url: &str) -> CheckResult {
     }
 }
 
-async fn check_activity_reporting(commonwealth_url: &str) -> CheckResult {
-    let url = format!("{commonwealth_url}/internal/node/activity");
+async fn check_activity_reporting(internal_url: &str) -> CheckResult {
+    // The endpoint expects `{level: "hot"|"warm"|"cool"|..., reason: "..."}`
+    // and replies 204. Passing `activity_level: 0.0` (the previous
+    // payload) yielded a 422 — it's a string enum, not a float.
+    let url = format!("{internal_url}/internal/node/activity");
     let resp = http_post_json(
         &url,
-        serde_json::json!({"activity_level": 0.0}),
+        serde_json::json!({
+            "level": "cool",
+            "reason": "doctor health check"
+        }),
     )
     .await;
     match resp {
@@ -518,9 +610,15 @@ fn check_hook_config() -> CheckResult {
 }
 
 async fn check_mcp_live() -> CheckResult {
+    // MCP is JSON-RPC over `/mcp`; tools/list is a method, not a
+    // path. See the same fix in `check_server_tools`.
     let resp = http_post_json(
-        "http://localhost:9741/mcp/tools/list",
-        serde_json::json!({}),
+        "http://localhost:9741/mcp",
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+        }),
     )
     .await;
     match resp {
@@ -528,16 +626,261 @@ async fn check_mcp_live() -> CheckResult {
             name: "mcp_live",
             layer: Layer::Omo,
             status: CheckStatus::Passed,
-            message: "MCP tools/list round-trip succeeded".into(),
+            message: "MCP /mcp tools/list round-trip succeeded".into(),
             repair: Repair::None,
         },
         _ => CheckResult {
             name: "mcp_live",
             layer: Layer::Omo,
             status: CheckStatus::Failed,
-            message: "MCP tools/list unreachable — agents cannot use sovereign tools".into(),
-            repair: Repair::Executable("sovereign project serve".into()),
+            message: "MCP /mcp unreachable — agents cannot use sovereign tools".into(),
+            repair: Repair::Executable("sovereign daemon restart".into()),
         },
+    }
+}
+
+// ── Freshness-pipeline checks ────────────────────────────────
+
+/// Query the daemon's `/v1/projects` endpoint and surface the
+/// aggregate watcher health. Passes when every registered project
+/// has all its watchers healthy; downgrades to Warning when any
+/// watcher is Crashed; Failed when any watcher is Disabled (the
+/// daemon has given up auto-restarting and needs operator action).
+async fn check_project_watchers() -> CheckResult {
+    let Some(body) = http_get_json("http://127.0.0.1:9741/v1/projects").await else {
+        return CheckResult {
+            name: "project_watchers",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: "daemon unreachable — /v1/projects did not answer".into(),
+            repair: Repair::Executable("sovereign daemon restart".into()),
+        };
+    };
+    let Some(projects) = body["projects"].as_array() else {
+        return CheckResult {
+            name: "project_watchers",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: "/v1/projects returned unexpected shape".into(),
+            repair: Repair::Manual("inspect daemon logs".into()),
+        };
+    };
+    if projects.is_empty() {
+        return CheckResult {
+            name: "project_watchers",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: "daemon is running but no projects registered".into(),
+            repair: Repair::Executable(
+                "sovereign project register  (run this from each repo root)".into(),
+            ),
+        };
+    }
+
+    let mut crashed: Vec<String> = Vec::new();
+    let mut disabled: Vec<String> = Vec::new();
+    let mut active_ok = 0usize;
+    for p in projects {
+        let id = p["corpus_id"].as_str().unwrap_or("?");
+        let Some(status) = p["status"].as_object() else {
+            continue;
+        };
+        for (kind, s) in status {
+            let state = s["state"].as_str().unwrap_or("?");
+            match state {
+                "idle" | "active" | "pending" => active_ok += 1,
+                "crashed" => crashed.push(format!("{id}:{kind}")),
+                "disabled" => disabled.push(format!("{id}:{kind}")),
+                _ => {}
+            }
+        }
+    }
+
+    if !disabled.is_empty() {
+        return CheckResult {
+            name: "project_watchers",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "{} watcher(s) disabled after repeated crashes: {}",
+                disabled.len(),
+                disabled.join(", ")
+            ),
+            repair: Repair::Executable(
+                "sovereign project watch restart <corpus_id>".into(),
+            ),
+        };
+    }
+    if !crashed.is_empty() {
+        return CheckResult {
+            name: "project_watchers",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: format!(
+                "{} watcher(s) crashed but auto-restarting: {}",
+                crashed.len(),
+                crashed.join(", ")
+            ),
+            repair: Repair::Manual(
+                "tail ~/.sovereign/logs/watch-<id>-<watcher>.log for details".into(),
+            ),
+        };
+    }
+    CheckResult {
+        name: "project_watchers",
+        layer: Layer::Sovereign,
+        status: CheckStatus::Passed,
+        message: format!(
+            "{} project(s), {} watcher(s) healthy",
+            projects.len(),
+            active_ok
+        ),
+        repair: Repair::None,
+    }
+}
+
+/// Run `PRAGMA integrity_check` (via `ScipGraph::open_with_integrity`)
+/// on every per-corpus `scip_graph.db`. A corrupt DB is quarantined
+/// by `open_with_integrity` as a side effect; we surface that to
+/// the operator so they can trigger an immediate rebuild. This is
+/// the doctor-level complement of the daemon's automatic
+/// quarantine-on-open behaviour.
+fn check_scip_integrity() -> CheckResult {
+    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let Ok(entries) = std::fs::read_dir(&indexes_dir) else {
+        return CheckResult {
+            name: "scip_integrity",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: format!("no indexes dir at {}", indexes_dir.display()),
+            repair: Repair::None,
+        };
+    };
+
+    let mut checked = 0usize;
+    let mut corrupt: Vec<String> = Vec::new();
+    let mut stale_schema: Vec<String> = Vec::new();
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let db = entry.path().join("scip_graph.db");
+        if !db.exists() {
+            continue;
+        }
+        let corpus = entry
+            .file_name()
+            .to_string_lossy()
+            .to_string();
+        match corpus_engine::ScipGraph::open_with_integrity(&db, &corpus) {
+            Ok(_) => {
+                checked += 1;
+            }
+            Err(corpus_engine::OpenError::Corrupt { .. }) => {
+                corrupt.push(corpus);
+            }
+            Err(corpus_engine::OpenError::SchemaMismatch { .. }) => {
+                stale_schema.push(corpus);
+            }
+            Err(_) => {
+                // Other errors (IO, transient DB issues) shouldn't
+                // trip the integrity check — the daemon will log
+                // them on its next open.
+            }
+        }
+    }
+
+    if !corrupt.is_empty() {
+        return CheckResult {
+            name: "scip_integrity",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "{} SCIP DB(s) were corrupt and moved aside: {}",
+                corrupt.len(),
+                corrupt.join(", ")
+            ),
+            repair: Repair::Executable(
+                "sovereign project refresh --name <corpus_id>".into(),
+            ),
+        };
+    }
+    if !stale_schema.is_empty() {
+        return CheckResult {
+            name: "scip_integrity",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: format!(
+                "{} SCIP DB(s) have an outdated schema: {}",
+                stale_schema.len(),
+                stale_schema.join(", ")
+            ),
+            repair: Repair::Executable(
+                "sovereign project refresh --name <corpus_id>".into(),
+            ),
+        };
+    }
+    CheckResult {
+        name: "scip_integrity",
+        layer: Layer::Sovereign,
+        status: CheckStatus::Passed,
+        message: format!("{checked} SCIP DB(s) integrity OK"),
+        repair: Repair::None,
+    }
+}
+
+/// Scan registered project roots for legacy `SOVEREIGN_HOOK_V*`
+/// post-commit hooks. The daemon owns freshness now, so any
+/// surviving hook is a ticking footgun (stale binary path, silent
+/// failures into `~/.sovereign/hooks.log`). Surface them with a
+/// one-shot cleanup hint.
+fn check_legacy_hooks() -> CheckResult {
+    // Best-effort: read the registry directly. If the registry
+    // isn't loadable, skip this check — the `warn_orphaned_indexes`
+    // path at daemon startup will cover the miss.
+    let registry = match sovereign_mesh::projects::Registry::load() {
+        Ok(r) => r,
+        Err(_) => {
+            return CheckResult {
+                name: "legacy_hooks",
+                layer: Layer::Sovereign,
+                status: CheckStatus::Skipped,
+                message: "project registry not loadable".into(),
+                repair: Repair::None,
+            };
+        }
+    };
+    let mut stale: Vec<String> = Vec::new();
+    for entry in registry.entries() {
+        let hook = entry.root.join(".git/hooks/post-commit");
+        let Ok(contents) = std::fs::read_to_string(&hook) else {
+            continue;
+        };
+        if contents.contains("SOVEREIGN_HOOK_V") {
+            stale.push(entry.corpus_id.clone());
+        }
+    }
+    if stale.is_empty() {
+        return CheckResult {
+            name: "legacy_hooks",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: "no legacy post-commit hooks found".into(),
+            repair: Repair::None,
+        };
+    }
+    CheckResult {
+        name: "legacy_hooks",
+        layer: Layer::Sovereign,
+        status: CheckStatus::Warning,
+        message: format!(
+            "{} project(s) still carry a legacy sovereign post-commit hook: {}",
+            stale.len(),
+            stale.join(", ")
+        ),
+        repair: Repair::Executable(
+            "sovereign project install-hooks  (in the affected repo — removes the legacy hook)".into(),
+        ),
     }
 }
 
@@ -556,25 +899,34 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     results.push(check_test_runner(sovereign_dir));
     results.push(check_lint_runner(sovereign_dir));
 
-    // ── Commonwealth layer (skip if not configured) ──────────────
-    // Try to detect commonwealth URL from sovereign-server config, or use default.
-    let commonwealth_url = detect_commonwealth_url(sovereign_dir);
-    if let Some(ref url) = commonwealth_url {
-        results.push(check_daemon_running().await);
-        results.push(check_mesh_member(url).await);
-        results.push(check_inference_capable(url).await);
-        results.push(check_activity_reporting(url).await);
-    } else {
-        // If daemon is running on the default port, check it even without config.
-        if tcp_connectable("127.0.0.1", 9741).await {
-            let url = "http://127.0.0.1:9742";
-            results.push(check_daemon_running().await);
-            results.push(check_mesh_member(url).await);
-            results.push(check_inference_capable(url).await);
-            results.push(check_activity_reporting(url).await);
-        }
-        // else: commonwealth not configured and not running — skip layer silently
+    // Freshness pipeline: registry-level checks that report on the
+    // daemon's project watchers and the integrity of their SCIP
+    // databases. These run only when the daemon is live; otherwise
+    // we'd be testing files the daemon may be about to overwrite.
+    if tcp_connectable("127.0.0.1", 9741).await {
+        results.push(check_project_watchers().await);
+        results.push(check_scip_integrity());
+        results.push(check_legacy_hooks());
     }
+
+    // ── Commonwealth layer (skip if not configured) ──────────────
+    // The embedded daemon serves two listeners:
+    //   - `:9741` — client surface: /status, /v1/*, /mcp, /v1/mesh/*.
+    //   - `:9742` — internal surface: /internal/*, used for gossip
+    //     and per-node activity reporting.
+    // Checks split between the two accordingly. An explicit
+    // override in sovereign-server.toml still wins for compatibility
+    // with standalone Commonwealth deployments.
+    let client_url = detect_commonwealth_url(sovereign_dir)
+        .unwrap_or_else(|| "http://127.0.0.1:9741".to_string());
+    let internal_url = "http://127.0.0.1:9742".to_string();
+    if tcp_connectable("127.0.0.1", 9741).await {
+        results.push(check_daemon_running().await);
+        results.push(check_mesh_member(&client_url).await);
+        results.push(check_inference_capable(&client_url).await);
+        results.push(check_activity_reporting(&internal_url).await);
+    }
+    // else: daemon not running — skip layer silently
 
     // ── OmO layer (skip if `opencode` not in PATH) ───────────────
     let opencode_available = std::process::Command::new("which")

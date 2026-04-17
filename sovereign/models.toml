@@ -328,17 +328,15 @@ instruction = 2
 
 # [[user_slots]]
 # slot    = "embed"
-# repo    = "nomic-ai/nomic-embed-text-v1.5-GGUF"
-# file    = "nomic-embed-text-v1.5.f16.gguf"
-# family  = "Unknown"
-# quant   = "F16"
-# size_gb = 0.55
+# repo    = "mxbai-ai/mxbai-embed-large-v1-gguf"
+# file    = "mxbai-embed-large-v1.Q4_K_M.gguf"
+# family  = "Unknown"          # Mean-pooling, no instruction prefix.
+# quant   = "Q4_K_M"
+# size_gb = 0.65
 # thinking = false
-# hf_url  = "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF"
+# hf_url  = "https://huggingface.co/mxbai-ai/mxbai-embed-large-v1-gguf"
 # [user_slots.quirks_override]
 # "embed.pooling"              = "Mean"
 # "embed.normalize"            = "Server"
-# "embed.query_instruction"    = "search_query: "
-# "embed.document_instruction" = "search_document: "
 # "embed.append_eos_token"     = false
-# "embed.output_dimensions"    = 768
+# "embed.output_dimensions"    = 1024
