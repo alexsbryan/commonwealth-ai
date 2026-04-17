@@ -145,9 +145,11 @@ pub async fn run_one_round(
     // the mesh write lock — `installed_indexes()` awaits a directory
     // read, and we don't want to pin the lock across that. The
     // engine is optional: test daemons and the CLI run without one.
+    let availability = *app_state.inner.local_inference_availability.read().await;
     let fresh_caps = build_local_capabilities(
         app_state.inner.corpus_engine.as_ref(),
         now,
+        availability,
     )
     .await;
     // Step 1: touch self + decay stale peers. One write-lock window.

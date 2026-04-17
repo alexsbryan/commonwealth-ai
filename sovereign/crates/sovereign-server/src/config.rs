@@ -17,6 +17,8 @@ pub struct ServerConfig {
     pub skills: SkillsSection,
     #[serde(default)]
     pub mcp: McpSection,
+    #[serde(default)]
+    pub commonwealth: CommonwealthSection,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -83,6 +85,14 @@ pub struct SkillsSection {
 pub struct McpSection {
     #[serde(default)]
     pub servers: Vec<sovereign_tools::mcp::McpServerConfig>,
+}
+
+/// Commonwealth mesh integration. Optional — when absent, activity reporting
+/// and mesh-routing features are disabled.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CommonwealthSection {
+    /// URL of the local Commonwealth internal API (e.g. `http://127.0.0.1:9742`).
+    pub url: Option<String>,
 }
 
 fn default_bind() -> String {

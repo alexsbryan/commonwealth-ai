@@ -44,6 +44,7 @@ fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> Member
             active_processes: vec![],
             hosted_corpora: vec![],
             reported_at: last_seen,
+            inference_availability: 1.0,
         },
         addresses: vec![addr],
     }

@@ -1,9 +1,11 @@
+mod activity;
 mod approval;
 mod auth;
 mod config;
 mod routes;
 mod routes_documents;
 mod routes_mcp;
+mod startup;
 mod tenant;
 mod ws;
 
@@ -273,6 +275,28 @@ async fn main() {
         Arc::clone(&scip_graph),
     )));
 
+    // Working notes tools — persist across sessions, used for session attribution.
+    let notes_db_path = home.join(".sovereign").join("notes.db");
+    match corpus_engine::NoteStore::open(&notes_db_path) {
+        Ok(store) => {
+            let store = Arc::new(store);
+            tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(&store))));
+            tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(&store))));
+            tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(store)));
+            tracing::info!("Notes: tools registered ({})", notes_db_path.display());
+        }
+        Err(e) => tracing::warn!(error = %e, "notes.db unavailable — note tools disabled"),
+    }
+
+    // Activity reporter — signals coding intensity to Commonwealth so
+    // the scheduler can route inference away from busy nodes.
+    if let Some(ref commonwealth_url) = config.commonwealth.url {
+        let reporter = Arc::new(activity::ActivityReporter::new(commonwealth_url.clone()));
+        reporter.start_decay_loop();
+        // TODO: pass reporter to WatcherCoordinator when watcher support is added
+        tracing::info!(url = %commonwealth_url, "Commonwealth activity reporter started");
+    }
+
     // Connect MCP servers (stdio and HTTP+SSE).
     let _mcp_manager = sovereign_tools::mcp::McpServerManager::from_config(
         &config.mcp.servers,
@@ -334,6 +358,12 @@ async fn main() {
         .layer(Extension(Arc::clone(&runtime)))
         .layer(Extension(approval))
         .layer(CorsLayer::permissive());
+
+    // Startup UX — mesh peer count from Commonwealth (non-fatal if daemon
+    // isn't running).
+    if let Some(ref commonwealth_url) = config.commonwealth.url {
+        startup::print_mesh_status(commonwealth_url).await;
+    }
 
     // Serve.
     let bind_addr = &config.server.bind;

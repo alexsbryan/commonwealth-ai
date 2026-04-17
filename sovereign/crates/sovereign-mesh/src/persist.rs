@@ -157,6 +157,7 @@ mod tests {
                 active_processes: vec![],
                 hosted_corpora: vec![],
                 reported_at: 100,
+                inference_availability: 1.0,
             },
             addresses: vec!["192.168.1.10:9742".parse().unwrap()],
         };

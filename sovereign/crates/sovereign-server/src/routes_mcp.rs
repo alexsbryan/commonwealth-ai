@@ -140,6 +140,7 @@ async fn mcp_initialize(
             .into_response();
     }
 
+    let session_id = generate_session_id(&req.params);
     let result = serde_json::json!({
         "protocolVersion": "2024-11-05",
         "capabilities": {
@@ -148,10 +149,36 @@ async fn mcp_initialize(
         "serverInfo": {
             "name": "sovereign",
             "version": env!("CARGO_PKG_VERSION")
-        }
+        },
+        "sessionId": session_id
     });
 
     (StatusCode::OK, Json(JsonRpcResponse::result(req.id, result))).into_response()
+}
+
+/// Generate a session ID that encodes the username for cross-session note attribution.
+/// Format: `{username}-{YYYY-MM-DDTHH:MM}-{uuid6}` where username comes from
+/// `params.clientInfo.name` or `params.meta.userName` (OmO convention).
+fn generate_session_id(params: &Option<Value>) -> String {
+    let username = params
+        .as_ref()
+        .and_then(|p| {
+            p.get("clientInfo")
+                .and_then(|c| c.get("name"))
+                .and_then(|v| v.as_str())
+                .or_else(|| p.get("meta").and_then(|m| m.get("userName")).and_then(|v| v.as_str()))
+        })
+        .unwrap_or("user");
+    let slug: String = username
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    let slug = if slug.is_empty() { "user".to_string() } else { slug };
+    let ts = chrono::Utc::now().format("%Y-%m-%dT%H:%M");
+    let uid = &uuid::Uuid::new_v4().to_string()[..6];
+    format!("{slug}-{ts}-{uid}")
 }
 
 async fn mcp_sse(
@@ -192,13 +219,15 @@ async fn mcp_message(
         "initialize" => {
             // Some clients send initialize as a regular message rather
             // than via the POST /mcp handshake. Accept both.
+            let session_id = generate_session_id(&req.params);
             let result = serde_json::json!({
                 "protocolVersion": "2024-11-05",
                 "capabilities": { "tools": {} },
                 "serverInfo": {
                     "name": "sovereign",
                     "version": env!("CARGO_PKG_VERSION")
-                }
+                },
+                "sessionId": session_id
             });
             JsonRpcResponse::result(id, result)
         }
@@ -655,6 +684,63 @@ mod tests {
         assert!(
             text.contains("code_search"),
             "empty result should suggest code_search fallback: {text}"
+        );
+    }
+
+    // ─── Session ID generation ────────────────────────────────
+
+    #[test]
+    fn session_id_extracts_client_info_name() {
+        let params = Some(serde_json::json!({
+            "clientInfo": { "name": "alice" }
+        }));
+        let id = generate_session_id(&params);
+        assert!(id.starts_with("alice-"), "session id must start with the slugified username");
+    }
+
+    #[test]
+    fn session_id_falls_back_to_meta_username() {
+        let params = Some(serde_json::json!({
+            "meta": { "userName": "BobSmith" }
+        }));
+        let id = generate_session_id(&params);
+        assert!(id.starts_with("bobsmith-"), "meta.userName must be used when clientInfo absent");
+    }
+
+    #[test]
+    fn session_id_falls_back_to_user_when_no_params() {
+        let id = generate_session_id(&None);
+        assert!(id.starts_with("user-"), "no params must produce 'user-...' session id");
+    }
+
+    #[test]
+    fn session_id_slugifies_special_characters() {
+        let params = Some(serde_json::json!({
+            "clientInfo": { "name": "Alice@Corp.io" }
+        }));
+        let id = generate_session_id(&params);
+        // '@' and '.' become '-' then trimmed; "alice-corp-io" is the slug
+        assert!(
+            id.starts_with("alice-corp-io-") || id.starts_with("alice"),
+            "special chars must be slugified: got {id}"
+        );
+        assert!(!id.contains('@'), "@ must not appear in session id");
+        assert!(!id.contains('.'), ". must not appear in session id");
+    }
+
+    #[test]
+    fn session_id_format_has_three_dash_separated_segments() {
+        // Format: {slug}-{YYYY-MM-DDTHH:MM}-{uuid6}
+        // The timestamp contains a '-' and 'T', and uuid6 is 6 hex chars.
+        // Total: slug | date-part | uuid6 — joined by '-' with timestamp containing '-'.
+        let id = generate_session_id(&None);
+        let parts: Vec<&str> = id.splitn(3, '-').collect();
+        // "user" | "YYYY" | rest
+        assert_eq!(parts[0], "user");
+        // Second part should be a year (4 digits starting with 20xx)
+        assert!(
+            parts[1].parse::<u32>().is_ok() && parts[1].starts_with("20"),
+            "second segment must be a year: {}", parts[1]
         );
     }
 

@@ -41,6 +41,7 @@ use corpus_engine::engine::CorpusEngine;
 pub async fn build_local_capabilities(
     engine: Option<&Arc<CorpusEngine>>,
     now_secs: u64,
+    inference_availability: f32,
 ) -> NodeCapabilities {
     let hardware = hardware::detect_hardware();
     let available = live_available_resources(&hardware);
@@ -58,6 +59,7 @@ pub async fn build_local_capabilities(
                                       // the honest answer here.
         hosted_corpora,
         reported_at: now_secs,
+        inference_availability,
     }
 }
 
