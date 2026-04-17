@@ -119,6 +119,8 @@ impl SimulatedNodeBuilder {
             hosted_corpora: vec![],
             reported_at: 0,
             inference_availability: 1.0,
+            inference_capable: true,
+            loaded_models: vec![],
         };
 
         let member = MemberRecord {
@@ -221,6 +223,8 @@ impl SimulatedNode {
             hosted_corpora: vec![],
             reported_at: 0,
             inference_availability: 1.0,
+            inference_capable: true,
+            loaded_models: vec![],
         }
     }
 }

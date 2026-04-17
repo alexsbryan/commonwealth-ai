@@ -15,6 +15,21 @@ pub struct NodeCapabilities {
     /// Nodes without sovereign-server always report 1.0 (the serde default).
     #[serde(default = "default_inference_availability")]
     pub inference_availability: f32,
+
+    /// Hard gate: false means never route inference requests to this node.
+    /// Set at daemon startup after model probe; gossiped so remote schedulers
+    /// can filter this node immediately.
+    /// Defaults to false so old gossip payloads (without this field) are
+    /// conservatively excluded until the peer re-joins with an updated daemon.
+    /// Asymmetry with inference_availability (defaults 1.0) is intentional:
+    /// availability is a soft preference signal; capability is a hard claim.
+    #[serde(default)]
+    pub inference_capable: bool,
+
+    /// Model names confirmed loadable by the daemon's startup probe.
+    /// Empty for storage-only nodes.
+    #[serde(default)]
+    pub loaded_models: Vec<String>,
 }
 
 fn default_inference_availability() -> f32 {
@@ -140,9 +155,15 @@ mod tests {
 
     // ─── inference_availability backward-compat ───────────────
 
-    fn minimal_capabilities_json(inference_availability: Option<f32>) -> String {
+    fn minimal_capabilities_json(
+        inference_availability: Option<f32>,
+        inference_capable: Option<bool>,
+    ) -> String {
         let availability_field = inference_availability
             .map(|v| format!(", \"inference_availability\": {v}"))
+            .unwrap_or_default();
+        let capable_field = inference_capable
+            .map(|v| format!(", \"inference_capable\": {v}"))
             .unwrap_or_default();
         format!(
             r#"{{
@@ -164,7 +185,7 @@ mod tests {
                 }},
                 "active_processes": [],
                 "hosted_corpora": [],
-                "reported_at": 1000{availability_field}
+                "reported_at": 1000{availability_field}{capable_field}
             }}"#
         )
     }
@@ -172,7 +193,7 @@ mod tests {
     #[test]
     fn inference_availability_defaults_to_1_when_absent() {
         // Old peers (pre-feature) don't include this field. Must deserialize to 1.0.
-        let json = minimal_capabilities_json(None);
+        let json = minimal_capabilities_json(None, None);
         let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
         assert_eq!(
             caps.inference_availability, 1.0,
@@ -182,7 +203,7 @@ mod tests {
 
     #[test]
     fn inference_availability_round_trips_hot_value() {
-        let json = minimal_capabilities_json(Some(0.20));
+        let json = minimal_capabilities_json(Some(0.20), None);
         let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
         assert!(
             (caps.inference_availability - 0.20).abs() < 1e-6,
@@ -192,5 +213,30 @@ mod tests {
         let re_json = serde_json::to_string(&caps).unwrap();
         let back: NodeCapabilities = serde_json::from_str(&re_json).unwrap();
         assert!((back.inference_availability - 0.20).abs() < 1e-6);
+    }
+
+    #[test]
+    fn inference_capable_defaults_to_false_when_absent() {
+        // Old peers without inference_capable must default to false (conservative exclusion).
+        let json = minimal_capabilities_json(None, None);
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert!(
+            !caps.inference_capable,
+            "old peers without inference_capable must default to false (excluded from routing)"
+        );
+        assert!(
+            caps.loaded_models.is_empty(),
+            "old peers without loaded_models must default to empty vec"
+        );
+    }
+
+    #[test]
+    fn inference_capable_round_trips() {
+        let json = minimal_capabilities_json(None, Some(true));
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert!(caps.inference_capable, "inference_capable: true must survive JSON round-trip");
+        let re_json = serde_json::to_string(&caps).unwrap();
+        let back: NodeCapabilities = serde_json::from_str(&re_json).unwrap();
+        assert!(back.inference_capable);
     }
 }

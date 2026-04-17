@@ -10,7 +10,7 @@ use tracing::info;
 
 use commonwealth_app::manifest::{AppPermissions, MeshAppManifest, RequiredCapabilities};
 use commonwealth_app::registry::AppRegistry;
-use commonwealth_core::config::DaemonConfig;
+use commonwealth_core::config::{DaemonConfig, InferenceConfig};
 use commonwealth_discovery::membership;
 use commonwealth_state::{MeshStore, RetentionGc};
 
@@ -600,7 +600,20 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         tokio::spawn(gc.run(shutdown_rx));
         info!("RetentionGc started");
 
-        // 6. Build AppState with platform components.
+        // 6. Probe inference capability before announcing to the mesh.
+        // This must run before mDNS announce and the first gossip round so the
+        // node never transiently appears as an inference candidate it cannot fill.
+        let inference_config = config.as_ref()
+            .map(|c| c.inference.clone())
+            .unwrap_or_default();
+        let inference_capable = probe_inference_capability(&inference_config).await;
+        if inference_capable {
+            info!("Inference probe passed — node will participate in inference routing.");
+        } else {
+            info!("Inference probe failed — node will join as storage-only.");
+        }
+
+        // 7. Build AppState with platform components.
         // (Mesh state is loaded from disk in a full implementation;
         //  here we construct a minimal mesh for the daemon to serve.)
         use commonwealth_core::ids::{MeshId, NodeId};
@@ -622,6 +635,7 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
             mesh_store,
             app_registry,
         );
+        state.set_local_inference_capable(inference_capable);
 
         // 7. Start both API servers.
         let client_addr: SocketAddr = format!("0.0.0.0:{api_port}").parse()?;
@@ -647,6 +661,78 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
 
         Ok::<_, anyhow::Error>(())
     })
+}
+
+/// Probe whether this node can serve inference requests.
+///
+/// The probe runs BEFORE mDNS announce and the first gossip round so the
+/// node never transiently advertises capability it cannot fulfill.
+///
+/// Strategy:
+/// - If `llama_server` looks like a URL (`http://` prefix or contains `:`),
+///   attempt a TCP connect + `GET /health` with a 3-second timeout.
+/// - Otherwise treat it as a binary name and check PATH via `which`.
+///
+/// Returns `true` only on confirmed reachability. Never panics.
+// TODO: re-probe on config file change; for now, daemon restart is required.
+async fn probe_inference_capability(config: &InferenceConfig) -> bool {
+    let addr = &config.llama_server;
+
+    if addr.starts_with("http://") || addr.starts_with("https://") || addr.contains(':') {
+        // Looks like an address — try a health check.
+        let url = if addr.starts_with("http") {
+            format!("{addr}/health")
+        } else {
+            format!("http://{addr}/health")
+        };
+        match reqwest::Client::new()
+            .get(&url)
+            .timeout(std::time::Duration::from_secs(3))
+            .send()
+            .await
+        {
+            Ok(r) if r.status().is_success() => {
+                tracing::info!(url = %url, "Inference probe: llama-server healthy");
+                true
+            }
+            Ok(r) => {
+                tracing::warn!(
+                    url = %url, status = %r.status(),
+                    "Inference probe: llama-server returned non-success status. \
+                     Joining mesh as storage-only."
+                );
+                false
+            }
+            Err(e) => {
+                tracing::warn!(
+                    url = %url, error = %e,
+                    "Inference probe: llama-server unreachable. \
+                     Joining mesh as storage-only. \
+                     Start llama-server or fix the address in config to enable inference routing."
+                );
+                false
+            }
+        }
+    } else {
+        // Looks like a binary name — check if it exists in PATH.
+        let found = std::process::Command::new("which")
+            .arg(addr.as_str())
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if found {
+            tracing::info!(binary = %addr, "Inference probe: binary found in PATH");
+        } else {
+            tracing::warn!(
+                binary = %addr,
+                "Inference probe: binary not found in PATH. \
+                 Joining mesh as storage-only. \
+                 Install llama-server or set [inference].llama_server in config."
+            );
+        }
+        found
+    }
 }
 
 fn cmd_daemon_stop(_config: &Option<DaemonConfig>) -> Result<()> {

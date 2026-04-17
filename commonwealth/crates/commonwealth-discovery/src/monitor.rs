@@ -77,6 +77,8 @@ impl ResourceMonitor {
                 hosted_corpora: vec![],
                 reported_at: now_secs(),
                 inference_availability: 1.0,
+                inference_capable: false,
+                loaded_models: vec![],
             },
             version: 0,
         };

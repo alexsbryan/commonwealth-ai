@@ -133,6 +133,8 @@ fn member(
                 .collect(),
             reported_at: 1_000,
             inference_availability: 1.0,
+            inference_capable: false,
+            loaded_models: vec![],
         },
         addresses: vec![addr],
     }

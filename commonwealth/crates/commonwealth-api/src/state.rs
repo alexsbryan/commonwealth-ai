@@ -95,6 +95,10 @@ pub struct AppStateInner {
     /// ActivityReporter via POST /internal/node/activity; read by gossip each
     /// round to populate NodeCapabilities.inference_availability. Default 1.0.
     pub local_inference_availability: RwLock<f32>,
+    /// Hard capability gate: true iff the daemon's startup probe confirmed
+    /// the configured model can be loaded. false (default) means this node
+    /// joins as storage-only and is excluded from inference routing.
+    pub local_inference_capable: std::sync::atomic::AtomicBool,
     /// Optional callback fired after any `Mesh` mutation by the
     /// route handlers. Set by the embedded daemon to the
     /// `persist::save` function so `/internal/join` accepts survive
@@ -165,10 +169,27 @@ impl AppState {
                 app_port_map: AppPortMap::new(),
                 active_ingests: RwLock::new(HashSet::new()),
                 local_inference_availability: RwLock::new(1.0_f32),
+                local_inference_capable: std::sync::atomic::AtomicBool::new(false),
                 on_mesh_mutation: None,
                 local_inference: None,
             }),
         }
+    }
+
+    /// Record whether this node's model probe succeeded at startup.
+    /// Called by the daemon after `probe_inference_capability()` completes,
+    /// before mDNS announce or the first gossip round.
+    pub fn set_local_inference_capable(&self, capable: bool) {
+        self.inner
+            .local_inference_capable
+            .store(capable, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Read the current hard capability gate for use in gossip payloads.
+    pub fn local_inference_capable(&self) -> bool {
+        self.inner
+            .local_inference_capable
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Install the in-process inference service. Same Arc-get_mut

@@ -166,13 +166,19 @@ pub async fn corpus_collaborate(
     // the assignment via gossip.
     {
         let mesh = state.inner.mesh.read().await;
-        // Start our own partition in the background.
-        {
-            let local_partition = handoff.partitions.iter()
-                .find(|p| p.node_id == self_id)
-                .cloned();
-            if let Some(partition) = local_partition {
-                if let Some(engine) = state.inner.corpus_engine.clone() {
+        // Start our own partition in the background — but only if this node
+        // doesn't already have an active ingest for this corpus. A running
+        // ingest holds the LanceDB write lock; spawning a second task on the
+        // same output path would corrupt the index. The existing task will
+        // naturally finish its range; peer partitions handle the rest.
+        let already_ingesting = state.inner.active_ingests.read().await.contains(&handoff.corpus_id);
+        if already_ingesting {
+            tracing::info!(
+                corpus = %handoff.corpus_id,
+                "collaborate: local ingest already running — skipping local partition spawn, peers will handle remaining range"
+            );
+        } else if let Some(partition) = handoff.partitions.iter().find(|p| p.node_id == self_id).cloned() {
+            if let Some(engine) = state.inner.corpus_engine.clone() {
                     let corpus_id = handoff.corpus_id.clone();
                     let recipe_id = handoff.recipe_id.clone();
                     let handoff_id = handoff.handoff_id;
@@ -250,7 +256,6 @@ pub async fn corpus_collaborate(
                             ),
                         }
                     });
-                }
             }
         }
 

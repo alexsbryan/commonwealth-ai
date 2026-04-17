@@ -37,6 +37,15 @@ pub fn pick_slot_for_oicp<'a>(
     candidates
         .iter()
         .enumerate()
+        // Hard gate: a node that has explicitly declared inference_capable: false
+        // is structurally unable to serve — exclude it before scoring.
+        // None node_capabilities = legacy pre-mesh node = do not exclude
+        // (preserves backward-compatibility with non-mesh backends).
+        .filter(|(_, c)| {
+            c.node_capabilities
+                .map(|nc| nc.inference_capable)
+                .unwrap_or(true)
+        })
         .filter_map(|(idx, c)| {
             let cap_score = c
                 .manifest
@@ -110,6 +119,8 @@ mod tests {
             hosted_corpora: vec![],
             reported_at: 0,
             inference_availability: availability,
+            inference_capable: true,
+            loaded_models: vec![],
         }
     }
 
@@ -249,5 +260,68 @@ mod tests {
     fn empty_candidate_list_returns_none() {
         let selected = pick_slot_for_oicp(&[], &reqs_requiring_code(1));
         assert_eq!(selected, None);
+    }
+
+    fn make_caps_with_capability(availability: f32, inference_capable: bool) -> NodeCapabilities {
+        NodeCapabilities {
+            inference_capable,
+            ..make_caps(availability)
+        }
+    }
+
+    #[test]
+    fn ghost_node_excluded_from_routing() {
+        // A node with inference_capable: false must never be routed to,
+        // even if it would otherwise have the highest capability score.
+        let ghost_caps = make_caps_with_capability(1.0, false);
+        let capable_caps = make_caps_with_capability(1.0, true);
+        let manifest = make_manifest(10);
+
+        let candidates = vec![
+            BackendCandidate { manifest: &manifest, node_capabilities: Some(&ghost_caps) },
+            BackendCandidate { manifest: &manifest, node_capabilities: Some(&capable_caps) },
+        ];
+
+        let selected = pick_slot_for_oicp(&candidates, &reqs_requiring_code(1));
+        assert_eq!(selected, Some(1), "ghost node (inference_capable: false) must be excluded");
+    }
+
+    #[test]
+    fn only_ghost_node_returns_none() {
+        let ghost_caps = make_caps_with_capability(1.0, false);
+        let manifest = make_manifest(10);
+
+        let candidates = vec![
+            BackendCandidate { manifest: &manifest, node_capabilities: Some(&ghost_caps) },
+        ];
+
+        let selected = pick_slot_for_oicp(&candidates, &reqs_requiring_code(1));
+        assert_eq!(selected, None, "single ghost node must result in no routing candidate");
+    }
+
+    #[test]
+    fn none_node_capabilities_not_excluded_by_hard_gate() {
+        // A backend without node_capabilities (legacy non-mesh node) must
+        // still be routed to — None is treated as capable (backward compat).
+        let manifest = make_manifest(4);
+        let candidates = vec![
+            BackendCandidate { manifest: &manifest, node_capabilities: None },
+        ];
+        let selected = pick_slot_for_oicp(&candidates, &reqs_requiring_code(1));
+        assert_eq!(selected, Some(0), "None node_capabilities must not trigger ghost-node exclusion");
+    }
+
+    #[test]
+    fn capable_node_with_low_availability_still_routes() {
+        // inference_capable: true with low availability must still appear as a candidate.
+        let low_avail_caps = make_caps_with_capability(0.20, true);
+        let manifest = make_manifest(4);
+
+        let candidates = vec![
+            BackendCandidate { manifest: &manifest, node_capabilities: Some(&low_avail_caps) },
+        ];
+
+        let selected = pick_slot_for_oicp(&candidates, &reqs_requiring_code(1));
+        assert_eq!(selected, Some(0), "capable node with low availability must still be routable");
     }
 }
