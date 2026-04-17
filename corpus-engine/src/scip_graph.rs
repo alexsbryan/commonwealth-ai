@@ -35,7 +35,13 @@ use crate::error::{Error, Result};
 /// `open_with_integrity` refuses to open a DB whose stored version
 /// differs from this constant — the caller (typically the daemon's
 /// `Reindexer`) treats that as a signal to trigger a full rebuild.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// v2: adds `corpus_id` column to `symbols` and `refs` so a merged
+/// graph (one DB holding symbols from many corpora) can scope
+/// delete-and-replace operations to a single source. v1 had only
+/// `id INTEGER PRIMARY KEY`, which meant `import_from_path` could
+/// only ever append — causing unbounded merged-graph growth.
+pub const SCHEMA_VERSION: u32 = 2;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -415,6 +421,14 @@ impl ScipGraph {
             "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)",
             params![chrono::Utc::now().to_rfc3339()],
         );
+        // Persist the corpus id so `import_from_path` has a
+        // reliable source to key the delete-and-replace against,
+        // even if the rows themselves are empty (an ingestion that
+        // produced no symbols but did bump metadata).
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('corpus_id', ?)",
+            params![self.corpus_id.as_str()],
+        );
         let _ = conn.execute(
             "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('stale_files', '')",
             [],
@@ -473,10 +487,18 @@ impl ScipGraph {
     }
 
     fn init_schema(conn: &Connection) -> Result<()> {
+        // Schema v2: `corpus_id` is a first-class column on symbols
+        // and refs so the merged-graph code path can delete-and-
+        // replace per source without touching unrelated rows. The
+        // default empty-string value preserves the previous
+        // per-DB-equals-per-corpus invariant for single-corpus
+        // callers (CLI tests, per-project graphs) that haven't
+        // been updated to pass a corpus_id.
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS symbols (
                 id INTEGER PRIMARY KEY,
+                corpus_id TEXT NOT NULL DEFAULT '',
                 name TEXT NOT NULL,
                 kind TEXT NOT NULL,
                 file_path TEXT NOT NULL,
@@ -486,9 +508,11 @@ impl ScipGraph {
             );
             CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
             CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_path);
+            CREATE INDEX IF NOT EXISTS idx_symbols_corpus ON symbols(corpus_id);
 
             CREATE TABLE IF NOT EXISTS refs (
                 id INTEGER PRIMARY KEY,
+                corpus_id TEXT NOT NULL DEFAULT '',
                 caller_symbol TEXT NOT NULL,
                 callee_symbol TEXT NOT NULL,
                 file_path TEXT NOT NULL,
@@ -497,6 +521,7 @@ impl ScipGraph {
             );
             CREATE INDEX IF NOT EXISTS idx_refs_caller ON refs(caller_symbol);
             CREATE INDEX IF NOT EXISTS idx_refs_callee ON refs(callee_symbol);
+            CREATE INDEX IF NOT EXISTS idx_refs_corpus ON refs(corpus_id);
 
             CREATE TABLE IF NOT EXISTS scip_meta (
                 key TEXT PRIMARY KEY,
@@ -785,24 +810,32 @@ impl ScipGraph {
         Ok((all_callers, caution))
     }
 
-    /// Bulk insert symbols and references. Used by the SCIP exporter and
-    /// by tests to populate the graph directly.
+    /// Bulk insert symbols and references for `self.corpus_id`.
+    /// Append-only — multiple calls accumulate rows under the same
+    /// corpus_id, which is what the per-language exporter loop
+    /// depends on (rust ingest, then typescript, then python all
+    /// land in the same DB under one corpus label).
+    ///
+    /// For the merged-graph flow that needs idempotent replacement
+    /// of a single source corpus's rows, see
+    /// [`replace_corpus`](Self::replace_corpus).
     pub async fn ingest_symbols_and_refs(
         &self,
         symbols: Vec<ScipSymbolRecord>,
         refs: Vec<ScipRefRecord>,
     ) -> Result<()> {
         let conn = self.conn.lock().await;
+        let corpus = self.corpus_id.clone();
 
-        // Use a transaction for performance.
         conn.execute_batch("BEGIN TRANSACTION")
             .map_err(|e| Error::Database(format!("begin: {e}")))?;
 
         for sym in &symbols {
             conn.execute(
-                "INSERT INTO symbols (name, kind, file_path, line_start, line_end, language)
-                 VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO symbols (corpus_id, name, kind, file_path, line_start, line_end, language)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
                 params![
+                    corpus,
                     sym.name,
                     sym.kind,
                     sym.file_path,
@@ -816,9 +849,10 @@ impl ScipGraph {
 
         for r in &refs {
             conn.execute(
-                "INSERT INTO refs (caller_symbol, callee_symbol, file_path, line, ref_kind)
-                 VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, file_path, line, ref_kind)
+                 VALUES (?, ?, ?, ?, ?, ?)",
                 params![
+                    corpus,
                     r.caller_symbol,
                     r.callee_symbol,
                     r.file_path,
@@ -909,9 +943,22 @@ impl ScipGraph {
         .ok();
     }
 
-    /// Import all symbols and references from another ScipGraph database
-    /// file into this graph. Used to build a merged view across multiple
-    /// per-project graphs (e.g. for a multi-project MCP server).
+    /// Import all symbols and references from another ScipGraph
+    /// database into this one, scoped by the source's `corpus_id`.
+    ///
+    /// Semantics are delete-and-replace: any rows previously
+    /// imported under the source's corpus_id are dropped before
+    /// insertion. This bounds growth of a merged graph — without
+    /// it, each rebuild of a per-project graph doubled the merged
+    /// table size and eventually blocked queries on mutex
+    /// contention.
+    ///
+    /// The source DB must have a non-empty `corpus_id` (either in
+    /// its rows' `corpus_id` column or recorded under
+    /// `scip_meta.corpus_id`). We fall back to reading the first
+    /// row's `corpus_id` when the scip_meta key is absent — a
+    /// legacy v1 DB that's been rebuilt once under v2 will have
+    /// per-row values but may not have the meta key.
     ///
     /// Returns `(symbols_imported, refs_imported)`.
     pub async fn import_from_path(&self, other_path: &Path) -> Result<(usize, usize)> {
@@ -922,7 +969,29 @@ impl ScipGraph {
         let other_conn = Connection::open(other_path)
             .map_err(|e| Error::Database(format!("import open: {e}")))?;
 
-        // Read symbols.
+        // Discover the source's corpus_id. Priority:
+        //   1. `scip_meta.corpus_id` (set by `record_rebuild`).
+        //   2. First symbol row's `corpus_id` column.
+        //   3. Empty string (legacy v1 DB without per-row ids).
+        // The replace step uses this key to scope the DELETE.
+        let source_corpus = other_conn
+            .query_row(
+                "SELECT value FROM scip_meta WHERE key = 'corpus_id'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .or_else(|| {
+                other_conn
+                    .query_row(
+                        "SELECT corpus_id FROM symbols LIMIT 1",
+                        [],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .ok()
+            })
+            .unwrap_or_default();
+
         let mut symbols = Vec::new();
         {
             let mut stmt = other_conn
@@ -940,14 +1009,11 @@ impl ScipGraph {
                     })
                 })
                 .map_err(|e| Error::Database(format!("import query symbols: {e}")))?;
-            for row in rows {
-                if let Ok(sym) = row {
-                    symbols.push(sym);
-                }
+            for row in rows.flatten() {
+                symbols.push(row);
             }
         }
 
-        // Read refs.
         let mut refs = Vec::new();
         {
             let mut stmt = other_conn
@@ -966,21 +1032,79 @@ impl ScipGraph {
                     })
                 })
                 .map_err(|e| Error::Database(format!("import query refs: {e}")))?;
-            for row in rows {
-                if let Ok(r) = row {
-                    refs.push(r);
-                }
+            for row in rows.flatten() {
+                refs.push(row);
             }
         }
 
         let sym_count = symbols.len();
         let ref_count = refs.len();
 
-        if !symbols.is_empty() || !refs.is_empty() {
-            self.ingest_symbols_and_refs(symbols, refs).await?;
+        self.replace_corpus(&source_corpus, symbols, refs).await?;
+        Ok((sym_count, ref_count))
+    }
+
+    /// Delete every symbol/ref currently stored under
+    /// `source_corpus_id` in *this* graph, then insert the
+    /// provided rows under that same id. Used by
+    /// [`import_from_path`](Self::import_from_path) to keep a
+    /// merged graph bounded at the union of all source corpora.
+    ///
+    /// Unlike [`ingest_symbols_and_refs`](Self::ingest_symbols_and_refs),
+    /// this does NOT use `self.corpus_id` — the caller supplies
+    /// the source's id so rows from different sources coexist.
+    pub async fn replace_corpus(
+        &self,
+        source_corpus_id: &str,
+        symbols: Vec<ScipSymbolRecord>,
+        refs: Vec<ScipRefRecord>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+
+        conn.execute_batch("BEGIN TRANSACTION")
+            .map_err(|e| Error::Database(format!("replace begin: {e}")))?;
+
+        conn.execute("DELETE FROM symbols WHERE corpus_id = ?", params![source_corpus_id])
+            .map_err(|e| Error::Database(format!("replace delete symbols: {e}")))?;
+        conn.execute("DELETE FROM refs WHERE corpus_id = ?", params![source_corpus_id])
+            .map_err(|e| Error::Database(format!("replace delete refs: {e}")))?;
+
+        for sym in &symbols {
+            conn.execute(
+                "INSERT INTO symbols (corpus_id, name, kind, file_path, line_start, line_end, language)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    source_corpus_id,
+                    sym.name,
+                    sym.kind,
+                    sym.file_path,
+                    sym.line_start,
+                    sym.line_end,
+                    sym.language,
+                ],
+            )
+            .map_err(|e| Error::Database(format!("replace insert symbol: {e}")))?;
         }
 
-        Ok((sym_count, ref_count))
+        for r in &refs {
+            conn.execute(
+                "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, file_path, line, ref_kind)
+                 VALUES (?, ?, ?, ?, ?, ?)",
+                params![
+                    source_corpus_id,
+                    r.caller_symbol,
+                    r.callee_symbol,
+                    r.file_path,
+                    r.line,
+                    r.ref_kind,
+                ],
+            )
+            .map_err(|e| Error::Database(format!("replace insert ref: {e}")))?;
+        }
+
+        conn.execute_batch("COMMIT")
+            .map_err(|e| Error::Database(format!("replace commit: {e}")))?;
+        Ok(())
     }
 
     /// Compute the transitive blast radius for a symbol: all callers at every
@@ -1288,6 +1412,112 @@ mod integrity_tests {
         drop(first);
         let third = ScipGraph::try_rebuild_lock(tmp.path()).unwrap();
         assert!(third.is_some(), "acquire should succeed after first drops");
+    }
+
+    /// Regression test for the merged-graph leak: before the
+    /// corpus_id column landed, every import_from_path call
+    /// appended rows into the merged DB, so repeated rebuilds
+    /// of a per-project graph doubled the merged symbol count.
+    /// With replace_corpus, re-importing the same source should
+    /// leave the merged count constant.
+    #[tokio::test]
+    async fn import_from_path_is_idempotent_across_repeated_imports() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        // Source DB with a single symbol under corpus_id = "alpha".
+        let src_path = tmp.path().join("src.db");
+        let src = ScipGraph::open_with_integrity(&src_path, "alpha").unwrap();
+        src.ingest_symbols_and_refs(
+            vec![ScipSymbolRecord {
+                name: "hello".into(),
+                kind: "function".into(),
+                file_path: "src/lib.rs".into(),
+                line_start: 1,
+                line_end: 3,
+                language: "rust".into(),
+            }],
+            vec![],
+        )
+        .await
+        .unwrap();
+        // Explicitly record so the corpus_id lands in scip_meta.
+        src.record_rebuild("test", None, None).await;
+        drop(src);
+
+        // Merged DB starts empty.
+        let merged_path = tmp.path().join("merged.db");
+        let merged = ScipGraph::open_with_integrity(&merged_path, "merged").unwrap();
+        assert_eq!(merged.symbol_count().await, 0);
+
+        // First import — one symbol lands.
+        let (syms, _) = merged.import_from_path(&src_path).await.unwrap();
+        assert_eq!(syms, 1);
+        assert_eq!(merged.symbol_count().await, 1);
+
+        // Second import of the same source — count stays at 1,
+        // NOT 2. This is the leak fix.
+        let (syms, _) = merged.import_from_path(&src_path).await.unwrap();
+        assert_eq!(syms, 1);
+        assert_eq!(
+            merged.symbol_count().await,
+            1,
+            "import_from_path must not accumulate duplicates"
+        );
+    }
+
+    /// Two source DBs with different corpus_ids must coexist in
+    /// the merged graph — re-importing one shouldn't clobber the
+    /// other.
+    #[tokio::test]
+    async fn import_from_path_scopes_delete_to_source_corpus() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let a_path = tmp.path().join("a.db");
+        let a = ScipGraph::open_with_integrity(&a_path, "alpha").unwrap();
+        a.ingest_symbols_and_refs(
+            vec![ScipSymbolRecord {
+                name: "alpha_sym".into(),
+                kind: "function".into(),
+                file_path: "a/lib.rs".into(),
+                line_start: 1,
+                line_end: 2,
+                language: "rust".into(),
+            }],
+            vec![],
+        )
+        .await
+        .unwrap();
+        a.record_rebuild("t", None, None).await;
+        drop(a);
+
+        let b_path = tmp.path().join("b.db");
+        let b = ScipGraph::open_with_integrity(&b_path, "beta").unwrap();
+        b.ingest_symbols_and_refs(
+            vec![ScipSymbolRecord {
+                name: "beta_sym".into(),
+                kind: "function".into(),
+                file_path: "b/lib.rs".into(),
+                line_start: 1,
+                line_end: 2,
+                language: "rust".into(),
+            }],
+            vec![],
+        )
+        .await
+        .unwrap();
+        b.record_rebuild("t", None, None).await;
+        drop(b);
+
+        let merged_path = tmp.path().join("merged.db");
+        let merged = ScipGraph::open_with_integrity(&merged_path, "merged").unwrap();
+        merged.import_from_path(&a_path).await.unwrap();
+        merged.import_from_path(&b_path).await.unwrap();
+        assert_eq!(merged.symbol_count().await, 2);
+
+        // Re-import of alpha: only alpha rows are replaced, beta
+        // rows stay. Total stays at 2.
+        merged.import_from_path(&a_path).await.unwrap();
+        assert_eq!(merged.symbol_count().await, 2);
     }
 
     #[tokio::test]
