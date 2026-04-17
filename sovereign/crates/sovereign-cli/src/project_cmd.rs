@@ -6,6 +6,7 @@
 //! filesystem watcher. Two minutes from first run to fully working tools.
 
 use std::collections::HashMap;
+use std::io::{self, BufRead as _, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -69,6 +70,59 @@ Commands:
                       without re-running init
   help                Show this help"
     );
+}
+
+// ─── Init helpers ────────────────────────────────────────────
+
+struct HarnessSelection {
+    claude_code: bool,
+    opencode: bool,
+}
+
+/// Ask which AI coding assistant configs to generate. Defaults to all.
+/// Skipped when stdin is not a TTY (CI/script environments).
+fn prompt_harness_selection() -> HarnessSelection {
+    eprint!("\n  Set up AI assistant configs: [A]ll / [C]laude Code / [O]pencode / [S]kip (default: A): ");
+    io::stderr().flush().ok();
+    let mut ans = String::new();
+    io::stdin().lock().read_line(&mut ans).unwrap_or(0);
+    match ans.trim().to_lowercase().as_str() {
+        "c" => HarnessSelection { claude_code: true, opencode: false },
+        "o" => HarnessSelection { claude_code: false, opencode: true },
+        "s" => HarnessSelection { claude_code: false, opencode: false },
+        _ => HarnessSelection { claude_code: true, opencode: true },
+    }
+}
+
+/// Probe the Commonwealth OICP capabilities endpoint and return available model IDs.
+/// Returns an empty vec silently if Commonwealth is not reachable — this is normal
+/// when the daemon isn't running at init time.
+async fn fetch_commonwealth_models(commonwealth_url: &str) -> Vec<String> {
+    let base = commonwealth_url
+        .trim_end_matches('/')
+        .replace(":9742", ":9741");
+    let url = format!("{base}/oicp/v1/capabilities");
+
+    let resp = match reqwest::Client::new()
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => r,
+        _ => return vec![],
+    };
+
+    resp.json::<oicp_types::ProviderManifest>()
+        .await
+        .map(|m| {
+            m.models
+                .into_iter()
+                .filter(|model| model.status.available)
+                .map(|model| model.id)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 // ─── Init ────────────────────────────────────────────────────
@@ -191,7 +245,14 @@ async fn cmd_init(args: &[String]) -> i32 {
     if langs.is_empty() {
         eprintln!("    ! No supported languages detected");
         eprintln!("      Supported: Rust, TypeScript, JavaScript, Go, Python");
-        return 1;
+        if !no_scip {
+            // Without a language index there's nothing to index — bail.
+            // Pass --no-scip to generate agent configs without indexing
+            // (useful for monorepo roots that have no source files at the top level).
+            eprintln!("      Pass --no-scip to skip indexing and only write agent configs.");
+            return 1;
+        }
+        eprintln!("      Continuing without indexing (--no-scip).");
     }
     for lang in &langs {
         println!("    \u{2713} {}", lang.display);
@@ -535,12 +596,82 @@ vector = false
         }
     }
 
-    // .claude/settings.json
-    if !no_claude_config {
+    // Prompt for harness selection before writing any agent configs.
+    // Skip in non-TTY environments (CI, pipes) — default to all.
+    let harness = if io::stdin().is_terminal() {
+        prompt_harness_selection()
+    } else {
+        HarnessSelection { claude_code: true, opencode: true }
+    };
+
+    // Detect Commonwealth URL from existing sovereign.toml, then prompt if opencode
+    // is selected and no URL was found yet.
+    let commonwealth_url: Option<String> = {
+        let toml_path = repo_root.join(".sovereign/sovereign.toml");
+        let from_toml = std::fs::read_to_string(&toml_path)
+            .ok()
+            .and_then(|s| toml::from_str::<toml::Value>(&s).ok())
+            .and_then(|v| {
+                v.get("commonwealth")
+                    .and_then(|c| c.get("url"))
+                    .and_then(|u| u.as_str())
+                    .map(str::to_owned)
+            });
+
+        if from_toml.is_some() {
+            from_toml
+        } else if harness.opencode && io::stdin().is_terminal() {
+            eprint!("  Commonwealth inference URL (e.g. http://localhost:9741, blank to skip): ");
+            io::stderr().flush().ok();
+            let mut ans = String::new();
+            io::stdin().lock().read_line(&mut ans).unwrap_or(0);
+            let trimmed = ans.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        } else {
+            None
+        }
+    };
+
+    // Probe OICP capabilities to enumerate real model IDs. Falls back to []
+    // gracefully if Commonwealth is not running at init time.
+    let commonwealth_models: Vec<String> = if let Some(ref url) = commonwealth_url {
+        fetch_commonwealth_models(url).await
+    } else {
+        vec![]
+    };
+
+    // .claude/settings.json + .claude/hooks/inject-notes.sh
+    if harness.claude_code && !no_claude_config {
         let claude_dir = repo_root.join(".claude");
         if let Err(e) = std::fs::create_dir_all(&claude_dir) {
             eprintln!("    \u{2717} Cannot create .claude/: {e}");
             return 1;
+        }
+
+        // Write the UserPromptSubmit hook script. It fetches active invariants
+        // and decisions from the sovereign MCP server and injects them as
+        // context before every Claude response — no manual read_notes call needed.
+        let hooks_dir = claude_dir.join("hooks");
+        if let Err(e) = std::fs::create_dir_all(&hooks_dir) {
+            eprintln!("    \u{2717} Cannot create .claude/hooks/: {e}");
+        } else {
+            let hook_path = hooks_dir.join("inject-notes.sh");
+            let hook_script = generate_inject_notes_script(port);
+            match std::fs::write(&hook_path, &hook_script) {
+                Ok(()) => {
+                    // Make executable.
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let _ = std::fs::set_permissions(
+                            &hook_path,
+                            std::fs::Permissions::from_mode(0o755),
+                        );
+                    }
+                    println!("    \u{2713} .claude/hooks/inject-notes.sh");
+                }
+                Err(e) => eprintln!("    \u{2717} Cannot write inject-notes.sh: {e}"),
+            }
         }
 
         let settings_path = claude_dir.join("settings.json");
@@ -560,6 +691,41 @@ vector = false
             return 1;
         }
         println!("    \u{2713} .claude/settings.json");
+    }
+
+    // .opencode/config.json + AGENTS.md
+    if harness.opencode {
+        let opencode_dir = repo_root.join(".opencode");
+        if let Err(e) = std::fs::create_dir_all(&opencode_dir) {
+            eprintln!("    \u{26a0} Cannot create .opencode/: {e}");
+        } else {
+            let config_path = opencode_dir.join("config.json");
+            let generated =
+                generate_opencode_config(port, commonwealth_url.as_deref(), &commonwealth_models);
+            let final_content = if config_path.exists() {
+                match std::fs::read_to_string(&config_path) {
+                    Ok(existing) => merge_opencode_config(&existing, &generated),
+                    Err(_) => generated,
+                }
+            } else {
+                generated
+            };
+            match std::fs::write(&config_path, &final_content) {
+                Ok(()) => println!("    \u{2713} .opencode/config.json"),
+                Err(e) => eprintln!("    \u{26a0} Cannot write .opencode/config.json: {e}"),
+            }
+        }
+
+        // AGENTS.md — only write if absent; it's project-specific and users edit it.
+        let agents_path = repo_root.join("AGENTS.md");
+        if !agents_path.exists() {
+            let content =
+                generate_agents_md(&corpus_id, port, !no_scip, commonwealth_url.as_deref());
+            match std::fs::write(&agents_path, &content) {
+                Ok(()) => println!("    \u{2713} AGENTS.md"),
+                Err(e) => eprintln!("    \u{26a0} Cannot write AGENTS.md: {e}"),
+            }
+        }
     }
 
     // .gitignore
@@ -1690,6 +1856,7 @@ mod mcp_server {
             // endpoint was a separate URL.
             .route("/mcp", post(mcp_handle).get(mcp_sse))
             .route("/mcp/message", post(mcp_handle))
+            .route("/mcp/stats", axum::routing::get(mcp_stats))
             .layer(Extension(tools))
             .layer(Extension(logger))
             .layer(Extension(Arc::new(session_id)))
@@ -1702,6 +1869,31 @@ mod mcp_server {
 
     fn is_localhost(addr: &SocketAddr) -> bool {
         addr.ip().is_loopback()
+    }
+
+    /// GET /mcp/stats — tool call counts since server start.
+    async fn mcp_stats(
+        ConnectInfo(peer): ConnectInfo<SocketAddr>,
+        Extension(tools): Extension<Arc<ToolRegistry>>,
+    ) -> impl IntoResponse {
+        if !is_localhost(&peer) {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({"error": "local-only"})),
+            )
+                .into_response();
+        }
+        let counts = tools.call_counts();
+        let total: u64 = counts.iter().map(|(_, n)| n).sum();
+        let tools_json: Vec<serde_json::Value> = counts
+            .into_iter()
+            .map(|(name, count)| serde_json::json!({ "tool": name, "calls": count }))
+            .collect();
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({ "total_calls": total, "tools": tools_json })),
+        )
+            .into_response()
     }
 
     /// Emit the `endpoint` event required by the 2024-11-05 HTTP+SSE transport.
@@ -2296,6 +2488,227 @@ architect.
     )
 }
 
+/// Generate `.opencode/config.json` — registers the sovereign MCP server and,
+/// when Commonwealth is configured, a custom OpenAI-compatible provider backed
+/// by the OICP mesh. Models are populated from live OICP capabilities when
+/// available; falls back to a single `"auto"` entry otherwise.
+fn generate_opencode_config(
+    port: u16,
+    commonwealth_url: Option<&str>,
+    commonwealth_models: &[String],
+) -> String {
+    let mut config = serde_json::json!({
+        "mcp": {
+            "servers": {
+                "sovereign": {
+                    "type": "http",
+                    "url": format!("http://localhost:{port}/mcp")
+                }
+            }
+        }
+    });
+
+    if let Some(url) = commonwealth_url {
+        let base = format!(
+            "{}/v1",
+            url.trim_end_matches('/').replace(":9742", ":9741")
+        );
+
+        let mut models = serde_json::Map::new();
+        for id in commonwealth_models {
+            models.insert(id.clone(), serde_json::json!({ "name": id }));
+        }
+        if models.is_empty() {
+            // Commonwealth not reachable at init time; "auto" routes at runtime.
+            models.insert(
+                "auto".into(),
+                serde_json::json!({ "name": "Commonwealth (auto-routed)" }),
+            );
+        }
+
+        config["provider"] = serde_json::json!({
+            "commonwealth": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Commonwealth Mesh",
+                "options": { "baseURL": base },
+                "models": models
+            }
+        });
+    }
+
+    serde_json::to_string_pretty(&config).unwrap_or_default()
+}
+
+/// Merge a generated opencode config into an existing one without clobbering
+/// other MCP servers or user settings. Only adds the `sovereign` server entry.
+fn merge_opencode_config(existing: &str, generated: &str) -> String {
+    let mut base: serde_json::Value =
+        serde_json::from_str(existing).unwrap_or(serde_json::json!({}));
+    let new: serde_json::Value = match serde_json::from_str(generated) {
+        Ok(v) => v,
+        Err(_) => return generated.to_string(),
+    };
+
+    if let Some(new_servers) = new
+        .get("mcp")
+        .and_then(|m| m.get("servers"))
+        .and_then(|s| s.as_object())
+    {
+        let mcp = base
+            .as_object_mut()
+            .unwrap()
+            .entry("mcp")
+            .or_insert_with(|| serde_json::json!({}));
+        let servers = mcp
+            .as_object_mut()
+            .unwrap()
+            .entry("servers")
+            .or_insert_with(|| serde_json::json!({}));
+        if let Some(map) = servers.as_object_mut() {
+            for (k, v) in new_servers {
+                map.insert(k.clone(), v.clone());
+            }
+        }
+    }
+
+    // Merge provider.commonwealth — add or update, preserve other providers.
+    if let Some(cw_provider) = new
+        .get("provider")
+        .and_then(|p| p.get("commonwealth"))
+    {
+        let provider = base
+            .as_object_mut()
+            .unwrap()
+            .entry("provider")
+            .or_insert_with(|| serde_json::json!({}));
+        if let Some(map) = provider.as_object_mut() {
+            map.insert("commonwealth".into(), cw_provider.clone());
+        }
+    }
+
+    serde_json::to_string_pretty(&base).unwrap_or_else(|_| generated.to_string())
+}
+
+/// Generate a starter AGENTS.md for projects that don't have one.
+/// Opencode (and other agents that read AGENTS.md) use this as their
+/// system-level instructions for the codebase.
+fn generate_agents_md(corpus_id: &str, port: u16, has_scip: bool, commonwealth_url: Option<&str>) -> String {
+    let scip_section = if has_scip {
+        "\n## Pre-flight before editing\n\
+         \n\
+         - **Before changing a function signature**: `find_callers(\"fn\")` first — counts every call site.\n\
+         - **Before adding a method to a trait**: `find_callers(\"TraitName\")` to find all implementors.\n\
+         - **Before a non-trivial refactor**: `blast_radius(\"symbol\", max_depth: 2)`.\n"
+    } else {
+        "\n## Pre-flight before editing\n\
+         \n\
+         Call graph tools are not available (SCIP not enabled). Use `code_search` to find usage patterns.\n"
+    };
+
+    let inference_section = if let Some(url) = commonwealth_url {
+        let base = url.trim_end_matches('/').replace(":9742", ":9741");
+        format!(
+            "\n## Inference\n\
+             \n\
+             Commonwealth mesh provider is configured at `{base}`.\n\
+             Use model `commonwealth/<model-id>` in opencode to route through the mesh.\n\
+             Run `GET {base}/v1/models` to list currently available models.\n"
+        )
+    } else {
+        String::new()
+    };
+
+    format!(
+        "# Agent instructions — {corpus_id}\n\
+         \n\
+         ## Code intelligence (MCP)\n\
+         \n\
+         A sovereign MCP server at `http://localhost:{port}/mcp` exposes compiler-resolved\n\
+         tools for this codebase. **Use MCP tools before reading files.**\n\
+         \n\
+         | Tool | Purpose |\n\
+         |---|---|\n\
+         | `symbol_lookup` | Exact struct/trait/fn definition — use instead of reading files |\n\
+         | `find_callers` | All call sites, compiler-resolved (catches trait dispatch) |\n\
+         | `find_callees` | What a function calls |\n\
+         | `blast_radius` | Transitive impact of changing a symbol |\n\
+         | `code_search` | Semantic search across the codebase |\n\
+         | `recent_changes` | Files changed in the last N hours |\n\
+         | `project_context` | Architecture and conventions for a topic |\n\
+         | `read_notes` | Decisions and invariants from prior sessions |\n\
+         | `write_note` | Record a decision, invariant, todo, or failed attempt |\n\
+         | `lint_status` | Check for compile errors (do not run `cargo check` via shell) |\n\
+         | `test_status` | Check test results (do not run `cargo test` via shell) |\n\
+         \n\
+         ## Required session start\n\
+         \n\
+         1. `read_notes(query: \"active\")` — surface active invariants and todos\n\
+         2. `project_context(\"<task area>\")` — pull relevant conventions\n\
+         3. `recent_changes(hours: 24)` — see what's been touched\n\
+         {scip_section}\n\
+         ## Build and test feedback\n\
+         \n\
+         The sovereign watcher runs continuously in the background. **Do not run `cargo check`,\n\
+         `cargo build`, `cargo test`, or `cargo clippy` directly** — they contend with the watcher\n\
+         for the Cargo file lock and stall both processes.\n\
+         \n\
+         - Check compile status: `lint_status` — response includes `age_seconds`, `watched_scope`,\n\
+           and `watcher_active` so you can confirm the result covers your changes.\n\
+         - Check test status: `test_status` — if stale, call `run_tests` then poll.\n\
+         - Only fall back to `cargo` commands when `lint_status` returns `watcher_active: false`.\n\
+         \n\
+         ## Session discipline\n\
+         \n\
+         - Call `write_note(kind: \"invariant\")` when you discover a constraint that must never be violated.\n\
+         - Call `write_note(kind: \"decision\")` when you choose one approach over alternatives.\n\
+         - Call `session_reflection` at the end of any significant task.\n\
+         {inference_section}"
+    )
+}
+
+/// Generate the inject-notes.sh hook script content for the given port.
+fn generate_inject_notes_script(port: u16) -> String {
+    format!(
+        r#"#!/bin/sh
+# sovereign inject-notes — UserPromptSubmit hook for Claude Code.
+# Fetches active invariants and decisions from the sovereign MCP server and
+# prints them as context before every Claude response.
+# Fails silently when the server is not running so offline work is unaffected.
+
+PORT="${{SOVEREIGN_PORT:-{port}}}"
+
+RESPONSE=$(curl -sf --max-time 2 \
+  -X POST "http://localhost:${{PORT}}/mcp" \
+  -H "Content-Type: application/json" \
+  -d '{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"read_notes","arguments":{{"kinds":["invariant","decision"],"limit":20}}}}}}' \
+  2>/dev/null) || exit 0
+
+[ -z "$RESPONSE" ] && exit 0
+
+printf '%s' "$RESPONSE" | python3 -c "
+import sys, json
+
+try:
+    outer = json.load(sys.stdin)
+    inner_text = outer['result']['content'][0]['text']
+    inner = json.loads(inner_text)
+    notes = inner.get('notes', [])
+    if not notes:
+        sys.exit(0)
+    print('## Active sovereign notes (injected by hook)')
+    print()
+    for n in notes:
+        kind = n.get('kind', 'note')
+        content = n.get('content', '').strip()
+        print('[' + kind + '] ' + content)
+        print()
+except Exception:
+    sys.exit(0)
+" 2>/dev/null
+"#
+    )
+}
+
 fn generate_claude_settings(
     port: u16,
     corpus_id: &str,
@@ -2377,6 +2790,18 @@ fn generate_claude_settings(
             }
         },
         "systemPrompt": system_prompt,
+        "hooks": {
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "sh .claude/hooks/inject-notes.sh"
+                        }
+                    ]
+                }
+            ]
+        }
     }))
     .unwrap_or_default()
 }
@@ -2431,6 +2856,49 @@ fn merge_claude_settings(existing: &str, generated: &str) -> String {
             }
         } else {
             base["systemPrompt"] = serde_json::json!(new_prompt);
+        }
+    }
+
+    // Merge hooks — add the sovereign UserPromptSubmit hook without removing
+    // other hooks the user may have configured. We identify our hook by its
+    // command string and skip re-adding it if already present.
+    if let Some(new_hooks) = new.get("hooks").and_then(|v| v.as_object()) {
+        let base_hooks = base
+            .as_object_mut()
+            .unwrap()
+            .entry("hooks")
+            .or_insert_with(|| serde_json::json!({}));
+        if let (Some(base_hooks_map), Some(new_ups)) = (
+            base_hooks.as_object_mut(),
+            new_hooks.get("UserPromptSubmit").and_then(|v| v.as_array()),
+        ) {
+            let existing_ups = base_hooks_map
+                .entry("UserPromptSubmit")
+                .or_insert_with(|| serde_json::json!([]));
+            if let Some(arr) = existing_ups.as_array_mut() {
+                for new_entry in new_ups {
+                    // Check if the exact command is already present.
+                    let new_cmd = new_entry
+                        .get("hooks")
+                        .and_then(|h| h.as_array())
+                        .and_then(|h| h.first())
+                        .and_then(|h| h.get("command"))
+                        .and_then(|c| c.as_str())
+                        .unwrap_or("");
+                    let already_present = arr.iter().any(|e| {
+                        e.get("hooks")
+                            .and_then(|h| h.as_array())
+                            .and_then(|h| h.first())
+                            .and_then(|h| h.get("command"))
+                            .and_then(|c| c.as_str())
+                            .map(|c| c == new_cmd)
+                            .unwrap_or(false)
+                    });
+                    if !already_present {
+                        arr.push(new_entry.clone());
+                    }
+                }
+            }
         }
     }
 
@@ -2802,6 +3270,90 @@ fi
         assert!(!stripped.contains("setsid"), "setsid line should be stripped");
         assert!(stripped.contains("echo \"user step\""), "user content preserved");
     }
+
+    // ── opencode config generation ──────────────────────────────
+
+    #[test]
+    fn opencode_config_no_commonwealth() {
+        let s = generate_opencode_config(8080, None, &[]);
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+        assert_eq!(v["mcp"]["servers"]["sovereign"]["url"], "http://localhost:8080/mcp");
+        assert!(v.get("provider").is_none());
+    }
+
+    #[test]
+    fn opencode_config_commonwealth_no_models_uses_auto_fallback() {
+        let s = generate_opencode_config(8080, Some("http://localhost:9741"), &[]);
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+        assert_eq!(v["provider"]["commonwealth"]["options"]["baseURL"], "http://localhost:9741/v1");
+        assert!(v["provider"]["commonwealth"]["models"]["auto"].is_object());
+    }
+
+    #[test]
+    fn opencode_config_commonwealth_real_models() {
+        let models = vec!["Qwen3-9B".into(), "Qwen3-27B".into()];
+        let s = generate_opencode_config(8080, Some("http://localhost:9741"), &models);
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+        let m = &v["provider"]["commonwealth"]["models"];
+        assert!(m["Qwen3-9B"].is_object());
+        assert!(m["Qwen3-27B"].is_object());
+        assert!(m.get("auto").is_none(), "auto should not appear when real models are known");
+    }
+
+    #[test]
+    fn opencode_config_normalizes_internal_port() {
+        // Port 9742 (internal mesh) should be rewritten to 9741 (public API)
+        let s = generate_opencode_config(8080, Some("http://localhost:9742"), &[]);
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+        assert_eq!(v["provider"]["commonwealth"]["options"]["baseURL"], "http://localhost:9741/v1");
+    }
+
+    #[test]
+    fn merge_opencode_adds_commonwealth_provider() {
+        let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:8080/mcp"}}}}"#;
+        let generated =
+            generate_opencode_config(8080, Some("http://localhost:9741"), &[]);
+        let merged = merge_opencode_config(existing, &generated);
+        let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert!(v["provider"]["commonwealth"]["options"]["baseURL"].is_string());
+    }
+
+    #[test]
+    fn merge_opencode_preserves_other_providers() {
+        let existing = r#"{"mcp":{"servers":{}},"provider":{"openai":{"name":"OpenAI","options":{"baseURL":"https://api.openai.com/v1"}}}}"#;
+        let generated =
+            generate_opencode_config(8080, Some("http://localhost:9741"), &[]);
+        let merged = merge_opencode_config(existing, &generated);
+        let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert!(v["provider"]["openai"].is_object(), "pre-existing provider must survive");
+        assert!(v["provider"]["commonwealth"].is_object(), "commonwealth must be added");
+    }
+
+    #[test]
+    fn merge_opencode_no_commonwealth_in_generated_leaves_existing_provider_intact() {
+        let existing = r#"{"mcp":{"servers":{}},"provider":{"commonwealth":{"name":"old"}}}"#;
+        // generate without commonwealth URL → no provider key in generated
+        let generated = generate_opencode_config(8080, None, &[]);
+        let merged = merge_opencode_config(existing, &generated);
+        let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        // existing commonwealth entry should be preserved unchanged
+        assert_eq!(v["provider"]["commonwealth"]["name"], "old");
+    }
+
+    #[test]
+    fn agents_md_includes_inference_section_when_commonwealth_configured() {
+        let md = generate_agents_md("myproject", 8080, true, Some("http://localhost:9741"));
+        assert!(md.contains("Commonwealth mesh provider"));
+        assert!(md.contains("commonwealth/<model-id>"));
+    }
+
+    #[test]
+    fn agents_md_no_inference_section_without_commonwealth() {
+        let md = generate_agents_md("myproject", 8080, true, None);
+        assert!(!md.contains("Commonwealth mesh provider"));
+    }
+
+    // ── git hook helpers ─────────────────────────────────────────
 
     #[tokio::test]
     async fn snapshot_graph_mtimes_tracks_files() {

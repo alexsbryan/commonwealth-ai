@@ -8045,6 +8045,7 @@ dependencies = [
  "dirs 5.0.1",
  "futures",
  "hostname",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

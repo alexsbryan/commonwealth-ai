@@ -135,9 +135,11 @@ impl Tool for SymbolLookupTool {
             if indexes.is_empty() {
                 return Ok(StepOutput::Text(format!(
                     "No symbol named `{name}` found — no code indexes are installed.\n\n\
+                     Try `code_search` with a description of what you're looking \
+                     for — it does semantic search across any installed knowledge corpora.\n\n\
                      ---\nIndex: absent | 0 symbols\n\
                      Code index not built. Run `sovereign code index <path>` \
-                     to enable symbol lookup."
+                     to enable exact symbol lookup."
                 )));
             }
             return Ok(StepOutput::Text(format!(

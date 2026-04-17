@@ -1,0 +1,10 @@
+{
+  "mcp": {
+    "servers": {
+      "sovereign": {
+        "type": "http",
+        "url": "http://localhost:8080/mcp"
+      }
+    }
+  }
+}

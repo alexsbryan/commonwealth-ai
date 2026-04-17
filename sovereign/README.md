@@ -231,9 +231,65 @@ cargo run --release -p sovereign-cli -- project init
 | `.sovereign/SOVEREIGN.md` | Tool reference, session-start protocol, project invariants | Yes |
 | `.sovereign/project.json` | Stores corpus ID, port, flags for `status`/`refresh` | No (gitignored) |
 | `.claude/settings.json` | MCP server entry + system prompt (merged, not overwritten) | Your choice |
+| `.claude/hooks/inject-notes.sh` | Injects active invariants/decisions before every Claude response | Your choice |
+| `.opencode/config.json` | MCP server entry + Commonwealth inference provider (merged) | Your choice |
+| `AGENTS.md` | AI assistant instructions: MCP tools, session start, inference routing | Yes (if absent) |
 | `.git/hooks/post-commit` | Runs `sovereign project refresh --quiet &` after each commit | No (local) |
 | `~/.sovereign/indexes/{corpus}/` | LanceDB symbol index | N/A (outside repo) |
 | `~/.sovereign/indexes/{corpus}/scip_graph.db` | SCIP call graph (SQLite) | N/A (outside repo) |
+
+### AI assistant configuration
+
+During `init`, sovereign prompts for which AI coding assistant configs to generate:
+
+```
+Set up AI assistant configs: [A]ll / [C]laude Code / [O]pencode / [S]kip (default: A):
+```
+
+- **All** (default) — writes both `.claude/settings.json` and `.opencode/config.json`
+- **Claude Code** — only `.claude/` config (the `--no-claude-config` flag still overrides)
+- **Opencode** — only `.opencode/config.json` and `AGENTS.md`
+- **Skip** — writes neither (useful when you want to configure assistants separately)
+
+In non-interactive environments (CI, pipes) the prompt is skipped and all configs are generated.
+
+#### Commonwealth mesh inference for opencode
+
+When opencode is selected, `init` prompts for a Commonwealth URL:
+
+```
+Commonwealth inference URL (e.g. http://localhost:9741, blank to skip):
+```
+
+Alternatively, if `.sovereign/sovereign.toml` already contains a `[commonwealth]` section, `init` picks it up automatically without prompting:
+
+```toml
+# .sovereign/sovereign.toml
+[commonwealth]
+url = "http://localhost:9741"
+```
+
+When this is set, `init` calls `GET /oicp/v1/capabilities` on the Commonwealth daemon to enumerate available models. The generated `.opencode/config.json` looks like:
+
+```json
+{
+  "mcp": { "servers": { "sovereign": { "type": "http", "url": "http://localhost:8080/mcp" } } },
+  "provider": {
+    "commonwealth": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Commonwealth Mesh",
+      "options": { "baseURL": "http://localhost:9741/v1" },
+      "models": {
+        "Qwen3-9B": { "name": "Qwen3-9B" }
+      }
+    }
+  }
+}
+```
+
+If Commonwealth is not reachable at init time, a single `"auto"` model entry is written as a placeholder — the mesh routes it at runtime. Re-run `sovereign project init` after starting the daemon to populate real model IDs.
+
+Select the provider in opencode with `commonwealth/<model-id>` (e.g. `commonwealth/Qwen3-9B` or `commonwealth/auto`).
 
 ### Ongoing commands
 
@@ -254,7 +310,7 @@ sovereign project refresh
 | `--data-dir <dir>` | `~/.sovereign/indexes` | Where the symbol index is stored |
 | `--no-scip` | off | Skip call graph export (if no SCIP exporter is installed) |
 | `--no-hooks` | off | Skip git hook installation |
-| `--no-claude-config` | off | Skip writing `.claude/settings.json` |
+| `--no-claude-config` | off | Skip writing `.claude/settings.json` (overrides harness prompt) |
 
 ### SCIP exporters
 
