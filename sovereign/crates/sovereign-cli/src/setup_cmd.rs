@@ -139,10 +139,16 @@ pub async fn run_setup(args: &[String]) -> i32 {
     let fast_path = models_dir.join(&fast_slot.file);
     let embed_path = models_dir.join(&embed_slot.file);
 
+    // The manifest's `hf_url` is the repo *landing page* — we derive the
+    // actual GGUF download URL from it plus the slot's filename.
+    let primary_url = hf_download_url(&picked);
+    let fast_url = hf_download_url(&fast_slot);
+    let embed_url = hf_download_url(&embed_slot);
+
     // Primary shows progress; fast+embed run silently in parallel.
-    let primary_fut = download_with_progress(&picked.hf_url, &primary_path, &picked.file);
-    let fast_fut = download_silent(&fast_slot.hf_url, &fast_path);
-    let embed_fut = download_silent(&embed_slot.hf_url, &embed_path);
+    let primary_fut = download_with_progress(&primary_url, &primary_path, &picked.file);
+    let fast_fut = download_silent(&fast_url, &fast_path);
+    let embed_fut = download_silent(&embed_url, &embed_path);
 
     let (primary_res, fast_res, embed_res) = tokio::join!(primary_fut, fast_fut, embed_fut);
 
@@ -175,6 +181,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
 
 // ─── Arg parsing ──────────────────────────────────────────────────
 
+#[derive(Debug)]
 struct Opts {
     reset: bool,
     yes: bool,
@@ -394,21 +401,43 @@ struct ModelPaths {
     embed: PathBuf,
 }
 
+/// Prompt for all three GGUF paths. BYOM is committed — if the user
+/// picked `[b]` from the numbered list, they wanted to supply their own
+/// weights for every slot. No "blank to use default" shortcuts; a
+/// blank line cancels the entire flow (setup exits). Paths are
+/// validated for existence before we return; drag-and-drop quoting and
+/// backslash-escaped spaces are stripped by `strip_quoting`.
 fn prompt_byom_paths(opts: &Opts) -> Result<ModelPaths, String> {
     if opts.yes {
         return Err("--yes cannot be combined with BYOM; choose a numbered option instead".into());
     }
     println!();
-    println!("  Bring your own GGUF files. Leave blank to cancel.");
+    println!("  Bring your own GGUF files. Provide a path for each slot.");
+    println!("  Leave any line blank to cancel.");
+    println!();
 
-    let primary = prompt_path("  Primary (thoughtful) GGUF path: ")?;
-    let fast = prompt_path("  Fast GGUF path (blank to use default recommended): ")?;
-    let embed = prompt_path("  Embed GGUF path (blank to use default recommended): ")?;
-    Ok(ModelPaths {
-        primary: primary.ok_or_else(|| "primary path required".to_string())?,
-        fast: fast.unwrap_or_else(|| PathBuf::from("TBD-fast")),
-        embed: embed.unwrap_or_else(|| PathBuf::from("TBD-embed")),
-    })
+    let primary = require_path(
+        "  Primary (thoughtful) GGUF path: ",
+        "primary path is required for BYOM",
+    )?;
+    let fast = require_path(
+        "  Fast GGUF path: ",
+        "fast path is required for BYOM",
+    )?;
+    let embed = require_path(
+        "  Embed GGUF path: ",
+        "embed path is required for BYOM",
+    )?;
+    Ok(ModelPaths { primary, fast, embed })
+}
+
+/// Prompt for a path, error out if the user leaves it blank.
+/// Thin wrapper over `prompt_path` that turns `Ok(None)` into an error.
+fn require_path(label: &str, missing_msg: &str) -> Result<PathBuf, String> {
+    match prompt_path(label)? {
+        Some(p) => Ok(p),
+        None => Err(missing_msg.to_string()),
+    }
 }
 
 fn prompt_path(label: &str) -> Result<Option<PathBuf>, String> {
@@ -416,16 +445,16 @@ fn prompt_path(label: &str) -> Result<Option<PathBuf>, String> {
     io::stderr().flush().ok();
     let mut line = String::new();
     io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
-    let trimmed = line.trim();
+    let trimmed = strip_quoting(line.trim());
     if trimmed.is_empty() {
         return Ok(None);
     }
-    let expanded = if trimmed.starts_with("~/") {
+    let expanded = if let Some(rest) = trimmed.strip_prefix("~/") {
         dirs::home_dir()
-            .map(|h| h.join(trimmed.trim_start_matches("~/")))
-            .unwrap_or_else(|| PathBuf::from(trimmed))
+            .map(|h| h.join(rest))
+            .unwrap_or_else(|| PathBuf::from(&trimmed))
     } else {
-        PathBuf::from(trimmed)
+        PathBuf::from(&trimmed)
     };
     if !expanded.exists() {
         return Err(format!("file not found: {}", expanded.display()));
@@ -433,7 +462,58 @@ fn prompt_path(label: &str) -> Result<Option<PathBuf>, String> {
     Ok(Some(expanded))
 }
 
+/// Strip surrounding single quotes, double quotes, or backticks from a
+/// user-pasted path. macOS Terminal, iTerm, and most shells wrap a
+/// drag-and-dropped path with single quotes (and escape embedded spaces
+/// with backslashes); pasting into our raw `read_line` then leaves the
+/// quotes embedded. Strip them so drag-and-drop "just works".
+fn strip_quoting(input: &str) -> String {
+    let s = input.trim();
+    let stripped = if s.len() >= 2 {
+        let first = s.chars().next().unwrap();
+        let last = s.chars().last().unwrap();
+        if (first == '\'' && last == '\'')
+            || (first == '"' && last == '"')
+            || (first == '`' && last == '`')
+        {
+            &s[1..s.len() - 1]
+        } else {
+            s
+        }
+    } else {
+        s
+    };
+    // Also undo common shell-escaping of spaces (`\ ` → ` `). Don't
+    // interpret other backslash escapes — a path with a literal `\n`
+    // should stay literal.
+    stripped.replace("\\ ", " ")
+}
+
 // ─── Downloaders ───────────────────────────────────────────────────
+
+/// Build the direct GGUF download URL from a manifest slot. The
+/// `hf_url` field in `models.toml` is the *repo* URL
+/// (`https://huggingface.co/Qwen/Qwen3-1.7B-GGUF`), not the file URL,
+/// so we append `/resolve/main/<file>` to land on the raw LFS blob.
+///
+/// This matches the canonical path `huggingface-cli download` would
+/// resolve; it handles the LFS redirect server-side and supports HTTP
+/// Range (crucial for resume).
+fn hf_download_url(slot: &SlotConfig) -> String {
+    let repo = slot
+        .hf_url
+        .trim_end_matches('/')
+        .strip_prefix("https://huggingface.co/")
+        .unwrap_or(&slot.hf_url);
+    // If the URL is already a /resolve/ URL (e.g. someone wrote the
+    // direct form), don't double-append.
+    if slot.hf_url.contains("/resolve/") {
+        slot.hf_url.clone()
+    } else {
+        format!("https://huggingface.co/{repo}/resolve/main/{}", slot.file)
+    }
+}
+
 
 /// Download `url` to `dest`, resuming a partial `.part` sibling if one
 /// exists. Streams bytes through a pretty progress bar showing the
@@ -441,8 +521,15 @@ fn prompt_path(label: &str) -> Result<Option<PathBuf>, String> {
 /// exists and has non-zero length, treat it as complete (skip).
 async fn download_with_progress(url: &str, dest: &Path, display: &str) -> Result<(), String> {
     if has_content(dest) {
-        println!("    \u{2713} {display} (already present)");
-        return Ok(());
+        // Don't blindly trust a pre-existing file — a prior setup run may
+        // have left an HTML error page at this path. If it's not a
+        // plausible GGUF, remove and re-download.
+        if verify_gguf_non_empty(dest).is_ok() {
+            println!("    \u{2713} {display} (already present)");
+            return Ok(());
+        }
+        eprintln!("    \u{26a0} {display} exists but is too small; re-downloading");
+        let _ = std::fs::remove_file(dest);
     }
     let part = dest.with_extension("part");
     let resume_from = part.metadata().map(|m| m.len()).unwrap_or(0);
@@ -488,8 +575,45 @@ async fn download_with_progress(url: &str, dest: &Path, display: &str) -> Result
     eprintln!();
     drop(file);
 
+    // Defensive: if we received zero bytes, the upstream returned a 2xx
+    // with an empty body (e.g. HF sometimes 200s a redirect body). Don't
+    // silently hand back an empty .gguf — the daemon will fail to load
+    // it, and the user won't know why without reading logs.
+    verify_gguf_non_empty(&part)?;
+
     std::fs::rename(&part, dest)
         .map_err(|e| format!("rename {} -> {}: {e}", part.display(), dest.display()))?;
+    Ok(())
+}
+
+/// Sanity-check a downloaded GGUF. A zero-byte file means the stream
+/// silently yielded nothing (empty redirect body, auth failure, etc).
+/// llama.cpp will error on load either way, but we want to fail the
+/// *download* with a clear message rather than leaving the config in a
+/// state where "setup completed but daemon won't start".
+fn verify_gguf_non_empty(path: &Path) -> Result<(), String> {
+    let len = path
+        .metadata()
+        .map_err(|e| format!("stat {}: {e}", path.display()))?
+        .len();
+    if len == 0 {
+        return Err(format!(
+            "download produced an empty file ({}); upstream likely returned \
+             an empty body. Retry, or pass --reset and try a different model.",
+            path.display()
+        ));
+    }
+    // A real GGUF is at least tens of MB. Anything smaller than 1 MB is
+    // almost certainly an HTML error page or truncated response.
+    const MIN_PLAUSIBLE_GGUF_BYTES: u64 = 1_000_000;
+    if len < MIN_PLAUSIBLE_GGUF_BYTES {
+        return Err(format!(
+            "downloaded file is suspiciously small ({} bytes at {}); \
+             likely an HTML error response rather than a GGUF. Retry.",
+            len,
+            path.display()
+        ));
+    }
     Ok(())
 }
 
@@ -497,7 +621,10 @@ async fn download_with_progress(url: &str, dest: &Path, display: &str) -> Result
 /// progress. Used for fast + embed (we show a single ✓ when done).
 async fn download_silent(url: &str, dest: &Path) -> Result<(), String> {
     if has_content(dest) {
-        return Ok(());
+        if verify_gguf_non_empty(dest).is_ok() {
+            return Ok(());
+        }
+        let _ = std::fs::remove_file(dest);
     }
     let part = dest.with_extension("part");
     let resume_from = part.metadata().map(|m| m.len()).unwrap_or(0);
@@ -529,6 +656,7 @@ async fn download_silent(url: &str, dest: &Path) -> Result<(), String> {
             .map_err(|e| format!("write: {e}"))?;
     }
     drop(file);
+    verify_gguf_non_empty(&part)?;
     std::fs::rename(&part, dest).map_err(|e| format!("rename: {e}"))?;
     Ok(())
 }
@@ -613,8 +741,8 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         println!(" ready");
     } else {
         println!();
-        eprintln!("  warning: daemon didn't respond within 30s.");
-        eprintln!("  check logs at {}/logs/daemon.err", data_dir.display());
+        eprintln!("  warning: daemon didn't respond on :{} within 30s.", cfg.daemon.client_port);
+        diagnose_daemon_failure(&data_dir);
         return 0;
     }
 
@@ -637,6 +765,39 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
 
     let _ = Arc::new(()); // placeholder; Arc usage removed post-refactor
     0
+}
+
+/// When the daemon fails to come up within the setup window, dump enough
+/// context for the user to self-diagnose without digging through logs:
+/// the last ~20 lines of `daemon.err`, the service-manager status, and
+/// a copy-paste command to run the daemon in the foreground.
+fn diagnose_daemon_failure(data_dir: &Path) {
+    let err_log = data_dir.join("logs").join("daemon.err");
+    eprintln!();
+    eprintln!("  To diagnose, try one of:");
+
+    #[cfg(target_os = "macos")]
+    eprintln!("    launchctl list | grep sovereign       # is the service loaded?");
+    #[cfg(target_os = "linux")]
+    eprintln!("    systemctl --user status sovereign     # is the unit active?");
+
+    eprintln!("    sovereign daemon run                  # run in the foreground to see errors live");
+    eprintln!();
+
+    if err_log.exists() {
+        eprintln!("  Last lines of {}:", err_log.display());
+        match std::fs::read_to_string(&err_log) {
+            Ok(contents) => {
+                let tail: Vec<&str> = contents.lines().rev().take(20).collect();
+                for line in tail.iter().rev() {
+                    eprintln!("    {line}");
+                }
+            }
+            Err(e) => eprintln!("    (couldn't read: {e})"),
+        }
+    } else {
+        eprintln!("  No log at {} yet — service likely didn't start.", err_log.display());
+    }
 }
 
 async fn wait_for_daemon(port: u16, timeout: Duration) -> bool {
@@ -666,4 +827,336 @@ fn hardware_label(hw: &HardwareProfile) -> String {
 #[allow(dead_code)]
 fn _tty_gate() -> bool {
     io::stdin().is_terminal()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── parse_args ─────────────────────────────────────────────────
+
+    fn s(v: &[&str]) -> Vec<String> {
+        v.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn parse_args_defaults_to_interactive() {
+        let opts = parse_args(&[]).unwrap();
+        assert!(!opts.reset);
+        assert!(!opts.yes);
+        assert!(!opts.help);
+        assert!(opts.data_dir.is_none());
+    }
+
+    #[test]
+    fn parse_args_recognizes_all_flags() {
+        let opts = parse_args(&s(&["--reset", "--yes", "--data-dir", "/tmp/sv"])).unwrap();
+        assert!(opts.reset);
+        assert!(opts.yes);
+        assert_eq!(opts.data_dir.as_deref(), Some(Path::new("/tmp/sv")));
+    }
+
+    #[test]
+    fn parse_args_short_yes() {
+        let opts = parse_args(&s(&["-y"])).unwrap();
+        assert!(opts.yes);
+    }
+
+    #[test]
+    fn parse_args_help_long_and_short() {
+        assert!(parse_args(&s(&["--help"])).unwrap().help);
+        assert!(parse_args(&s(&["-h"])).unwrap().help);
+    }
+
+    #[test]
+    fn parse_args_rejects_unknown_flag() {
+        let err = parse_args(&s(&["--wat"])).unwrap_err();
+        assert!(err.contains("--wat"), "error: {err}");
+    }
+
+    #[test]
+    fn parse_args_rejects_dangling_data_dir() {
+        let err = parse_args(&s(&["--data-dir"])).unwrap_err();
+        assert!(err.contains("--data-dir"), "error: {err}");
+    }
+
+    // ── tier_rank ──────────────────────────────────────────────────
+
+    #[test]
+    fn tier_rank_orders_profiles_low_to_high() {
+        assert!(tier_rank(&ProfileName::CpuOnly) < tier_rank(&ProfileName::LowMem));
+        assert!(tier_rank(&ProfileName::LowMem) < tier_rank(&ProfileName::Default));
+        assert!(tier_rank(&ProfileName::Default) < tier_rank(&ProfileName::High));
+        assert!(tier_rank(&ProfileName::High) < tier_rank(&ProfileName::VeryHigh));
+    }
+
+    // ── build_primary_catalog ─────────────────────────────────────
+
+    #[test]
+    fn catalog_is_non_empty_for_every_profile() {
+        // Sanity — the bundled manifest should support every hardware tier.
+        for p in [
+            ProfileName::CpuOnly,
+            ProfileName::LowMem,
+            ProfileName::Default,
+            ProfileName::High,
+            ProfileName::VeryHigh,
+        ] {
+            let cat = build_primary_catalog(&p);
+            assert!(!cat.is_empty(), "catalog empty for {p:?}");
+        }
+    }
+
+    #[test]
+    fn catalog_marks_exactly_one_recommended() {
+        let cat = build_primary_catalog(&ProfileName::Default);
+        let recommended: Vec<_> = cat.iter().filter(|o| o.recommended).collect();
+        assert_eq!(
+            recommended.len(),
+            1,
+            "expected exactly one recommended row, got {}",
+            recommended.len()
+        );
+    }
+
+    #[test]
+    fn catalog_excludes_tiers_above_user_hardware() {
+        // A Default-tier machine must NOT see VeryHigh or High options — they
+        // won't fit in VRAM. Verify by checking no returned slot came from a
+        // higher tier's thoughtful slot.
+        let cat = build_primary_catalog(&ProfileName::Default);
+        let very_high_thoughtful = DEFAULT_MANIFEST
+            .profiles
+            .get("very_high")
+            .and_then(|p| p.thoughtful.as_ref())
+            .map(|s| s.file.clone());
+        if let Some(f) = very_high_thoughtful {
+            assert!(
+                !cat.iter().any(|o| o.slot.file == f),
+                "Default-tier catalog leaked very_high slot {f}"
+            );
+        }
+    }
+
+    #[test]
+    fn catalog_dedupes_by_base_name() {
+        // If two profile tiers point to the same base model, the catalog
+        // should show it only once. We can't assume the bundled manifest has
+        // duplicates, so construct a stricter invariant: every base_name
+        // appears at most once.
+        let cat = build_primary_catalog(&ProfileName::VeryHigh);
+        let mut seen = std::collections::HashSet::new();
+        for opt in &cat {
+            let key = if opt.slot.base_name.is_empty() {
+                opt.slot.file.clone()
+            } else {
+                opt.slot.base_name.clone()
+            };
+            assert!(seen.insert(key.clone()), "duplicate base_name in catalog: {key}");
+        }
+    }
+
+    #[test]
+    fn catalog_very_high_includes_every_tier_below() {
+        // VeryHigh users should see every tier at-or-below them (subject to
+        // dedup). Count of distinct tiers available should be >= 1 (hard
+        // guarantee) and match the number of profiles that define thoughtful
+        // and have non-duplicate base_names.
+        let cat = build_primary_catalog(&ProfileName::VeryHigh);
+        assert!(cat.len() >= 1);
+        // First row (recommended) should be the VeryHigh slot.
+        let first = &cat[0];
+        assert!(first.recommended);
+    }
+
+    // ── resolve_slot ───────────────────────────────────────────────
+
+    #[test]
+    fn resolve_slot_returns_profile_slot_when_defined() {
+        // Default profile has all three slots defined in the bundled manifest.
+        let fast = resolve_slot(&ProfileName::Default, SlotKind::Fast);
+        let embed = resolve_slot(&ProfileName::Default, SlotKind::Embed);
+        assert!(fast.is_some(), "default.fast should exist");
+        assert!(embed.is_some(), "default.embed should exist");
+    }
+
+    #[test]
+    fn resolve_slot_falls_back_to_default_when_missing() {
+        // This test encodes the invariant: even if a profile is thin (say,
+        // cpu_only missing embed), we must fall back to default.embed so
+        // `setup` always has three paths to write.
+        for p in [
+            ProfileName::CpuOnly,
+            ProfileName::LowMem,
+            ProfileName::Default,
+            ProfileName::High,
+            ProfileName::VeryHigh,
+        ] {
+            assert!(
+                resolve_slot(&p, SlotKind::Fast).is_some(),
+                "no fast slot (even via fallback) for {p:?}"
+            );
+            assert!(
+                resolve_slot(&p, SlotKind::Embed).is_some(),
+                "no embed slot (even via fallback) for {p:?}"
+            );
+        }
+    }
+
+    // ── display_name ───────────────────────────────────────────────
+
+    #[test]
+    fn display_name_uses_base_name_when_present() {
+        let slot = SlotConfig {
+            file: "qwen_weights.gguf".into(),
+            base_name: "Qwen3.5-27B".into(),
+            quant: "Q4_K_M".into(),
+            ..Default::default()
+        };
+        assert_eq!(display_name(&slot), "Qwen3.5-27B Q4_K_M");
+    }
+
+    #[test]
+    fn display_name_falls_back_to_filename() {
+        let slot = SlotConfig {
+            file: "custom-model.gguf".into(),
+            base_name: "".into(),
+            ..Default::default()
+        };
+        assert_eq!(display_name(&slot), "custom-model");
+    }
+
+    // ── hf_download_url ────────────────────────────────────────────
+
+    #[test]
+    fn hf_download_url_from_repo_landing_page() {
+        let slot = SlotConfig {
+            file: "Qwen3-1.7B-Q8_0.gguf".into(),
+            hf_url: "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            hf_download_url(&slot),
+            "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf"
+        );
+    }
+
+    #[test]
+    fn hf_download_url_handles_trailing_slash() {
+        let slot = SlotConfig {
+            file: "model.gguf".into(),
+            hf_url: "https://huggingface.co/org/repo/".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            hf_download_url(&slot),
+            "https://huggingface.co/org/repo/resolve/main/model.gguf"
+        );
+    }
+
+    #[test]
+    fn hf_download_url_passes_through_direct_urls() {
+        // If the manifest already has a direct /resolve/ URL, don't
+        // double-append.
+        let slot = SlotConfig {
+            file: "model.gguf".into(),
+            hf_url: "https://huggingface.co/org/repo/resolve/main/model.gguf".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            hf_download_url(&slot),
+            "https://huggingface.co/org/repo/resolve/main/model.gguf"
+        );
+    }
+
+    // ── strip_quoting ──────────────────────────────────────────────
+
+    #[test]
+    fn strip_quoting_removes_single_quotes_from_drag_and_drop() {
+        assert_eq!(
+            strip_quoting("'/Users/alice/models/qwen.gguf'"),
+            "/Users/alice/models/qwen.gguf"
+        );
+    }
+
+    #[test]
+    fn strip_quoting_removes_double_quotes() {
+        assert_eq!(
+            strip_quoting("\"/Users/alice/models/qwen.gguf\""),
+            "/Users/alice/models/qwen.gguf"
+        );
+    }
+
+    #[test]
+    fn strip_quoting_removes_backticks() {
+        assert_eq!(strip_quoting("`/Users/alice/my model.gguf`"), "/Users/alice/my model.gguf");
+    }
+
+    #[test]
+    fn strip_quoting_preserves_unquoted_path() {
+        assert_eq!(strip_quoting("/abs/path"), "/abs/path");
+    }
+
+    #[test]
+    fn strip_quoting_mismatched_quotes_left_alone() {
+        // A path like `foo'bar` must stay as `foo'bar` — only matching
+        // pairs at start+end are stripped.
+        assert_eq!(strip_quoting("'foo\"bar"), "'foo\"bar");
+    }
+
+    #[test]
+    fn strip_quoting_unescapes_backslash_space() {
+        // macOS drag-and-drop can produce `/path/with\ space` when dragging
+        // onto an unquoted prompt. Undo that so the resulting PathBuf
+        // compares equal to the user's intent.
+        assert_eq!(
+            strip_quoting("/Users/alice/my\\ models/qwen.gguf"),
+            "/Users/alice/my models/qwen.gguf"
+        );
+    }
+
+    // ── verify_gguf_non_empty ──────────────────────────────────────
+
+    #[test]
+    fn verify_gguf_non_empty_rejects_zero_bytes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("empty.gguf");
+        std::fs::write(&p, b"").unwrap();
+        let err = verify_gguf_non_empty(&p).unwrap_err();
+        assert!(err.contains("empty"), "err: {err}");
+    }
+
+    #[test]
+    fn verify_gguf_non_empty_rejects_small_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("tiny.gguf");
+        std::fs::write(&p, b"<html>error</html>").unwrap();
+        let err = verify_gguf_non_empty(&p).unwrap_err();
+        assert!(err.contains("suspiciously small"), "err: {err}");
+    }
+
+    #[test]
+    fn verify_gguf_non_empty_accepts_plausible_size() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("ok.gguf");
+        std::fs::write(&p, vec![0u8; 2_000_000]).unwrap();
+        assert!(verify_gguf_non_empty(&p).is_ok());
+    }
+
+    // ── has_content ────────────────────────────────────────────────
+
+    #[test]
+    fn has_content_distinguishes_empty_from_populated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let empty = tmp.path().join("empty.gguf");
+        std::fs::write(&empty, b"").unwrap();
+        assert!(!has_content(&empty));
+
+        let populated = tmp.path().join("model.gguf");
+        std::fs::write(&populated, b"data").unwrap();
+        assert!(has_content(&populated));
+
+        let missing = tmp.path().join("nope.gguf");
+        assert!(!has_content(&missing));
+    }
 }

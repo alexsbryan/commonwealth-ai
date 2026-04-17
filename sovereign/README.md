@@ -12,6 +12,81 @@ Sovereign loads open-source language models directly on your hardware and gives 
 - **Works offline.** Once you have a model and knowledge bases downloaded, everything works without internet.
 - **Extensible with skills.** TOML-based skill manifests shape routing, planning, synthesis, and memory behavior. No code required.
 
+## Quick start for coding (three commands)
+
+One binary, three commands, a working local AI coding stack from zero:
+
+```sh
+sovereign setup         # once — detects hardware, downloads models, starts the daemon
+sovereign project init  # per project — indexes the codebase, registers MCP tools
+sovereign mesh create   # optional — promotes your local mesh to a joinable one
+```
+
+`localhost:9741` serves **both** the OpenAI-compatible completions endpoint (`/v1/chat/completions`, `/v1/models`) **and** the MCP tool server (`/mcp`). Point opencode, Claude Code, or any OpenAI-compatible client at it and everything just works.
+
+### `sovereign setup`
+
+First-run onboarding. Detects your hardware, curates a list of primary models that fit, downloads all three slots (primary / fast / embed) in parallel, writes `~/.config/sovereign/config.toml`, and registers the daemon with launchd (macOS) or systemd (Linux) so it survives logout.
+
+```sh
+sovereign setup              # interactive — pick your primary model
+sovereign setup --yes        # non-interactive — accept recommended
+sovereign setup --reset      # wipe config and re-run
+sovereign setup --data-dir /path/to/override  # override ~/.sovereign
+```
+
+When it finishes you'll see:
+
+```
+✓ Models ready
+    ✓ Wrote ~/.config/sovereign/config.toml
+    ✓ Service registered
+  Waiting for daemon to come up... ready
+
+  ✓ Mesh running — 1 node (you)
+  ✓ Endpoint: localhost:9741/v1
+```
+
+Your daemon is now running under launchd/systemd. Check it anytime with `curl http://localhost:9741/v1/models`.
+
+### `sovereign project init`
+
+Per-project code intelligence: tree-sitter symbol index + SCIP call graph + generated `SOVEREIGN.md`. Auto-detects which AI coding assistants you have installed (Claude Code, opencode) and offers to write their configs. See the [Code Intelligence](#code-intelligence) section below for details.
+
+### `sovereign mesh create` / `join` / `rotate`
+
+Share compute with trusted friends. `setup` leaves you on a silent single-node mesh; `mesh create` promotes it and prints a shareable invite:
+
+```sh
+$ sovereign mesh create
+
+Mesh created.
+
+  Join key:  cwth-a1b2-c3d4-e5f6
+
+Share with a friend:
+  App:  https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6
+  CLI:  sovereign mesh join cwth-a1b2-c3d4-e5f6
+```
+
+Your friend runs any of:
+
+```sh
+sovereign mesh join cwth-a1b2-c3d4-e5f6                          # bare key
+sovereign mesh join https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6   # https url
+sovereign mesh join sovereign://join/cwth-a1b2-c3d4-e5f6         # deep link
+```
+
+Lost the key? The plaintext is never stored (only a BLAKE3 hash lives on disk). Run `sovereign mesh rotate` to generate a new one — existing members stay connected, only future joins need the new key.
+
+### `sovereign daemon`
+
+The daemon you never call directly. `sovereign setup` registers it with your service manager; launchd (macOS) or systemd (Linux) keeps it alive across logout. If you need to run it manually (e.g. to debug startup), `sovereign daemon run` blocks in the foreground.
+
+Logs: `~/.sovereign/logs/daemon.log` (macOS) or `journalctl --user -u sovereign` (Linux).
+
+---
+
 ## Getting Started
 
 ### Requirements
