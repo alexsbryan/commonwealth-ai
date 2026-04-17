@@ -567,7 +567,7 @@ mod tests {
 
     #[test]
     fn could_be_path_rejects_urls_and_qualified_names() {
-        assert!(!could_be_path("http://localhost:8080/mcp"));
+        assert!(!could_be_path("http://localhost:9741/mcp"));
         assert!(!could_be_path("https://example.com/foo"));
         assert!(!could_be_path("Module::sub::thing"));
         assert!(!could_be_path("no_slash_here"));
@@ -616,7 +616,7 @@ mod tests {
     #[test]
     fn extract_backtick_paths_ignores_urls() {
         let mut out = Vec::new();
-        extract_backtick_paths("server at `http://localhost:8080/mcp`", 1, &mut out);
+        extract_backtick_paths("server at `http://localhost:9741/mcp`", 1, &mut out);
         assert_eq!(out.len(), 0);
     }
 

@@ -97,6 +97,18 @@ export interface SetupConfig {
   selected_tier?: string;
 }
 
+/** Snapshot of the desktop's bootstrap probe. Emitted by the
+ *  `detect_bootstrap` Tauri command. The wizard inspects this at
+ *  start to decide which screens to skip: if `cli_config_present`
+ *  is true, the user has already run `sovereign setup`, so the
+ *  model-path and knowledge-tier steps are covered. */
+export interface BootstrapSnapshot {
+  daemon_running: boolean;
+  cli_config_present: boolean;
+  desktop_setup_complete: boolean;
+  client_port: number;
+}
+
 // ─── Event Payloads ──────────────────────────────────────────
 
 export interface StepStartedPayload {

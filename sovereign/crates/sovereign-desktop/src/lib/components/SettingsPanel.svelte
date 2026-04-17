@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getConfig, saveConfig } from "../api";
-  import type { DesktopConfig } from "../types";
+  import { detectBootstrap, getConfig, saveConfig } from "../api";
+  import type { BootstrapSnapshot, DesktopConfig } from "../types";
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import MeshSettings from "./MeshSettings.svelte";
   import SkillManager from "./SkillManager.svelte";
@@ -21,12 +21,23 @@
   let saving = $state(false);
   let saveMessage = $state("");
   let dirty = $state(false);
+  // Bootstrap snapshot surfaces whether we're attached to an
+  // externally-managed daemon. When true, the Models tab shows a
+  // note that port/data-dir changes need `sovereign setup` (not
+  // the in-process Settings panel).
+  let bootstrap = $state<BootstrapSnapshot | null>(null);
+  let attachedToDaemon = $derived(bootstrap?.daemon_running === true);
 
   onMount(async () => {
     try {
       config = await getConfig();
     } catch (e) {
       console.error("Failed to load config:", e);
+    }
+    try {
+      bootstrap = await detectBootstrap();
+    } catch {
+      bootstrap = null;
     }
   });
 
@@ -231,6 +242,21 @@
 
         <!-- ──────────────── MODELS ──────────────── -->
         {#if activeTab === "models" && config}
+
+          {#if attachedToDaemon}
+            <div class="attach-note" role="note">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M6.5 4v3.5M6.5 9.5v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              <span>
+                Daemon managed externally. Model-path changes hot-reload the
+                running <code>sovereign daemon</code> in place. Port and data
+                directory changes require a daemon restart —
+                run <code>sovereign setup</code> in a terminal.
+              </span>
+            </div>
+          {/if}
 
           <!-- ── Three-column slot grid ── -->
           <div class="model-slots-grid">
@@ -880,6 +906,32 @@
     font-size: 0.76rem;
     color: var(--accent-light);
     line-height: 1.45;
+  }
+
+  /* Attach-mode heads-up above the model slots. Same visual weight
+     as `.inline-notice` but distinct color so a user glancing at
+     the Models tab sees "daemon managed externally" before the
+     familiar embed-missing warning. */
+  .attach-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: rgba(121, 196, 120, 0.08);
+    border: 1px solid rgba(121, 196, 120, 0.22);
+    border-radius: var(--radius);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .attach-note svg { flex-shrink: 0; margin-top: 2px; color: var(--growth); }
+  .attach-note code {
+    font-family: 'Syne Mono', monospace;
+    background: var(--bg-surface);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.72rem;
   }
 
   .inline-notice svg {

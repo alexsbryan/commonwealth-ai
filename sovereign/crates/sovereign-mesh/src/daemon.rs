@@ -4,7 +4,7 @@
 //! It starts when the user creates or joins a mesh, and stops when they leave.
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
@@ -18,8 +18,10 @@ use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::{CorpusEngine, NoteStore};
 use sovereign_core::registry::ToolRegistry;
+use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 
+use crate::admin_http::{ConfigDiff, ProviderFactory};
 use crate::deep_link::DeepLink;
 use crate::gossip::{self, GossipHandle};
 use crate::mcp_router;
@@ -75,6 +77,33 @@ pub struct EmbeddedDaemon {
     /// `None` means the daemon only serves `/v1/*` (inference, OICP
     /// capabilities, knowledge search) — no code-intelligence tools.
     mcp: RwLock<Option<McpMount>>,
+    /// Pre-built axum `Router` merged into the client listener at
+    /// `start_daemon` time. The daemon can't hand out an `Arc<Self>`
+    /// from a `&self` method, so the caller (who already owns the
+    /// outer `Arc<EmbeddedDaemon>`) builds `mesh_http::mesh_router`
+    /// externally and stashes it here. `None` means the mesh HTTP
+    /// surface is disabled — tests and legacy callers skip it.
+    mesh_http_router: RwLock<Option<axum::Router>>,
+    /// Pre-built axum `Router` for the admin HTTP surface
+    /// (`POST /v1/admin/reload`). Same installation pattern as
+    /// `mesh_http_router`: the CLI/desktop builds
+    /// `admin_http::admin_router(Arc::clone(&daemon))` and hands it
+    /// here before `start_daemon`. `None` means no admin surface —
+    /// consumers must `kickstart`/`systemctl restart` to apply config
+    /// changes.
+    admin_http_router: RwLock<Option<axum::Router>>,
+    /// In-memory copy of the `SetupConfig` the daemon booted with.
+    /// `admin_http::reload` diffs this against the file on disk so it
+    /// knows which fields actually changed. Updated in place after a
+    /// successful reload. `None` in tests / legacy callers that skip
+    /// `set_setup_config`.
+    setup_config: RwLock<Option<SetupConfig>>,
+    /// How to rebuild an `InferenceProvider` when `models.*` changes
+    /// during a reload. The daemon itself can't import
+    /// `sovereign-inference` model loading without layering
+    /// violations; the CLI/desktop provide a concrete factory at
+    /// startup.
+    provider_factory: RwLock<Option<Arc<dyn ProviderFactory>>>,
 }
 
 enum DaemonState {
@@ -125,6 +154,10 @@ impl EmbeddedDaemon {
             inference_provider: RwLock::new(None),
             embed_model: RwLock::new(None),
             mcp: RwLock::new(None),
+            mesh_http_router: RwLock::new(None),
+            admin_http_router: RwLock::new(None),
+            setup_config: RwLock::new(None),
+            provider_factory: RwLock::new(None),
         }
     }
 
@@ -139,6 +172,10 @@ impl EmbeddedDaemon {
             inference_provider: RwLock::new(None),
             embed_model: RwLock::new(None),
             mcp: RwLock::new(None),
+            mesh_http_router: RwLock::new(None),
+            admin_http_router: RwLock::new(None),
+            setup_config: RwLock::new(None),
+            provider_factory: RwLock::new(None),
         }
     }
 
@@ -154,6 +191,140 @@ impl EmbeddedDaemon {
         session_id: String,
     ) {
         *self.mcp.write().await = Some(McpMount { tools, notes, session_id });
+    }
+
+    /// Install the mesh HTTP API so `/v1/mesh/status` + `create` +
+    /// `join` + `rotate` + `leave` are served on the same `:9741`
+    /// listener. The caller builds the router with
+    /// [`mesh_http::mesh_router(Arc::clone(&daemon_arc))`]
+    /// (which captures the `Arc<EmbeddedDaemon>` the caller owns) and
+    /// hands it here. We can't build the router internally from
+    /// `&self` because axum handlers need an `Arc<Self>` and this
+    /// method can't conjure one.
+    ///
+    /// Call once at bootstrap, before `start_daemon`. Calling again
+    /// later replaces the previously installed router; the change
+    /// won't take effect until the next `start_daemon` cycle.
+    pub async fn install_mesh_http_router(&self, router: axum::Router) {
+        *self.mesh_http_router.write().await = Some(router);
+    }
+
+    /// Install the admin HTTP router (`POST /v1/admin/reload`). Same
+    /// installation shape as [`install_mesh_http_router`] — the caller
+    /// builds `admin_http::admin_router(Arc::clone(&daemon))` and hands
+    /// it here. Must be called before `start_daemon` for the route to
+    /// be live; a later install affects only the next restart.
+    pub async fn install_admin_http_router(&self, router: axum::Router) {
+        *self.admin_http_router.write().await = Some(router);
+    }
+
+    /// Record the `SetupConfig` this daemon booted with. The admin
+    /// reload handler diffs future on-disk states against this value
+    /// to figure out which fields actually changed. Called once by
+    /// `sovereign daemon run` right after it loads the config, and
+    /// again after every successful reload so the in-memory baseline
+    /// moves forward.
+    pub async fn set_setup_config(&self, cfg: SetupConfig) {
+        *self.setup_config.write().await = Some(cfg);
+    }
+
+    /// Install the `ProviderFactory` the admin reload handler uses to
+    /// rebuild an `InferenceProvider` when `models.*` fields change.
+    /// Without one, a reload that touches model paths fails at the
+    /// HTTP layer rather than silently swallowing the change.
+    pub async fn set_provider_factory(&self, factory: Arc<dyn ProviderFactory>) {
+        *self.provider_factory.write().await = Some(factory);
+    }
+
+    /// Re-read `SetupConfig` from disk (or from `config_path_override`
+    /// if supplied by a test), diff against the in-memory baseline,
+    /// and apply whatever is hot-reloadable. Returns the per-field
+    /// report the HTTP layer serialises as [`ReloadResponse`].
+    ///
+    /// Semantics:
+    /// - `models.*` changes → rebuild the provider via
+    ///   [`set_provider_factory`]'s factory, then swap atomically
+    ///   through [`set_inference_provider`]. In-flight requests
+    ///   holding the old `Arc` continue against it; new ones see
+    ///   the new provider.
+    /// - `daemon.client_port` / `daemon.internal_port` / `data.dir`
+    ///   changes → reported as `restart_required_fields`. The
+    ///   handler doesn't rebind or reopen anything; rebinding while
+    ///   serving requests risks losing them and reopening SQLite
+    ///   handles mid-flight is unsafe.
+    /// - Identical files → no-op, empty `reloaded_fields`.
+    ///
+    /// The baseline `SetupConfig` is advanced to the fresh value
+    /// only when the reload succeeds end-to-end, so a provider
+    /// rebuild failure leaves the daemon in its pre-reload state
+    /// for a retry.
+    pub async fn reload_from_setup_config(
+        &self,
+        config_path_override: Option<&Path>,
+    ) -> Result<crate::admin_http::ReloadResponse, String> {
+        let current = self
+            .setup_config
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| "no SetupConfig installed on this daemon".to_string())?;
+
+        let fresh = match config_path_override {
+            Some(p) => SetupConfig::load_from(p)?,
+            None => SetupConfig::load()?,
+        };
+
+        let diff = ConfigDiff::diff(&current, &fresh);
+        if diff.is_noop() {
+            return Ok(crate::admin_http::ReloadResponse {
+                reloaded_fields: vec![],
+                restart_required_fields: vec![],
+                restart_required: false,
+            });
+        }
+
+        let mut reloaded: Vec<String> = vec![];
+
+        if !diff.models_changed.is_empty() {
+            let factory = self
+                .provider_factory
+                .read()
+                .await
+                .clone()
+                .ok_or_else(|| {
+                    "models changed but no ProviderFactory installed"
+                        .to_string()
+                })?;
+            let new_provider = factory.build_provider(&fresh).await?;
+            self.set_inference_provider(new_provider).await;
+            for f in &diff.models_changed {
+                reloaded.push((*f).to_string());
+            }
+            info!(
+                changed = ?diff.models_changed,
+                "admin_reload: inference provider swapped"
+            );
+        }
+
+        let restart_required_fields: Vec<String> = diff
+            .restart_required
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        let restart_required = !restart_required_fields.is_empty();
+
+        // Advance the baseline only after successful application.
+        // Fields that require restart are still recorded here —
+        // otherwise a subsequent reload would keep reporting them
+        // as "changed" even though the caller already acknowledged
+        // them.
+        *self.setup_config.write().await = Some(fresh);
+
+        Ok(crate::admin_http::ReloadResponse {
+            reloaded_fields: reloaded,
+            restart_required_fields,
+            restart_required,
+        })
     }
 
     /// Install a `CorpusEngine` so that when the daemon starts, its
@@ -239,6 +410,13 @@ impl EmbeddedDaemon {
     /// Whether the daemon is currently running.
     pub async fn is_running(&self) -> bool {
         matches!(*self.state.read().await, DaemonState::Running { .. })
+    }
+
+    /// Where mesh state + setup are persisted. Needed by the HTTP
+    /// mesh API's rotate handler, which talks to `persist::rotate_join_key`
+    /// directly rather than going through a daemon method.
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
     /// Create a new mesh and start the daemon.
@@ -728,9 +906,13 @@ impl EmbeddedDaemon {
             .browse(peer_tx)
             .map_err(|e| MeshError::Network(format!("mDNS browse failed: {e}")))?;
 
-        // Snapshot the MCP mount (if any) before moving app_state into the spawn.
-        // Cheap — an Option<McpMount> where McpMount clones are 3 Arc bumps.
+        // Snapshot the MCP mount + installed mesh HTTP router (if any)
+        // before moving app_state into the spawn. Both are cheap:
+        // Option<McpMount> clones 3 Arc bumps, Option<axum::Router>
+        // clones internal Arcs.
         let mcp_mount = self.mcp.read().await.clone();
+        let mesh_http = self.mesh_http_router.read().await.clone();
+        let admin_http = self.admin_http_router.read().await.clone();
 
         // Spawn the API servers in the background.
         let app_state_clone = app_state.clone();
@@ -743,6 +925,12 @@ impl EmbeddedDaemon {
                     m.notes,
                     m.session_id,
                 ));
+            }
+            if let Some(mesh_http_router) = mesh_http {
+                client_router = client_router.merge(mesh_http_router);
+            }
+            if let Some(admin_http_router) = admin_http {
+                client_router = client_router.merge(admin_http_router);
             }
             let internal_router =
                 commonwealth_api::server::internal_router(app_state_clone);

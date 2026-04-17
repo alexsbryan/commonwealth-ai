@@ -13,6 +13,7 @@ pub mod registry;
 pub mod router;
 pub mod runtime;
 pub mod gap;
+pub mod setup_config;
 pub mod skills;
 pub mod stubs;
 pub mod title;

@@ -26,6 +26,7 @@ import type {
   DocumentAsset,
   DocumentAskResponse,
   LegacyDocumentEntry,
+  BootstrapSnapshot,
 } from "./types";
 
 export async function sendMessage(
@@ -135,6 +136,14 @@ export async function completeSetup(setup: SetupConfig): Promise<void> {
 
 export async function detectHardware(): Promise<HardwareInfo> {
   return invoke("detect_hardware");
+}
+
+/** Ask the backend whether a CLI-started daemon is already running
+ *  and/or whether `~/.config/sovereign/config.toml` exists. The
+ *  setup wizard uses this to skip the model and knowledge-tier
+ *  screens when the user has already run `sovereign setup`. */
+export async function detectBootstrap(): Promise<BootstrapSnapshot> {
+  return invoke("detect_bootstrap");
 }
 
 export async function searchWeb(

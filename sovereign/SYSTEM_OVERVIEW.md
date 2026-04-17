@@ -1014,6 +1014,46 @@ Commonwealth distributes shards across nodes via `ShardManager`, and both use
 the same `corpus-engine` schema so a shard transferred between nodes is
 immediately searchable through `CorpusIndex::search` with no migration step.
 
+### 6.3.1 Desktop attach mode (CLI-started daemon + hot reload)
+
+The desktop app and the CLI (`sovereign daemon run`, installed as a
+launchd/systemd service by `sovereign setup`) both want to own `:9741`.
+Rather than colliding, the desktop probes `http://127.0.0.1:9741/v1/models`
+at startup via `sovereign-desktop::bootstrap::detect` (see
+`src-tauri/src/bootstrap.rs`). If the probe succeeds, the desktop
+enters **Attach** mode:
+
+- inference flows through `RemoteApiProvider` pointing at the running
+  daemon instead of starting an in-process `EmbeddedDaemon`,
+- mesh mutations (`create/join/rotate/leave`) go over HTTP via
+  `sovereign-mesh::mesh_http` (`/v1/mesh/*` — all localhost-only),
+- the setup wizard's `detecting` state skips the model and knowledge
+  screens when `SetupConfig` on disk already covers those fields,
+- `commands::save_config` mirrors shared fields (model paths, data
+  dir) back into `~/.config/sovereign/config.toml` and POSTs
+  `/v1/admin/reload` so the running daemon swaps its
+  `InferenceProvider` in place — no service restart, no visible
+  inference gap.
+
+The admin surface (`sovereign-mesh::admin_http::admin_router`) merges
+alongside `mcp_router` and `mesh_router` on `:9741`. The reload handler
+diffs the incoming `SetupConfig` against the daemon's baseline and
+rebuilds only what changed:
+
+| Changed field                       | Reload action                                      |
+|-------------------------------------|----------------------------------------------------|
+| `models.primary` / `.fast` / `.embed` | Rebuild provider via `ProviderFactory`, swap atomically |
+| `daemon.client_port` / `.internal_port` | `restart_required: true` (handler refuses to rebind) |
+| `data.dir`                          | `restart_required: true` (SQLite handles mid-flight) |
+
+`sovereign-cli::daemon_cmd::LlamaCppFactory` is the concrete factory
+the CLI daemon installs; it calls `EmbeddedLlamaCpp::load_full_with_families`
+with the same parameters as cold start. When `restart_required: true`
+surfaces, `save_config` falls back to `launchctl kickstart -k
+gui/$(id -u)/com.sovereign.daemon` on macOS or `systemctl --user
+restart sovereign` on Linux. Smoke test at
+`sovereign/scripts/smoke-attach-mode.sh`.
+
 ### 6.4 Shared protocols
 
 Two protocols cross the Sovereign/Commonwealth boundary:

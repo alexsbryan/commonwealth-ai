@@ -24,23 +24,36 @@ vi.mock("./WebSearchSetup.svelte", () => ({ default: StubStep }));
 
 vi.mock("../api", () => ({
   completeSetup: vi.fn(async () => undefined),
+  // Wizard now probes bootstrap state on startup. Return a fresh-
+  // install snapshot so the machine falls through `detecting` into
+  // the full wizard and the persona cards render unchanged.
+  detectBootstrap: vi.fn(async () => ({
+    daemon_running: false,
+    cli_config_present: false,
+    desktop_setup_complete: false,
+    client_port: 9741,
+  })),
 }));
 
 const { default: SetupWizard } = await import("./SetupWizard.svelte");
 
 describe("SetupWizard", () => {
-  it("renders the three persona cards on first mount", () => {
+  it("renders the three persona cards on first mount", async () => {
     render(SetupWizard, { props: { onComplete: vi.fn() } });
-    expect(screen.getByText(/research & analysis/i)).toBeInTheDocument();
+    // The machine starts in `detecting`; wait for the probe to
+    // resolve before asserting persona cards render.
+    expect(
+      await screen.findByText(/research & analysis/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/personal assistant/i)).toBeInTheDocument();
     expect(screen.getByText(/^Developer$/)).toBeInTheDocument();
   });
 
   it("advances to personaSetup after a persona click", async () => {
     render(SetupWizard, { props: { onComplete: vi.fn() } });
-    const researchCard = screen.getByText(/research & analysis/i).closest(
-      "button",
-    );
+    const researchCard = (
+      await screen.findByText(/research & analysis/i)
+    ).closest("button");
     expect(researchCard).toBeTruthy();
     await fireEvent.click(researchCard!);
 
@@ -53,9 +66,7 @@ describe("SetupWizard", () => {
 
   it("developer persona collapses totalSteps to 3", async () => {
     render(SetupWizard, { props: { onComplete: vi.fn() } });
-    const dev = screen
-      .getByText(/^Developer$/)
-      .closest("button");
+    const dev = (await screen.findByText(/^Developer$/)).closest("button");
     await fireEvent.click(dev!);
     expect(screen.getByText(/2 \/ 3/)).toBeInTheDocument();
   });

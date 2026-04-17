@@ -219,6 +219,17 @@ pub async fn detect_hardware() -> Result<HardwareInfo, String> {
     })
 }
 
+/// Expose the result of `bootstrap::detect` to the frontend so the
+/// setup wizard can skip screens that are already covered by the
+/// CLI-written `SetupConfig`. Called once at app start (or any time
+/// the wizard wants to re-probe, e.g. after the user runs
+/// `sovereign setup` in a terminal).
+#[tauri::command]
+pub async fn detect_bootstrap() -> Result<crate::bootstrap::BootstrapSnapshot, String> {
+    let mode = crate::bootstrap::detect().await;
+    Ok(crate::bootstrap::BootstrapSnapshot::from(&mode))
+}
+
 // ─── Commands ────────────────────────────────────────────────
 
 #[derive(Serialize, Clone)]
@@ -669,8 +680,26 @@ pub async fn save_config(
     config: DesktopConfig,
 ) -> Result<(), String> {
     config.save()?;
-    let old_embed = state.config.read().await.embed_model_path.clone();
+    let old = state.config.read().await.clone();
+    let old_embed = old.embed_model_path.clone();
     let new_embed = config.embed_model_path.clone();
+
+    // Mirror shared fields (model paths + data_dir) into SetupConfig
+    // on disk, then ask the daemon to hot-reload. This is the
+    // "desktop Settings → daemon stays up" path: the user picks a new
+    // primary model and the CLI-owned daemon swaps its provider
+    // without the UI seeing a restart gap.
+    //
+    // Best-effort: a failure to write SetupConfig or to reach the
+    // daemon must not block the desktop's local save. We log and
+    // move on — next desktop save attempt will retry the mirror.
+    if let Err(e) = mirror_to_setup_config(&config).await {
+        tracing::warn!("save_config: could not mirror to SetupConfig: {e}");
+    }
+    if let Err(e) = request_daemon_reload().await {
+        tracing::warn!("save_config: admin/reload failed: {e}");
+    }
+
     *state.config.write().await = config;
     // If the embedding model changed, drop the cached inference so bootstrap
     // reloads it with the new embed model path.
@@ -678,6 +707,152 @@ pub async fn save_config(
         *state.inference.write().await = None;
     }
     state::rebuild_runtime(&state).await
+}
+
+/// Mirror the three model paths + data_dir from `DesktopConfig` into
+/// `SetupConfig`. Creates the config file on first write if it didn't
+/// exist (matches `sovereign setup` behaviour). Leaves `daemon`
+/// defaults in place — port changes go through the CLI's `sovereign
+/// setup`, not the desktop Settings panel.
+async fn mirror_to_setup_config(
+    desktop: &DesktopConfig,
+) -> Result<(), String> {
+    use sovereign_core::setup_config::{
+        DaemonSection, DataSection, ModelsSection, SetupConfig,
+    };
+
+    let mut cli = SetupConfig::load().unwrap_or_else(|_| SetupConfig {
+        models: ModelsSection {
+            primary: desktop
+                .primary_model_path
+                .clone()
+                .unwrap_or_else(|| desktop.model_path.clone()),
+            fast: desktop.model_path.clone(),
+            embed: desktop
+                .embed_model_path
+                .clone()
+                .unwrap_or_else(|| desktop.model_path.clone()),
+        },
+        daemon: DaemonSection::default(),
+        data: DataSection { dir: desktop.data_dir.clone() },
+    });
+
+    let mut changed = false;
+    if cli.models.fast != desktop.model_path {
+        cli.models.fast = desktop.model_path.clone();
+        changed = true;
+    }
+    if let Some(p) = &desktop.primary_model_path {
+        if &cli.models.primary != p {
+            cli.models.primary = p.clone();
+            changed = true;
+        }
+    }
+    if let Some(e) = &desktop.embed_model_path {
+        if &cli.models.embed != e {
+            cli.models.embed = e.clone();
+            changed = true;
+        }
+    }
+    if cli.data.dir != desktop.data_dir {
+        cli.data.dir = desktop.data_dir.clone();
+        changed = true;
+    }
+
+    if changed {
+        cli.save()?;
+        tracing::info!("save_config: mirrored shared fields into SetupConfig");
+    }
+    Ok(())
+}
+
+/// POST `http://127.0.0.1:9741/v1/admin/reload` so a CLI-started
+/// daemon picks up the `SetupConfig` changes we just wrote. When the
+/// daemon replies `{restart_required: true}` — typically a port or
+/// data_dir change — fall back to `launchctl kickstart` / `systemctl
+/// --user restart`. Swallows all errors: if no daemon is running,
+/// the next `sovereign daemon run` will read the fresh config anyway.
+async fn request_daemon_reload() -> Result<(), String> {
+    let url = "http://127.0.0.1:9741/v1/admin/reload";
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+
+    let resp = client
+        .post(url)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("POST admin/reload: {e}"))?;
+
+    let status = resp.status();
+    let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
+    if !status.is_success() {
+        return Err(format!("admin/reload returned {status}: {body}"));
+    }
+    let restart_required = body
+        .get("restart_required")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    tracing::info!(
+        reloaded = ?body.get("reloaded_fields"),
+        restart_required,
+        "save_config: admin/reload completed"
+    );
+    if restart_required {
+        if let Err(e) = kickstart_daemon() {
+            tracing::warn!("save_config: kickstart fallback failed: {e}");
+        }
+    }
+    Ok(())
+}
+
+/// Best-effort restart of the `sovereign-daemon` service. Used only
+/// when the admin/reload handler reported `restart_required` (port
+/// or data_dir change) — hot reload can't rebind listeners.
+fn kickstart_daemon() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        // `id -u` avoids pulling in `libc` just for `getuid()`.
+        let uid_out = Command::new("id")
+            .arg("-u")
+            .output()
+            .map_err(|e| format!("spawn id: {e}"))?;
+        let uid = String::from_utf8_lossy(&uid_out.stdout).trim().to_string();
+        let label = format!("gui/{uid}/com.sovereign.daemon");
+        let out = Command::new("launchctl")
+            .args(["kickstart", "-k", &label])
+            .output()
+            .map_err(|e| format!("spawn launchctl: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "launchctl kickstart {label} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        let out = Command::new("systemctl")
+            .args(["--user", "restart", "sovereign"])
+            .output()
+            .map_err(|e| format!("spawn systemctl: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "systemctl --user restart sovereign failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        Err("service restart is only supported on macOS and Linux".into())
+    }
 }
 
 #[tauri::command]
@@ -691,12 +866,29 @@ pub async fn complete_setup(
     state: State<'_, Arc<AppState>>,
     setup: SetupConfig,
 ) -> Result<(), String> {
+    // When the wizard skipped the model picker (because `SetupConfig`
+    // from `sovereign setup` was detected), the incoming `setup` has
+    // empty model paths. Fall back to what the CLI already wrote on
+    // disk rather than clobbering the desktop config with empties.
+    let cli_cfg = sovereign_core::setup_config::SetupConfig::load().ok();
     let mut config = state.config.write().await;
-    config.model_path = setup.model_path.into();
-    config.primary_model_path = setup.primary_model_path.map(|p| p.into());
-    config.embed_model_path = setup.embed_model_path.map(|p| p.into());
+    if !setup.model_path.is_empty() {
+        config.model_path = setup.model_path.into();
+    } else if let Some(c) = cli_cfg.as_ref() {
+        config.model_path = c.models.fast.clone();
+    }
+    config.primary_model_path = setup
+        .primary_model_path
+        .map(std::path::PathBuf::from)
+        .or_else(|| cli_cfg.as_ref().map(|c| c.models.primary.clone()));
+    config.embed_model_path = setup
+        .embed_model_path
+        .map(std::path::PathBuf::from)
+        .or_else(|| cli_cfg.as_ref().map(|c| c.models.embed.clone()));
     if let Some(dir) = setup.data_dir {
         config.data_dir = dir.into();
+    } else if let Some(c) = cli_cfg.as_ref() {
+        config.data_dir = c.data.dir.clone();
     }
     config.active_skills = setup.active_skills;
     if !setup.enabled_tools.is_empty() {

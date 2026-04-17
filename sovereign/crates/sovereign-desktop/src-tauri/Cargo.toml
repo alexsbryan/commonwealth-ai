@@ -32,3 +32,10 @@ hostname = { workspace = true }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+# Used only by bootstrap.rs tests — stand up a tiny axum server so we
+# can assert `is_daemon_live` correctly accepts an OpenAI-compatible
+# responder and rejects an arbitrary HTTP server that happens to own
+# the port.
+axum = { workspace = true }

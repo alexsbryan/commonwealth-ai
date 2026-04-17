@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { initEventListeners } from "./lib/events";
-  import { isSetupComplete } from "./lib/api";
+  import { detectBootstrap, isSetupComplete } from "./lib/api";
+  import type { BootstrapSnapshot } from "./lib/types";
   import { approvalStore } from "./lib/stores/approval.svelte";
   import { joinLinkStore } from "./lib/stores/joinLink.svelte";
   import type {
@@ -34,6 +35,14 @@
   // moved to the `approvalStore` singleton — every consumer reads it
   // directly, so no prop drilling.
   let taskSteps: TaskStep[] = $state([]);
+
+  // Bootstrap snapshot drives the "attached to external daemon"
+  // badge. Probed once after mount; we don't re-probe because the
+  // app either holds an in-process daemon Arc or an HTTP provider
+  // for its whole lifetime — if the CLI daemon dies while we're
+  // attached, inference 503s will surface it through the chat UI.
+  let bootstrap = $state<BootstrapSnapshot | null>(null);
+  let attachedToDaemon = $derived(bootstrap?.daemon_running === true);
 
   onMount(async () => {
     await initEventListeners({
@@ -88,6 +97,15 @@
       // If complete, wait for backend-ready event (async bootstrap).
     } catch {
       // Backend not ready yet — stay on loading.
+    }
+
+    // Fire-and-forget bootstrap probe. Failure leaves `bootstrap`
+    // null, which hides the badge — acceptable: the badge is
+    // informational, not functional.
+    try {
+      bootstrap = await detectBootstrap();
+    } catch {
+      bootstrap = null;
     }
   });
 
@@ -190,6 +208,19 @@
   </div>
 {/if}
 
+{#if attachedToDaemon}
+  <!-- Small pill anchored bottom-left; informational only. Lets
+       the user understand why stopping the CLI daemon would break
+       inference, and where to look for logs. -->
+  <div
+    class="attach-badge"
+    title="This desktop is using the daemon started by `sovereign daemon run`. Stopping that service will break inference until it restarts."
+  >
+    <span class="attach-dot" aria-hidden="true"></span>
+    connected to daemon · :{bootstrap?.client_port ?? 9741}
+  </div>
+{/if}
+
 {#if pendingJoinLink}
   <MeshJoinDialog
     link={pendingJoinLink}
@@ -255,6 +286,36 @@
   @keyframes ring-expand {
     0%   { transform: scale(1);   opacity: 0.55; }
     100% { transform: scale(3.2); opacity: 0; }
+  }
+
+  /* ── Attach-mode badge ── */
+  .attach-badge {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    font-family: 'Syne Mono', monospace;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: 999px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    pointer-events: auto;
+    user-select: none;
+  }
+
+  .attach-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--growth);
+    box-shadow: 0 0 6px rgba(121, 196, 120, 0.8);
   }
 
   .loading-mark {

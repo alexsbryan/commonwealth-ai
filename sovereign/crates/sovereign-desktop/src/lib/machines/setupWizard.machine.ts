@@ -29,7 +29,7 @@
 // a string `errorMessage` surfaced after a failed finishing invocation.
 import { assign, fromPromise, setup } from "xstate";
 import { produce } from "immer";
-import type { SetupConfig } from "../types";
+import type { BootstrapSnapshot, SetupConfig } from "../types";
 
 export type Persona = "research" | "assistant" | "developer";
 
@@ -41,6 +41,10 @@ export interface SetupWizardContext {
    *  filled in by PERSONA_CONFIGURED. */
   config: SetupConfig;
   errorMessage: string;
+  /** Result of the bootstrap probe the machine runs on entry. When
+   *  `cli_config_present` is true, the wizard skips the model and
+   *  knowledge screens because `SetupConfig` already covers them. */
+  bootstrap: BootstrapSnapshot | null;
 }
 
 export type SetupWizardEvent =
@@ -73,6 +77,14 @@ export const setupWizardMachine = setup({
         throw new Error("completeSetup actor not provided");
       },
     ),
+    // Probes the daemon + disk config to decide whether to run the
+    // full wizard or skip the model-selection screens. Consumers
+    // provide the real implementation; the default throws so a
+    // missing provider fails loudly rather than silently falling
+    // through to the full wizard.
+    detectBootstrap: fromPromise(async (): Promise<BootstrapSnapshot> => {
+      throw new Error("detectBootstrap actor not provided");
+    }),
   },
   guards: {
     // Developer persona has no web-search step — collapses straight
@@ -85,24 +97,79 @@ export const setupWizardMachine = setup({
       if (event.type !== "PERSONA_CONFIGURED") return false;
       return event.config.model_path.trim().length > 0;
     },
+    // CLI setup already wrote model paths + data dir to
+    // `~/.config/sovereign/config.toml`. The wizard still needs
+    // persona (local UI preference) and optionally web search, but
+    // everything in personaSetup's model picker is covered.
+    hasCliConfig: ({ context }) =>
+      context.bootstrap?.cli_config_present === true ||
+      context.bootstrap?.daemon_running === true,
   },
 }).createMachine({
   id: "setupWizard",
-  initial: "persona",
+  initial: "detecting",
   context: {
     persona: null,
     config: emptyConfig,
     errorMessage: "",
+    bootstrap: null,
   },
   states: {
-    persona: {
-      on: {
-        PERSONA_SELECTED: {
-          target: "personaSetup",
+    // Gate state that runs the bootstrap probe before showing anything.
+    // Branches on the snapshot: if the CLI has already written model
+    // paths, jump past the model picker entirely (`personaSetup` →
+    // straight to persona selection, then knowledge/websearch).
+    // Otherwise fall through to the existing `persona` flow.
+    detecting: {
+      invoke: {
+        src: "detectBootstrap",
+        onDone: {
+          target: "persona",
           actions: assign({
-            persona: ({ event }) => event.persona,
+            bootstrap: ({ event }) => event.output as BootstrapSnapshot,
           }),
         },
+        // On probe failure we still need to let the user set up —
+        // degrade gracefully to the full wizard rather than blocking.
+        onError: {
+          target: "persona",
+          actions: assign({ bootstrap: null }),
+        },
+      },
+    },
+    persona: {
+      on: {
+        PERSONA_SELECTED: [
+          // CLI setup path — skip the model picker entirely. The
+          // backend `complete_setup` command pulls model paths from
+          // `SetupConfig` when `model_path` is empty (see commands.rs).
+          // Developer persona also skips knowledge because tier choice
+          // there is orthogonal to the CLI's corpus plumbing; go
+          // straight to finishing.
+          {
+            target: "finishing",
+            guard: ({ context, event }) =>
+              (context.bootstrap?.cli_config_present === true ||
+                context.bootstrap?.daemon_running === true) &&
+              event.persona === "developer",
+            actions: assign({
+              persona: ({ event }) => event.persona,
+            }),
+          },
+          {
+            target: "knowledge",
+            guard: "hasCliConfig",
+            actions: assign({
+              persona: ({ event }) => event.persona,
+            }),
+          },
+          {
+            target: "personaSetup",
+            actions: assign({
+              persona: ({ event }) => event.persona,
+            }),
+          },
+        ],
       },
     },
     personaSetup: {

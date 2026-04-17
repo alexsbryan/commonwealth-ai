@@ -261,7 +261,16 @@ pub struct AppState {
     pub install_progress: RwLock<HashMap<String, crate::commands::CorpusProgressPayload>>,
     /// Embedded Commonwealth daemon — started on-demand when the user
     /// creates or joins a mesh.
-    pub mesh: Arc<sovereign_mesh::EmbeddedDaemon>,
+    ///
+    /// `None` in Attach mode: the CLI (`sovereign daemon run` under
+    /// launchd/systemd) already owns the daemon on `:9741`. Mesh
+    /// mutations route through the daemon's HTTP API
+    /// (`/v1/mesh/create/join/rotate/leave`) instead of calling
+    /// in-process `EmbeddedDaemon` methods. See `crate::bootstrap`.
+    pub mesh: Option<Arc<sovereign_mesh::EmbeddedDaemon>>,
+    /// How this process bootstrapped. Used by mesh_commands and the UI
+    /// badge to decide whether to drive mesh via Rust or HTTP.
+    pub bootstrap_mode: crate::bootstrap::BootstrapMode,
     /// Background health monitor. Populated during bootstrap; None before first boot.
     pub health_monitor: RwLock<Option<Arc<HealthMonitor>>>,
     /// CancellationToken to shut down the health monitor on exit.
@@ -272,13 +281,42 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Legacy constructor — treated as `Local{Fresh}` (desktop-legacy
+    /// behaviour). Prefer `new_with_mode` so the Attach path is
+    /// exercised when a CLI-started daemon is already up.
     pub fn new(approval: Arc<TauriApprovalChannel>) -> Self {
+        Self::new_with_mode(approval, crate::bootstrap::BootstrapMode::Local {
+            source: crate::bootstrap::ConfigSource::Fresh,
+        })
+    }
+
+    /// Construct `AppState` branching on the bootstrap mode probed at
+    /// app start:
+    ///
+    /// - `Attach` — a CLI-started daemon already owns `:9741`. We
+    ///   skip creating an `EmbeddedDaemon` (it would silently fail to
+    ///   bind); mesh mutations land on the daemon's HTTP API.
+    /// - `Local` — no daemon running. Create our own `EmbeddedDaemon`
+    ///   just like before; it'll be started on demand when the user
+    ///   creates or joins a mesh.
+    pub fn new_with_mode(
+        approval: Arc<TauriApprovalChannel>,
+        mode: crate::bootstrap::BootstrapMode,
+    ) -> Self {
         let config = DesktopConfig::load();
         // The mesh daemon persists its running-mesh state into
         // `<data_dir>/mesh.json` so a create/join survives an app
         // restart — otherwise the founder loses their mesh on quit
         // and would-be joiners get "no peer on this network".
         let mesh_data_dir = config.data_dir.clone();
+
+        let mesh = match &mode {
+            crate::bootstrap::BootstrapMode::Attach { .. } => None,
+            crate::bootstrap::BootstrapMode::Local { .. } => {
+                Some(Arc::new(sovereign_mesh::EmbeddedDaemon::new(mesh_data_dir)))
+            }
+        };
+
         Self {
             runtime: RwLock::new(None),
             approval,
@@ -287,7 +325,8 @@ impl AppState {
             store: RwLock::new(None),
             corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
-            mesh: Arc::new(sovereign_mesh::EmbeddedDaemon::new(mesh_data_dir)),
+            mesh,
+            bootstrap_mode: mode,
             health_monitor: RwLock::new(None),
             health_shutdown: CancellationToken::new(),
             insight_service: RwLock::new(None),
@@ -363,17 +402,26 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         }
     };
 
-    // Wrap raw with mesh routing. The wrapper asks the embedded
-    // daemon on every Slow-slot request whether any peer with more
-    // RAM is online; if yes AND privacy isn't LocalOnly, it forwards
-    // over HTTP to `<peer>:9741/v1/chat/completions`. On any remote
-    // error, auto-falls back to `raw_inference`.
-    let inference: Arc<dyn InferenceProvider> = Arc::new(
-        sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-            Arc::clone(&raw_inference),
-            Arc::clone(&state.mesh),
+    // Wrap raw with mesh routing only in Local mode. The wrapper asks
+    // the embedded daemon on every Slow-slot request whether any peer
+    // with more RAM is online; if yes AND privacy isn't LocalOnly, it
+    // forwards over HTTP to `<peer>:9741/v1/chat/completions`. On any
+    // remote error, auto-falls back to `raw_inference`.
+    //
+    // In Attach mode (`state.mesh == None`) the CLI daemon already
+    // owns peer-routing decisions — wrapping `raw_inference` with a
+    // MeshInferenceProvider against a None daemon would be a no-op at
+    // best and misleading at worst, so we just hand the raw provider
+    // through.
+    let inference: Arc<dyn InferenceProvider> = match state.mesh.as_ref() {
+        Some(mesh) => Arc::new(
+            sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+                Arc::clone(&raw_inference),
+                Arc::clone(mesh),
+            ),
         ),
-    );
+        None => Arc::clone(&raw_inference),
+    };
 
     // Open database.
     let store: Arc<dyn StateStore> = {
@@ -559,7 +607,12 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     // happen BEFORE `try_resume` below — if resume fires first and
     // starts gossiping, our first few rounds would advertise empty
     // `hosted_corpora` and peers wouldn't know we host anything.
-    state.mesh.set_corpus_engine(Arc::clone(&corpus_engine)).await;
+    // Only set the engine on an in-process EmbeddedDaemon (Local mode).
+    // In Attach mode the CLI daemon owns this state and already has
+    // its own CorpusEngine wired up.
+    if let Some(mesh) = state.mesh.as_ref() {
+        mesh.set_corpus_engine(Arc::clone(&corpus_engine)).await;
+    }
 
     // Also hand over our RAW `InferenceProvider` (the
     // `EmbeddedLlamaCpp`, NOT the mesh-wrapped one) so when a peer
@@ -570,7 +623,9 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     // possible: Joiner's `MeshInferenceProvider` POSTs to the
     // Founder, the Founder's daemon invokes THIS adapter, which
     // runs inference locally and returns.
-    state.mesh.set_inference_provider(Arc::clone(&raw_inference)).await;
+    if let Some(mesh) = state.mesh.as_ref() {
+        mesh.set_inference_provider(Arc::clone(&raw_inference)).await;
+    }
 
     // Startup dimension guard: probe the loaded embed model's actual output
     // size and compare against every installed corpus index. A mismatch means
@@ -617,7 +672,9 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                     pooling = ?embed_info.pooling,
                     "embed model info: advertising to mesh peers"
                 );
-                state.mesh.set_embed_model_info(embed_info).await;
+                if let Some(mesh) = state.mesh.as_ref() {
+                    mesh.set_embed_model_info(embed_info).await;
+                }
             }
             Err(_) => {} // embed not configured or failed — skip validation
         }
@@ -776,10 +833,19 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     // their mesh on restart and existing joiners pick up where they
     // left off. Fails soft — a missing or corrupt mesh.json never
     // blocks startup.
-    match state.mesh.try_resume().await {
-        Ok(true) => tracing::info!("mesh: resumed from persisted state"),
-        Ok(false) => tracing::debug!("mesh: no persisted state, starting fresh"),
-        Err(e) => tracing::warn!(error = %e, "mesh: try_resume failed"),
+    //
+    // Attach mode skips this: the CLI daemon has already resumed its
+    // own mesh state before we probed `:9741`. Running `try_resume`
+    // from this process would either be a no-op (if our `mesh` is
+    // None) or fight the CLI daemon for the same mesh.json.
+    if let Some(mesh) = state.mesh.as_ref() {
+        match mesh.try_resume().await {
+            Ok(true) => tracing::info!("mesh: resumed from persisted state"),
+            Ok(false) => tracing::debug!("mesh: no persisted state, starting fresh"),
+            Err(e) => tracing::warn!(error = %e, "mesh: try_resume failed"),
+        }
+    } else {
+        tracing::info!("mesh: attach mode — CLI daemon owns mesh state");
     }
 
     // Background startup task: verify per-corpus vector index readiness and

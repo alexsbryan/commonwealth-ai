@@ -1,4 +1,5 @@
 mod approval;
+mod bootstrap;
 mod commands;
 mod insight_commands;
 mod mesh_commands;
@@ -65,8 +66,21 @@ fn main() {
             // Create approval channel with app handle for event emission.
             let approval = Arc::new(TauriApprovalChannel::new(handle.clone()));
 
+            // Probe `:9741` to decide whether a CLI-started daemon is
+            // already running. If so, we skip starting our own
+            // `EmbeddedDaemon` (same port, same mesh.json — collision
+            // inevitable) and route inference + mesh mutations over
+            // HTTP instead. `detect()` is a ≤4s worst-case probe so
+            // it's fine to block app setup on it.
+            let bootstrap_mode =
+                tauri::async_runtime::block_on(bootstrap::detect());
+            tracing::info!(?bootstrap_mode, "bootstrap mode resolved");
+
             // Create app state (loads config, no Runtime yet).
-            let app_state = AppState::new(Arc::clone(&approval));
+            let app_state = AppState::new_with_mode(
+                Arc::clone(&approval),
+                bootstrap_mode,
+            );
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
 
@@ -135,6 +149,7 @@ fn main() {
             commands::is_setup_complete,
             commands::complete_setup,
             commands::detect_hardware,
+            commands::detect_bootstrap,
             commands::search_web,
             commands::scan_for_models,
             commands::download_model,

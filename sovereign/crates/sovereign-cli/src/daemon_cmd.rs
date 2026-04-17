@@ -20,13 +20,14 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use corpus_engine::{CorpusEngine, EmbedFn, NoteStore};
 use sovereign_core::model_family::ModelFamily;
+use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::ToolRegistry;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
-
-use crate::setup_config::SetupConfig;
+use sovereign_mesh::admin_http::ProviderFactory;
 
 /// Entry point routed from `main.rs` when the user invokes
 /// `sovereign daemon run`. Any other `daemon` subcommand prints usage.
@@ -126,12 +127,35 @@ async fn run_daemon(_args: &[String]) -> i32 {
     let tools = build_tool_registry(&data_dir, Arc::clone(&notes_store)).await;
 
     // ── EmbeddedDaemon ────────────────────────────────────────────
-    let daemon = sovereign_mesh::EmbeddedDaemon::new(data_dir.clone());
+    // Wrap in Arc so the mesh HTTP router can clone it for axum
+    // handlers (see `install_mesh_http_router` — the router needs an
+    // owned `Arc<EmbeddedDaemon>` to drive `create/join/rotate/leave`
+    // from HTTP callers).
+    let daemon = Arc::new(sovereign_mesh::EmbeddedDaemon::new(data_dir.clone()));
     daemon.set_inference_provider(Arc::clone(&provider)).await;
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
     daemon
         .set_mcp(Arc::new(tools), Arc::clone(&notes_store), session_id)
         .await;
+
+    // Mount the mesh HTTP API so the desktop (when running in Attach
+    // mode) can drive `create/join/rotate/leave` against this daemon
+    // without starting its own colliding EmbeddedDaemon.
+    daemon
+        .install_mesh_http_router(sovereign_mesh::mesh_http::mesh_router(Arc::clone(&daemon)))
+        .await;
+
+    // Admin HTTP surface — POST /v1/admin/reload. The factory below
+    // tells the reload handler how to rebuild an InferenceProvider
+    // when models.* changes on disk; without it, reload would error
+    // out on any model-path change.
+    daemon
+        .install_admin_http_router(sovereign_mesh::admin_http::admin_router(Arc::clone(
+            &daemon,
+        )))
+        .await;
+    daemon.set_provider_factory(Arc::new(LlamaCppFactory)).await;
+    daemon.set_setup_config(config.clone()).await;
 
     // ── Resume or bootstrap a solo mesh ───────────────────────────
     match daemon.try_resume().await {
@@ -231,6 +255,40 @@ async fn build_tool_registry(
     )));
 
     tools
+}
+
+/// Rebuilds the embedded llama.cpp provider from a fresh `SetupConfig`.
+/// Hot-swapped into `EmbeddedDaemon::inference_provider` by the admin
+/// reload handler when the user changes a `models.*` path in
+/// `~/.config/sovereign/config.toml` (e.g. via the desktop Settings
+/// panel's model picker). Keeps the model-loading side of the daemon
+/// out of `sovereign-mesh`, which has no business knowing about GGUF.
+struct LlamaCppFactory;
+
+#[async_trait]
+impl ProviderFactory for LlamaCppFactory {
+    async fn build_provider(
+        &self,
+        cfg: &SetupConfig,
+    ) -> Result<Arc<dyn InferenceProvider>, String> {
+        // Mirror the load parameters used by `run_daemon` on cold
+        // start — the reload must not silently downgrade context
+        // size or auto-gpu-layer behaviour.
+        let provider = EmbeddedLlamaCpp::load_full_with_families(
+            &cfg.models.fast,
+            Some(&cfg.models.primary),
+            Some(&cfg.models.embed),
+            4096,
+            None,
+            ModelFamily::Unknown,
+            ModelFamily::Unknown,
+            ModelFamily::Unknown,
+        )
+        .map_err(|e| format!("reload: failed to load models: {e}"))?;
+        let arc = Arc::new(provider);
+        arc.start_idle_monitor(60);
+        Ok(arc)
+    }
 }
 
 /// Wait for SIGINT (Ctrl-C) or SIGTERM (systemd/launchd shutdown).

@@ -10,6 +10,7 @@
 //! - Translate mesh state into UI-friendly representations
 //! - Expose mesh operations for both GUI and CLI
 
+pub mod admin_http;
 pub mod auto_ingest;
 pub mod capabilities;
 pub mod daemon;
@@ -19,6 +20,7 @@ pub mod inference_adapter;
 pub mod join;
 pub mod knowledge_client;
 pub mod mcp_router;
+pub mod mesh_http;
 pub(crate) mod oicp_select;
 pub mod peer_inference;
 pub mod persist;

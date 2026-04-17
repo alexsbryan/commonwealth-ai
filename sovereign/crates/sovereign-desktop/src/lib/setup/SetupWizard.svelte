@@ -1,8 +1,8 @@
 <script lang="ts">
   import { useMachine } from "@xstate/svelte";
   import { fromPromise } from "xstate";
-  import { completeSetup } from "../api";
-  import type { SetupConfig } from "../types";
+  import { completeSetup, detectBootstrap } from "../api";
+  import type { BootstrapSnapshot, SetupConfig } from "../types";
   import {
     setupWizardMachine,
     type Persona,
@@ -30,6 +30,9 @@
         async ({ input }: { input: { config: SetupConfig } }) => {
           await completeSetup(input.config);
         },
+      ),
+      detectBootstrap: fromPromise(
+        async (): Promise<BootstrapSnapshot> => await detectBootstrap(),
       ),
     },
   });
@@ -92,7 +95,7 @@
       <span class="wizard-name">SOVEREIGN</span>
     </div>
 
-    {#if !$snapshot.matches("finishing") && !$snapshot.matches("done")}
+    {#if !$snapshot.matches("detecting") && !$snapshot.matches("finishing") && !$snapshot.matches("done")}
       <nav class="step-track" aria-label="Setup progress, step {stepNum} of {totalSteps}">
         {#each Array(totalSteps) as _, i}
           {#if i > 0}
@@ -109,8 +112,20 @@
     {/if}
   </header>
 
+  <!-- ── Bootstrap probe — brief loading gate ── -->
+  {#if $snapshot.matches("detecting")}
+    <div class="finishing-screen">
+      <div class="finishing-mark-wrap" aria-hidden="true">
+        <div class="f-ring f-ring-1"></div>
+        <div class="f-ring f-ring-2"></div>
+        <div class="f-ring f-ring-3"></div>
+        <div class="finishing-mark">◈</div>
+      </div>
+      <h2>Checking your setup</h2>
+    </div>
+
   <!-- ── Persona selection — two-column layout ── -->
-  {#if $snapshot.matches("persona")}
+  {:else if $snapshot.matches("persona")}
     <div class="persona-step">
 
       <!-- Left ambient panel -->

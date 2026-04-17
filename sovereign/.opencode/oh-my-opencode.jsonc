@@ -7,7 +7,7 @@
       "sovereign": {
         // Local code intelligence + working notes server.
         // Start with: sovereign-server --config ~/.sovereign/server.toml
-        "url": "http://localhost:8080/mcp",
+        "url": "http://localhost:9741/mcp",
         "type": "http"
       }
     }
