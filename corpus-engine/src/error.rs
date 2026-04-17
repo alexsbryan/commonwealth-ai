@@ -46,4 +46,7 @@ pub enum Error {
 
     #[error("Unknown enrichment domain: {0}")]
     UnknownEnrichmentDomain(String),
+
+    #[error("Shard mismatch: {0}")]
+    ShardMismatch(String),
 }

@@ -144,6 +144,51 @@ pub async fn merge_shards(
     let first_info = first.info().await?;
     drop(first);
 
+    // Validate that all shards share the same embedding model and dimensions.
+    // A mismatch would silently produce a merged index where vectors from
+    // different embedding spaces are compared directly — giving nonsense results.
+    let mut total_input_chunks: u64 = first_info.chunk_count;
+    for shard_path in shard_paths.iter().skip(1) {
+        let shard = CorpusIndex::open(shard_path).await?;
+        let shard_info = shard.info().await?;
+        drop(shard);
+        if shard_info.embedding_model != first_info.embedding_model {
+            return Err(Error::ShardMismatch(format!(
+                "embedding model mismatch: shard '{}' uses '{}' but first shard uses '{}'",
+                shard_path.display(),
+                shard_info.embedding_model,
+                first_info.embedding_model,
+            )));
+        }
+        if shard_info.embedding_dimensions != first_info.embedding_dimensions {
+            return Err(Error::ShardMismatch(format!(
+                "embedding dimensions mismatch: shard '{}' has {} dims but first shard has {}",
+                shard_path.display(),
+                shard_info.embedding_dimensions,
+                first_info.embedding_dimensions,
+            )));
+        }
+        total_input_chunks += shard_info.chunk_count;
+    }
+
+    tracing::info!(
+        corpus_id = %first_info.corpus_id,
+        shard_count = shard_paths.len(),
+        total_input_chunks,
+        embedding_model = %first_info.embedding_model,
+        embedding_dimensions = first_info.embedding_dimensions,
+        output = %output_path.display(),
+        "merge_shards: starting — merging {} shard(s) into {}",
+        shard_paths.len(), output_path.display(),
+    );
+    for (i, p) in shard_paths.iter().enumerate() {
+        tracing::info!(
+            shard_index = i,
+            path = %p.display(),
+            "merge_shards: shard {}/{}", i + 1, shard_paths.len(),
+        );
+    }
+
     // Create output index.
     let merged = CorpusIndex::create(
         output_path,
@@ -288,11 +333,20 @@ pub async fn merge_shards(
         tracing::info!(
             dedup_count,
             output = %output_path.display(),
-            "Deduplication dropped duplicate chunks during merge"
+            "merge_shards: deduplication dropped {} duplicate chunks", dedup_count,
         );
     }
 
-    merged.info().await
+    let result = merged.info().await?;
+    tracing::info!(
+        corpus_id = %result.corpus_id,
+        chunks_merged = result.chunk_count,
+        chunks_deduped = dedup_count,
+        output = %output_path.display(),
+        "merge_shards: complete — {} chunks written ({} input, {} deduped)",
+        result.chunk_count, total_input_chunks, dedup_count,
+    );
+    Ok(result)
 }
 
 fn dir_size(path: &Path) -> u64 {

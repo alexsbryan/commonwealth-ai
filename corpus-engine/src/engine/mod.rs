@@ -27,12 +27,17 @@ use crate::types::{
 const EMBED_BATCH_SIZE: usize = 256;
 
 /// Number of embedded chunks to accumulate before flushing to
-/// the LanceDB index. Larger values drastically reduce the number
-/// of index fragments and thus compaction stalls. At 10K chunks and
-/// ~32 chunks/s this means one insert every ~5 minutes, and LanceDB
-/// compaction triggers much less often.
-/// Memory: 10K chunks × 768 dims × 4 bytes ≈ 30MB — trivial.
-const INDEX_FLUSH_SIZE: usize = 10_000;
+/// the LanceDB index and writing a crash-recovery checkpoint.
+///
+/// Tradeoff: larger values → fewer LanceDB fragments (less compaction
+/// pressure) but more work lost if the embed process crashes mid-batch.
+/// The llama.cpp Metal backend is known to assert-abort under prolonged
+/// GPU memory pressure (ggml_metal_buffer_set_tensor: buf_src = NULL).
+/// On a multi-day ingestion run, crashes will happen. At 2K chunks and
+/// ~32 chunks/s, a checkpoint is written every ~60s so at most ~60s of
+/// embedding work is lost per crash. LanceDB compaction handles the
+/// increased fragment count gracefully.
+const INDEX_FLUSH_SIZE: usize = 2_000;
 
 pub struct CorpusEngine {
     registry: RecipeRegistry,
