@@ -91,6 +91,10 @@ pub struct AppStateInner {
     /// Prevents the auto-collaborate loop from firing a second
     /// `collaborate` call while a live ingest task is writing chunks.
     pub active_ingests: RwLock<HashSet<String>>,
+    /// Current inference availability (0.0–1.0). Written by sovereign-server's
+    /// ActivityReporter via POST /internal/node/activity; read by gossip each
+    /// round to populate NodeCapabilities.inference_availability. Default 1.0.
+    pub local_inference_availability: RwLock<f32>,
     /// Optional callback fired after any `Mesh` mutation by the
     /// route handlers. Set by the embedded daemon to the
     /// `persist::save` function so `/internal/join` accepts survive
@@ -160,6 +164,7 @@ impl AppState {
                 app_registry,
                 app_port_map: AppPortMap::new(),
                 active_ingests: RwLock::new(HashSet::new()),
+                local_inference_availability: RwLock::new(1.0_f32),
                 on_mesh_mutation: None,
                 local_inference: None,
             }),
@@ -240,6 +245,14 @@ impl AppState {
             .inference_store
             .get_plan()
             .and_then(|p| p.model_plans.first().map(|mp| mp.model))
+    }
+
+    /// Update this node's inference availability. Called by sovereign-server's
+    /// ActivityReporter after a level transition; gossip picks up the new value
+    /// on its next 10-second round.
+    pub async fn update_local_availability(&self, availability: f32) {
+        *self.inner.local_inference_availability.write().await = availability;
+        tracing::debug!(availability, "inference_availability updated by sovereign-server");
     }
 
     /// Count online members.

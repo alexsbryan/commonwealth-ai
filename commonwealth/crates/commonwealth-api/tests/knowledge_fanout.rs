@@ -132,6 +132,7 @@ fn member(
                 })
                 .collect(),
             reported_at: 1_000,
+            inference_availability: 1.0,
         },
         addresses: vec![addr],
     }

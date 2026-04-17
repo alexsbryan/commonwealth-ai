@@ -170,6 +170,7 @@ mod tests {
             active_processes: vec![],
             hosted_corpora: vec![],
             reported_at,
+            inference_availability: 1.0,
         }
     }
 

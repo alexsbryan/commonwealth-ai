@@ -38,6 +38,7 @@ fn mesh_with_known_key() -> (AppState, String) {
         active_processes: vec![],
         hosted_corpora: vec![],
         reported_at: 0,
+        inference_availability: 1.0,
     };
 
     let founder = MemberRecord {

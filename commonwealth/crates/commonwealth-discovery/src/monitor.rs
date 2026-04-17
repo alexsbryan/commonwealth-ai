@@ -76,6 +76,7 @@ impl ResourceMonitor {
                 active_processes: vec![],
                 hosted_corpora: vec![],
                 reported_at: now_secs(),
+                inference_availability: 1.0,
             },
             version: 0,
         };

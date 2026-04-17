@@ -10,6 +10,15 @@ pub struct NodeCapabilities {
     pub active_processes: Vec<ProcessInfo>,
     pub hosted_corpora: Vec<CorpusShardInfo>,
     pub reported_at: u64,
+    /// Fractional availability for inference workloads (0.0–1.0).
+    /// Driven by sovereign-server's ActivityReporter; 1.0 means fully idle.
+    /// Nodes without sovereign-server always report 1.0 (the serde default).
+    #[serde(default = "default_inference_availability")]
+    pub inference_availability: f32,
+}
+
+fn default_inference_availability() -> f32 {
+    1.0
 }
 
 /// Static hardware profile of a node.
@@ -127,5 +136,61 @@ mod tests {
         let r = AvailableResources::default();
         assert!(r.available_for_mesh);
         assert_eq!(r.free_vram_gb, 0.0);
+    }
+
+    // ─── inference_availability backward-compat ───────────────
+
+    fn minimal_capabilities_json(inference_availability: Option<f32>) -> String {
+        let availability_field = inference_availability
+            .map(|v| format!(", \"inference_availability\": {v}"))
+            .unwrap_or_default();
+        format!(
+            r#"{{
+                "hardware": {{
+                    "gpus": [],
+                    "system_ram_gb": 16,
+                    "cpu_cores": 8,
+                    "total_storage_gb": 500,
+                    "free_storage_gb": 200,
+                    "network_bandwidth_mbps": null
+                }},
+                "available": {{
+                    "free_vram_gb": 0.0,
+                    "free_ram_gb": 4.0,
+                    "free_storage_gb": 200.0,
+                    "gpu_utilization": 0.0,
+                    "cpu_utilization": 0.1,
+                    "available_for_mesh": true
+                }},
+                "active_processes": [],
+                "hosted_corpora": [],
+                "reported_at": 1000{availability_field}
+            }}"#
+        )
+    }
+
+    #[test]
+    fn inference_availability_defaults_to_1_when_absent() {
+        // Old peers (pre-feature) don't include this field. Must deserialize to 1.0.
+        let json = minimal_capabilities_json(None);
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            caps.inference_availability, 1.0,
+            "old peers without inference_availability must default to 1.0 (fully available)"
+        );
+    }
+
+    #[test]
+    fn inference_availability_round_trips_hot_value() {
+        let json = minimal_capabilities_json(Some(0.20));
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert!(
+            (caps.inference_availability - 0.20).abs() < 1e-6,
+            "hot availability 0.20 must survive a JSON round-trip"
+        );
+        // Re-serialize and back.
+        let re_json = serde_json::to_string(&caps).unwrap();
+        let back: NodeCapabilities = serde_json::from_str(&re_json).unwrap();
+        assert!((back.inference_availability - 0.20).abs() < 1e-6);
     }
 }

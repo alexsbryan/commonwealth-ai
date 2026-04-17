@@ -84,6 +84,7 @@ pub fn init_mesh(name: &str, node_name: &str, addresses: Vec<SocketAddr>) -> (Me
             active_processes: vec![],
             hosted_corpora: vec![],
             reported_at: now,
+            inference_availability: 1.0,
         },
         addresses,
     };
@@ -145,6 +146,7 @@ pub fn accept_join(
             active_processes: vec![],
             hosted_corpora: vec![],
             reported_at: now,
+            inference_availability: 1.0,
         },
         addresses: new_node_addresses,
     };

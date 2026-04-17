@@ -118,6 +118,7 @@ impl SimulatedNodeBuilder {
             active_processes: vec![],
             hosted_corpora: vec![],
             reported_at: 0,
+            inference_availability: 1.0,
         };
 
         let member = MemberRecord {
@@ -219,6 +220,7 @@ impl SimulatedNode {
             active_processes: vec![],
             hosted_corpora: vec![],
             reported_at: 0,
+            inference_availability: 1.0,
         }
     }
 }

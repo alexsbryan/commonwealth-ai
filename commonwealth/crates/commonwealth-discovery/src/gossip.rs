@@ -264,6 +264,7 @@ mod tests {
                     active_processes: vec![],
                     hosted_corpora: vec![],
                     reported_at: timestamp,
+                    inference_availability: 1.0,
                 }),
             },
             timestamp,

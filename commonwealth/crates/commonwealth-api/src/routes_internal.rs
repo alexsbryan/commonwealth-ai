@@ -876,6 +876,41 @@ pub async fn latency_probe() -> StatusCode {
     StatusCode::OK
 }
 
+// ── Node activity reporting ─────────────────────────────────
+
+/// POST /internal/node/activity — sovereign-server reports coding activity level.
+///
+/// sovereign-server's ActivityReporter calls this after each level transition.
+/// The level maps to an inference_availability weight that gossip carries to
+/// peers so the scheduler routes work away from busy nodes.
+///
+/// Levels: "hot" (0.20) | "warm" (0.65) | "cool" (0.85) | "idle" (1.00)
+pub async fn node_activity(
+    State(state): State<AppState>,
+    Json(payload): Json<NodeActivityPayload>,
+) -> StatusCode {
+    let availability = match payload.level.as_str() {
+        "hot"  => 0.20_f32,
+        "warm" => 0.65_f32,
+        "cool" => 0.85_f32,
+        _      => 1.00_f32,
+    };
+    tracing::info!(
+        level = %payload.level,
+        reason = %payload.reason,
+        availability,
+        "node_activity: inference_availability updated"
+    );
+    state.update_local_availability(availability).await;
+    StatusCode::NO_CONTENT
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NodeActivityPayload {
+    pub level: String,
+    pub reason: String,
+}
+
 // ── Mesh join handshake ─────────────────────────────────────
 //
 // The founder (or any existing member) receives a POST from a
@@ -1023,4 +1058,90 @@ pub struct SchedulingIntent {
 pub struct SchedulingIntentResponse {
     pub granted: bool,
     pub leader: String,
+}
+
+// ─── Tests ────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode as HttpStatus};
+    use axum::routing::post;
+    use axum::Router;
+    use tower::ServiceExt;
+
+    use crate::state::test_app_state;
+
+    fn activity_router() -> (AppState, Router) {
+        let state = test_app_state();
+        let app = Router::new()
+            .route("/internal/node/activity", post(node_activity))
+            .with_state(state.clone());
+        (state, app)
+    }
+
+    async fn post_activity(app: Router, level: &str, reason: &str) -> HttpStatus {
+        let body = serde_json::json!({ "level": level, "reason": reason }).to_string();
+        let req = Request::builder()
+            .method("POST")
+            .uri("/internal/node/activity")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let response = app.oneshot(req).await.unwrap();
+        response.status()
+    }
+
+    #[tokio::test]
+    async fn hot_level_returns_204_no_content() {
+        let (_, app) = activity_router();
+        let status = post_activity(app, "hot", "tests_running").await;
+        assert_eq!(status, HttpStatus::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn hot_level_sets_availability_to_020() {
+        let (state, app) = activity_router();
+        post_activity(app, "hot", "tests_running").await;
+        let val = *state.inner.local_inference_availability.read().await;
+        assert!(
+            (val - 0.20).abs() < 1e-6,
+            "hot must set availability to 0.20, got {val}"
+        );
+    }
+
+    #[tokio::test]
+    async fn warm_level_sets_availability_to_065() {
+        let (state, app) = activity_router();
+        post_activity(app, "warm", "recent_edits").await;
+        let val = *state.inner.local_inference_availability.read().await;
+        assert!((val - 0.65).abs() < 1e-6, "warm must set availability to 0.65, got {val}");
+    }
+
+    #[tokio::test]
+    async fn cool_level_sets_availability_to_085() {
+        let (state, app) = activity_router();
+        post_activity(app, "cool", "settling").await;
+        let val = *state.inner.local_inference_availability.read().await;
+        assert!((val - 0.85).abs() < 1e-6, "cool must set availability to 0.85, got {val}");
+    }
+
+    #[tokio::test]
+    async fn idle_level_sets_availability_to_100() {
+        // Start hot, then go idle to verify full round-trip.
+        let (state, app) = activity_router();
+        post_activity(app.clone(), "hot", "start").await;
+        post_activity(app, "idle", "long_pause").await;
+        let val = *state.inner.local_inference_availability.read().await;
+        assert!((val - 1.00).abs() < 1e-6, "idle must set availability to 1.00, got {val}");
+    }
+
+    #[tokio::test]
+    async fn unknown_level_defaults_to_idle() {
+        let (state, app) = activity_router();
+        post_activity(app, "turbo", "unknown_level").await;
+        let val = *state.inner.local_inference_availability.read().await;
+        assert!((val - 1.00).abs() < 1e-6, "unknown level must default to 1.00, got {val}");
+    }
 }

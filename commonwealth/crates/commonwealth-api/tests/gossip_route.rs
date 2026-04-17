@@ -39,6 +39,7 @@ fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
             active_processes: vec![],
             hosted_corpora: vec![],
             reported_at: last_seen,
+            inference_availability: 1.0,
         },
         addresses: vec!["192.168.1.1:9742".parse::<SocketAddr>().unwrap()],
     }
