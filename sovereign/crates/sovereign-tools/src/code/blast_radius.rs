@@ -106,7 +106,20 @@ impl Tool for BlastRadiusTool {
                 },
                 "required": ["symbol"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You're about to modify a trait or widely-used function. Call this BEFORE touching any code — it tells you exactly how many things will break and whether a refactor is a 2-file change or a 20-file change.".into(),
+                    call: serde_json::json!({ "symbol": "InferenceProvider", "max_depth": 2 }),
+                },
+                ToolExample {
+                    situation: "You want to check if a function is safe to change. A total of 0 callers means it's safe; high counts mean you need a migration strategy.".into(),
+                    call: serde_json::json!({ "symbol": "execute_step_inner" }),
+                },
+                ToolExample {
+                    situation: "You're auditing a type for hidden macro usages (derive, register_tool!, etc.) that the call graph wouldn't capture. The macro_hints field in the response covers these.".into(),
+                    call: serde_json::json!({ "symbol": "ToolRegistry", "max_depth": 1 }),
+                },
+            ],
         }
     }
 

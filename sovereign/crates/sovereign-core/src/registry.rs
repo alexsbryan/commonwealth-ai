@@ -1,14 +1,21 @@
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use crate::error::{Error, Result};
 use crate::traits::Tool;
 use crate::types::ToolDescriptor;
 
 pub struct ToolRegistry {
     tools: Vec<Box<dyn Tool>>,
+    call_counts: Mutex<HashMap<String, u64>>,
 }
 
 impl ToolRegistry {
     pub fn new() -> Self {
-        Self { tools: Vec::new() }
+        Self {
+            tools: Vec::new(),
+            call_counts: Mutex::new(HashMap::new()),
+        }
     }
 
     pub fn register(&mut self, tool: Box<dyn Tool>) {
@@ -46,6 +53,25 @@ impl ToolRegistry {
 
     pub fn count(&self) -> usize {
         self.tools.len()
+    }
+
+    /// Increment the call counter for a tool. Called by the MCP handler on every
+    /// successful tools/call dispatch. Counts reset when the server restarts.
+    pub fn record_call(&self, tool_id: &str) {
+        if let Ok(mut counts) = self.call_counts.lock() {
+            *counts.entry(tool_id.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    /// Snapshot of call counts since server start, sorted by count descending.
+    pub fn call_counts(&self) -> Vec<(String, u64)> {
+        let counts = self.call_counts.lock().unwrap_or_else(|e| e.into_inner());
+        let mut v: Vec<(String, u64)> = counts
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        v
     }
 
     /// Remove all tools whose ID starts with the given prefix.

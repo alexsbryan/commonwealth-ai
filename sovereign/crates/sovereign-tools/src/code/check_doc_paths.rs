@@ -91,7 +91,16 @@ impl Tool for CheckDocPathsTool {
                 },
                 "required": ["doc_path"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You just renamed a module, moved a file, or deleted dead code. Run this on SYSTEM_OVERVIEW.md to find any path references that are now stale — before someone else reads a doc that points at files that no longer exist.".into(),
+                    call: serde_json::json!({ "doc_path": "SYSTEM_OVERVIEW.md" }),
+                },
+                ToolExample {
+                    situation: "You're updating architecture docs and want to verify every path you wrote actually resolves. Catches typos and wrong relative paths before they land in the repo.".into(),
+                    call: serde_json::json!({ "doc_path": "sovereign/.opencode/skills/sovereign-code/SKILL.md" }),
+                },
+            ],
         }
     }
 

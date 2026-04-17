@@ -68,7 +68,33 @@ impl Tool for WriteNoteTool {
                 },
                 "required": ["kind", "content"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You've just discovered a non-obvious constraint — something that would take another session hours to re-derive. Record it now as an invariant so it surfaces the next time anyone touches this code.".into(),
+                    call: serde_json::json!({
+                        "kind": "invariant",
+                        "content": "EmbedSlot must use n_gpu_layers=0, offload_kqv=false, and op_offload=false. The GGML Metal scheduler crashes on embedding tensor graphs (GGML_ASSERT buf_src) without all three.",
+                        "symbols": ["EmbedSlot", "EmbeddedLlamaCpp"],
+                        "files": ["crates/sovereign-inference/src/embedded.rs"]
+                    }),
+                },
+                ToolExample {
+                    situation: "You chose one implementation approach over others. Record the decision and reasoning so the next session doesn't relitigate it.".into(),
+                    call: serde_json::json!({
+                        "kind": "decision",
+                        "content": "Used Mutex<HashMap> for tool call counters in ToolRegistry rather than DashMap — avoids adding a dependency to sovereign-core for a non-hot path.",
+                        "symbols": ["ToolRegistry"]
+                    }),
+                },
+                ToolExample {
+                    situation: "You tried an approach that failed in a non-obvious way. Record it so the next session skips straight to what works.".into(),
+                    call: serde_json::json!({
+                        "kind": "attempt",
+                        "content": "Tried with_split_mode(LlamaSplitMode::None) to force CPU-only for embedding — has no effect on compute graph routing. op_offload=false is required.",
+                        "symbols": ["EmbedSlot"]
+                    }),
+                },
+            ],
         }
     }
 

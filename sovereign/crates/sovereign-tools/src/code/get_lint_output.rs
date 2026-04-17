@@ -44,7 +44,12 @@ impl Tool for GetLintOutputTool {
                 },
                 "required": ["run_id"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "lint_status returned errors but the message was cut off with output_truncated: true. Call this with the run_id from that response to get the full compiler output — file paths, line numbers, and the complete error text.".into(),
+                    call: serde_json::json!({ "run_id": 42 }),
+                },
+            ],
         }
     }
 

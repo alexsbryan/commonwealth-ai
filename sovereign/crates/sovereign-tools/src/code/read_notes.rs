@@ -71,7 +71,20 @@ impl Tool for ReadNotesTool {
                 },
                 "required": []
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You're starting work on a symbol and want to know if any previous session recorded a decision, invariant, or failed attempt about it. Do this BEFORE reading code — it can save you from re-discovering constraints the hard way.".into(),
+                    call: serde_json::json!({ "symbols": ["EmbedSlot"] }),
+                },
+                ToolExample {
+                    situation: "You're picking up a session and want to find open tasks or recent decisions relevant to the area you're working on.".into(),
+                    call: serde_json::json!({ "query": "embedding GPU Metal", "kinds": ["invariant", "attempt"] }),
+                },
+                ToolExample {
+                    situation: "You want to check what the session_reflection tool has flagged about a tool you're about to use heavily — surface known blind spots before relying on it.".into(),
+                    call: serde_json::json!({ "kinds": ["reflection"], "query": "blast_radius" }),
+                },
+            ],
         }
     }
 

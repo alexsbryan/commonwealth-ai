@@ -45,7 +45,12 @@ impl Tool for DeleteNoteTool {
                 },
                 "required": ["id"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You just completed the work described in a todo note, or a decision note has been superseded by a better approach. Clean it up so it doesn't mislead future sessions. The ID comes from the read_notes response.".into(),
+                    call: serde_json::json!({ "id": "note_abc123" }),
+                },
+            ],
         }
     }
 

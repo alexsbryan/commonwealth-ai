@@ -53,7 +53,12 @@ impl Tool for RunTestsTool {
                 "properties": {},
                 "required": []
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "test_status returned 'stale' and you need a guaranteed fresh result before proceeding. Trigger this, then wait ~30-60s and poll test_status. Do NOT run `cargo test` directly.".into(),
+                    call: serde_json::json!({}),
+                },
+            ],
         }
     }
 

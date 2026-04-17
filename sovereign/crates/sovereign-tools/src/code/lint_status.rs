@@ -12,6 +12,8 @@
 //!   errors before wasting time on test runs.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::SystemTime;
 
 use async_trait::async_trait;
 use serde_json::json;
@@ -24,11 +26,26 @@ use corpus_engine::lint_results::LintResultStore;
 
 pub struct LintStatusTool {
     store: Arc<LintResultStore>,
+    /// The command the watcher runs, e.g. "cargo check --workspace". Passed
+    /// through to the response so agents can confirm scope coverage.
+    watched_scope: Option<String>,
+    /// Shared with the watcher coordinator — true while the FS watcher is live.
+    watcher_active: Option<Arc<AtomicBool>>,
 }
 
 impl LintStatusTool {
     pub fn new(store: Arc<LintResultStore>) -> Self {
-        Self { store }
+        Self { store, watched_scope: None, watcher_active: None }
+    }
+
+    pub fn with_watched_scope(mut self, scope: String) -> Self {
+        self.watched_scope = Some(scope);
+        self
+    }
+
+    pub fn with_watcher_active(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.watcher_active = Some(flag);
+        self
     }
 }
 
@@ -38,16 +55,24 @@ impl Tool for LintStatusTool {
         ToolDescriptor {
             id: "lint_status".to_string(),
             name: "Lint Status".to_string(),
-            description: "PREFERRED OVER `cargo check`. Return the current lint/type-check \
-                          status. Reads from a local SQLite cache — instant, zero contention. \
-                          The background watcher runs cargo check automatically on every file \
-                          change; by the time you finish an edit the result is often already \
-                          here. Do NOT run cargo check via Bash — it will contend with the \
-                          watcher for the Cargo lock and block both. Errors are pre-grouped by \
-                          file and included in this response; call get_lint_output only when \
-                          output_truncated is true. Status values: 'fresh_passing' (clean), \
-                          'fresh_failing' (errors in response), 'stale' (watcher queued — \
-                          call again in ~15s), 'running' (in progress — call again shortly), \
+            description: "Return lint/type-check status from the background watcher. \
+                          NEVER run `cargo check` or `cargo build` via Bash — the watcher \
+                          holds the Cargo file lock continuously; running cargo check \
+                          alongside it causes BOTH processes to stall indefinitely waiting \
+                          for the lock. This call reads cached results in microseconds with \
+                          zero contention. \
+                          Response fields to trust the result: \
+                          `age_seconds` — how old the result is (typically < 30s after an \
+                          edit; if large, the watcher may have been idle); \
+                          `watched_scope` — the exact command the watcher runs (e.g. \
+                          'cargo check --workspace'), confirming which crates are covered; \
+                          `watcher_active` — true = watcher is live and will pick up your \
+                          next save automatically; false = watcher not running, only then \
+                          fall back to Bash. \
+                          Status: 'fresh_passing' (clean, age_seconds shows recency), \
+                          'fresh_failing' (errors in response), 'stale' (files changed \
+                          since last run — watcher will rerun automatically on next save), \
+                          'running' (in progress — check again in ~15s), \
                           'never_run' (watcher not configured — fall back to Bash)."
                 .to_string(),
             parameters: json!({
@@ -55,7 +80,12 @@ impl Tool for LintStatusTool {
                 "properties": {},
                 "required": []
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You've edited one or more files and want to know if the code compiles. Do NOT run `cargo check` or `cargo build` — that fights the background watcher for the Cargo file lock and blocks both processes. This reads the watcher's cached result instantly with no contention.".into(),
+                    call: serde_json::json!({}),
+                },
+            ],
         }
     }
 
@@ -64,6 +94,12 @@ impl Tool for LintStatusTool {
     }
 
     async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        let watcher_active = self
+            .watcher_active
+            .as_ref()
+            .map(|f| f.load(Ordering::Relaxed))
+            .unwrap_or(false);
+
         let is_running = self.store.run_in_progress().await.unwrap_or(false);
 
         if is_running {
@@ -72,7 +108,10 @@ impl Tool for LintStatusTool {
                 "summary": null,
                 "errors": [],
                 "warnings": [],
-                "stale_since": []
+                "stale_since": [],
+                "age_seconds": null,
+                "watched_scope": self.watched_scope,
+                "watcher_active": watcher_active,
             })));
         }
 
@@ -87,9 +126,17 @@ impl Tool for LintStatusTool {
                 "summary": null,
                 "errors": [],
                 "warnings": [],
-                "stale_since": []
+                "stale_since": [],
+                "age_seconds": null,
+                "watched_scope": self.watched_scope,
+                "watcher_active": watcher_active,
             })));
         };
+
+        let age_seconds = SystemTime::now()
+            .duration_since(run.finished_at)
+            .unwrap_or_default()
+            .as_secs();
 
         let stale = self
             .store
@@ -100,7 +147,7 @@ impl Tool for LintStatusTool {
         let status = if !stale.is_empty() {
             "stale"
         } else if run.passed() {
-            "fresh"
+            "fresh_passing"
         } else {
             "fresh_failing"
         };
@@ -155,7 +202,10 @@ impl Tool for LintStatusTool {
             },
             "errors": errors,
             "warnings": warnings,
-            "stale_since": stale_paths
+            "stale_since": stale_paths,
+            "age_seconds": age_seconds,
+            "watched_scope": self.watched_scope,
+            "watcher_active": watcher_active,
         })))
     }
 }

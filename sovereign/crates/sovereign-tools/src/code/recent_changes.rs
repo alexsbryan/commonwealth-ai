@@ -59,7 +59,16 @@ impl Tool for RecentChangesTool {
                     }
                 }
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You're starting a session and want to understand what's been actively worked on before diving in. More useful than 'git log' because it shows the actual symbols changed, not just file names.".into(),
+                    call: serde_json::json!({ "hours": 24 }),
+                },
+                ToolExample {
+                    situation: "Something broke and you want to know what changed recently that could have caused it. Narrows the search to files actually modified in the last hour.".into(),
+                    call: serde_json::json!({ "hours": 2 }),
+                },
+            ],
         }
     }
 

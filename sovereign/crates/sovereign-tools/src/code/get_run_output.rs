@@ -45,7 +45,12 @@ impl Tool for GetRunOutputTool {
                 },
                 "required": ["run_id"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "test_status showed a failure but the output was truncated. Call this with the run_id from that response to get the full test output — panic message, assertion diff, and the exact line that failed.".into(),
+                    call: serde_json::json!({ "run_id": 7 }),
+                },
+            ],
         }
     }
 

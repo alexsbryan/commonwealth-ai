@@ -66,7 +66,16 @@ impl Tool for FindCalleesTool {
                 },
                 "required": ["symbol"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You're about to read an entire function body to understand what it calls. Don't — this returns the exact outbound call graph, including trait dispatch that reading source would miss.".into(),
+                    call: serde_json::json!({ "symbol": "handle_tools_call" }),
+                },
+                ToolExample {
+                    situation: "You need to understand what a function depends on before refactoring it. Knowing its callees tells you what interfaces must remain stable.".into(),
+                    call: serde_json::json!({ "symbol": "run_embed_batch_sync" }),
+                },
+            ],
         }
     }
 

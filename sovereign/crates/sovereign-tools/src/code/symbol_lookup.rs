@@ -56,7 +56,20 @@ impl Tool for SymbolLookupTool {
                 },
                 "required": ["name"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You're about to grep for a struct or read an entire file to check its fields before writing code that uses it. Don't — this returns the exact definition, fields, and doc comments in one call.".into(),
+                    call: serde_json::json!({ "name": "ToolRegistry" }),
+                },
+                ToolExample {
+                    situation: "You need a function's exact signature before calling it. Reading the whole file wastes context. This returns only the definition line and its docs.".into(),
+                    call: serde_json::json!({ "name": "record_call" }),
+                },
+                ToolExample {
+                    situation: "You want to find all trait impls for a type. Pass kind='impl' to filter to implementation blocks only.".into(),
+                    call: serde_json::json!({ "name": "InferenceProvider", "kind": "trait" }),
+                },
+            ],
         }
     }
 

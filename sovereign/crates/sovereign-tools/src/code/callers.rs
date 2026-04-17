@@ -64,7 +64,20 @@ impl Tool for FindCallersTool {
                 },
                 "required": ["symbol"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You're about to change a function signature and want to know all callers first. Do NOT grep — grep misses trait dispatch and dynamic calls entirely, giving false confidence about blast radius.".into(),
+                    call: serde_json::json!({ "symbol": "execute_step" }),
+                },
+                ToolExample {
+                    situation: "You're removing a method and need to verify nothing calls it. grep would miss calls through trait objects. This is compiler-resolved — if it returns empty, the method is truly uncalled.".into(),
+                    call: serde_json::json!({ "symbol": "record_call" }),
+                },
+                ToolExample {
+                    situation: "You want to understand the full impact of changing a low-level utility. Use depth=2 to see callers of callers — the full blast radius two hops out.".into(),
+                    call: serde_json::json!({ "symbol": "embed", "depth": 2 }),
+                },
+            ],
         }
     }
 

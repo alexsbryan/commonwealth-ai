@@ -113,6 +113,7 @@ pub fn mcp_router() -> Router {
     Router::new()
         .route("/mcp", post(mcp_initialize).get(mcp_sse))
         .route("/mcp/message", post(mcp_message))
+        .route("/mcp/stats", axum::routing::get(mcp_stats))
 }
 
 // ─── Localhost gate ───────────────────────────────────────────
@@ -235,6 +236,30 @@ async fn mcp_message(
     };
 
     (StatusCode::OK, Json(response)).into_response()
+}
+
+// ─── GET /mcp/stats ───────────────────────────────────────────
+
+async fn mcp_stats(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(runtime): Extension<Arc<Runtime>>,
+) -> impl IntoResponse {
+    if !is_localhost(&peer) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "local-only"}))).into_response();
+    }
+
+    let counts = runtime.tools.call_counts();
+    let total: u64 = counts.iter().map(|(_, n)| n).sum();
+
+    let tools_json: Vec<serde_json::Value> = counts
+        .into_iter()
+        .map(|(name, count)| serde_json::json!({ "tool": name, "calls": count }))
+        .collect();
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "total_calls": total,
+        "tools": tools_json,
+    }))).into_response()
 }
 
 // ─── tools/list ───────────────────────────────────────────────
@@ -360,6 +385,8 @@ pub(crate) async fn handle_tools_call(
     if let Err(e) = tool.validate(&arguments) {
         return JsonRpcResponse::result(id, call_tool_text(e.to_string(), true));
     }
+
+    registry.record_call(&name);
 
     let ctx = ToolContext {
         conversation_id: "mcp".to_string(),

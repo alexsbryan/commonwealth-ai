@@ -93,7 +93,27 @@ impl Tool for SessionReflectionTool {
                 },
                 "required": ["task_summary"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You just fixed a bug where a tool gave you incomplete or wrong information — record exactly what it missed so the developer can improve it and future sessions know to work around it.".into(),
+                    call: serde_json::json!({
+                        "task_summary": "Fixed GGML_ASSERT crash in embedding context on Metal",
+                        "tool_name": "code_search",
+                        "tools_that_helped": ["find_callers", "symbol_lookup"],
+                        "manual_work_that_should_be_a_tool": "Had to read llama-context.cpp source directly to find op_offload parameter — no tool surfaces llama.cpp context param semantics",
+                        "wished_i_had_known": "op_offload=true (the default) routes compute ops to Metal even when n_gpu_layers=0. All three flags must be set: n_gpu_layers=0, offload_kqv=false, op_offload=false."
+                    }),
+                },
+                ToolExample {
+                    situation: "A refactor touched many files and you want to record which tools were accurate, which were stale, and what you had to do by hand — so the next session starts calibrated.".into(),
+                    call: serde_json::json!({
+                        "task_summary": "Wired IndexHealthChecker into all 6 MCP tools",
+                        "tools_that_helped": ["blast_radius", "find_callers", "symbol_lookup"],
+                        "misleading_outputs": "rust-analyzer diagnostics showed stale errors after edits — confirmed by reading file that the fixes were already applied",
+                        "manual_work_that_should_be_a_tool": "Had to grep for all NodeCapabilities struct literal sites across 17 files after adding a field — blast_radius only covers call graph, not struct initialization sites"
+                    }),
+                },
+            ],
         }
     }
 

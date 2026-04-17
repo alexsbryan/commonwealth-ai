@@ -114,7 +114,20 @@ impl Tool for CodeSearchTool {
                 },
                 "required": ["query"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You need to find how a pattern is implemented before writing something similar. Don't read random files — search for the pattern semantically and get the 3-5 most relevant chunks.".into(),
+                    call: serde_json::json!({ "query": "streaming SSE response handler" }),
+                },
+                ToolExample {
+                    situation: "You're about to write a Python/shell script to grep for examples of a pattern across the codebase. This does it in one call and ranks results by relevance.".into(),
+                    call: serde_json::json!({ "query": "retry logic with exponential backoff" }),
+                },
+                ToolExample {
+                    situation: "You know the concept but not the exact symbol name. Use this to find it, then follow up with symbol_lookup for the precise definition.".into(),
+                    call: serde_json::json!({ "query": "tool permission validation before execute", "language": "rust" }),
+                },
+            ],
         }
     }
 

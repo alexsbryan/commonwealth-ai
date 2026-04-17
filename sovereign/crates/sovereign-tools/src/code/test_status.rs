@@ -12,6 +12,8 @@
 //! - Constantly during active editing — this call costs microseconds.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::SystemTime;
 
 use async_trait::async_trait;
 use serde_json::json;
@@ -27,6 +29,11 @@ pub struct TestStatusTool {
     /// Optional handle to the watcher for live "Running" status.
     /// If None, status is derived entirely from the store.
     running_flag: Option<Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>>,
+    /// The command the watcher runs, e.g. "cargo test --workspace". Passed
+    /// through to the response so agents can confirm scope coverage.
+    watched_scope: Option<String>,
+    /// Shared with the watcher coordinator — true while the FS watcher is live.
+    watcher_active: Option<Arc<AtomicBool>>,
 }
 
 impl TestStatusTool {
@@ -34,6 +41,8 @@ impl TestStatusTool {
         Self {
             store,
             running_flag: None,
+            watched_scope: None,
+            watcher_active: None,
         }
     }
 
@@ -45,6 +54,16 @@ impl TestStatusTool {
         self.running_flag = Some(handle);
         self
     }
+
+    pub fn with_watched_scope(mut self, scope: String) -> Self {
+        self.watched_scope = Some(scope);
+        self
+    }
+
+    pub fn with_watcher_active(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.watcher_active = Some(flag);
+        self
+    }
 }
 
 #[async_trait]
@@ -53,25 +72,36 @@ impl Tool for TestStatusTool {
         ToolDescriptor {
             id: "test_status".to_string(),
             name: "Test Status".to_string(),
-            description: "PREFERRED OVER `cargo test`. Return the current state of the \
-                          background test runner. Reads from a local SQLite cache — instant, \
-                          zero lock contention. The background watcher runs the test suite \
-                          automatically on file changes; call this before claiming a change \
-                          is correct or before committing. Do NOT run cargo test via Bash — \
-                          it contends with the watcher for the Cargo lock and stalls both. \
-                          Failures are included in this response; call get_run_output only \
-                          when output_truncated is true. Status values: 'fresh_passing' \
-                          (all pass — safe to proceed), 'fresh_failing' (failures in \
-                          response), 'stale' (files changed since last run — call \
-                          run_tests then poll), 'running' (in progress — check again in \
-                          30-60s), 'never_run' (watcher not configured — fall back to Bash)."
+            description: "Return test suite status from the background watcher. \
+                          NEVER run `cargo test` via Bash — the watcher holds the Cargo \
+                          file lock continuously; running cargo test alongside it causes \
+                          BOTH processes to stall indefinitely waiting for the lock. \
+                          This call reads cached results in microseconds with zero contention. \
+                          Response fields to trust the result: \
+                          `age_seconds` — how old the result is (if 0-60s, the watcher \
+                          ran on your current changes); \
+                          `watched_scope` — the exact command the watcher runs (e.g. \
+                          'cargo test --workspace'), confirming which crates are covered; \
+                          `watcher_active` — true = watcher is live and will rerun on your \
+                          next save automatically; false = watcher not running, only then \
+                          fall back to Bash. \
+                          Status: 'fresh_passing' (all pass — safe to proceed), \
+                          'fresh_failing' (failures in response), 'stale' (files changed \
+                          since last run — call run_tests then poll), 'running' (in \
+                          progress — check again in 30-60s), 'never_run' (watcher not \
+                          configured — fall back to Bash)."
                 .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {},
                 "required": []
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You've made a change and want to know if tests pass. Do NOT run `cargo test` — it contends with the background watcher for the Cargo file lock. This reads the watcher's result instantly. If status is 'stale', call run_tests to force a fresh run, then poll back here in ~30s.".into(),
+                    call: serde_json::json!({}),
+                },
+            ],
         }
     }
 
@@ -80,6 +110,12 @@ impl Tool for TestStatusTool {
     }
 
     async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        let watcher_active = self
+            .watcher_active
+            .as_ref()
+            .map(|f| f.load(Ordering::Relaxed))
+            .unwrap_or(false);
+
         // Check running flag.
         let is_running = if let Some(ref flag) = self.running_flag {
             flag.lock()
@@ -96,7 +132,10 @@ impl Tool for TestStatusTool {
                 "status": "running",
                 "summary": null,
                 "failures": [],
-                "stale_since": []
+                "stale_since": [],
+                "age_seconds": null,
+                "watched_scope": self.watched_scope,
+                "watcher_active": watcher_active,
             })));
         }
 
@@ -110,9 +149,17 @@ impl Tool for TestStatusTool {
                 "status": "never_run",
                 "summary": null,
                 "failures": [],
-                "stale_since": []
+                "stale_since": [],
+                "age_seconds": null,
+                "watched_scope": self.watched_scope,
+                "watcher_active": watcher_active,
             })));
         };
+
+        let age_seconds = SystemTime::now()
+            .duration_since(run.finished_at)
+            .unwrap_or_default()
+            .as_secs();
 
         let stale = self
             .store
@@ -158,7 +205,10 @@ impl Tool for TestStatusTool {
                 "exit_code": run.exit_code,
             },
             "failures": failures,
-            "stale_since": stale_paths
+            "stale_since": stale_paths,
+            "age_seconds": age_seconds,
+            "watched_scope": self.watched_scope,
+            "watcher_active": watcher_active,
         })))
     }
 }

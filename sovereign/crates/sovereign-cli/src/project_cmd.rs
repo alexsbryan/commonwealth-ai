@@ -1240,6 +1240,23 @@ async fn cmd_serve(args: &[String]) -> i32 {
         );
     }
 
+    // Scope strings for lint/test status tools — shown to agents so they can
+    // confirm the watcher covers the crates they just edited.
+    let test_watched_scope: Option<String> = sovereign_cfg
+        .test_runner
+        .as_ref()
+        .map(|c| c.command.clone());
+    let lint_watched_scope: Option<String> = sovereign_cfg
+        .lint_runner
+        .as_ref()
+        .map(|c| c.command.clone());
+
+    // Shared flag: set to true after coordinator.start() succeeds. Tools expose
+    // this as watcher_active so agents know the FS watcher is live.
+    let watcher_active_flag = std::sync::Arc::new(
+        std::sync::atomic::AtomicBool::new(false),
+    );
+
     // ── Register tools ──────────────────────────────────────────
 
     let mut tools = sovereign_core::ToolRegistry::new();
@@ -1263,9 +1280,14 @@ async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Test / lint watcher tools ───────────────────────────────
 
-    tools.register(Box::new(sovereign_tools::TestStatusTool::new(
-        Arc::clone(&test_store),
-    )));
+    {
+        let mut tool = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
+            .with_watcher_active(Arc::clone(&watcher_active_flag));
+        if let Some(scope) = test_watched_scope {
+            tool = tool.with_watched_scope(scope);
+        }
+        tools.register(Box::new(tool));
+    }
     if let Some(ref watcher) = test_watcher {
         tools.register(Box::new(sovereign_tools::RunTestsTool::new(
             Arc::clone(watcher),
@@ -1275,9 +1297,14 @@ async fn cmd_serve(args: &[String]) -> i32 {
         Arc::clone(&test_store),
     )));
 
-    tools.register(Box::new(sovereign_tools::LintStatusTool::new(
-        Arc::clone(&lint_store),
-    )));
+    {
+        let mut tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
+            .with_watcher_active(Arc::clone(&watcher_active_flag));
+        if let Some(scope) = lint_watched_scope {
+            tool = tool.with_watched_scope(scope);
+        }
+        tools.register(Box::new(tool));
+    }
     tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
         Arc::clone(&lint_store),
     )));
@@ -1343,6 +1370,7 @@ async fn cmd_serve(args: &[String]) -> i32 {
         match coordinator.start(vec![repo_root.clone()]).await {
             Ok(handle) => {
                 eprintln!("  Watcher started (watching {})", repo_root.display());
+                watcher_active_flag.store(true, std::sync::atomic::Ordering::Release);
                 Some(handle)
             }
             Err(e) => {

@@ -54,7 +54,20 @@ impl Tool for ProjectContextTool {
                 },
                 "required": ["query"]
             }),
-            examples: vec![],
+            examples: vec![
+                ToolExample {
+                    situation: "You're about to implement something and want to check whether the project has established conventions for it before you guess or invent your own. Do this before writing any code.".into(),
+                    call: serde_json::json!({ "query": "error handling conventions" }),
+                },
+                ToolExample {
+                    situation: "You're unsure about the architectural boundary between two subsystems. Pull the documented decisions rather than inferring from code.".into(),
+                    call: serde_json::json!({ "query": "corpus engine vs sovereign tools boundary" }),
+                },
+                ToolExample {
+                    situation: "You got empty or low-relevance results from a code search. Check here — the answer may be in conventions docs rather than source code.".into(),
+                    call: serde_json::json!({ "query": "testing strategy integration vs unit" }),
+                },
+            ],
         }
     }
 
