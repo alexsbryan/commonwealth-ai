@@ -9,6 +9,7 @@ mod reflect_cmd;
 mod service_install;
 mod setup_cmd;
 mod setup_config;
+mod util;
 
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -116,18 +117,51 @@ struct Args {
     tavily_api_key: Option<String>,
 }
 
+use crate::util::help::{Help, HelpSection};
+
+/// Top-level help: lists every subcommand plus the flags for the
+/// fall-through interactive REPL mode (what runs when no subcommand
+/// is given). The subcommand table points users at the modern flow
+/// (setup / project / mesh) rather than the legacy REPL.
+const HELP: Help = Help {
+    command: "sovereign",
+    summary: "Local AI assistant with code intelligence, knowledge bases, and an optional mesh.",
+    sections: &[
+        HelpSection::Usage(
+            "sovereign <subcommand> [flags]\n\
+             sovereign --model <path.gguf> [options]   (legacy interactive REPL)",
+        ),
+        HelpSection::Subcommands(&[
+            ("setup",   "First-run: detect hardware, download models, start daemon"),
+            ("project", "Per-project code intelligence (init / serve / status / refresh)"),
+            ("mesh",    "Mesh management (create / join / rotate / status)"),
+            ("corpus",  "Knowledge corpus install / remove / status"),
+            ("code",    "Code intelligence tooling (index / watch / mcp-status)"),
+            ("doctor",  "Diagnose setup and daemon health"),
+            ("reflect", "Review session reflections; retire fixed ones"),
+            ("recipe",  "Run a corpus ingestion recipe"),
+            ("mcp",     "MCP server diagnostics (list tools, proxy)"),
+            ("daemon",  "(internal) Long-running service managed by launchd/systemd"),
+        ]),
+        HelpSection::Flags(&[
+            ("--model <path>",         "Fast/default GGUF model (REPL mode only)"),
+            ("--primary-model <path>", "Larger model for deep reasoning (REPL)"),
+            ("--data-dir <path>",      "Database directory (default: data)"),
+            ("--skills-dir <path>",    "Skills directory (default: ~/.sovereign/skills)"),
+            ("--ingest <path>",        "Ingest documents from directory before REPL"),
+            ("--router",               "Enable LLM-based intent routing"),
+            ("--brave-api-key <key>",  "Brave Search key (optional)"),
+            ("--tavily-api-key <key>", "Tavily Search key (optional)"),
+            ("--help, -h",             "Show this message"),
+        ]),
+        HelpSection::Notes(
+            "Run `sovereign <subcommand> --help` for detail on any specific subcommand.",
+        ),
+    ],
+};
+
 fn print_usage() {
-    eprintln!("Usage: sovereign-cli --model <path.gguf> [options]");
-    eprintln!();
-    eprintln!("Options:");
-    eprintln!("  --model <path>           Fast/default model (required)");
-    eprintln!("  --primary-model <path>   Larger model for deep reasoning");
-    eprintln!("  --data-dir <path>        Database directory (default: data)");
-    eprintln!("  --skills-dir <path>      Skills directory (default: ~/.sovereign/skills)");
-    eprintln!("  --ingest <path>          Ingest documents from directory");
-    eprintln!("  --router                 Enable LLM-based intent routing");
-    eprintln!("  --brave-api-key <key>    Use Brave Search (better quality)");
-    eprintln!("  --tavily-api-key <key>   Use Tavily Search (best quality)");
+    crate::util::help::print(&HELP);
 }
 
 fn parse_args() -> Option<Args> {
@@ -198,6 +232,17 @@ fn parse_args() -> Option<Args> {
 async fn main() {
     // Check for subcommands before standard arg parsing.
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
+
+    // Top-level --help / help short-circuit. A lone "help" (no
+    // subcommand) prints the banner; `sovereign mesh --help` is
+    // handled by the subcommand dispatcher below.
+    if let Some(first) = raw_args.first() {
+        if matches!(first.as_str(), "--help" | "-h" | "help") && raw_args.len() == 1 {
+            print_usage();
+            std::process::exit(0);
+        }
+    }
+
     if let Some(first) = raw_args.first() {
         match first.as_str() {
             "mesh" => {
@@ -207,19 +252,12 @@ async fn main() {
                 // vanishes into the void and mesh failures look
                 // identical from outside. Honour RUST_LOG if set,
                 // otherwise show all mesh-layer info lines.
-                tracing_subscriber::fmt()
-                    .with_env_filter(
-                        tracing_subscriber::EnvFilter::try_from_default_env()
-                            .unwrap_or_else(|_| {
-                                "sovereign_cli=info,\
-                                 sovereign_mesh=info,\
-                                 commonwealth_discovery=info,\
-                                 commonwealth_api=info"
-                                    .into()
-                            }),
-                    )
-                    .with_target(false)
-                    .init();
+                util::tracing_init::init_tracing(
+                    "sovereign_cli=info,\
+                     sovereign_mesh=info,\
+                     commonwealth_discovery=info,\
+                     commonwealth_api=info",
+                );
                 let code = mesh_cmd::run_mesh(&raw_args[1..]).await;
                 std::process::exit(code);
             }
@@ -252,13 +290,7 @@ async fn main() {
                 std::process::exit(code);
             }
             "setup" => {
-                tracing_subscriber::fmt()
-                    .with_env_filter(
-                        tracing_subscriber::EnvFilter::try_from_default_env()
-                            .unwrap_or_else(|_| "sovereign_cli=info".into()),
-                    )
-                    .with_target(false)
-                    .init();
+                util::tracing_init::init_tracing("sovereign_cli=info");
                 let code = setup_cmd::run_setup(&raw_args[1..]).await;
                 std::process::exit(code);
             }
@@ -266,20 +298,13 @@ async fn main() {
                 // The daemon run loop depends on tracing for visibility
                 // into model load, mesh resume, and gossip. Initialize a
                 // subscriber up front so launchd/systemd can tail it.
-                tracing_subscriber::fmt()
-                    .with_env_filter(
-                        tracing_subscriber::EnvFilter::try_from_default_env()
-                            .unwrap_or_else(|_| {
-                                "sovereign_cli=info,\
-                                 sovereign_mesh=info,\
-                                 sovereign_inference=info,\
-                                 commonwealth_discovery=info,\
-                                 commonwealth_api=info"
-                                    .into()
-                            }),
-                    )
-                    .with_target(false)
-                    .init();
+                util::tracing_init::init_tracing(
+                    "sovereign_cli=info,\
+                     sovereign_mesh=info,\
+                     sovereign_inference=info,\
+                     commonwealth_discovery=info,\
+                     commonwealth_api=info",
+                );
                 let code = daemon_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }

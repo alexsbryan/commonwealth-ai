@@ -11,20 +11,23 @@ use corpus_engine::{CorpusEngine, ReconstructionMethod};
 use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
 use sovereign_mesh::EmbeddedDaemon;
 
-/// Same location the desktop app uses: `<data_dir>/sovereign/`.
-/// Sharing the path means a mesh created from the CLI is picked up
-/// by the next desktop launch (and vice versa).
+/// Same location the desktop app uses: `<platform-data-dir>/sovereign/`.
+/// Sharing the path means a mesh created from the CLI is picked up by the
+/// next desktop launch (and vice versa). Thin wrapper around the shared
+/// `util::dirs::mesh_data_dir()` so this file still reads naturally.
 fn mesh_data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("sovereign")
+    crate::util::dirs::mesh_data_dir()
 }
 
 /// Run a mesh subcommand. Returns the exit code.
 pub async fn run_mesh(args: &[String]) -> i32 {
     if args.is_empty() {
-        print_mesh_usage();
+        crate::util::help::print(&HELP_MESH);
         return 1;
+    }
+    if matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        crate::util::help::print(&HELP_MESH);
+        return 0;
     }
 
     match args[0].as_str() {
@@ -35,13 +38,9 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "balance" => cmd_balance().await,
         "leave" => cmd_leave().await,
         "logs" => cmd_logs().await,
-        "help" | "--help" | "-h" => {
-            print_mesh_usage();
-            0
-        }
         other => {
             eprintln!("Unknown mesh subcommand: {other}");
-            print_mesh_usage();
+            crate::util::help::print(&HELP_MESH);
             1
         }
     }
@@ -50,8 +49,12 @@ pub async fn run_mesh(args: &[String]) -> i32 {
 /// Run a corpus subcommand. Returns the exit code.
 pub async fn run_corpus(args: &[String]) -> i32 {
     if args.is_empty() {
-        print_corpus_usage();
+        crate::util::help::print(&HELP_CORPUS);
         return 1;
+    }
+    if matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        crate::util::help::print(&HELP_CORPUS);
+        return 0;
     }
 
     match args[0].as_str() {
@@ -60,66 +63,103 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "remove" => cmd_corpus_remove(&args[1..]).await,
         "status" => cmd_corpus_status().await,
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
-        "help" | "--help" | "-h" => {
-            print_corpus_usage();
-            0
-        }
         other => {
             eprintln!("Unknown corpus subcommand: {other}");
-            print_corpus_usage();
+            crate::util::help::print(&HELP_CORPUS);
             1
         }
     }
 }
 
-fn print_mesh_usage() {
-    eprintln!(
-        "Usage: sovereign mesh <subcommand>
+const HELP_MESH: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign mesh",
+    summary: "Manage the local Commonwealth mesh (create / join / rotate / status).",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign mesh <subcommand> [args]"),
+        crate::util::help::HelpSection::Subcommands(&[
+            ("create",    "Promote the solo mesh to a joinable mesh; print invite"),
+            ("join <arg>","Join an existing mesh (bare key, https url, or sovereign://)"),
+            ("rotate",    "Generate a new shareable join key (invalidates the previous)"),
+            ("status",    "Show mesh members, hosted knowledge, loaded models"),
+            ("balance",   "Show your contribution to the mesh"),
+            ("leave",     "Leave the current mesh"),
+            ("logs",      "Show mesh daemon logs"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Run `sovereign mesh <subcommand> --help` for subcommand-specific flags.",
+        ),
+    ],
+};
 
-Manage your community mesh.
+const HELP_MESH_CREATE: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign mesh create",
+    summary: "Promote the solo mesh to a joinable mesh and print the shareable invite.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign mesh create [--name <name>]"),
+        crate::util::help::HelpSection::Flags(&[
+            ("--name <name>", "Human-readable mesh name (default: \"<host>'s Mesh\")"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Errors if a mesh already exists (e.g. from `sovereign setup`'s silent solo mesh).\n\
+             In that case, run `sovereign mesh rotate` to generate a new shareable key instead.",
+        ),
+    ],
+};
 
-Subcommands:
-  create [--name <name>]  Promote the solo mesh to a joinable mesh and print
-                          the shareable invite. Errors if a joinable mesh
-                          already exists — use `mesh rotate` in that case.
-  join <arg>              Join an existing mesh. <arg> may be any of:
-                            - A bare key: cwth-XXXX-XXXX-XXXX
-                            - An https URL: https://sovereign.dev/join/<key>
-                            - A deep link: sovereign://join/<key>
-  rotate                  Generate a new shareable join key for the existing
-                          mesh (invalidates the previous key).
-  status                  Show mesh status (members, knowledge, model)
-  balance                 Show your contribution to the mesh
-  leave                   Leave the current mesh
-  logs                    Show mesh daemon logs
-"
-    );
-}
+const HELP_MESH_JOIN: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign mesh join",
+    summary: "Join an existing mesh using any of the three invite forms.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign mesh join <arg>"),
+        crate::util::help::HelpSection::Examples(&[
+            ("sovereign mesh join cwth-a1b2-c3d4-e5f6",
+             "Bare key typed from another user's terminal"),
+            ("sovereign mesh join https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6",
+             "Clickable https link from an email"),
+            ("sovereign mesh join sovereign://join/cwth-a1b2-c3d4-e5f6",
+             "Native app deep link"),
+        ]),
+    ],
+};
 
-fn print_corpus_usage() {
-    eprintln!(
-        "Usage: sovereign corpus <subcommand>
+const HELP_MESH_ROTATE: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign mesh rotate",
+    summary: "Generate a new shareable join key (the previous key stops working for future joins).",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign mesh rotate"),
+        crate::util::help::HelpSection::Notes(
+            "Existing members keep their connections. If the daemon is running, restart it\n\
+             so the new key is active in-memory (the persisted mesh.json is updated on disk).",
+        ),
+    ],
+};
 
-Manage knowledge corpora shared across the mesh.
-
-Subcommands:
-  list                              List installed and available corpora
-  install <id>                      Install a corpus (e.g., 'wikipedia')
-  remove <id>                       Remove an installed corpus
-  status                            Show shard status for all corpora
-  reconstruct-manifest <id>         Reconstruct source-file manifest for a
-                                    mid-flight index (required before
-                                    collaborative ingestion)
-    --source-dir <path>             Directory containing the parquet shards
-                                    (defaults to ~/.sovereign/indexes/_downloads/<id>)
-    --yes                           Skip confirmation prompt
-"
-    );
-}
+const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign corpus",
+    summary: "Manage knowledge corpora shared across the mesh (install / remove / inspect).",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign corpus <subcommand> [args]"),
+        crate::util::help::HelpSection::Subcommands(&[
+            ("list",                      "List installed and available corpora"),
+            ("install <id>",              "Install a corpus (e.g. 'wikipedia')"),
+            ("remove <id>",               "Remove an installed corpus"),
+            ("status",                    "Show shard status for all corpora"),
+            ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "`reconstruct-manifest` accepts --source-dir <path> (default:\n\
+             ~/.sovereign/indexes/_downloads/<id>) and --yes (skip confirmation).",
+        ),
+    ],
+};
 
 // ── Mesh subcommand implementations ──────────────────────
 
 async fn cmd_create(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_MESH_CREATE);
+        return 0;
+    }
     let mut name = None;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -183,6 +223,10 @@ fn print_mesh_share(mesh_name: &str, join_key: &str) {
 }
 
 async fn cmd_join(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_MESH_JOIN);
+        return 0;
+    }
     let Some(arg) = args.first() else {
         eprintln!("Missing join key.");
         eprintln!("Usage: sovereign mesh join <key-or-url>");
@@ -229,7 +273,11 @@ async fn cmd_join(args: &[String]) -> i32 {
 /// Rotate the join key on an existing mesh. Regenerates the plaintext
 /// key + hash, writes the new hash back to `mesh.json`, and prints the
 /// new shareable invite in the same format as `mesh create`.
-async fn cmd_rotate(_args: &[String]) -> i32 {
+async fn cmd_rotate(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_MESH_ROTATE);
+        return 0;
+    }
     match sovereign_mesh::persist::rotate_join_key(&mesh_data_dir()) {
         Ok(Some(rotated)) => {
             eprintln!();

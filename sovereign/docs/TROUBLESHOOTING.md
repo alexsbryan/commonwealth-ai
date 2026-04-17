@@ -1,0 +1,150 @@
+# Troubleshooting
+
+Common issues with `sovereign setup`, the daemon, and per-project code intelligence. Run [`sovereign doctor`](CLI_REFERENCE.md#sovereign-doctor) first — it covers most of these automatically. When in doubt, re-running `sovereign setup --reset` is safe.
+
+← [back to README](../README.md)
+
+## Setup / daemon
+
+### `sovereign setup` finishes but `waiting for daemon to come up` times out
+
+The daemon is crash-looping, usually because a downloaded GGUF is corrupt or the model format isn't supported by the bundled `llama.cpp`. Diagnose:
+
+```sh
+# macOS
+launchctl list | grep sovereign
+tail -f ~/.sovereign/logs/daemon.err
+
+# Linux
+systemctl --user status sovereign
+journalctl --user -u sovereign -f
+```
+
+If the log shows `Failed to load model: null result from llama cpp`, the GGUF file is invalid. Check its size:
+
+```sh
+ls -la ~/.sovereign/models/
+```
+
+Anything under ~100 MB is almost certainly an HTML error page from a failed Hugging Face download. Fix:
+
+```sh
+rm -rf ~/.sovereign/models/*
+sovereign setup --reset
+```
+
+### `sovereign setup` says "Already set up"
+
+A config file exists at `~/.config/sovereign/config.toml` (Linux) or `~/Library/Application Support/sovereign/config.toml` (macOS). Use `sovereign setup --reset` to wipe and reconfigure, or edit the file manually.
+
+### Want to switch models after setup
+
+Edit the `[models]` section of the config file directly, then restart the daemon:
+
+```sh
+# macOS
+launchctl kickstart -k gui/$(id -u)/com.sovereign.daemon
+
+# Linux
+systemctl --user restart sovereign
+```
+
+Or run `sovereign setup --reset` for a full re-download.
+
+### Daemon is running but `:9741` returns connection refused
+
+Check the actual listening port:
+
+```sh
+lsof -iTCP -sTCP:LISTEN -P | grep sovereign
+```
+
+If it's listening on a different port, your `~/.config/sovereign/config.toml` has a non-default `client_port` — edit and restart. If nothing is listening, the daemon didn't start cleanly; see the first entry above.
+
+### Port conflict with another tool
+
+Many devtools grab `:8080` or `:3000`; `:9741` was chosen to avoid that. If something else owns `:9741`:
+
+```toml
+# ~/.config/sovereign/config.toml
+[daemon]
+client_port = 19741
+internal_port = 19742
+```
+
+Restart the daemon. Update any `.opencode/config.json` / `.claude/settings.json` that reference the old port (re-run `sovereign project init` and it'll pick up the new port).
+
+## Project init
+
+### `sovereign project init` shows "unknown flag" for `--help`
+
+You're running a stale binary. Rebuild:
+
+```sh
+cd /path/to/sovereign
+cargo build --release -p sovereign-cli
+```
+
+Every subcommand (including sub-subcommands like `project init`) recognises `--help` in the current binary.
+
+### `sovereign project serve` listens on `:8080` instead of `:9741`
+
+Also a stale binary. Verify:
+
+```sh
+sovereign project serve --help | grep port
+# should say: --port <port>   Listen port (default: 9741)
+```
+
+If the default is 8080, rebuild. See [CLI_REFERENCE.md](CLI_REFERENCE.md) for the current flag list.
+
+### MCP tools are missing after `project init`
+
+Check that the server can see the index:
+
+```sh
+sovereign project status
+curl -s http://localhost:9741/mcp/stats
+```
+
+If `project status` shows the index but `/mcp/stats` returns nothing, the daemon is running a stale build. Restart it (see the daemon section above).
+
+## Mesh
+
+### `sovereign mesh create` fails with "mesh already exists"
+
+`sovereign setup` silently creates a solo mesh so the daemon has state to resume. To get a new shareable key:
+
+```sh
+sovereign mesh rotate
+```
+
+This generates a new plaintext key, updates the persisted hash, and prints the share URL. Existing members stay connected — only future joins need the new key.
+
+### Friend's `mesh join` hangs
+
+Two common causes:
+
+1. **mDNS blocked** — Router or AP isolation. Add a `?relay=<your-ip>:9742` query param: `sovereign mesh join sovereign://join/<key>?relay=192.168.1.100`.
+2. **Firewall** — macOS prompts for incoming connection permission the first time; Linux may need `ufw allow 9742/tcp` or equivalent.
+
+## Uninstall
+
+Full removal:
+
+```sh
+# macOS
+launchctl bootout gui/$(id -u)/com.sovereign.daemon
+rm ~/Library/LaunchAgents/com.sovereign.daemon.plist
+rm -rf ~/.sovereign
+rm -rf "~/Library/Application Support/sovereign"
+
+# Linux
+systemctl --user disable --now sovereign
+rm ~/.config/systemd/user/sovereign.service
+systemctl --user daemon-reload
+rm -rf ~/.sovereign
+rm -rf ~/.config/sovereign
+```
+
+`sovereign setup --reset` is sufficient for a "start over" — it removes the service and config but keeps downloaded models (rerun downloads cheaply resume). Remove `~/.sovereign/models/` manually if you want to force a fresh model pick.

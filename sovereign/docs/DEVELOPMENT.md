@@ -1,0 +1,159 @@
+# Development
+
+Building, testing, and extending Sovereign. For a high-level architectural map see [`ARCHITECTURE.md`](../ARCHITECTURE.md) and [`SYSTEM_OVERVIEW.md`](../SYSTEM_OVERVIEW.md).
+
+← [back to README](../README.md)
+
+## Building
+
+```sh
+cargo build --release              # all crates
+cargo build -p sovereign-cli       # CLI only
+cargo build -p sovereign-server    # server only
+```
+
+Desktop app requires [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) plus Node.js:
+
+```sh
+cd crates/sovereign-desktop
+npm install
+cargo tauri dev
+```
+
+## Testing
+
+```sh
+cargo test --workspace                              # all tests
+cargo test -p sovereign-core --test functional      # functional tests (provenance, FTS5, KBs)
+cargo test -p sovereign-tools --test smoke_tests    # smoke tests (Parquet ingestion, full pipeline)
+```
+
+Three layers:
+
+- **Unit tests** — Mock-based, fast. Cover types, serialization, registry logic, plan parsing.
+- **Functional tests** — `DeterministicInference` + real in-memory SQLite + real FTS5. No mocks on the store or search pipeline. Assert on provenance records, conversation state, corpus search results.
+- **Smoke tests** — Real Parquet parsing → real SQLite → real Runtime → provenance assertions. End-to-end: ingest philosophy corpus, query about Bergson, verify provenance shows SEP chunks found.
+
+No tests require a GPU, model file, or network access.
+
+## Project structure
+
+```
+sovereign/
+├── crates/
+│   ├── sovereign-core/        # Traits, Runtime, Executor, Planner, Router, Memory, Skills
+│   ├── sovereign-inference/   # llama.cpp, remote APIs, hybrid provider, backend selection
+│   ├── sovereign-store/       # SQLite, PostgreSQL, in-memory StateStore
+│   ├── sovereign-tools/       # Search, corpus parsers, web, shell, RAG, MCP
+│   ├── sovereign-cli/         # Terminal REPL + subcommands (setup, project, mesh, …)
+│   ├── sovereign-server/      # REST + WebSocket API
+│   ├── sovereign-mesh/        # Embedded Commonwealth daemon + MCP router
+│   └── sovereign-desktop/     # Tauri + Svelte desktop app
+├── data/
+│   └── corpora.toml           # Knowledge base manifest (compiled into desktop app)
+├── skills/
+│   ├── research-analyst/      # Multi-source research with citations
+│   ├── code-review/           # Structured code analysis
+│   ├── personal-assistant/    # Task management
+│   └── inner-work/            # Reflective companion (local-only)
+├── docs/
+│   ├── CLI_REFERENCE.md       # Flag + subcommand reference
+│   ├── CODE_INTELLIGENCE.md   # Per-project code intelligence setup
+│   ├── KNOWLEDGE_BASES.md     # Corpora, tiers, search pipeline
+│   ├── FEATURES.md            # Routing, memory, skills, OICP
+│   ├── DEVELOPMENT.md         # This file
+│   ├── TROUBLESHOOTING.md     # Common issues + diagnostics
+│   ├── FAQ.md                 # Quick answers
+│   └── specs/oicp.md          # OICP protocol specification
+├── contrib/
+│   ├── launchd/               # macOS service template
+│   └── systemd/               # Linux user-service template
+├── models/                    # GGUF model files (not committed)
+└── sovereign-server.toml      # Example server configuration
+```
+
+## Key traits
+
+The system is built around five async trait boundaries (in `sovereign-core/src/traits.rs`):
+
+| Trait | Purpose |
+|---|---|
+| `InferenceProvider` | `complete()`, `embed()`, `complete_stream()` — model inference |
+| `Router` | `classify()` — intent classification |
+| `Planner` | `plan()`, `replan()` — step DAG generation |
+| `Tool` | `execute()`, `validate()`, `retry_config()` — tool execution |
+| `StateStore` | 25+ methods for conversations, memories, documents, corpus state, permissions |
+
+All database records carry a `version` (Lamport timestamp) and soft-deletable tables have a `deleted_at` field. Writes are append-only with soft deletes. This enables future multi-device sync without schema migration — two `StateStore` instances can merge by taking the union of records and resolving by timestamp.
+
+## Adding a tool
+
+Implement the `Tool` trait:
+
+```rust
+#[async_trait]
+impl Tool for MyTool {
+    fn descriptor(&self) -> ToolDescriptor { /* id, name, description, JSON schema */ }
+    fn required_permissions(&self) -> Vec<Permission> { vec![Permission::Network] }
+    async fn execute(&self, params: &Value, ctx: &ToolContext) -> Result<StepOutput> { /* ... */ }
+
+    // Optional: retry on transient failures
+    fn retry_config(&self) -> Option<RetryConfig> {
+        Some(RetryConfig { max_retries: 2, backoff_ms: vec![1000, 3000] })
+    }
+}
+```
+
+Register it in the CLI, server, or desktop `main.rs`:
+
+```rust
+tools.register(Box::new(MyTool::new()));
+```
+
+## Adding a corpus
+
+1. Add a parser implementing `CorpusParser` trait in `sovereign-tools/src/corpus/`.
+2. Register it in `registry.rs::parser_for_corpus()`.
+3. Add the corpus definition to `data/corpora.toml`.
+4. Supported formats: Parquet, MediaWiki XML (bzip2), Stack Exchange XML, JSONL (gzip), HTML directory, plain text directory.
+
+## Adding a skill
+
+Create `skills/my-skill/skill.toml`:
+
+```toml
+[skill]
+id = "my-skill"
+name = "My Skill"
+version = "0.1.0"
+description = "What this skill does"
+
+[routing]
+trigger_phrases = ["relevant", "trigger", "phrases"]
+default_intent = "ComplexTask"
+min_confidence = 0.75
+
+[[planner.templates]]
+name = "my_template"
+trigger = "When the user wants X"
+steps = """
+1. Search for information. [no_eval]
+2. Analyze findings. [sample:3:llm_judge]
+3. Synthesize answer. [eval:synthesis, max_retries:1]
+"""
+
+[tools]
+required = ["search"]
+
+[prompts]
+synthesis = "You are a specialist in X. Cite sources."
+
+[memory]
+extract_prompt_addendum = "Extract facts about X that the user cares about."
+confidence_decay_per_month = 0.05
+prune_threshold = 0.1
+
+[inference]
+privacy = "LocalOnly"
+min_context_tokens = 8192
+```

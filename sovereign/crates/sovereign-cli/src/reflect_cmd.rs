@@ -28,6 +28,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use corpus_engine::{NoteRow, NoteStore, ToolCallLogRow};
 
 pub async fn run_reflect(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP);
+        return 0;
+    }
     // ── Arg parsing ─────────────────────────────────────────────────────────
     let mut since_days: u64 = 30;
     let mut raw = false;
@@ -72,13 +76,9 @@ pub async fn run_reflect(args: &[String]) -> i32 {
                 i += 1;
                 data_dir = args.get(i).map(PathBuf::from);
             }
-            "--help" | "-h" => {
-                print_usage();
-                return 0;
-            }
             other => {
                 eprintln!("Unknown flag: {other}");
-                print_usage();
+                crate::util::help::print(&HELP);
                 return 1;
             }
         }
@@ -714,31 +714,29 @@ fn confirm(prompt: &str) -> bool {
     matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
 }
 
-fn print_usage() {
-    eprintln!(
-        "Usage: sovereign reflect [flags]
-
-Flags:
-  --since <Nd|Nh>           Period to analyse (default: 30d)
-  --tool <name>             Filter signals to one tool
-  --raw                     Print full reflection prose ungrouped
-  --todos                   List open todo notes only
-  --log                     Show raw tool_call_log patterns
-  --history                 Include retired reflections
-
-Retirement:
-  --retire --tool <name> --reason \"<why>\"
-  --retire --id <uuid>   --reason \"<why>\"
-  --yes                     Skip confirmation prompt
-
-Data:
-  --data-dir <path>         Directory containing notes.db
-                            (default: ~/.sovereign/indexes/)
-
-Examples:
-  sovereign reflect
-  sovereign reflect --since 7d --tool blast_radius
-  sovereign reflect --retire --tool blast_radius --reason \"macro support added in v0.4.2\"
-  sovereign reflect --history --tool blast_radius"
-    );
-}
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign reflect",
+    summary: "Review session reflections and retire ones that are no longer relevant.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign reflect [flags]"),
+        crate::util::help::HelpSection::Flags(&[
+            ("--since <Nd|Nh>",    "Period to analyse (default: 30d)"),
+            ("--tool <name>",      "Filter signals to one tool"),
+            ("--raw",              "Print full reflection prose ungrouped"),
+            ("--todos",            "List open todo notes only"),
+            ("--log",              "Show raw tool_call_log patterns"),
+            ("--history",          "Include retired reflections"),
+            ("--retire",           "Retire matching reflections (requires --tool or --id + --reason)"),
+            ("--id <uuid>",        "Target a specific reflection for retirement"),
+            ("--reason <why>",     "Retirement rationale (required with --retire)"),
+            ("--yes",              "Skip retirement confirmation prompt"),
+            ("--data-dir <path>",  "Directory containing notes.db (default: ~/.sovereign/indexes)"),
+        ]),
+        crate::util::help::HelpSection::Examples(&[
+            ("sovereign reflect",                                           "30-day backlog summary"),
+            ("sovereign reflect --since 7d --tool blast_radius",            "Last week, one tool only"),
+            ("sovereign reflect --retire --tool blast_radius --reason \"macro support added in v0.4.2\"",
+             "Retire all blast_radius reflections"),
+        ]),
+    ],
+};

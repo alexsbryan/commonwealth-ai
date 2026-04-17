@@ -210,19 +210,29 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
     Ok(opts)
 }
 
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign setup",
+    summary: "First-run onboarding: detect hardware, download models, start the daemon.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign setup [--yes] [--reset] [--data-dir <path>]",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            ("--yes, -y",       "Non-interactive; accept recommended choices"),
+            ("--reset",         "Wipe config and re-run (uninstalls service first)"),
+            ("--data-dir <p>",  "Override the default data root (~/.sovereign)"),
+            ("--help, -h",      "Show this message"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Writes config to the XDG config dir (macOS: ~/Library/Application Support/sovereign/,\n\
+             Linux: ~/.config/sovereign/). Registers the daemon with launchd/systemd so it\n\
+             survives logout. Re-run with --reset to wipe and reconfigure.",
+        ),
+    ],
+};
+
 fn print_usage() {
-    eprintln!(
-        "sovereign setup — first-run onboarding\n\
-         \n\
-         Detects hardware, downloads models, writes ~/.config/sovereign/config.toml,\n\
-         and registers the daemon with launchd (macOS) or systemd (Linux).\n\
-         \n\
-         Flags:\n  \
-         --reset         Wipe config and re-run (uninstalls service first)\n  \
-         --yes, -y       Non-interactive; accept recommended choices\n  \
-         --data-dir <p>  Override the default data root (~/.sovereign)\n  \
-         --help, -h      Show this message"
-    );
+    crate::util::help::print(&HELP);
 }
 
 // ─── Model catalog + picker ───────────────────────────────────────
@@ -440,53 +450,10 @@ fn require_path(label: &str, missing_msg: &str) -> Result<PathBuf, String> {
     }
 }
 
+/// BYOM path prompt. Delegates to `util::prompts::prompt_path` which
+/// handles quote stripping, `~/` expansion, and existence checking.
 fn prompt_path(label: &str) -> Result<Option<PathBuf>, String> {
-    eprint!("{label}");
-    io::stderr().flush().ok();
-    let mut line = String::new();
-    io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
-    let trimmed = strip_quoting(line.trim());
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-    let expanded = if let Some(rest) = trimmed.strip_prefix("~/") {
-        dirs::home_dir()
-            .map(|h| h.join(rest))
-            .unwrap_or_else(|| PathBuf::from(&trimmed))
-    } else {
-        PathBuf::from(&trimmed)
-    };
-    if !expanded.exists() {
-        return Err(format!("file not found: {}", expanded.display()));
-    }
-    Ok(Some(expanded))
-}
-
-/// Strip surrounding single quotes, double quotes, or backticks from a
-/// user-pasted path. macOS Terminal, iTerm, and most shells wrap a
-/// drag-and-dropped path with single quotes (and escape embedded spaces
-/// with backslashes); pasting into our raw `read_line` then leaves the
-/// quotes embedded. Strip them so drag-and-drop "just works".
-fn strip_quoting(input: &str) -> String {
-    let s = input.trim();
-    let stripped = if s.len() >= 2 {
-        let first = s.chars().next().unwrap();
-        let last = s.chars().last().unwrap();
-        if (first == '\'' && last == '\'')
-            || (first == '"' && last == '"')
-            || (first == '`' && last == '`')
-        {
-            &s[1..s.len() - 1]
-        } else {
-            s
-        }
-    } else {
-        s
-    };
-    // Also undo common shell-escaping of spaces (`\ ` → ` `). Don't
-    // interpret other backslash escapes — a path with a literal `\n`
-    // should stay literal.
-    stripped.replace("\\ ", " ")
+    crate::util::prompts::prompt_path(label)
 }
 
 // ─── Downloaders ───────────────────────────────────────────────────
@@ -1069,51 +1036,7 @@ mod tests {
         );
     }
 
-    // ── strip_quoting ──────────────────────────────────────────────
-
-    #[test]
-    fn strip_quoting_removes_single_quotes_from_drag_and_drop() {
-        assert_eq!(
-            strip_quoting("'/Users/alice/models/qwen.gguf'"),
-            "/Users/alice/models/qwen.gguf"
-        );
-    }
-
-    #[test]
-    fn strip_quoting_removes_double_quotes() {
-        assert_eq!(
-            strip_quoting("\"/Users/alice/models/qwen.gguf\""),
-            "/Users/alice/models/qwen.gguf"
-        );
-    }
-
-    #[test]
-    fn strip_quoting_removes_backticks() {
-        assert_eq!(strip_quoting("`/Users/alice/my model.gguf`"), "/Users/alice/my model.gguf");
-    }
-
-    #[test]
-    fn strip_quoting_preserves_unquoted_path() {
-        assert_eq!(strip_quoting("/abs/path"), "/abs/path");
-    }
-
-    #[test]
-    fn strip_quoting_mismatched_quotes_left_alone() {
-        // A path like `foo'bar` must stay as `foo'bar` — only matching
-        // pairs at start+end are stripped.
-        assert_eq!(strip_quoting("'foo\"bar"), "'foo\"bar");
-    }
-
-    #[test]
-    fn strip_quoting_unescapes_backslash_space() {
-        // macOS drag-and-drop can produce `/path/with\ space` when dragging
-        // onto an unquoted prompt. Undo that so the resulting PathBuf
-        // compares equal to the user's intent.
-        assert_eq!(
-            strip_quoting("/Users/alice/my\\ models/qwen.gguf"),
-            "/Users/alice/my models/qwen.gguf"
-        );
-    }
+    // strip_quoting tests moved to util::prompts::tests — the function lives there now.
 
     // ── verify_gguf_non_empty ──────────────────────────────────────
 

@@ -73,9 +73,8 @@ fn default_client_port() -> u16 { 9741 }
 fn default_internal_port() -> u16 { 9742 }
 fn default_autostart() -> bool { true }
 fn default_data_dir() -> PathBuf {
-    dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| PathBuf::from("~/.sovereign"))
+    // Source of truth lives in `util::dirs`.
+    crate::util::dirs::sovereign_root()
 }
 
 impl SetupConfig {

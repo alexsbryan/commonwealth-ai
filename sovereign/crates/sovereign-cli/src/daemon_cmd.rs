@@ -31,34 +31,39 @@ use crate::setup_config::SetupConfig;
 /// Entry point routed from `main.rs` when the user invokes
 /// `sovereign daemon run`. Any other `daemon` subcommand prints usage.
 pub async fn run(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP);
+        return 0;
+    }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(&args[1..]).await,
-        Some("--help") | Some("-h") | Some("help") => {
-            print_usage();
-            0
-        }
         Some(other) => {
             eprintln!("error: unknown daemon subcommand '{other}'");
-            print_usage();
+            crate::util::help::print(&HELP);
             1
         }
         None => {
             // Bare `sovereign daemon` — user probably wanted help.
-            print_usage();
+            crate::util::help::print(&HELP);
             1
         }
     }
 }
 
-fn print_usage() {
-    eprintln!(
-        "sovereign daemon — long-running service (managed by launchd/systemd)\n\
-         \n\
-         Subcommands:\n  \
-         run    Run the daemon in the foreground. Normally invoked by the\n         \
-                service manager after `sovereign setup`. Exits on SIGINT/SIGTERM."
-    );
-}
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign daemon",
+    summary: "Long-running service managed by launchd (macOS) or systemd (Linux).",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign daemon run"),
+        crate::util::help::HelpSection::Subcommands(&[
+            ("run", "Run in the foreground; exits on SIGINT/SIGTERM"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "You don't normally invoke this directly. `sovereign setup` registers the\n\
+             service; the OS starts it via `daemon run`. Logs: ~/.sovereign/logs/daemon.log.",
+        ),
+    ],
+};
 
 async fn run_daemon(_args: &[String]) -> i32 {
     // ── Load config ───────────────────────────────────────────────

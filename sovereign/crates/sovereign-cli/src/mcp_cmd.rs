@@ -8,8 +8,12 @@ use sovereign_tools::mcp::config::{McpServerConfig, McpTransportConfig};
 
 /// Run an MCP subcommand. Returns the exit code.
 pub async fn run_mcp(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP);
+        return 0;
+    }
     if args.is_empty() {
-        print_mcp_usage();
+        crate::util::help::print(&HELP);
         return 1;
     }
 
@@ -17,29 +21,26 @@ pub async fn run_mcp(args: &[String]) -> i32 {
         "list" => cmd_list().await,
         "test" => cmd_test(&args[1..]).await,
         "tools" => cmd_tools(&args[1..]).await,
-        "help" | "--help" | "-h" => {
-            print_mcp_usage();
-            0
-        }
         other => {
             eprintln!("Unknown mcp subcommand: {other}");
-            print_mcp_usage();
+            crate::util::help::print(&HELP);
             1
         }
     }
 }
 
-fn print_mcp_usage() {
-    eprintln!(
-        "Usage: sovereign mcp <command>
-
-Commands:
-  list                     List configured MCP servers with status
-  test <server-name>       Test connection to a server
-  tools [server-name]      List available MCP tools
-  help                     Show this help"
-    );
-}
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign mcp",
+    summary: "Inspect and test configured MCP (Model Context Protocol) servers.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign mcp <command> [args]"),
+        crate::util::help::HelpSection::Subcommands(&[
+            ("list",               "List configured MCP servers with status"),
+            ("test <server>",      "Test connection to a named server"),
+            ("tools [server]",     "List available MCP tools (optionally for one server)"),
+        ]),
+    ],
+};
 
 async fn cmd_list() -> i32 {
     let configs = load_mcp_configs();

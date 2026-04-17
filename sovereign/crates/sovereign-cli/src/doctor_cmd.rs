@@ -721,7 +721,31 @@ async fn run_fix(results: &[CheckResult]) {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign doctor",
+    summary: "Diagnose setup and daemon health across the Sovereign / Commonwealth / OmO layers.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign doctor [--fix] [--watch] [--json]",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            ("--fix",    "Attempt automatic repair for failing checks"),
+            ("--watch",  "Re-run periodically (every 5s) with a clear screen"),
+            ("--json",   "Emit structured JSON (one object per check) for scripting"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Checks three layers: Sovereign (server, indexes, config), Commonwealth (daemon,\n\
+             mesh, inference), OmO (skill file, MCP round-trip). Exit 0 = all pass (warnings\n\
+             don't count), exit 1 = any failure.",
+        ),
+    ],
+};
+
 pub async fn run_doctor(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP);
+        return 0;
+    }
     let fix = args.iter().any(|a| a == "--fix");
     let watch = args.iter().any(|a| a == "--watch");
     let json = args.iter().any(|a| a == "--json");

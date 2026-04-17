@@ -22,25 +22,43 @@ use corpus_engine::{CorpusEngine, EmbedFn, RecipeRegistry, TestOptions};
 /// Run a `recipe` subcommand. Returns the exit code.
 pub async fn run_recipe(args: &[String]) -> i32 {
     if args.is_empty() {
-        print_usage();
+        crate::util::help::print(&HELP);
         return 1;
+    }
+    if matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        crate::util::help::print(&HELP);
+        return 0;
     }
 
     match args[0].as_str() {
         "test" => cmd_test(&args[1..]).await,
         "validate" => cmd_validate(&args[1..]).await,
         "list" => cmd_list(&args[1..]).await,
-        "help" | "--help" | "-h" => {
-            print_usage();
-            0
-        }
         other => {
             eprintln!("Unknown recipe subcommand: {other}");
-            print_usage();
+            crate::util::help::print(&HELP);
             1
         }
     }
 }
+
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign recipe",
+    summary: "Run corpus ingestion recipes: test, validate, list.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign recipe <subcommand> [args]"),
+        crate::util::help::HelpSection::Subcommands(&[
+            ("list",             "List all corpora available in the registry"),
+            ("test <path>",      "Run the full test harness against a recipe file"),
+            ("validate <path>",  "Validate recipe fields without downloading data"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "`list` takes --offline (skip live registry refresh).\n\
+             `test` takes --sample-size N, --output <path>, --offline, --verbose.\n\
+             `validate` takes --offline.",
+        ),
+    ],
+};
 
 // ── `recipe test` ───────────────────────────────────────────────────────────
 
@@ -287,24 +305,4 @@ fn build_stub_engine() -> CorpusEngine {
     CorpusEngine::new(tmp.clone(), tmp, stub_embed)
 }
 
-fn print_usage() {
-    eprintln!("Usage: sovereign recipe <subcommand> [options]");
-    eprintln!();
-    eprintln!("Subcommands:");
-    eprintln!("  list             List all corpora available in the registry");
-    eprintln!("  test <path>      Run the full test harness against a recipe file");
-    eprintln!("  validate <path>  Validate recipe fields without downloading data");
-    eprintln!();
-    eprintln!("Options for 'list':");
-    eprintln!("  --offline        Use bundled snapshot; skip live registry refresh");
-    eprintln!();
-    eprintln!("Options for 'test':");
-    eprintln!("  --sample-size N  Number of records to sample (default: 100)");
-    eprintln!("  --output <path>  Where to write TEST_REPORT.md (default: <recipe_dir>/)");
-    eprintln!("  --no-embed       Skip embedding and search test (default: always skipped here)");
-    eprintln!("  --offline        Skip source URL reachability check");
-    eprintln!("  --verbose, -v    Print per-record extraction outcome");
-    eprintln!();
-    eprintln!("Options for 'validate':");
-    eprintln!("  --offline        Skip source URL reachability check");
-}
+// print_usage replaced by crate::util::help::print(&HELP); see HELP const above.

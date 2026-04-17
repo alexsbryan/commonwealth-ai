@@ -17,9 +17,16 @@ use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
 // ─── Dispatch ────────────────────────────────────────────────
 
 pub async fn run_project(args: &[String]) -> i32 {
+    // Top-level `project --help` / `project -h` / `project help`.
+    // Specific sub-subcommand help (e.g. `project init --help`) is
+    // handled inside each cmd_* function via `util::help::wants_help`.
     if args.is_empty() {
-        print_usage();
+        crate::util::help::print(&HELP);
         return 1;
+    }
+    if matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        crate::util::help::print(&HELP);
+        return 0;
     }
 
     match args[0].as_str() {
@@ -28,49 +35,104 @@ pub async fn run_project(args: &[String]) -> i32 {
         "refresh" => cmd_refresh(&args[1..]).await,
         "serve" => cmd_serve(&args[1..]).await,
         "install-hooks" => cmd_install_hooks(&args[1..]).await,
-        "help" | "--help" | "-h" => {
-            print_usage();
-            0
-        }
         other => {
             eprintln!("Unknown project subcommand: {other}");
-            print_usage();
+            crate::util::help::print(&HELP);
             1
         }
     }
 }
 
-fn print_usage() {
-    eprintln!(
-        "Usage: sovereign project <command>
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project",
+    summary: "Per-project code intelligence: indexes, call graphs, and the MCP tool server.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign project <subcommand> [flags]"),
+        crate::util::help::HelpSection::Subcommands(&[
+            ("init",           "Set up code intelligence for the current workspace"),
+            ("status",         "Show the status of code intelligence"),
+            ("refresh",        "Re-export the SCIP call graph (runs automatically on commit)"),
+            ("serve",          "Start a lightweight MCP server (no model required)"),
+            ("install-hooks",  "Upgrade (or install) the post-commit hook without re-running init"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Run `sovereign project <subcommand> --help` for subcommand-specific flags.",
+        ),
+    ],
+};
 
-Commands:
-  init                Set up code intelligence for the current workspace
-    --name <id>           Corpus ID (default: directory name)
-    --no-scip             Skip SCIP call graph export
-    --no-hooks            Skip git hook installation
-    --no-claude-config    Skip writing .claude/settings.json
-    --port <port>         MCP server port (default: 9741)
-    --data-dir <dir>      Index directory (default: ~/.sovereign/indexes)
-    --workspace-root <p>  Monorepo root containing multiple workspace dirs.
-                          When set, sovereign discovers all Cargo/Go/etc.
-                          workspaces under <p> and analyzes them together.
-                          Use this when your project lives alongside sibling
-                          workspaces in a shared parent directory.
-                          Example: sovereign project init --workspace-root ..
+const HELP_INIT: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project init",
+    summary: "Set up code intelligence for the workspace in the current directory.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign project init [--name <id>] [--port <port>]\n    \
+             [--data-dir <dir>] [--workspace-root <path>]\n    \
+             [--no-scip] [--no-hooks] [--no-claude-config]",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            ("--name <id>",          "Corpus ID (default: directory name)"),
+            ("--port <port>",        "MCP server port (default: 9741)"),
+            ("--data-dir <dir>",     "Index directory (default: ~/.sovereign/indexes)"),
+            ("--workspace-root <p>", "Monorepo root; discover every Cargo/Go/etc. workspace under <p>"),
+            ("--no-scip",            "Skip SCIP call graph export"),
+            ("--no-hooks",           "Skip git hook installation"),
+            ("--no-claude-config",   "Skip writing .claude/settings.json (overrides harness prompt)"),
+        ]),
+        crate::util::help::HelpSection::Examples(&[
+            ("sovereign project init",                           "Index the current workspace"),
+            ("sovereign project init --workspace-root ..",       "Index a monorepo from a sibling dir"),
+            ("sovereign project init --no-scip",                 "Skip call graph (no exporter installed)"),
+        ]),
+    ],
+};
 
-  status              Show the status of code intelligence
-  refresh             Update the call graph (runs automatically on commit)
-    --quiet           Suppress progress output
-  serve               Start a lightweight MCP server (no model required)
-    --port <port>         Listen port (default: 9741)
-    --data-dir <dir>      Index directory (default: ~/.sovereign/indexes)
-    --sovereign-dir <dir> Path to .sovereign/ dir (default: nearest ancestor with .sovereign/)
-  install-hooks       Upgrade (or install) the post-commit hook in this repo
-                      without re-running init
-  help                Show this help"
-    );
-}
+const HELP_SERVE: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project serve",
+    summary: "Start a lightweight MCP server for locally-indexed projects (no model required).",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign project serve [--port <port>] [--data-dir <dir>]\n    \
+             [--sovereign-dir <dir>]",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            ("--port <port>",         "Listen port (default: 9741)"),
+            ("--data-dir <dir>",      "Index directory (default: ~/.sovereign/indexes)"),
+            ("--sovereign-dir <dir>", "Path to .sovereign/ (default: nearest ancestor with .sovereign/)"),
+        ]),
+    ],
+};
+
+const HELP_STATUS: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project status",
+    summary: "Show the status of code intelligence for the current project.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign project status"),
+    ],
+};
+
+const HELP_REFRESH: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project refresh",
+    summary: "Re-export the SCIP call graph. Runs automatically on commit via the installed hook.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign project refresh [--quiet]"),
+        crate::util::help::HelpSection::Flags(&[
+            ("--quiet", "Suppress progress output (use from hook scripts)"),
+        ]),
+    ],
+};
+
+const HELP_INSTALL_HOOKS: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project install-hooks",
+    summary: "Upgrade (or install) the post-commit hook in the current repo.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign project install-hooks"),
+        crate::util::help::HelpSection::Notes(
+            "Use this when you've upgraded sovereign-cli and want the hook to pick up the new\n\
+             binary without re-running `sovereign project init`.",
+        ),
+    ],
+};
 
 // ─── Init helpers ────────────────────────────────────────────
 
@@ -161,6 +223,10 @@ async fn fetch_commonwealth_models(commonwealth_url: &str) -> Vec<String> {
 // ─── Init ────────────────────────────────────────────────────
 
 async fn cmd_init(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_INIT);
+        return 0;
+    }
     let mut name: Option<String> = None;
     let mut no_scip = false;
     let mut no_hooks = false;
@@ -803,6 +869,10 @@ vector = false
 // ─── Status ──────────────────────────────────────────────────
 
 async fn cmd_status(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_STATUS);
+        return 0;
+    }
     let mut data_dir: Option<PathBuf> = None;
 
     let mut i = 0;
@@ -987,6 +1057,10 @@ async fn cmd_status(args: &[String]) -> i32 {
 // ─── Refresh ─────────────────────────────────────────────────
 
 async fn cmd_refresh(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_REFRESH);
+        return 0;
+    }
     let mut quiet = false;
     let mut data_dir: Option<PathBuf> = None;
 
@@ -1154,6 +1228,10 @@ async fn cmd_refresh(args: &[String]) -> i32 {
 // ─── Serve ───────────────────────────────────────────────────
 
 async fn cmd_serve(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_SERVE);
+        return 0;
+    }
     let mut port: u16 = 9741;
     let mut data_dir: Option<PathBuf> = None;
     let mut sovereign_dir_arg: Option<PathBuf> = None;
@@ -2608,7 +2686,11 @@ fn update_gitignore(root: &Path) -> std::io::Result<()> {
 /// Upgrade (or install) the post-commit hook in the current repo without
 /// running the full `project init` pipeline. Safe to re-run; detects and
 /// rewrites prior-version hook blocks in place.
-async fn cmd_install_hooks(_args: &[String]) -> i32 {
+async fn cmd_install_hooks(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_INSTALL_HOOKS);
+        return 0;
+    }
     let repo_root = match find_repo_root() {
         Some(r) => r,
         None => {
@@ -2850,7 +2932,13 @@ async fn check_mcp_server(url: &str) -> bool {
 // ─── Helpers ─────────────────────────────────────────────────
 
 fn default_data_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".sovereign").join("indexes"))
+    // Thin wrapper around util::dirs::sovereign_indexes(), kept as an
+    // `Option<PathBuf>` so existing `.or_else(default_data_dir)` call
+    // sites don't need to change shape. Returns None only when the home
+    // directory can't be resolved — rare, and the callers already handle
+    // the fallback to `./sovereign-indexes`.
+    let p = crate::util::dirs::sovereign_indexes();
+    if p == PathBuf::from(".") { None } else { Some(p) }
 }
 
 fn tempfile_dir() -> std::io::Result<PathBuf> {

@@ -26,8 +26,12 @@ use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
 /// Run a `code` subcommand. Returns the exit code.
 pub async fn run_code(args: &[String]) -> i32 {
     if args.is_empty() {
-        print_usage();
+        crate::util::help::print(&HELP);
         return 1;
+    }
+    if matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        crate::util::help::print(&HELP);
+        return 0;
     }
 
     match args[0].as_str() {
@@ -35,44 +39,31 @@ pub async fn run_code(args: &[String]) -> i32 {
         "watch" => cmd_watch(&args[1..]).await,
         "mcp-status" => cmd_mcp_status(&args[1..]).await,
         "search" => cmd_search(&args[1..]).await,
-        "help" | "--help" | "-h" => {
-            print_usage();
-            0
-        }
         other => {
             eprintln!("Unknown code subcommand: {other}");
-            print_usage();
+            crate::util::help::print(&HELP);
             1
         }
     }
 }
 
-fn print_usage() {
-    eprintln!(
-        "Usage: sovereign code <command>
-
-Commands:
-  index <path>        Index a local repository with tree-sitter
-    --corpus-id <id>  Corpus identifier (default: basename of <path>)
-    --data-dir <dir>  Index directory (default: ~/.sovereign/indexes)
-
-  watch <corpus-id>   Run a filesystem watcher that re-indexes files on save
-    --root <path>     Override the source root stored at ingest time
-    --data-dir <dir>  Index directory (default: ~/.sovereign/indexes)
-
-  mcp-status          Ping the local MCP server and list exposed tools
-    --url <url>       Override the default http://localhost:9741/mcp
-
-  search <query>      Semantic search (use the Sovereign chat or MCP for now)
-  help                Show this help
-
-Code Intelligence phases:
-  P1  — corpus indexing via `code index`
-  P2  — five tools (symbol_lookup, code_search, recent_changes, find_callees, find_callers)
-  P3  — filesystem watcher (this command)
-  P4  — MCP HTTP server"
-    );
-}
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign code",
+    summary: "Code intelligence tooling: index a repository, watch for changes, check MCP.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign code <subcommand> [args]"),
+        crate::util::help::HelpSection::Subcommands(&[
+            ("index <path>",       "Index a local repository with tree-sitter"),
+            ("watch <corpus-id>",  "Run a filesystem watcher that re-indexes on save"),
+            ("mcp-status",         "Ping the local MCP server and list exposed tools"),
+            ("search <query>",     "(placeholder) Use the Sovereign chat or MCP for now"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "`index` and `watch` take --corpus-id <id>, --data-dir <dir>, --root <path>.\n\
+             `mcp-status` accepts --url <url> to override http://localhost:9741/mcp.",
+        ),
+    ],
+};
 
 // ─── index ────────────────────────────────────────────────────
 
@@ -112,7 +103,7 @@ async fn cmd_index(args: &[String]) -> i32 {
 
     let Some(path) = path_arg else {
         eprintln!("error: missing <path>");
-        print_usage();
+        crate::util::help::print(&HELP);
         return 1;
     };
 
@@ -506,7 +497,11 @@ async fn cmd_search(args: &[String]) -> i32 {
 // ─── helpers ──────────────────────────────────────────────────
 
 fn default_data_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".sovereign").join("indexes"))
+    // Mirrors project_cmd::default_data_dir; both just wrap
+    // `util::dirs::sovereign_indexes()` but keep the Option return so
+    // existing `.or_else(default_data_dir)` callers stay stable.
+    let p = crate::util::dirs::sovereign_indexes();
+    if p == PathBuf::from(".") { None } else { Some(p) }
 }
 
 fn tempfile_dir() -> std::io::Result<PathBuf> {
