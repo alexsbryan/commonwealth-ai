@@ -94,6 +94,10 @@ notify                 = { version = "8",    optional = true }
 rusqlite               = { version = "0.35", features = ["bundled"], optional = true }
 prost                  = { version = "0.13", optional = true }
 which                  = { version = "7",    optional = true }
+# Cross-process file locking for the SCIP rebuild guard. Cheaper than a
+# lockfile + PID dance; kernel releases the lock automatically on process
+# death so we can't leak a stale lock from a crashed writer.
+fs4                    = { version = "0.12", optional = true }
 
 [features]
 default = []
@@ -111,6 +115,7 @@ treesitter = [
     "dep:rusqlite",
     "dep:prost",
     "dep:which",
+    "dep:fs4",
 ]
 
 [dev-dependencies]

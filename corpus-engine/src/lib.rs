@@ -75,7 +75,10 @@ pub use types::{
 };
 
 #[cfg(feature = "treesitter")]
-pub use scip_graph::{ScipGraph, ScipGraphStats, ScipSymbolRecord, ScipRefRecord, BlastEntry, BlastRadiusResult};
+pub use scip_graph::{
+    BlastEntry, BlastRadiusResult, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
+    ScipRefRecord, ScipSymbolRecord, SCHEMA_VERSION,
+};
 
 #[cfg(feature = "treesitter")]
 pub use update::watcher_coordinator::{

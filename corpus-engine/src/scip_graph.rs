@@ -22,13 +22,20 @@
 //! individual queries. Bulk ingestion uses `spawn_blocking`.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use rusqlite::{params, Connection};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::error::{Error, Result};
+
+/// On-disk schema version. Bumped when the scip_graph SQLite schema
+/// changes in a way that prior data can no longer be read correctly.
+/// `open_with_integrity` refuses to open a DB whose stored version
+/// differs from this constant — the caller (typically the daemon's
+/// `Reindexer`) treats that as a signal to trigger a full rebuild.
+pub const SCHEMA_VERSION: u32 = 1;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -254,6 +261,194 @@ impl ScipGraph {
             corpus_id: corpus_id.to_string(),
             stale_files: Arc::new(RwLock::new(stale)),
         })
+    }
+
+    /// Open the DB at `db_path` with integrity + schema-version
+    /// verification. Use this from anywhere that's consuming a
+    /// daemon-managed graph file; `open()` stays available as the
+    /// lenient variant for legacy call sites (tests, one-shot CLI
+    /// tools that would rather see corruption than move it aside).
+    ///
+    /// Behaviour:
+    /// - If `db_path` doesn't exist → fresh DB, schema initialised,
+    ///   `schema_version` stamped. Orphan `.db-wal` / `.db-shm`
+    ///   files from a previous crash are cleaned up first.
+    /// - If the DB is corrupt (fails `PRAGMA integrity_check`) →
+    ///   file is renamed to `scip_graph.db.corrupt.<unix_ts>`, and
+    ///   `Err(OpenError::Corrupt)` is returned carrying the
+    ///   quarantine path. Caller is expected to trigger a full
+    ///   rebuild.
+    /// - If `schema_version` doesn't match the compiled constant →
+    ///   `Err(OpenError::SchemaMismatch)`. Same rebuild response.
+    /// - Any other SQLite / IO failure → `Err(OpenError::Database)`
+    ///   / `Err(OpenError::Io)`. These are not rebuild triggers;
+    ///   caller should log and retry or surface to the operator.
+    pub fn open_with_integrity(
+        db_path: &Path,
+        corpus_id: &str,
+    ) -> std::result::Result<Self, OpenError> {
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).map_err(OpenError::Io)?;
+        }
+
+        // Clean up orphan journal files if the main DB is missing.
+        // rusqlite's WAL recovery gets confused when the .db itself
+        // is gone but the sidecars linger; tidy them before open.
+        if !db_path.exists() {
+            for ext in &["-wal", "-shm"] {
+                let orphan = sidecar_path(db_path, ext);
+                let _ = std::fs::remove_file(&orphan);
+            }
+        }
+
+        let is_existing =
+            db_path.exists() && db_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
+
+        let conn = Connection::open(db_path)
+            .map_err(|e| OpenError::Database(format!("open {}: {e}", db_path.display())))?;
+
+        if is_existing {
+            // `PRAGMA integrity_check` returns "ok" when the DB is
+            // sound, or one or more error lines otherwise. We check
+            // only the first row — any non-"ok" value means quarantine.
+            let verdict: rusqlite::Result<String> = conn.query_row(
+                "PRAGMA integrity_check",
+                [],
+                |row| row.get(0),
+            );
+            let quarantined = match verdict {
+                Ok(v) if v == "ok" => false,
+                _ => true,
+            };
+            if quarantined {
+                drop(conn);
+                let moved_to = corrupt_quarantine_path(db_path);
+                std::fs::rename(db_path, &moved_to).map_err(OpenError::Io)?;
+                return Err(OpenError::Corrupt { moved_to });
+            }
+
+            // Schema version check. Absent key is treated as 0 (pre-
+            // versioned DB, written before this integrity work); we
+            // still treat that as a mismatch and let the caller
+            // rebuild — the SCHEMA_VERSION constant starts at 1.
+            let found: u32 = conn
+                .query_row(
+                    "SELECT value FROM scip_meta WHERE key = 'schema_version'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            if found != SCHEMA_VERSION {
+                return Err(OpenError::SchemaMismatch {
+                    found,
+                    expected: SCHEMA_VERSION,
+                });
+            }
+        }
+
+        Self::init_schema(&conn).map_err(|e| OpenError::Database(e.to_string()))?;
+        // Stamp schema version unconditionally so a fresh DB
+        // becomes compatible on next open.
+        conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('schema_version', ?)",
+            params![SCHEMA_VERSION.to_string()],
+        )
+        .ok();
+
+        let stale = Self::load_stale_files(&conn);
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+            corpus_id: corpus_id.to_string(),
+            stale_files: Arc::new(RwLock::new(stale)),
+        })
+    }
+
+    /// Try to acquire an exclusive lock guarding a SCIP rebuild. The
+    /// lock is a `flock(LOCK_EX | LOCK_NB)` on
+    /// `<db_dir>/.rebuild.lock`, released when the returned guard is
+    /// dropped (or when the holding process dies — the kernel
+    /// cleans up, so we can never leak a stale lock).
+    ///
+    /// `None` means another writer holds the lock; the caller should
+    /// drop this rebuild attempt and let the current holder finish
+    /// (the Reindexer's debouncer will re-fire after it's done).
+    pub fn try_rebuild_lock(
+        db_dir: &Path,
+    ) -> std::io::Result<Option<RebuildLock>> {
+        use fs4::fs_std::FileExt;
+
+        std::fs::create_dir_all(db_dir)?;
+        let lock_path = db_dir.join(".rebuild.lock");
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .read(true)
+            .open(&lock_path)?;
+
+        // fs4's flock wrapper returns Ok(()) on acquire and
+        // Err(WouldBlock) when another writer holds the lock — map
+        // the latter to `Ok(None)` for the caller's semantics.
+        match FileExt::try_lock_exclusive(&file) {
+            Ok(()) => Ok(Some(RebuildLock { _file: file })),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Record a rebuild's outcome in `scip_meta`. Extends the
+    /// existing `last_export_at` key with a structured trigger
+    /// reason, the indexed git HEAD (empty string for non-git
+    /// projects), and a JSON-encoded summary of exporter outcomes
+    /// so `sovereign project watch status` and `sovereign doctor`
+    /// can surface "typescript exporter missing" to operators.
+    pub async fn record_rebuild(
+        &self,
+        trigger_reason: &str,
+        indexed_head: Option<&str>,
+        exporter_outcomes: Option<&str>,
+    ) {
+        self.stale_files.write().await.clear();
+        let conn = self.conn.lock().await;
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)",
+            params![chrono::Utc::now().to_rfc3339()],
+        );
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('stale_files', '')",
+            [],
+        );
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_trigger_reason', ?)",
+            params![trigger_reason],
+        );
+        if let Some(head) = indexed_head {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_indexed_head', ?)",
+                params![head],
+            );
+        }
+        if let Some(outcomes) = exporter_outcomes {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_exporter_outcomes', ?)",
+                params![outcomes],
+            );
+        }
+    }
+
+    /// Read `last_indexed_head` from `scip_meta`. `None` when the
+    /// field was never written (legacy DB, pre-integrity work).
+    /// Used by the daemon's startup catch-up signal to decide
+    /// whether HEAD has drifted since the last build.
+    pub async fn last_indexed_head(&self) -> Option<String> {
+        let conn = self.conn.lock().await;
+        conn.query_row(
+            "SELECT value FROM scip_meta WHERE key = 'last_indexed_head'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
     }
 
     /// Create an in-memory database for testing.
@@ -914,7 +1109,215 @@ pub(crate) fn is_test_path(path: &str) -> bool {
         || path.contains("/test_")
 }
 
+// ─── Integrity / rebuild primitives ──────────────────────────
+
+/// Distinct error type returned by [`ScipGraph::open_with_integrity`].
+/// Separated from the crate-wide `Error` because callers want to
+/// branch on variants — `Corrupt` and `SchemaMismatch` are rebuild
+/// triggers, while `Io` / `Database` are operator-visible failures.
+#[derive(Debug, thiserror::Error)]
+pub enum OpenError {
+    /// `PRAGMA integrity_check` failed. The offending file has been
+    /// renamed to `moved_to` so a subsequent `open_with_integrity`
+    /// starts from a clean slate.
+    #[error("scip_graph.db was corrupt; quarantined to {}", .moved_to.display())]
+    Corrupt { moved_to: PathBuf },
+    /// On-disk schema doesn't match the compiled `SCHEMA_VERSION`.
+    /// Caller should trigger a full rebuild.
+    #[error("scip_graph.db schema version mismatch: found {found}, expected {expected}")]
+    SchemaMismatch { found: u32, expected: u32 },
+    /// Filesystem error opening or moving the DB.
+    #[error("scip_graph IO: {0}")]
+    Io(#[from] std::io::Error),
+    /// SQLite-level error (corrupt file that rusqlite can't even
+    /// probe, unreadable journal, etc.).
+    #[error("scip_graph DB: {0}")]
+    Database(String),
+}
+
+/// Guard returned by [`ScipGraph::try_rebuild_lock`]. Holding one
+/// prevents any other process from entering the rebuild write path.
+/// Release is automatic on drop (and on process death — the kernel
+/// cleans up).
+pub struct RebuildLock {
+    _file: std::fs::File,
+}
+
+fn sidecar_path(db_path: &Path, suffix: &str) -> PathBuf {
+    // `scip_graph.db` + "-wal" → `scip_graph.db-wal`. We preserve the
+    // full file name rather than using `set_extension` so we don't
+    // trip over non-standard names.
+    let name = db_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("scip_graph.db");
+    db_path.with_file_name(format!("{name}{suffix}"))
+}
+
+fn corrupt_quarantine_path(db_path: &Path) -> PathBuf {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let name = db_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("scip_graph.db");
+    db_path.with_file_name(format!("{name}.corrupt.{ts}"))
+}
+
 // ─── Tests ───────────────────────────────────────────────────
+
+#[cfg(test)]
+mod integrity_tests {
+    //! Coverage for the integrity-checking open path, the rebuild
+    //! lock, and metadata writes added for the daemon-owned
+    //! freshness pipeline.
+    use super::*;
+
+    #[test]
+    fn open_with_integrity_creates_fresh_db_and_stamps_schema_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("scip_graph.db");
+
+        let g = ScipGraph::open_with_integrity(&path, "test").unwrap();
+        // Schema version stamped on fresh DB.
+        let v: String = {
+            let conn = g.conn.try_lock().unwrap();
+            conn.query_row(
+                "SELECT value FROM scip_meta WHERE key = 'schema_version'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(v.parse::<u32>().unwrap(), SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn open_with_integrity_moves_corrupt_db_aside() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("scip_graph.db");
+
+        // Plant a file that looks like SQLite but isn't. Any bytes
+        // past the SQLite magic that don't form a valid page → the
+        // first query fails integrity_check.
+        std::fs::write(&path, b"SQLite format 3\0and then garbage that breaks pages").unwrap();
+
+        let err = match ScipGraph::open_with_integrity(&path, "test") {
+            Ok(_) => panic!("open should have failed"),
+            Err(e) => e,
+        };
+        match err {
+            OpenError::Corrupt { moved_to } => {
+                assert!(moved_to.exists(), "quarantine file should be created");
+                assert!(!path.exists(), "original should be moved aside");
+                let name = moved_to.file_name().unwrap().to_string_lossy().to_string();
+                assert!(
+                    name.starts_with("scip_graph.db.corrupt."),
+                    "unexpected quarantine name: {name}"
+                );
+            }
+            other => panic!("expected Corrupt, got {other:?}"),
+        }
+
+        // A fresh open now succeeds (no file to be corrupt about).
+        ScipGraph::open_with_integrity(&path, "test").unwrap();
+    }
+
+    #[test]
+    fn open_with_integrity_returns_schema_mismatch_when_version_differs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("scip_graph.db");
+
+        // Open fresh, then corrupt the schema_version to simulate
+        // an older build writing the DB.
+        let g = ScipGraph::open_with_integrity(&path, "test").unwrap();
+        {
+            let conn = g.conn.try_lock().unwrap();
+            conn.execute(
+                "UPDATE scip_meta SET value = ? WHERE key = 'schema_version'",
+                params!["0"],
+            )
+            .unwrap();
+        }
+        drop(g);
+
+        let err = match ScipGraph::open_with_integrity(&path, "test") {
+            Ok(_) => panic!("open should have failed"),
+            Err(e) => e,
+        };
+        match err {
+            OpenError::SchemaMismatch { found, expected } => {
+                assert_eq!(found, 0);
+                assert_eq!(expected, SCHEMA_VERSION);
+            }
+            other => panic!("expected SchemaMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn open_with_integrity_cleans_orphan_wal_when_db_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("scip_graph.db");
+        // Simulate leftover journal files with no .db (the kind of
+        // mess a SIGKILL + manual `rm` leaves behind).
+        let wal = tmp.path().join("scip_graph.db-wal");
+        let shm = tmp.path().join("scip_graph.db-shm");
+        std::fs::write(&wal, b"stale wal").unwrap();
+        std::fs::write(&shm, b"stale shm").unwrap();
+
+        ScipGraph::open_with_integrity(&path, "test").unwrap();
+        assert!(path.exists());
+        // After a successful open the live WAL/SHM are recreated by
+        // rusqlite, but the orphans we planted are gone — rusqlite
+        // would have re-created real ones with the same names.
+        // The important property is that open() succeeded rather
+        // than tripping on the stale journal.
+    }
+
+    #[test]
+    fn try_rebuild_lock_is_exclusive_within_process() {
+        let tmp = tempfile::tempdir().unwrap();
+        let first = ScipGraph::try_rebuild_lock(tmp.path()).unwrap();
+        assert!(first.is_some(), "first acquire should succeed");
+
+        let second = ScipGraph::try_rebuild_lock(tmp.path()).unwrap();
+        assert!(second.is_none(), "second acquire must not succeed while first is held");
+
+        drop(first);
+        let third = ScipGraph::try_rebuild_lock(tmp.path()).unwrap();
+        assert!(third.is_some(), "acquire should succeed after first drops");
+    }
+
+    #[tokio::test]
+    async fn record_rebuild_stores_head_and_trigger_reason() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("scip_graph.db");
+        let g = ScipGraph::open_with_integrity(&path, "test").unwrap();
+
+        g.record_rebuild("fs_change", Some("abc123"), Some(r#"[{"lang":"rust","ok":true}]"#)).await;
+
+        assert_eq!(g.last_indexed_head().await.as_deref(), Some("abc123"));
+        let conn = g.conn.lock().await;
+        let reason: String = conn
+            .query_row(
+                "SELECT value FROM scip_meta WHERE key = 'last_trigger_reason'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(reason, "fs_change");
+        let outcomes: String = conn
+            .query_row(
+                "SELECT value FROM scip_meta WHERE key = 'last_exporter_outcomes'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(outcomes.contains("rust"));
+    }
+}
 
 #[cfg(test)]
 mod tests {

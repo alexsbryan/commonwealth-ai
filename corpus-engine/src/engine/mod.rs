@@ -74,7 +74,7 @@ impl CorpusEngine {
             batch_embed: None,
             inference: None,
             fast_inference: None,
-            expected_embedding_model: "nomic-embed-text-v2".to_string(),
+            expected_embedding_model: "qwen3-embedding-0.6b".to_string(),
         }
     }
 
@@ -440,8 +440,8 @@ impl CorpusEngine {
         let info = index.info().await?;
 
         // Warn on mismatch rather than hard-erroring so that indexes written
-        // before the model name was recorded correctly (they all stored the
-        // placeholder "nomic-embed-text-v2") remain searchable after the fix.
+        // before the model name was recorded correctly (they originally
+        // stored a placeholder default) remain searchable after the fix.
         // A true incompatibility (different dimensionality) will surface as a
         // search error anyway; the string check is informational only.
         if info.embedding_model != self.expected_embedding_model {
@@ -1000,7 +1000,7 @@ mod tests {
     #[tokio::test]
     async fn open_index_allows_model_mismatch_with_warning() {
         // Model-name mismatches are downgraded to warnings so that indexes
-        // written before the placeholder "nomic-embed-text-v2" was fixed
+        // written before the embedding-model default was formalised
         // remain searchable.  A true dimensionality mismatch surfaces as a
         // search error, so blocking open() adds no safety.
         let dir = tempfile::tempdir().unwrap();

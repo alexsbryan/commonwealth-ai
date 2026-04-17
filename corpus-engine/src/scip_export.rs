@@ -279,7 +279,11 @@ pub async fn export_all(
     output_dir: &Path,
     graph: &ScipGraph,
     workspace_roots: Option<&[std::path::PathBuf]>,
-    progress: &dyn Fn(ScipProgress<'_>),
+    // `+ Send + Sync` makes the reference safe to hold across
+    // `await` boundaries in `tokio::spawn`'d tasks. The previous
+    // signature was sound for CLI use, where the task is never
+    // moved across threads, but broke the daemon's Reindexer.
+    progress: &(dyn Fn(ScipProgress<'_>) + Send + Sync),
 ) -> Result<ExportSummary> {
     // Resolve the workspace roots to run exporters in.
     let owned_auto: Vec<std::path::PathBuf>;

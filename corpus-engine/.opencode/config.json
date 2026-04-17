@@ -1,0 +1,24 @@
+{
+  "mcp": {
+    "servers": {
+      "sovereign": {
+        "type": "http",
+        "url": "http://localhost:9741/mcp"
+      }
+    }
+  },
+  "provider": {
+    "commonwealth": {
+      "models": {
+        "auto": {
+          "name": "Commonwealth (auto-routed)"
+        }
+      },
+      "name": "Commonwealth Mesh",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://localhost:9741/v1"
+      }
+    }
+  }
+}

@@ -63,7 +63,7 @@ fn default_overlap_chars() -> usize {
 }
 
 fn default_embedding_model() -> String {
-    "nomic-embed-text-v2".to_string()
+    "qwen3-embedding-0.6b".to_string()
 }
 
 fn default_embedding_dimensions() -> usize {
@@ -80,7 +80,7 @@ fn default_embedding_dimensions() -> usize {
 pub struct PrebuiltConfig {
     /// HuggingFace repo in `org/name` format, e.g. `"sovereign-foundation/wikipedia-index"`.
     pub hf_repo: String,
-    /// Filename within the HF repo, e.g. `"wikipedia-nomic-embed-text-v2.tar.zst"`.
+    /// Filename within the HF repo, e.g. `"wikipedia-qwen3-embedding-0.6b.tar.zst"`.
     pub hf_filename: String,
     /// Hex-encoded SHA-256 of the archive. Empty string skips verification.
     pub sha256: String,
@@ -624,7 +624,7 @@ type = "paragraph"
         // IndexConfig should use defaults
         assert!(recipe.index.fts);
         assert!(recipe.index.vector);
-        assert_eq!(recipe.index.embedding_model, "nomic-embed-text-v2");
+        assert_eq!(recipe.index.embedding_model, "qwen3-embedding-0.6b");
         assert_eq!(recipe.index.embedding_dimensions, 0); // 0 = auto-detect
     }
 
