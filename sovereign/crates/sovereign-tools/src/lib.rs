@@ -29,6 +29,8 @@ pub use code::{WriteNoteTool, ReadNotesTool, DeleteNoteTool};
 #[cfg(feature = "treesitter")]
 pub use code::BlastRadiusTool;
 #[cfg(feature = "treesitter")]
+pub use code::{IndexHealth, IndexHealthChecker, StalenessLevel};
+#[cfg(feature = "treesitter")]
 pub use code::ProjectContextTool;
 #[cfg(feature = "treesitter")]
 pub use code::SessionReflectionTool;

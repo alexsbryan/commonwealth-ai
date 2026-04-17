@@ -117,6 +117,16 @@ impl Tool for SymbolLookupTool {
             })?;
 
         if rows.is_empty() {
+            // Check if the code index is absent (vs. just missing this symbol).
+            let indexes = self.engine.installed_indexes().await.unwrap_or_default();
+            if indexes.is_empty() {
+                return Ok(StepOutput::Text(format!(
+                    "No symbol named `{name}` found — no code indexes are installed.\n\n\
+                     ---\nIndex: absent | 0 symbols\n\
+                     Code index not built. Run `sovereign code index <path>` \
+                     to enable symbol lookup."
+                )));
+            }
             return Ok(StepOutput::Text(format!(
                 "No symbol named `{name}` found in any installed code corpus.\n\n\
                  Try `code_search` with a description of what you're looking \

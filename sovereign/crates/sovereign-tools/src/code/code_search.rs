@@ -231,7 +231,19 @@ impl Tool for CodeSearchTool {
         });
         rows.truncate(8);
 
-        Ok(StepOutput::Text(format_approximate_response(query, &rows)))
+        let mut text = format_approximate_response(query, &rows);
+
+        // Append index health note when no code indexes are present.
+        let indexes = self.engine.installed_indexes().await.unwrap_or_default();
+        if indexes.is_empty() {
+            text.push_str(
+                "\n\n---\nIndex: absent | 0 symbols\n\
+                 Code index not built. Run `sovereign code index <path>` \
+                 to enable semantic code search.",
+            );
+        }
+
+        Ok(StepOutput::Text(text))
     }
 }
 

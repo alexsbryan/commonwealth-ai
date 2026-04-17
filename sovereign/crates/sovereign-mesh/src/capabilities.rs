@@ -60,6 +60,8 @@ pub async fn build_local_capabilities(
         hosted_corpora,
         reported_at: now_secs,
         inference_availability,
+        inference_capable: false,
+        loaded_models: Vec::new(),
     }
 }
 

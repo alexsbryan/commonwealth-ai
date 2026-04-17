@@ -1,11 +1,21 @@
 //! Startup diagnostics and UX helpers.
 
 /// Query the Commonwealth daemon for mesh peer count and print a one-line
-/// status summary.  Silently returns if the daemon isn't reachable so that
-/// standalone sovereign-server setups don't see noise at boot.
+/// status summary.  Logs a warning if the daemon isn't reachable — activity
+/// reporting and mesh routing will be disabled for this server session.
 pub async fn print_mesh_status(commonwealth_url: &str) {
-    if let Some(line) = mesh_status_line(commonwealth_url).await {
-        eprintln!("  ⬡ {line}");
+    match mesh_status_line(commonwealth_url).await {
+        Some(line) => {
+            eprintln!("  ⬡ {line}");
+            tracing::info!(url = %commonwealth_url, "Commonwealth reachable");
+        }
+        None => {
+            tracing::warn!(
+                url = %commonwealth_url,
+                "Commonwealth not reachable. Activity reporting disabled. \
+                 Run `commonwealth daemon start` to enable mesh routing."
+            );
+        }
     }
 }
 

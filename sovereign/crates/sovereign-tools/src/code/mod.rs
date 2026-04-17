@@ -55,6 +55,10 @@ pub mod read_notes;
 #[cfg(feature = "treesitter")]
 pub mod delete_note;
 
+// Index health reporting — used by all SCIP-dependent tools.
+#[cfg(feature = "treesitter")]
+pub mod index_health;
+
 // Blast radius (transitive impact analysis).
 #[cfg(feature = "treesitter")]
 pub mod blast_radius;
@@ -98,6 +102,8 @@ pub use write_note::WriteNoteTool;
 pub use read_notes::ReadNotesTool;
 #[cfg(feature = "treesitter")]
 pub use delete_note::DeleteNoteTool;
+#[cfg(feature = "treesitter")]
+pub use index_health::{IndexHealth, IndexHealthChecker, StalenessLevel};
 #[cfg(feature = "treesitter")]
 pub use blast_radius::BlastRadiusTool;
 #[cfg(feature = "treesitter")]

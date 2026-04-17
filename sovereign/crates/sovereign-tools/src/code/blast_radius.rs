@@ -35,6 +35,7 @@ use sovereign_core::types::*;
 
 use corpus_engine::scip_graph::{BlastEntry, ScipGraph, StalenessCaution};
 
+use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
 
 pub type ScipGraphHandleRef = Arc<ArcSwap<ScipGraph>>;
@@ -43,11 +44,12 @@ pub struct BlastRadiusTool {
     graph: ScipGraphHandleRef,
     /// Optional project root for the supplementary macro text scan.
     project_root: Option<PathBuf>,
+    checker: Option<Arc<IndexHealthChecker>>,
 }
 
 impl BlastRadiusTool {
     pub fn new(graph: ScipGraphHandleRef) -> Self {
-        Self { graph, project_root: None }
+        Self { graph, project_root: None, checker: None }
     }
 
     /// Enable the supplementary macro text scan. Call this when the project
@@ -55,6 +57,14 @@ impl BlastRadiusTool {
     /// is absent from the output.
     pub fn with_project_root(mut self, root: PathBuf) -> Self {
         self.project_root = Some(root);
+        self
+    }
+
+    /// Attach an index health checker. When set, every response includes
+    /// an `index_health` field so agents can distinguish empty results
+    /// from an absent index.
+    pub fn with_health_checker(mut self, checker: Arc<IndexHealthChecker>) -> Self {
+        self.checker = Some(checker);
         self
     }
 }
@@ -171,6 +181,10 @@ impl Tool for BlastRadiusTool {
                      macro indicator (`!(` or `#[`). May include comments or string literals."
                 );
             }
+            if let Some(checker) = &self.checker {
+                let health = checker.check().await;
+                obj["index_health"] = serde_json::to_value(&health).unwrap_or_default();
+            }
             return Ok(StepOutput::Json(obj));
         }
 
@@ -199,6 +213,10 @@ impl Tool for BlastRadiusTool {
                      macro indicator (`!(` or `#[`). May include comments or string literals."
                 );
             }
+        }
+        if let Some(checker) = &self.checker {
+            let health = checker.check().await;
+            obj["index_health"] = serde_json::to_value(&health).unwrap_or_default();
         }
         Ok(StepOutput::Json(obj))
     }

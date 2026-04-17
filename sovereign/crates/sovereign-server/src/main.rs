@@ -266,14 +266,15 @@ async fn main() {
         .expect("SCIP graph database");
     let scip_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(arc_swap::ArcSwap::from_pointee(scip_graph));
+    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(&scip_graph)));
     tools.register(Box::new(sovereign_tools::FindCalleesTool::new(
         Arc::clone(&corpus_engine),
         Arc::clone(&scip_graph),
-    )));
+    ).with_health_checker(Arc::clone(&health_checker))));
     tools.register(Box::new(sovereign_tools::FindCallersTool::new(
         Arc::clone(&corpus_engine),
         Arc::clone(&scip_graph),
-    )));
+    ).with_health_checker(Arc::clone(&health_checker))));
 
     // Working notes tools — persist across sessions, used for session attribution.
     let notes_db_path = home.join(".sovereign").join("notes.db");

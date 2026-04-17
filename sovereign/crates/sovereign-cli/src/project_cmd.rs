@@ -1046,6 +1046,7 @@ async fn cmd_serve(args: &[String]) -> i32 {
     let (initial_graph, _summary) = load_merged_graph(&data_dir, true).await;
     let merged_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(ArcSwap::from_pointee(initial_graph));
+    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(&merged_graph)));
 
     // Spawn the background reloader: every 30s, stat each scip_graph.db,
     // and if any mtime changed (or a file appeared/disappeared) rebuild the
@@ -1254,11 +1255,11 @@ async fn cmd_serve(args: &[String]) -> i32 {
     tools.register(Box::new(sovereign_tools::FindCalleesTool::new(
         Arc::clone(&engine),
         Arc::clone(&merged_graph),
-    )));
+    ).with_health_checker(Arc::clone(&health_checker))));
     tools.register(Box::new(sovereign_tools::FindCallersTool::new(
         Arc::clone(&engine),
         Arc::clone(&merged_graph),
-    )));
+    ).with_health_checker(Arc::clone(&health_checker))));
 
     // ── Test / lint watcher tools ───────────────────────────────
 
@@ -1294,7 +1295,8 @@ async fn cmd_serve(args: &[String]) -> i32 {
     )));
     tools.register(Box::new(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
-            .with_project_root(repo_root.clone()),
+            .with_project_root(repo_root.clone())
+            .with_health_checker(Arc::clone(&health_checker)),
     ));
     if let Some(ref ds) = docs_store {
         tools.register(Box::new(sovereign_tools::ProjectContextTool::new(

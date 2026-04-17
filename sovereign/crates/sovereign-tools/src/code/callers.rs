@@ -15,17 +15,24 @@ use sovereign_core::types::*;
 use corpus_engine::CorpusEngine;
 
 use super::callees::ScipGraphHandle;
+use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
 
 pub struct FindCallersTool {
     #[allow(dead_code)]
     engine: Arc<CorpusEngine>,
     graph: ScipGraphHandle,
+    checker: Option<Arc<IndexHealthChecker>>,
 }
 
 impl FindCallersTool {
     pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {
-        Self { engine, graph }
+        Self { engine, graph, checker: None }
+    }
+
+    pub fn with_health_checker(mut self, checker: Arc<IndexHealthChecker>) -> Self {
+        self.checker = Some(checker);
+        self
     }
 }
 
@@ -135,6 +142,18 @@ impl Tool for FindCallersTool {
         }
 
         out.push_str(&caution.format_note());
+        if let Some(checker) = &self.checker {
+            let health = checker.check().await;
+            if let Some(hint) = &health.hint {
+                out.push_str(&format!(
+                    "\n\n---\nIndex: {} | {} symbols | {} stale files\n{}",
+                    format!("{:?}", health.staleness).to_lowercase(),
+                    health.symbol_count,
+                    health.stale_file_count,
+                    hint
+                ));
+            }
+        }
         Ok(StepOutput::Text(out))
     }
 }

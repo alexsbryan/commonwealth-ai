@@ -1,4 +1,5 @@
 mod code_cmd;
+mod doctor_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
 mod project_cmd;
@@ -240,6 +241,10 @@ async fn main() {
             }
             "reflect" => {
                 let code = reflect_cmd::run_reflect(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "doctor" => {
+                let code = doctor_cmd::run_doctor(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             _ => {}

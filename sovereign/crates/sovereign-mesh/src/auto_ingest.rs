@@ -19,8 +19,10 @@ const COOLDOWN: Duration = Duration::from_secs(30 * 60);
 ///   A is partway through ingestion and Machine B comes online.
 ///
 /// **Guard**: if an ingest task is actively running (corpus_id is in
-/// `AppStateInner::active_ingests`) the trigger is skipped that round
-/// to avoid starting a conflicting second task on the same output path.
+/// `AppStateInner::active_ingests`) the trigger is skipped — UNLESS a
+/// new peer just appeared, in which case `corpus_collaborate` is still
+/// called. That handler checks `active_ingests` itself and skips the
+/// local partition spawn while still dispatching work to the new peer.
 pub fn spawn_auto_collaborate_loop(state: AppState, daemon_port: u16) {
     tokio::spawn(async move {
         auto_collaborate_loop(state, daemon_port).await;
@@ -73,15 +75,20 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         };
 
         for corpus_id in &in_progress {
-            if active_ingests.contains(corpus_id) {
+            // Skip if this node is mid-ingest AND no new peer just appeared.
+            // When a new peer appears we must still call corpus_collaborate — that
+            // handler now checks active_ingests itself and skips the local partition
+            // spawn, so calling it while mid-ingest is safe and will still dispatch
+            // a partition to the newly joined peer.
+            if active_ingests.contains(corpus_id) && !new_peer_appeared {
                 tracing::debug!(
                     corpus = %corpus_id,
-                    "auto_ingest: ingest task is active — skipping auto-collaborate this round"
+                    "auto_ingest: ingest task is active and no new peer — skipping"
                 );
                 continue;
             }
 
-            if triggered.get(corpus_id).map_or(false, |t| t.elapsed() < COOLDOWN) {
+            if triggered.get(corpus_id).map_or(false, |t| t.elapsed() < COOLDOWN) && !new_peer_appeared {
                 continue;
             }
 

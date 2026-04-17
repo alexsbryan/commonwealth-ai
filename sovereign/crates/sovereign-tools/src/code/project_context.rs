@@ -113,9 +113,29 @@ impl Tool for ProjectContextTool {
             })
             .collect();
 
+        // Include a basic index health block so agents can distinguish
+        // "no relevant docs" from "no index at all".
+        let doc_count = self.store.file_count().await.unwrap_or(0);
+        let index_health = if doc_count == 0 {
+            json!({
+                "present": false,
+                "staleness": "absent",
+                "hint": "Project index not built or empty. \
+                         Run `sovereign index project` to enable project_context search."
+            })
+        } else {
+            json!({
+                "present": true,
+                "staleness": "unknown",
+                "document_count": doc_count,
+                "hint": null
+            })
+        };
+
         Ok(StepOutput::Json(json!({
             "results": result_values,
-            "hint": hint
+            "hint": hint,
+            "index_health": index_health
         })))
     }
 }

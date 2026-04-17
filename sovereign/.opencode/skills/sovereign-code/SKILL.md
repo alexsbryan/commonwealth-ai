@@ -1,5 +1,18 @@
 # Sovereign Code Intelligence
 
+## On Skill Load
+
+Verify sovereign tools are in your available tool set. If `code_search`, `blast_radius`,
+or other sovereign tools are absent from your tool list, report immediately:
+
+> ⚠ sovereign-code tools unavailable. The sovereign MCP server is not responding
+> at localhost:8080. Code intelligence features are disabled for this session.
+> Run `sovereign doctor` to diagnose. Run `sovereign project serve` to restart.
+
+Do not proceed silently without these tools for any task involving code changes.
+
+---
+
 You have access to a local sovereign-server instance at `http://localhost:8080/mcp`
 that provides compiler-resolved code intelligence for this repository.
 
