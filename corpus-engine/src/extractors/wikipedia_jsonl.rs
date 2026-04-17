@@ -226,14 +226,24 @@ impl Iterator for WikipediaJsonlLineIterator {
                 return Some(Ok(doc));
             }
 
-            let mut line = String::new();
-            match self.inner.read_line(&mut line) {
+            // Use read_until instead of read_line so isolated non-UTF-8 bytes
+            // (e.g. Latin-1 encoded club names from older Wikipedia markup) don't
+            // abort the entire article. from_utf8_lossy replaces bad bytes with
+            // U+FFFD — a few replacement chars in a footballer's name is acceptable.
+            let mut line_bytes = Vec::new();
+            match self.inner.read_until(b'\n', &mut line_bytes) {
                 Ok(0) => return None, // EOF
                 Ok(_) => {}
                 Err(e) => return Some(Err(Error::Extraction(format!("JSONL read error: {e}")))),
             }
 
-            let line = line.trim();
+            let line_cow = String::from_utf8_lossy(&line_bytes);
+            // Cow::Owned means from_utf8_lossy made replacements — log so we
+            // can gauge how widespread the encoding issues are in this corpus.
+            if matches!(line_cow, std::borrow::Cow::Owned(_)) {
+                tracing::debug!(article_index = self.article_index, "non-UTF-8 bytes replaced with U+FFFD");
+            }
+            let line = line_cow.trim();
             if line.is_empty() {
                 continue;
             }
