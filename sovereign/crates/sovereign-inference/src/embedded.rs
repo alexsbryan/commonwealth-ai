@@ -406,10 +406,14 @@ impl EmbedSlot {
             .with_n_ubatch(max_tokens as u32)
             .with_embeddings(true)
             .with_pooling_type(pooling_type)
-            // Keep KV cache on CPU. With Metal enabled, the default (true)
-            // can cause GGML_ASSERT(buf_src) in ggml_metal_buffer_set_tensor
-            // when the KV tensor has no registered CPU backing buffer.
-            .with_offload_kqv(false);
+            // Keep the entire embedding context on CPU. Even with n_gpu_layers=0
+            // the GGML backend scheduler (op_offload=true by default) will route
+            // compute ops to Metal, and offload_kqv=true allocates the KV cache
+            // on Metal. Both cause GGML_ASSERT(buf_src) in recent llama.cpp when
+            // an intermediate tensor has no CPU backing buffer. Embedding is not
+            // compute-bound, so CPU-only has no meaningful perf impact.
+            .with_offload_kqv(false)
+            .with_op_offload(false);
 
         let ctx = unsafe {
             let model_ref: &'static LlamaModel =
