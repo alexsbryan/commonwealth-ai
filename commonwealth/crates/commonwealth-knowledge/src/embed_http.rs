@@ -91,7 +91,7 @@ pub fn http_embed_fn(embeddings_url: String) -> EmbedFn {
                 .post(&url)
                 .json(&serde_json::json!({
                     "input": text,
-                    "model": "nomic-embed-text-v2"
+                    "model": "qwen3-embedding-0.6b"
                 }))
                 .send()
                 .await

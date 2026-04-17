@@ -56,7 +56,7 @@ async fn make_engine_with_corpus(
         &idx_path,
         corpus_id,
         corpus_id,          // corpus_name
-        "nomic-embed-text-v2", // embedding_model — must match what
+        "qwen3-embedding-0.6b", // embedding_model — must match what
                                // the engine will look for when it
                                // opens the index via `open_index`.
         8,
@@ -77,7 +77,7 @@ async fn make_engine_with_corpus(
 
     Arc::new(
         CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("nomic-embed-text-v2"),
+            .with_embedding_model("qwen3-embedding-0.6b"),
     )
 }
 

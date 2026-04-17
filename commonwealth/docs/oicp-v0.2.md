@@ -455,7 +455,7 @@ Each result:
 
 ### 6.3 Embedding Model Compatibility
 
-The knowledge search API assumes the client's query embedding is compatible with the embeddings stored in the provider's index. In practice, this means the client and provider use the same embedding model. Sovereign's default embedding model (`nomic-embed-text-v2`) is the reference. Providers that use a different embedding model SHOULD advertise this in a future extension. For v0.2.0, the assumption is that all participants in a mesh use the same embedding model (configured at mesh level).
+The knowledge search API assumes the client's query embedding is compatible with the embeddings stored in the provider's index. In practice, this means the client and provider use the same embedding model. Sovereign's default embedding model (`qwen3-embedding-0.6b`) is the reference. Providers that use a different embedding model SHOULD advertise this in a future extension. For v0.2.0, the assumption is that all participants in a mesh use the same embedding model (configured at mesh level).
 
 ---
 
