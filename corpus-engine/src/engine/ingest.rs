@@ -162,6 +162,7 @@ impl CorpusEngine {
         // Initialise counters. On resume these start from where we left off.
         let mut total_chunks = index.chunk_count().await.unwrap_or(0);
         let mut docs_processed = 0u64; // successful docs in THIS run
+        let mut docs_skipped = 0u64;   // docs skipped due to extraction errors this run
         let mut iter_pos = 0u64;       // absolute position in the source iterator
 
         // ── Source-file manifest tracking ─────────────────────────────────
@@ -221,7 +222,14 @@ impl CorpusEngine {
             let doc = match doc_result {
                 Ok(d) => d,
                 Err(e) => {
-                    eprintln!("Skipping document: {e}");
+                    docs_skipped += 1;
+                    tracing::warn!(
+                        corpus = %recipe.corpus.id,
+                        iter_pos,
+                        docs_skipped,
+                        error = %e,
+                        "skipping document due to extraction error"
+                    );
                     continue;
                 }
             };
@@ -416,8 +424,16 @@ impl CorpusEngine {
                     *flushed_chunks_per_file.entry(sf.clone()).or_insert(0) += 1;
                 }
             }
+            if docs_skipped > 0 {
+                tracing::warn!(
+                    corpus = %recipe.corpus.id,
+                    docs_skipped,
+                    docs_processed,
+                    "ingestion complete with extraction errors — source file may be corrupted or partially downloaded"
+                );
+            }
             eprintln!(
-                "[{}] Final flush — {flush_count} chunks — {total_chunks} total committed from {} docs",
+                "[{}] Final flush — {flush_count} chunks — {total_chunks} total committed from {} docs ({docs_skipped} skipped)",
                 recipe.corpus.id,
                 resume_iter_pos + docs_processed,
             );
@@ -606,6 +622,7 @@ impl CorpusEngine {
             chunks_created: total_chunks,
             index_size_bytes: info.index_size_bytes,
             duration_secs,
+            docs_skipped,
         })
     }
 

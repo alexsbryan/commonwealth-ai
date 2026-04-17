@@ -151,6 +151,10 @@ pub struct IngestResult {
     pub chunks_created: u64,
     pub index_size_bytes: u64,
     pub duration_secs: u64,
+    /// Documents skipped due to extraction errors (e.g. invalid UTF-8, corrupt lines).
+    /// Non-zero warrants inspection of the source file on the ingesting node.
+    #[serde(default)]
+    pub docs_skipped: u64,
 }
 
 // ─── Builtin Corpus ─────────────────────────────────────
