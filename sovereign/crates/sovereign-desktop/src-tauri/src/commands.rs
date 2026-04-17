@@ -1020,6 +1020,14 @@ pub struct DiscoveredModel {
 pub struct DownloadRequest {
     pub url: String,
     pub file_name: String,
+    /// Advertised file size from the model catalogue (models.toml
+    /// / ModelSelector.svelte's EMBED_MODELS). Optional for back-
+    /// compat; when present, `download_model` applies a 50% floor
+    /// via `sovereign_inference::GgufExpectation::from_size_gb`
+    /// so a CDN-served 200 KB HTML stub doesn't silently land at
+    /// the final path as a "30 GB" model.
+    #[serde(default)]
+    pub size_gb: Option<f64>,
 }
 
 #[derive(Serialize, Clone)]
@@ -1114,32 +1122,88 @@ pub async fn download_model(
         .map_err(|e| format!("Failed to create models directory: {e}"))?;
 
     let dest = models_dir.join(&request.file_name);
+    let expected = match request.size_gb {
+        Some(gb) => sovereign_inference::GgufExpectation::from_size_gb(gb),
+        None => sovereign_inference::GgufExpectation::unknown(),
+    };
 
-    // Skip if already downloaded.
+    // Validate any pre-existing file at the destination. A stub
+    // from a previous bad download (HTML error page, truncated
+    // stream) must be deleted — the old early-return-on-exists
+    // behaviour locked users into re-running setup from a clean
+    // slate. Now we just re-download whatever's invalid.
     if dest.exists() {
-        let size = dest.metadata().map(|m| m.len()).unwrap_or(0);
-        let _ = app_handle.emit(
-            "download-progress",
-            DownloadProgress {
-                file_name: request.file_name,
-                downloaded_bytes: size,
-                total_bytes: Some(size),
-                percent: Some(100.0),
-                status: "complete".to_string(),
-                error: None,
-            },
-        );
-        return Ok(dest.display().to_string());
+        match sovereign_inference::validate_gguf(&dest, &expected) {
+            Ok(()) => {
+                let size = dest.metadata().map(|m| m.len()).unwrap_or(0);
+                let _ = app_handle.emit(
+                    "download-progress",
+                    DownloadProgress {
+                        file_name: request.file_name,
+                        downloaded_bytes: size,
+                        total_bytes: Some(size),
+                        percent: Some(100.0),
+                        status: "complete".to_string(),
+                        error: None,
+                    },
+                );
+                return Ok(dest.display().to_string());
+            }
+            Err(e) => {
+                tracing::warn!(
+                    path = %dest.display(),
+                    reason = %e,
+                    "download_model: existing file failed validation, redownloading"
+                );
+                let _ = std::fs::remove_file(&dest);
+            }
+        }
     }
 
     let part_path = models_dir.join(format!("{}.part", &request.file_name));
 
-    let response = reqwest::get(&request.url)
+    // Build the request with optional HF_TOKEN bearer auth.
+    // Authenticated HF requests bypass anonymous rate-limits and
+    // the CDN's bot-detection paths that return HTML.
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60 * 60))
+        .build()
+        .map_err(|e| format!("Build http client: {e}"))?;
+    let mut req = client.get(&request.url);
+    if let Ok(tok) = std::env::var("HF_TOKEN") {
+        if !tok.is_empty() {
+            req = req.bearer_auth(tok);
+        }
+    }
+    let response = req
+        .send()
         .await
         .map_err(|e| format!("Download request failed: {e}"))?;
 
     if !response.status().is_success() {
         return Err(format!("Download failed: HTTP {}", response.status()));
+    }
+
+    // Pre-stream content-type sniff. When HuggingFace returns an
+    // error page (rate limit, bot detection, gated repo), the
+    // body is HTML or JSON — catch it before streaming MB of
+    // garbage to disk. The post-stream `validate_gguf` check
+    // backstops this for cases where the server lies about
+    // content-type.
+    if let Some(ct) = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+    {
+        let lower = ct.to_ascii_lowercase();
+        if lower.starts_with("text/") || lower.starts_with("application/json") {
+            return Err(format!(
+                "HuggingFace returned content-type={ct} for {} — likely \
+                 bot-detection, rate limiting, or a gated-repo login page. \
+                 Set HF_TOKEN and retry, or try a different model.",
+                request.url
+            ));
+        }
     }
 
     let total_bytes = response.content_length();
@@ -1178,6 +1242,29 @@ pub async fn download_model(
 
     file.flush().await.map_err(|e| format!("Flush error: {e}"))?;
     drop(file);
+
+    // Post-stream validation. Covers CDN responses that advertised
+    // `application/octet-stream` but delivered HTML, silent TCP
+    // resets mid-body, and any other way a response can look
+    // successful but not actually be a GGUF. On failure we delete
+    // the `.part` so a retry starts clean rather than resuming a
+    // partial bogus file.
+    if let Err(e) = sovereign_inference::validate_gguf(&part_path, &expected) {
+        let _ = tokio::fs::remove_file(&part_path).await;
+        let msg = format!("download validation failed: {e}");
+        let _ = app_handle.emit(
+            "download-progress",
+            DownloadProgress {
+                file_name: request.file_name.clone(),
+                downloaded_bytes: downloaded,
+                total_bytes,
+                percent: None,
+                status: "error".to_string(),
+                error: Some(msg.clone()),
+            },
+        );
+        return Err(msg);
+    }
 
     // Rename .part to final.
     tokio::fs::rename(&part_path, &dest)

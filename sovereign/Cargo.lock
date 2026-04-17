@@ -8184,6 +8184,7 @@ dependencies = [
  "serde_json",
  "sovereign-core",
  "sysinfo 0.34.2",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",

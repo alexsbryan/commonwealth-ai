@@ -178,6 +178,12 @@ export interface DiscoveredModel {
 export interface DownloadRequest {
   url: string;
   file_name: string;
+  /** Advertised file size in GB. When present, the backend
+   *  applies a 50% floor on the downloaded size via
+   *  `sovereign_inference::validate_gguf` — a CDN-served HTML
+   *  stub masquerading as a model file gets rejected instead of
+   *  silently landing at the final path. */
+  size_gb?: number;
 }
 
 export interface DownloadProgress {

@@ -36,6 +36,20 @@ pub async fn run_setup(args: &[String]) -> i32 {
         return 0;
     }
 
+    // ── --repair: scan installed models, delete corrupted ones ────
+    //
+    // Unblocks users who landed here after a previous setup run
+    // silently stored HTML error pages / LFS pointers at the
+    // model paths (pre-validator). For each slot we look at the
+    // stored SetupConfig, validate what's on disk, and delete
+    // anything that isn't a real GGUF. The daemon will then
+    // either fall back to re-running setup or surface a clean
+    // "file missing" error, both of which are strictly better
+    // than "null result from llama cpp" at inference time.
+    if opts.repair {
+        return run_repair().await;
+    }
+
     // ── --reset: tear down existing setup ─────────────────────────
     if opts.reset {
         eprintln!("  Resetting sovereign...");
@@ -146,9 +160,14 @@ pub async fn run_setup(args: &[String]) -> i32 {
     let embed_url = hf_download_url(&embed_slot);
 
     // Primary shows progress; fast+embed run silently in parallel.
-    let primary_fut = download_with_progress(&primary_url, &primary_path, &picked.file);
-    let fast_fut = download_silent(&fast_url, &fast_path);
-    let embed_fut = download_silent(&embed_url, &embed_path);
+    // Each slot's `size_gb` goes through so `validate_gguf` can
+    // apply a tighter floor than the 1 MB sentinel — a corrupt
+    // 200 KB "35 GB" file is an obvious lie, a corrupt 200 KB
+    // "0.4 GB" embed is too.
+    let primary_fut =
+        download_with_progress(&primary_url, &primary_path, &picked.file, picked.size_gb);
+    let fast_fut = download_silent(&fast_url, &fast_path, fast_slot.size_gb);
+    let embed_fut = download_silent(&embed_url, &embed_path, embed_slot.size_gb);
 
     let (primary_res, fast_res, embed_res) = tokio::join!(primary_fut, fast_fut, embed_fut);
 
@@ -186,16 +205,24 @@ struct Opts {
     reset: bool,
     yes: bool,
     data_dir: Option<PathBuf>,
+    repair: bool,
     help: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Opts, String> {
-    let mut opts = Opts { reset: false, yes: false, data_dir: None, help: false };
+    let mut opts = Opts {
+        reset: false,
+        yes: false,
+        data_dir: None,
+        repair: false,
+        help: false,
+    };
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--reset" => opts.reset = true,
             "--yes" | "-y" => opts.yes = true,
+            "--repair" => opts.repair = true,
             "--data-dir" => {
                 i += 1;
                 opts.data_dir = Some(PathBuf::from(
@@ -486,17 +513,29 @@ fn hf_download_url(slot: &SlotConfig) -> String {
 /// exists. Streams bytes through a pretty progress bar showing the
 /// filename and percentage. Overwrite semantics: if `dest` already
 /// exists and has non-zero length, treat it as complete (skip).
-async fn download_with_progress(url: &str, dest: &Path, display: &str) -> Result<(), String> {
+pub(crate) async fn download_with_progress(
+    url: &str,
+    dest: &Path,
+    display: &str,
+    size_gb: f64,
+) -> Result<(), String> {
+    let expected = sovereign_inference::GgufExpectation::from_size_gb(size_gb);
+
     if has_content(dest) {
-        // Don't blindly trust a pre-existing file — a prior setup run may
-        // have left an HTML error page at this path. If it's not a
-        // plausible GGUF, remove and re-download.
-        if verify_gguf_non_empty(dest).is_ok() {
-            println!("    \u{2713} {display} (already present)");
-            return Ok(());
+        // Don't blindly trust a pre-existing file — a prior setup
+        // run may have left an HTML error page at this path. If
+        // it's not a plausible GGUF, remove and re-download.
+        match sovereign_inference::validate_gguf(dest, &expected) {
+            Ok(()) => {
+                println!("    \u{2713} {display} (already present)");
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("    \u{26a0} {display} exists but is invalid: {e}");
+                eprintln!("      re-downloading");
+                let _ = std::fs::remove_file(dest);
+            }
         }
-        eprintln!("    \u{26a0} {display} exists but is too small; re-downloading");
-        let _ = std::fs::remove_file(dest);
     }
     let part = dest.with_extension("part");
     let resume_from = part.metadata().map(|m| m.len()).unwrap_or(0);
@@ -509,10 +548,22 @@ async fn download_with_progress(url: &str, dest: &Path, display: &str) -> Result
     if resume_from > 0 {
         req = req.header("Range", format!("bytes={resume_from}-"));
     }
+    if let Some(tok) = hf_token() {
+        req = req.bearer_auth(tok);
+    }
     let resp = req.send().await.map_err(|e| format!("GET {url}: {e}"))?;
     if !resp.status().is_success() && resp.status().as_u16() != 206 {
         return Err(format!("GET {url}: {}", resp.status()));
     }
+
+    // Pre-stream sniff: HuggingFace's CDN sometimes returns a 200
+    // OK with `content-type: text/html` when it thinks we're a
+    // bot, and the body is an error page. Surface that before we
+    // stream MB of HTML to disk.
+    if let Err(e) = reject_non_binary_content_type(&resp, url) {
+        return Err(e);
+    }
+
     let total = resp.content_length().map(|c| c + resume_from);
 
     let mut file = std::fs::OpenOptions::new()
@@ -542,53 +593,69 @@ async fn download_with_progress(url: &str, dest: &Path, display: &str) -> Result
     eprintln!();
     drop(file);
 
-    // Defensive: if we received zero bytes, the upstream returned a 2xx
-    // with an empty body (e.g. HF sometimes 200s a redirect body). Don't
-    // silently hand back an empty .gguf — the daemon will fail to load
-    // it, and the user won't know why without reading logs.
-    verify_gguf_non_empty(&part)?;
+    // Post-stream validation: catches cases the content-type
+    // sniff missed (some CDN paths return `application/octet-
+    // stream` on the error page) AND truncated real downloads
+    // where the first few MB are a valid GGUF header but the
+    // rest is cut off. On failure delete `.part` so a retry
+    // starts from zero rather than resuming a partial bogus file.
+    if let Err(e) = sovereign_inference::validate_gguf(&part, &expected) {
+        let _ = std::fs::remove_file(&part);
+        return Err(format!("download validation failed: {e}"));
+    }
 
     std::fs::rename(&part, dest)
         .map_err(|e| format!("rename {} -> {}: {e}", part.display(), dest.display()))?;
     Ok(())
 }
 
-/// Sanity-check a downloaded GGUF. A zero-byte file means the stream
-/// silently yielded nothing (empty redirect body, auth failure, etc).
-/// llama.cpp will error on load either way, but we want to fail the
-/// *download* with a clear message rather than leaving the config in a
-/// state where "setup completed but daemon won't start".
-fn verify_gguf_non_empty(path: &Path) -> Result<(), String> {
-    let len = path
-        .metadata()
-        .map_err(|e| format!("stat {}: {e}", path.display()))?
-        .len();
-    if len == 0 {
+/// Return `Err` if the HTTP response advertises a non-binary
+/// content type. The GGUF endpoint on HuggingFace serves
+/// `application/octet-stream` (or sometimes no content-type at
+/// all). Anything starting with `text/` or `application/json` is
+/// an error page — surface the first 200 chars so the operator
+/// can see "rate-limited" / "requires authentication" / etc.
+/// without having to curl manually.
+fn reject_non_binary_content_type(resp: &reqwest::Response, url: &str) -> Result<(), String> {
+    let Some(ct) = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return Ok(());
+    };
+    let lower = ct.to_ascii_lowercase();
+    if lower.starts_with("text/") || lower.starts_with("application/json") {
+        // The body isn't captured here (that would consume the
+        // stream before we get to download); we quote just the
+        // header. `validate_gguf` after streaming catches the
+        // actual bytes if the body surprises us.
         return Err(format!(
-            "download produced an empty file ({}); upstream likely returned \
-             an empty body. Retry, or pass --reset and try a different model.",
-            path.display()
-        ));
-    }
-    // A real GGUF is at least tens of MB. Anything smaller than 1 MB is
-    // almost certainly an HTML error page or truncated response.
-    const MIN_PLAUSIBLE_GGUF_BYTES: u64 = 1_000_000;
-    if len < MIN_PLAUSIBLE_GGUF_BYTES {
-        return Err(format!(
-            "downloaded file is suspiciously small ({} bytes at {}); \
-             likely an HTML error response rather than a GGUF. Retry.",
-            len,
-            path.display()
+            "HuggingFace returned content-type={ct} for {url} — likely \
+             bot-detection, rate limiting, or a gated-repo login page. \
+             Try setting `HF_TOKEN` before `sovereign setup` to use \
+             authenticated downloads."
         ));
     }
     Ok(())
 }
 
+/// Read `HF_TOKEN` from the environment for HuggingFace bearer
+/// auth. Authenticated requests bypass the anonymous rate-limit
+/// and bot-detection paths that return HTML error pages; leaving
+/// `HF_TOKEN` unset is still fine for public models on a fresh
+/// IP, just less robust at scale.
+fn hf_token() -> Option<String> {
+    std::env::var("HF_TOKEN").ok().filter(|s| !s.is_empty())
+}
+
 /// Same as `download_with_progress` but doesn't print per-chunk
 /// progress. Used for fast + embed (we show a single ✓ when done).
-async fn download_silent(url: &str, dest: &Path) -> Result<(), String> {
+async fn download_silent(url: &str, dest: &Path, size_gb: f64) -> Result<(), String> {
+    let expected = sovereign_inference::GgufExpectation::from_size_gb(size_gb);
+
     if has_content(dest) {
-        if verify_gguf_non_empty(dest).is_ok() {
+        if sovereign_inference::validate_gguf(dest, &expected).is_ok() {
             return Ok(());
         }
         let _ = std::fs::remove_file(dest);
@@ -604,9 +671,15 @@ async fn download_silent(url: &str, dest: &Path) -> Result<(), String> {
     if resume_from > 0 {
         req = req.header("Range", format!("bytes={resume_from}-"));
     }
+    if let Some(tok) = hf_token() {
+        req = req.bearer_auth(tok);
+    }
     let resp = req.send().await.map_err(|e| format!("GET {url}: {e}"))?;
     if !resp.status().is_success() && resp.status().as_u16() != 206 {
         return Err(format!("GET {url}: {}", resp.status()));
+    }
+    if let Err(e) = reject_non_binary_content_type(&resp, url) {
+        return Err(e);
     }
 
     let mut file = std::fs::OpenOptions::new()
@@ -623,9 +696,111 @@ async fn download_silent(url: &str, dest: &Path) -> Result<(), String> {
             .map_err(|e| format!("write: {e}"))?;
     }
     drop(file);
-    verify_gguf_non_empty(&part)?;
+    if let Err(e) = sovereign_inference::validate_gguf(&part, &expected) {
+        let _ = std::fs::remove_file(&part);
+        return Err(format!("download validation failed: {e}"));
+    }
     std::fs::rename(&part, dest).map_err(|e| format!("rename: {e}"))?;
     Ok(())
+}
+
+/// Scan the three models referenced by `SetupConfig`, validate
+/// each against the manifest-derived size floor + GGUF magic
+/// bytes, and delete the corrupted ones.
+///
+/// Deleting is the right action here even though it's aggressive:
+/// the files that survive this check are either (a) plausible
+/// GGUFs or (b) oversized placeholders that llama.cpp would also
+/// reject at load. Leaving a stub behind has exactly one failure
+/// mode — silent inference 503s hours later when the user first
+/// issues a chat — while deleting it lets the operator just
+/// re-run `sovereign setup` (which is now idempotent: it'll skip
+/// good files and re-download missing ones).
+async fn run_repair() -> i32 {
+    let cfg = match SetupConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: could not read {}: {e}", SetupConfig::default_path().display());
+            eprintln!("hint: run `sovereign setup` to set up from scratch.");
+            return 1;
+        }
+    };
+
+    println!();
+    println!("  Sovereign Setup — Repair");
+    println!("  {}", "─".repeat(54));
+
+    // Bundled manifest lookup provides each slot's advertised
+    // `size_gb`. If a file isn't in the manifest (BYOM), the
+    // validator falls back to a 1 MB floor — still enough to
+    // catch the common HTML-stub failure mode.
+    let manifest = &*sovereign_core::models_manifest::DEFAULT_MANIFEST;
+
+    let slots: [(&str, &std::path::Path); 3] = [
+        ("primary", cfg.models.primary.as_path()),
+        ("fast",    cfg.models.fast.as_path()),
+        ("embed",   cfg.models.embed.as_path()),
+    ];
+
+    let mut removed = 0usize;
+    let mut kept = 0usize;
+    for (role, path) in slots {
+        let size_gb = lookup_slot_size_gb(manifest, path);
+        let expected = match size_gb {
+            Some(gb) => sovereign_inference::GgufExpectation::from_size_gb(gb),
+            None => sovereign_inference::GgufExpectation::unknown(),
+        };
+        match sovereign_inference::validate_gguf(path, &expected) {
+            Ok(()) => {
+                println!("  \u{2713} {role:<7} {} — valid", path.display());
+                kept += 1;
+            }
+            Err(e) => {
+                eprintln!("  \u{2717} {role:<7} {} — {e}", path.display());
+                if let Err(rm_err) = std::fs::remove_file(path) {
+                    eprintln!("      could not remove: {rm_err}");
+                } else {
+                    eprintln!("      removed; re-run `sovereign setup` to re-download.");
+                    removed += 1;
+                }
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "  Summary: {kept} valid, {removed} removed. \
+         Run `sovereign setup` to re-download the removed slots."
+    );
+    if removed > 0 { 1 } else { 0 }
+}
+
+/// Given a model file path, look up the slot's advertised
+/// `size_gb` from the bundled manifest by filename match. The
+/// manifest indexes by profile + slot, so we scan every slot in
+/// every profile for a filename match; first hit wins. Returns
+/// `None` if the user has a custom / BYOM model whose filename
+/// isn't in the manifest.
+fn lookup_slot_size_gb(
+    manifest: &sovereign_core::models_manifest::ModelsManifest,
+    path: &std::path::Path,
+) -> Option<f64> {
+    let file_name = path.file_name()?.to_str()?;
+    for profile in manifest.profiles.values() {
+        for slot in [&profile.thoughtful, &profile.fast, &profile.embed] {
+            if let Some(s) = slot {
+                if s.file == file_name {
+                    return Some(s.size_gb);
+                }
+            }
+        }
+    }
+    for user in &manifest.user_slots {
+        if user.file == file_name {
+            return Some(user.size_gb);
+        }
+    }
+    None
 }
 
 fn has_content(p: &Path) -> bool {
@@ -794,6 +969,172 @@ fn hardware_label(hw: &HardwareProfile) -> String {
 #[allow(dead_code)]
 fn _tty_gate() -> bool {
     io::stdin().is_terminal()
+}
+
+#[cfg(test)]
+mod download_failure_tests {
+    //! Integration tests for the download validation path. Each
+    //! spins up an axum mock on a kernel-assigned port, points
+    //! `download_with_progress` at it, and asserts the expected
+    //! failure mode leaves the models dir clean.
+    use super::*;
+    use axum::{response::IntoResponse, routing::get, Router};
+    use std::net::SocketAddr;
+
+    async fn serve(app: Router) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await;
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        (format!("http://{addr}"), handle)
+    }
+
+    /// The pathological case that landed three 188 KB stubs on
+    /// the user's disk: CDN returns 200 OK with `text/html`
+    /// body. The content-type pre-check must fire and refuse
+    /// *before* we stream any HTML to the `.part` file.
+    #[tokio::test]
+    async fn rejects_text_html_before_streaming_and_leaves_no_part() {
+        let app = Router::new().route(
+            "/fake-model.gguf",
+            get(|| async {
+                (
+                    [(reqwest::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                    "<!DOCTYPE html><html><body>rate limited</body></html>",
+                )
+                    .into_response()
+            }),
+        );
+        let (base, _handle) = serve(app).await;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("fake-model.gguf");
+        let part = tmp.path().join("fake-model.gguf.part");
+
+        let err = download_with_progress(
+            &format!("{base}/fake-model.gguf"),
+            &dest,
+            "fake",
+            18.5, // pretend this is a big model
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("content-type") || err.contains("text/html"), "err: {err}");
+        assert!(!dest.exists(), "no stub should land at final path");
+        assert!(!part.exists(), "no .part should remain");
+    }
+
+    /// Server returns 200 with `application/octet-stream` but
+    /// the body is HTML anyway — post-stream `validate_gguf`
+    /// catches the magic-byte mismatch. We assert the `.part`
+    /// is cleaned up so a retry doesn't resume a bogus file.
+    #[tokio::test]
+    async fn rejects_post_stream_when_magic_is_wrong_and_deletes_part() {
+        // 2 MB of fake HTML, above the default 1 MB floor so the
+        // size check passes and the magic check is the one that
+        // fires. Advertises octet-stream to bypass the pre-check.
+        let mut body = Vec::new();
+        body.extend_from_slice(b"<!DOCTYPE html><html>");
+        body.resize(2_000_000, b'.');
+
+        let app = Router::new().route(
+            "/fake-model.gguf",
+            get(move || {
+                let body = body.clone();
+                async move {
+                    (
+                        [(reqwest::header::CONTENT_TYPE, "application/octet-stream")],
+                        body,
+                    )
+                        .into_response()
+                }
+            }),
+        );
+        let (base, _handle) = serve(app).await;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("fake.gguf");
+        let part = tmp.path().join("fake.gguf.part");
+
+        // size_gb=0.001 → 1 MB floor (the default min); the 2 MB
+        // body passes the size check, so the GGUF magic check is
+        // what fires. This is the important case: servers that
+        // return HTML with an innocuous content-type header.
+        let err = download_with_progress(
+            &format!("{base}/fake-model.gguf"),
+            &dest,
+            "fake",
+            0.001,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            err.contains("not a GGUF") || err.contains("GGUF") || err.contains("magic"),
+            "err should mention magic mismatch: {err}"
+        );
+        assert!(!dest.exists(), "no stub should land at final path");
+        assert!(!part.exists(), "no .part should remain on failure");
+    }
+
+    /// A successful response with a real GGUF magic header and
+    /// plausible size lands at the final path. Confirms the
+    /// happy path isn't broken by the new validation layer.
+    #[tokio::test]
+    async fn accepts_real_gguf_and_renames_to_final() {
+        let mut body = Vec::with_capacity(2 * 1024 * 1024);
+        body.extend_from_slice(b"GGUF");
+        body.resize(2 * 1024 * 1024, 0u8);
+
+        let app = Router::new().route(
+            "/real-model.gguf",
+            get(move || {
+                let body = body.clone();
+                async move {
+                    (
+                        [(reqwest::header::CONTENT_TYPE, "application/octet-stream")],
+                        body,
+                    )
+                        .into_response()
+                }
+            }),
+        );
+        let (base, _handle) = serve(app).await;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("real.gguf");
+        // size_gb 0.001 so the 50% floor (512 KB) comfortably
+        // accepts our 2 MB test payload.
+        download_with_progress(
+            &format!("{base}/real-model.gguf"),
+            &dest,
+            "real",
+            0.001,
+        )
+        .await
+        .expect("happy path should succeed");
+        assert!(dest.exists(), "final path should hold the downloaded file");
+        assert_eq!(dest.metadata().unwrap().len(), 2 * 1024 * 1024);
+    }
+
+    #[test]
+    fn hf_token_reads_env_var() {
+        // Unset first to get a clean baseline; safe because tests
+        // use a distinct thread and no production code reads this
+        // during tests.
+        std::env::remove_var("HF_TOKEN");
+        assert!(hf_token().is_none());
+        std::env::set_var("HF_TOKEN", "secret");
+        assert_eq!(hf_token().as_deref(), Some("secret"));
+        std::env::set_var("HF_TOKEN", "");
+        assert!(hf_token().is_none(), "empty token counted as unset");
+        std::env::remove_var("HF_TOKEN");
+    }
 }
 
 #[cfg(test)]
@@ -1038,33 +1379,11 @@ mod tests {
 
     // strip_quoting tests moved to util::prompts::tests — the function lives there now.
 
-    // ── verify_gguf_non_empty ──────────────────────────────────────
-
-    #[test]
-    fn verify_gguf_non_empty_rejects_zero_bytes() {
-        let tmp = tempfile::tempdir().unwrap();
-        let p = tmp.path().join("empty.gguf");
-        std::fs::write(&p, b"").unwrap();
-        let err = verify_gguf_non_empty(&p).unwrap_err();
-        assert!(err.contains("empty"), "err: {err}");
-    }
-
-    #[test]
-    fn verify_gguf_non_empty_rejects_small_files() {
-        let tmp = tempfile::tempdir().unwrap();
-        let p = tmp.path().join("tiny.gguf");
-        std::fs::write(&p, b"<html>error</html>").unwrap();
-        let err = verify_gguf_non_empty(&p).unwrap_err();
-        assert!(err.contains("suspiciously small"), "err: {err}");
-    }
-
-    #[test]
-    fn verify_gguf_non_empty_accepts_plausible_size() {
-        let tmp = tempfile::tempdir().unwrap();
-        let p = tmp.path().join("ok.gguf");
-        std::fs::write(&p, vec![0u8; 2_000_000]).unwrap();
-        assert!(verify_gguf_non_empty(&p).is_ok());
-    }
+    // `verify_gguf_non_empty` was replaced by
+    // `sovereign_inference::validate_gguf`, which is tested in
+    // `sovereign-inference/src/gguf_validator.rs`. The old tests
+    // here duplicated a strict subset of that coverage; they
+    // were removed to avoid drift between the two schemas.
 
     // ── has_content ────────────────────────────────────────────────
 

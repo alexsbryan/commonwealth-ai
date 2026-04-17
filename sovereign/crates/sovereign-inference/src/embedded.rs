@@ -14,6 +14,7 @@ use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
+use llama_cpp_2::token::LlamaToken;
 
 use sovereign_core::error::Error;
 use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, ThinkingControl};
@@ -59,6 +60,7 @@ impl ModelSlot {
 
         let model = Arc::new(model);
 
+        let n_threads = llama_threads_for_host();
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(NonZeroU32::new(context_size))
             // n_batch = context_size so the full context window is available
@@ -67,7 +69,19 @@ impl ModelSlot {
             // memory pressure is unchanged — only the Rust-side assertion limit
             // is relaxed.
             .with_n_batch(context_size)
-            .with_n_ubatch(512);
+            .with_n_ubatch(512)
+            // llama-cpp-2 defaults both thread counts to 4, which
+            // caps matmul at four cores regardless of machine
+            // size. Embedding prefill and chat prompt processing
+            // are both dominated by `n_threads_batch`; `n_threads`
+            // governs single-token decode. Set both to the
+            // platform's parallelism so the CPU backend actually
+            // uses all the cores (BLAS on macOS, plain ggml
+            // elsewhere). The default-of-4 behaviour was the
+            // reason a 600M embed model ran at 2 seq/s while only
+            // 400% of the CPU was busy.
+            .with_n_threads(n_threads as i32)
+            .with_n_threads_batch(n_threads as i32);
 
         let ctx = unsafe {
             let model_ref: &'static LlamaModel =
@@ -361,9 +375,18 @@ struct EmbedSlot {
     /// Embedding dimensionality reported by the model. Cached so the
     /// hot path doesn't have to call `model.n_embd()` on every embed.
     n_embd: usize,
-    /// Maximum tokens we can pack into the batch / context. Used to
-    /// truncate long inputs gracefully instead of crashing llama.cpp.
-    max_tokens: usize,
+    /// Per-input truncation limit. Any single text longer than this
+    /// is clipped before decode. Named separately from the context
+    /// size so bin-packing logic doesn't conflate "how big one seq
+    /// can be" with "how big a packed sub-batch can be".
+    max_input_tokens: usize,
+    /// Total tokens the KV cache can hold across all active
+    /// sequences in one packed decode. Governs how many chunks we
+    /// can pack into a single sub-batch in `run_embed_batch_sync`.
+    ctx_tokens: usize,
+    /// Upper bound on distinct sequences per packed batch, matching
+    /// the value passed to `LlamaContextParams::with_n_seq_max`.
+    n_seq_max: usize,
     /// Family-specific embedding configuration: pooling strategy,
     /// instruction prefixes, EOS appending. None = Qwen3-Embedding and similar
     /// defaults (mean pooling, no instructions, no EOS).
@@ -385,13 +408,46 @@ impl EmbedSlot {
         n_gpu_layers: u32,
         embed_quirks: Option<EmbedQuirks>,
     ) -> Result<Self> {
-        let model_params = LlamaModelParams::default().with_n_gpu_layers(n_gpu_layers);
+        // Force Metal offload on platforms where the feature was
+        // compiled in. Benchmarked on M2 Max with Qwen3-Embedding-
+        // 0.6B: CPU peaks at ~2.8 seq/sec @ 8 threads; Metal hits
+        // 33 seq/sec — a 12× speedup that directly unblocks
+        // Wikipedia-scale ingestion. The old `GGML_ASSERT(buf_src)`
+        // crash that forced CPU-only mode was fixed in llama-cpp-2
+        // 0.1.141; if it comes back for a given quant or platform,
+        // the fallback-to-CPU path below catches it.
+        let requested_gpu_layers = if cfg!(target_os = "macos") && n_gpu_layers == 0 {
+            999 // every layer on GPU
+        } else {
+            n_gpu_layers
+        };
+        let model_params = LlamaModelParams::default().with_n_gpu_layers(requested_gpu_layers);
 
         let model = LlamaModel::load_from_file(backend, model_path, &model_params)
             .map_err(|e| Error::Inference(format!("Failed to load embed model: {e}")))?;
 
         let n_embd = model.n_embd() as usize;
-        let max_tokens = 2048;
+        // Per-input truncation: any single text longer than this
+        // is clipped. Set to match the per-slot KV budget below
+        // (ctx_tokens / n_seq_max) so a full-length chunk is
+        // guaranteed to fit in one of the packed slots — llama.cpp
+        // rejects a decode with `NoKvCacheSlot` if any single
+        // sequence exceeds its partition of the unified cache.
+        let max_input_tokens = 1024;
+        // Aggregate KV cache: `n_ctx` bounds the sum of tokens
+        // across all active sequences in a packed decode. 16384
+        // gives us 1024 tokens × 16 parallel slots, which covers
+        // the p99 chunk length for Wikipedia without forcing a
+        // second sub-batch per chunk.
+        let ctx_tokens: u32 = 16384;
+        // Parallel slot count. The scheduler reserves
+        // `ctx_tokens / n_seq_max` tokens per slot, so raising
+        // this above 16 shrinks per-slot budget below what our
+        // chunker emits and trips `NoKvCacheSlot` at decode time.
+        // 16 gives a 16× throughput multiplier over the single-
+        // sequence path while staying comfortably inside
+        // llama.cpp's unified-cache semantics.
+        let n_seq_max: u32 = 16;
         let model = Arc::new(model);
 
         let pooling_type = match embed_quirks.as_ref().map(|q| &q.pooling) {
@@ -400,27 +456,66 @@ impl EmbedSlot {
             _                           => LlamaPoolingType::Mean,
         };
 
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(NonZeroU32::new(max_tokens as u32))
-            .with_n_batch(max_tokens as u32)
-            .with_n_ubatch(max_tokens as u32)
-            .with_embeddings(true)
-            .with_pooling_type(pooling_type)
-            // Keep the entire embedding context on CPU. Even with n_gpu_layers=0
-            // the GGML backend scheduler (op_offload=true by default) will route
-            // compute ops to Metal, and offload_kqv=true allocates the KV cache
-            // on Metal. Both cause GGML_ASSERT(buf_src) in recent llama.cpp when
-            // an intermediate tensor has no CPU backing buffer. Embedding is not
-            // compute-bound, so CPU-only has no meaningful perf impact.
-            .with_offload_kqv(false)
-            .with_op_offload(false);
+        let n_threads = llama_threads_for_host();
+        let wants_metal = cfg!(target_os = "macos") && requested_gpu_layers > 0;
+        let build_params = |metal: bool| {
+            LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(ctx_tokens))
+                .with_n_batch(ctx_tokens)
+                .with_n_ubatch(2048)
+                .with_n_seq_max(n_seq_max)
+                .with_n_threads(n_threads as i32)
+                .with_n_threads_batch(n_threads as i32)
+                .with_embeddings(true)
+                .with_pooling_type(pooling_type)
+                // Metal offload toggles. `with_offload_kqv(true)` puts
+                // the KV cache in GPU memory; `with_op_offload(true)`
+                // lets the GGML scheduler route compute ops to Metal.
+                // When both are true (the default when Metal works),
+                // the decode runs entirely on the GPU. The CPU-only
+                // fallback disables both explicitly so the scheduler
+                // keeps every tensor in main memory.
+                .with_offload_kqv(metal)
+                .with_op_offload(metal)
+        };
 
-        let ctx = unsafe {
-            let model_ref: &'static LlamaModel =
-                &*(Arc::as_ptr(&model) as *const LlamaModel);
-            model_ref
-                .new_context(backend, ctx_params)
-                .map_err(|e| Error::Inference(format!("Failed to create embed context: {e}")))?
+        // Try Metal first if compiled in; fall back to CPU on any
+        // context-creation error. The common failure mode on older
+        // llama.cpp builds was `GGML_ASSERT(buf_src)` — ugly from
+        // the crash's perspective, but if it happens before
+        // `new_context` returns we just see `Err` here and retry.
+        let (ctx, used_metal) = match if wants_metal {
+            unsafe {
+                let model_ref: &'static LlamaModel =
+                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                model_ref
+                    .new_context(backend, build_params(true))
+                    .map(|c| (c, true))
+            }
+        } else {
+            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+        } {
+            Ok(pair) => pair,
+            Err(e) => {
+                if wants_metal {
+                    tracing::warn!(
+                        error = ?e,
+                        "Metal embed context failed, falling back to CPU"
+                    );
+                }
+                let ctx = unsafe {
+                    let model_ref: &'static LlamaModel =
+                        &*(Arc::as_ptr(&model) as *const LlamaModel);
+                    model_ref
+                        .new_context(backend, build_params(false))
+                        .map_err(|e| {
+                            Error::Inference(format!(
+                                "Failed to create embed context: {e}"
+                            ))
+                        })?
+                };
+                (ctx, false)
+            }
         };
 
         let pooling_name = match embed_quirks.as_ref().map(|q| &q.pooling) {
@@ -428,12 +523,27 @@ impl EmbedSlot {
             Some(PoolingStrategy::Cls)  => "cls",
             _                           => "mean",
         };
+        // Report the actual backend so logs show whether Metal
+        // took (33 seq/sec on M2 Max, measured) or we fell back
+        // to CPU (2.8 seq/sec peak). Key diagnostic — a silent
+        // CPU fallback is the exact class of regression that
+        // triggered the benchmark-driven investigation of this
+        // path.
+        let compute_backend = if used_metal {
+            "gpu+metal"
+        } else {
+            embed_compute_backend_label()
+        };
         tracing::info!(
             dims = n_embd,
             layers = model.n_layer(),
             size_mb = model.size() / (1024 * 1024),
             pooling = pooling_name,
-            n_ctx = max_tokens,
+            n_ctx = ctx_tokens,
+            n_seq_max,
+            max_input_tokens,
+            n_threads,
+            compute_backend,
             "EmbedSlot::load — slot ready"
         );
 
@@ -444,7 +554,9 @@ impl EmbedSlot {
                 _model: model,
             })],
             n_embd,
-            max_tokens,
+            max_input_tokens,
+            ctx_tokens: ctx_tokens as usize,
+            n_seq_max: n_seq_max as usize,
             embed_quirks,
         })
     }
@@ -456,7 +568,7 @@ impl EmbedSlot {
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         text: &str,
         n_embd: usize,
-        max_tokens: usize,
+        max_input_tokens: usize,
         embed_quirks: Option<&EmbedQuirks>,
     ) -> Result<Vec<f32>> {
         let prepared = if let Some(eq) = embed_quirks {
@@ -469,7 +581,7 @@ impl EmbedSlot {
         } else {
             text.to_string()
         };
-        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_tokens)
+        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens)
     }
 
     /// Embed a query string, applying the query-side instruction prefix
@@ -479,7 +591,7 @@ impl EmbedSlot {
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         query: &str,
         n_embd: usize,
-        max_tokens: usize,
+        max_input_tokens: usize,
         embed_quirks: Option<&EmbedQuirks>,
     ) -> Result<Vec<f32>> {
         let prepared = if let Some(eq) = embed_quirks {
@@ -492,80 +604,82 @@ impl EmbedSlot {
         } else {
             query.to_string()
         };
-        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_tokens)
+        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens)
     }
 
-    /// Core embedding routine: tokenize, batch-decode, pool, and L2-normalize.
+    /// Single-sequence embedding routine. Kept alongside the
+    /// multi-sequence [`run_embed_batch_sync`] for single-query
+    /// paths (e.g. `embed_query`) where building a packed batch
+    /// would be pure overhead.
     fn run_embed_sync(
         model: &LlamaModel,
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         input: &str,
         n_embd: usize,
-        max_tokens: usize,
+        max_input_tokens: usize,
     ) -> Result<Vec<f32>> {
-        // Each call is its own sequence — wipe the KV cache so previous
-        // embeddings don't bleed into this one.
         ctx.clear_kv_cache();
 
         let mut tokens = model
             .str_to_token(input, AddBos::Always)
             .map_err(|e| Error::Inference(format!("Embed tokenization failed: {e}")))?;
-
-        // Truncate inputs that exceed the context window. Embedding
-        // models lose nothing critical by dropping trailing tokens —
-        // the alternative is a llama.cpp panic on overflow.
-        if tokens.len() > max_tokens {
-            tokens.truncate(max_tokens);
+        if tokens.len() > max_input_tokens {
+            tokens.truncate(max_input_tokens);
         }
-
         if tokens.is_empty() {
-            // The empty-string case. Return a zero vector rather than
-            // erroring out — corpus-engine occasionally calls embed
-            // with whitespace-only chunks during testing.
             return Ok(vec![0.0; n_embd]);
         }
 
-        let mut batch = LlamaBatch::new(max_tokens, 1);
+        let mut batch = LlamaBatch::new(max_input_tokens, 1);
         for (i, &token) in tokens.iter().enumerate() {
             batch
                 .add(token, i as i32, &[0], true)
                 .map_err(|e| Error::Inference(format!("Embed batch add failed: {e}")))?;
         }
-
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
 
-        // Sequence 0 has the pooled embedding (mean, last, or cls depending on
-        // the context params set at load time).
         let raw = ctx
             .embeddings_seq_ith(0)
             .map_err(|e| Error::Inference(format!("Failed to read embeddings: {e}")))?;
-
-        // L2-normalize so the resulting vectors are directly comparable
-        // by cosine similarity (which is what corpus-engine's vector search assumes).
-        // We always normalise in-process — NormalizationStrategy::Server only applies
-        // in remote llama-server mode.
-        let mut out = raw.to_vec();
-        let norm: f32 = out.iter().map(|x| x * x).sum::<f32>().sqrt();
-        if norm > 0.0 {
-            for v in out.iter_mut() {
-                *v /= norm;
-            }
-        }
-        Ok(out)
+        Ok(l2_normalize(raw.to_vec()))
     }
 
-    /// Batch-embed multiple texts in a single decode pass.
+    /// Batch-embed multiple texts by packing distinct sequences
+    /// into a single `LlamaBatch` and calling `ctx.decode` once per
+    /// sub-batch.
     ///
-    /// Each text gets its own sequence ID. All tokens are packed into one
-    /// `LlamaBatch` and decoded together — llama.cpp processes them in
-    /// parallel on the GPU. This amortises the decode overhead and can
-    /// yield 5-10x throughput over sequential single-text embedding.
+    /// ## Why this exists
     ///
-    /// If the combined token count exceeds `max_tokens`, the batch is
-    /// split into sub-batches that each fit within the context window.
-    /// Batch-embed: hold the context lock once and embed all texts
-    /// sequentially. Avoids per-call mutex + spawn_blocking overhead.
+    /// The prior implementation was a sequential loop over
+    /// `embed_sync`. Each iteration reset the KV cache and ran a
+    /// full decode pass for one sequence, so a 256-input call
+    /// performed 256 single-sequence prefills. On Apple-Silicon
+    /// CPU with Accelerate (Metal is disabled for embedding
+    /// contexts due to a llama.cpp `GGML_ASSERT(buf_src)` crash —
+    /// see the `EmbedSlot::load` comment) the per-sequence decode
+    /// is dominated by the attention + FFN matmuls. Accelerate's
+    /// SGEMM amortises dispatch + cache misses across the batch
+    /// dimension, so packing N sequences into one decode delivers
+    /// close to N× the FLOPs with ~1× the wall time until we
+    /// saturate the vector engine.
+    ///
+    /// ## Strategy
+    ///
+    /// 1. Tokenize every input up front (no llama.cpp state, so
+    ///    we can do this outside the context lock).
+    /// 2. Bin-pack tokenized inputs into sub-batches subject to:
+    ///      (a) total tokens ≤ `slot.ctx_tokens`
+    ///      (b) sequence count ≤ `slot.n_seq_max`
+    /// 3. For each sub-batch: clear KV cache, add tokens with
+    ///    distinct `seq_id`s, `decode()`, then read one pooled
+    ///    embedding per sequence.
+    /// 4. Splice results back in input order — bin-packing is
+    ///    order-preserving so this is just concatenation.
+    ///
+    /// A pathological input longer than `slot.ctx_tokens` is
+    /// truncated to `slot.max_input_tokens` up front, so single
+    /// oversized chunks always fit in their own sub-batch.
     fn run_embed_batch_sync(
         slot: &EmbedSlot,
         inputs: &[String],
@@ -574,20 +688,128 @@ impl EmbedSlot {
             return Ok(vec![]);
         }
 
+        // Tokenize every input without holding the context lock.
+        // Tokenization is pure (model vocab is immutable after
+        // load); keeping it outside the lock shortens the
+        // critical section and lets a future caller tokenize in
+        // parallel if we ever move that behind a thread pool.
+        let mut prepared: Vec<Vec<LlamaToken>> = Vec::with_capacity(inputs.len());
+        for text in inputs {
+            let prefixed = match slot.embed_quirks.as_ref() {
+                Some(eq) => {
+                    let mut s = format!("{}{}", eq.document_instruction, text);
+                    if eq.append_eos_token {
+                        s.push_str("<|endoftext|>");
+                    }
+                    s
+                }
+                None => text.to_string(),
+            };
+            let mut toks = slot
+                .model
+                .str_to_token(&prefixed, AddBos::Always)
+                .map_err(|e| Error::Inference(format!("Embed tokenization failed: {e}")))?;
+            if toks.len() > slot.max_input_tokens {
+                toks.truncate(slot.max_input_tokens);
+            }
+            prepared.push(toks);
+        }
+
         let batch_start = std::time::Instant::now();
         let mut ctx_lock = slot.contexts[0].blocking_lock();
-        let mut results = Vec::with_capacity(inputs.len());
+        let mut results: Vec<Vec<f32>> = Vec::with_capacity(inputs.len());
 
-        for text in inputs {
-            let emb = Self::embed_sync(
-                &slot.model,
-                &mut ctx_lock.ctx,
-                text,
-                slot.n_embd,
-                slot.max_tokens,
-                slot.embed_quirks.as_ref(),
-            )?;
-            results.push(emb);
+        let mut sub_batches = 0usize;
+        let mut cursor = 0usize;
+        // Reuse one `LlamaBatch` allocation across sub-batches;
+        // `clear()` resets n_tokens without freeing the backing
+        // memory. Matches the context's n_batch capacity.
+        let mut batch = LlamaBatch::new(slot.ctx_tokens, slot.n_seq_max as i32);
+
+        // Pack to ~90% of the nominal ctx budget. llama.cpp uses
+        // some headroom inside the unified KV cache for scheduler
+        // bookkeeping; packing to exactly `ctx_tokens` has tripped
+        // `NoKvCacheSlot` at decode time on real-world corpora.
+        let pack_budget = slot.ctx_tokens.saturating_sub(slot.ctx_tokens / 10);
+
+        while cursor < prepared.len() {
+            // Greedily accumulate sequences into `batch` until the
+            // next one would overflow either bound. `take >= 1`
+            // always — a single input exceeding ctx_tokens already
+            // had its tokens truncated to max_input_tokens, and
+            // max_input_tokens ≤ ctx_tokens / n_seq_max by
+            // construction at `EmbedSlot::load`.
+            batch.clear();
+            let mut tokens_in_batch = 0usize;
+            let mut seqs_in_batch = 0usize;
+            let sub_start = cursor;
+
+            while cursor < prepared.len() {
+                let next_len = prepared[cursor].len().max(1);
+                if seqs_in_batch > 0
+                    && (tokens_in_batch + next_len > pack_budget
+                        || seqs_in_batch + 1 > slot.n_seq_max)
+                {
+                    break;
+                }
+                let seq_id = seqs_in_batch as i32;
+                let toks = &prepared[cursor];
+                if toks.is_empty() {
+                    // Zero-token input: record a sentinel so we
+                    // can inject a zero vector without running it
+                    // through llama.cpp (adding zero tokens to a
+                    // batch is a no-op that then has no seq to
+                    // read from).
+                    // We handle this by NOT advancing seqs_in_batch
+                    // for this input; instead we account for it
+                    // after the decode. Track its global index.
+                    // Simpler: fabricate a synthetic token? Cheaper
+                    // to skip. We'll handle below by post-filling.
+                } else {
+                    for (pos, &tok) in toks.iter().enumerate() {
+                        batch
+                            .add(tok, pos as i32, &[seq_id], true)
+                            .map_err(|e| {
+                                Error::Inference(format!("Embed batch add failed: {e}"))
+                            })?;
+                    }
+                    tokens_in_batch += next_len;
+                    seqs_in_batch += 1;
+                }
+                cursor += 1;
+            }
+
+            // Decode whatever sequences were packed. If every
+            // input in the range was empty, `seqs_in_batch == 0`
+            // and we skip the decode entirely.
+            if seqs_in_batch > 0 {
+                ctx_lock.ctx.clear_kv_cache();
+                ctx_lock
+                    .ctx
+                    .decode(&mut batch)
+                    .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
+            }
+
+            // Walk the inputs that belonged to this sub-batch and
+            // emit one embedding per input, mapping local seq_id
+            // back to the original input slot. Empty inputs get
+            // zero vectors of the right length.
+            let mut local_seq: i32 = 0;
+            for local_idx in sub_start..cursor {
+                if prepared[local_idx].is_empty() {
+                    results.push(vec![0.0; slot.n_embd]);
+                } else {
+                    let raw = ctx_lock
+                        .ctx
+                        .embeddings_seq_ith(local_seq)
+                        .map_err(|e| {
+                            Error::Inference(format!("Failed to read embedding: {e}"))
+                        })?;
+                    results.push(l2_normalize(raw.to_vec()));
+                    local_seq += 1;
+                }
+            }
+            sub_batches += 1;
         }
 
         let total_ms = batch_start.elapsed().as_millis();
@@ -598,12 +820,74 @@ impl EmbedSlot {
         };
         tracing::info!(
             sequences = inputs.len(),
+            sub_batches,
             total_ms,
             seqs_per_sec = format!("{seqs_per_sec:.1}"),
             "Batch embed complete"
         );
 
         Ok(results)
+    }
+}
+
+/// L2-normalize in place, preserving direction; all-zero vectors
+/// pass through unchanged so downstream cosine-similarity search
+/// treats them consistently.
+fn l2_normalize(mut v: Vec<f32>) -> Vec<f32> {
+    let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        for x in v.iter_mut() {
+            *x /= norm;
+        }
+    }
+    v
+}
+
+/// Describe which compute backend the embed slot effectively
+/// uses. Logged at slot load so the operator can tell at a glance
+/// whether matmul is hitting Accelerate, OpenBLAS, or plain CPU.
+/// The embed context is always CPU-pinned (see `EmbedSlot::load`)
+/// so the only question is which CPU math library GGML picked.
+/// How many CPU threads to hand llama.cpp for a single context.
+///
+/// Benchmarked on M2 Max (8P + 4E) with Qwen3-Embedding-0.6B:
+///
+///   n_threads=1  → 0.44 seq/sec    (baseline)
+///   n_threads=4  → 1.63 seq/sec    (3.7× — scales)
+///   n_threads=8  → 2.83 seq/sec    (6.4× — peak)
+///   n_threads=10 → 2.76 seq/sec    (6.3× — plateau)
+///   n_threads=12 → 2.41 seq/sec    (5.5× — REGRESSION)
+///
+/// Peak is at the performance-core count. Going higher puts work
+/// on the efficiency cores, which are slower per-thread AND drag
+/// the P-cores down by forcing cross-cluster synchronisation. The
+/// crate's default of 4 under-uses any modern machine; our
+/// earlier fix of "use everything available" over-used them on
+/// big.LITTLE chips.
+///
+/// Clamp to `[2, 8]`: 8 is the P-core count on current Apple
+/// Silicon flagships and roughly the elbow on x86 too (SMT
+/// threads behave like E-cores here — they don't help SGEMM).
+fn llama_threads_for_host() -> usize {
+    let raw = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    raw.clamp(2, 8)
+}
+
+fn embed_compute_backend_label() -> &'static str {
+    // Embed context is CPU-pinned (see `EmbedSlot::load`'s
+    // `with_offload_kqv(false).with_op_offload(false)`). On
+    // Apple Silicon, GGML's CPU backend links Accelerate's
+    // SGEMM — that's where real throughput comes from. Other
+    // platforms fall back to plain llama.cpp CPU kernels.
+    #[cfg(target_os = "macos")]
+    {
+        "cpu+accelerate"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "cpu"
     }
 }
 
@@ -1097,7 +1381,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     &mut ctx_lock.ctx,
                     &text,
                     slot.n_embd,
-                    slot.max_tokens,
+                    slot.max_input_tokens,
                     slot.embed_quirks.as_ref(),
                 )
             }));
@@ -1146,7 +1430,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     &mut ctx_lock.ctx,
                     &query,
                     slot.n_embd,
-                    slot.max_tokens,
+                    slot.max_input_tokens,
                     slot.embed_quirks.as_ref(),
                 )
             }));

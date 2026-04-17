@@ -240,12 +240,28 @@
       const path = await downloadModel({
         url: model.url,
         file_name: model.file_name,
+        // Pass the advertised size to the backend so its
+        // post-download validator can reject stubs sized
+        // wildly below what the catalogue claims. The field
+        // is `~640 MB`-style human text; we parse it into GB.
+        size_gb: parseSizeEstimateToGb(model.size_estimate),
       });
       onSelect(path);
     } catch (e) {
       downloadError = `${e}`;
       downloading = null;
     }
+  }
+
+  /** Parse strings like "~640 MB", "~20 GB", "~9.5 GB" to a
+   *  floating-point GB value. Returns undefined on unrecognised
+   *  input — the backend validator falls back to a 1 MB floor. */
+  function parseSizeEstimateToGb(s: string): number | undefined {
+    const m = s.match(/([\d.]+)\s*(MB|GB)/i);
+    if (!m) return undefined;
+    const n = parseFloat(m[1]);
+    if (!Number.isFinite(n)) return undefined;
+    return m[2].toUpperCase() === "GB" ? n : n / 1024;
   }
 
   function handleManualSubmit() {
