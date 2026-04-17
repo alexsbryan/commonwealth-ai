@@ -756,9 +756,14 @@ impl EmbeddedLlamaCpp {
                     family = ?embed_family,
                     "loading slot"
                 );
-                match EmbedSlot::load(&backend, path, n_gpu_layers, embed_quirks) {
+                // Embedding contexts always run CPU-only (n_gpu_layers = 0).
+                // The Metal scheduler mis-handles embedding tensor graphs in
+                // several llama.cpp versions (GGML_ASSERT buf_src failure),
+                // and embedding workloads are not compute-bound enough to
+                // benefit from GPU offloading.
+                match EmbedSlot::load(&backend, path, 0, embed_quirks) {
                     Ok(slot) => {
-                        tracing::info!(slot = "embed", "slot loaded");
+                        tracing::info!(slot = "embed", "slot loaded (CPU-only)");
                         Some(Arc::new(slot))
                     }
                     Err(e) => {
