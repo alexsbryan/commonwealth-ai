@@ -8,7 +8,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, ReconstructionMethod};
-use sovereign_mesh::{parse_deep_link, EmbeddedDaemon};
+use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
+use sovereign_mesh::EmbeddedDaemon;
 
 /// Same location the desktop app uses: `<data_dir>/sovereign/`.
 /// Sharing the path means a mesh created from the CLI is picked up
@@ -29,6 +30,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
     match args[0].as_str() {
         "create" => cmd_create(&args[1..]).await,
         "join" => cmd_join(&args[1..]).await,
+        "rotate" => cmd_rotate(&args[1..]).await,
         "status" => cmd_status().await,
         "balance" => cmd_balance().await,
         "leave" => cmd_leave().await,
@@ -77,8 +79,15 @@ fn print_mesh_usage() {
 Manage your community mesh.
 
 Subcommands:
-  create --name <name>    Create a new mesh and print the join link
-  join <link>             Join an existing mesh via deep link
+  create [--name <name>]  Promote the solo mesh to a joinable mesh and print
+                          the shareable invite. Errors if a joinable mesh
+                          already exists — use `mesh rotate` in that case.
+  join <arg>              Join an existing mesh. <arg> may be any of:
+                            - A bare key: cwth-XXXX-XXXX-XXXX
+                            - An https URL: https://sovereign.dev/join/<key>
+                            - A deep link: sovereign://join/<key>
+  rotate                  Generate a new shareable join key for the existing
+                          mesh (invalidates the previous key).
   status                  Show mesh status (members, knowledge, model)
   balance                 Show your contribution to the mesh
   leave                   Leave the current mesh
@@ -121,26 +130,33 @@ async fn cmd_create(args: &[String]) -> i32 {
         }
     }
 
-    let Some(mesh_name) = name else {
-        eprintln!("Missing --name argument");
-        eprintln!("Usage: sovereign mesh create --name <name>");
+    // If a mesh already exists (e.g. the silent solo mesh created by
+    // `sovereign setup`), the join-key hash is stored but its plaintext
+    // is gone — we can't re-show it. Direct the user to `mesh rotate`
+    // instead of blindly attempting another create_mesh (which errors
+    // with AlreadyRunning or leaves them confused).
+    if sovereign_mesh::persist::load(&mesh_data_dir())
+        .map(|opt| opt.is_some())
+        .unwrap_or(false)
+    {
+        eprintln!("A mesh already exists (created during `sovereign setup`).");
+        eprintln!("To generate a new shareable join key, run:");
+        eprintln!();
+        eprintln!("  sovereign mesh rotate");
+        eprintln!();
         return 1;
-    };
+    }
 
+    let mesh_name = name.unwrap_or_else(|| {
+        let host = hostname().unwrap_or_else(|| "sovereign".to_string());
+        format!("{host}'s Mesh")
+    });
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
     let daemon = EmbeddedDaemon::new(mesh_data_dir());
     match daemon.create_mesh(&mesh_name, &node_name).await {
         Ok(result) => {
-            println!();
-            println!("Mesh created: {}", result.mesh_name);
-            println!();
-            println!("Share this link with people you trust:");
-            println!("  {}", result.join_link);
-            println!();
-            println!("Or share the join key directly:");
-            println!("  {}", result.join_key);
-            println!();
+            print_mesh_share(&result.mesh_name, &result.join_key);
             0
         }
         Err(e) => {
@@ -150,17 +166,39 @@ async fn cmd_create(args: &[String]) -> i32 {
     }
 }
 
+/// Spec-format banner for a freshly-created or freshly-rotated mesh.
+/// Prints both the https share URL and the CLI form so the inviter
+/// can pick whichever suits the invitee's environment.
+fn print_mesh_share(mesh_name: &str, join_key: &str) {
+    let app_link = build_https_join_link(join_key, None, Some(mesh_name));
+    println!();
+    println!("Mesh created.");
+    println!();
+    println!("  Join key:  {join_key}");
+    println!();
+    println!("Share with a friend:");
+    println!("  App:  {app_link}");
+    println!("  CLI:  sovereign mesh join {join_key}");
+    println!();
+}
+
 async fn cmd_join(args: &[String]) -> i32 {
-    let Some(link_str) = args.first() else {
-        eprintln!("Missing join link");
-        eprintln!("Usage: sovereign mesh join <sovereign://join/...>");
+    let Some(arg) = args.first() else {
+        eprintln!("Missing join key.");
+        eprintln!("Usage: sovereign mesh join <key-or-url>");
+        eprintln!();
+        eprintln!("Accepted forms:");
+        eprintln!("  cwth-XXXX-XXXX-XXXX");
+        eprintln!("  https://sovereign.dev/join/cwth-XXXX-XXXX-XXXX");
+        eprintln!("  sovereign://join/cwth-XXXX-XXXX-XXXX");
         return 1;
     };
 
-    let link = match parse_deep_link(link_str) {
+    let link = match parse_join_argument(arg) {
         Some(l) => l,
         None => {
-            eprintln!("Invalid join link: {link_str}");
+            eprintln!("Invalid join argument: {arg}");
+            eprintln!("Expected a bare key (cwth-XXXX-XXXX-XXXX), an https URL, or a sovereign:// link.");
             return 1;
         }
     };
@@ -168,16 +206,44 @@ async fn cmd_join(args: &[String]) -> i32 {
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
     let daemon = EmbeddedDaemon::new(mesh_data_dir());
 
+    println!();
+    println!("Joining mesh...");
     match daemon.join_mesh(&link, &node_name).await {
         Ok(result) => {
             println!();
-            println!("Joined mesh: {}", result.mesh_name);
-            println!("Your node ID: {}", result.node_id);
+            println!("\u{2713} Connected to \"{}\"", result.mesh_name);
+            println!("  Your node id: {}", result.node_id);
+            println!();
+            println!("Shared compute is now available.");
             println!();
             0
         }
         Err(e) => {
+            eprintln!();
             eprintln!("Failed to join mesh: {e}");
+            1
+        }
+    }
+}
+
+/// Rotate the join key on an existing mesh. Regenerates the plaintext
+/// key + hash, writes the new hash back to `mesh.json`, and prints the
+/// new shareable invite in the same format as `mesh create`.
+async fn cmd_rotate(_args: &[String]) -> i32 {
+    match sovereign_mesh::persist::rotate_join_key(&mesh_data_dir()) {
+        Ok(Some(rotated)) => {
+            eprintln!();
+            eprintln!("Note: existing members stay connected. Only future joins need the new key.");
+            eprintln!("If the daemon is currently running, restart it to load the new key.");
+            print_mesh_share(&rotated.mesh_name, &rotated.join_key);
+            0
+        }
+        Ok(None) => {
+            eprintln!("No mesh to rotate — run `sovereign setup` or `sovereign mesh create` first.");
+            1
+        }
+        Err(e) => {
+            eprintln!("Failed to rotate join key: {e}");
             1
         }
     }

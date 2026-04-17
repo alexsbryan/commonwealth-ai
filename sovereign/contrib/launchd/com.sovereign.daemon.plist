@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Sovereign user daemon — launched by launchd on login.
+
+    {BINARY} is substituted by service_install.rs with the absolute path
+    to the sovereign binary at install time. {HOME} is substituted with
+    the user's home directory so logs and working dir are per-user.
+
+    Install:  launchctl load  ~/Library/LaunchAgents/com.sovereign.daemon.plist
+    Stop:     launchctl unload ~/Library/LaunchAgents/com.sovereign.daemon.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sovereign.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{BINARY}</string>
+        <string>daemon</string>
+        <string>run</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Auto-restart if the daemon exits with a non-zero status (crash). -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>{HOME}/.sovereign/logs/daemon.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{HOME}/.sovereign/logs/daemon.err</string>
+
+    <key>WorkingDirectory</key>
+    <string>{HOME}/.sovereign</string>
+
+    <!-- Environment: keep PATH usable so child processes (e.g. llama-server
+         if the embedded inference falls back to spawning one) can find the
+         system binaries. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+</dict>
+</plist>

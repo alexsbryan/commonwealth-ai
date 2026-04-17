@@ -18,7 +18,11 @@ commonwealth-app = { path = "../../../commonwealth/crates/commonwealth-app" }
 # re-exported via commonwealth-inference::oicp — we POST/parse those
 # bodies from the mesh knowledge client.
 commonwealth-inference = { path = "../../../commonwealth/crates/commonwealth-inference" }
-corpus-engine = { workspace = true }
+# treesitter feature is needed for corpus_engine::NoteStore, which the
+# mcp_router module uses to log tool-call outcomes. Pulls in tree-sitter
+# transitively — acceptable cost since the embedded daemon already ingests
+# from corpus-engine for /v1/knowledge/search.
+corpus-engine = { workspace = true, features = ["treesitter"] }
 
 # Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }
@@ -37,7 +41,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
+tower-http = { workspace = true }
 thiserror = { workspace = true }
+# JSON-RPC request id field uses Value; explicit dep even though
+# serde_json already transitively provides it.
+uuid = { workspace = true }
 tracing = { workspace = true }
 hex = "0.4"
 # For the join-handshake client (Phase B). Added now because the

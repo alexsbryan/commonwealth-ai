@@ -8162,7 +8162,9 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tower-http",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

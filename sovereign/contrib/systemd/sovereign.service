@@ -1,0 +1,23 @@
+[Unit]
+Description=Sovereign Daemon — single-node inference + code intelligence
+After=network-online.target
+Wants=network-online.target
+
+# Installed as a user unit (not system): matches the spirit of a local
+# developer tool that owns ~/.sovereign/ rather than a shared service.
+# service_install.rs substitutes {BINARY} with the absolute path to the
+# sovereign binary at install time.
+
+[Service]
+Type=simple
+ExecStart={BINARY} daemon run
+Restart=on-failure
+RestartSec=10
+
+# Logging goes to the systemd journal; `journalctl --user -u sovereign` to tail.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sovereign
+
+[Install]
+WantedBy=default.target

@@ -93,13 +93,13 @@ fn home_dir() -> PathBuf {
 }
 
 async fn check_server_running() -> CheckResult {
-    let up = tcp_connectable("127.0.0.1", 8080).await;
+    let up = tcp_connectable("127.0.0.1", 9741).await;
     if up {
         CheckResult {
             name: "server_running",
             layer: Layer::Sovereign,
             status: CheckStatus::Passed,
-            message: "sovereign server is reachable at :8080".into(),
+            message: "sovereign server is reachable at :9741".into(),
             repair: Repair::None,
         }
     } else {
@@ -107,7 +107,7 @@ async fn check_server_running() -> CheckResult {
             name: "server_running",
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
-            message: "sovereign server not reachable at :8080".into(),
+            message: "sovereign server not reachable at :9741".into(),
             repair: Repair::Executable("sovereign project serve".into()),
         }
     }
@@ -115,7 +115,7 @@ async fn check_server_running() -> CheckResult {
 
 async fn check_server_tools() -> CheckResult {
     let resp = http_post_json(
-        "http://localhost:8080/mcp/tools/list",
+        "http://localhost:9741/mcp/tools/list",
         serde_json::json!({}),
     )
     .await;
@@ -519,7 +519,7 @@ fn check_hook_config() -> CheckResult {
 
 async fn check_mcp_live() -> CheckResult {
     let resp = http_post_json(
-        "http://localhost:8080/mcp/tools/list",
+        "http://localhost:9741/mcp/tools/list",
         serde_json::json!({}),
     )
     .await;

@@ -16,13 +16,26 @@ use commonwealth_core::mesh::Mesh;
 use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
-use corpus_engine::CorpusEngine;
+use corpus_engine::{CorpusEngine, NoteStore};
+use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::InferenceProvider;
 
 use crate::deep_link::DeepLink;
 use crate::gossip::{self, GossipHandle};
+use crate::mcp_router;
 use crate::persist;
 use crate::state::MeshState;
+
+/// Per-session MCP mount for the embedded daemon. When set, the daemon
+/// merges `mcp_router::mcp_router(...)` into its `:9741` client router
+/// so `/mcp`, `/mcp/message`, and `/mcp/stats` share the port with the
+/// OpenAI-compatible `/v1/*` endpoints.
+#[derive(Clone)]
+struct McpMount {
+    tools: Arc<ToolRegistry>,
+    notes: Arc<NoteStore>,
+    session_id: String,
+}
 
 /// The embedded Commonwealth daemon, managed by Sovereign's UI.
 pub struct EmbeddedDaemon {
@@ -56,6 +69,12 @@ pub struct EmbeddedDaemon {
     /// pooling strategy, and config-specified `embed_family`.
     /// `None` when no embed model is configured.
     embed_model: RwLock<Option<EmbedModelInfo>>,
+    /// Optional MCP tool-server mount. When present, the client
+    /// router on `:9741` additionally serves `/mcp`, `/mcp/message`,
+    /// and `/mcp/stats`. Set at bootstrap via [`Self::set_mcp`].
+    /// `None` means the daemon only serves `/v1/*` (inference, OICP
+    /// capabilities, knowledge search) — no code-intelligence tools.
+    mcp: RwLock<Option<McpMount>>,
 }
 
 enum DaemonState {
@@ -105,6 +124,7 @@ impl EmbeddedDaemon {
             corpus_engine: RwLock::new(None),
             inference_provider: RwLock::new(None),
             embed_model: RwLock::new(None),
+            mcp: RwLock::new(None),
         }
     }
 
@@ -118,7 +138,22 @@ impl EmbeddedDaemon {
             corpus_engine: RwLock::new(None),
             inference_provider: RwLock::new(None),
             embed_model: RwLock::new(None),
+            mcp: RwLock::new(None),
         }
+    }
+
+    /// Install an MCP tool mount so the client router on `:9741` also
+    /// serves `/mcp`, `/mcp/message`, and `/mcp/stats`. Call once
+    /// during bootstrap *before* `try_resume` / `create_mesh` /
+    /// `join_mesh`. Passing a session id (e.g. `serve-<uuid>`) groups
+    /// per-process tool calls in `NoteStore::log_tool_call`.
+    pub async fn set_mcp(
+        &self,
+        tools: Arc<ToolRegistry>,
+        notes: Arc<NoteStore>,
+        session_id: String,
+    ) {
+        *self.mcp.write().await = Some(McpMount { tools, notes, session_id });
     }
 
     /// Install a `CorpusEngine` so that when the daemon starts, its
@@ -693,10 +728,22 @@ impl EmbeddedDaemon {
             .browse(peer_tx)
             .map_err(|e| MeshError::Network(format!("mDNS browse failed: {e}")))?;
 
+        // Snapshot the MCP mount (if any) before moving app_state into the spawn.
+        // Cheap — an Option<McpMount> where McpMount clones are 3 Arc bumps.
+        let mcp_mount = self.mcp.read().await.clone();
+
         // Spawn the API servers in the background.
         let app_state_clone = app_state.clone();
         tokio::spawn(async move {
-            let client_router = commonwealth_api::server::client_router(app_state_clone.clone());
+            let mut client_router =
+                commonwealth_api::server::client_router(app_state_clone.clone());
+            if let Some(m) = mcp_mount {
+                client_router = client_router.merge(mcp_router::mcp_router(
+                    m.tools,
+                    m.notes,
+                    m.session_id,
+                ));
+            }
             let internal_router =
                 commonwealth_api::server::internal_router(app_state_clone);
 

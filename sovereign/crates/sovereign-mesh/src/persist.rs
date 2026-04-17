@@ -113,6 +113,39 @@ pub fn load(data_dir: &Path) -> std::io::Result<Option<PersistedMesh>> {
     }
 }
 
+/// Result of [`rotate_join_key`] — carries the plaintext of the
+/// freshly-generated key (shown to the user once; not re-recoverable)
+/// plus the mesh name for display in the banner.
+#[derive(Debug, Clone)]
+pub struct RotatedKey {
+    pub mesh_name: String,
+    pub join_key: String,
+}
+
+/// Generate a fresh plaintext join key, overwrite the persisted
+/// `mesh.join_key_hash`, and return the plaintext to the caller.
+///
+/// Existing members (stored as `MemberRecord`s with their own node
+/// ids) remain connected — rotation only affects *future* joins.
+/// A running daemon holds its own in-memory copy of the old hash and
+/// will not pick up the new one until restart; the CLI tells the user
+/// to restart in that case.
+///
+/// Returns `Ok(None)` if no mesh is persisted. Returns `Err` on I/O
+/// or serialization failure.
+pub fn rotate_join_key(data_dir: &Path) -> std::io::Result<Option<RotatedKey>> {
+    let Some(persisted) = load(data_dir)? else {
+        return Ok(None);
+    };
+    let new_key = commonwealth_discovery::membership::generate_join_key();
+    let new_hash = commonwealth_discovery::membership::hash_join_key(&new_key);
+    let (mut mesh, self_node_id) = persisted.into_live();
+    mesh.join_key_hash = new_hash;
+    let mesh_name = mesh.name.clone();
+    save(data_dir, &mesh, self_node_id)?;
+    Ok(Some(RotatedKey { mesh_name, join_key: new_key }))
+}
+
 /// Remove the persisted mesh file. Called on `leave_mesh`.
 /// Returns Ok even if the file doesn't exist — the post-condition
 /// ("no persisted mesh") holds either way.
@@ -211,6 +244,36 @@ mod tests {
 
         // Second call on a missing file is a no-op, not an error.
         clear(tmp.path()).unwrap();
+    }
+
+    #[test]
+    fn rotate_join_key_updates_hash_and_returns_new_plaintext() {
+        let tmp = TempDir::new().unwrap();
+        let (mesh, node_id) = sample_mesh();
+        let original_hash = mesh.join_key_hash;
+        save(tmp.path(), &mesh, node_id).unwrap();
+
+        let rotated = rotate_join_key(tmp.path())
+            .unwrap()
+            .expect("mesh exists, rotation should return Some");
+        assert_eq!(rotated.mesh_name, "Persisted Mesh");
+        assert!(rotated.join_key.starts_with("cwth-"));
+
+        // Persisted file now reflects the new hash.
+        let reloaded = load(tmp.path()).unwrap().unwrap();
+        assert_ne!(reloaded.join_key_hash, original_hash, "hash must change");
+        // The returned plaintext verifies against the new hash.
+        let expected = commonwealth_discovery::membership::hash_join_key(&rotated.join_key);
+        assert_eq!(reloaded.join_key_hash, expected);
+        // Members + node id survive rotation.
+        assert_eq!(reloaded.self_node_id, node_id);
+        assert_eq!(reloaded.members.len(), 1);
+    }
+
+    #[test]
+    fn rotate_join_key_on_missing_mesh_returns_none() {
+        let tmp = TempDir::new().unwrap();
+        assert!(rotate_join_key(tmp.path()).unwrap().is_none());
     }
 
     #[test]

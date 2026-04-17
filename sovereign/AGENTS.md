@@ -2,7 +2,7 @@
 
 ## Code intelligence (MCP)
 
-A sovereign-server instance at `http://localhost:8080/mcp` exposes compiler-resolved
+A sovereign-server instance at `http://localhost:9741/mcp` exposes compiler-resolved
 tools for this codebase. **Use MCP tools before reading files.**
 
 ```

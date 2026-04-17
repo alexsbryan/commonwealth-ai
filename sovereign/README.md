@@ -273,7 +273,7 @@ When this is set, `init` calls `GET /oicp/v1/capabilities` on the Commonwealth d
 
 ```json
 {
-  "mcp": { "servers": { "sovereign": { "type": "http", "url": "http://localhost:8080/mcp" } } },
+  "mcp": { "servers": { "sovereign": { "type": "http", "url": "http://localhost:9741/mcp" } } },
   "provider": {
     "commonwealth": {
       "npm": "@ai-sdk/openai-compatible",
@@ -364,7 +364,7 @@ After this, working in any one project gives you full symbol coverage of the ent
 sovereign project serve
 ```
 
-This starts a lightweight, model-free MCP server that serves all five projects. It discovers every index under `~/.sovereign/indexes/`, merges their SCIP call graphs into a single in-memory view, and exposes all five tools (`symbol_lookup`, `code_search`, `recent_changes`, `find_callers`, `find_callees`) over JSON-RPC at `http://localhost:8080/mcp`.
+This starts a lightweight, model-free MCP server that serves all five projects. It discovers every index under `~/.sovereign/indexes/`, merges their SCIP call graphs into a single in-memory view, and exposes all five tools (`symbol_lookup`, `code_search`, `recent_changes`, `find_callers`, `find_callees`) over JSON-RPC at `http://localhost:9741/mcp`.
 
 No GGUF model, no config file, no auth. Localhost only.
 
@@ -396,7 +396,7 @@ The server prints what it found on startup:
     Total: 13,797 symbols, 82,451 edges across 3 projects
 
   Tools: 5 registered
-  Listening on http://127.0.0.1:8080/mcp
+  Listening on http://127.0.0.1:9741/mcp
 ```
 
 Each project's `.claude/settings.json` (written by `init`) already points to this server — open Claude Code in any project directory and the tools are available immediately.

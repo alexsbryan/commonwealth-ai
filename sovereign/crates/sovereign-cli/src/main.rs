@@ -1,10 +1,14 @@
 mod code_cmd;
+mod daemon_cmd;
 mod doctor_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
 mod project_cmd;
 mod recipe_cmd;
 mod reflect_cmd;
+mod service_install;
+mod setup_cmd;
+mod setup_config;
 
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -245,6 +249,38 @@ async fn main() {
             }
             "doctor" => {
                 let code = doctor_cmd::run_doctor(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "setup" => {
+                tracing_subscriber::fmt()
+                    .with_env_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| "sovereign_cli=info".into()),
+                    )
+                    .with_target(false)
+                    .init();
+                let code = setup_cmd::run_setup(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "daemon" => {
+                // The daemon run loop depends on tracing for visibility
+                // into model load, mesh resume, and gossip. Initialize a
+                // subscriber up front so launchd/systemd can tail it.
+                tracing_subscriber::fmt()
+                    .with_env_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| {
+                                "sovereign_cli=info,\
+                                 sovereign_mesh=info,\
+                                 sovereign_inference=info,\
+                                 commonwealth_discovery=info,\
+                                 commonwealth_api=info"
+                                    .into()
+                            }),
+                    )
+                    .with_target(false)
+                    .init();
+                let code = daemon_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             _ => {}

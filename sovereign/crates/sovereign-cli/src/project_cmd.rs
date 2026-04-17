@@ -50,7 +50,7 @@ Commands:
     --no-scip             Skip SCIP call graph export
     --no-hooks            Skip git hook installation
     --no-claude-config    Skip writing .claude/settings.json
-    --port <port>         MCP server port (default: 8080)
+    --port <port>         MCP server port (default: 9741)
     --data-dir <dir>      Index directory (default: ~/.sovereign/indexes)
     --workspace-root <p>  Monorepo root containing multiple workspace dirs.
                           When set, sovereign discovers all Cargo/Go/etc.
@@ -63,7 +63,7 @@ Commands:
   refresh             Update the call graph (runs automatically on commit)
     --quiet           Suppress progress output
   serve               Start a lightweight MCP server (no model required)
-    --port <port>         Listen port (default: 8080)
+    --port <port>         Listen port (default: 9741)
     --data-dir <dir>      Index directory (default: ~/.sovereign/indexes)
     --sovereign-dir <dir> Path to .sovereign/ dir (default: nearest ancestor with .sovereign/)
   install-hooks       Upgrade (or install) the post-commit hook in this repo
@@ -74,24 +74,57 @@ Commands:
 
 // ─── Init helpers ────────────────────────────────────────────
 
-struct HarnessSelection {
+/// Auto-detected presence of supported AI coding assistants in the
+/// user's environment. Replaces the old interactive harness prompt:
+/// if a harness isn't detected, we skip it silently — no clutter.
+struct HarnessDetection {
     claude_code: bool,
     opencode: bool,
 }
 
-/// Ask which AI coding assistant configs to generate. Defaults to all.
-/// Skipped when stdin is not a TTY (CI/script environments).
-fn prompt_harness_selection() -> HarnessSelection {
-    eprint!("\n  Set up AI assistant configs: [A]ll / [C]laude Code / [O]pencode / [S]kip (default: A): ");
+/// Detect which coding harnesses are plausibly in use. Checks both
+/// project-local dotfolders (`.claude/`, `.opencode/`), home-level
+/// dotfolders (`~/.claude/`, `~/.opencode/`), and `PATH` for the
+/// binary names. Any one signal flips the harness on.
+fn detect_harnesses(project_root: &Path) -> HarnessDetection {
+    let home = dirs::home_dir();
+
+    let claude_code = project_root.join(".claude").exists()
+        || home.as_ref().is_some_and(|h| h.join(".claude").exists())
+        || binary_on_path("claude");
+
+    let opencode = project_root.join(".opencode").exists()
+        || home.as_ref().is_some_and(|h| h.join(".opencode").exists())
+        || binary_on_path("opencode");
+
+    HarnessDetection { claude_code, opencode }
+}
+
+/// Best-effort check for a binary on PATH. Uses `which(1)` on unix and
+/// `where.exe` on Windows; returns false on error / not-found.
+fn binary_on_path(name: &str) -> bool {
+    #[cfg(unix)]
+    let cmd = std::process::Command::new("which").arg(name).output();
+    #[cfg(windows)]
+    let cmd = std::process::Command::new("where").arg(name).output();
+
+    cmd.map(|o| o.status.success()).unwrap_or(false)
+}
+
+/// Prompt `Detected <harness>. Write config automatically? [Y/n]` with
+/// `Y` as the default. In non-TTY environments (CI, pipes) returns
+/// `true` without prompting — matches the `--yes` semantics used by
+/// `sovereign setup`.
+fn confirm_write_config(harness: &str) -> bool {
+    if !io::stdin().is_terminal() {
+        return true;
+    }
+    eprint!("  Detected {harness}. Write config automatically? [Y/n] ");
     io::stderr().flush().ok();
     let mut ans = String::new();
     io::stdin().lock().read_line(&mut ans).unwrap_or(0);
-    match ans.trim().to_lowercase().as_str() {
-        "c" => HarnessSelection { claude_code: true, opencode: false },
-        "o" => HarnessSelection { claude_code: false, opencode: true },
-        "s" => HarnessSelection { claude_code: false, opencode: false },
-        _ => HarnessSelection { claude_code: true, opencode: true },
-    }
+    let trimmed = ans.trim().to_lowercase();
+    trimmed.is_empty() || trimmed == "y" || trimmed == "yes"
 }
 
 /// Probe the Commonwealth OICP capabilities endpoint and return available model IDs.
@@ -132,7 +165,7 @@ async fn cmd_init(args: &[String]) -> i32 {
     let mut no_scip = false;
     let mut no_hooks = false;
     let mut no_claude_config = false;
-    let mut port: u16 = 8080;
+    let mut port: u16 = 9741;
     let mut data_dir: Option<PathBuf> = None;
     // Monorepo root: when set, sovereign discovers all workspace roots under
     // this path rather than treating the git root as the sole workspace.
@@ -596,16 +629,19 @@ vector = false
         }
     }
 
-    // Prompt for harness selection before writing any agent configs.
-    // Skip in non-TTY environments (CI, pipes) — default to all.
-    let harness = if io::stdin().is_terminal() {
-        prompt_harness_selection()
-    } else {
-        HarnessSelection { claude_code: true, opencode: true }
-    };
+    // Auto-detect which AI coding assistants are present. If none, we write
+    // nothing — no clutter for non-AI-coding projects. If detected, we ask
+    // once per harness whether to write its config.
+    let detected = detect_harnesses(&repo_root);
+    let write_claude = detected.claude_code
+        && !no_claude_config
+        && confirm_write_config("Claude Code");
+    let write_opencode = detected.opencode && confirm_write_config("opencode");
 
-    // Detect Commonwealth URL from existing sovereign.toml, then prompt if opencode
-    // is selected and no URL was found yet.
+    // Commonwealth URL: after `sovereign setup`, the local daemon always
+    // lives at http://localhost:9741 and serves both /v1 and /mcp. Users
+    // who want to point at a remote Commonwealth can override via the
+    // legacy `[commonwealth]` section in sovereign.toml.
     let commonwealth_url: Option<String> = {
         let toml_path = repo_root.join(".sovereign/sovereign.toml");
         let from_toml = std::fs::read_to_string(&toml_path)
@@ -617,19 +653,7 @@ vector = false
                     .and_then(|u| u.as_str())
                     .map(str::to_owned)
             });
-
-        if from_toml.is_some() {
-            from_toml
-        } else if harness.opencode && io::stdin().is_terminal() {
-            eprint!("  Commonwealth inference URL (e.g. http://localhost:9741, blank to skip): ");
-            io::stderr().flush().ok();
-            let mut ans = String::new();
-            io::stdin().lock().read_line(&mut ans).unwrap_or(0);
-            let trimmed = ans.trim().to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
-        } else {
-            None
-        }
+        from_toml.or_else(|| write_opencode.then(|| "http://localhost:9741".to_string()))
     };
 
     // Probe OICP capabilities to enumerate real model IDs. Falls back to []
@@ -641,7 +665,7 @@ vector = false
     };
 
     // .claude/settings.json + .claude/hooks/inject-notes.sh
-    if harness.claude_code && !no_claude_config {
+    if write_claude {
         let claude_dir = repo_root.join(".claude");
         if let Err(e) = std::fs::create_dir_all(&claude_dir) {
             eprintln!("    \u{2717} Cannot create .claude/: {e}");
@@ -694,7 +718,7 @@ vector = false
     }
 
     // .opencode/config.json + AGENTS.md
-    if harness.opencode {
+    if write_opencode {
         let opencode_dir = repo_root.join(".opencode");
         if let Err(e) = std::fs::create_dir_all(&opencode_dir) {
             eprintln!("    \u{26a0} Cannot create .opencode/: {e}");
@@ -818,7 +842,7 @@ async fn cmd_status(args: &[String]) -> i32 {
     let port = config
         .as_ref()
         .and_then(|c| c["port"].as_u64())
-        .unwrap_or(8080) as u16;
+        .unwrap_or(9741) as u16;
 
     println!();
     println!("  {corpus_id}");
@@ -1130,7 +1154,7 @@ async fn cmd_refresh(args: &[String]) -> i32 {
 // ─── Serve ───────────────────────────────────────────────────
 
 async fn cmd_serve(args: &[String]) -> i32 {
-    let mut port: u16 = 8080;
+    let mut port: u16 = 9741;
     let mut data_dir: Option<PathBuf> = None;
     let mut sovereign_dir_arg: Option<PathBuf> = None;
 
@@ -1574,7 +1598,7 @@ async fn cmd_serve(args: &[String]) -> i32 {
     // calls from the same sovereign project serve invocation.
     let mcp_session_id = format!("serve-{}", uuid::Uuid::new_v4());
 
-    let app = mcp_server::router(tools, Arc::clone(&notes_store), mcp_session_id);
+    let app = sovereign_mesh::mcp_router::mcp_router(tools, Arc::clone(&notes_store), mcp_session_id);
 
     let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
         Ok(l) => l,
@@ -1742,373 +1766,6 @@ async fn scip_graph_reloader(
     }
 }
 
-// ─── Lightweight MCP server ──────────────────────────────────
-//
-// Minimal JSON-RPC 2.0 / MCP implementation that serves just the
-// five code intelligence tools. No model, no auth, localhost only.
-
-mod mcp_server {
-    use std::convert::Infallible;
-    use std::net::SocketAddr;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::Arc;
-
-    use axum::extract::{ConnectInfo, Extension};
-    use axum::http::StatusCode;
-    use axum::response::sse::{Event, KeepAlive, Sse};
-    use axum::response::IntoResponse;
-    use axum::routing::post;
-    use axum::{Json, Router};
-    use futures::stream::{self, Stream, StreamExt};
-    use serde::{Deserialize, Serialize};
-    use serde_json::Value;
-    use tower_http::cors::CorsLayer;
-
-    use corpus_engine::NoteStore;
-    use sovereign_core::registry::ToolRegistry;
-    use sovereign_core::types::{StepOutput, ToolContext};
-
-    #[derive(Deserialize)]
-    pub struct JsonRpcRequest {
-        #[allow(dead_code)]
-        #[serde(default)]
-        pub jsonrpc: String,
-        /// Optional — JSON-RPC notifications (e.g. `notifications/initialized`)
-        /// omit the id and must not receive a response.
-        #[serde(default)]
-        pub id: Option<Value>,
-        pub method: String,
-        #[serde(default)]
-        pub params: Option<Value>,
-    }
-
-    #[derive(Serialize)]
-    pub struct JsonRpcResponse {
-        pub jsonrpc: &'static str,
-        pub id: Value,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub result: Option<Value>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub error: Option<JsonRpcError>,
-    }
-
-    #[derive(Serialize)]
-    pub struct JsonRpcError {
-        pub code: i32,
-        pub message: String,
-    }
-
-    impl JsonRpcResponse {
-        fn ok(id: Value, value: Value) -> Self {
-            Self { jsonrpc: "2.0", id, result: Some(value), error: None }
-        }
-        fn err(id: Value, code: i32, message: impl Into<String>) -> Self {
-            Self {
-                jsonrpc: "2.0",
-                id,
-                result: None,
-                error: Some(JsonRpcError { code, message: message.into() }),
-            }
-        }
-    }
-
-    fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
-        serde_json::json!({
-            "content": [{ "type": "text", "text": text.into() }],
-            "isError": is_error,
-        })
-    }
-
-    const MCP_TOOLS: &[&str] = &[
-        // Code index
-        "symbol_lookup", "code_search", "recent_changes",
-        // SCIP call graph
-        "find_callees", "find_callers",
-        // Test watcher
-        "test_status", "run_tests", "get_run_output",
-        // Lint watcher
-        "lint_status", "get_lint_output",
-        // Working notes
-        "write_note", "read_notes", "delete_note",
-        // Blast radius (transitive impact analysis)
-        "blast_radius",
-        // Project documentation search
-        "project_context",
-        // Session reflection & feedback loop
-        "session_reflection",
-        // Doc path validity checker
-        "check_doc_paths",
-    ];
-
-    pub fn router(
-        tools: Arc<ToolRegistry>,
-        logger: Arc<NoteStore>,
-        session_id: String,
-    ) -> Router {
-        // Shared per-session call counter. Every REFLECT_HINT_INTERVAL tool
-        // calls we append a brief reminder to write a session_reflection.
-        let call_counter: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
-        Router::new()
-            // Both URLs accept the full JSON-RPC dispatch.
-            // `POST /mcp` is the modern (2025-03-26 Streamable HTTP) entry point.
-            // `POST /mcp/message` is kept for backward compatibility with clients
-            // that followed the 2024-11-05 HTTP+SSE transport where the message
-            // endpoint was a separate URL.
-            .route("/mcp", post(mcp_handle).get(mcp_sse))
-            .route("/mcp/message", post(mcp_handle))
-            .route("/mcp/stats", axum::routing::get(mcp_stats))
-            .layer(Extension(tools))
-            .layer(Extension(logger))
-            .layer(Extension(Arc::new(session_id)))
-            .layer(Extension(call_counter))
-            .layer(CorsLayer::permissive())
-    }
-
-    /// After this many tool calls in a session, append a reflection reminder.
-    const REFLECT_HINT_INTERVAL: u64 = 10;
-
-    fn is_localhost(addr: &SocketAddr) -> bool {
-        addr.ip().is_loopback()
-    }
-
-    /// GET /mcp/stats — tool call counts since server start.
-    async fn mcp_stats(
-        ConnectInfo(peer): ConnectInfo<SocketAddr>,
-        Extension(tools): Extension<Arc<ToolRegistry>>,
-    ) -> impl IntoResponse {
-        if !is_localhost(&peer) {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(serde_json::json!({"error": "local-only"})),
-            )
-                .into_response();
-        }
-        let counts = tools.call_counts();
-        let total: u64 = counts.iter().map(|(_, n)| n).sum();
-        let tools_json: Vec<serde_json::Value> = counts
-            .into_iter()
-            .map(|(name, count)| serde_json::json!({ "tool": name, "calls": count }))
-            .collect();
-        (
-            StatusCode::OK,
-            Json(serde_json::json!({ "total_calls": total, "tools": tools_json })),
-        )
-            .into_response()
-    }
-
-    /// Emit the `endpoint` event required by the 2024-11-05 HTTP+SSE transport.
-    /// Clients open this stream first, wait for the endpoint URL, then POST
-    /// JSON-RPC messages to it. We point them back at `/mcp` itself so both
-    /// transports converge on the same handler.
-    async fn mcp_sse(
-        ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-        if !is_localhost(&peer) {
-            return Err(StatusCode::FORBIDDEN);
-        }
-        // Emit exactly one `endpoint` event, then hold the connection open
-        // with keepalive so spec-compliant clients stay subscribed.
-        let endpoint_event = stream::once(async {
-            Ok::<_, Infallible>(Event::default().event("endpoint").data("/mcp"))
-        });
-        let forever = stream::pending::<Result<Event, Infallible>>();
-        Ok(Sse::new(endpoint_event.chain(forever)).keep_alive(KeepAlive::default()))
-    }
-
-    /// Single JSON-RPC handler for both `/mcp` and `/mcp/message`.
-    /// Notifications (requests without an `id`) receive an empty 204 response
-    /// — per JSON-RPC 2.0, notifications have no reply.
-    async fn mcp_handle(
-        ConnectInfo(peer): ConnectInfo<SocketAddr>,
-        Extension(tools): Extension<Arc<ToolRegistry>>,
-        Extension(logger): Extension<Arc<NoteStore>>,
-        Extension(session_id): Extension<Arc<String>>,
-        Extension(call_counter): Extension<Arc<AtomicU64>>,
-        Json(req): Json<JsonRpcRequest>,
-    ) -> axum::response::Response {
-        if !is_localhost(&peer) {
-            let id = req.id.clone().unwrap_or(Value::Null);
-            return (
-                StatusCode::FORBIDDEN,
-                Json(JsonRpcResponse::err(id, -32001, "MCP is local-only")),
-            )
-                .into_response();
-        }
-
-        match dispatch(req, tools, logger, session_id, call_counter).await {
-            Some(response) => (StatusCode::OK, Json(response)).into_response(),
-            None => StatusCode::NO_CONTENT.into_response(),
-        }
-    }
-
-    /// Dispatch a JSON-RPC request to the appropriate handler.
-    ///
-    /// Returns `Some(JsonRpcResponse)` for calls (requests with an id) and
-    /// `None` for notifications (no id, no reply per JSON-RPC spec).
-    async fn dispatch(
-        req: JsonRpcRequest,
-        tools: Arc<ToolRegistry>,
-        logger: Arc<NoteStore>,
-        session_id: Arc<String>,
-        call_counter: Arc<AtomicU64>,
-    ) -> Option<JsonRpcResponse> {
-        // Notifications: no id → no response. We still want to accept the
-        // method (e.g. `notifications/initialized`) so the client doesn't see
-        // an error. Return None so the handler sends 204 No Content.
-        let Some(id) = req.id else {
-            tracing::debug!(method = %req.method, "mcp: notification received");
-            return None;
-        };
-
-        let response = match req.method.as_str() {
-            "initialize" => {
-                let result = serde_json::json!({
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": { "tools": {} },
-                    "serverInfo": {
-                        "name": "sovereign-code",
-                        "version": env!("CARGO_PKG_VERSION")
-                    }
-                });
-                JsonRpcResponse::ok(id, result)
-            }
-            "tools/list" => {
-                let mut tool_list = Vec::new();
-                for desc in tools.descriptors() {
-                    if MCP_TOOLS.contains(&desc.id.as_str()) {
-                        tool_list.push(serde_json::json!({
-                            "name": desc.id,
-                            "description": desc.description,
-                            "inputSchema": desc.parameters,
-                        }));
-                    }
-                }
-                JsonRpcResponse::ok(id, serde_json::json!({ "tools": tool_list }))
-            }
-            "tools/call" => handle_tool_call(id, req.params, tools, logger, session_id, call_counter).await,
-            "ping" => JsonRpcResponse::ok(id, serde_json::json!({})),
-            other => JsonRpcResponse::err(id, -32601, format!("method not found: {other}")),
-        };
-
-        Some(response)
-    }
-
-    /// Execute a `tools/call` request. Logs the call to the tool_call_log ring
-    /// buffer for pattern analysis by `sovereign reflect`. Log failures are
-    /// silently ignored — they must never affect tool call outcomes.
-    ///
-    /// Every REFLECT_HINT_INTERVAL calls a short reminder is appended to the
-    /// response text nudging the agent to call `session_reflection`.
-    async fn handle_tool_call(
-        id: Value,
-        params: Option<Value>,
-        tools: Arc<ToolRegistry>,
-        logger: Arc<NoteStore>,
-        session_id: Arc<String>,
-        call_counter: Arc<AtomicU64>,
-    ) -> JsonRpcResponse {
-        let Some(params) = params else {
-            return JsonRpcResponse::err(id, -32602, "missing params");
-        };
-        let Some(name) = params.get("name").and_then(|v| v.as_str()) else {
-            return JsonRpcResponse::err(id, -32602, "missing 'name'");
-        };
-        let name = name.to_string();
-        let arguments = params
-            .get("arguments")
-            .cloned()
-            .unwrap_or(Value::Object(Default::default()));
-
-        if !MCP_TOOLS.contains(&name.as_str()) {
-            return JsonRpcResponse::err(id, -32601, format!("tool not found: {name}"));
-        }
-
-        let tool = match tools.get(&name) {
-            Ok(t) => t,
-            Err(_) => {
-                return JsonRpcResponse::ok(
-                    id,
-                    call_tool_text(
-                        format!("`{name}` not registered. Run `sovereign project init` first."),
-                        false,
-                    ),
-                );
-            }
-        };
-
-        if let Err(e) = tool.validate(&arguments) {
-            return JsonRpcResponse::ok(id, call_tool_text(e.to_string(), true));
-        }
-
-        let ctx = ToolContext {
-            conversation_id: "mcp".to_string(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-        };
-
-        let result = tool.execute(&arguments, &ctx).await;
-
-        // Log outcome to ring buffer. Fire-and-forget — a logging failure must
-        // never affect the tool call result.
-        let outcome = match &result {
-            Err(_) => "error",
-            Ok(StepOutput::Json(v)) => {
-                // Detect empty/null results to flag "index missing content" signals.
-                if v.is_null() || *v == serde_json::json!({}) || *v == serde_json::json!([]) {
-                    "empty_result"
-                } else {
-                    "success"
-                }
-            }
-            Ok(_) => "success",
-        };
-        let _ = logger.log_tool_call(&session_id, &name, outcome).await;
-
-        // Increment the session call counter. When it crosses a multiple of
-        // REFLECT_HINT_INTERVAL, append a brief reflection reminder to the
-        // response. Skip the reminder when the tool IS session_reflection
-        // (no need to prompt what was just called) and on error results
-        // (don't dilute the error message).
-        let count = call_counter.fetch_add(1, Ordering::Relaxed) + 1;
-        let reflect_hint = if name != "session_reflection"
-            && count % REFLECT_HINT_INTERVAL == 0
-            && result.is_ok()
-        {
-            Some(format!(
-                "\n\n---\n[sovereign] {count} tool calls this session. \
-                 Consider calling `session_reflection` to record what helped \
-                 and what was missing while context is fresh."
-            ))
-        } else {
-            None
-        };
-
-        match result {
-            Ok(StepOutput::Text(text)) => {
-                let body = match reflect_hint {
-                    Some(hint) => format!("{text}{hint}"),
-                    None => text,
-                };
-                JsonRpcResponse::ok(id, call_tool_text(body, false))
-            }
-            Ok(StepOutput::Json(value)) => {
-                let text = serde_json::to_string_pretty(&value)
-                    .unwrap_or_else(|_| value.to_string());
-                let body = match reflect_hint {
-                    Some(hint) => format!("{text}{hint}"),
-                    None => text,
-                };
-                JsonRpcResponse::ok(id, call_tool_text(body, false))
-            }
-            Ok(other) => JsonRpcResponse::ok(id, call_tool_text(format!("{other:?}"), false)),
-            Err(e) => JsonRpcResponse::ok(
-                id,
-                call_tool_text(format!("Tool `{name}` failed: {e}"), true),
-            ),
-        }
-    }
-}
 
 // ─── Language detection ──────────────────────────────────────
 
@@ -3275,15 +2932,15 @@ fi
 
     #[test]
     fn opencode_config_no_commonwealth() {
-        let s = generate_opencode_config(8080, None, &[]);
+        let s = generate_opencode_config(9741, None, &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
-        assert_eq!(v["mcp"]["servers"]["sovereign"]["url"], "http://localhost:8080/mcp");
+        assert_eq!(v["mcp"]["servers"]["sovereign"]["url"], "http://localhost:9741/mcp");
         assert!(v.get("provider").is_none());
     }
 
     #[test]
     fn opencode_config_commonwealth_no_models_uses_auto_fallback() {
-        let s = generate_opencode_config(8080, Some("http://localhost:9741"), &[]);
+        let s = generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(v["provider"]["commonwealth"]["options"]["baseURL"], "http://localhost:9741/v1");
         assert!(v["provider"]["commonwealth"]["models"]["auto"].is_object());
@@ -3292,7 +2949,7 @@ fi
     #[test]
     fn opencode_config_commonwealth_real_models() {
         let models = vec!["Qwen3-9B".into(), "Qwen3-27B".into()];
-        let s = generate_opencode_config(8080, Some("http://localhost:9741"), &models);
+        let s = generate_opencode_config(9741, Some("http://localhost:9741"), &models);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         let m = &v["provider"]["commonwealth"]["models"];
         assert!(m["Qwen3-9B"].is_object());
@@ -3303,16 +2960,16 @@ fi
     #[test]
     fn opencode_config_normalizes_internal_port() {
         // Port 9742 (internal mesh) should be rewritten to 9741 (public API)
-        let s = generate_opencode_config(8080, Some("http://localhost:9742"), &[]);
+        let s = generate_opencode_config(9741, Some("http://localhost:9742"), &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(v["provider"]["commonwealth"]["options"]["baseURL"], "http://localhost:9741/v1");
     }
 
     #[test]
     fn merge_opencode_adds_commonwealth_provider() {
-        let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:8080/mcp"}}}}"#;
+        let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:9741/mcp"}}}}"#;
         let generated =
-            generate_opencode_config(8080, Some("http://localhost:9741"), &[]);
+            generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         assert!(v["provider"]["commonwealth"]["options"]["baseURL"].is_string());
@@ -3322,7 +2979,7 @@ fi
     fn merge_opencode_preserves_other_providers() {
         let existing = r#"{"mcp":{"servers":{}},"provider":{"openai":{"name":"OpenAI","options":{"baseURL":"https://api.openai.com/v1"}}}}"#;
         let generated =
-            generate_opencode_config(8080, Some("http://localhost:9741"), &[]);
+            generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         assert!(v["provider"]["openai"].is_object(), "pre-existing provider must survive");
@@ -3333,7 +2990,7 @@ fi
     fn merge_opencode_no_commonwealth_in_generated_leaves_existing_provider_intact() {
         let existing = r#"{"mcp":{"servers":{}},"provider":{"commonwealth":{"name":"old"}}}"#;
         // generate without commonwealth URL → no provider key in generated
-        let generated = generate_opencode_config(8080, None, &[]);
+        let generated = generate_opencode_config(9741, None, &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         // existing commonwealth entry should be preserved unchanged
@@ -3342,14 +2999,14 @@ fi
 
     #[test]
     fn agents_md_includes_inference_section_when_commonwealth_configured() {
-        let md = generate_agents_md("myproject", 8080, true, Some("http://localhost:9741"));
+        let md = generate_agents_md("myproject", 9741, true, Some("http://localhost:9741"));
         assert!(md.contains("Commonwealth mesh provider"));
         assert!(md.contains("commonwealth/<model-id>"));
     }
 
     #[test]
     fn agents_md_no_inference_section_without_commonwealth() {
-        let md = generate_agents_md("myproject", 8080, true, None);
+        let md = generate_agents_md("myproject", 9741, true, None);
         assert!(!md.contains("Commonwealth mesh provider"));
     }
 

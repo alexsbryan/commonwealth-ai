@@ -61,7 +61,7 @@ Commands:
     --data-dir <dir>  Index directory (default: ~/.sovereign/indexes)
 
   mcp-status          Ping the local MCP server and list exposed tools
-    --url <url>       Override the default http://localhost:8080/mcp
+    --url <url>       Override the default http://localhost:9741/mcp
 
   search <query>      Semantic search (use the Sovereign chat or MCP for now)
   help                Show this help
@@ -366,7 +366,7 @@ async fn cmd_watch(args: &[String]) -> i32 {
 // ─── mcp-status (P4) ──────────────────────────────────────────
 
 async fn cmd_mcp_status(args: &[String]) -> i32 {
-    let mut url = "http://localhost:8080/mcp".to_string();
+    let mut url = "http://localhost:9741/mcp".to_string();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {

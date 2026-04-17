@@ -18,6 +18,7 @@ pub mod gossip;
 pub mod inference_adapter;
 pub mod join;
 pub mod knowledge_client;
+pub mod mcp_router;
 pub(crate) mod oicp_select;
 pub mod peer_inference;
 pub mod persist;
