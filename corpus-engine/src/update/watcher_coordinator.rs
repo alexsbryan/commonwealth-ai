@@ -78,6 +78,19 @@ impl WatcherStatus {
     }
 }
 
+// ─── ActivityCallback ─────────────────────────────────────────────────────────
+
+/// Notified by [`WatcherCoordinator`] when filesystem activity is detected.
+///
+/// Implemented by `sovereign-server`'s `ActivityReporter` — this trait lives
+/// in `corpus-engine` so the dependency direction is correct (corpus-engine
+/// cannot depend on sovereign-server).
+#[async_trait]
+pub trait ActivityCallback: Send + Sync + 'static {
+    /// Called when the debounce window fires and paths are dispatched to watchers.
+    async fn on_files_changed(&self);
+}
+
 // ─── BackgroundWatcher trait ──────────────────────────────────────────────────
 
 /// A background computation that re-runs on file changes and stores results
@@ -121,6 +134,7 @@ pub trait BackgroundWatcher: Send + Sync + 'static {
 pub struct WatcherCoordinator {
     watchers: Vec<Arc<dyn BackgroundWatcher>>,
     debounce_ms: u64,
+    activity: Option<Arc<dyn ActivityCallback>>,
 }
 
 impl WatcherCoordinator {
@@ -131,7 +145,15 @@ impl WatcherCoordinator {
         Self {
             watchers: Vec::new(),
             debounce_ms,
+            activity: None,
         }
+    }
+
+    /// Attach an activity reporter. Called before [`start`] — the callback is
+    /// notified whenever files are flushed to watchers.
+    pub fn with_activity(mut self, cb: Arc<dyn ActivityCallback>) -> Self {
+        self.activity = Some(cb);
+        self
     }
 
     /// Register a plugin. Plugins receive events in the order they are
@@ -185,9 +207,10 @@ impl WatcherCoordinator {
         let debounce = Duration::from_millis(self.debounce_ms);
         let watchers = self.watchers;
         let roots = canonical_paths;
+        let activity = self.activity;
 
         let task = tokio::spawn(async move {
-            run_coordinator_loop(rx, watchers, roots, debounce).await;
+            run_coordinator_loop(rx, watchers, roots, debounce, activity).await;
         });
 
         tracing::info!(
@@ -257,6 +280,7 @@ async fn run_coordinator_loop(
     watchers: Vec<Arc<dyn BackgroundWatcher>>,
     roots: Vec<PathBuf>,
     debounce: Duration,
+    activity: Option<Arc<dyn ActivityCallback>>,
 ) {
     // Map: absolute path → (last_event_at, is_delete).
     let mut pending: std::collections::HashMap<PathBuf, (Instant, bool)> =
@@ -281,13 +305,13 @@ async fn run_coordinator_loop(
                     }
                     None => {
                         // Channel closed — flush remaining and exit.
-                        flush_coordinator(&mut pending, &watchers, Duration::ZERO).await;
+                        flush_coordinator(&mut pending, &watchers, Duration::ZERO, activity.as_deref()).await;
                         return;
                     }
                 }
             }
             _ = tokio::time::sleep(tick_interval) => {
-                flush_coordinator(&mut pending, &watchers, debounce).await;
+                flush_coordinator(&mut pending, &watchers, debounce, activity.as_deref()).await;
             }
         }
     }
@@ -330,6 +354,7 @@ async fn flush_coordinator(
     pending: &mut std::collections::HashMap<PathBuf, (Instant, bool)>,
     watchers: &[Arc<dyn BackgroundWatcher>],
     debounce: Duration,
+    activity: Option<&dyn ActivityCallback>,
 ) {
     let now = Instant::now();
     let ready: Vec<PathBuf> = pending
@@ -351,6 +376,11 @@ async fn flush_coordinator(
         "coordinator flushing paths to {} watchers",
         watchers.len()
     );
+
+    // Notify activity reporter that files changed.
+    if let Some(cb) = activity {
+        cb.on_files_changed().await;
+    }
 
     // Fan out to all watchers concurrently. Each watcher gets the same
     // path list and handles its own cancel-and-restart logic.
@@ -436,7 +466,7 @@ mod tests {
             [(paths[0].clone(), (Instant::now() - Duration::from_secs(10), false))]
                 .into();
 
-        flush_coordinator(&mut pending, &watchers, Duration::from_millis(800)).await;
+        flush_coordinator(&mut pending, &watchers, Duration::from_millis(800), None).await;
 
         assert_eq!(counter_a.load(Ordering::SeqCst), 1, "watcher-a not called");
         assert_eq!(counter_b.load(Ordering::SeqCst), 1, "watcher-b not called");
@@ -456,7 +486,7 @@ mod tests {
         let mut pending: std::collections::HashMap<PathBuf, (Instant, bool)> =
             [(PathBuf::from("/tmp/bar.rs"), (Instant::now(), false))].into();
 
-        flush_coordinator(&mut pending, &[w], Duration::from_millis(800)).await;
+        flush_coordinator(&mut pending, &[w], Duration::from_millis(800), None).await;
 
         assert_eq!(counter.load(Ordering::SeqCst), 0, "should not have been called");
         assert_eq!(pending.len(), 1, "pending should not be drained");

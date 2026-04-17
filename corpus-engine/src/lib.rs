@@ -79,7 +79,7 @@ pub use scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord, BlastEntry, Bla
 
 #[cfg(feature = "treesitter")]
 pub use update::watcher_coordinator::{
-    BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherStatus,
+    ActivityCallback, BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherStatus,
 };
 
 #[cfg(feature = "treesitter")]
