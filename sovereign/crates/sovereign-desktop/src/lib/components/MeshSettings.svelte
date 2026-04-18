@@ -6,7 +6,9 @@
     meshGetState,
     meshIsRunning,
     meshLeave,
+    meshRotateInvite,
     saveConfig,
+    suggestNodeName,
   } from "../api";
   import { joinLinkStore } from "../stores/joinLink.svelte";
   import MeshDiagnosticsPanel from "./MeshDiagnosticsPanel.svelte";
@@ -46,6 +48,16 @@
     }
   }
 
+  async function rollNodeName() {
+    try {
+      // Just refresh the input field — the user still has to press
+      // Save to commit. Keeps "what changes when" obvious.
+      nodeNameInput = await suggestNodeName();
+    } catch (e) {
+      console.error("Failed to generate suggested node name:", e);
+    }
+  }
+
   async function saveNodeName() {
     if (!config || nodeNameSaving) return;
     nodeNameSaving = true;
@@ -80,6 +92,14 @@
   // Leave-mesh confirmation
   let showLeaveConfirm = $state(false);
   let leaving = $state(false);
+
+  // Rotate-invite confirmation. Rotating revokes the link the user
+  // already shared, which is destructive enough to warrant an
+  // explicit confirm — accidentally clicking it would lock anyone
+  // mid-share out of the mesh until they got the new link.
+  let showRotateConfirm = $state(false);
+  let rotating = $state(false);
+  let rotateError = $state<string | null>(null);
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -206,6 +226,33 @@
       error = `Failed to leave mesh: ${e}`;
     }
     leaving = false;
+  }
+
+  // ── Rotate flow ────────────────────────────────────────
+  function openRotateConfirm() {
+    rotateError = null;
+    showRotateConfirm = true;
+  }
+
+  function cancelRotate() {
+    showRotateConfirm = false;
+  }
+
+  async function confirmRotate() {
+    if (rotating) return;
+    rotating = true;
+    rotateError = null;
+    try {
+      await meshRotateInvite();
+      // Pull fresh state so the invite-card re-renders with the new
+      // link in place. Without this, the user clicks "Rotate" and
+      // the displayed link doesn't change until the 5s poll fires.
+      meshState = await meshGetState();
+      showRotateConfirm = false;
+    } catch (e) {
+      rotateError = `Failed to rotate invite: ${e}`;
+    }
+    rotating = false;
   }
 
   // ── Helpers ────────────────────────────────────────────
@@ -362,6 +409,60 @@
       {/if}
     </div>
 
+    <!-- Invite card — present whenever the daemon has cached the
+         plaintext key. Hidden for legacy meshes (no join_key.secret
+         from before this feature shipped); the user can click
+         "Rotate" to recover an inviteable link. -->
+    {#if meshState.status.join_link}
+      <div class="invite-card">
+        <h5>Invite link</h5>
+        <p class="muted">
+          Send this to anyone you want in the mesh. They tap once to join.
+        </p>
+        <div class="link-row">
+          <code class="link">{meshState.status.join_link}</code>
+          <button
+            class="copy-btn"
+            onclick={() => copyToClipboard(meshState!.status.join_link!)}
+          >
+            Copy
+          </button>
+        </div>
+        {#if copyFeedback}
+          <span class="copy-feedback">{copyFeedback}</span>
+        {/if}
+        {#if meshState.status.join_key}
+          <details class="advanced">
+            <summary>Or share the bare key</summary>
+            <div class="link-row">
+              <code class="link">{meshState.status.join_key}</code>
+              <button
+                class="copy-btn"
+                onclick={() => copyToClipboard(meshState!.status.join_key!)}
+              >
+                Copy
+              </button>
+            </div>
+          </details>
+        {/if}
+        <button class="ghost rotate-btn" onclick={openRotateConfirm}>
+          Rotate link (revokes the old one)
+        </button>
+      </div>
+    {:else}
+      <div class="invite-card invite-missing">
+        <h5>Invite link</h5>
+        <p class="muted">
+          This mesh was created before invite caching was added.
+          Rotate to generate a fresh share link — existing members
+          stay connected.
+        </p>
+        <button class="primary" onclick={openRotateConfirm}>
+          Generate new invite link
+        </button>
+      </div>
+    {/if}
+
     <div class="members-card">
       <h5>Members</h5>
       {#if meshState.members.length === 0}
@@ -384,6 +485,31 @@
         </ul>
       {/if}
     </div>
+
+    <!-- Switch-mesh paste flow — collapsed by default so it doesn't
+         clutter the main view. The MeshJoinDialog auto-leaves the
+         current mesh on confirm; the hint here makes that action
+         explicit before the user even commits. -->
+    <details class="switch-mesh">
+      <summary>Join a different mesh</summary>
+      <p class="hint">
+        Pasting a link will leave
+        <strong>"{meshState.status.name}"</strong> first.
+      </p>
+      <div class="join-row">
+        <input
+          type="text"
+          class="join-input"
+          placeholder="sovereign://join/cwth-xxxx-xxxx-xxxx"
+          bind:value={joinLinkInput}
+          onkeydown={(e) => e.key === "Enter" && submitJoinLink()}
+        />
+        <button class="primary" onclick={submitJoinLink}>Preview</button>
+      </div>
+      {#if joinLinkError}
+        <div class="alert error small">{joinLinkError}</div>
+      {/if}
+    </details>
 
     {#if meshState.contribution}
       <div class="contribution-card">
@@ -442,6 +568,44 @@
     </div>
   {/if}
 
+  <!-- ─── Rotate confirmation modal ─────────────────────── -->
+  {#if showRotateConfirm}
+    <div
+      class="modal-backdrop"
+      onclick={cancelRotate}
+      onkeydown={(e) => e.key === "Escape" && cancelRotate()}
+      role="presentation"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rotate-title"
+        tabindex="-1"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+      >
+        <h4 id="rotate-title">Generate a new invite link?</h4>
+        <p>
+          The current link will stop working. Anyone you've already
+          shared it with who hasn't joined yet will need the new
+          link. Existing members stay connected.
+        </p>
+        {#if rotateError}
+          <div class="alert error small">{rotateError}</div>
+        {/if}
+        <div class="form-actions">
+          <button class="secondary" onclick={cancelRotate} disabled={rotating}>
+            Cancel
+          </button>
+          <button class="primary" onclick={confirmRotate} disabled={rotating}>
+            {rotating ? "Rotating…" : "Rotate"}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Node name — shown to other mesh members in their rosters.
        Persisted to DesktopConfig so it survives restarts. Empty
        means "use the system hostname"; backend strips `.local`. -->
@@ -460,11 +624,20 @@
           id="node-name-input"
           type="text"
           class="node-name-input"
-          placeholder="e.g. Alex's MacBook"
+          placeholder="e.g. BeefyMac"
           bind:value={nodeNameInput}
           onkeydown={(e) => e.key === "Enter" && saveNodeName()}
           disabled={nodeNameSaving}
         />
+        <button
+          class="ghost dice-btn"
+          onclick={rollNodeName}
+          disabled={nodeNameSaving}
+          title="Suggest a memorable name"
+          aria-label="Suggest a memorable node name"
+        >
+          🎲
+        </button>
         <button
           class="primary"
           onclick={saveNodeName}
@@ -696,11 +869,16 @@
   .share-card,
   .status-card,
   .members-card,
-  .contribution-card {
+  .contribution-card,
+  .invite-card {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 16px 18px;
     background: var(--bg-secondary);
+  }
+
+  .invite-card.invite-missing {
+    border-style: dashed;
   }
 
   .form-card h4,
@@ -712,13 +890,55 @@
   }
 
   .members-card h5,
-  .contribution-card h5 {
+  .contribution-card h5,
+  .invite-card h5 {
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted);
     font-weight: 600;
     margin-bottom: 10px;
+  }
+
+  /* ── Rotate ghost button ─────────────────────────── */
+  button.ghost {
+    padding: 7px 12px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.8rem;
+    margin-top: 4px;
+  }
+  button.ghost:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--bg-input);
+  }
+
+  /* ── Dice button alongside the node-name input ── */
+  button.dice-btn {
+    padding: 0 10px;
+    font-size: 1.05rem;
+    line-height: 1;
+    margin-top: 0;
+  }
+
+  /* ── Switch-mesh details on the active-mesh view ── */
+  .switch-mesh {
+    margin-top: 4px;
+    padding: 12px 14px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .switch-mesh > summary {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .switch-mesh > .hint,
+  .switch-mesh > .join-row {
+    margin-top: 10px;
   }
 
   .form-card label {

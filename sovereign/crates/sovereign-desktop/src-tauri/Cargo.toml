@@ -29,6 +29,10 @@ futures = { workspace = true }
 walkdir = "2"
 dirs = "6"
 hostname = { workspace = true }
+# Used only by friendly_names.rs — entropy seed for the
+# adjective+mascot generator. Workspace already pins this for
+# commonwealth crates; keeping the same major.
+rand = "0.8"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

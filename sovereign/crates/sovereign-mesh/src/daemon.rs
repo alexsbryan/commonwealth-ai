@@ -107,6 +107,13 @@ pub struct EmbeddedDaemon {
     /// violations; the CLI/desktop provide a concrete factory at
     /// startup.
     provider_factory: RwLock<Option<Arc<dyn ProviderFactory>>>,
+    /// Cached plaintext of the active mesh's join key, mirroring
+    /// `<data_dir>/join_key.secret`. The hash is one-way, so without
+    /// this the share UI couldn't render the invite link after the
+    /// app restarts. Set on `create_mesh` / `join_mesh` /
+    /// `try_resume`; refreshed on `set_join_key` (called by the
+    /// rotate handler); cleared on `stop`.
+    join_key_plaintext: RwLock<Option<String>>,
 }
 
 enum DaemonState {
@@ -162,6 +169,7 @@ impl EmbeddedDaemon {
             project_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
+            join_key_plaintext: RwLock::new(None),
         }
     }
 
@@ -181,6 +189,7 @@ impl EmbeddedDaemon {
             project_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
+            join_key_plaintext: RwLock::new(None),
         }
     }
 
@@ -409,6 +418,24 @@ impl EmbeddedDaemon {
         let (mesh, self_node_id) = loaded.into_live();
         let mesh_name = mesh.name.clone();
         self.start_daemon(mesh, self_node_id).await?;
+        // Restore the cached plaintext so the share UI can render the
+        // invite link immediately on this launch — without it, users
+        // would see a member roster but no way to invite anyone new.
+        match persist::load_join_key(&self.data_dir) {
+            Ok(Some(key)) => {
+                *self.join_key_plaintext.write().await = Some(key);
+            }
+            Ok(None) => {
+                // Pre-existing mesh from before this feature shipped.
+                // Active-mesh view will hide the invite card; the
+                // user can still rotate to recover a shareable link.
+                tracing::info!(
+                    "resumed mesh has no cached join_key.secret \
+                     — share card disabled until next rotate"
+                );
+            }
+            Err(e) => warn!(error = %e, "failed to read join_key.secret on resume"),
+        }
         info!(mesh_name, "resumed mesh from persisted state");
         // A resumed mesh may have peers cached from a prior session.
         // Kick off an immediate gossip sweep so their `last_seen`
@@ -474,7 +501,14 @@ impl EmbeddedDaemon {
                     warn!(error = %e, "mesh.json write failed — mesh is in-memory only");
                 }
             }
+            if let Err(e) = persist::save_join_key(&self.data_dir, &join_key) {
+                warn!(
+                    error = %e,
+                    "join_key.secret write failed — share UI will be empty after restart"
+                );
+            }
         }
+        *self.join_key_plaintext.write().await = Some(join_key.clone());
 
         info!(mesh_name, "mesh created, daemon started");
         // On create there are no peers yet, but fire initial_sync
@@ -607,7 +641,16 @@ impl EmbeddedDaemon {
                     warn!(error = %e, "mesh.json write failed — joined mesh is in-memory only");
                 }
             }
+            // Cache the joiner-side plaintext too — they're equally
+            // entitled to re-share the invite they used to get in.
+            if let Err(e) = persist::save_join_key(&self.data_dir, &join_key) {
+                warn!(
+                    error = %e,
+                    "join_key.secret write failed — share UI will be empty after restart"
+                );
+            }
         }
+        *self.join_key_plaintext.write().await = Some(join_key.clone());
 
         info!(mesh_name, node_id = %adopted_node_id, "joined mesh, daemon started");
         // Fire a gossip round immediately so the founder (and any
@@ -642,7 +685,14 @@ impl EmbeddedDaemon {
                              it may auto-resume on next launch"
                         );
                     }
+                    if let Err(e) = persist::clear_join_key(&self.data_dir) {
+                        warn!(
+                            error = %e,
+                            "join_key.secret could not be deleted on leave"
+                        );
+                    }
                 }
+                *self.join_key_plaintext.write().await = None;
                 info!("mesh daemon stopped");
                 Ok(())
             }
@@ -697,6 +747,42 @@ impl EmbeddedDaemon {
             }
             DaemonState::Stopped => None,
         }
+    }
+
+    /// Current shareable invite for the active mesh.
+    ///
+    /// Returns `(join_key, join_link)` when the daemon is running
+    /// and the plaintext key is cached (set on `create_mesh` /
+    /// `join_mesh` / restored from disk on `try_resume`). Returns
+    /// `None` when:
+    ///   - the daemon is stopped (no mesh)
+    ///   - the daemon resumed an older mesh from before this cache
+    ///     existed (the share UI hides the invite card and prompts
+    ///     a rotate to recover a link)
+    ///
+    /// The `join_link` is reconstructed on demand from the cached
+    /// key + the current mesh name via [`crate::deep_link::build_join_link`],
+    /// so a mesh rename (if we ever add it) is automatically picked
+    /// up without invalidating the secret file.
+    pub async fn current_invite(&self) -> Option<(String, String)> {
+        let key = self.join_key_plaintext.read().await.clone()?;
+        let state = self.state.read().await;
+        let app_state = match &*state {
+            DaemonState::Running { app_state, .. } => app_state.clone(),
+            DaemonState::Stopped => return None,
+        };
+        drop(state);
+        let mesh_name = app_state.inner.mesh.read().await.name.clone();
+        let link = crate::deep_link::build_join_link(&key, None, Some(&mesh_name));
+        Some((key, link))
+    }
+
+    /// Replace the in-memory cached plaintext join key. Called by
+    /// the rotate HTTP handler after `persist::rotate_join_key` so
+    /// the next status poll surfaces the new link without needing
+    /// a daemon restart.
+    pub async fn set_join_key(&self, key: String) {
+        *self.join_key_plaintext.write().await = Some(key);
     }
 
     /// Get the Commonwealth API address (for internal use).

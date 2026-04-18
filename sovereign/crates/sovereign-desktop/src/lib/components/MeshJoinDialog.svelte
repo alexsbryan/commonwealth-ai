@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { meshPreviewJoinLink, meshJoin } from "../api";
+  import {
+    meshPreviewJoinLink,
+    meshJoin,
+    meshIsRunning,
+    meshLeave,
+  } from "../api";
   import type { JoinConfirmation } from "../types";
 
   interface Props {
@@ -18,12 +23,28 @@
   let parseError = $state<string | null>(null);
   let joining = $state(false);
   let joinError = $state<string | null>(null);
+  /** True when this user is already in a mesh — joining the new one
+   *  will leave the current one first. Drives an extra "you'll
+   *  leave X" line in the dialog so the action isn't surprising. */
+  let alreadyInMesh = $state(false);
 
   onMount(async () => {
     try {
       confirmation = await meshPreviewJoinLink(link);
     } catch (e) {
       parseError = `${e}`;
+    }
+    // Probe whether we're already in a mesh — drives the
+    // "leave-first" copy + the extra meshLeave call below. We don't
+    // call meshGetState here to keep the dialog's load fast; the
+    // boolean is sufficient for the UX hint.
+    try {
+      alreadyInMesh = await meshIsRunning();
+    } catch {
+      // If we can't tell, assume we're not in one — joining will
+      // surface a clear "AlreadyRunning" error from the daemon
+      // rather than producing a stale stub.
+      alreadyInMesh = false;
     }
   });
 
@@ -32,6 +53,13 @@
     joining = true;
     joinError = null;
     try {
+      // If the daemon already runs a mesh, the backend's join_mesh
+      // would reject with `MeshError::AlreadyRunning`. Leave the
+      // current one first so the user can switch meshes without
+      // having to drop back to the empty state.
+      if (alreadyInMesh) {
+        await meshLeave();
+      }
       const result = await meshJoin(link);
       if (onJoined) onJoined(result.mesh_name);
       onClose();
@@ -96,6 +124,12 @@
           <li>Your memories and notes</li>
         </ul>
       </div>
+
+      {#if alreadyInMesh}
+        <p class="leave-first">
+          Joining will leave the mesh you're currently in.
+        </p>
+      {/if}
 
       {#if confirmation.relay_hint}
         <p class="muted small">
@@ -211,6 +245,16 @@
     color: var(--error);
     font-size: 0.85rem;
     margin: 8px 0;
+  }
+
+  .leave-first {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: rgba(220, 165, 60, 0.08);
+    border: 1px solid rgba(220, 165, 60, 0.25);
+    color: var(--text-primary);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
   }
 
   .actions {

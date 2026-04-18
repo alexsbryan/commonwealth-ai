@@ -11,6 +11,17 @@ pub struct MeshStatus {
     pub model_name: Option<String>,
     pub knowledge_corpora: Vec<String>,
     pub is_connected: bool,
+    /// `sovereign://join/...` invite for the active mesh. `None` when
+    /// the daemon resumed a mesh from before the cached-plaintext
+    /// feature shipped — the UI hides the share card and offers
+    /// "Rotate" to recover an inviteable link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join_link: Option<String>,
+    /// Bare `cwth-XXXX-XXXX-XXXX` — the link's payload, exposed so
+    /// users can paste into chat clients that mangle deep-link URLs.
+    /// Same `None` semantics as `join_link`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join_key: Option<String>,
 }
 
 /// A member of the mesh, as shown in the UI.

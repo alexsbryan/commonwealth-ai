@@ -98,6 +98,14 @@ pub struct StatusResponse {
     pub members_online: usize,
     pub members_total: usize,
     pub members: Vec<MemberDto>,
+    /// Current shareable invite. `None` when the daemon is solo,
+    /// or when the persisted mesh predates the join_key.secret cache
+    /// (a rotate recovers the link). The frontend hides the share
+    /// card when these are absent.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub join_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub join_link: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -156,6 +164,8 @@ async fn mesh_status(
                 members_online: 0,
                 members_total: 0,
                 members: vec![],
+                join_key: None,
+                join_link: None,
             }).unwrap()),
         )
             .into_response();
@@ -181,6 +191,11 @@ async fn mesh_status(
         })
         .collect();
 
+    let (join_key, join_link) = match daemon.current_invite().await {
+        Some((k, l)) => (Some(k), Some(l)),
+        None => (None, None),
+    };
+
     (
         StatusCode::OK,
         Json(serde_json::to_value(StatusResponse {
@@ -189,6 +204,8 @@ async fn mesh_status(
             members_online: s.status.members_online,
             members_total: s.status.members_total,
             members,
+            join_key,
+            join_link,
         }).unwrap()),
     )
         .into_response()
@@ -286,14 +303,23 @@ async fn mesh_rotate(
     // state, independent of the running daemon.
     let data_dir = daemon.data_dir().to_path_buf();
     match crate::persist::rotate_join_key(&data_dir) {
-        Ok(Some(rotated)) => (
-            StatusCode::OK,
-            Json(serde_json::to_value(RotateResponse {
-                mesh_name: rotated.mesh_name,
-                join_key: rotated.join_key,
-            }).unwrap()),
-        )
-            .into_response(),
+        Ok(Some(rotated)) => {
+            // Refresh the daemon's in-memory plaintext too so the next
+            // /v1/mesh/status poll reflects the new link without a
+            // restart. (The in-memory hash on the running daemon is
+            // still stale until restart — same long-standing wart;
+            // members already in the mesh remain connected, only new
+            // joins use the new key.)
+            daemon.set_join_key(rotated.join_key.clone()).await;
+            (
+                StatusCode::OK,
+                Json(serde_json::to_value(RotateResponse {
+                    mesh_name: rotated.mesh_name,
+                    join_key: rotated.join_key,
+                }).unwrap()),
+            )
+                .into_response()
+        }
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "no mesh to rotate" })),
@@ -443,6 +469,78 @@ mod tests {
         let client = reqwest::Client::new();
         let resp = client.post(format!("{base}/v1/mesh/rotate")).send().await.unwrap();
         assert_eq!(resp.status(), 404);
+    }
+
+    #[tokio::test]
+    async fn status_includes_invite_after_create() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let create: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "Lab Squad" }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let created_key = create["join_key"].as_str().unwrap().to_string();
+
+        let status: serde_json::Value = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(
+            status["join_key"].as_str().unwrap(),
+            created_key,
+            "status must echo back the same plaintext key"
+        );
+        let link = status["join_link"].as_str().unwrap();
+        assert!(link.starts_with("sovereign://join/"));
+        assert!(link.contains(&created_key));
+    }
+
+    #[tokio::test]
+    async fn status_omits_invite_when_solo() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let status: serde_json::Value = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(status.get("join_key").map_or(true, |v| v.is_null()));
+        assert!(status.get("join_link").map_or(true, |v| v.is_null()));
+    }
+
+    #[tokio::test]
+    async fn rotate_refreshes_status_invite_in_place() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let create: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "m" }))
+            .send().await.unwrap().json().await.unwrap();
+        let pre_key = create["join_key"].as_str().unwrap().to_string();
+
+        let rotate: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send().await.unwrap().json().await.unwrap();
+        let new_key = rotate["join_key"].as_str().unwrap().to_string();
+        assert_ne!(pre_key, new_key);
+
+        let status: serde_json::Value = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send().await.unwrap().json().await.unwrap();
+        assert_eq!(status["join_key"].as_str().unwrap(), new_key);
+        assert!(status["join_link"].as_str().unwrap().contains(&new_key));
     }
 
     #[tokio::test]

@@ -313,6 +313,15 @@ export interface MeshStatus {
   model_name: string | null;
   knowledge_corpora: string[];
   is_connected: boolean;
+  /** sovereign://join/cwth-... invite for the active mesh. Absent
+   *  when this daemon resumed a mesh from before join_key.secret
+   *  caching shipped — frontend hides the share card and offers
+   *  "Rotate" to recover an inviteable link. */
+  join_link?: string | null;
+  /** Bare cwth-XXXX-XXXX-XXXX form, exposed in the "Or share the
+   *  bare key" details so users can paste into a chat client that
+   *  mangles deep-link URLs. Same caveat as join_link. */
+  join_key?: string | null;
 }
 
 export interface MeshMember {

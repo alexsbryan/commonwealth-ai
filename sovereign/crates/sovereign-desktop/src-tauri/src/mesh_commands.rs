@@ -193,7 +193,16 @@ pub async fn mesh_get_state(
     let Some(mesh_state) = mesh.mesh_state().await else {
         return Ok(None);
     };
-    Ok(Some(MeshStateResponse::from(mesh_state)))
+    let mut resp = MeshStateResponse::from(mesh_state);
+    // Local-mode equivalent of the Attach-mode HTTP path: enrich the
+    // status with the cached invite so the active-mesh view's share
+    // card has something to render. Without this, in-process daemons
+    // (the desktop's default) would never show the invite.
+    if let Some((key, link)) = mesh.current_invite().await {
+        resp.status.join_key = Some(key);
+        resp.status.join_link = Some(link);
+    }
+    Ok(Some(resp))
 }
 
 /// Check if the mesh daemon is currently running. In Attach mode we
@@ -205,6 +214,56 @@ pub async fn mesh_is_running(state: State<'_, Arc<AppState>>) -> Result<bool, St
         Some(m) => Ok(m.is_running().await),
         None => Ok(true), // Attach mode: the external daemon is always running.
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RotateInviteResponse {
+    pub mesh_name: String,
+    pub join_key: String,
+}
+
+/// Rotate the active mesh's join key. Existing members stay
+/// connected (they share the mesh state, not the key); only future
+/// joins must use the new link. Refreshes the cached plaintext on
+/// the daemon so the next status poll surfaces the new invite.
+#[tauri::command]
+pub async fn mesh_rotate_invite(
+    state: State<'_, Arc<AppState>>,
+) -> Result<RotateInviteResponse, String> {
+    if let Some(port) = attached_port(&state) {
+        let client = http_client()?;
+        let resp = client
+            .post(format!("http://localhost:{port}/v1/mesh/rotate"))
+            .send()
+            .await
+            .map_err(|e| format!("mesh rotate: {e}"))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(format!("mesh rotate failed ({status}): {text}"));
+        }
+        return resp
+            .json::<RotateInviteResponse>()
+            .await
+            .map_err(|e| format!("parse mesh/rotate response: {e}"));
+    }
+
+    // Local mode — talk to persist directly so we don't need a new
+    // EmbeddedDaemon method just for this. Mirror what the HTTP
+    // handler does: rotate on disk, then push the plaintext back
+    // into the daemon so subsequent status polls see the new key.
+    let Some(mesh) = state.mesh.as_ref() else {
+        return Err("mesh daemon not available".into());
+    };
+    let data_dir = mesh.data_dir().to_path_buf();
+    let rotated = sovereign_mesh::persist::rotate_join_key(&data_dir)
+        .map_err(|e| format!("rotate failed: {e}"))?
+        .ok_or_else(|| "no mesh to rotate".to_string())?;
+    mesh.set_join_key(rotated.join_key.clone()).await;
+    Ok(RotateInviteResponse {
+        mesh_name: rotated.mesh_name,
+        join_key: rotated.join_key,
+    })
 }
 
 /// Leave the current mesh and stop the daemon.
@@ -255,6 +314,20 @@ pub struct DiscoveredPeerDto {
 pub struct MeshDiagnostics {
     pub discovered_peers: Vec<DiscoveredPeerDto>,
     pub daemon_running: bool,
+}
+
+/// Generate a fresh memorable two-word node-name suggestion (e.g.
+/// "BeefyMac"). Powers the 🎲 button next to the node-name input —
+/// users click it to roll a new candidate, then press Save to
+/// persist via the existing `save_config` flow.
+///
+/// This command is non-persisting on purpose: we don't want clicking
+/// 🎲 to immediately mutate the user's config. The save still goes
+/// through the existing audit point so DesktopConfig writes are
+/// uniform.
+#[tauri::command]
+pub fn suggest_node_name() -> String {
+    crate::friendly_names::generate(None)
 }
 
 /// Snapshot of mDNS-discovered peers and daemon health. Polled by
@@ -344,6 +417,8 @@ impl MeshStateResponse {
                 model_name: None,
                 knowledge_corpora: Vec::new(),
                 is_connected: remote.running,
+                join_link: remote.join_link,
+                join_key: remote.join_key,
             },
             members,
             corpora: Vec::new(),

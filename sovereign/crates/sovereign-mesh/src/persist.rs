@@ -27,6 +27,14 @@ use serde::{Deserialize, Serialize};
 /// Filename at `<data_dir>/mesh.json`.
 pub const MESH_FILE: &str = "mesh.json";
 
+/// Filename at `<data_dir>/join_key.secret` — plaintext join key for
+/// the currently-active mesh. Persisted so the active-mesh UI can
+/// re-display the invite link after a daemon restart without forcing
+/// a rotation. Written 0600 on Unix; mesh.json sits next to it but
+/// only carries the salted hash so this is the only file the user
+/// must keep secret. See `save_join_key` / `load_join_key`.
+pub const JOIN_KEY_FILE: &str = "join_key.secret";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedMesh {
     pub self_node_id: NodeId,
@@ -69,6 +77,62 @@ impl PersistedMesh {
 
 pub fn mesh_file(data_dir: &Path) -> PathBuf {
     data_dir.join(MESH_FILE)
+}
+
+pub fn join_key_file(data_dir: &Path) -> PathBuf {
+    data_dir.join(JOIN_KEY_FILE)
+}
+
+/// Persist the plaintext `join_key` for the active mesh. Atomic
+/// (write-tmp-then-rename) and 0600 on Unix so other local users
+/// can't read it.
+///
+/// Why store the plaintext at all: `Mesh.join_key_hash` is one-way,
+/// so once the in-memory copy is dropped (daemon restart, app crash),
+/// nobody can reconstruct the link. Either we ask the user to rotate
+/// — which churns the link they already shared — or we cache the
+/// plaintext alongside `mesh.json`. We chose the cache. Sensitivity
+/// is the same as what `sovereign mesh create` already prints to the
+/// terminal; loopback-only HTTP keeps remote machines from reading
+/// it back.
+pub fn save_join_key(data_dir: &Path, join_key: &str) -> std::io::Result<()> {
+    fs::create_dir_all(data_dir)?;
+    let target = join_key_file(data_dir);
+    let tmp = target.with_extension("secret.tmp");
+    {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(join_key.as_bytes())?;
+        f.sync_all()?;
+    }
+    fs::rename(&tmp, &target)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // Ignore — best-effort. A failure here doesn't invalidate the
+        // write; the file's still present, just possibly group-readable.
+        let _ = fs::set_permissions(&target, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+/// Read the cached plaintext join key. `Ok(None)` when the file
+/// doesn't exist (clean install, or pre-`save_join_key` daemon).
+pub fn load_join_key(data_dir: &Path) -> std::io::Result<Option<String>> {
+    match fs::read_to_string(join_key_file(data_dir)) {
+        Ok(s) => Ok(Some(s)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Delete the cached plaintext join key. Called on `leave_mesh`
+/// alongside `clear`. Idempotent.
+pub fn clear_join_key(data_dir: &Path) -> std::io::Result<()> {
+    match fs::remove_file(join_key_file(data_dir)) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Atomically persist `mesh` + `self_node_id` to `<data_dir>/mesh.json`.
@@ -143,6 +207,9 @@ pub fn rotate_join_key(data_dir: &Path) -> std::io::Result<Option<RotatedKey>> {
     mesh.join_key_hash = new_hash;
     let mesh_name = mesh.name.clone();
     save(data_dir, &mesh, self_node_id)?;
+    // Refresh the cached plaintext too so the share UI shows the new
+    // link immediately on next status poll, not after a restart.
+    save_join_key(data_dir, &new_key)?;
     Ok(Some(RotatedKey { mesh_name, join_key: new_key }))
 }
 
@@ -274,6 +341,48 @@ mod tests {
     fn rotate_join_key_on_missing_mesh_returns_none() {
         let tmp = TempDir::new().unwrap();
         assert!(rotate_join_key(tmp.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn join_key_save_load_roundtrips() {
+        let tmp = TempDir::new().unwrap();
+        assert!(load_join_key(tmp.path()).unwrap().is_none());
+        save_join_key(tmp.path(), "cwth-1111-2222-3333").unwrap();
+        let read_back = load_join_key(tmp.path()).unwrap();
+        assert_eq!(read_back.as_deref(), Some("cwth-1111-2222-3333"));
+    }
+
+    #[test]
+    fn join_key_clear_is_idempotent() {
+        let tmp = TempDir::new().unwrap();
+        save_join_key(tmp.path(), "cwth-1111-2222-3333").unwrap();
+        clear_join_key(tmp.path()).unwrap();
+        clear_join_key(tmp.path()).unwrap(); // no-op second time
+        assert!(load_join_key(tmp.path()).unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn join_key_file_is_mode_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        save_join_key(tmp.path(), "cwth-1111-2222-3333").unwrap();
+        let mode = fs::metadata(join_key_file(tmp.path()))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "join_key.secret must be 0600 on Unix");
+    }
+
+    #[test]
+    fn rotate_join_key_persists_plaintext() {
+        let tmp = TempDir::new().unwrap();
+        let (mesh, node_id) = sample_mesh();
+        save(tmp.path(), &mesh, node_id).unwrap();
+        let rotated = rotate_join_key(tmp.path()).unwrap().unwrap();
+        let cached = load_join_key(tmp.path()).unwrap();
+        assert_eq!(cached.as_deref(), Some(rotated.join_key.as_str()));
     }
 
     #[test]

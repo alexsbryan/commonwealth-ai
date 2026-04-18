@@ -208,6 +208,17 @@ impl Default for DesktopConfig {
     }
 }
 
+/// Marker file recording that the friendly-name first-launch
+/// generator has run for this user. Held next to `desktop.toml`
+/// so wiping config also resets the sentinel — letting the user
+/// recover a fresh suggestion by deleting both files.
+fn sentinel_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("sovereign")
+        .join(".first-name-generated")
+}
+
 impl DesktopConfig {
     pub fn config_path() -> PathBuf {
         dirs::config_dir()
@@ -218,16 +229,59 @@ impl DesktopConfig {
 
     pub fn load() -> Self {
         let path = Self::config_path();
-        if path.exists() {
+        let mut config: DesktopConfig = if path.exists() {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
-                    Ok(config) => return config,
-                    Err(e) => tracing::warn!("Failed to parse config: {e}"),
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!("Failed to parse config: {e}");
+                        Self::default()
+                    }
                 },
-                Err(e) => tracing::warn!("Failed to read config: {e}"),
+                Err(e) => {
+                    tracing::warn!("Failed to read config: {e}");
+                    Self::default()
+                }
+            }
+        } else {
+            Self::default()
+        };
+
+        // Friendly first-launch node name. Without this, anyone who
+        // never opened the node-name input ends up identified by their
+        // raw system hostname ("Alexs-MacBook-2") in mesh rosters,
+        // which is forgettable and easy to mistake for someone else.
+        // Generate once and persist; never overwrite a name the user
+        // explicitly set, and never re-roll if they later cleared the
+        // field on purpose (sentinel guards against that).
+        let sentinel = sentinel_path();
+        let already_generated = sentinel.exists();
+        if config.node_name.trim().is_empty() && !already_generated {
+            let suggested = crate::friendly_names::generate(None);
+            tracing::info!(
+                node_name = %suggested,
+                "first-launch friendly node name generated"
+            );
+            config.node_name = suggested;
+            // Persist immediately so the suggestion survives even if
+            // the user closes the app before opening MeshSettings.
+            // Errors here are non-fatal — the in-memory config is
+            // still good for this session.
+            if let Err(e) = config.save() {
+                tracing::warn!(
+                    "failed to persist first-launch node name: {e}"
+                );
+            } else if let Some(parent) = sentinel.parent() {
+                let _ = std::fs::create_dir_all(parent);
+                if let Err(e) = std::fs::write(&sentinel, b"1") {
+                    tracing::warn!(
+                        "failed to write friendly-name sentinel: {e}"
+                    );
+                }
             }
         }
-        Self::default()
+
+        config
     }
 
     pub fn save(&self) -> Result<(), String> {

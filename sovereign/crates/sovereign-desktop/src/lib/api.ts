@@ -242,8 +242,27 @@ export async function meshLeave(): Promise<void> {
   return invoke("mesh_leave");
 }
 
+export interface RotateInviteResponse {
+  mesh_name: string;
+  join_key: string;
+}
+
+/** Rotate the active mesh's join key. Returns the new bare key.
+ *  Existing members stay connected — only future joins use the new
+ *  link. The next `meshGetState` reflects the new `join_key`/`join_link`. */
+export async function meshRotateInvite(): Promise<RotateInviteResponse> {
+  return invoke("mesh_rotate_invite");
+}
+
 export async function meshDiagnostics(): Promise<import("./types").MeshDiagnostics> {
   return invoke("mesh_diagnostics");
+}
+
+/** Roll a fresh memorable node-name suggestion (e.g. "BeefyMac").
+ *  The 🎲 button next to the node-name input calls this; the user
+ *  still has to press Save for the name to persist. */
+export async function suggestNodeName(): Promise<string> {
+  return invoke("suggest_node_name");
 }
 
 export async function recipeValidate(

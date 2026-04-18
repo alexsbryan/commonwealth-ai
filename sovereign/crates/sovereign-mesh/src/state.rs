@@ -83,6 +83,12 @@ impl MeshState {
             model_name: None, // Populated when inference plan active
             knowledge_corpora: corpus_ids,
             is_connected: true,
+            // Populated by the daemon's mesh_get_state wrapper from
+            // EmbeddedDaemon::current_invite — keeping it None here
+            // avoids leaking the plaintext key through the AppState
+            // path that doesn't own it.
+            join_link: None,
+            join_key: None,
         };
 
         Self {
