@@ -90,13 +90,28 @@ async fn run_daemon(_args: &[String]) -> i32 {
         &config.models.fast,
         Some(&config.models.primary),
         Some(&config.models.embed),
-        // context_size — 32768 matches the Qwen3-Instruct family's
-        // advertised window and leaves real headroom for coding-agent
-        // clients (opencode/aider) that ship max_tokens=4096 alongside
-        // long context-stuffed prompts. Earlier 4096 default made
-        // chat_completions fail with "Prompt too long" the moment a
-        // single AGENTS.md got injected.
-        32768,
+        // context_size — 16384 is the safe default across all three
+        // slots on a 64 GB unified-memory Mac running a 30B+ primary.
+        //
+        // History: 4096 caused "Prompt too long" when opencode shipped
+        // max_tokens=4096 alongside a multi-turn AGENTS.md prompt. We
+        // briefly bumped to 32768 which fit the fast + embed slots fine
+        // but, on first primary use, made llama_new_context_with_model
+        // return NULL — KV cache for a ~35B Q4 at 32k is ~16 GB, which
+        // on top of 18 GB weights + fast + embed + OS + ingest
+        // overcommitted VRAM and llama.cpp reports the allocation
+        // failure as "null result from llama cpp".
+        //
+        // 16384 halves KV to ~8 GB on the 35B, still comfortably
+        // covers opencode's 4k max_tokens plus a long prompt (12k
+        // headroom), and keeps fast + embed well under their
+        // individual budgets.
+        //
+        // When we want finer control per slot (big-box users who can
+        // afford 32k on primary), add a `[models].context_size` field
+        // to SetupConfig — the code already respects request-level
+        // max_tokens clamping, so config is the last missing piece.
+        16384,
         None, // gpu_layers — auto-detect
         ModelFamily::Unknown,
         ModelFamily::Unknown,
