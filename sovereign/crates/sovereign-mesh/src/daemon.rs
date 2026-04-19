@@ -548,8 +548,31 @@ impl EmbeddedDaemon {
         link: &DeepLink,
         node_name: &str,
     ) -> Result<JoinMeshResult, MeshError> {
+        // Auto-leave any existing mesh before joining a new one.
+        //
+        // Why: after `sovereign setup`, the CLI daemon
+        // (`daemon_cmd.rs`) auto-creates a solo mesh at boot so it
+        // has a valid state to gossip from. If the user then pastes a
+        // real invite to switch meshes, this method used to error with
+        // `AlreadyRunning` and force a two-step "leave, wait, join"
+        // flow — but the HTTP listener is tied to the daemon task, so
+        // the `leave` call takes the listener offline before `join`
+        // can arrive. The result: paste-invite silently failed and the
+        // user was stuck in the solo mesh.
+        //
+        // Switching is a valid operation, and the alternative (manual
+        // ordering from the caller) isn't survivable across the
+        // launchd restart race. Do the leave internally in one call
+        // so callers get atomic "switch mesh" semantics.
         if self.is_running().await {
-            return Err(MeshError::AlreadyRunning);
+            tracing::info!(
+                "join_mesh: daemon is in an existing mesh — auto-leaving before joining"
+            );
+            // Swallow the stop() result. Leaving *before* joining is
+            // advisory: if cleanup fails (e.g. mesh.json unlink
+            // errors), we'd rather surface the join result than a
+            // stop error that the user can't act on.
+            let _ = self.stop().await;
         }
 
         let (join_key, url_mesh_name, relay_hint) = match link {

@@ -53,13 +53,13 @@
     joining = true;
     joinError = null;
     try {
-      // If the daemon already runs a mesh, the backend's join_mesh
-      // would reject with `MeshError::AlreadyRunning`. Leave the
-      // current one first so the user can switch meshes without
-      // having to drop back to the empty state.
-      if (alreadyInMesh) {
-        await meshLeave();
-      }
+      // `join_mesh` on the daemon auto-leaves any existing mesh
+      // (including the silent solo mesh `sovereign setup` creates on
+      // first boot). Calling `meshLeave` here first would race with
+      // the launchd-managed daemon's auto-restart — the HTTP listener
+      // dies between the two round-trips and the join arrives at
+      // connection-refused or a freshly-recreated solo mesh. One
+      // atomic HTTP call to /v1/mesh/join is the load-bearing path.
       const result = await meshJoin(link);
       if (onJoined) onJoined(result.mesh_name);
       onClose();
