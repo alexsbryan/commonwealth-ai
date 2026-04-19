@@ -146,11 +146,43 @@ async fn run_daemon(_args: &[String]) -> i32 {
         }
     };
 
+    // ── CorpusEngine ──────────────────────────────────────────────
+    // Single shared instance: powers both the `/mcp` tool registry
+    // (find_callers, code_search, etc.) and the mesh daemon's
+    // `/internal/corpus/*` HTTP surface. Without sharing, the
+    // `auto_ingest` loop on the mesh side would hit `state.inner
+    // .corpus_engine == None` and silently no-op, and a manual
+    // POST to `/internal/corpus/collaborate` would 503 with
+    // "no corpus engine available on this node".
+    //
+    // Zero-vector embed for code indexes — real inference flows
+    // through `/v1/*` via the InferenceProvider, not the tool
+    // layer. (Wikipedia + other JSONL corpora are ingested by the
+    // desktop's own engine; the daemon only NEEDS to read the
+    // `_corpus_meta.json` files those ingests leave on disk to
+    // detect "in_progress" state, which doesn't require embed.)
+    let engine: Arc<CorpusEngine> = {
+        let indexes_dir = data_dir.join("indexes");
+        let embed: EmbedFn = Arc::new(|_text: &str| {
+            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+        });
+        Arc::new(CorpusEngine::new(
+            indexes_dir.clone(),
+            indexes_dir,
+            embed,
+        ))
+    };
+
     // ── Tool registry (code intelligence + notes) ─────────────────
     // The embedded daemon serves /mcp for all locally-indexed corpora
     // under data_dir/indexes/. Tools return helpful errors when no
     // index is installed yet (first boot after setup, pre-project-init).
-    let tools = build_tool_registry(&data_dir, Arc::clone(&notes_store)).await;
+    let tools = build_tool_registry(
+        &data_dir,
+        Arc::clone(&engine),
+        Arc::clone(&notes_store),
+    )
+    .await;
 
     // ── EmbeddedDaemon ────────────────────────────────────────────
     // Wrap in Arc so the mesh HTTP router can clone it for axum
@@ -159,6 +191,11 @@ async fn run_daemon(_args: &[String]) -> i32 {
     // from HTTP callers).
     let daemon = Arc::new(sovereign_mesh::EmbeddedDaemon::new(data_dir.clone()));
     daemon.set_inference_provider(Arc::clone(&provider)).await;
+    // Hand the engine to the mesh daemon so the auto_ingest loop and
+    // /internal/corpus/* HTTP surface can both see in-progress
+    // wikipedia/etc. ingests. See engine block above for the
+    // diagnostic story.
+    daemon.set_corpus_engine(Arc::clone(&engine)).await;
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
     daemon
         .set_mcp(Arc::new(tools), Arc::clone(&notes_store), session_id)
@@ -285,21 +322,10 @@ async fn run_daemon(_args: &[String]) -> i32 {
 /// `write_note` / `read_notes`.
 async fn build_tool_registry(
     data_dir: &std::path::Path,
+    engine: Arc<CorpusEngine>,
     notes: Arc<NoteStore>,
 ) -> ToolRegistry {
-    // Zero-vector embed for code indexes; real inference flows through
-    // `/v1/*` via the InferenceProvider, not the tool layer.
-    let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
-    });
     let indexes_dir = data_dir.join("indexes");
-    // CorpusEngine expects a recipes dir + data dir; we point recipes at
-    // the same indexes dir (no recipe registry for the daemon).
-    let engine = Arc::new(CorpusEngine::new(
-        indexes_dir.clone(),
-        indexes_dir.clone(),
-        embed,
-    ));
 
     let mut tools = ToolRegistry::new();
 
