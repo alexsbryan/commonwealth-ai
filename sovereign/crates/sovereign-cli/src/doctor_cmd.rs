@@ -38,6 +38,8 @@ enum CheckStatus {
 #[serde(rename_all = "snake_case")]
 enum Repair {
     Executable(String),
+    /// Multiple commands to run in sequence (e.g. one per corpus).
+    MultiExecutable(Vec<String>),
     Manual(String),
     None,
 }
@@ -647,15 +649,58 @@ async fn check_mcp_live() -> CheckResult {
 /// watcher is Crashed; Failed when any watcher is Disabled (the
 /// daemon has given up auto-restarting and needs operator action).
 async fn check_project_watchers() -> CheckResult {
-    let Some(body) = http_get_json("http://127.0.0.1:9741/v1/projects").await else {
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => {
+            return CheckResult {
+                name: "project_watchers",
+                layer: Layer::Sovereign,
+                status: CheckStatus::Warning,
+                message: "could not build HTTP client".into(),
+                repair: Repair::None,
+            };
+        }
+    };
+
+    let resp = match client.get("http://127.0.0.1:9741/v1/projects").send().await {
+        Ok(r) => r,
+        Err(_) => {
+            return CheckResult {
+                name: "project_watchers",
+                layer: Layer::Sovereign,
+                status: CheckStatus::Warning,
+                message: "daemon unreachable — /v1/projects did not answer".into(),
+                repair: Repair::Executable("sovereign daemon restart".into()),
+            };
+        }
+    };
+
+    if resp.status().as_u16() == 404 {
         return CheckResult {
             name: "project_watchers",
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
-            message: "daemon unreachable — /v1/projects did not answer".into(),
+            message: "/v1/projects returned 404 — project_http_router not mounted (restart the daemon)".into(),
             repair: Repair::Executable("sovereign daemon restart".into()),
         };
+    }
+
+    let body: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(_) => {
+            return CheckResult {
+                name: "project_watchers",
+                layer: Layer::Sovereign,
+                status: CheckStatus::Warning,
+                message: "/v1/projects returned unexpected shape".into(),
+                repair: Repair::Manual("inspect daemon logs".into()),
+            };
+        }
     };
+
     let Some(projects) = body["projects"].as_array() else {
         return CheckResult {
             name: "project_watchers",
@@ -671,8 +716,8 @@ async fn check_project_watchers() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
             message: "daemon is running but no projects registered".into(),
-            repair: Repair::Executable(
-                "sovereign project register  (run this from each repo root)".into(),
+            repair: Repair::Manual(
+                "cd <repo-root> && sovereign project register  (run from each repo root)".into(),
             ),
         };
     }
@@ -800,8 +845,11 @@ fn check_scip_integrity() -> CheckResult {
                 corrupt.len(),
                 corrupt.join(", ")
             ),
-            repair: Repair::Executable(
-                "sovereign project refresh --name <corpus_id>".into(),
+            repair: Repair::MultiExecutable(
+                corrupt
+                    .iter()
+                    .map(|id| format!("sovereign project refresh --name {id} --local"))
+                    .collect(),
             ),
         };
     }
@@ -815,8 +863,11 @@ fn check_scip_integrity() -> CheckResult {
                 stale_schema.len(),
                 stale_schema.join(", ")
             ),
-            repair: Repair::Executable(
-                "sovereign project refresh --name <corpus_id>".into(),
+            repair: Repair::MultiExecutable(
+                stale_schema
+                    .iter()
+                    .map(|id| format!("sovereign project refresh --name {id} --local"))
+                    .collect(),
             ),
         };
     }
@@ -989,11 +1040,21 @@ fn print_human(results: &[CheckResult]) {
         for r in &layer_results {
             let sym = status_symbol(&r.status);
             println!("    {sym}  {}  —  {}", r.name, r.message);
-            if r.status == CheckStatus::Failed {
-                if let Repair::Executable(cmd) | Repair::Manual(cmd) = &r.repair {
-                    println!("       → {cmd}");
+            if r.status == CheckStatus::Failed || r.status == CheckStatus::Warning {
+                match &r.repair {
+                    Repair::Executable(cmd) | Repair::Manual(cmd) => {
+                        println!("       → {cmd}");
+                    }
+                    Repair::MultiExecutable(cmds) => {
+                        for cmd in cmds {
+                            println!("       → {cmd}");
+                        }
+                    }
+                    Repair::None => {}
                 }
-                total_issues += 1;
+                if r.status == CheckStatus::Failed {
+                    total_issues += 1;
+                }
             }
         }
     }
@@ -1018,16 +1079,124 @@ fn print_json(results: &[CheckResult]) {
     println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
 }
 
-async fn run_fix(results: &[CheckResult]) {
+// ── Default config templates (embedded at compile time) ──────────────────────
+
+const DEFAULT_TEST_RUNNER_TOML: &str = r#"
+[test_runner]
+command = "scripts/sovereign-test.sh"
+working_dir = "."
+timeout_secs = 120
+debounce_ms = 2000
+"#;
+
+const DEFAULT_LINT_RUNNER_TOML: &str = r#"
+[lint_runner]
+command = "scripts/sovereign-lint.sh"
+working_dir = "."
+timeout_secs = 60
+debounce_ms = 800
+"#;
+
+const SKILL_MD_TEMPLATE: &str =
+    include_str!("../../../.opencode/skills/sovereign-code/SKILL.md");
+const HOOK_CONFIG_TEMPLATE: &str =
+    include_str!("../../../.opencode/oh-my-opencode.jsonc");
+
+// ── Inline repair helpers ─────────────────────────────────────────────────────
+
+/// Write a default `.sovereign/sovereign.toml` with both runners configured,
+/// appending only the sections that are missing when the file already exists.
+fn attempt_write_runner_config(sovereign_dir: &std::path::Path) {
+    let toml_path = sovereign_dir.join("sovereign.toml");
+    if toml_path.exists() {
+        let existing = std::fs::read_to_string(&toml_path).unwrap_or_default();
+        let mut append = String::new();
+        if !existing.contains("[test_runner]") {
+            append.push_str(DEFAULT_TEST_RUNNER_TOML);
+        }
+        if !existing.contains("[lint_runner]") {
+            append.push_str(DEFAULT_LINT_RUNNER_TOML);
+        }
+        if append.is_empty() {
+            println!("  – runners: already configured, no changes needed");
+            return;
+        }
+        match std::fs::OpenOptions::new()
+            .append(true)
+            .open(&toml_path)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, append.as_bytes()))
+        {
+            Ok(_) => println!("  ✓ runners: appended to {}", toml_path.display()),
+            Err(e) => println!("  ✗ runners: could not write {}: {e}", toml_path.display()),
+        }
+        return;
+    }
+    if let Some(parent) = toml_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let content = format!("{DEFAULT_TEST_RUNNER_TOML}{DEFAULT_LINT_RUNNER_TOML}");
+    match std::fs::write(&toml_path, &content) {
+        Ok(_) => println!("  ✓ runners: wrote {}", toml_path.display()),
+        Err(e) => println!("  ✗ runners: could not write {}: {e}", toml_path.display()),
+    }
+}
+
+/// Write the OmO SKILL.md to `.opencode/skills/sovereign-code/SKILL.md`
+/// under the current working directory.
+fn attempt_write_skill_file() {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let skill_dir = cwd
+        .join(".opencode")
+        .join("skills")
+        .join("sovereign-code");
+    if let Err(e) = std::fs::create_dir_all(&skill_dir) {
+        println!(
+            "  ✗ skill_file: could not create directory {}: {e}",
+            skill_dir.display()
+        );
+        return;
+    }
+    let skill_md = skill_dir.join("SKILL.md");
+    if skill_md.exists() {
+        println!("  – skill_file: already exists at {}", skill_md.display());
+        return;
+    }
+    match std::fs::write(&skill_md, SKILL_MD_TEMPLATE) {
+        Ok(_) => println!("  ✓ skill_file: wrote {}", skill_md.display()),
+        Err(e) => println!("  ✗ skill_file: could not write {}: {e}", skill_md.display()),
+    }
+}
+
+/// Write the OmO hook config to `.opencode/oh-my-opencode.jsonc`
+/// under the current working directory.
+fn attempt_write_hook_config() {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let opencode_dir = cwd.join(".opencode");
+    if let Err(e) = std::fs::create_dir_all(&opencode_dir) {
+        println!(
+            "  ✗ hook_config: could not create directory {}: {e}",
+            opencode_dir.display()
+        );
+        return;
+    }
+    let hook_file = opencode_dir.join("oh-my-opencode.jsonc");
+    if hook_file.exists() {
+        println!("  – hook_config: already exists at {}", hook_file.display());
+        return;
+    }
+    match std::fs::write(&hook_file, HOOK_CONFIG_TEMPLATE) {
+        Ok(_) => println!("  ✓ hook_config: wrote {}", hook_file.display()),
+        Err(e) => println!("  ✗ hook_config: could not write {}: {e}", hook_file.display()),
+    }
+}
+
+// ── Fix runner ────────────────────────────────────────────────────────────────
+
+async fn run_fix(results: &[CheckResult], sovereign_dir: &std::path::Path) {
     let fixable: Vec<_> = results
         .iter()
-        .filter(|r| r.status == CheckStatus::Failed)
-        .filter_map(|r| {
-            if let Repair::Executable(cmd) = &r.repair {
-                Some((r.name, cmd.clone()))
-            } else {
-                None
-            }
+        .filter(|r| {
+            r.status == CheckStatus::Failed || r.status == CheckStatus::Warning
         })
         .collect();
 
@@ -1036,37 +1205,82 @@ async fn run_fix(results: &[CheckResult]) {
         return;
     }
 
-    for (name, cmd) in &fixable {
-        println!("  Repairing {name}: {cmd}");
-        // Split into program + args at the first space boundary.
+    // ── Executable repairs ────────────────────────────────────────
+    for r in fixable.iter().filter(|r| matches!(r.repair, Repair::Executable(_))) {
+        let Repair::Executable(cmd) = &r.repair else { continue };
+        println!("  Repairing {}: {cmd}", r.name);
         let mut parts = cmd.splitn(2, ' ');
         let prog = parts.next().unwrap_or(cmd);
-        let rest: Vec<&str> = parts.next().map(|s| s.split_whitespace().collect()).unwrap_or_default();
+        let rest: Vec<&str> = parts
+            .next()
+            .map(|s| s.split_whitespace().collect())
+            .unwrap_or_default();
         let status = std::process::Command::new(prog).args(&rest).status();
         match status {
-            Ok(s) if s.success() => println!("  ✓ {name} repaired"),
-            Ok(s) => println!("  ✗ {name} repair exited {s}"),
-            Err(e) => println!("  ✗ {name} repair failed: {e}"),
+            Ok(s) if s.success() => println!("  ✓ {} repaired", r.name),
+            Ok(s) => println!("  ✗ {} repair exited {s}", r.name),
+            Err(e) => println!("  ✗ {} repair failed: {e}", r.name),
         }
     }
 
-    // Print manual hints for non-executable repairs.
-    let manual: Vec<_> = results
-        .iter()
-        .filter(|r| r.status == CheckStatus::Failed)
-        .filter_map(|r| {
-            if let Repair::Manual(hint) = &r.repair {
-                Some((r.name, hint.clone()))
-            } else {
-                None
+    // ── MultiExecutable repairs (e.g. one per stale SCIP corpus) ─
+    for r in fixable.iter().filter(|r| matches!(r.repair, Repair::MultiExecutable(_))) {
+        let Repair::MultiExecutable(cmds) = &r.repair else { continue };
+        println!("  Repairing {} ({} commands):", r.name, cmds.len());
+        let mut all_ok = true;
+        for cmd in cmds {
+            println!("    {cmd}");
+            let mut parts = cmd.splitn(2, ' ');
+            let prog = parts.next().unwrap_or(cmd);
+            let rest: Vec<&str> = parts
+                .next()
+                .map(|s| s.split_whitespace().collect())
+                .unwrap_or_default();
+            let status = std::process::Command::new(prog).args(&rest).status();
+            match status {
+                Ok(s) if s.success() => {}
+                Ok(s) => {
+                    println!("    ✗ exited {s}");
+                    all_ok = false;
+                }
+                Err(e) => {
+                    println!("    ✗ {e}");
+                    all_ok = false;
+                }
             }
-        })
-        .collect();
+        }
+        if all_ok {
+            println!("  ✓ {} repaired", r.name);
+        }
+    }
 
+    // ── Inline repairs for checks that need file-writing logic ───
+    for r in fixable.iter() {
+        match r.name {
+            "test_runner" | "lint_runner" => {
+                attempt_write_runner_config(sovereign_dir);
+            }
+            "skill_file" => {
+                attempt_write_skill_file();
+            }
+            "hook_config" => {
+                attempt_write_hook_config();
+            }
+            _ => {}
+        }
+    }
+
+    // ── Print manual hints ────────────────────────────────────────
+    let manual: Vec<_> = fixable
+        .iter()
+        .filter(|r| matches!(r.repair, Repair::Manual(_)))
+        .collect();
     if !manual.is_empty() {
         println!("\n  Manual repairs needed:");
-        for (name, hint) in &manual {
-            println!("    {name}: {hint}");
+        for r in &manual {
+            if let Repair::Manual(hint) = &r.repair {
+                println!("    {}: {hint}", r.name);
+            }
         }
     }
 }
@@ -1117,7 +1331,7 @@ pub async fn run_doctor(args: &[String]) -> i32 {
         print_human(&results);
         if fix {
             println!("\n  Running repairs...");
-            run_fix(&results).await;
+            run_fix(&results, &sovereign_dir).await;
         }
     }
 

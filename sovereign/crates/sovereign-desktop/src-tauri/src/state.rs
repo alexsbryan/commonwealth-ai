@@ -681,6 +681,161 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         mesh.set_inference_provider(Arc::clone(&raw_inference)).await;
     }
 
+    // ── Wire the embedded daemon's full HTTP surface for CLI-setup mode ────────
+    // In Local/CliSetup mode this process IS the sovereign daemon on :9741.
+    // Earlier code only wired set_corpus_engine + set_inference_provider, which
+    // leaves three surfaces dark when the HTTP listener starts at try_resume:
+    //   • /v1/models  — needs set_setup_config so register_local_model_slots runs
+    //   • /mcp        — needs set_mcp (ToolRegistry + NoteStore + session id)
+    //   • /v1/projects — needs install_project_http_router + a live Reindexer
+    //
+    // Clone the Arc and config upfront so no borrows cross the .await points.
+    let cli_setup_wiring = match (&state.bootstrap_mode, state.mesh.as_ref()) {
+        (
+            crate::bootstrap::BootstrapMode::Local {
+                source: crate::bootstrap::ConfigSource::CliSetup(cfg),
+            },
+            Some(mesh),
+        ) => Some((Arc::clone(mesh), cfg.clone())),
+        _ => None,
+    };
+    if let Some((daemon_arc, cli_cfg)) = cli_setup_wiring {
+        let data_dir = cli_cfg.data.dir.clone();
+        let indexes_dir = data_dir.join("indexes");
+        let _ = std::fs::create_dir_all(&indexes_dir);
+
+        // 1. /v1/models — set_setup_config causes register_local_model_slots
+        //    to fire inside start_daemon (called by try_resume below).
+        daemon_arc.set_setup_config(cli_cfg.clone()).await;
+
+        // 2. /mcp — ToolRegistry backed by the already-loaded CorpusEngine.
+        let notes_path = data_dir.join("notes.db");
+        match corpus_engine::NoteStore::open(&notes_path) {
+            Ok(notes_store) => {
+                let notes = Arc::new(notes_store);
+                let mut mcp_tools = ToolRegistry::new();
+                // Code-intel tools — reuse the already-loaded CorpusEngine.
+                mcp_tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+                    Arc::clone(&corpus_engine),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(
+                    Arc::clone(&corpus_engine),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
+                    Arc::clone(&corpus_engine),
+                )));
+                // Call-graph tools with initial merged SCIP state.
+                let initial_graph = corpus_engine::ScipGraph::open_in_memory("merged")
+                    .expect("in-memory ScipGraph for MCP call-graph tools");
+                if let Ok(rd) = std::fs::read_dir(&indexes_dir) {
+                    for de in rd.flatten() {
+                        if !de.path().is_dir() {
+                            continue;
+                        }
+                        let scip_path = de.path().join("scip_graph.db");
+                        if scip_path.exists() {
+                            let _ = initial_graph.import_from_path(&scip_path).await;
+                        }
+                    }
+                }
+                let graph_handle: sovereign_mesh::reindexer::ScipGraphHandle =
+                    Arc::new(arc_swap::ArcSwap::from_pointee(initial_graph));
+                let hc = Arc::new(sovereign_tools::IndexHealthChecker::new(
+                    Arc::clone(&graph_handle),
+                ));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::FindCallersTool::new(
+                        Arc::clone(&corpus_engine),
+                        Arc::clone(&graph_handle),
+                    )
+                    .with_health_checker(Arc::clone(&hc)),
+                ));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::FindCalleesTool::new(
+                        Arc::clone(&corpus_engine),
+                        Arc::clone(&graph_handle),
+                    )
+                    .with_health_checker(Arc::clone(&hc)),
+                ));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
+                        .with_health_checker(Arc::clone(&hc)),
+                ));
+                // Notes tools.
+                mcp_tools.register(Box::new(sovereign_tools::WriteNoteTool::new(
+                    Arc::clone(&notes),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::ReadNotesTool::new(
+                    Arc::clone(&notes),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(
+                    Arc::clone(&notes),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
+                    Arc::clone(&notes),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::CheckDocPathsTool::new()));
+                let session_id = format!("desktop-{}", uuid::Uuid::new_v4());
+                tracing::info!(tools = mcp_tools.count(), "desktop daemon: wiring /mcp");
+                daemon_arc
+                    .set_mcp(Arc::new(mcp_tools), Arc::clone(&notes), session_id)
+                    .await;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "desktop daemon: notes.db unavailable — /mcp will not be mounted"
+                );
+            }
+        }
+
+        // 3. Mesh HTTP + admin HTTP API (enables /v1/mesh/* and /v1/admin/reload).
+        daemon_arc
+            .install_mesh_http_router(sovereign_mesh::mesh_http::mesh_router(
+                Arc::clone(&daemon_arc),
+            ))
+            .await;
+        daemon_arc
+            .install_admin_http_router(sovereign_mesh::admin_http::admin_router(
+                Arc::clone(&daemon_arc),
+            ))
+            .await;
+
+        // 4. /v1/projects — project freshness pipeline.
+        let merged_for_indexer = corpus_engine::ScipGraph::open_in_memory("merged")
+            .expect("in-memory ScipGraph for project pipeline");
+        let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle =
+            Arc::new(arc_swap::ArcSwap::from_pointee(merged_for_indexer));
+        let reindexer = sovereign_mesh::reindexer::Reindexer::new(
+            indexes_dir.clone(),
+            merged_handle,
+        );
+        daemon_arc
+            .install_project_http_router(sovereign_mesh::project_http::project_router(
+                Arc::clone(&reindexer),
+            ))
+            .await;
+        // Resume any previously-registered projects so FS watchers restart.
+        let registry = sovereign_mesh::projects::Registry::load().unwrap_or_else(|e| {
+            tracing::warn!(
+                error = %e,
+                "desktop daemon: project registry unavailable; starting empty"
+            );
+            sovereign_mesh::projects::Registry::default()
+        });
+        for entry in registry.entries() {
+            reindexer.register(entry.clone()).await;
+            tracing::info!(corpus = %entry.corpus_id, "desktop daemon: resumed project");
+        }
+        // The project router's Extension holds an Arc<Reindexer> keeping
+        // watchers alive for the process lifetime — the local clone can drop.
+        drop(reindexer);
+
+        tracing::info!(
+            "desktop daemon: /v1/models, /mcp, and /v1/projects are now wired"
+        );
+    }
+
     // Startup dimension guard: probe the loaded embed model's actual output
     // size and compare against every installed corpus index. A mismatch means
     // the user swapped embed models after building their library — retrieval

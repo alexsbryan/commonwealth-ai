@@ -8142,6 +8142,7 @@ dependencies = [
 name = "sovereign-desktop"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "axum",
  "chrono",

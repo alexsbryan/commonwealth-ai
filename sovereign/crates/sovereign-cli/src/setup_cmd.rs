@@ -888,6 +888,18 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         return 0;
     }
 
+    // ── Post-setup health check ──────────────────────────────────
+    // Run doctor to verify everything is healthy. Print results so the
+    // user gets immediate confirmation that setup succeeded end-to-end.
+    println!();
+    println!("  Verifying setup health...");
+    let exit_code = crate::doctor_cmd::run_doctor(&[]).await;
+    if exit_code != 0 {
+        println!();
+        println!("  \u{26a0} Setup completed but some checks failed.");
+        println!("    Run `sovereign doctor --fix` to attempt repairs.");
+    }
+
     // ── Banner ───────────────────────────────────────────────────
     println!();
     println!("  \u{2713} Mesh running — 1 node (you)");

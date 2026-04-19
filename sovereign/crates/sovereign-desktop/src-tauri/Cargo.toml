@@ -7,7 +7,7 @@ edition.workspace = true
 sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
-sovereign-tools = { workspace = true }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-mesh = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 tokio = { workspace = true }
@@ -25,6 +25,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
 reqwest = { workspace = true, features = ["stream"] }
+arc-swap = { workspace = true }
 futures = { workspace = true }
 walkdir = "2"
 dirs = "6"
