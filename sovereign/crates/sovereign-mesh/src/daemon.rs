@@ -139,6 +139,16 @@ enum DaemonState {
     },
 }
 
+/// Distinguishes "user wants to leave the mesh" from "process is
+/// being shut down gracefully". Both stop the in-memory daemon, but
+/// only Leave wipes the on-disk persistence — Shutdown preserves it
+/// so the next launch resumes into the same mesh.
+#[derive(Debug, Clone, Copy)]
+enum StopMode {
+    Leave,
+    Shutdown,
+}
+
 /// Result of creating a new mesh.
 pub struct CreateMeshResult {
     pub mesh_name: String,
@@ -568,11 +578,11 @@ impl EmbeddedDaemon {
             tracing::info!(
                 "join_mesh: daemon is in an existing mesh — auto-leaving before joining"
             );
-            // Swallow the stop() result. Leaving *before* joining is
-            // advisory: if cleanup fails (e.g. mesh.json unlink
-            // errors), we'd rather surface the join result than a
-            // stop error that the user can't act on.
-            let _ = self.stop().await;
+            // User intent: switch meshes. Use leave (clears state)
+            // not shutdown (preserves it) — without the clear, the
+            // resume on next launch would race the join and we'd be
+            // back in the previous mesh after a restart.
+            let _ = self.leave().await;
         }
 
         let (join_key, url_mesh_name, relay_hint) = match link {
@@ -632,8 +642,11 @@ impl EmbeddedDaemon {
             Ok(h) => h,
             Err(e) => {
                 // Tear down the placeholder daemon so the next attempt
-                // from the UI doesn't hit AlreadyRunning.
-                let _ = self.stop().await;
+                // from the UI doesn't hit AlreadyRunning. Use leave —
+                // we never persisted the placeholder mesh, so leave's
+                // clear is a no-op against persistence and matches the
+                // user-facing intent ("the join failed, go back to no-mesh").
+                let _ = self.leave().await;
                 return Err(MeshError::Network(e.to_string()));
             }
         };
@@ -688,10 +701,39 @@ impl EmbeddedDaemon {
         })
     }
 
-    /// Leave the mesh: stop the daemon AND delete the persisted
-    /// state so the next app start doesn't auto-resume. This is
-    /// what the UI's "Leave" button calls.
+    /// **Leave** the mesh: stop the daemon AND delete the persisted
+    /// state so the next launch doesn't auto-resume. The UI's "Leave"
+    /// button and `POST /v1/mesh/leave` invoke this. Internal callers
+    /// switching meshes (`join_mesh`'s auto-leave) also use it.
+    ///
+    /// Distinct from [`shutdown`](Self::shutdown) which is intended
+    /// for graceful process exit (SIGTERM/SIGINT) and PRESERVES the
+    /// persisted state. Conflating the two means a Ctrl-C wipes the
+    /// mesh — the regression that left Machine A creating a fresh
+    /// solo mesh on every restart.
+    pub async fn leave(&self) -> Result<(), MeshError> {
+        self.stop_inner(StopMode::Leave).await
+    }
+
+    /// **Shutdown** the daemon for process exit. Stops gossip,
+    /// mDNS, and the HTTP listener, but PRESERVES `mesh.json` and
+    /// `join_key.secret` so the next launch resumes into the same
+    /// mesh. Use this in SIGTERM/SIGINT handlers — never to "leave".
+    pub async fn shutdown(&self) -> Result<(), MeshError> {
+        self.stop_inner(StopMode::Shutdown).await
+    }
+
+    /// Backwards-compatible alias for the old API. Deprecated —
+    /// callers should pick [`leave`](Self::leave) or
+    /// [`shutdown`](Self::shutdown) explicitly so the persistence
+    /// intent is unambiguous. Defaulting to leave-semantics
+    /// preserves pre-rename behavior for any caller we missed.
+    #[deprecated = "use leave() for /v1/mesh/leave or shutdown() for graceful process exit"]
     pub async fn stop(&self) -> Result<(), MeshError> {
+        self.leave().await
+    }
+
+    async fn stop_inner(&self, mode: StopMode) -> Result<(), MeshError> {
         let mut state = self.state.write().await;
         match std::mem::replace(&mut *state, DaemonState::Stopped) {
             DaemonState::Running { _shutdown_tx, .. } => {
@@ -700,7 +742,7 @@ impl EmbeddedDaemon {
                 // Drop the write guard before touching the filesystem
                 // — persistence shouldn't gate the in-memory stop.
                 drop(state);
-                if self.persistence_enabled() {
+                if matches!(mode, StopMode::Leave) && self.persistence_enabled() {
                     if let Err(e) = persist::clear(&self.data_dir) {
                         warn!(
                             error = %e,
@@ -715,8 +757,13 @@ impl EmbeddedDaemon {
                         );
                     }
                 }
-                *self.join_key_plaintext.write().await = None;
-                info!("mesh daemon stopped");
+                if matches!(mode, StopMode::Leave) {
+                    *self.join_key_plaintext.write().await = None;
+                }
+                match mode {
+                    StopMode::Leave => info!("mesh daemon stopped (left mesh)"),
+                    StopMode::Shutdown => info!("mesh daemon stopped (preserving mesh state)"),
+                }
                 Ok(())
             }
             DaemonState::Stopped => Err(MeshError::NotRunning),

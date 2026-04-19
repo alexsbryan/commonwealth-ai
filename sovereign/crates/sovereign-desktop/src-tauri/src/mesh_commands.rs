@@ -287,7 +287,10 @@ pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let Some(mesh) = state.mesh.as_ref() else {
         return Err("mesh daemon not available".into());
     };
-    mesh.stop().await.map_err(|e| e.to_string())
+    // User clicked "Leave" — clear persisted mesh state. Distinct
+    // from the daemon's graceful shutdown path which uses
+    // `daemon.shutdown()` to PRESERVE state across restarts.
+    mesh.leave().await.map_err(|e| e.to_string())
 }
 
 // ── Diagnostics ──────────────────────────────────────────

@@ -309,8 +309,12 @@ async fn run_daemon(_args: &[String]) -> i32 {
     // ── Block until SIGINT/SIGTERM ────────────────────────────────
     wait_for_shutdown().await;
 
-    // Graceful stop. Ignore errors — we're exiting anyway.
-    let _ = daemon.stop().await;
+    // Graceful shutdown — preserves mesh.json so the next launch
+    // resumes into the same mesh. Critically NOT `leave()`, which
+    // would clear persistence and force a fresh solo mesh on next
+    // boot (the regression that left Machine A and Machine B in
+    // different meshes after every Ctrl-C).
+    let _ = daemon.shutdown().await;
     eprintln!("sovereign daemon stopped");
     0
 }

@@ -363,7 +363,7 @@ async fn mesh_leave(
     if let Err(r) = enforce_localhost(&peer) {
         return r.into_response();
     }
-    match daemon.stop().await {
+    match daemon.leave().await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => (
             StatusCode::CONFLICT,
