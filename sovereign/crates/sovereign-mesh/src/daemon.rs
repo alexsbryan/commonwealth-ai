@@ -662,6 +662,16 @@ impl EmbeddedDaemon {
             } = &*state
             {
                 *app_state.inner.mesh.write().await = handshake.mesh;
+                // Swap our `self_node_id` from the placeholder we
+                // generated locally for mDNS to the founder-assigned
+                // ID. Without this, every component that indexes by
+                // self_node_id (gossip's own-record update,
+                // corpus_collaborate's "find me in members",
+                // auto_ingest's peer filter) would hit the
+                // placeholder which doesn't exist in the adopted
+                // mesh — manifesting as `local node not found in
+                // mesh` 500s and gossip log spam every 10s.
+                app_state.set_self_node_id(adopted_node_id);
                 *mesh_state.write().await =
                     MeshState::from_app_state(app_state).await;
             }
@@ -892,7 +902,7 @@ impl EmbeddedDaemon {
         };
         drop(state);
         let mesh = app_state.inner.mesh.read().await;
-        let self_id = app_state.inner.self_node_id;
+        let self_id = app_state.inner.self_node_id_swap.load_full().as_ref().clone();
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id)

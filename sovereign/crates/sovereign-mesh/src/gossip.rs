@@ -91,7 +91,7 @@ pub fn spawn_gossip_loop(
             }
             if let Some(dir) = persist_dir.as_deref() {
                 let mesh = app_state.inner.mesh.read().await.clone();
-                let self_id = app_state.inner.self_node_id;
+                let self_id = app_state.inner.self_node_id_swap.load_full().as_ref().clone();
                 if let Err(e) = crate::persist::save(dir, &mesh, self_id) {
                     // Don't spam — persistence failure is rarely
                     // fatal to the running session, but the operator
@@ -137,7 +137,7 @@ pub async fn run_one_round(
     app_state: &AppState,
     offline_threshold: Duration,
 ) -> Result<(), GossipError> {
-    let self_id = app_state.inner.self_node_id;
+    let self_id = app_state.inner.self_node_id_swap.load_full().as_ref().clone();
     let now = now_secs();
     let threshold = offline_threshold.as_secs();
 

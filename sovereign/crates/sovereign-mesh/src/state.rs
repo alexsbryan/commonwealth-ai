@@ -25,7 +25,7 @@ impl MeshState {
             .get_shard_plan()
             .unwrap_or_default();
 
-        let self_node_id = app_state.inner.self_node_id;
+        let self_node_id = app_state.inner.self_node_id_swap.load_full().as_ref().clone();
 
         // Members.
         let mut members: Vec<MeshMember> = mesh

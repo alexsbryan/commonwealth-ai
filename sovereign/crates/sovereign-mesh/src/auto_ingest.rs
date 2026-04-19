@@ -56,7 +56,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
     );
 
     loop {
-        let self_id = state.inner.self_node_id;
+        let self_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
 
         let current_peers: HashSet<NodeId> = {
             let mesh = state.inner.mesh.read().await;
