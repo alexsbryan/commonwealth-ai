@@ -58,10 +58,23 @@ fn now_secs() -> u64 {
 
 /// Initialize a new mesh. Returns the mesh state and the join key (to be shared out-of-band).
 pub fn init_mesh(name: &str, node_name: &str, addresses: Vec<SocketAddr>) -> (Mesh, String) {
+    init_mesh_with_node_id(name, node_name, addresses, NodeId::generate())
+}
+
+/// Same as [`init_mesh`] but accepts an externally-provided stable
+/// `NodeId` for the founder. Used when the daemon persists a
+/// machine-stable identity so every `sovereign setup` / `mesh create`
+/// cycle comes back under the same node_id instead of stamping a
+/// fresh random one.
+pub fn init_mesh_with_node_id(
+    name: &str,
+    node_name: &str,
+    addresses: Vec<SocketAddr>,
+    node_id: NodeId,
+) -> (Mesh, String) {
     let join_key = generate_join_key();
     let join_key_hash = hash_join_key(&join_key);
     let mesh_id = MeshId::generate();
-    let node_id = NodeId::generate();
     let now = now_secs();
 
     let founder = MemberRecord {
@@ -121,13 +134,70 @@ pub fn accept_join(
     new_node_addresses: Vec<SocketAddr>,
     invited_by: NodeId,
 ) -> Result<NodeId> {
+    accept_join_with_proposed_id(
+        mesh,
+        join_key,
+        new_node_name,
+        new_node_addresses,
+        invited_by,
+        None,
+    )
+}
+
+/// Same as [`accept_join`] but lets the joiner propose its stable
+/// `NodeId`. Used by the rejoin path so a machine that has joined
+/// this mesh before comes back with its original identity instead
+/// of a freshly-generated zombie.
+///
+/// If `proposed_id` is `Some(id)`:
+///   - and `id` is NOT already in `mesh.members` → adopt it
+///     verbatim. The joiner is a new-to-this-mesh machine that has
+///     persisted a stable install-local ID.
+///   - and `id` IS already in `mesh.members` with a matching
+///     `new_node_name` → update the existing record's addresses +
+///     last_seen + status and return the same id. This is the
+///     "same machine rejoining" case — no zombie entry created.
+///   - and `id` IS already in `mesh.members` with a DIFFERENT
+///     name → refuse (the ID would collide with someone else's
+///     machine on this mesh). Fall back to generating a fresh ID.
+///
+/// If `proposed_id` is `None`, generate as before.
+pub fn accept_join_with_proposed_id(
+    mesh: &mut Mesh,
+    join_key: &str,
+    new_node_name: &str,
+    new_node_addresses: Vec<SocketAddr>,
+    invited_by: NodeId,
+    proposed_id: Option<NodeId>,
+) -> Result<NodeId> {
     // Verify join key.
     if !verify_join_key(join_key, &mesh.join_key_hash) {
         return Err(Error::InvalidJoinKey("join key does not match".into()));
     }
 
-    let new_node_id = NodeId::generate();
     let now = now_secs();
+
+    // Resolve the effective node_id using the rules in the docstring.
+    let new_node_id = match proposed_id {
+        Some(id) => match mesh.members.get(&id) {
+            None => id,
+            Some(existing) if existing.name == new_node_name => {
+                // Rejoin: refresh the existing record in place.
+                let mut refreshed = existing.clone();
+                refreshed.addresses = new_node_addresses;
+                refreshed.last_seen = now;
+                refreshed.status = NodeStatus::Online;
+                mesh.members.insert(id, refreshed);
+                return Ok(id);
+            }
+            Some(_) => {
+                // Collision with a differently-named member — refuse
+                // the proposed ID and generate fresh.
+                NodeId::generate()
+            }
+        },
+        None => NodeId::generate(),
+    };
 
     let member = MemberRecord {
         node_id: new_node_id,

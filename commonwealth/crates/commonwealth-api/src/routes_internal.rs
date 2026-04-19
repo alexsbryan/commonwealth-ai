@@ -235,14 +235,29 @@ pub async fn corpus_collaborate(
                         })
                         .collect();
                     tokio::spawn(async move {
-                        // Resume into the existing partial index if present — preserves
-                        // accumulated chunks instead of writing to a new partition dir.
-                        let original_path = engine.index_dir().join(&corpus_id);
-                        let output_path = if original_path.join("_corpus_meta.json").exists() {
-                            original_path
-                        } else {
-                            engine.index_dir().join(format!("{corpus_id}-partition-{self_id}"))
-                        };
+                        // ALWAYS write to a partition-scoped subdirectory —
+                        // never to the canonical `<corpus>/` path.
+                        //
+                        // Earlier, this "resumed into the existing partial
+                        // index" when `<corpus>/_corpus_meta.json` was
+                        // present, on the theory that we'd reuse the
+                        // chunks already committed there. But the desktop
+                        // process's in-tab ingest *also* writes to that
+                        // exact path, so the collaborate spawn and the
+                        // desktop ingest would race as two concurrent
+                        // writers on the same LanceDB table — manifesting
+                        // as the `arrow-array FixedSizeListBuilder` panic
+                        // ("Length of the child array ... must be the
+                        // multiple of the value length"). Isolating the
+                        // coordinator's local share into its own
+                        // `<corpus>-partition-<self>/` directory removes
+                        // the collision entirely; the existing
+                        // `shard_manager::coordinate_merge` path at the
+                        // bottom of this spawn already handles merging
+                        // partition outputs into the canonical index.
+                        let output_path = engine
+                            .index_dir()
+                            .join(format!("{corpus_id}-partition-{self_id}"));
                         tracing::info!(
                             corpus = %corpus_id,
                             files = partition.file_indices.len(),
@@ -988,6 +1003,16 @@ pub struct JoinRequest {
     pub join_key: String,
     pub joining_node_name: String,
     pub joining_node_addresses: Vec<SocketAddr>,
+    /// Stable `NodeId` the joiner persists at
+    /// `<data_dir>/node_id`. When present and not already claimed
+    /// under a different name, the founder admits the joiner under
+    /// this exact ID so rejoins don't leave zombies.
+    ///
+    /// Backward-compatible: older joiners don't send this field;
+    /// `#[serde(default)]` makes the founder accept those requests
+    /// unchanged.
+    #[serde(default)]
+    pub proposed_node_id: Option<NodeId>,
 }
 
 /// Wire shape for the full mesh snapshot. The Rust `Mesh` stores
@@ -1060,12 +1085,13 @@ pub async fn join(
     let self_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
     let mut mesh = state.inner.mesh.write().await;
 
-    match membership::accept_join(
+    match membership::accept_join_with_proposed_id(
         &mut mesh,
         &req.join_key,
         &req.joining_node_name,
         req.joining_node_addresses,
         self_node_id,
+        req.proposed_node_id,
     ) {
         Ok(new_id) => {
             tracing::info!(
