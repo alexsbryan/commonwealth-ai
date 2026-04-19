@@ -260,7 +260,8 @@ mod tests {
                 inference_availability: 1.0,
                 inference_capable: false,
                 loaded_models: vec![],
-            },
+
+                embed_model: None,            },
             addresses: vec!["192.168.1.10:9742".parse().unwrap()],
         };
         let mut members = HashMap::new();

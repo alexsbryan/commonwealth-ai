@@ -36,6 +36,7 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/join", post(mesh_join))
         .route("/v1/mesh/rotate", post(mesh_rotate))
         .route("/v1/mesh/leave", post(mesh_leave))
+        .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
         // Router-level loopback guard — defense in depth on top of
         // the per-handler `enforce_localhost` checks. Adding a new
         // route to this module inherits the guard for free; the
@@ -333,6 +334,26 @@ async fn mesh_rotate(
     }
 }
 
+/// `GET /v1/mesh/relay-candidates` — enumerate the host's
+/// reachable IPs so the founder can copy one into a `?relay=…`
+/// query param when sharing the invite. Doesn't require a running
+/// mesh — the candidates are interface-derived and a user might
+/// want to look at them before deciding to create a mesh.
+async fn mesh_relay_candidates(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r.into_response();
+    }
+    // Internal port is fixed at 9742 today (matches what the daemon
+    // binds in start_daemon and what the gossip handshake targets).
+    // Plumbing this through config is a follow-up; for now the
+    // single source of truth lives next to the binder.
+    let candidates = crate::daemon::relay_candidates(9742);
+    (StatusCode::OK, Json(serde_json::json!({ "candidates": candidates })))
+        .into_response()
+}
+
 /// `POST /v1/mesh/leave` — stop the daemon and clear persisted mesh
 /// state. Mirrors the desktop "Leave mesh" button.
 async fn mesh_leave(
@@ -541,6 +562,35 @@ mod tests {
             .send().await.unwrap().json().await.unwrap();
         assert_eq!(status["join_key"].as_str().unwrap(), new_key);
         assert!(status["join_link"].as_str().unwrap().contains(&new_key));
+    }
+
+    #[tokio::test]
+    async fn relay_candidates_endpoint_returns_classified_array() {
+        // Doesn't require a mesh — just lists local interfaces.
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(format!("{base}/v1/mesh/relay-candidates"))
+            .send().await.unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        let arr = body["candidates"].as_array().expect("candidates is array");
+        // Test runners on macOS / Linux always have at least one
+        // non-loopback interface (even CI VMs). Each entry must be
+        // shape-correct so the desktop's typed deserializer doesn't
+        // silently drop fields.
+        for c in arr {
+            assert!(c["ip"].is_string());
+            assert!(c["kind"].is_string());
+            assert!(c["url_fragment"].is_string());
+            assert!(c["recommended"].is_boolean());
+        }
+        // At most one should be marked recommended.
+        let recommended_count = arr
+            .iter()
+            .filter(|c| c["recommended"].as_bool().unwrap_or(false))
+            .count();
+        assert!(recommended_count <= 1, "got {recommended_count} recommended");
     }
 
     #[tokio::test]

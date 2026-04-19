@@ -6,6 +6,7 @@
     meshGetState,
     meshIsRunning,
     meshLeave,
+    meshRelayCandidates,
     meshRotateInvite,
     saveConfig,
     suggestNodeName,
@@ -17,6 +18,7 @@
     DesktopConfig,
     MeshStateResponse,
     MeshMember,
+    RelayCandidate,
   } from "../types";
 
   // `sovereign://join/cwth-XXXX-XXXX-XXXX` with optional query params.
@@ -100,6 +102,75 @@
   let showRotateConfirm = $state(false);
   let rotating = $state(false);
   let rotateError = $state<string | null>(null);
+
+  // Relay candidates for cross-network invites (Tailscale / LAN
+  // address that the joiner can dial directly when mDNS won't
+  // reach them). Lazy-loaded the first time the user opens the
+  // "Add a relay…" reveal so we don't hit the daemon on every
+  // settings open. `null` = not yet loaded; `[]` = loaded but
+  // empty (no detected interfaces — UI hides the picker).
+  let relayCandidates = $state<RelayCandidate[] | null>(null);
+  let selectedRelay = $state<string | null>(null);
+  let relayLoading = $state(false);
+
+  /** Lazy-load relay candidates and pre-select the recommended one
+   *  the first time the picker opens. Cached for the rest of the
+   *  session — they don't change unless the network does, and the
+   *  user can always close+reopen settings to refresh. */
+  async function ensureRelayCandidates() {
+    if (relayCandidates !== null || relayLoading) return;
+    relayLoading = true;
+    try {
+      const list = await meshRelayCandidates();
+      relayCandidates = list;
+      const recommended = list.find((c) => c.recommended);
+      if (recommended) selectedRelay = recommended.url_fragment;
+    } catch (e) {
+      console.error("Failed to load relay candidates:", e);
+      relayCandidates = [];
+    }
+    relayLoading = false;
+  }
+
+  /** Append `?relay=<value>` (or `&relay=…` if other params already
+   *  exist) to the bare invite link. Idempotent: any existing relay
+   *  query param gets replaced, so toggling between candidates
+   *  doesn't accumulate junk.
+   *
+   *  Must NOT use `URL.searchParams.set()` — that percent-encodes
+   *  reserved chars (`:` → `%3A`, `'` → `%27`) which makes the link
+   *  ugly in a chat client AND produces `relay=100.104.36.28%3A9742`
+   *  that older daemon builds (pre-percent-decode fix) fail to parse.
+   *  Mirror `build_join_link` in Rust instead — its query format is
+   *  the canonical one the parser's round-trip test locks in. */
+  function withRelay(baseLink: string, relay: string | null): string {
+    // Strip any existing `relay=` param so toggling is idempotent.
+    const qIdx = baseLink.indexOf("?");
+    let base = baseLink;
+    let query: string[] = [];
+    if (qIdx >= 0) {
+      base = baseLink.slice(0, qIdx);
+      query = baseLink
+        .slice(qIdx + 1)
+        .split("&")
+        .filter((p) => p.length > 0 && !p.startsWith("relay="));
+    }
+    if (relay) query.push(`relay=${relay}`);
+    return query.length > 0 ? `${base}?${query.join("&")}` : base;
+  }
+
+  function relayLabel(c: RelayCandidate): string {
+    switch (c.kind) {
+      case "tailscale":
+        return "Tailscale (works across networks)";
+      case "lan":
+        return "Local network only";
+      case "ipv6":
+        return "IPv6 (sometimes routable)";
+      default:
+        return c.kind;
+    }
+  }
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -414,16 +485,17 @@
          from before this feature shipped); the user can click
          "Rotate" to recover an inviteable link. -->
     {#if meshState.status.join_link}
+      {@const enrichedLink = withRelay(meshState.status.join_link, selectedRelay)}
       <div class="invite-card">
         <h5>Invite link</h5>
         <p class="muted">
           Send this to anyone you want in the mesh. They tap once to join.
         </p>
         <div class="link-row">
-          <code class="link">{meshState.status.join_link}</code>
+          <code class="link">{enrichedLink}</code>
           <button
             class="copy-btn"
-            onclick={() => copyToClipboard(meshState!.status.join_link!)}
+            onclick={() => copyToClipboard(enrichedLink)}
           >
             Copy
           </button>
@@ -431,6 +503,65 @@
         {#if copyFeedback}
           <span class="copy-feedback">{copyFeedback}</span>
         {/if}
+
+        <details
+          class="relay-picker"
+          ontoggle={(e) => (e.currentTarget as HTMLDetailsElement).open && ensureRelayCandidates()}
+        >
+          <summary>
+            Add a relay for friends not on your network
+            {#if selectedRelay}
+              <span class="relay-active">· active</span>
+            {/if}
+          </summary>
+          <p class="hint">
+            mDNS only finds joiners on the same Wi-Fi. Pick a routable
+            address (Tailscale recommended) so people on other networks
+            can reach you.
+          </p>
+          {#if relayLoading}
+            <p class="muted">Loading addresses…</p>
+          {:else if relayCandidates && relayCandidates.length === 0}
+            <p class="muted">
+              No reachable addresses detected. Connect to a network or
+              install Tailscale, then reopen this panel.
+            </p>
+          {:else if relayCandidates}
+            <ul class="relay-list">
+              <li>
+                <label>
+                  <input
+                    type="radio"
+                    name="relay"
+                    value=""
+                    checked={!selectedRelay}
+                    onchange={() => (selectedRelay = null)}
+                  />
+                  <span class="relay-label">No relay (LAN-only invite)</span>
+                </label>
+              </li>
+              {#each relayCandidates as cand}
+                <li>
+                  <label>
+                    <input
+                      type="radio"
+                      name="relay"
+                      value={cand.url_fragment}
+                      checked={selectedRelay === cand.url_fragment}
+                      onchange={() => (selectedRelay = cand.url_fragment)}
+                    />
+                    <span class="relay-label">
+                      {relayLabel(cand)}
+                      {#if cand.recommended}<em class="badge">Recommended</em>{/if}
+                    </span>
+                    <code class="relay-frag">{cand.url_fragment}</code>
+                  </label>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </details>
+
         {#if meshState.status.join_key}
           <details class="advanced">
             <summary>Or share the bare key</summary>
@@ -913,6 +1044,66 @@
   button.ghost:hover:not(:disabled) {
     color: var(--text-primary);
     background: var(--bg-input);
+  }
+
+  /* ── Relay picker inside the invite card ── */
+  .relay-picker {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .relay-picker > summary {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .relay-active {
+    margin-left: 6px;
+    font-size: 0.78rem;
+    color: var(--success);
+    font-weight: 600;
+  }
+  .relay-picker .hint {
+    margin: 8px 0;
+  }
+  .relay-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .relay-list li label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .relay-list .relay-label {
+    flex: 1;
+  }
+  .relay-list .badge {
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: rgba(80, 200, 120, 0.15);
+    color: var(--success);
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .relay-list .relay-frag {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    background: var(--bg-input);
+    padding: 1px 6px;
+    border-radius: 3px;
   }
 
   /* ── Dice button alongside the node-name input ── */

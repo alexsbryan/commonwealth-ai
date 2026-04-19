@@ -9,6 +9,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use sovereign_mesh::daemon::RelayCandidate;
 use sovereign_mesh::{parse_deep_link, JoinConfirmation, MeshState};
 
 use crate::bootstrap::BootstrapMode;
@@ -314,6 +315,40 @@ pub struct DiscoveredPeerDto {
 pub struct MeshDiagnostics {
     pub discovered_peers: Vec<DiscoveredPeerDto>,
     pub daemon_running: bool,
+}
+
+/// Snapshot of relay candidates (Tailscale / LAN / IPv6) the user
+/// can append to a mesh invite as `?relay=<host:port>` for friends
+/// who can't reach them via mDNS. Used by the invite-card relay
+/// picker. Empty list = no detected interfaces (no network); the UI
+/// hides the picker.
+#[tauri::command]
+pub async fn mesh_relay_candidates(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<RelayCandidate>, String> {
+    if let Some(port) = attached_port(&state) {
+        // Attach mode — the CLI daemon is the source of truth for
+        // its own interfaces (it might be running in a container
+        // or on a different binding than this desktop process).
+        let client = http_client()?;
+        let resp = client
+            .get(format!("http://localhost:{port}/v1/mesh/relay-candidates"))
+            .send()
+            .await
+            .map_err(|e| format!("relay-candidates: {e}"))?;
+        if !resp.status().is_success() {
+            return Ok(Vec::new());
+        }
+        #[derive(serde::Deserialize)]
+        struct Body { candidates: Vec<RelayCandidate> }
+        return Ok(resp
+            .json::<Body>()
+            .await
+            .map(|b| b.candidates)
+            .unwrap_or_default());
+    }
+    // Local mode — call the helper directly, no HTTP round-trip.
+    Ok(sovereign_mesh::daemon::relay_candidates(9742))
 }
 
 /// Generate a fresh memorable two-word node-name suggestion (e.g.

@@ -892,21 +892,197 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     println!();
     println!("  \u{2713} Mesh running — 1 node (you)");
     println!("  \u{2713} Endpoint: localhost:{}/v1", cfg.daemon.client_port);
-    println!();
-    println!("  Add to opencode — .opencode/config.json:");
-    println!(r#"    {{
-      "mcp": {{ "servers": {{ "sovereign": {{ "type": "http", "url": "http://localhost:{port}/mcp" }} }} }},
-      "provider": {{
-        "commonwealth": {{
-          "npm": "@ai-sdk/openai-compatible",
-          "options": {{ "baseURL": "http://localhost:{port}/v1" }}
-        }}
-      }}
-    }}"#,
-        port = cfg.daemon.client_port);
+
+    // ── opencode config — write the global file directly ─────────
+    //
+    // Earlier the script just printed a snippet pointing at
+    // `.opencode/config.json` (project-local). Real opencode reads
+    // `~/.config/opencode/opencode.json`; users had to figure that
+    // out themselves. Auto-write so a fresh `sovereign setup` is
+    // immediately usable from opencode without copy-paste plumbing.
+    match install_opencode_config(cfg.daemon.client_port) {
+        Ok(OpencodeInstall::Created(path)) => {
+            println!();
+            println!(
+                "  \u{2713} Wrote opencode config — {}",
+                path.display()
+            );
+        }
+        Ok(OpencodeInstall::MergedInto(path)) => {
+            println!();
+            println!(
+                "  \u{2713} Updated opencode config — {} (preserved your existing entries)",
+                path.display()
+            );
+        }
+        Ok(OpencodeInstall::AlreadyConfigured(path)) => {
+            println!();
+            println!(
+                "  \u{2713} opencode already configured — {}",
+                path.display()
+            );
+        }
+        Err(e) => {
+            // Non-fatal: print the snippet the user can paste themselves.
+            eprintln!();
+            eprintln!("  warning: couldn't write opencode config: {e}");
+            eprintln!(
+                "  paste this into ~/.config/opencode/opencode.json yourself:"
+            );
+            eprintln!("{}", opencode_config_snippet(cfg.daemon.client_port));
+        }
+    }
 
     let _ = Arc::new(()); // placeholder; Arc usage removed post-refactor
     0
+}
+
+/// Outcome of attempting to install / update the opencode config.
+/// Carries the path so the banner prints something actionable
+/// instead of "ok".
+#[derive(Debug)]
+enum OpencodeInstall {
+    /// File didn't exist; we created it from scratch.
+    Created(PathBuf),
+    /// File existed; we merged Sovereign's MCP server + provider
+    /// into the existing JSON without disturbing the user's other
+    /// providers, models, skills, etc.
+    MergedInto(PathBuf),
+    /// File existed and already contained an entry pointing at our
+    /// daemon — nothing to do.
+    AlreadyConfigured(PathBuf),
+}
+
+fn opencode_config_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("opencode")
+        .join("opencode.json")
+}
+
+/// Render the JSON snippet we'd write — used both to seed a new file
+/// and to print as a fallback when writing fails.
+fn opencode_config_snippet(client_port: u16) -> String {
+    let value = serde_json::json!({
+        "mcp": {
+            "servers": {
+                "sovereign": {
+                    "type": "http",
+                    "url": format!("http://localhost:{client_port}/mcp")
+                }
+            }
+        },
+        "provider": {
+            "commonwealth": {
+                "npm": "@ai-sdk/openai-compatible",
+                "options": {
+                    "baseURL": format!("http://localhost:{client_port}/v1")
+                }
+            }
+        }
+    });
+    serde_json::to_string_pretty(&value).unwrap_or_else(|_| String::new())
+}
+
+/// Install or merge our opencode entries into `~/.config/opencode/opencode.json`.
+///
+/// Behaviour matrix (decided so a re-run of `sovereign setup` is
+/// always safe and never clobbers third-party config):
+///   - file missing               → create with our entries only.
+///   - file present, no overlap   → merge: add `mcp.servers.sovereign`
+///                                  and `provider.commonwealth`,
+///                                  leave everything else untouched.
+///   - file present, our entries  → noop, return `AlreadyConfigured`.
+///   - file present, parse error  → bail (the user has invalid JSON;
+///                                  we shouldn't try to "fix" it).
+fn install_opencode_config(client_port: u16) -> Result<OpencodeInstall, String> {
+    install_opencode_config_at(&opencode_config_path(), client_port)
+}
+
+fn install_opencode_config_at(
+    path: &Path,
+    client_port: u16,
+) -> Result<OpencodeInstall, String> {
+    // Fresh install — easy path.
+    if !path.exists() {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("create {}: {e}", parent.display()))?;
+        }
+        std::fs::write(path, opencode_config_snippet(client_port))
+            .map_err(|e| format!("write {}: {e}", path.display()))?;
+        return Ok(OpencodeInstall::Created(path.to_path_buf()));
+    }
+
+    // Existing file — parse, merge our keys, write back.
+    let raw = std::fs::read_to_string(path)
+        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    let mut cfg: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    if !cfg.is_object() {
+        return Err(format!(
+            "{} is not a JSON object — refusing to overwrite",
+            path.display()
+        ));
+    }
+
+    let mcp_url = format!("http://localhost:{client_port}/mcp");
+    let base_url = format!("http://localhost:{client_port}/v1");
+
+    // Detect already-configured to give the user a "nothing to do"
+    // banner instead of pretending we did work.
+    let same_mcp = cfg
+        .pointer("/mcp/servers/sovereign/url")
+        .and_then(|v| v.as_str())
+        == Some(mcp_url.as_str());
+    let same_provider = cfg
+        .pointer("/provider/commonwealth/options/baseURL")
+        .and_then(|v| v.as_str())
+        == Some(base_url.as_str());
+    if same_mcp && same_provider {
+        return Ok(OpencodeInstall::AlreadyConfigured(path.to_path_buf()));
+    }
+
+    // Walk into mcp.servers.sovereign and provider.commonwealth,
+    // creating intermediate objects only as needed. Other keys at
+    // each level are preserved verbatim.
+    let obj = cfg.as_object_mut().expect("verified above");
+    let mcp = obj
+        .entry("mcp".to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    let mcp_obj = mcp
+        .as_object_mut()
+        .ok_or_else(|| "`mcp` is not an object".to_string())?;
+    let servers = mcp_obj
+        .entry("servers".to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    let servers_obj = servers
+        .as_object_mut()
+        .ok_or_else(|| "`mcp.servers` is not an object".to_string())?;
+    servers_obj.insert(
+        "sovereign".to_string(),
+        serde_json::json!({ "type": "http", "url": mcp_url }),
+    );
+
+    let provider = obj
+        .entry("provider".to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    let provider_obj = provider
+        .as_object_mut()
+        .ok_or_else(|| "`provider` is not an object".to_string())?;
+    provider_obj.insert(
+        "commonwealth".to_string(),
+        serde_json::json!({
+            "npm": "@ai-sdk/openai-compatible",
+            "options": { "baseURL": base_url }
+        }),
+    );
+
+    let pretty = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("serialize merged config: {e}"))?;
+    std::fs::write(path, pretty)
+        .map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(OpencodeInstall::MergedInto(path.to_path_buf()))
 }
 
 /// When the daemon fails to come up within the setup window, dump enough
@@ -1332,6 +1508,108 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(display_name(&slot), "custom-model");
+    }
+
+    // ── opencode config install ───────────────────────────────────
+
+    #[test]
+    fn opencode_install_creates_file_when_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("opencode.json");
+        let result = install_opencode_config_at(&path, 9741).unwrap();
+        assert!(matches!(result, OpencodeInstall::Created(_)));
+        let content = std::fs::read_to_string(&path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(
+            parsed["mcp"]["servers"]["sovereign"]["url"],
+            "http://localhost:9741/mcp"
+        );
+        assert_eq!(
+            parsed["provider"]["commonwealth"]["options"]["baseURL"],
+            "http://localhost:9741/v1"
+        );
+    }
+
+    #[test]
+    fn opencode_install_preserves_unrelated_keys() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("opencode.json");
+        // Pre-existing config with another provider, MCP server, and
+        // top-level keys. Merge must leave them all alone.
+        std::fs::write(
+            &path,
+            r#"{
+              "model": { "id": "auto" },
+              "skills": [".opencode/skills/sovereign-code"],
+              "mcp": {
+                "servers": {
+                  "github": { "type": "http", "url": "https://example.com/mcp" }
+                }
+              },
+              "provider": {
+                "openrouter": { "npm": "@openrouter/ai-sdk", "options": {} }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let result = install_opencode_config_at(&path, 9741).unwrap();
+        assert!(matches!(result, OpencodeInstall::MergedInto(_)));
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        // Our entries are present.
+        assert_eq!(
+            parsed["mcp"]["servers"]["sovereign"]["url"],
+            "http://localhost:9741/mcp"
+        );
+        assert_eq!(
+            parsed["provider"]["commonwealth"]["options"]["baseURL"],
+            "http://localhost:9741/v1"
+        );
+        // Existing entries survived.
+        assert_eq!(
+            parsed["mcp"]["servers"]["github"]["url"],
+            "https://example.com/mcp"
+        );
+        assert_eq!(parsed["provider"]["openrouter"]["npm"], "@openrouter/ai-sdk");
+        assert_eq!(parsed["model"]["id"], "auto");
+        assert_eq!(parsed["skills"][0], ".opencode/skills/sovereign-code");
+    }
+
+    #[test]
+    fn opencode_install_is_noop_when_already_configured() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("opencode.json");
+        // First install: Created.
+        install_opencode_config_at(&path, 9741).unwrap();
+        // Second call with the same port: AlreadyConfigured.
+        let result = install_opencode_config_at(&path, 9741).unwrap();
+        assert!(matches!(result, OpencodeInstall::AlreadyConfigured(_)));
+    }
+
+    #[test]
+    fn opencode_install_updates_when_port_changes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("opencode.json");
+        install_opencode_config_at(&path, 9741).unwrap();
+        let result = install_opencode_config_at(&path, 9999).unwrap();
+        assert!(matches!(result, OpencodeInstall::MergedInto(_)));
+        let parsed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            parsed["mcp"]["servers"]["sovereign"]["url"],
+            "http://localhost:9999/mcp"
+        );
+    }
+
+    #[test]
+    fn opencode_install_refuses_invalid_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("opencode.json");
+        std::fs::write(&path, "{ not json").unwrap();
+        let err = install_opencode_config_at(&path, 9741).unwrap_err();
+        assert!(err.contains("parse"), "{err}");
     }
 
     // ── hf_download_url ────────────────────────────────────────────

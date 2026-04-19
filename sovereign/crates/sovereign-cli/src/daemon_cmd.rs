@@ -90,7 +90,13 @@ async fn run_daemon(_args: &[String]) -> i32 {
         &config.models.fast,
         Some(&config.models.primary),
         Some(&config.models.embed),
-        4096, // context_size — reasonable default; setup can make this configurable later
+        // context_size — 32768 matches the Qwen3-Instruct family's
+        // advertised window and leaves real headroom for coding-agent
+        // clients (opencode/aider) that ship max_tokens=4096 alongside
+        // long context-stuffed prompts. Earlier 4096 default made
+        // chat_completions fail with "Prompt too long" the moment a
+        // single AGENTS.md got injected.
+        32768,
         None, // gpu_layers — auto-detect
         ModelFamily::Unknown,
         ModelFamily::Unknown,

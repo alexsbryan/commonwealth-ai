@@ -128,24 +128,13 @@ impl ModelSlot {
             .str_to_token(&full_prompt, AddBos::Always)
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
 
-        let max_tokens = request.max_tokens.unwrap_or(1024);
-
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
-
-        // Guard: reject only if the prompt + response won't fit in the context
-        // window at all. n_batch == context_size (set at load time) so the
-        // llama.cpp assertion n_tokens_all <= cparams.n_batch is automatically
-        // satisfied for any prompt that passes this check.
-        if tokens.len() + max_tokens > n_ctx {
-            return Err(Error::Inference(format!(
-                "Prompt too long: {} tokens + {} max response tokens exceeds \
-                 context window of {}. Try a shorter message.",
-                tokens.len(),
-                max_tokens,
-                n_ctx
-            )));
-        }
+        let max_tokens = clamp_max_tokens(
+            request.max_tokens,
+            tokens.len(),
+            n_ctx,
+        )?;
 
         let mut batch = LlamaBatch::new(n_batch, 1);
         let last_idx = tokens.len() - 1;
@@ -259,7 +248,12 @@ impl ModelSlot {
             .str_to_token(&full_prompt, AddBos::Always)
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
 
-        let max_tokens = request.max_tokens.unwrap_or(1024);
+        let n_ctx = ctx.n_ctx() as usize;
+        let max_tokens = clamp_max_tokens(
+            request.max_tokens,
+            tokens.len(),
+            n_ctx,
+        )?;
 
         let mut batch = LlamaBatch::new(tokens.len().max(512), 1);
         let last_idx = tokens.len() - 1;
@@ -1506,6 +1500,57 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
 // ─── Shared helpers ────────────────────────────────────────────
 
+/// Resolve the actual `max_tokens` budget for a generation, given the
+/// caller's request, the prompt length, and the loaded context window.
+///
+/// Three behaviours we want to preserve, in order of importance:
+///   1. **Never exceed the context window.** llama.cpp's KV cache
+///      asserts on overflow and crashes the daemon. The decode loop
+///      treats this cap as the upper bound for `n_generated`.
+///   2. **Never reject a request that could partially succeed.** If a
+///      caller asks for max_tokens=4096 on a 32k context but their
+///      prompt is 30k tokens, we'd rather emit ~2k tokens than 503
+///      with "Prompt too long" — opencode and aider don't recover
+///      from that gracefully and the user just sees a dead chat.
+///   3. **Default generously when the caller omits max_tokens.** A
+///      1024-token cap (the previous default) clipped most coding
+///      replies mid-thought. We hand back the entire remaining
+///      context window in that case; the EOG sampler still terminates
+///      naturally for short answers.
+///
+/// Errors only when the prompt itself doesn't fit. That's a real
+/// "your input is too big" — no clamping can recover.
+pub(crate) fn clamp_max_tokens(
+    requested: Option<usize>,
+    prompt_tokens: usize,
+    n_ctx: usize,
+) -> Result<usize> {
+    if prompt_tokens >= n_ctx {
+        return Err(Error::Inference(format!(
+            "Prompt too long: {prompt_tokens} tokens already meets or exceeds \
+             the context window of {n_ctx}. Shorten the conversation."
+        )));
+    }
+    let headroom = n_ctx - prompt_tokens;
+    let resolved = match requested {
+        Some(asked) if asked > headroom => {
+            tracing::warn!(
+                requested = asked,
+                clamped_to = headroom,
+                prompt_tokens,
+                n_ctx,
+                "max_tokens exceeded context headroom; clamping to fit instead of rejecting"
+            );
+            headroom
+        }
+        Some(asked) => asked,
+        // No explicit cap — give the model the whole remaining
+        // window. Generation still stops at EOG for short replies.
+        None => headroom,
+    };
+    Ok(resolved)
+}
+
 fn format_prompt(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> Result<String> {
     // Inject thinking-mode token into the system message based on family quirks.
     // `think_budget == Some(0)` signals the caller wants thinking suppressed.
@@ -1724,5 +1769,49 @@ fn prop_type_rule(schema: &serde_json::Value) -> &'static str {
         Some("number") => "number",
         Some("boolean") => "boolean",
         _ => "string", // default to string for unknown types
+    }
+}
+
+#[cfg(test)]
+mod clamp_tests {
+    use super::clamp_max_tokens;
+
+    #[test]
+    fn defaults_to_remaining_context_when_unspecified() {
+        // Caller didn't ask for a cap — give them the whole window.
+        assert_eq!(clamp_max_tokens(None, 1000, 8192).unwrap(), 7192);
+    }
+
+    #[test]
+    fn passes_through_when_request_fits() {
+        assert_eq!(
+            clamp_max_tokens(Some(2000), 1000, 8192).unwrap(),
+            2000
+        );
+    }
+
+    #[test]
+    fn clamps_when_request_exceeds_headroom() {
+        // Coding-agent worst case: opencode asks for 4096 on a tight
+        // window. Pre-fix: returned Err. Post-fix: emits as much as
+        // fits.
+        assert_eq!(
+            clamp_max_tokens(Some(4096), 30000, 32768).unwrap(),
+            2768
+        );
+    }
+
+    #[test]
+    fn errs_only_when_prompt_alone_exhausts_context() {
+        let err = clamp_max_tokens(Some(100), 8192, 8192).unwrap_err();
+        // The wording is the user-visible error string; lock the
+        // hint phrasing so it stays actionable.
+        let msg = format!("{err}");
+        assert!(msg.contains("Prompt too long"), "{msg}");
+    }
+
+    #[test]
+    fn errs_when_prompt_is_strictly_oversized() {
+        assert!(clamp_max_tokens(None, 9000, 8192).is_err());
     }
 }

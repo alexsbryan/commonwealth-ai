@@ -12,11 +12,17 @@ const COOLDOWN: Duration = Duration::from_secs(30 * 60);
 /// /internal/corpus/collaborate` when in-progress corpora are
 /// detected and at least one compatible peer is available.
 ///
-/// **Trigger conditions**
+/// **Trigger conditions** (any one of these fires the trigger):
 /// - Daemon startup (first iteration) — handles the restart scenario
 ///   where Machine A had been ingesting before it was stopped.
-/// - New peer appears in the mesh — handles the scenario where Machine
-///   A is partway through ingestion and Machine B comes online.
+/// - New peer appears in the mesh — handles Machine A mid-ingest,
+///   Machine B comes online.
+/// - **New in-progress corpus appears** — handles Machine A starts
+///   downloading Wikipedia *after* daemon startup with peers already
+///   known. This is the common desktop case (open app → mesh peers
+///   already discovered → *then* click Install). Without this trigger
+///   the loop's `should_check` gate stays false forever and Machine B
+///   never receives a partition.
 ///
 /// **Guard**: if an ingest task is actively running (corpus_id is in
 /// `AppStateInner::active_ingests`) the trigger is skipped — UNLESS a
@@ -32,11 +38,22 @@ pub fn spawn_auto_collaborate_loop(state: AppState, daemon_port: u16) {
 async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
     let mut triggered: HashMap<String, Instant> = HashMap::new();
     let mut last_known_peers: HashSet<NodeId> = HashSet::new();
+    // Snapshot of `in_progress_ingestions()` from the previous tick.
+    // Comparing tick-over-tick lets us detect "user just started a
+    // new corpus install" — the scenario where `first_iteration`
+    // already burned and `new_peer_appeared` is false.
+    let mut last_known_in_progress: HashSet<String> = HashSet::new();
     let mut first_iteration = true;
     let client = reqwest::Client::new();
 
     // Brief startup delay so the HTTP server is accepting connections.
     tokio::time::sleep(Duration::from_secs(10)).await;
+
+    tracing::info!(
+        check_interval_secs = CHECK_INTERVAL.as_secs(),
+        cooldown_secs = COOLDOWN.as_secs(),
+        "auto_ingest: loop started"
+    );
 
     loop {
         let self_id = state.inner.self_node_id;
@@ -52,20 +69,55 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         let new_peer_appeared = current_peers.iter().any(|id| !last_known_peers.contains(id));
         last_known_peers = current_peers.clone();
 
-        let should_check = first_iteration || new_peer_appeared;
-        first_iteration = false;
-
-        if !should_check || current_peers.is_empty() {
-            tokio::time::sleep(CHECK_INTERVAL).await;
-            continue;
-        }
-
+        // We can't call `in_progress_ingestions()` until we have an
+        // engine, so query it right after the peer-set refresh.
         let Some(engine) = state.inner.corpus_engine.as_ref() else {
+            tracing::debug!("auto_ingest: no corpus engine yet — waiting");
+            first_iteration = false;
             tokio::time::sleep(CHECK_INTERVAL).await;
             continue;
         };
 
-        let in_progress = engine.in_progress_ingestions();
+        let in_progress_vec = engine.in_progress_ingestions();
+        let in_progress: HashSet<String> = in_progress_vec.iter().cloned().collect();
+        let new_ingest_appeared = in_progress
+            .iter()
+            .any(|id| !last_known_in_progress.contains(id));
+        last_known_in_progress = in_progress.clone();
+
+        let should_check =
+            first_iteration || new_peer_appeared || new_ingest_appeared;
+        first_iteration = false;
+
+        if current_peers.is_empty() {
+            // No peers means nothing to dispatch to — log at debug to
+            // keep the happy path quiet but still visible with
+            // RUST_LOG=sovereign_mesh=debug.
+            tracing::debug!(
+                in_progress_count = in_progress.len(),
+                "auto_ingest: no peers online — skipping"
+            );
+            tokio::time::sleep(CHECK_INTERVAL).await;
+            continue;
+        }
+
+        if !should_check {
+            tracing::debug!(
+                peers = current_peers.len(),
+                in_progress_count = in_progress.len(),
+                "auto_ingest: no trigger (peers and ingests unchanged)"
+            );
+            tokio::time::sleep(CHECK_INTERVAL).await;
+            continue;
+        }
+
+        tracing::info!(
+            peers = current_peers.len(),
+            in_progress_count = in_progress.len(),
+            new_peer = new_peer_appeared,
+            new_ingest = new_ingest_appeared,
+            "auto_ingest: trigger fired — evaluating corpora"
+        );
 
         // Retire cooldown entries for corpora that have since completed.
         triggered.retain(|id, _| in_progress.contains(id));
@@ -74,21 +126,33 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             state.inner.active_ingests.read().await.clone()
         };
 
+        // Use the ordered Vec form to keep log output stable across
+        // ticks — iterating a HashSet shuffles per-run and makes
+        // diagnostic reading harder.
+        let in_progress = in_progress_vec;
+
         for corpus_id in &in_progress {
-            // Skip if this node is mid-ingest AND no new peer just appeared.
-            // When a new peer appears we must still call corpus_collaborate — that
-            // handler now checks active_ingests itself and skips the local partition
-            // spawn, so calling it while mid-ingest is safe and will still dispatch
-            // a partition to the newly joined peer.
-            if active_ingests.contains(corpus_id) && !new_peer_appeared {
+            // Skip if this node is mid-ingest AND neither a new peer
+            // nor a new in-progress corpus just appeared. (When
+            // either appears we must still call corpus_collaborate:
+            // that handler checks active_ingests itself and skips the
+            // local partition spawn while still dispatching work to
+            // the peer or for the freshly-started corpus.)
+            if active_ingests.contains(corpus_id)
+                && !new_peer_appeared
+                && !new_ingest_appeared
+            {
                 tracing::debug!(
                     corpus = %corpus_id,
-                    "auto_ingest: ingest task is active and no new peer — skipping"
+                    "auto_ingest: ingest task is active and no new trigger — skipping"
                 );
                 continue;
             }
 
-            if triggered.get(corpus_id).map_or(false, |t| t.elapsed() < COOLDOWN) && !new_peer_appeared {
+            if triggered.get(corpus_id).map_or(false, |t| t.elapsed() < COOLDOWN)
+                && !new_peer_appeared
+                && !new_ingest_appeared
+            {
                 continue;
             }
 
@@ -107,22 +171,42 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     triggered.insert(corpus_id.clone(), Instant::now());
                 }
                 Ok(resp) if resp.status().as_u16() == 409 => {
-                    tracing::debug!(corpus = %corpus_id, "auto_ingest: corpus already complete");
+                    tracing::info!(
+                        corpus = %corpus_id,
+                        "auto_ingest: corpus already complete — cooling down"
+                    );
                     triggered.insert(corpus_id.clone(), Instant::now());
                 }
                 Ok(resp) if resp.status().as_u16() == 422 => {
-                    // No compatible peers — don't cooldown, retry on next peer join.
-                    tracing::debug!(corpus = %corpus_id, "auto_ingest: no compatible peers yet");
+                    // No compatible peers — don't cooldown, retry on
+                    // next peer join. INFO (not debug) so the user
+                    // sees *why* Machine B isn't getting work when
+                    // they check the log: mismatched embed model,
+                    // offline peers, etc. The coordinator's own
+                    // log line carries the specific reason.
+                    let body = resp.text().await.unwrap_or_default();
+                    tracing::info!(
+                        corpus = %corpus_id,
+                        reason = %body,
+                        "auto_ingest: no compatible peers yet — will retry on peer/ingest change"
+                    );
                 }
                 Ok(resp) => {
+                    let status = resp.status().as_u16();
+                    let body = resp.text().await.unwrap_or_default();
                     tracing::warn!(
                         corpus = %corpus_id,
-                        status = resp.status().as_u16(),
-                        "auto_ingest: unexpected response"
+                        status,
+                        body = %body,
+                        "auto_ingest: unexpected response from collaborate handler"
                     );
                 }
                 Err(e) => {
-                    tracing::debug!(corpus = %corpus_id, error = %e, "auto_ingest: request failed");
+                    tracing::warn!(
+                        corpus = %corpus_id,
+                        error = %e,
+                        "auto_ingest: request to local collaborate endpoint failed"
+                    );
                 }
             }
         }

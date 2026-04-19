@@ -211,11 +211,63 @@ fn parse_query_params(query: Option<&str>) -> std::collections::HashMap<String, 
     if let Some(q) = query {
         for pair in q.split('&') {
             if let Some((key, value)) = pair.split_once('=') {
-                map.insert(key.to_string(), value.to_string());
+                map.insert(percent_decode(key), percent_decode(value));
             }
         }
     }
     map
+}
+
+/// Best-effort percent-decoder for query values.
+///
+/// Browsers and most clipboard-capable chat clients round-trip URLs
+/// through `URL`/`encodeURIComponent`, which percent-escapes reserved
+/// characters the builder didn't bother to encode — most importantly
+/// the `:` in `relay=100.104.36.28:9742` (becomes `%3A`) and `'` in
+/// mesh names (becomes `%27`). Without this decode the parser treats
+/// `100.104.36.28%3A9742` as a DNS hostname, the join handshake
+/// fails, and the user sees a "no peer at that address" error that
+/// looks like a networking problem but is actually an encoding one.
+///
+/// Scope: handles `%XX` sequences and translates `+` to space (the
+/// traditional HTML form-encoding convention — existing code already
+/// does this for the `name` param). Invalid escapes pass through as
+/// literals rather than erroring, because our input is user-pasted
+/// and a partial-success link is better than a hard reject.
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let hi = (bytes[i + 1] as char).to_digit(16);
+                let lo = (bytes[i + 2] as char).to_digit(16);
+                if let (Some(h), Some(l)) = (hi, lo) {
+                    out.push(((h << 4) | l) as u8);
+                    i += 3;
+                    continue;
+                }
+                out.push(b'%');
+                i += 1;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    // Decoded bytes are only valid UTF-8 if the original encoder
+    // produced valid UTF-8 — true for anything `encodeURIComponent`
+    // emits. On malformed input, fall back to lossy conversion so we
+    // still return something the caller can pattern-match.
+    String::from_utf8(out).unwrap_or_else(|e| {
+        String::from_utf8_lossy(e.as_bytes()).into_owned()
+    })
 }
 
 #[cfg(test)]
@@ -363,6 +415,48 @@ mod tests {
         assert_eq!(join_key, "cwth-abcd-ef01-2345");
         assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
         assert_eq!(mesh_name.as_deref(), Some("My Mesh"));
+    }
+
+    #[test]
+    fn parses_percent_encoded_relay_with_colon() {
+        // Regression for a real user-reported link: the desktop UI
+        // built the share link via `URL.searchParams.set("relay", ...)`,
+        // which encodes `:` as `%3A`. Without decode the parser
+        // handed `100.104.36.28%3A9742` to the join handshake as a
+        // hostname, which failed with a misleading network error.
+        let link = parse_deep_link(
+            "sovereign://join/cwth-4d5f-6211-64d6?name=Alexs-MacBook-Pro-2.local%27s+Mesh&relay=100.104.36.28%3A9742"
+        ).unwrap();
+        let DeepLink::Join { join_key, relay_hint, mesh_name } = link;
+        assert_eq!(join_key, "cwth-4d5f-6211-64d6");
+        assert_eq!(relay_hint.as_deref(), Some("100.104.36.28:9742"));
+        assert_eq!(
+            mesh_name.as_deref(),
+            Some("Alexs-MacBook-Pro-2.local's Mesh")
+        );
+    }
+
+    #[test]
+    fn parses_bracketed_ipv6_relay() {
+        // IPv6 relays use bracket form — `[fd7a:...]:9742`. The
+        // brackets themselves often get percent-encoded too.
+        let link = parse_deep_link(
+            "sovereign://join/cwth-7f3a-9b2e-4d1c?relay=%5Bfd7a%3A115c%3Aa1e0%3A%3Aa3a%3A241c%5D%3A9742"
+        ).unwrap();
+        let DeepLink::Join { relay_hint, .. } = link;
+        assert_eq!(
+            relay_hint.as_deref(),
+            Some("[fd7a:115c:a1e0::a3a:241c]:9742")
+        );
+    }
+
+    #[test]
+    fn percent_decode_passes_through_invalid_escapes() {
+        // A lone `%` with no two hex digits shouldn't panic or drop
+        // characters — we'd rather hand back a partial value than
+        // reject the whole link. Guard for accidental truncation.
+        assert_eq!(percent_decode("abc%"), "abc%");
+        assert_eq!(percent_decode("abc%ZZ"), "abc%ZZ");
     }
 
     #[test]

@@ -258,6 +258,15 @@ export async function meshDiagnostics(): Promise<import("./types").MeshDiagnosti
   return invoke("mesh_diagnostics");
 }
 
+/** Reachable interfaces (Tailscale / LAN / IPv6) the founder can
+ *  pick from when generating a remote-friendly invite. Empty list
+ *  means no detected interfaces — UI hides the relay picker. */
+export async function meshRelayCandidates(): Promise<
+  import("./types").RelayCandidate[]
+> {
+  return invoke("mesh_relay_candidates");
+}
+
 /** Roll a fresh memorable node-name suggestion (e.g. "BeefyMac").
  *  The 🎲 button next to the node-name input calls this; the user
  *  still has to press Save for the name to persist. */

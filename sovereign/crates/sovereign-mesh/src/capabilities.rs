@@ -26,6 +26,7 @@ use commonwealth_core::capabilities::{
     AvailableResources, HardwareProfile, NodeCapabilities,
 };
 use commonwealth_core::knowledge::{ChunkRange as CoreChunkRange, CorpusShardInfo};
+use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::hardware;
 use corpus_engine::engine::CorpusEngine;
 
@@ -42,6 +43,7 @@ pub async fn build_local_capabilities(
     engine: Option<&Arc<CorpusEngine>>,
     now_secs: u64,
     inference_availability: f32,
+    embed_model: Option<EmbedModelInfo>,
 ) -> NodeCapabilities {
     let hardware = hardware::detect_hardware();
     let available = live_available_resources(&hardware);
@@ -62,6 +64,11 @@ pub async fn build_local_capabilities(
         inference_availability,
         inference_capable: false,
         loaded_models: Vec::new(),
+        // The collaborative-ingestion planner filters candidates by
+        // exact match against this field. `None` means "don't include
+        // me in distribution" — safe default for nodes that haven't
+        // bootstrapped an embed slot yet.
+        embed_model,
     }
 }
 

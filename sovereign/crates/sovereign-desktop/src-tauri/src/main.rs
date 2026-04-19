@@ -180,6 +180,7 @@ fn main() {
             mesh_commands::mesh_is_running,
             mesh_commands::mesh_leave,
             mesh_commands::mesh_rotate_invite,
+            mesh_commands::mesh_relay_candidates,
             mesh_commands::suggest_node_name,
             mesh_commands::mesh_diagnostics,
             insight_commands::clip_insight,

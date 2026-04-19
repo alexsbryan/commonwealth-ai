@@ -368,6 +368,25 @@ export interface MeshDiagnostics {
   daemon_running: boolean;
 }
 
+/** A reachable network address for the founder's machine, surfaced
+ *  in the invite-card relay picker so they can hand a remote-friendly
+ *  link to people who can't reach them via mDNS (cross-Wi-Fi,
+ *  cross-subnet, AP isolation). The daemon classifies and orders
+ *  these so the UI can show the best one with a "Recommended" badge. */
+export interface RelayCandidate {
+  /** Bare IP literal (no brackets for IPv6). */
+  ip: string;
+  /** "tailscale" | "lan" | "ipv6" | "other" — drives the human label
+   *  and the auto-selected default. */
+  kind: string;
+  /** Pre-formatted "host:port" (or "[host]:port" for IPv6) ready to
+   *  drop straight into the `?relay=…` query param. Saves us
+   *  re-implementing IPv6 bracket rules in TS. */
+  url_fragment: string;
+  /** True for the single best candidate, pre-selected in the picker. */
+  recommended: boolean;
+}
+
 export interface ContributionSummary {
   compute_hours_contributed: number;
   compute_hours_used: number;
