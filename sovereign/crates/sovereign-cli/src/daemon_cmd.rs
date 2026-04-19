@@ -22,7 +22,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use corpus_engine::{CorpusEngine, EmbedFn, NoteStore};
-use sovereign_core::model_family::ModelFamily;
+use sovereign_core::model_family::{
+    EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
+};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::ToolRegistry;
@@ -196,6 +198,64 @@ async fn run_daemon(_args: &[String]) -> i32 {
     // wikipedia/etc. ingests. See engine block above for the
     // diagnostic story.
     daemon.set_corpus_engine(Arc::clone(&engine)).await;
+
+    // Publish this node's embed model fingerprint so peers can filter
+    // us in/out of collaborative ingestion.
+    //
+    // Without this wiring, `corpus_collaborate` returns 503
+    // "embed model not configured on this node — cannot plan
+    // collaboration" even though the embed slot is loaded and
+    // working. The desktop does the same publication in
+    // `sovereign-desktop/src-tauri/src/state.rs:885`; the CLI daemon
+    // just didn't mirror it.
+    //
+    // Probe the provider for the real output dimensions rather than
+    // trusting a hardcoded value — gets us the same ground truth the
+    // corpus-engine uses for its dimension-mismatch guard.
+    match provider.embed("probe").await {
+        Ok(probe_vec) => {
+            // `model_id` = bare filename stem (e.g.
+            // `qwen-embedding-0.6b`). Peers compare EmbedModelInfo
+            // for exact equality, so the string has to match what
+            // the desktop/other CLI daemons advertise for the same
+            // GGUF. File-stem is the stable shared handle.
+            let model_id = config
+                .models
+                .embed
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("embed")
+                .to_string();
+            // ModelFamily::Unknown — the CLI doesn't persist
+            // `embed_family` in SetupConfig today. Defaults to
+            // Mean pooling + Application normalization, which
+            // matches qwen-embedding-0.6b and the typical
+            // mean-pool BERT family. Qwen3-embedding-* users on
+            // the CLI path would need embed_family surfaced in
+            // SetupConfig (separate work — note to future self).
+            let pooling = PoolingStrategy::Mean;
+            let normalization = NormalizationStrategy::Application;
+            let embed_info = EmbedModelInfo {
+                model_id: model_id.clone(),
+                dimensions: probe_vec.len(),
+                pooling,
+                normalization,
+            };
+            tracing::info!(
+                model_id = %embed_info.model_id,
+                dims = embed_info.dimensions,
+                pooling = ?pooling,
+                "embed model info: advertising to mesh peers"
+            );
+            daemon.set_embed_model_info(embed_info).await;
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "embed probe failed — peers will NOT route collaborative ingestion to this node"
+            );
+        }
+    }
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
     daemon
         .set_mcp(Arc::new(tools), Arc::clone(&notes_store), session_id)
