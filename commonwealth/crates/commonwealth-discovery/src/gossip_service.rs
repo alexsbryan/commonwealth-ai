@@ -173,7 +173,8 @@ mod tests {
             inference_availability: 1.0,
             inference_capable: false,
             loaded_models: vec![],
-        }
+
+            embed_model: None,        }
     }
 
     #[tokio::test]

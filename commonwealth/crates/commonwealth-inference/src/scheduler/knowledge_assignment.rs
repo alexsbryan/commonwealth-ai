@@ -49,15 +49,24 @@ pub fn plan_collaborative_ingestion(
         return Err(CollaborativeIngestionError::AlreadyComplete(corpus_id.to_string()));
     }
 
-    // Filter candidates whose embed_model matches exactly.
+    // Belt-and-suspenders filter. The coordinator
+    // (`corpus_collaborate`) pre-filters candidates by gossiped
+    // `embed_model` so the common call path feeds only compatible
+    // peers in. But this function has several direct callers (tests,
+    // the CLI's `sovereign mesh collaborate` subcommand) that pass
+    // raw `MemberRecord` sets without running the coordinator's
+    // filter. Repeating the check here means a mismatched peer
+    // never ends up in `all_nodes` regardless of entry point.
     let compatible_peers: Vec<&MemberRecord> = candidates
         .iter()
         .filter(|peer| {
-            // We check the KnowledgeManifest embed_model via the OICP capabilities.
-            // At this layer we receive the raw MemberRecord; the caller is responsible
-            // for including only peers whose embed_model has already been verified.
-            // Here we check free storage as a secondary gate.
-            peer.capabilities.hardware.free_storage_gb > 0
+            if peer.capabilities.hardware.free_storage_gb == 0 {
+                return false;
+            }
+            match peer.capabilities.embed_model.as_ref() {
+                Some(em) => em == local_embed_model,
+                None => false, // Peer hasn't advertised — excluded.
+            }
         })
         .collect();
 
@@ -180,12 +189,22 @@ pub fn plan_collaborative_ingestion_jsonl(
         return Err(CollaborativeIngestionError::AlreadyComplete(corpus_id.to_string()));
     }
 
-    // All passed candidates are already filtered to Online status by the
-    // caller. Include all of them regardless of free_storage_gb (which may
-    // be 0 on first gossip) — equal distribution doesn't use storage weight,
-    // and the ingest_partition receiver validates embed model compatibility.
+    // Filter candidates whose gossiped embed_model matches ours.
+    // Belt-and-suspenders: the coordinator also pre-filters, but
+    // this function has other callers (tests, CLI) that may hand us
+    // raw candidate sets. Without this check a mismatched peer
+    // would get an article range it silently refuses to process,
+    // leaving those articles stranded and the overall ingest
+    // permanently incomplete.
+    let compatible: Vec<&MemberRecord> = candidates
+        .iter()
+        .filter(|peer| match peer.capabilities.embed_model.as_ref() {
+            Some(em) => em == local_embed_model,
+            None => false,
+        })
+        .collect();
     let mut all_nodes: Vec<NodeId> = std::iter::once(local_node.node_id)
-        .chain(candidates.iter().map(|p| p.node_id))
+        .chain(compatible.iter().map(|p| p.node_id))
         .collect();
     all_nodes.dedup();
     let n = all_nodes.len() as u64;
@@ -411,6 +430,152 @@ mod tests {
             size_gb,
             mesh_sharing: sharing,
         }
+    }
+
+    // ── collaborative-ingestion embed_model filter ─────────────────
+
+    fn qwen_embed() -> EmbedModelInfo {
+        use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+        EmbedModelInfo {
+            model_id: "qwen3-embedding-0.6b".into(),
+            dimensions: 1024,
+            pooling: PoolingStrategy::Mean,
+            normalization: NormalizationStrategy::Application,
+        }
+    }
+
+    fn other_embed() -> EmbedModelInfo {
+        use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+        EmbedModelInfo {
+            model_id: "nomic-embed-text-v2".into(),
+            dimensions: 768,
+            pooling: PoolingStrategy::Mean,
+            normalization: NormalizationStrategy::Application,
+        }
+    }
+
+    fn member(id: u128, embed: Option<EmbedModelInfo>) -> MemberRecord {
+        use commonwealth_core::capabilities::{
+            AvailableResources, HardwareProfile, NodeCapabilities,
+        };
+        use commonwealth_core::mesh::NodeStatus;
+        MemberRecord {
+            node_id: NodeId::from_u128(id),
+            name: format!("node-{id}"),
+            invited_by: NodeId::from_u128(1),
+            joined_at: 100,
+            last_seen: 100,
+            status: NodeStatus::Online,
+            capabilities: NodeCapabilities {
+                hardware: HardwareProfile {
+                    gpus: vec![],
+                    system_ram_gb: 16,
+                    cpu_cores: 8,
+                    total_storage_gb: 500,
+                    free_storage_gb: 200,
+                    network_bandwidth_mbps: None,
+                },
+                available: AvailableResources::default(),
+                active_processes: vec![],
+                hosted_corpora: vec![],
+                reported_at: 100,
+                inference_availability: 1.0,
+                inference_capable: false,
+                loaded_models: vec![],
+                embed_model: embed,
+            },
+            addresses: vec!["192.168.1.10:9742".parse().unwrap()],
+        }
+    }
+
+    #[test]
+    fn jsonl_plan_excludes_peer_with_mismatched_embed_model() {
+        // Regression: pre-fix, a Machine B running nomic would get a
+        // partition assigned and silently reject it. Now the planner
+        // excludes it upfront so the split goes to local + compatible
+        // peers only.
+        let local = member(1, Some(qwen_embed()));
+        let peer_match = member(2, Some(qwen_embed()));
+        let peer_mismatch = member(3, Some(other_embed()));
+        let handoff = plan_collaborative_ingestion_jsonl(
+            "wikipedia",
+            "wikipedia",
+            0,
+            1000,
+            &local,
+            &[peer_match.clone(), peer_mismatch.clone()],
+            &qwen_embed(),
+        )
+        .unwrap();
+        let assigned_nodes: Vec<NodeId> =
+            handoff.partitions.iter().map(|p| p.node_id).collect();
+        assert!(assigned_nodes.contains(&local.node_id));
+        assert!(assigned_nodes.contains(&peer_match.node_id));
+        assert!(
+            !assigned_nodes.contains(&peer_mismatch.node_id),
+            "peer with other_embed must not receive a partition"
+        );
+        assert_eq!(handoff.partitions.len(), 2);
+    }
+
+    #[test]
+    fn jsonl_plan_excludes_peer_that_has_not_advertised_embed_model() {
+        // Pre-bootstrap peer — gossiped capabilities but embed_model
+        // is still None. Exclude conservatively; they'll re-evaluate
+        // when they complete bootstrap and re-gossip.
+        let local = member(1, Some(qwen_embed()));
+        let peer_bootstrapping = member(2, None);
+        let handoff = plan_collaborative_ingestion_jsonl(
+            "wikipedia",
+            "wikipedia",
+            0,
+            1000,
+            &local,
+            &[peer_bootstrapping.clone()],
+            &qwen_embed(),
+        )
+        .unwrap();
+        assert_eq!(
+            handoff.partitions.len(),
+            1,
+            "only local should be assigned when peer hasn't advertised embed_model"
+        );
+        assert_eq!(handoff.partitions[0].node_id, local.node_id);
+    }
+
+    #[test]
+    fn jsonl_plan_splits_across_local_and_matching_peer() {
+        // Happy path: equal split of the remaining range across two
+        // compatible nodes.
+        let local = member(1, Some(qwen_embed()));
+        let peer = member(2, Some(qwen_embed()));
+        let handoff = plan_collaborative_ingestion_jsonl(
+            "wikipedia",
+            "wikipedia",
+            0,
+            1000,
+            &local,
+            &[peer.clone()],
+            &qwen_embed(),
+        )
+        .unwrap();
+        assert_eq!(handoff.partitions.len(), 2);
+        let local_range = handoff
+            .partitions
+            .iter()
+            .find(|p| p.node_id == local.node_id)
+            .and_then(|p| p.article_range)
+            .unwrap();
+        let peer_range = handoff
+            .partitions
+            .iter()
+            .find(|p| p.node_id == peer.node_id)
+            .and_then(|p| p.article_range)
+            .unwrap();
+        // Ranges must cover [0, 1000) with no gap or overlap.
+        assert_eq!(local_range.0, 0);
+        assert_eq!(local_range.1, peer_range.0);
+        assert_eq!(peer_range.1, 1000);
     }
 
     #[test]

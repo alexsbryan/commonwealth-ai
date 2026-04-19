@@ -49,17 +49,6 @@ pub async fn corpus_collaborate(
         )
     })?;
 
-    // Only include online peers — offline members can't accept partitions,
-    // and freshly-joined peers may have NodeStatus::Online before their
-    // capability gossip fully propagates (free_storage_gb may still be 0).
-    let candidates: Vec<_> = mesh
-        .members
-        .values()
-        .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-        .cloned()
-        .collect();
-    drop(mesh);
-
     let local_embed_model = state.inner.inference_store.get_local_embed_model()
         .ok_or_else(|| (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -67,6 +56,57 @@ pub async fn corpus_collaborate(
                 error: "embed model not configured on this node — cannot plan collaboration".into(),
             }),
         ))?;
+
+    // Include online peers whose *gossiped* embed_model matches ours
+    // exactly. Without this upfront filter the coordinator would ship
+    // partitions to mismatched peers, they'd reject with 409 (fire-and-
+    // forget, so coordinator never learns), and the user would see
+    // Machine B do nothing with no diagnostic trail. The match requires:
+    //   1. Peer is Online (offline peers can't accept partitions).
+    //   2. Peer has gossiped an embed_model (pre-bootstrap peers are
+    //      excluded; they'll re-evaluate on the next capability
+    //      refresh when they join).
+    //   3. Peer's embed_model exactly equals ours (model_id +
+    //      dimensions + pooling + normalization — same EmbedModelInfo
+    //      equality the peer-side ingest_partition handler already
+    //      enforces).
+    //
+    // We also tally rejections with reasons so the log line below
+    // explains *why* each would-be peer is excluded — when the user
+    // sees no collaboration, they can look here and see "Machine B
+    // has qwen3-embed-0.6b; we have qwen3-embed-4b — mismatch".
+    let mut rejected: Vec<(NodeId, &'static str)> = Vec::new();
+    let candidates: Vec<_> = mesh
+        .members
+        .values()
+        .filter(|m| m.node_id != self_id)
+        .filter_map(|m| {
+            if m.status != NodeStatus::Online {
+                rejected.push((m.node_id, "offline"));
+                return None;
+            }
+            match m.capabilities.embed_model.as_ref() {
+                None => {
+                    rejected.push((m.node_id, "no embed_model advertised"));
+                    None
+                }
+                Some(em) if em != &local_embed_model => {
+                    rejected.push((m.node_id, "embed_model mismatch"));
+                    None
+                }
+                Some(_) => Some(m.clone()),
+            }
+        })
+        .collect();
+    drop(mesh);
+
+    if !rejected.is_empty() {
+        tracing::info!(
+            rejected = ?rejected,
+            compatible = candidates.len(),
+            "corpus_collaborate: candidate filter results"
+        );
+    }
 
     let recipe_id = req.recipe_id.as_deref().unwrap_or(&req.corpus_id);
 
@@ -295,10 +335,19 @@ pub async fn corpus_collaborate(
                         tracing::info!(node = %node_id, url = %peer_url_clone, "collaborate: peer accepted partition");
                     }
                     Ok(resp) => {
+                        // Capture the response body so the rejection
+                        // reason is visible in logs without grepping
+                        // the peer's daemon output. Most often this
+                        // is an embed_model mismatch (409) or a
+                        // bootstrap-in-progress 503 — both actionable
+                        // if the user can actually see the reason.
+                        let status = resp.status();
+                        let body = resp.text().await.unwrap_or_default();
                         tracing::warn!(
                             node = %node_id,
                             url = %peer_url_clone,
-                            status = %resp.status(),
+                            status = %status,
+                            body = %body,
                             "collaborate: peer rejected partition"
                         );
                     }

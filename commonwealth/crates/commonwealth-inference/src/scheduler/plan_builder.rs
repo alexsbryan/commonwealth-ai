@@ -212,7 +212,8 @@ mod tests {
             inference_availability: 1.0,
             inference_capable: true,
             loaded_models: vec![],
-        }
+
+            embed_model: None,        }
     }
 
     fn test_node_config() -> NodeConfig {

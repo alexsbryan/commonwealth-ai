@@ -125,7 +125,8 @@ fn gossip_convergence_five_nodes_bounded_rounds() {
                     inference_availability: 1.0,
                     inference_capable: false,
                     loaded_models: vec![],
-                }),
+
+                    embed_model: None,                }),
             },
             timestamp: 100 + i as u64,
             origin: id,
@@ -197,7 +198,8 @@ fn gossip_convergence_with_late_joiner() {
                     inference_availability: 1.0,
                     inference_capable: false,
                     loaded_models: vec![],
-                }),
+
+                    embed_model: None,                }),
             },
             timestamp: 100,
             origin: id,
@@ -245,7 +247,8 @@ fn gossip_convergence_with_late_joiner() {
                 inference_availability: 1.0,
                 inference_capable: false,
                 loaded_models: vec![],
-            }),
+
+                embed_model: None,            }),
         },
         timestamp: 200,
         origin: node4,

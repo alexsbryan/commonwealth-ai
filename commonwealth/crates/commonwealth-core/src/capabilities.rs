@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::knowledge::CorpusShardInfo;
+use crate::oicp::EmbedModelInfo;
 
 /// A node's full capability report — hardware profile plus current availability.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,26 @@ pub struct NodeCapabilities {
     /// Empty for storage-only nodes.
     #[serde(default)]
     pub loaded_models: Vec<String>,
+
+    /// Advertised embedding model for this node. Populated when the
+    /// daemon has an embed slot loaded; `None` before bootstrap
+    /// completes or on nodes that run no embed model at all.
+    ///
+    /// **Why this must be gossiped.** The collaborative-ingestion
+    /// planner on Machine A needs to know whether Machine B's embed
+    /// space matches its own BEFORE dispatching a partition. Cosine
+    /// similarity across different embedding spaces is meaningless,
+    /// so a mismatch means the partition can't be merged later.
+    ///
+    /// Before this field existed, the planner filtered candidates on
+    /// `free_storage_gb > 0` only, dispatched to everyone, and relied
+    /// on the peer-side `ingest_partition` handler to reject with 409
+    /// on mismatch. That rejection was fire-and-forget, so the
+    /// coordinator never learned about it and logs looked like the
+    /// peer just didn't participate. With this field the planner
+    /// filters upfront and logs the mismatch loudly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embed_model: Option<EmbedModelInfo>,
 }
 
 fn default_inference_availability() -> f32 {
@@ -228,6 +249,53 @@ mod tests {
             caps.loaded_models.is_empty(),
             "old peers without loaded_models must default to empty vec"
         );
+    }
+
+    #[test]
+    fn embed_model_defaults_to_none_when_absent() {
+        // Old peers (pre-field) don't include embed_model. Must
+        // deserialize to None — the planner treats None as
+        // "exclude from distribution", which is the conservative
+        // answer for a peer that never advertised compatibility.
+        let json = minimal_capabilities_json(None, None);
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert!(
+            caps.embed_model.is_none(),
+            "old peers without embed_model must default to None"
+        );
+    }
+
+    #[test]
+    fn embed_model_round_trips() {
+        use crate::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
+        let caps = NodeCapabilities {
+            hardware: HardwareProfile {
+                gpus: vec![],
+                system_ram_gb: 16,
+                cpu_cores: 8,
+                total_storage_gb: 500,
+                free_storage_gb: 200,
+                network_bandwidth_mbps: None,
+            },
+            available: AvailableResources::default(),
+            active_processes: vec![],
+            hosted_corpora: vec![],
+            reported_at: 1000,
+            inference_availability: 1.0,
+            inference_capable: false,
+            loaded_models: vec![],
+            embed_model: Some(EmbedModelInfo {
+                model_id: "qwen3-embedding-0.6b".into(),
+                dimensions: 1024,
+                pooling: PoolingStrategy::Mean,
+                normalization: NormalizationStrategy::Application,
+            }),
+        };
+        let json = serde_json::to_string(&caps).unwrap();
+        let back: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        let em = back.embed_model.expect("embed_model survives");
+        assert_eq!(em.model_id, "qwen3-embedding-0.6b");
+        assert_eq!(em.dimensions, 1024);
     }
 
     #[test]

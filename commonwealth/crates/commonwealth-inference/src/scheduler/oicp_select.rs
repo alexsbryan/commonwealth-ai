@@ -121,7 +121,8 @@ mod tests {
             inference_availability: availability,
             inference_capable: true,
             loaded_models: vec![],
-        }
+
+            embed_model: None,        }
     }
 
     fn reqs_requiring_code(min_level: u8) -> InferenceRequirements {
