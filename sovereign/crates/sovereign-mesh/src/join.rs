@@ -45,6 +45,15 @@ struct JoinRequestWire {
     join_key: String,
     joining_node_name: String,
     joining_node_addresses: Vec<SocketAddr>,
+    /// Stable NodeId the joiner has persisted at
+    /// `<data_dir>/node_id`. The founder honours this as the
+    /// member's `node_id` in the mesh if it's either (a) not
+    /// already taken, or (b) already present under the same name
+    /// (rejoin path). Absent on pre-stable-identity builds; the
+    /// `#[serde(default, skip_serializing_if = "Option::is_none")]`
+    /// on the founder side keeps the wire format backward-compatible.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proposed_node_id: Option<NodeId>,
 }
 
 /// Members transit as a flat Vec because `HashMap<NodeId, _>` doesn't
@@ -230,6 +239,7 @@ async fn try_single_peer(
 /// doesn't propagate), then polls `mdns` for peers advertising
 /// `mesh_name`. First accepting peer wins. Times out after
 /// `timeout` with `Error::NoPeerFound` if nothing accepts.
+#[allow(clippy::too_many_arguments)]
 pub async fn perform_join(
     mesh_name: &str,
     join_key: &str,
@@ -238,6 +248,7 @@ pub async fn perform_join(
     direct_peer_hint: Option<&str>,
     mdns: &MdnsDiscovery,
     timeout: Duration,
+    proposed_node_id: Option<NodeId>,
 ) -> Result<JoinHandshakeResult, JoinError> {
     // 3-second per-peer HTTP timeout. With a 5s overall budget this
     // leaves one retry with a fresh mDNS candidate if the first peer
@@ -251,6 +262,7 @@ pub async fn perform_join(
         join_key: join_key.to_string(),
         joining_node_name: joining_node_name.to_string(),
         joining_node_addresses,
+        proposed_node_id,
     };
 
     // Direct peer hint — tried first so overlay-network (Tailscale /

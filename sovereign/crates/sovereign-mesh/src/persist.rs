@@ -35,6 +35,21 @@ pub const MESH_FILE: &str = "mesh.json";
 /// must keep secret. See `save_join_key` / `load_join_key`.
 pub const JOIN_KEY_FILE: &str = "join_key.secret";
 
+/// Filename at `<data_dir>/node_id` — 16 raw bytes, mode 0600.
+///
+/// This is the daemon's stable identity across mesh create/join
+/// cycles. Generated exactly once on first boot, and never
+/// regenerated. Without this, every `create_mesh` and every
+/// `join_mesh` would call `NodeId::generate()` and stamp out a
+/// fresh 16-byte random ID, causing:
+///   - Zombie accumulation: each rejoin adds a new member to the
+///     founder's mesh, old "us" entries never get GC'd.
+///   - Failed self-identification: status / collaborate handlers
+///     can't find a stable "me" record across restarts.
+///   - Churning UI: the member's displayed identity changes every
+///     time the daemon restarts.
+pub const NODE_ID_FILE: &str = "node_id";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedMesh {
     pub self_node_id: NodeId,
@@ -81,6 +96,113 @@ pub fn mesh_file(data_dir: &Path) -> PathBuf {
 
 pub fn join_key_file(data_dir: &Path) -> PathBuf {
     data_dir.join(JOIN_KEY_FILE)
+}
+
+pub fn node_id_file(data_dir: &Path) -> PathBuf {
+    data_dir.join(NODE_ID_FILE)
+}
+
+/// Load this daemon's stable `NodeId` from `<data_dir>/node_id`.
+/// On first boot (file missing), generate a fresh ID and persist it
+/// atomically before returning.
+///
+/// Once this has returned a given NodeId for a given data_dir, every
+/// future call returns the same value — the identity survives
+/// `sovereign mesh leave` (we leave `node_id` in place on leave so
+/// the user re-joins with their familiar identity), crashes,
+/// reinstalls that preserve `~/.sovereign`, etc. The only way to
+/// churn identity is for the user to manually `rm ~/.sovereign/node_id`.
+///
+/// Errors: any filesystem/serialization failure bubbles up as an
+/// `io::Error`. Callers currently log-and-continue by falling back
+/// to `NodeId::generate()` for the in-memory value, trading identity
+/// stability for availability — see [`load_or_generate_self_node_id`]
+/// for the convenience wrapper that does this.
+pub fn load_node_id(data_dir: &Path) -> std::io::Result<Option<NodeId>> {
+    let path = node_id_file(data_dir);
+    match fs::read(&path) {
+        Ok(bytes) => {
+            if bytes.len() != 16 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "node_id file at {} is {} bytes, expected 16",
+                        path.display(),
+                        bytes.len()
+                    ),
+                ));
+            }
+            let arr: [u8; 16] = bytes.try_into().unwrap();
+            // NodeId is defined via macro in commonwealth-core with
+            // `[u8; 16]` as its single field. We can't construct it
+            // directly from outside that crate — go through the
+            // serde path using a tiny JSON shim.
+            let id: NodeId = serde_json::from_value(serde_json::json!(arr))
+                .map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+                })?;
+            Ok(Some(id))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Persist this daemon's stable `NodeId`. Idempotent — calling
+/// twice with the same ID is a no-op from the caller's perspective,
+/// but still rewrites the file (tmp-then-rename, so atomic).
+fn save_node_id(data_dir: &Path, id: &NodeId) -> std::io::Result<()> {
+    fs::create_dir_all(data_dir)?;
+    let target = node_id_file(data_dir);
+    let tmp = target.with_extension("id.tmp");
+    {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(id.as_bytes())?;
+        f.sync_all()?;
+    }
+    fs::rename(&tmp, &target)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+/// Load-or-generate wrapper with graceful fallback. First boot
+/// writes the file; subsequent boots return the persisted ID.
+/// On I/O error writing the generated ID, returns the fresh ID
+/// anyway and logs — the daemon is still usable, just loses
+/// identity stability until the file can be written.
+pub fn load_or_generate_self_node_id(data_dir: &Path) -> NodeId {
+    match load_node_id(data_dir) {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            let fresh = NodeId::generate();
+            if let Err(e) = save_node_id(data_dir, &fresh) {
+                tracing::warn!(
+                    error = %e,
+                    data_dir = %data_dir.display(),
+                    "node_id persistence failed — daemon will run with a fresh \
+                     ID this session; rejoins will appear as a new peer to \
+                     the founder"
+                );
+            } else {
+                tracing::info!(
+                    node_id = %fresh,
+                    "node_id: generated + persisted stable identity (first boot)"
+                );
+            }
+            fresh
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "node_id: failed to load persisted ID — using fresh this session"
+            );
+            NodeId::generate()
+        }
+    }
 }
 
 /// Persist the plaintext `join_key` for the active mesh. Atomic

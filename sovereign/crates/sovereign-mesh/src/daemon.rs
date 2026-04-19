@@ -486,8 +486,19 @@ impl EmbeddedDaemon {
         // they'd hit themselves instead of us. See `reachable_addresses`.
         let addrs = reachable_addresses(internal_port);
 
-        let (mesh, join_key) = membership::init_mesh(mesh_name, node_name, addrs);
-        let node_id = mesh
+        // Use this install's stable NodeId (persisted at
+        // `<data_dir>/node_id`). Without this, every `create_mesh`
+        // would stamp a fresh random ID, so rejoining users would
+        // appear as new peers every time their mesh.json got wiped.
+        let stable_id = persist::load_or_generate_self_node_id(&self.data_dir);
+        let (mesh, join_key) = membership::init_mesh_with_node_id(
+            mesh_name,
+            node_name,
+            addrs,
+            stable_id,
+        );
+        let node_id = stable_id;
+        let _ = mesh
             .members
             .keys()
             .next()
@@ -606,14 +617,22 @@ impl EmbeddedDaemon {
         let addrs = reachable_addresses(internal_port);
 
         // Step 2 — placeholder mesh so mDNS has something to advertise.
-        let (placeholder_mesh, _throwaway_key) =
-            membership::init_mesh(&mesh_name, node_name, addrs.clone());
-        let placeholder_node_id = placeholder_mesh
-            .members
-            .keys()
-            .next()
-            .copied()
-            .ok_or_else(|| MeshError::Config("placeholder mesh has no node".into()))?;
+        //
+        // Use the persisted stable NodeId (not a fresh one). The
+        // founder will honour this during the handshake via the
+        // `proposed_node_id` wire field, so after adoption our
+        // identity in the mesh matches the one we'll advertise in
+        // every future rejoin. Without this, each rejoin would
+        // assign us a new founder-side NodeId and leave zombie
+        // entries in the mesh.members roster.
+        let stable_id = persist::load_or_generate_self_node_id(&self.data_dir);
+        let (placeholder_mesh, _throwaway_key) = membership::init_mesh_with_node_id(
+            &mesh_name,
+            node_name,
+            addrs.clone(),
+            stable_id,
+        );
+        let placeholder_node_id = stable_id;
 
         self.start_daemon(placeholder_mesh, placeholder_node_id).await?;
 
@@ -635,6 +654,10 @@ impl EmbeddedDaemon {
             relay_hint.as_deref(),
             mdns.as_ref(),
             std::time::Duration::from_secs(5),
+            // Propose our stable NodeId. Founder keeps it if free
+            // or matches our name; else mints a fresh one (first
+            // join from a new machine to this mesh).
+            Some(stable_id),
         )
         .await;
 
