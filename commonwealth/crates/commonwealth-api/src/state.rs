@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
 
 use std::pin::Pin;
@@ -73,7 +74,17 @@ pub struct AppState {
 }
 
 pub struct AppStateInner {
-    pub self_node_id: NodeId,
+    /// Internal storage. Use [`AppStateInner::self_node_id`] to read
+    /// (returns `NodeId` by value) — direct field access is hidden
+    /// behind a method so callers always go through the load.
+    ///
+    /// Backed by `ArcSwap` so the `join_mesh` adoption flow can swap
+    /// the placeholder ID for the founder-assigned ID atomically
+    /// after the handshake completes. Without that swap, gossip
+    /// would never find our own member record (it indexes by
+    /// `self_node_id`), `corpus_collaborate` would 500 with "local
+    /// node not found in mesh", and partitions would never dispatch.
+    pub self_node_id_swap: ArcSwap<NodeId>,
     pub mesh: RwLock<Mesh>,
     /// Inference plan, model info, ledger, and llama addresses — all via MeshStore.
     pub inference_store: InferenceStateStore,
@@ -158,7 +169,7 @@ impl AppState {
         let knowledge_store = KnowledgeStateStore::new(Arc::clone(&mesh_store), self_node_id);
         Self {
             inner: Arc::new(AppStateInner {
-                self_node_id,
+                self_node_id_swap: ArcSwap::from_pointee(self_node_id),
                 mesh: RwLock::new(mesh),
                 inference_store,
                 knowledge_store,
@@ -174,6 +185,22 @@ impl AppState {
                 local_inference: None,
             }),
         }
+    }
+
+    /// This node's NodeId, by value. Cheap (atomic load + Arc deref).
+    /// Use everywhere instead of the old field access — `join_mesh`
+    /// swaps this when adopting a founder-assigned ID, and the field
+    /// access path would always see the placeholder.
+    pub fn self_node_id(&self) -> NodeId {
+        **self.inner.self_node_id_swap.load()
+    }
+
+    /// Replace this node's `self_node_id` (atomic). Called by
+    /// `join_mesh` after the founder assigns us a NodeId during the
+    /// handshake. Cheap pointer swap; concurrent readers see either
+    /// the old or new value but never garbage.
+    pub fn set_self_node_id(&self, new_id: NodeId) {
+        self.inner.self_node_id_swap.store(Arc::new(new_id));
     }
 
     /// Record whether this node's model probe succeeded at startup.

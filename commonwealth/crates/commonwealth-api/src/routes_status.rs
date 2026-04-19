@@ -44,7 +44,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         .collect();
 
     Json(StatusResponse {
-        node_id: format!("{}", state.inner.self_node_id),
+        node_id: format!("{}", state.inner.self_node_id_swap.load_full().as_ref().clone()),
         mesh: MeshStatus {
             name: mesh.name.clone(),
             members_online,

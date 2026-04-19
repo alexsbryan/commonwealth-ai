@@ -27,6 +27,10 @@ reqwest = { version = "0.12", features = ["json"] }
 # Stream alias used in the handler's SSE wrapper.
 async-trait = "0.1"
 futures = "0.3"
+# Used to swap `AppStateInner.self_node_id` after the join handshake
+# adopts a founder-assigned ID. Cheap reads (Arc clone), single
+# atomic swap on adoption, no async lock contention.
+arc-swap = "1.7"
 
 [dev-dependencies]
 commonwealth-discovery = { workspace = true }

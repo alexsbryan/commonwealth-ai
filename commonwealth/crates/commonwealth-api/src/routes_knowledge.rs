@@ -43,7 +43,7 @@ pub async fn knowledge_search(
     Json(request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     let limit = request.effective_limit() as usize;
-    let self_id = state.inner.self_node_id;
+    let self_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
 
     // Step 1: figure out what corpora are locally installed, keyed
     // by id. This drives the "search here vs. fan out" split.

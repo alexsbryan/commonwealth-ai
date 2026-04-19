@@ -41,7 +41,7 @@ pub async fn corpus_collaborate(
 
     // Build local node view.
     let mesh = state.inner.mesh.read().await;
-    let self_id = state.inner.self_node_id;
+    let self_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
     let local_member = mesh.members.get(&self_id).cloned().ok_or_else(|| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -439,7 +439,7 @@ pub async fn corpus_ingest_partition(
     let file_indices = req.file_indices.clone();
     let article_range = req.article_range;
     let handoff_id = req.handoff_id;
-    let local_node_id = state.inner.self_node_id;
+    let local_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
     let engine = _engine.clone();
     let mesh_store = Arc::clone(&state.inner.mesh_store);
     let state_clone = state.clone();
@@ -569,7 +569,7 @@ pub async fn gossip(
     Json(req): Json<GossipRequest>,
 ) -> Result<Json<GossipResponse>, (StatusCode, Json<GossipRejection>)> {
     let incoming = req.mesh.into_mesh();
-    let self_node_id = state.inner.self_node_id;
+    let self_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
     let mut mesh = state.inner.mesh.write().await;
     let report = mesh.merge_from(self_node_id, &incoming);
 
@@ -1057,7 +1057,7 @@ pub async fn join(
     State(state): State<AppState>,
     Json(req): Json<JoinRequest>,
 ) -> Result<Json<JoinResponse>, (StatusCode, Json<JoinRejection>)> {
-    let self_node_id = state.inner.self_node_id;
+    let self_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
     let mut mesh = state.inner.mesh.write().await;
 
     match membership::accept_join(
