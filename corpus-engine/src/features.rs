@@ -71,6 +71,11 @@ pub struct FeatureRow {
     pub created_at: i64,
     pub updated_at: i64,
     pub archived_at: Option<i64>,
+    /// Charter-declared opt-in for automatic red-team after the final
+    /// milestone passes. Defaults to `false`; the charter parser sets
+    /// it via `**Red team:** auto` in the preamble, and the CLI lifts
+    /// that into the DB via [`FeatureStore::set_auto_redteam`].
+    pub auto_redteam: bool,
 }
 
 /// One row of the `feature_milestones` table.
@@ -164,6 +169,15 @@ impl FeatureStore {
         )?;
         add_column_if_missing(&conn, "atos_runs", "stop_stdout", "TEXT")?;
         conn.execute_batch(SCHEMA).map_err(sqlite_err)?;
+        // M5.7: opt-in auto red-team flag on features. Additive
+        // migration — pre-M5.7 features deserialize with `auto_redteam
+        // = false`, matching the "absent means off" charter rule.
+        add_column_if_missing(
+            &conn,
+            "features",
+            "auto_redteam",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -215,7 +229,24 @@ impl FeatureStore {
             created_at: now,
             updated_at: now,
             archived_at: None,
+            auto_redteam: false,
         })
+    }
+
+    /// Flip the `auto_redteam` opt-in flag for an existing feature.
+    /// Called by the charter-driven provision path after `parse` has
+    /// decided whether the preamble requested auto-redteam. Returns
+    /// `true` when the row was updated, `false` when no feature with
+    /// that id exists.
+    pub async fn set_auto_redteam(&self, id: &str, enabled: bool) -> Result<bool> {
+        let conn = self.conn.lock().await;
+        let affected = conn
+            .execute(
+                "UPDATE features SET auto_redteam = ?1, updated_at = ?2 WHERE id = ?3",
+                params![enabled as i64, unix_now(), id],
+            )
+            .map_err(sqlite_err)?;
+        Ok(affected > 0)
     }
 
     /// Transition a feature to a new state. No-op if already in that state.
@@ -251,7 +282,7 @@ impl FeatureStore {
         let row = conn
             .query_row(
                 "SELECT id, title, charter_md, sovereign_md, state, stop_condition,
-                        created_at, updated_at, archived_at
+                        created_at, updated_at, archived_at, auto_redteam
                  FROM features WHERE id = ?",
                 params![id],
                 map_feature_row,
@@ -269,12 +300,12 @@ impl FeatureStore {
     pub async fn list(&self, include_archived: bool) -> Result<Vec<FeatureRow>> {
         let sql = if include_archived {
             "SELECT id, title, charter_md, sovereign_md, state, stop_condition,
-                    created_at, updated_at, archived_at
+                    created_at, updated_at, archived_at, auto_redteam
              FROM features
              ORDER BY created_at DESC"
         } else {
             "SELECT id, title, charter_md, sovereign_md, state, stop_condition,
-                    created_at, updated_at, archived_at
+                    created_at, updated_at, archived_at, auto_redteam
              FROM features
              WHERE archived_at IS NULL
              ORDER BY created_at DESC"
@@ -823,6 +854,10 @@ fn map_feature_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeatureRow> {
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
         archived_at: row.get(8)?,
+        auto_redteam: {
+            let v: i64 = row.get(9)?;
+            v != 0
+        },
     })
 }
 
@@ -1140,6 +1175,62 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(fresh.mode, "redteam");
+    }
+
+    #[tokio::test]
+    async fn auto_redteam_round_trip() {
+        let store = make_store().await;
+        let f = store.provision("f1", "t", "c", "", "").await.unwrap();
+        assert!(!f.auto_redteam, "provision defaults to false");
+
+        let loaded = store.get("f1").await.unwrap().unwrap();
+        assert!(!loaded.auto_redteam);
+
+        assert!(store.set_auto_redteam("f1", true).await.unwrap());
+        let after = store.get("f1").await.unwrap().unwrap();
+        assert!(after.auto_redteam, "flag persisted across reads");
+
+        // Toggle back off.
+        assert!(store.set_auto_redteam("f1", false).await.unwrap());
+        let cleared = store.get("f1").await.unwrap().unwrap();
+        assert!(!cleared.auto_redteam);
+
+        // Unknown feature → no rows updated.
+        assert!(!store.set_auto_redteam("ghost", true).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn auto_redteam_column_is_additive_on_pre_m5_db() {
+        // Build a features.db without the auto_redteam column, then
+        // reopen via FeatureStore and confirm the migration lands
+        // and existing rows default to false.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("features.db");
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE features (
+                     id TEXT PRIMARY KEY, title TEXT NOT NULL, charter_md TEXT NOT NULL,
+                     sovereign_md TEXT NOT NULL, state TEXT NOT NULL,
+                     stop_condition TEXT NOT NULL DEFAULT '',
+                     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                     archived_at INTEGER);
+                 CREATE TABLE feature_milestones (
+                     id TEXT PRIMARY KEY, feature_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+                     brief_md TEXT NOT NULL, started_at INTEGER, ended_at INTEGER,
+                     compliance_report_json TEXT);
+                 CREATE TABLE atos_runs (
+                     id TEXT PRIMARY KEY, feature_id TEXT NOT NULL, milestone_id TEXT NOT NULL,
+                     driver TEXT NOT NULL, session_id TEXT, started_at INTEGER NOT NULL,
+                     ended_at INTEGER, exit_code INTEGER, stop_passed INTEGER);
+                 INSERT INTO features VALUES ('legacy','t','c','','provisioned','true',1000,1000,NULL);",
+            )
+            .unwrap();
+        }
+
+        let store = FeatureStore::open(&path).unwrap();
+        let loaded = store.get("legacy").await.unwrap().unwrap();
+        assert!(!loaded.auto_redteam, "pre-M5 row defaults to false");
     }
 
     #[tokio::test]
