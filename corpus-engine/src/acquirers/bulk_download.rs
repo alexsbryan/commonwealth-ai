@@ -28,9 +28,21 @@ impl BulkDownloader {
         let part_path = download_dir.join(format!("{corpus_id}.part"));
         let final_path = download_dir.join(format!("{corpus_id}.{ext}"));
 
-        // If already downloaded, skip.
+        // If already downloaded, return early — but first verify the archive
+        // is not truncated.  A crash mid-stream can leave a renamed .zip whose
+        // last bytes are mid-data rather than the End-of-Central-Directory
+        // record, causing the extractor to fail with "Could not find EOCD".
+        // Detect this cheaply (4-byte magic at the expected EOCD offset) and
+        // delete the corrupt file so we fall through to a fresh download.
         if final_path.exists() {
-            return Ok(final_path);
+            if zip_looks_valid(&final_path) {
+                return Ok(final_path);
+            }
+            tracing::warn!(
+                path = %final_path.display(),
+                "BulkDownloader: cached archive failed EOCD check — deleting and re-downloading"
+            );
+            let _ = std::fs::remove_file(&final_path);
         }
 
         // Check for partial download (resume support).
@@ -105,6 +117,36 @@ impl BulkDownloader {
         std::fs::rename(&part_path, &final_path)?;
         Ok(final_path)
     }
+}
+
+/// Check whether `path` looks like a structurally-valid ZIP by reading the
+/// End-of-Central-Directory signature (`PK\x05\x06`) at the expected offset.
+///
+/// For ZIP files with no archive comment (the common case for bulk downloads),
+/// the EOCD record is exactly the last 22 bytes. We read just those 4 bytes
+/// rather than parsing the full directory, so this is an O(1) I/O operation
+/// regardless of archive size.
+///
+/// Returns `false` (treat as corrupt) on any I/O error or if the file is
+/// smaller than the minimum valid ZIP size (22 bytes).
+fn zip_looks_valid(path: &Path) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return false;
+    };
+    let Ok(size) = f.seek(SeekFrom::End(0)) else {
+        return false;
+    };
+    if size < 22 {
+        return false;
+    }
+    if f.seek(SeekFrom::End(-22)).is_err() {
+        return false;
+    }
+    let mut sig = [0u8; 4];
+    f.read_exact(&mut sig)
+        .map(|_| sig == [0x50, 0x4b, 0x05, 0x06])
+        .unwrap_or(false)
 }
 
 fn extract_extension(url: &str) -> String {
