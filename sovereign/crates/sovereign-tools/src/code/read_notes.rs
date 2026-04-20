@@ -13,7 +13,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::NoteStore;
+use corpus_engine::{NoteScope, NoteStore, ScopeFilter};
 
 pub struct ReadNotesTool {
     store: Arc<NoteStore>,
@@ -67,6 +67,21 @@ impl Tool for ReadNotesTool {
                         "type": "integer",
                         "default": 10,
                         "description": "Maximum number of notes to return (capped at 100)"
+                    },
+                    "scope": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["global", "feature", "session"]
+                        },
+                        "description": "ATOS scope filter. Omit for legacy behavior (all scopes). \
+                                        Common use: scope=['global','feature'] with feature_id \
+                                        returns globals plus one feature's notes."
+                    },
+                    "feature_id": {
+                        "type": "string",
+                        "description": "Feature id to pair with scope=['feature']. Notes \
+                                        in other features are excluded."
                     }
                 },
                 "required": []
@@ -115,14 +130,35 @@ impl Tool for ReadNotesTool {
             .map(|v| v as usize)
             .unwrap_or(10);
 
-        let notes = self
-            .store
-            .read_notes(query, &symbols, &files, &kinds, limit, false)
-            .await
-            .map_err(|e| Error::Tool {
-                tool_id: "read_notes".to_string(),
-                message: e.to_string(),
-            })?;
+        let scopes: Vec<NoteScope> = params
+            .get("scope")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().and_then(NoteScope::parse))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let feature_id = params
+            .get("feature_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let notes = if scopes.is_empty() && feature_id.is_none() {
+            self.store
+                .read_notes(query, &symbols, &files, &kinds, limit, false)
+                .await
+        } else {
+            let filter = ScopeFilter { scopes, feature_id };
+            self.store
+                .read_notes_scoped(query, &symbols, &files, &kinds, limit, false, &filter)
+                .await
+        }
+        .map_err(|e| Error::Tool {
+            tool_id: "read_notes".to_string(),
+            message: e.to_string(),
+        })?;
 
         let total = notes.len();
         let note_values: Vec<serde_json::Value> = notes
@@ -135,7 +171,9 @@ impl Tool for ReadNotesTool {
                     "symbols": n.symbols,
                     "files": n.files,
                     "session_id": n.session_id,
-                    "created_at": n.created_at
+                    "created_at": n.created_at,
+                    "scope": n.scope,
+                    "feature_id": n.feature_id,
                 })
             })
             .collect();

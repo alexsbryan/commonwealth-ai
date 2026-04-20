@@ -100,6 +100,12 @@ const MCP_TOOLS: &[&str] = &[
     "session_reflection",
     // Doc path validity checker
     "check_doc_paths",
+    // ATOS feature management
+    "provision_feature", "archive_feature",
+    // ATOS note lookup
+    "read_note_by_id",
+    // ATOS note promotion
+    "promote_note",
 ];
 
 /// Build the MCP router. Mounts `/mcp`, `/mcp/message`, and `/mcp/stats`

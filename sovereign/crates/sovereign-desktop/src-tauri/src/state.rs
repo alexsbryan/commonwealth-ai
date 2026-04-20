@@ -646,11 +646,36 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         .and_then(|s| s.to_str())
         .unwrap_or("unknown-embed-model")
         .to_string();
+    // Resolve the persistent node_id so partition_path() returns a
+    // directory name the Desktop-side daemon and the CLI daemon both
+    // agree on (`<corpus>-partition-node-<hex>`). Without this the
+    // engine defaults to `self_node_id = "local"` and
+    // `in_progress_ingestions` silently misses partition-of-self
+    // directories, leaving the UI stuck on "Install" for corpora
+    // that are actively being ingested on disk.
+    //
+    // Resolution order matches `EmbeddedDaemon::start_daemon`: the
+    // `node_id` sidecar file first (rare — only appears after
+    // `load_or_generate` has written one), then mesh.json's
+    // `self_node_id` (the common path when a mesh already exists),
+    // falling back to generate-and-persist for fresh installs.
+    let mesh_data_dir_resolved = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("sovereign");
+    let self_node_id = match sovereign_mesh::persist::load_node_id(&mesh_data_dir_resolved) {
+        Ok(Some(id)) => id,
+        _ => match sovereign_mesh::persist::load(&mesh_data_dir_resolved) {
+            Ok(Some(persisted)) => persisted.self_node_id,
+            _ => sovereign_mesh::persist::load_or_generate_self_node_id(&mesh_data_dir_resolved),
+        },
+    };
+
     let corpus_engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
             .with_embedding_model(&embed_model_name)
             .with_batch_embed_fn(batch_embed_fn)
-            .with_inference_fn(inference_fn),
+            .with_inference_fn(inference_fn)
+            .with_self_node_id(self_node_id.to_string()),
     );
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
 

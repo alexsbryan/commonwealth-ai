@@ -171,6 +171,33 @@ async fn run_daemon(_args: &[String]) -> i32 {
     // dims, same pooling. Also wire the batch variant: Wikipedia
     // throughput is ~5× higher with batched embed calls on
     // M-series Metal compared to per-chunk.
+    // Resolve the persistent node_id up front so the engine's
+    // `partition_path(corpus_id)` returns the same
+    // `<corpus>-partition-node-<hex>` the daemon itself will expect.
+    // Without this the engine defaults to `self_node_id = "local"` and
+    // every partition-of-self lookup misses — `in_progress_ingestions`
+    // returns 0 for a partition dir that's sitting right there on
+    // disk with `ingestion_in_progress=true`.
+    //
+    // Resolution order mirrors what `EmbeddedDaemon::start_daemon`
+    // does on resume vs. create:
+    //   1. `<data_dir>/node_id` file, if present.
+    //   2. `self_node_id` baked into `mesh.json` (the common case —
+    //      existing meshes carry the id inside the mesh snapshot even
+    //      when the standalone node_id file was never materialised).
+    //   3. Generate a fresh id and persist it (fresh install).
+    // `load_or_generate_self_node_id` covers (1) and (3) but would
+    // ignore (2), which is exactly the bug we're fixing: the user's
+    // daemon resumes with mesh.json's id while the engine had been
+    // minting a mismatched fresh one.
+    let self_node_id = match sovereign_mesh::persist::load_node_id(&data_dir) {
+        Ok(Some(id)) => id,
+        _ => match sovereign_mesh::persist::load(&data_dir) {
+            Ok(Some(persisted)) => persisted.self_node_id,
+            _ => sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir),
+        },
+    };
+
     let engine: Arc<CorpusEngine> = {
         let indexes_dir = data_dir.join("indexes");
         let provider_for_embed = Arc::clone(&provider);
@@ -195,7 +222,8 @@ async fn run_daemon(_args: &[String]) -> i32 {
         });
         Arc::new(
             CorpusEngine::new(indexes_dir.clone(), indexes_dir, embed)
-                .with_batch_embed_fn(batch_embed),
+                .with_batch_embed_fn(batch_embed)
+                .with_self_node_id(self_node_id.to_string()),
         )
     };
 

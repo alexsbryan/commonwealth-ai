@@ -16,15 +16,24 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::ProjectDocsStore;
+use corpus_engine::{FeatureStore, ProjectDocsStore};
 
 pub struct ProjectContextTool {
     store: Arc<ProjectDocsStore>,
+    /// When set and the caller passes `feature_id`, the feature's charter
+    /// and SOVEREIGN.md are prepended to the results as a synthetic
+    /// top-relevance entry. Absent → feature_id is simply ignored.
+    features: Option<Arc<FeatureStore>>,
 }
 
 impl ProjectContextTool {
     pub fn new(store: Arc<ProjectDocsStore>) -> Self {
-        Self { store }
+        Self { store, features: None }
+    }
+
+    pub fn with_features(mut self, features: Arc<FeatureStore>) -> Self {
+        self.features = Some(features);
+        self
     }
 }
 
@@ -50,6 +59,13 @@ impl Tool for ProjectContextTool {
                     "query": {
                         "type": "string",
                         "description": "What to look for in project docs"
+                    },
+                    "feature_id": {
+                        "type": "string",
+                        "description": "Optional ATOS feature id. When set, the feature's \
+                                        charter and SOVEREIGN.md are returned as the first \
+                                        result (relevance=1.0) before BM25 matches. Use when \
+                                        you're running inside a provisioned feature."
                     }
                 },
                 "required": ["query"]
@@ -90,6 +106,11 @@ impl Tool for ProjectContextTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("missing 'query'".to_string()))?;
 
+        let feature_id = params
+            .get("feature_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+
         let results = self
             .store
             .search(query, 5)
@@ -105,26 +126,60 @@ impl Tool for ProjectContextTool {
         let all_low = results.is_empty()
             || results.iter().all(|r| r.relevance < LOW_RELEVANCE_THRESHOLD);
 
-        let hint: Option<&str> = if all_low {
-            Some(
+        // Resolve the feature charter if requested. A missing feature is
+        // communicated via a hint rather than an error so a typo doesn't
+        // derail the whole query.
+        let mut result_values: Vec<serde_json::Value> = Vec::new();
+        let mut feature_hint: Option<String> = None;
+
+        if let (Some(fid), Some(fs)) = (feature_id, self.features.as_ref()) {
+            match fs.get(fid).await {
+                Ok(Some(feat)) => {
+                    let content = if feat.sovereign_md.trim().is_empty() {
+                        feat.charter_md.clone()
+                    } else {
+                        format!("{}\n\n---\n\n{}", feat.charter_md, feat.sovereign_md)
+                    };
+                    result_values.push(json!({
+                        "source": format!("features/{}/SOVEREIGN.md", feat.id),
+                        "content": content,
+                        "relevance": 1.0,
+                    }));
+                }
+                Ok(None) => {
+                    feature_hint = Some(format!(
+                        "feature_id='{fid}' is not provisioned — continuing with normal BM25 search"
+                    ));
+                }
+                Err(e) => {
+                    feature_hint = Some(format!(
+                        "feature lookup for '{fid}' failed: {e} — continuing with normal BM25 search"
+                    ));
+                }
+            }
+        }
+
+        result_values.extend(results.into_iter().map(|r| {
+            json!({
+                "source": r.source,
+                "content": r.content,
+                "relevance": r.relevance
+            })
+        }));
+
+        let hint: Option<String> = match (all_low, feature_hint) {
+            (true, Some(fh)) => Some(format!(
+                "{fh}. No relevant conventions found either — add guidance to .sovereign/conventions/ and restart."
+            )),
+            (true, None) => Some(
                 "No relevant conventions found. \
                  Add project-specific guidance to .sovereign/conventions/ \
-                 and restart the server to index it.",
-            )
-        } else {
-            None
+                 and restart the server to index it."
+                    .to_string(),
+            ),
+            (false, Some(fh)) => Some(fh),
+            (false, None) => None,
         };
-
-        let result_values: Vec<serde_json::Value> = results
-            .into_iter()
-            .map(|r| {
-                json!({
-                    "source": r.source,
-                    "content": r.content,
-                    "relevance": r.relevance
-                })
-            })
-            .collect();
 
         // Include a basic index health block so agents can distinguish
         // "no relevant docs" from "no index at all".

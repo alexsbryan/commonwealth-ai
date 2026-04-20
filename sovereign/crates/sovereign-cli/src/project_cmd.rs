@@ -1552,6 +1552,22 @@ async fn cmd_serve(args: &[String]) -> i32 {
         }
     };
 
+    // ── Feature store (ATOS charters + milestones) ─────────────
+    let features_db_path = sovereign_dir.join("features.db");
+    let features_store = match corpus_engine::FeatureStore::open(&features_db_path) {
+        Ok(s) => {
+            eprintln!("  features.db      ✓");
+            Arc::new(s)
+        }
+        Err(e) => {
+            eprintln!("  warning: could not open features DB: {e}");
+            Arc::new(
+                corpus_engine::FeatureStore::open(std::path::Path::new(":memory:"))
+                    .expect("in-memory features store"),
+            )
+        }
+    };
+
     // Print any open todos from previous sessions at startup.
     if let Ok(todos) = notes_store.open_todos(5).await {
         if !todos.is_empty() {
@@ -1736,10 +1752,25 @@ async fn cmd_serve(args: &[String]) -> i32 {
             .with_health_checker(Arc::clone(&health_checker)),
     ));
     if let Some(ref ds) = docs_store {
-        tools.register(Box::new(sovereign_tools::ProjectContextTool::new(
-            Arc::clone(ds),
-        )));
+        tools.register(Box::new(
+            sovereign_tools::ProjectContextTool::new(Arc::clone(ds))
+                .with_features(Arc::clone(&features_store)),
+        ));
     }
+
+    // ── ATOS feature management ─────────────────────────────────
+    tools.register(Box::new(sovereign_tools::ProvisionFeatureTool::new(
+        Arc::clone(&features_store),
+    )));
+    tools.register(Box::new(sovereign_tools::ArchiveFeatureTool::new(
+        Arc::clone(&features_store),
+    )));
+    tools.register(Box::new(sovereign_tools::ReadNoteByIdTool::new(
+        Arc::clone(&notes_store),
+    )));
+    tools.register(Box::new(sovereign_tools::PromoteNoteTool::new(
+        Arc::clone(&notes_store),
+    )));
 
     // ── Session reflection (feedback loop) ─────────────────────────────
     tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
@@ -2544,6 +2575,13 @@ fn generate_agents_md(corpus_id: &str, port: u16, has_scip: bool, commonwealth_u
 }
 
 /// Generate the inject-notes.sh hook script content for the given port.
+///
+/// The hook is ATOS-aware: when `$SOVEREIGN_FEATURE_ID` is set in the driver
+/// environment (see `sovereign atos start-milestone`), the MCP call includes
+/// `scope=["global","feature"]` plus that feature_id so the agent sees both
+/// global invariants and the in-flight feature's decisions. Outside an ATOS
+/// session the hook scopes to globals only — feature-specific chatter from
+/// in-flight work does not leak into unrelated Claude sessions.
 fn generate_inject_notes_script(port: u16) -> String {
     format!(
         r#"#!/bin/sh
@@ -2554,16 +2592,25 @@ fn generate_inject_notes_script(port: u16) -> String {
 
 PORT="${{SOVEREIGN_PORT:-{port}}}"
 
+# ATOS scope-aware payload. When $SOVEREIGN_FEATURE_ID is set (by
+# `sovereign atos start-milestone`), the query pulls global notes plus
+# the active feature's notes. Otherwise only globals are injected.
+if [ -n "${{SOVEREIGN_FEATURE_ID:-}}" ]; then
+  PAYLOAD=$(printf '{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"read_notes","arguments":{{"kinds":["invariant","decision"],"scope":["global","feature"],"feature_id":"%s","limit":20}}}}}}' "$SOVEREIGN_FEATURE_ID")
+else
+  PAYLOAD='{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"read_notes","arguments":{{"kinds":["invariant","decision"],"scope":["global"],"limit":20}}}}}}'
+fi
+
 RESPONSE=$(curl -sf --max-time 2 \
   -X POST "http://localhost:${{PORT}}/mcp" \
   -H "Content-Type: application/json" \
-  -d '{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"read_notes","arguments":{{"kinds":["invariant","decision"],"limit":20}}}}}}' \
+  -d "$PAYLOAD" \
   2>/dev/null) || exit 0
 
 [ -z "$RESPONSE" ] && exit 0
 
 printf '%s' "$RESPONSE" | python3 -c "
-import sys, json
+import sys, os, json
 
 try:
     outer = json.load(sys.stdin)
@@ -2572,12 +2619,18 @@ try:
     notes = inner.get('notes', [])
     if not notes:
         sys.exit(0)
-    print('## Active sovereign notes (injected by hook)')
+    fid = os.environ.get('SOVEREIGN_FEATURE_ID', '')
+    header = '## Active sovereign notes (injected by hook)'
+    if fid:
+        header = header + ' (feature=' + fid + ')'
+    print(header)
     print()
     for n in notes:
         kind = n.get('kind', 'note')
+        scope = n.get('scope', 'global')
         content = n.get('content', '').strip()
-        print('[' + kind + '] ' + content)
+        tag = kind if scope == 'global' else kind + '/' + scope
+        print('[' + tag + '] ' + content)
         print()
 except Exception:
     sys.exit(0)

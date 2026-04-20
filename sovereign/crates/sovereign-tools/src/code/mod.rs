@@ -75,6 +75,16 @@ pub mod session_reflection;
 #[cfg(feature = "treesitter")]
 pub mod check_doc_paths;
 
+// ATOS feature management.
+#[cfg(feature = "treesitter")]
+pub mod provision_feature;
+#[cfg(feature = "treesitter")]
+pub mod archive_feature;
+#[cfg(feature = "treesitter")]
+pub mod read_note_by_id;
+#[cfg(feature = "treesitter")]
+pub mod promote_note;
+
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
 pub use symbol_lookup::SymbolLookupTool;
@@ -112,6 +122,14 @@ pub use project_context::ProjectContextTool;
 pub use session_reflection::SessionReflectionTool;
 #[cfg(feature = "treesitter")]
 pub use check_doc_paths::CheckDocPathsTool;
+#[cfg(feature = "treesitter")]
+pub use provision_feature::ProvisionFeatureTool;
+#[cfg(feature = "treesitter")]
+pub use archive_feature::ArchiveFeatureTool;
+#[cfg(feature = "treesitter")]
+pub use read_note_by_id::ReadNoteByIdTool;
+#[cfg(feature = "treesitter")]
+pub use promote_note::PromoteNoteTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -13,7 +13,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::NoteStore;
+use corpus_engine::{NoteScope, NoteStore};
 
 pub struct WriteNoteTool {
     store: Arc<NoteStore>,
@@ -64,6 +64,18 @@ impl Tool for WriteNoteTool {
                     "session_id": {
                         "type": "string",
                         "description": "Optional session identifier (defaults to 'mcp')"
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["global", "feature", "session"],
+                        "description": "ATOS scope. Defaults to 'global'. Pass 'feature' with a \
+                                        feature_id to tag this note to an ATOS feature."
+                    },
+                    "feature_id": {
+                        "type": "string",
+                        "description": "Required when scope='feature'. The id returned by \
+                                        provision_feature (same value as $SOVEREIGN_FEATURE_ID \
+                                        in the ATOS driver env)."
                     }
                 },
                 "required": ["kind", "content"]
@@ -155,9 +167,21 @@ impl Tool for WriteNoteTool {
             .and_then(|v| v.as_str())
             .unwrap_or("mcp");
 
+        let scope = params
+            .get("scope")
+            .and_then(|v| v.as_str())
+            .and_then(NoteScope::parse)
+            .unwrap_or(NoteScope::Global);
+        let feature_id = params
+            .get("feature_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+
         let id = self
             .store
-            .write_note(kind, content, symbols, files, session_id)
+            .write_note_scoped(
+                kind, content, symbols, files, session_id, scope, feature_id,
+            )
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "write_note".to_string(),
@@ -167,7 +191,9 @@ impl Tool for WriteNoteTool {
         // The created_at timestamp can be retrieved via read_notes if needed.
         Ok(StepOutput::Json(json!({
             "id": id,
-            "kind": kind
+            "kind": kind,
+            "scope": scope.as_str(),
+            "feature_id": feature_id,
         })))
     }
 }

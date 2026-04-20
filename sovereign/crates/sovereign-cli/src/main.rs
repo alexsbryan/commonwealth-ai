@@ -1,3 +1,4 @@
+mod atos_cmd;
 mod code_cmd;
 mod daemon_cmd;
 mod doctor_cmd;
@@ -283,6 +284,10 @@ async fn main() {
             }
             "reflect" => {
                 let code = reflect_cmd::run_reflect(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "atos" => {
+                let code = atos_cmd::run_atos(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "doctor" => {

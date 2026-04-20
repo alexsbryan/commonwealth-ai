@@ -36,6 +36,8 @@ pub use code::ProjectContextTool;
 pub use code::SessionReflectionTool;
 #[cfg(feature = "treesitter")]
 pub use code::CheckDocPathsTool;
+#[cfg(feature = "treesitter")]
+pub use code::{ArchiveFeatureTool, ProvisionFeatureTool, PromoteNoteTool, ReadNoteByIdTool};
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
