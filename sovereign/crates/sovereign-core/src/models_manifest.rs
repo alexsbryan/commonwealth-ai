@@ -1,4 +1,4 @@
-//! Parser for `lcol-llm/models.toml`.
+//! Parser for `sovereign/models.toml`.
 //!
 //! The workspace-root `models.toml` is the source of truth for
 //! which GGUF files ship with each hardware profile (cpu_only,
@@ -279,14 +279,14 @@ fn strip_gguf(s: &str) -> &str {
     s.strip_suffix(".gguf").unwrap_or(s)
 }
 
-/// Process-wide view of the bundled `lcol-llm/models.toml`.
+/// Process-wide view of the bundled `sovereign/models.toml`.
 /// Parsed once on first access via `LazyLock`. Panics at startup
 /// time if the bundled file has become malformed — that's a
 /// compile-adjacent invariant, not a runtime condition.
 pub static DEFAULT_MANIFEST: LazyLock<ModelsManifest> = LazyLock::new(|| {
     static SRC: &str = include_str!("../../../models.toml");
     ModelsManifest::from_toml_str(SRC).expect(
-        "bundled lcol-llm/models.toml must parse — regression in the model manifest schema",
+        "bundled sovereign/models.toml must parse — regression in the model manifest schema",
     )
 });
 

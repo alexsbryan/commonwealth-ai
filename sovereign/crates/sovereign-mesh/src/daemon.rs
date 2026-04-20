@@ -1036,6 +1036,11 @@ impl EmbeddedDaemon {
             );
         }
 
+        // Start the pull-based work-queue reaper. Dormant until a handoff
+        // gets registered via `corpus_collaborate` with the pull-based flag;
+        // always-on so we don't have to race the first `register` call.
+        let _reaper = app_state.start_work_queue_reaper();
+
         // Register the locally-loaded model slots so `/v1/models`
         // answers with something meaningful instead of an empty list.
         // Without this, the OpenAI-compatible models list returns

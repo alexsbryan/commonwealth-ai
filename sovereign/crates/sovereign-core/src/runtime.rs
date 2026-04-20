@@ -2385,9 +2385,9 @@ mod score_normalisation_tests {
             chunk("corpus-engine", "extract_questions_prefers_canonical", 21.37),
             chunk("corpus-engine", "test_skeleton", 14.96),
             chunk("corpus-engine", "mock_inference_fn", 14.80),
-            // lcol-llm: a code corpus with middling matches.
-            chunk("lcol-llm", "needs_deep_reasoning", 16.44),
-            chunk("lcol-llm", "LlmRouter", 12.91),
+            // sovereign: a code corpus with middling matches.
+            chunk("sovereign", "needs_deep_reasoning", 16.44),
+            chunk("sovereign", "LlmRouter", 12.91),
         ];
 
         normalise_scores_per_corpus(&mut chunks);

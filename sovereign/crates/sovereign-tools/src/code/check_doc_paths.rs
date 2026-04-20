@@ -17,7 +17,7 @@
 //!
 //! ```text
 //! check_doc_paths(doc_path: "SYSTEM_OVERVIEW.md")
-//! # → not_found: ["lcol-llm/src/main.rs", …]
+//! # → not_found: ["sovereign/src/main.rs", …]
 //! # Fix the stale references, then re-run to confirm valid_count equals total.
 //! ```
 //!

@@ -6,7 +6,7 @@
 //!         /tmp/sov-code-test
 //!
 //! The path argument is the parent directory that contains one corpus
-//! subdirectory (e.g. `/tmp/sov-code-test/lcol-llm`). Expects a code
+//! subdirectory (e.g. `/tmp/sov-code-test/sovereign`). Expects a code
 //! corpus already indexed via `sovereign code index`.
 //!
 //! Not part of the normal build path — lives under `examples/` as a
