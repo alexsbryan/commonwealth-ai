@@ -16,7 +16,7 @@ let results = index.search(&query_embedding, "Ostrom design principles", 10).awa
 
 It's the storage and retrieval layer for two downstream projects:
 
-- **[Sovereign](../lcol-llm)** — a standalone AI application that indexes knowledge bases locally and reasons over them with a local LLM.
+- **[Sovereign](../sovereign)** — a standalone AI application that indexes knowledge bases locally and reasons over them with a local LLM.
 - **[Commonwealth](../commonwealth)** — a distributed inference mesh that shards knowledge indexes across peer nodes.
 
 Both projects share one index directory on disk, and both interact with `corpus-engine` through the same public API. Neither depends on the other. `corpus-engine` knows nothing about either of them.

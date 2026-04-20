@@ -4,7 +4,7 @@
 //!
 //! Usage:
 //!     cargo run --example dump_code_index --features treesitter -- \
-//!         /tmp/sov-code-test/lcol-llm
+//!         /tmp/sov-code-test/sovereign
 //!
 //! Not part of the normal build path — intentionally stashed under
 //! `examples/` so it ships as a throwaway for P1 validation.

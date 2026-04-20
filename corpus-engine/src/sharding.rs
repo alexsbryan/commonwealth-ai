@@ -219,12 +219,20 @@ pub async fn extract_shard(
 
 /// Merge multiple shard directories into a single index.
 ///
-/// Chunks are renumbered to form a contiguous ID space.  Duplicate chunks
-/// (same `content_hash`) are silently dropped — this handles the case where
-/// an in-flight file appears in two shards (re-processed on the coordinator
-/// after being assigned to a peer).  Chunks with a `NULL` or absent
-/// `content_hash` are always included (conservative: cannot deduplicate
-/// without a hash).
+/// Chunks are renumbered to form a contiguous ID space. Duplicate chunks
+/// are dropped by a two-key lookup:
+///
+/// 1. **`content_hash`** (primary) — handles legacy in-flight overlap
+///    (same file appears in two shards after coordinator/peer reassignment)
+///    AND pull-based lease-expiry overlap (two peers process the same
+///    `unit_id` → identical chunking → identical content_hashes).
+/// 2. **`unit_id`** (secondary, pull-based only) — when a chunk's
+///    `content_hash` is NULL (shouldn't happen under the ingest pipeline
+///    but defensive), the `(unit_id, source_doc_id)` pair catches
+///    duplicates that content_hash dedup would miss.
+///
+/// Chunks with both keys NULL are always included (conservative: cannot
+/// deduplicate without any signal).
 pub async fn merge_shards(
     shard_paths: &[PathBuf],
     output_path: &Path,
@@ -319,8 +327,11 @@ pub async fn merge_shards(
 
     let dim = first_info.embedding_dimensions;
     let mut next_id: i64 = 1;
-    // Track seen content_hashes for deduplication.
+    // Track seen content_hashes (primary key) and (unit_id, source_doc_id)
+    // pairs (secondary key for rows with NULL content_hash).
     let mut seen_hashes: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_units: std::collections::HashSet<(i32, String)> =
+        std::collections::HashSet::new();
     let mut dedup_count: u64 = 0;
 
     for shard_path in shard_paths {
@@ -342,29 +353,50 @@ pub async fn merge_shards(
                 continue;
             }
 
-            // ── Content-hash deduplication ────────────────────────────
-            // Build a boolean keep-mask: true for rows whose content_hash
-            // has not been seen in any earlier shard.
+            // ── Two-key deduplication ─────────────────────────────────
+            // Primary: content_hash. Secondary: (unit_id, source_doc_id)
+            // for rows with NULL content_hash (defensive fallback; under
+            // the pull-based queue path every chunk has a populated hash).
+            // Build a boolean keep-mask: true for rows whose primary OR
+            // secondary key has not been seen in any earlier shard.
             let hash_col = batch
                 .column_by_name("content_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let unit_id_col = batch
+                .column_by_name("unit_id")
+                .and_then(|c| c.as_any().downcast_ref::<arrow_array::Int32Array>());
+            let source_doc_col = batch
+                .column_by_name("source_doc_id")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>());
 
             let keep_mask: BooleanArray = (0..num_rows)
                 .map(|row| {
-                    match hash_col {
-                        Some(col) if !col.is_null(row) => {
+                    // Primary key: content_hash.
+                    if let Some(col) = hash_col {
+                        if !col.is_null(row) {
                             let h = col.value(row);
                             if seen_hashes.contains(h) {
                                 dedup_count += 1;
-                                false
-                            } else {
-                                seen_hashes.insert(h.to_string());
-                                true
+                                return false;
                             }
+                            seen_hashes.insert(h.to_string());
+                            return true;
                         }
-                        // No hash or null — include (cannot deduplicate).
-                        _ => true,
                     }
+                    // Secondary key: (unit_id, source_doc_id) when both exist.
+                    if let (Some(u_col), Some(d_col)) = (unit_id_col, source_doc_col) {
+                        if !u_col.is_null(row) && !d_col.is_null(row) {
+                            let key = (u_col.value(row), d_col.value(row).to_string());
+                            if seen_units.contains(&key) {
+                                dedup_count += 1;
+                                return false;
+                            }
+                            seen_units.insert(key);
+                            return true;
+                        }
+                    }
+                    // Neither key available — include (cannot deduplicate).
+                    true
                 })
                 .collect();
 
@@ -432,6 +464,11 @@ pub async fn merge_shards(
                     col_or_null_i32("line_end"),
                     col_or_null_str("language"),
                     col_or_null_i64("mtime"),
+                    // Preserve unit_id through merge so downstream tooling
+                    // can attribute each chunk to the pull-queue unit that
+                    // produced it. Legacy shards without the column get a
+                    // NULL-filled replacement via col_or_null_i32.
+                    col_or_null_i32("unit_id"),
                 ],
             )
             .map_err(|e| Error::Serialization(format!("merge batch: {e}")))?;
@@ -508,6 +545,7 @@ mod tests {
                         source_doc_id: None,
                         source_file: None,
                         code: crate::index::InsertCodeMeta::default(),
+                            unit_id: None,
                     },
                     make_test_embedding(i as f32),
                 )

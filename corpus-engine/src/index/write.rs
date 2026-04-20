@@ -83,6 +83,14 @@ impl CorpusIndex {
             .map(|(c, _)| c.code.mtime)
             .collect();
 
+        // Pull-based work queue column: `u32` cast to `i32` (Arrow has no
+        // unsigned 32-bit). Unit IDs are small indices into the coordinator's
+        // queue, so the cast is lossless in practice.
+        let unit_ids: Vec<Option<i32>> = chunks
+            .iter()
+            .map(|(c, _)| c.unit_id.map(|u| u as i32))
+            .collect();
+
         // Build the embedding FixedSizeList array.
         let dim = self.embedding_dimensions as i32;
         let embedding_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
@@ -111,6 +119,7 @@ impl CorpusIndex {
                 Arc::new(Int32Array::from(line_ends)),
                 Arc::new(StringArray::from(languages)),
                 Arc::new(Int64Array::from(mtimes)),
+                Arc::new(Int32Array::from(unit_ids)),
             ],
         )
         .map_err(|e| Error::Serialization(format!("record batch: {e}")))?;

@@ -1397,6 +1397,7 @@ impl CorpusEngine {
                     source_doc_id: None,
                     source_file: None,
                     code: crate::index::InsertCodeMeta::default(),
+                            unit_id: None,
                 }
             })
             .collect();

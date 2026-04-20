@@ -146,8 +146,11 @@ impl CorpusEngine {
         }
 
         // ── Run the actual pipeline with cleanup-on-failure ───────
+        // Solo `ingest()` never runs under a work-queue lease — unit_id
+        // stamping only happens for `ingest_with_overrides` callers that
+        // explicitly thread a UnitId in.
         let result = self
-            .ingest_inner(&recipe, &index_path, &progress)
+            .ingest_inner(&recipe, &index_path, &progress, None)
             .await;
 
         // On successful completion of a new-flow ingest, attempt to
@@ -229,11 +232,17 @@ impl CorpusEngine {
 
     /// The actual ingest pipeline. Pulled into its own function so the
     /// public `ingest()` can wrap it with cleanup-on-failure logic.
+    ///
+    /// `unit_id` — when this run is executing a leased work-queue unit,
+    /// the caller threads the `UnitId` through so every chunk written to
+    /// LanceDB is stamped with it. `None` for legacy static-partition
+    /// ingests and local Desktop-driven installs.
     async fn ingest_inner(
         &self,
         recipe: &Recipe,
         index_path: &Path,
         progress: &Option<ProgressCallback>,
+        unit_id: Option<u32>,
     ) -> Result<IngestResult> {
         let start = Instant::now();
 
@@ -320,19 +329,29 @@ impl CorpusEngine {
         let mut embed_timer = Instant::now();
 
         let use_batch_embed = self.batch_embed.is_some();
-        if resume_iter_pos == 0 {
-            tracing::info!(
-                corpus = %recipe.corpus.id,
-                embed_batch = embed_batch_size,
-                index_flush = INDEX_FLUSH_SIZE,
-                batch_embed = use_batch_embed,
-                "Starting embed+index pipeline"
-            );
-            eprintln!(
-                "[{}] Starting embed+index pipeline (embed_batch={}, index_flush={}, batch_embed={})",
-                recipe.corpus.id, embed_batch_size, INDEX_FLUSH_SIZE, use_batch_embed,
-            );
-        }
+        // Always log the pipeline config so resume runs also confirm which
+        // embed_batch_size is active — important when per-machine tuning
+        // via SOVEREIGN_EMBED_BATCH_SIZE is in play and the operator needs
+        // to verify their env var reached the launchd-managed daemon.
+        let resuming = resume_iter_pos > 0;
+        tracing::info!(
+            corpus = %recipe.corpus.id,
+            embed_batch = embed_batch_size,
+            index_flush = INDEX_FLUSH_SIZE,
+            batch_embed = use_batch_embed,
+            resuming,
+            resume_iter_pos,
+            "Starting embed+index pipeline"
+        );
+        eprintln!(
+            "[{}] {} embed+index pipeline (embed_batch={}, index_flush={}, batch_embed={}){}",
+            recipe.corpus.id,
+            if resuming { "Resuming" } else { "Starting" },
+            embed_batch_size,
+            INDEX_FLUSH_SIZE,
+            use_batch_embed,
+            if resuming { format!(" from iter {resume_iter_pos}") } else { String::new() },
+        );
 
         // Register (or look up) the cancellation flag for this corpus.
         // Both the Desktop-originated install path and the peer
@@ -456,6 +475,7 @@ impl CorpusEngine {
                         .or_else(|| Some(doc.source_id.clone())),
                     source_file: doc.source_file.clone(),
                     code,
+                    unit_id,
                 });
                 // Track chunk count per source file for manifest reporting.
                 if let Some(ref sf) = doc.source_file {
@@ -1001,6 +1021,16 @@ impl CorpusEngine {
     /// constrained to download only those shard indices (position in the
     /// sorted full manifest). A `None` value falls through to the recipe's
     /// own `file_indices` field, which allows TOML-based partitioning.
+    /// Execute an ingest with caller-provided overrides on the recipe's
+    /// extractor/acquirer (selecting a subset of shards / an article range)
+    /// and an explicit output directory.
+    ///
+    /// `unit_id` — when the run is processing a leased unit from a
+    /// pull-based [`WorkQueueManager`], the caller threads the UnitId
+    /// through so every chunk produced is stamped with it in the LanceDB
+    /// `unit_id` column. The merge step uses this to dedupe chunks that
+    /// two peers wrote for the same unit after a lease expiry. `None`
+    /// for legacy static-partition ingests and local Desktop installs.
     pub async fn ingest_with_overrides(
         &self,
         recipe_id: &str,
@@ -1008,6 +1038,7 @@ impl CorpusEngine {
         article_range: Option<(u64, u64)>,
         output_path: &Path,
         progress: Option<ProgressCallback>,
+        unit_id: Option<u32>,
     ) -> Result<IngestResult> {
         let mut recipe = self
             .resolve_recipe(&crate::types::CorpusSpec::Builtin(recipe_id.to_string()))
@@ -1071,7 +1102,8 @@ impl CorpusEngine {
             recipe.index.embedding_dimensions = probe.len();
         }
 
-        self.ingest_inner(&recipe, output_path, &progress).await
+        self.ingest_inner(&recipe, output_path, &progress, unit_id)
+            .await
     }
 }
 

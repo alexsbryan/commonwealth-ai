@@ -149,6 +149,10 @@ impl CorpusEngine {
                         language: Some(chunk.language.to_string()),
                         mtime: Some(chunk.mtime),
                     },
+                    // Reindex path runs outside any work-queue lease — it's
+                    // invoked by file-watcher deltas for code corpora, which
+                    // are never partitioned across peers.
+                    unit_id: None,
                 };
                 (insert, emb)
             })

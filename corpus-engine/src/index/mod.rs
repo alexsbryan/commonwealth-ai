@@ -72,6 +72,13 @@ pub struct InsertChunk {
     /// Optional code-intelligence metadata. `Default::default()` means
     /// non-code chunk — all code columns will be Null.
     pub code: InsertCodeMeta,
+    /// Optional pull-based work queue unit id. Stamped onto every chunk
+    /// produced by a leased unit so that if lease expiry causes two peers
+    /// to process the same unit, the merge leader can dedupe by
+    /// `(unit_id, peer_id)` groups and keep only the earliest-completed
+    /// peer's chunks. `None` for legacy (static-partition) ingest and
+    /// local Desktop-driven ingest, which have no shared work queue.
+    pub unit_id: Option<u32>,
 }
 
 /// A pre-embedded chunk ready for direct insertion.
@@ -151,12 +158,22 @@ pub(crate) fn corpus_schema(embedding_dim: usize) -> SchemaRef {
         Field::new("line_end", DataType::Int32, true),
         Field::new("language", DataType::Utf8, true),
         Field::new("mtime", DataType::Int64, true),
+        // Pull-based work queue column: the UnitId that produced this chunk.
+        // Null for legacy ingests (static partitioning, local Desktop install).
+        // Populated when ingest runs under a WorkQueueManager lease so the
+        // merge step can dedupe re-processed units across peer partition dirs.
+        Field::new("unit_id", DataType::Int32, true),
     ]))
 }
 
 /// Current on-disk schema version. Bumped when `corpus_schema()` changes
 /// in a way that requires an LanceDB `add_columns` migration on open.
-pub(crate) const CURRENT_INDEX_SCHEMA_VERSION: u32 = 2;
+///
+/// - v1: base + embedding only.
+/// - v2: added code-intelligence columns (symbol_name, symbol_kind, file_path,
+///   line_start, line_end, language, mtime).
+/// - v3: added `unit_id` for pull-based queue dedup.
+pub(crate) const CURRENT_INDEX_SCHEMA_VERSION: u32 = 3;
 
 fn default_index_schema_version() -> u32 {
     1 // Files without the field predate versioning → treat as v1.
@@ -264,20 +281,24 @@ fn meta_path(index_dir: &Path) -> std::path::PathBuf {
 }
 
 /// Migrate an on-disk index from `from_version` to the current schema
-/// version. Adds the code-intelligence columns as all-Null when the
-/// source version is < 2. Safe to call on a partially-migrated index;
-/// LanceDB's `add_columns` is a no-op for columns that already exist.
+/// version. Additive-only (new nullable columns); existing data is
+/// untouched. Safe to call on a partially-migrated index — LanceDB's
+/// `add_columns` is a no-op for columns that already exist, so retries
+/// after a crashed migration converge on the correct schema.
+///
+/// - v1 → v2 adds the seven code-intelligence columns.
+/// - v2 → v3 adds `unit_id` for pull-based queue dedup.
 async fn migrate_schema(table: &lancedb::Table, from_version: u32) -> Result<()> {
-    if from_version >= 2 {
+    if from_version >= CURRENT_INDEX_SCHEMA_VERSION {
         return Ok(());
     }
 
     use lancedb::table::NewColumnTransform;
 
-    // Check which code columns are actually missing — a previous
-    // migration attempt may have added some and then crashed. We build
-    // the Arrow schema for exactly the columns that don't exist yet,
-    // so retries are idempotent.
+    // Check which columns are actually missing — a previous migration
+    // attempt may have added some and then crashed. We build the Arrow
+    // schema for exactly the columns that don't exist yet, so retries
+    // are idempotent.
     let current = table
         .schema()
         .await
@@ -285,6 +306,9 @@ async fn migrate_schema(table: &lancedb::Table, from_version: u32) -> Result<()>
     let existing: std::collections::HashSet<&str> =
         current.fields().iter().map(|f| f.name().as_str()).collect();
 
+    // Union of all columns introduced after v1. The filter below keeps
+    // only those not already present on disk, so an index already at v2
+    // only gets `unit_id`, and an index at v3 gets nothing.
     let wanted: &[(&str, DataType)] = &[
         ("symbol_name", DataType::Utf8),
         ("symbol_kind", DataType::Utf8),
@@ -293,6 +317,7 @@ async fn migrate_schema(table: &lancedb::Table, from_version: u32) -> Result<()>
         ("line_end", DataType::Int32),
         ("language", DataType::Utf8),
         ("mtime", DataType::Int64),
+        ("unit_id", DataType::Int32),
     ];
 
     let missing: Vec<Field> = wanted
@@ -311,7 +336,11 @@ async fn migrate_schema(table: &lancedb::Table, from_version: u32) -> Result<()>
         .await
         .map_err(|e| Error::Database(format!("add_columns migration: {e}")))?;
 
-    tracing::info!("Migrated index to schema v{CURRENT_INDEX_SCHEMA_VERSION}");
+    tracing::info!(
+        from = from_version,
+        to = CURRENT_INDEX_SCHEMA_VERSION,
+        "Migrated corpus index schema"
+    );
     Ok(())
 }
 
@@ -591,6 +620,7 @@ mod tests {
                     source_doc_id: Some("https://rust-lang.org".into()),
                     source_file: None,
                     code: InsertCodeMeta::default(),
+                    unit_id: None,
                 },
                 make_embedding(&[1.0, 0.0, 0.0, 0.0]),
             ),
@@ -604,6 +634,7 @@ mod tests {
                     source_doc_id: None,
                     source_file: None,
                     code: InsertCodeMeta::default(),
+                    unit_id: None,
                 },
                 make_embedding(&[0.0, 1.0, 0.0, 0.0]),
             ),
@@ -617,6 +648,7 @@ mod tests {
                     source_doc_id: Some("https://sqlite.org".into()),
                     source_file: None,
                     code: InsertCodeMeta::default(),
+                    unit_id: None,
                 },
                 make_embedding(&[0.0, 0.0, 1.0, 0.0]),
             ),
@@ -630,6 +662,7 @@ mod tests {
                     source_doc_id: None,
                     source_file: None,
                     code: InsertCodeMeta::default(),
+                    unit_id: None,
                 },
                 make_embedding(&[0.9, 0.1, 0.0, 0.0]),
             ),

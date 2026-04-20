@@ -641,6 +641,7 @@ pub(crate) async fn run_test(
                             source_doc_id: url.clone(),
                             source_file: None,
                             code: crate::index::InsertCodeMeta::default(),
+                            unit_id: None,
                         },
                         emb,
                     ));
