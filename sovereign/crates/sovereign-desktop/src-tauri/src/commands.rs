@@ -2279,17 +2279,16 @@ pub async fn diagnose_corpus(
 const DAEMON_INTERNAL_URL: &str = "http://127.0.0.1:9742";
 
 /// Kick off a corpus install via the daemon's unified install
-/// endpoint, then poll the daemon's progress map so the Svelte UI
-/// keeps getting `corpus-progress` events whether the ingest was
-/// spawned by this Desktop tab or by the daemon's
-/// auto-collaborate loop (Desktop-closed case).
+/// endpoint. The daemon is the single owner of ingest lifecycle —
+/// Desktop is a thin client that says "start" and then watches. The
+/// continuous `spawn_corpus_status_poller` (started at backend
+/// bootstrap) emits `corpus-progress` events for whichever ingests
+/// the daemon is running, whether Desktop initiated them or a prior
+/// session's auto-collaborate loop did.
 ///
-/// The daemon is the single owner of ingest lifecycle: Desktop is a
-/// thin client that says "start" and then watches. Clicking Install a
-/// second time while the daemon is already ingesting this corpus is a
-/// no-op because `/internal/corpus/install` is idempotent — the
-/// daemon returns `spawned: false` and the poller picks up the
-/// already-running task's progress.
+/// Clicking Install a second time while the daemon is already
+/// ingesting this corpus is a no-op: `/internal/corpus/install` is
+/// idempotent and returns `spawned: false`.
 #[tauri::command]
 pub async fn install_corpus(
     app_handle: tauri::AppHandle,
@@ -2301,7 +2300,6 @@ pub async fn install_corpus(
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
 
-    // 1. Tell the daemon to start (or resume) the ingest.
     let install_url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/install");
     let resp = client
         .post(&install_url)
@@ -2317,8 +2315,10 @@ pub async fn install_corpus(
         ));
     }
 
-    // 2. Flip the UI state immediately so the Install button reacts
-    //    before the first poll completes.
+    // Flip the UI state immediately so the Install button reacts
+    // before the next status-poller tick lands. The poller (running
+    // in the background) will overwrite this stub payload with real
+    // progress on its very next pass.
     let initial = CorpusProgressPayload {
         corpus_id: corpus_id.clone(),
         phase: "downloading".into(),
@@ -2331,106 +2331,251 @@ pub async fn install_corpus(
     }
     let _ = app_handle.emit("corpus-progress", initial);
 
-    // 3. Poll the daemon's progress snapshot until the corpus either
-    //    completes, fails, or is cancelled (i.e. disappears from the
-    //    snapshot and from active_ingests).
-    let state_ref = Arc::clone(&state);
-    let cid = corpus_id.clone();
-    let app = app_handle.clone();
-    tokio::spawn(async move {
-        poll_corpus_progress(client, state_ref, app, cid).await;
-    });
-
     Ok(())
 }
 
-/// Poll `/internal/corpus/progress` and forward each tick to the
-/// Tauri `corpus-progress` event channel. Terminates when the corpus
-/// either hits a `Complete` phase, is wiped by a cancel, or stops
-/// appearing in the snapshot for a grace window (terminal-by-absence).
-async fn poll_corpus_progress(
-    client: reqwest::Client,
+/// Spawn the background poller that reads
+/// `/internal/corpus/status` every second and forwards every active
+/// entry to the `corpus-progress` Tauri event channel.
+///
+/// Starts at backend bootstrap and runs for the life of the process.
+/// Without this the UI only sees ingests Desktop itself kicked off —
+/// a daemon-driven resume after a crash/close would run invisibly and
+/// the user would still see the "Install" button for a corpus the
+/// daemon is actively ingesting (the bug we're fixing).
+///
+/// Emits a terminal `complete` event for corpora that disappear from
+/// the snapshot after a grace window, so the Svelte `installing`
+/// state flips back to `installed` without waiting for the next
+/// `list_corpora` refresh.
+pub fn spawn_corpus_status_poller(
+    app_handle: tauri::AppHandle,
     state: Arc<AppState>,
-    app: tauri::AppHandle,
-    corpus_id: String,
 ) {
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/progress");
-    let poll_interval = std::time::Duration::from_millis(500);
-    let mut consecutive_absent = 0u32;
-    // ~3 s grace window: the ingest task clears from active_ingests
-    // a few ticks before its final `Complete` payload lands in the
-    // progress map in rare races. Giving absence a handful of ticks
-    // before declaring "done by disappearance" prevents a flicker
-    // back to `not_installed`.
-    const MAX_ABSENT_TICKS: u32 = 6;
-
-    loop {
-        tokio::time::sleep(poll_interval).await;
-        let Ok(resp) = client.get(&url).send().await else {
-            // Daemon unreachable — back off and retry. Could be a
-            // restart in flight; the poll loop recovers on its own.
-            continue;
+    tokio::spawn(async move {
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "corpus status poller: failed to build HTTP client — poller disabled"
+                );
+                return;
+            }
         };
-        let Ok(body) = resp.json::<ProgressSnapshot>().await else {
-            continue;
-        };
+        let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/status");
+        // Track what was seen last tick so we can detect terminations
+        // (corpus disappeared from the snapshot → emit complete).
+        let mut last_seen: std::collections::HashSet<String> = Default::default();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        match body.progress.get(&corpus_id) {
-            Some(progress) => {
-                consecutive_absent = 0;
-                let payload = ingest_progress_to_payload(&corpus_id, progress);
-                let is_complete = matches!(payload.phase.as_str(), "complete");
-                if let Ok(mut map) = state.install_progress.try_write() {
-                    map.insert(corpus_id.clone(), payload.clone());
-                }
-                let _ = app.emit("corpus-progress", payload);
-                if is_complete {
-                    return;
+            let resp = match client.get(&url).send().await {
+                Ok(r) => r,
+                Err(_) => continue, // Daemon may be restarting; retry next tick.
+            };
+            let snapshot: CorpusStatusResponse = match resp.json().await {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+
+            let current: std::collections::HashSet<String> = snapshot
+                .entries
+                .iter()
+                .map(|e| e.corpus_id.clone())
+                .collect();
+
+            // Emit terminal "complete" for entries that were active last
+            // tick but have dropped off this tick.
+            for gone in last_seen.difference(&current) {
+                let last_phase = state
+                    .install_progress
+                    .read()
+                    .await
+                    .get(gone)
+                    .map(|p| p.phase.clone())
+                    .unwrap_or_default();
+                if last_phase != "complete" && last_phase != "failed" {
+                    let final_payload = CorpusProgressPayload {
+                        corpus_id: gone.clone(),
+                        phase: "complete".into(),
+                        percent: 100.0,
+                        chunks_processed: 0,
+                        message: Some("Done".into()),
+                    };
+                    if let Ok(mut map) = state.install_progress.try_write() {
+                        map.insert(gone.clone(), final_payload.clone());
+                    }
+                    let _ = app_handle.emit("corpus-progress", final_payload);
                 }
             }
-            None => {
-                consecutive_absent += 1;
-                if consecutive_absent >= MAX_ABSENT_TICKS {
-                    // Absent from the snapshot long enough that a
-                    // terminal event must have landed (or the cancel
-                    // wipe ran). Emit a synthetic "complete" only if
-                    // the last recorded phase wasn't already terminal
-                    // — otherwise just stop.
-                    let already_terminal = state
-                        .install_progress
-                        .read()
-                        .await
-                        .get(&corpus_id)
-                        .map(|p| p.phase == "complete" || p.phase == "failed")
-                        .unwrap_or(false);
-                    if !already_terminal {
-                        if let Ok(mut map) = state.install_progress.try_write() {
-                            map.remove(&corpus_id);
-                        }
-                        let _ = app.emit(
-                            "corpus-progress",
-                            CorpusProgressPayload {
-                                corpus_id: corpus_id.clone(),
-                                phase: "complete".into(),
-                                percent: 100.0,
-                                chunks_processed: 0,
-                                message: Some("Done".into()),
-                            },
-                        );
-                    }
-                    return;
+            last_seen = current;
+
+            for entry in &snapshot.entries {
+                let payload = status_entry_to_payload(entry);
+                if let Ok(mut map) = state.install_progress.try_write() {
+                    map.insert(entry.corpus_id.clone(), payload.clone());
                 }
+                let _ = app_handle.emit("corpus-progress", payload);
             }
         }
+    });
+}
+
+/// Convert a `CorpusStatusEntry` from the daemon into the
+/// frontend-shaped `CorpusProgressPayload`. Prefers the
+/// daemon-computed `estimated_fraction` for the percent; falls back
+/// to a sensible phase + message when no progress event is known yet.
+fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
+    use corpus_engine::IngestProgress as P;
+
+    let percent = entry
+        .estimated_fraction
+        .map(|f| (f * 100.0).clamp(0.0, 100.0))
+        .unwrap_or(0.0);
+
+    let (phase, chunks_processed, message) = match entry.progress.as_ref() {
+        Some(P::Downloading {
+            percent: dp,
+            bytes_downloaded,
+            bytes_total,
+        }) => {
+            let msg = bytes_total
+                .map(|t| format!(
+                    "{:.0} / {:.0} MB ({:.0}%)",
+                    *bytes_downloaded as f64 / 1_048_576.0,
+                    t as f64 / 1_048_576.0,
+                    dp,
+                ))
+                .unwrap_or_else(|| {
+                    format!("{:.0} MB", *bytes_downloaded as f64 / 1_048_576.0)
+                });
+            ("downloading".to_string(), 0u64, Some(msg))
+        }
+        Some(P::Extracting { documents_processed }) => (
+            "extracting".to_string(),
+            0,
+            Some(format!("{} articles", documents_processed)),
+        ),
+        Some(P::Chunking { chunks_created }) => (
+            "chunking".to_string(),
+            *chunks_created,
+            Some(format!("{} chunks", chunks_created)),
+        ),
+        Some(P::Embedding {
+            chunks_embedded,
+            docs_processed,
+            chunks_per_sec,
+            ..
+        }) => (
+            "embedding".to_string(),
+            *chunks_embedded,
+            Some(format!(
+                "{} chunks · {} docs · {:.0}/s",
+                pretty_count(*chunks_embedded),
+                pretty_count(*docs_processed),
+                chunks_per_sec,
+            )),
+        ),
+        Some(P::Indexing { chunks_indexed, .. }) => (
+            "indexing".to_string(),
+            *chunks_indexed,
+            Some(format!("{} chunks indexed", pretty_count(*chunks_indexed))),
+        ),
+        Some(P::Complete {
+            total_chunks,
+            duration_secs,
+        }) => (
+            "complete".to_string(),
+            *total_chunks,
+            Some(format!("Done in {duration_secs}s")),
+        ),
+        None => {
+            // No IngestProgress event yet this session — this is the
+            // classic "daemon resumed after Desktop close" state. Use
+            // on-disk counters so the user still sees "something is
+            // happening" instead of a stuck spinner.
+            let phase = if entry.canonical_in_progress || entry.partition_in_progress {
+                "embedding"
+            } else {
+                "downloading"
+            };
+            let msg = if entry.committed_iter_pos > 0 {
+                // When the sampler has published a total estimate we
+                // prefer `M/N sections` over a raw running count —
+                // it's the same info the progress bar encodes but
+                // more legible at a glance on the details line.
+                match entry.estimated_total_sections {
+                    Some(total) if total > 0 => Some(format!(
+                        "Resuming · {}/{} sections",
+                        pretty_count(entry.committed_iter_pos),
+                        pretty_count(total),
+                    )),
+                    _ => Some(format!(
+                        "Resuming · {} sections committed",
+                        pretty_count(entry.committed_iter_pos),
+                    )),
+                }
+            } else {
+                Some("Starting…".into())
+            };
+            (phase.to_string(), entry.committed_iter_pos, msg)
+        }
+    };
+
+    CorpusProgressPayload {
+        corpus_id: entry.corpus_id.clone(),
+        phase,
+        percent,
+        chunks_processed,
+        message,
     }
 }
 
-/// Wire-level DTO for the daemon's progress snapshot. We deserialize
-/// the variant tag-free enum form that `IngestProgress`'s default
-/// derive emits.
+/// Compact count formatter for UI messages: 7_265_216 → "7.3M".
+fn pretty_count(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}k", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
+}
+
+/// Wire-level DTO for the daemon's `/internal/corpus/status`
+/// response. Mirrors `commonwealth_api::routes_internal::CorpusStatusEntry`.
 #[derive(Debug, serde::Deserialize)]
-struct ProgressSnapshot {
-    progress: std::collections::HashMap<String, corpus_engine::IngestProgress>,
+struct CorpusStatusResponse {
+    entries: Vec<CorpusStatusEntry>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CorpusStatusEntry {
+    corpus_id: String,
+    #[allow(dead_code)]
+    active: bool,
+    progress: Option<corpus_engine::IngestProgress>,
+    #[allow(dead_code)]
+    shards_completed: usize,
+    #[allow(dead_code)]
+    shards_total: usize,
+    committed_iter_pos: u64,
+    #[allow(dead_code)]
+    canonical_present: bool,
+    #[allow(dead_code)]
+    partition_present: bool,
+    canonical_in_progress: bool,
+    partition_in_progress: bool,
+    estimated_fraction: Option<f32>,
+    #[serde(default)]
+    estimated_total_sections: Option<u64>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    estimated_total_articles: Option<u64>,
 }
 
 /// Cancel (and wipe) a corpus on this node via the daemon.

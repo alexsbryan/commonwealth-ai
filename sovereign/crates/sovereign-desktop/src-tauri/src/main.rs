@@ -118,6 +118,16 @@ fn main() {
                     Ok(()) => {
                         tracing::info!("Backend ready");
                         let _ = handle_clone.emit("backend-ready", ());
+                        // Start the continuous corpus-status poller so
+                        // the Knowledge settings pane reflects ingests
+                        // the daemon is running regardless of whether
+                        // Desktop initiated them (e.g. auto-collaborate
+                        // resume after a previous session closed with
+                        // Wikipedia mid-ingest).
+                        commands::spawn_corpus_status_poller(
+                            handle_clone.clone(),
+                            Arc::clone(&state_clone),
+                        );
                     }
                     Err(e) => {
                         tracing::error!("Bootstrap failed: {e}");
