@@ -33,9 +33,11 @@ use corpus_engine::{
     AtosRunRow, FeatureRow, FeatureStore, MilestoneRow, NoteRow, NoteStore,
 };
 
+pub mod approval;
 pub mod charter;
 pub mod local;
 pub mod report;
+pub mod session;
 
 pub use charter::{parse as parse_charter, CharterParse, MilestoneSpec};
 pub use local::LocalAtosOrchestrator;
