@@ -98,6 +98,15 @@ impl Middleware for ContextInjector {
             }
         }
 
+        // Project charter (M7.2) — the project-layer invariants +
+        // current phase live ABOVE the feature spec so they frame
+        // every turn. When the project hasn't been founded, we
+        // silently skip — feature work on pre-M6 repos still works.
+        if let Some(block) = compose_charter_frame(&ctx.repo_root) {
+            preamble.push_str("\n");
+            preamble.push_str(&block);
+        }
+
         // Notes digest (if enabled for this pipeline).
         if ctx.context_config.inject_notes {
             let digest = compose_notes_digest(&ctx.repo_root, &feature_id).await;
@@ -141,6 +150,126 @@ impl Middleware for ContextInjector {
 }
 
 // ─── Composition helpers ─────────────────────────────────────────────────────
+
+/// M7.2: assemble the project-layer charter frame for the
+/// preamble. Returns `None` when:
+/// - the repo hasn't been `sovereign project found`ed (no
+///   `.sovereign/CHARTER.md`),
+/// - reading fails,
+/// - the invariants section is empty.
+///
+/// The frame intentionally prepends ABOVE the feature spec — the
+/// agent's first-pass reading should see project invariants,
+/// then the current phase (so it knows where in the plan it is),
+/// then feature specifics. Keeping it compact (invariants +
+/// one-line phase marker) avoids drowning the spec.
+fn compose_charter_frame(repo_root: &Path) -> Option<String> {
+    let sov = repo_root.join(".sovereign");
+    let charter = std::fs::read_to_string(sov.join("CHARTER.md")).ok()?;
+    let invariants = extract_named_section(&charter, "Invariants");
+    let phase_marker = read_current_phase_marker(&sov);
+    let drift_tag = detect_charter_drift(&sov, &charter);
+
+    let mut out = String::from("## Project charter\n\n");
+    if let Some(p) = phase_marker {
+        out.push_str(&format!("_{}_\n\n", p));
+    }
+    if let Some(tag) = drift_tag {
+        out.push_str(&format!("{tag}\n\n"));
+    }
+    let inv = invariants.unwrap_or_default();
+    if inv.trim().is_empty() {
+        // No invariants → frame is just the phase marker + drift.
+        // If BOTH are also empty, there's nothing to say.
+        if phase_marker_present(repo_root) || drift_tag_present(&sov) {
+            return Some(out);
+        }
+        return None;
+    }
+    out.push_str("**Invariants**\n\n");
+    out.push_str(inv.trim());
+    out.push('\n');
+    Some(out)
+}
+
+/// Minimal section extractor — `## <name>` body up to the next
+/// `## ` heading or EOF. Avoids a full markdown parse for a cheap
+/// read path the middleware runs on every turn.
+fn extract_named_section(md: &str, name: &str) -> Option<String> {
+    let heading = format!("## {name}");
+    let idx = md.find(&heading)?;
+    let rest = &md[idx + heading.len()..];
+    let end = rest.find("\n## ").unwrap_or(rest.len());
+    Some(rest[..end].to_string())
+}
+
+fn read_current_phase_marker(sovereign_dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(sovereign_dir.join("project.toml")).ok()?;
+    // Cheap scan for `current_phase = N` — avoids pulling the
+    // toml crate into this hot path. Middleware runs per-turn.
+    for line in text.lines() {
+        if let Some(rest) = line.trim().strip_prefix("current_phase") {
+            if let Some(val) = rest.split('=').nth(1) {
+                let n: i64 = val.trim().parse().ok()?;
+                return Some(format!("current phase: {n}"));
+            }
+        }
+    }
+    None
+}
+
+fn phase_marker_present(repo_root: &Path) -> bool {
+    read_current_phase_marker(&repo_root.join(".sovereign")).is_some()
+}
+
+/// Read `lifecycle.charter_hash` from project.toml without pulling
+/// in the toml crate for this hot path.
+fn recorded_charter_hash(sovereign_dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(sovereign_dir.join("project.toml")).ok()?;
+    for line in text.lines() {
+        if let Some(rest) = line.trim().strip_prefix("charter_hash") {
+            if let Some(val) = rest.split('=').nth(1) {
+                let v = val.trim().trim_matches('"').to_string();
+                if v.is_empty() {
+                    return None;
+                }
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn hash_sha256_hex(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(s.as_bytes());
+    format!("{:x}", h.finalize())
+}
+
+/// Returns `Some("⚠ ...")` when on-disk CHARTER.md has drifted
+/// from the hash recorded at founding/amend time. `None` when the
+/// hash is unknown (never founded) OR matches.
+fn detect_charter_drift(sovereign_dir: &Path, charter: &str) -> Option<String> {
+    let recorded = recorded_charter_hash(sovereign_dir)?;
+    let current = hash_sha256_hex(charter);
+    if recorded == current {
+        None
+    } else {
+        Some(format!(
+            "⚠ **Charter drift** — CHARTER.md on disk differs from the recorded hash. \
+             Run `sovereign project amend` to reconcile, or `git checkout --` \
+             the file."
+        ))
+    }
+}
+
+fn drift_tag_present(sovereign_dir: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(sovereign_dir.join("CHARTER.md")) else {
+        return false;
+    };
+    detect_charter_drift(sovereign_dir, &text).is_some()
+}
 
 /// Pull a compact digest from the SQLite cache. Cache hit = cheap.
 /// Cache miss = fall back to concatenated note headers (the same
@@ -464,5 +593,118 @@ mod tests {
         let mut req2 = minimal_request();
         inj.process(&mut req2, &mut session, &ctx).await.unwrap();
         assert!(!req2.messages[0].content.contains("Since last turn"));
+    }
+
+    // ── M7.2: charter frame ───────────────────────────────────
+
+    fn seed_founded_project(repo_root: &Path, charter_body: &str) {
+        let sov = repo_root.join(".sovereign");
+        std::fs::create_dir_all(&sov).unwrap();
+        std::fs::write(sov.join("CHARTER.md"), charter_body).unwrap();
+        let hash = hash_sha256_hex(charter_body);
+        let toml_body = format!(
+            "schema_version = 1\n\n[observation]\nobserved_at = 0\nhas_git = true\nembed_model_available = true\n\n[lifecycle]\nfounded = true\ncharter_version = 1\ncurrent_phase = 1\ncharter_hash = \"{hash}\"\n"
+        );
+        std::fs::write(sov.join("project.toml"), toml_body).unwrap();
+        // Feature spec so the injector has something to work with.
+        let feat_dir = sov.join("features").join("fx");
+        std::fs::create_dir_all(&feat_dir).unwrap();
+        std::fs::write(feat_dir.join("spec.md"), "# fx — Feature\n").unwrap();
+    }
+
+    const CHARTER_SAMPLE: &str = r#"# proj — Charter
+
+## System design
+
+Build a thing.
+
+## Invariants
+
+- Persistence contract X: schema-stable.
+- External assumption Y: rate limits apply.
+
+## Resolved decisions
+
+- Decided Z.
+
+## Open questions
+
+## Amendment log
+
+_(empty)_
+"#;
+
+    #[tokio::test]
+    async fn charter_frame_injected_when_project_is_founded() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed_founded_project(tmp.path(), CHARTER_SAMPLE);
+        let inj = ContextInjector::new();
+        let mut req = minimal_request();
+        let mut session = MiddlewareSession::default();
+        let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
+        inj.process(&mut req, &mut session, &ctx).await.unwrap();
+        let sys = &req.messages[0].content;
+        assert!(sys.contains("## Project charter"));
+        assert!(sys.contains("current phase: 1"));
+        assert!(sys.contains("**Invariants**"));
+        assert!(sys.contains("Persistence contract X"));
+        assert!(sys.contains("External assumption Y"));
+        // Frame appears BEFORE the feature spec section.
+        let charter_idx = sys.find("## Project charter").unwrap();
+        let feature_idx = sys.find("## Feature specification").unwrap();
+        assert!(charter_idx < feature_idx);
+    }
+
+    #[tokio::test]
+    async fn charter_frame_absent_when_not_founded() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Feature spec only — no CHARTER.md or project.toml.
+        let feat_dir = tmp.path().join(".sovereign").join("features").join("fx");
+        std::fs::create_dir_all(&feat_dir).unwrap();
+        std::fs::write(feat_dir.join("spec.md"), "# fx\n").unwrap();
+
+        let inj = ContextInjector::new();
+        let mut req = minimal_request();
+        let mut session = MiddlewareSession::default();
+        let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
+        inj.process(&mut req, &mut session, &ctx).await.unwrap();
+        let sys = &req.messages[0].content;
+        assert!(
+            !sys.contains("## Project charter"),
+            "pre-founding repos must not get a charter frame"
+        );
+    }
+
+    #[tokio::test]
+    async fn charter_drift_flagged_inline_in_frame() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed_founded_project(tmp.path(), CHARTER_SAMPLE);
+        // Mutate CHARTER.md so its hash no longer matches project.toml.
+        std::fs::write(
+            tmp.path().join(".sovereign").join("CHARTER.md"),
+            format!("{CHARTER_SAMPLE}\n\nMUTATED CONTENT\n"),
+        )
+        .unwrap();
+
+        let inj = ContextInjector::new();
+        let mut req = minimal_request();
+        let mut session = MiddlewareSession::default();
+        let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
+        inj.process(&mut req, &mut session, &ctx).await.unwrap();
+        let sys = &req.messages[0].content;
+        assert!(
+            sys.contains("Charter drift"),
+            "drift must be flagged in the frame so the agent doesn't operate on stale context"
+        );
+    }
+
+    #[test]
+    fn extract_named_section_pulls_invariants_body_only() {
+        let body = extract_named_section(CHARTER_SAMPLE, "Invariants").unwrap();
+        assert!(body.contains("Persistence contract X"));
+        assert!(
+            !body.contains("## Resolved decisions"),
+            "extraction must stop at the next heading"
+        );
     }
 }

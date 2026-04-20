@@ -34,6 +34,7 @@ futures = "0.3"
 # adopts a founder-assigned ID. Cheap reads (Arc clone), single
 # atomic swap on adoption, no async lock contention.
 arc-swap = "1.7"
+sha2 = "0.10"
 
 [dev-dependencies]
 commonwealth-discovery = { workspace = true }
