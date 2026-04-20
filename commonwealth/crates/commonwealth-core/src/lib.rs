@@ -10,6 +10,7 @@ pub mod ledger_store;
 pub mod mesh;
 pub mod model;
 pub mod model_aliases;
+pub mod pipeline_aliases;
 pub use oicp_types as oicp;
 pub mod oicp_registry;
 pub mod scheduler;

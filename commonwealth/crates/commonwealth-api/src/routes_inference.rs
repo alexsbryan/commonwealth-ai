@@ -1,5 +1,5 @@
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -9,14 +9,50 @@ use tracing::{debug, info, warn};
 use commonwealth_core::ids::ModelId;
 use commonwealth_inference::oicp::{self, CapabilityRequirements, ShardingPrivacy};
 
+use crate::middleware::{MiddlewareError, MiddlewareSession, PipelineContext};
 use crate::openai_types::*;
 use crate::state::AppState;
 
 /// POST /v1/chat/completions — OpenAI-compatible chat completions.
 pub async fn chat_completions(
     State(state): State<AppState>,
-    Json(request): Json<ChatCompletionRequest>,
+    headers: HeaderMap,
+    Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
+    // ── ATOS pipeline resolution ──────────────────────────────────────
+    //
+    // If the model name matches a pipeline alias (e.g.,
+    // `commonwealth/sovereign-coder`), run the ATOS middleware chain
+    // before any legacy routing. On success the pipeline rewrites
+    // `request.model` to the concrete model id the middleware config
+    // says to use, and we drop into priority-0 routing exactly as if
+    // the client had sent the concrete name directly.
+    //
+    // On failure — the usual cause is ApprovalRequired when a
+    // feature hasn't been approved and the request tries to call a
+    // write-intent tool — we short-circuit with a structured
+    // OpenAI-compatible error so opencode surfaces it as a model
+    // error rather than a transport failure.
+    let requested_model = request.model.clone().unwrap_or_default();
+    if let Some(pipeline_res) = state
+        .inner
+        .pipeline_aliases
+        .resolve(&requested_model)
+        .cloned()
+    {
+        if let Err(resp) = run_atos_pipeline(&state, &headers, &mut request, &pipeline_res).await {
+            return resp;
+        }
+        // Rewrite the model field so downstream routing finds the
+        // concrete model. Preserve the original only in a debug log.
+        debug!(
+            pipeline = %pipeline_res.name,
+            target_model = %pipeline_res.model_id,
+            "atos pipeline resolved; rewriting request.model"
+        );
+        request.model = Some(pipeline_res.model_id.clone());
+    }
+
     // Privacy enforcement: reject local_only requests.
     if let Some(ref oicp_req) = request.oicp {
         if oicp_req.sharding() == ShardingPrivacy::LocalOnly {
@@ -410,4 +446,152 @@ async fn serve_local_stream(
     Sse::new(combined)
         .keep_alive(KeepAlive::default())
         .into_response()
+}
+
+// ─── ATOS pipeline helpers ───────────────────────────────────────────────────
+
+/// Run the ATOS middleware chain against a request. Returns `Ok(())`
+/// when the chain completes successfully; returns an
+/// already-constructed HTTP `Response` when a middleware wants to
+/// short-circuit (e.g., ApprovalRequired).
+///
+/// Persists session state back to MeshStore on exit so subsequent
+/// requests on the same `X-Session-Id` see the mutations. Missing
+/// prerequisites (no session_store, no X-Feature-Id) degrade the
+/// call to a no-op — the handler then proceeds to legacy routing
+/// with the unmodified request.
+async fn run_atos_pipeline(
+    state: &AppState,
+    headers: &HeaderMap,
+    request: &mut ChatCompletionRequest,
+    pipeline: &commonwealth_core::pipeline_aliases::PipelineResolution,
+) -> Result<(), Response> {
+    let Some(session_store) = state.inner.session_store.clone() else {
+        debug!("atos pipeline resolved but no session store configured; skipping middleware");
+        return Ok(());
+    };
+
+    // Extract headers. Strings are ASCII; non-ASCII values are
+    // treated as absent rather than 400ing — a stray UTF-8 in the
+    // header is likely a client bug and we'd rather degrade.
+    let feature_id = headers
+        .get("x-feature-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let session_id = headers
+        .get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| uuid_like_for_sessionless());
+
+    // Build the pipeline from the alias config + middleware
+    // registry. Unknown middleware ids become 500s so a typo
+    // doesn't silently skip an important step.
+    let pipeline_exec = match state
+        .inner
+        .middleware_registry
+        .build_pipeline(&pipeline.middleware)
+    {
+        Ok(p) => p,
+        Err(e) => {
+            return Err(atos_error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "atos_pipeline_misconfigured",
+                &e.to_string(),
+            ));
+        }
+    };
+
+    let ctx = PipelineContext {
+        pipeline_name: pipeline.name.clone(),
+        model_id: pipeline.model_id.clone(),
+        context_config: pipeline.context.clone(),
+        feature_id: feature_id.clone(),
+        session_id: Some(session_id.clone()),
+        repo_root: state
+            .inner
+            .repo_root
+            .clone()
+            .unwrap_or_else(|| std::path::PathBuf::from(".")),
+    };
+
+    let mut handle = session_store.load_and_lock(&session_id).await;
+    // Seed the feature_id from the header so middleware see it
+    // immediately on first contact. ApprovalGate will overwrite
+    // `approval_validated` / `spec_content_hash` as it runs.
+    if handle.state.feature_id.is_none() {
+        handle.state.feature_id = feature_id.clone();
+    }
+
+    // Mirror session state into the middleware-visible struct so
+    // middleware don't depend on the full AtosSessionState type.
+    let mut mw_session = MiddlewareSession {
+        feature_id: handle.state.feature_id.clone(),
+        approval_validated: handle.state.approval_validated,
+        spec_content_hash: handle.state.spec_content_hash.clone(),
+        pending_deviation_ack: handle.state.pending_deviation_ack,
+        deviation_note_id: handle.state.deviation_note_id.clone(),
+    };
+
+    let outcome = pipeline_exec.run(request, &mut mw_session, &ctx).await;
+
+    // Copy mw_session mutations back into the persistent state
+    // before saving.
+    handle.state.feature_id = mw_session.feature_id;
+    handle.state.approval_validated = mw_session.approval_validated;
+    handle.state.spec_content_hash = mw_session.spec_content_hash;
+    handle.state.pending_deviation_ack = mw_session.pending_deviation_ack;
+    handle.state.deviation_note_id = mw_session.deviation_note_id;
+    handle.save().await;
+
+    match outcome {
+        Ok(()) => Ok(()),
+        Err(err) => Err(middleware_error_to_response(err)),
+    }
+}
+
+/// Generate a per-request pseudo-session id when the client didn't
+/// send an `X-Session-Id` header. Ephemeral; not persisted beyond
+/// the in-memory mutex lifetime because the next request without a
+/// header makes a new one.
+fn uuid_like_for_sessionless() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("sessionless-{nanos:x}")
+}
+
+fn middleware_error_to_response(err: MiddlewareError) -> Response {
+    match err {
+        MiddlewareError::ApprovalRequired { feature_id, hint } => atos_error_response(
+            StatusCode::FORBIDDEN,
+            "atos_approval_required",
+            &format!("feature '{feature_id}' is not approved: {hint}"),
+        ),
+        MiddlewareError::PipelineRejected(msg) => atos_error_response(
+            StatusCode::FORBIDDEN,
+            "atos_pipeline_rejected",
+            &msg,
+        ),
+        MiddlewareError::Infra(msg) => atos_error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "atos_pipeline_infra_error",
+            &msg,
+        ),
+    }
+}
+
+fn atos_error_response(status: StatusCode, code: &str, message: &str) -> Response {
+    let envelope = serde_json::json!({
+        "error": {
+            "message": message,
+            "type": code,
+            "code": code,
+        }
+    });
+    (status, Json(envelope)).into_response()
 }

@@ -1,3 +1,4 @@
+pub mod middleware;
 pub mod openai_types;
 pub mod routes_app_internal;
 pub mod routes_apps;

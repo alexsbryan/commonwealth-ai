@@ -91,6 +91,25 @@ pub struct AppStateInner {
     /// Knowledge shard plan — via MeshStore.
     pub knowledge_store: KnowledgeStateStore,
     pub model_aliases: ModelAliasTable,
+    /// ATOS pipeline aliases — resolved before `model_aliases` when
+    /// an incoming request carries a pipeline name like
+    /// `commonwealth/sovereign-coder`. Loaded from the embedded
+    /// `default_pipelines.toml` at `AppState::new` time.
+    pub pipeline_aliases: commonwealth_core::pipeline_aliases::PipelineAliasTable,
+    /// ATOS middleware registry. Holds one instance of each
+    /// middleware the pipelines can reference by id.
+    pub middleware_registry: Arc<crate::middleware::MiddlewareRegistry>,
+    /// ATOS session-state store. `None` until a M4.4+ daemon wires
+    /// it (tests without a MeshStore handle leave this empty; the
+    /// handler skips ATOS pipeline processing when the store is
+    /// absent).
+    pub session_store: Option<sovereign_atos::session::SessionStore>,
+    /// Repository root the Commonwealth daemon is anchored to —
+    /// the directory that contains `.sovereign/features/`. Used by
+    /// ApprovalGate for git lookups and by ContextInjector for
+    /// reading spec.md. `None` when the daemon wasn't started in a
+    /// repo-like context (degrades ATOS pipelines to a noop).
+    pub repo_root: Option<std::path::PathBuf>,
     pub corpus_engine: Option<Arc<CorpusEngine>>,
     /// Distributed KV store for mesh apps.
     pub mesh_store: Arc<MeshStore>,
@@ -175,6 +194,28 @@ impl AppState {
     ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let knowledge_store = KnowledgeStateStore::new(Arc::clone(&mesh_store), self_node_id);
+        // ATOS middleware registry with the M4 core four implementations
+        // registered under their TOML ids. The wiring is intentionally
+        // additive — operators deploying a stock Commonwealth daemon
+        // get the full stack without extra config; tests that want a
+        // bare daemon can build a minimal registry themselves.
+        let mut middleware_registry = crate::middleware::MiddlewareRegistry::new();
+        middleware_registry.register(Arc::new(crate::middleware::ApprovalGate::new()));
+        middleware_registry.register(Arc::new(crate::middleware::ContextInjector::new()));
+        middleware_registry.register(Arc::new(crate::middleware::ToolInjector::new()));
+        // `read_only_enforcer` is the red-team alias's gate. For M4
+        // it shares the ApprovalGate implementation under a distinct
+        // id — M5 splits them if the behavior actually diverges.
+        let read_only = Arc::new(crate::middleware::ApprovalGate::new());
+        middleware_registry.register(read_only);
+
+        // Session store is wired up when the daemon has a MeshStore
+        // in hand. The handler falls back to legacy routing when
+        // this is None.
+        let session_store = Some(sovereign_atos::session::SessionStore::new(
+            (*mesh_store).clone(),
+            self_node_id,
+        ));
         Self {
             inner: Arc::new(AppStateInner {
                 self_node_id_swap: ArcSwap::from_pointee(self_node_id),
@@ -182,6 +223,11 @@ impl AppState {
                 inference_store,
                 knowledge_store,
                 model_aliases: ModelAliasTable::default_table(),
+                pipeline_aliases:
+                    commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table(),
+                middleware_registry: Arc::new(middleware_registry),
+                session_store,
+                repo_root: std::env::current_dir().ok(),
                 corpus_engine,
                 mesh_store,
                 app_registry,
