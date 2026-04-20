@@ -40,6 +40,37 @@ use crate::error::{Error, Result};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/// Scope dimension for ATOS notes.
+///
+/// - `Global`: architectural invariants that outlive any one feature.
+/// - `Feature`: decisions/attempts/invariants tied to a single feature id.
+/// - `Session`: ephemeral scratch within one agent session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteScope {
+    Global,
+    Feature,
+    Session,
+}
+
+impl NoteScope {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Feature => "feature",
+            Self::Session => "session",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "global" => Some(Self::Global),
+            "feature" => Some(Self::Feature),
+            "session" => Some(Self::Session),
+            _ => None,
+        }
+    }
+}
+
 /// A single note row returned from [`NoteStore::read_notes`].
 #[derive(Debug, Clone)]
 pub struct NoteRow {
@@ -57,6 +88,26 @@ pub struct NoteRow {
     pub retired_at: Option<i64>,
     /// Human-readable reason for retirement (e.g. "fixed in PR #88").
     pub retired_by: Option<String>,
+    /// Scope dimension: `"global"` | `"feature"` | `"session"`.
+    pub scope: String,
+    /// ATOS feature id when `scope == "feature"`. `None` otherwise.
+    pub feature_id: Option<String>,
+    /// Origin note id when this row was created by `promote_note`. `None` for
+    /// native writes.
+    pub promoted_from: Option<String>,
+}
+
+/// Retrieval filter for scope/feature combinations.
+///
+/// Use `ScopeFilter::default()` to preserve the legacy behavior of reading
+/// all notes regardless of scope.
+#[derive(Debug, Clone, Default)]
+pub struct ScopeFilter {
+    /// When non-empty, results are restricted to rows with `scope` in this list.
+    pub scopes: Vec<NoteScope>,
+    /// When `Some`, applies `feature_id = ?` as an additional predicate. Only
+    /// meaningful when `scopes` includes `NoteScope::Feature`.
+    pub feature_id: Option<String>,
 }
 
 /// A single row from the tool call ring buffer.
@@ -122,7 +173,16 @@ impl NoteStore {
                 })?;
             }
         }
-        // version >= 1: schema is current, nothing to do.
+
+        // Re-read after any v0→v1 work above, then apply v1→v2 if needed.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 2 {
+            conn.execute_batch(MIGRATION_V2).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v2: {e}")))
+            })?;
+        }
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -131,11 +191,8 @@ impl NoteStore {
 
     // ── Note writes ────────────────────────────────────────────────────────
 
-    /// Persist a new note. Returns the generated note ID.
-    ///
-    /// `kind` must be one of `"decision"`, `"attempt"`, `"invariant"`, `"todo"`.
-    /// Use [`write_reflection`] for `kind = "reflection"` (it additionally
-    /// accepts a `tool_name`).
+    /// Persist a new note at global scope. Back-compat wrapper over
+    /// [`write_note_scoped`]; new call sites should prefer the scoped API.
     pub async fn write_note(
         &self,
         kind: &str,
@@ -144,6 +201,40 @@ impl NoteStore {
         files: Vec<String>,
         session_id: &str,
     ) -> Result<String> {
+        self.write_note_scoped(
+            kind,
+            content,
+            symbols,
+            files,
+            session_id,
+            NoteScope::Global,
+            None,
+        )
+        .await
+    }
+
+    /// Persist a new note with an explicit scope. Returns the generated id.
+    ///
+    /// `kind` must be one of `"decision"`, `"attempt"`, `"invariant"`, `"todo"`.
+    /// Use [`write_reflection_scoped`] for `kind = "reflection"`.
+    ///
+    /// Invariant: `scope == Feature` requires `feature_id.is_some()`; violators
+    /// return [`Error::InvalidInput`].
+    pub async fn write_note_scoped(
+        &self,
+        kind: &str,
+        content: &str,
+        symbols: Vec<String>,
+        files: Vec<String>,
+        session_id: &str,
+        scope: NoteScope,
+        feature_id: Option<&str>,
+    ) -> Result<String> {
+        if scope == NoteScope::Feature && feature_id.is_none() {
+            return Err(Error::InvalidInput(
+                "write_note_scoped: scope='feature' requires feature_id".into(),
+            ));
+        }
         let id = uuid::Uuid::new_v4().to_string();
         let now = unix_now();
         let symbols_json = serde_json::to_string(&symbols).unwrap_or_else(|_| "[]".to_string());
@@ -151,38 +242,169 @@ impl NoteStore {
 
         let conn = self.conn.lock().await;
         conn.execute(
-            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
-            params![id, kind, content, symbols_json, files_json, session_id, now],
+            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, scope, feature_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9)",
+            params![id, kind, content, symbols_json, files_json, session_id, now, scope.as_str(), feature_id],
         )
         .map_err(sqlite_err)?;
+        bump_notes_version(&conn)?;
 
         Ok(id)
     }
 
-    /// Persist a reflection note. Returns the generated note ID.
-    ///
-    /// `content` should be a JSON blob containing structured reflection fields
-    /// (task_summary, tools_that_helped, etc.). `tool_name` is the primary tool
-    /// the reflection concerns — used as the grouping key by `sovereign reflect`.
+    /// Persist a reflection note at global scope. Back-compat wrapper.
     pub async fn write_reflection(
         &self,
         content: &str,
         tool_name: Option<&str>,
         session_id: &str,
     ) -> Result<String> {
+        self.write_reflection_scoped(content, tool_name, session_id, NoteScope::Global, None)
+            .await
+    }
+
+    /// Persist a reflection note with an explicit scope.
+    pub async fn write_reflection_scoped(
+        &self,
+        content: &str,
+        tool_name: Option<&str>,
+        session_id: &str,
+        scope: NoteScope,
+        feature_id: Option<&str>,
+    ) -> Result<String> {
+        if scope == NoteScope::Feature && feature_id.is_none() {
+            return Err(Error::InvalidInput(
+                "write_reflection_scoped: scope='feature' requires feature_id".into(),
+            ));
+        }
         let id = uuid::Uuid::new_v4().to_string();
         let now = unix_now();
 
         let conn = self.conn.lock().await;
         conn.execute(
-            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, tool_name)
-             VALUES (?1, 'reflection', ?2, '[]', '[]', ?3, ?4, ?4, ?5)",
-            params![id, content, session_id, now, tool_name],
+            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, tool_name, scope, feature_id)
+             VALUES (?1, 'reflection', ?2, '[]', '[]', ?3, ?4, ?4, ?5, ?6, ?7)",
+            params![id, content, session_id, now, tool_name, scope.as_str(), feature_id],
         )
         .map_err(sqlite_err)?;
+        bump_notes_version(&conn)?;
 
         Ok(id)
+    }
+
+    /// Rewrite `id`'s scope (and optional `feature_id`) to match a promotion.
+    ///
+    /// Returns the newly inserted promoted note id (a fresh row is created;
+    /// the source row is left intact for audit). The new row carries
+    /// `promoted_from = <source id>`.
+    pub async fn promote_note(
+        &self,
+        source_id: &str,
+        new_scope: NoteScope,
+        new_feature_id: Option<&str>,
+        new_content: Option<&str>,
+    ) -> Result<String> {
+        if new_scope == NoteScope::Feature && new_feature_id.is_none() {
+            return Err(Error::InvalidInput(
+                "promote_note: scope='feature' requires feature_id".into(),
+            ));
+        }
+
+        let new_id = uuid::Uuid::new_v4().to_string();
+        let now = unix_now();
+
+        let conn = self.conn.lock().await;
+        let (kind, content, symbols, files, session_id, tool_name): (
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+        ) = conn
+            .query_row(
+                "SELECT kind, content, symbols, files, session_id, tool_name
+                 FROM notes WHERE id = ?",
+                params![source_id],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                },
+            )
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Error::InvalidInput(format!(
+                    "promote_note: source id not found: {source_id}"
+                )),
+                other => sqlite_err(other),
+            })?;
+
+        let final_content = new_content.unwrap_or(&content);
+        conn.execute(
+            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, tool_name, scope, feature_id, promoted_from)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                new_id,
+                kind,
+                final_content,
+                symbols,
+                files,
+                session_id,
+                now,
+                tool_name,
+                new_scope.as_str(),
+                new_feature_id,
+                source_id,
+            ],
+        )
+        .map_err(sqlite_err)?;
+        bump_notes_version(&conn)?;
+
+        Ok(new_id)
+    }
+
+    /// Look up a single note by id, or return `None` when not found.
+    ///
+    /// Used by compaction-recovery paths: a digest references notes by id
+    /// (`[note:abc-123]`), and the agent calls this to fetch the full row
+    /// only for those it needs.
+    pub async fn read_note_by_id(&self, id: &str) -> Result<Option<NoteRow>> {
+        let conn = self.conn.lock().await;
+        let row = conn
+            .query_row(
+                "SELECT id, kind, content, symbols, files, session_id,
+                        created_at, tool_name, retired_at, retired_by,
+                        scope, feature_id, promoted_from
+                 FROM notes WHERE id = ?",
+                params![id],
+                map_note_row,
+            )
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(sqlite_err(other)),
+            })?;
+        Ok(row)
+    }
+
+    /// Returns the current monotonic counter that increments on every note
+    /// write / delete / retire. Used by the digest cache in M1.4 to key
+    /// cached digests without invalidating on every call.
+    pub async fn notes_version(&self) -> Result<i64> {
+        let conn = self.conn.lock().await;
+        let v: i64 = conn
+            .query_row(
+                "SELECT val FROM meta_counters WHERE key = 'notes_version'",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(sqlite_err)?;
+        Ok(v)
     }
 
     // ── Note reads ─────────────────────────────────────────────────────────
@@ -206,13 +428,37 @@ impl NoteStore {
         limit: usize,
         include_retired: bool,
     ) -> Result<Vec<NoteRow>> {
+        self.read_notes_scoped(
+            query,
+            symbols,
+            files,
+            kinds,
+            limit,
+            include_retired,
+            &ScopeFilter::default(),
+        )
+        .await
+    }
+
+    /// Query notes with an additional scope predicate.
+    ///
+    /// All filters from [`read_notes`] apply. Scope filtering is a post-match
+    /// step (like `kinds`) because the FTS5 index is not aware of the `scope`
+    /// column — see `idx_notes_scope_feature` for the recency path.
+    pub async fn read_notes_scoped(
+        &self,
+        query: Option<&str>,
+        symbols: &[String],
+        files: &[String],
+        kinds: &[String],
+        limit: usize,
+        include_retired: bool,
+        scope_filter: &ScopeFilter,
+    ) -> Result<Vec<NoteRow>> {
         let cap = limit.min(100);
         // Over-fetch when FTS is active to leave room for post-filtering.
         let fetch_limit = if query.is_some() { cap * 10 } else { cap };
 
-        // No table alias — works in both the FTS path (n.retired_at and
-        // retired_at are equivalent since only notes has this column) and the
-        // recency path (no alias defined).
         let retired_clause = if include_retired {
             ""
         } else {
@@ -222,7 +468,6 @@ impl NoteStore {
         let rows: Vec<NoteRow> = {
             let conn = self.conn.lock().await;
             if let Some(q) = query.filter(|s| !s.is_empty()) {
-                // FTS5 path — BM25 relevance order.
                 let sql = format!(
                     "WITH ranked AS (
                         SELECT rowid, bm25(notes_fts) AS rank
@@ -231,7 +476,8 @@ impl NoteStore {
                         LIMIT {fetch_limit}
                     )
                     SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
-                           n.created_at, n.tool_name, n.retired_at, n.retired_by
+                           n.created_at, n.tool_name, n.retired_at, n.retired_by,
+                           n.scope, n.feature_id, n.promoted_from
                     FROM notes n
                     JOIN ranked r ON r.rowid = n.rowid
                     WHERE 1=1 {retired_clause}
@@ -245,10 +491,10 @@ impl NoteStore {
                 }
                 out
             } else {
-                // Recency path.
                 let sql = format!(
                     "SELECT id, kind, content, symbols, files, session_id,
-                            created_at, tool_name, retired_at, retired_by
+                            created_at, tool_name, retired_at, retired_by,
+                            scope, feature_id, promoted_from
                      FROM notes
                      WHERE 1=1 {retired_clause}
                      ORDER BY created_at DESC
@@ -266,12 +512,12 @@ impl NoteStore {
             }
         };
 
-        // Post-filter: kinds, symbols, files (conn lock released above).
         let mut out: Vec<NoteRow> = rows
             .into_iter()
             .filter(|n| kinds.is_empty() || kinds.iter().any(|k| k == &n.kind))
             .filter(|n| symbols.is_empty() || symbols.iter().any(|s| n.symbols.contains(s)))
             .filter(|n| files.is_empty() || files.iter().any(|f| n.files.contains(f)))
+            .filter(|n| scope_matches(n, scope_filter))
             .collect();
 
         out.truncate(cap);
@@ -302,7 +548,8 @@ impl NoteStore {
 
         let sql = format!(
             "SELECT id, kind, content, symbols, files, session_id,
-                    created_at, tool_name, retired_at, retired_by
+                    created_at, tool_name, retired_at, retired_by,
+                    scope, feature_id, promoted_from
              FROM notes
              WHERE kind = 'reflection'
                AND created_at >= ?
@@ -339,6 +586,9 @@ impl NoteStore {
         let affected = conn
             .execute("DELETE FROM notes WHERE id = ?", params![id])
             .map_err(sqlite_err)?;
+        if affected > 0 {
+            bump_notes_version(&conn)?;
+        }
         Ok(affected > 0)
     }
 
@@ -372,6 +622,7 @@ impl NoteStore {
             params![now, reason, tool_name],
         )
         .map_err(sqlite_err)?;
+        bump_notes_version(&conn)?;
 
         Ok(ids)
     }
@@ -390,6 +641,9 @@ impl NoteStore {
                 params![now, reason, id],
             )
             .map_err(sqlite_err)?;
+        if affected > 0 {
+            bump_notes_version(&conn)?;
+        }
         Ok(affected > 0)
     }
 
@@ -401,7 +655,8 @@ impl NoteStore {
         let mut stmt = conn
             .prepare(
                 "SELECT id, kind, content, symbols, files, session_id,
-                        created_at, tool_name, retired_at, retired_by
+                        created_at, tool_name, retired_at, retired_by,
+                        scope, feature_id, promoted_from
                  FROM notes
                  WHERE kind = 'todo' AND retired_at IS NULL
                  ORDER BY created_at DESC
@@ -548,6 +803,48 @@ CREATE INDEX IF NOT EXISTS idx_log_called  ON tool_call_log(called_at DESC);
 PRAGMA user_version = 1;
 ";
 
+// ─── Schema migration v1 → v2 (ATOS scoping) ─────────────────────────────────
+
+/// Applied to databases at `user_version = 1`. Adds ATOS scope/feature_id
+/// columns to `notes`, creates the `meta_counters` singleton for the
+/// `notes_version` clock, and provisions the `note_digest_cache` table
+/// used by the Fast-slot digest in M1.4.
+///
+/// Idempotent across a single install: the migration is gated by
+/// `PRAGMA user_version < 2` in `NoteStore::open`.
+const MIGRATION_V2: &str = "
+BEGIN;
+
+ALTER TABLE notes ADD COLUMN scope         TEXT NOT NULL DEFAULT 'global';
+ALTER TABLE notes ADD COLUMN feature_id    TEXT;
+ALTER TABLE notes ADD COLUMN promoted_from TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_notes_scope_feature ON notes(scope, feature_id);
+CREATE INDEX IF NOT EXISTS idx_notes_feature
+    ON notes(feature_id) WHERE feature_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS meta_counters (
+    key TEXT PRIMARY KEY,
+    val INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO meta_counters(key, val) VALUES ('notes_version', 0);
+
+CREATE TABLE IF NOT EXISTS note_digest_cache (
+    scope_hash    TEXT    NOT NULL,
+    notes_version INTEGER NOT NULL,
+    digest_md     TEXT    NOT NULL,
+    token_count   INTEGER NOT NULL,
+    created_at    INTEGER NOT NULL,
+    PRIMARY KEY(scope_hash, notes_version)
+);
+CREATE INDEX IF NOT EXISTS idx_digest_created
+    ON note_digest_cache(created_at DESC);
+
+PRAGMA user_version = 2;
+
+COMMIT;
+";
+
 // ─── Schema migration v0 → v1 ────────────────────────────────────────────────
 
 /// Applied to existing databases whose `user_version = 0`. Uses SQLite's
@@ -638,6 +935,45 @@ fn sqlite_err(e: rusqlite::Error) -> Error {
     Error::Io(std::io::Error::other(format!("NoteStore sqlite: {e}")))
 }
 
+/// Returns `true` when the note matches the caller's scope predicate.
+///
+/// Default `ScopeFilter` (no scopes, no feature_id) always matches — the
+/// legacy [`NoteStore::read_notes`] wrapper uses this to preserve behavior.
+fn scope_matches(note: &NoteRow, filter: &ScopeFilter) -> bool {
+    if filter.scopes.is_empty() && filter.feature_id.is_none() {
+        return true;
+    }
+
+    if !filter.scopes.is_empty() {
+        let ok = filter.scopes.iter().any(|s| s.as_str() == note.scope);
+        if !ok {
+            return false;
+        }
+    }
+
+    if let Some(fid) = &filter.feature_id {
+        // Feature_id predicate only applies to feature-scoped rows. Global /
+        // session rows pass through regardless so a `scopes = [global,
+        // feature]` + `feature_id = X` query returns globals + one feature.
+        if note.scope == "feature" && note.feature_id.as_deref() != Some(fid.as_str()) {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Monotonic counter bumped on every note mutation. Callers must hold the
+/// NoteStore lock so the bump is effectively atomic with the mutation.
+fn bump_notes_version(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "UPDATE meta_counters SET val = val + 1 WHERE key = 'notes_version'",
+        [],
+    )
+    .map_err(sqlite_err)?;
+    Ok(())
+}
+
 fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
     let symbols_json: String = row.get(3)?;
     let files_json: String = row.get(4)?;
@@ -662,6 +998,9 @@ fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
         tool_name: row.get(7)?,
         retired_at: row.get(8)?,
         retired_by: row.get(9)?,
+        scope: row.get(10)?,
+        feature_id: row.get(11)?,
+        promoted_from: row.get(12)?,
     })
 }
 
@@ -1018,5 +1357,229 @@ mod tests {
         store.log_tool_call("sess", "lint_status", "success").await.unwrap();
         let rows = store.tool_call_log_rows(0, 10).await.unwrap();
         assert_eq!(rows.len(), 1);
+    }
+
+    // ── ATOS scope tests (M1.1) ──────────────────────────────────────────
+
+    #[tokio::test]
+    async fn scoped_note_persists_scope_and_feature_id() {
+        let store = make_store().await;
+        let id = store
+            .write_note_scoped(
+                "decision",
+                "prefer UNION over sequential queries",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Feature,
+                Some("atos-version-flag"),
+            )
+            .await
+            .unwrap();
+
+        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let note = notes.iter().find(|n| n.id == id).unwrap();
+        assert_eq!(note.scope, "feature");
+        assert_eq!(note.feature_id.as_deref(), Some("atos-version-flag"));
+        assert!(note.promoted_from.is_none());
+    }
+
+    #[tokio::test]
+    async fn feature_scope_requires_feature_id() {
+        let store = make_store().await;
+        let result = store
+            .write_note_scoped(
+                "decision",
+                "bad",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Feature,
+                None,
+            )
+            .await;
+        assert!(matches!(result, Err(Error::InvalidInput(_))));
+    }
+
+    #[tokio::test]
+    async fn legacy_write_note_defaults_to_global_scope() {
+        let store = make_store().await;
+        let id = store
+            .write_note("invariant", "never panic", vec![], vec![], "s1")
+            .await
+            .unwrap();
+        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let note = notes.iter().find(|n| n.id == id).unwrap();
+        assert_eq!(note.scope, "global");
+        assert!(note.feature_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn scope_filter_selects_feature_and_global() {
+        let store = make_store().await;
+
+        // A global invariant visible to every feature.
+        store
+            .write_note_scoped(
+                "invariant",
+                "global rule",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+            )
+            .await
+            .unwrap();
+        // Two features' worth of feature-scoped notes.
+        store
+            .write_note_scoped(
+                "decision",
+                "feat-A decision",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Feature,
+                Some("feat-a"),
+            )
+            .await
+            .unwrap();
+        store
+            .write_note_scoped(
+                "decision",
+                "feat-B decision",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Feature,
+                Some("feat-b"),
+            )
+            .await
+            .unwrap();
+
+        let filter = ScopeFilter {
+            scopes: vec![NoteScope::Global, NoteScope::Feature],
+            feature_id: Some("feat-a".into()),
+        };
+        let notes = store
+            .read_notes_scoped(None, &[], &[], &[], 10, false, &filter)
+            .await
+            .unwrap();
+
+        let contents: Vec<_> = notes.iter().map(|n| n.content.as_str()).collect();
+        assert!(contents.contains(&"global rule"));
+        assert!(contents.contains(&"feat-A decision"));
+        assert!(!contents.contains(&"feat-B decision"));
+        assert_eq!(notes.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn notes_version_counter_increments_on_writes() {
+        let store = make_store().await;
+        let v0 = store.notes_version().await.unwrap();
+
+        store
+            .write_note("decision", "a", vec![], vec![], "s1")
+            .await
+            .unwrap();
+        let v1 = store.notes_version().await.unwrap();
+        assert_eq!(v1, v0 + 1);
+
+        let id = store
+            .write_note_scoped(
+                "decision",
+                "b",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+            )
+            .await
+            .unwrap();
+        let v2 = store.notes_version().await.unwrap();
+        assert_eq!(v2, v1 + 1);
+
+        store.delete_note(&id).await.unwrap();
+        let v3 = store.notes_version().await.unwrap();
+        assert_eq!(v3, v2 + 1);
+
+        // No-op delete should not bump.
+        store.delete_note("nonexistent").await.unwrap();
+        let v4 = store.notes_version().await.unwrap();
+        assert_eq!(v4, v3);
+    }
+
+    #[tokio::test]
+    async fn promote_note_creates_new_row_and_tags_origin() {
+        let store = make_store().await;
+        let src = store
+            .write_note_scoped(
+                "decision",
+                "feature-local decision",
+                vec!["Foo".into()],
+                vec![],
+                "s1",
+                NoteScope::Feature,
+                Some("feat-a"),
+            )
+            .await
+            .unwrap();
+
+        let promoted_id = store
+            .promote_note(&src, NoteScope::Global, None, Some("rewritten as global rule"))
+            .await
+            .unwrap();
+
+        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let promoted = notes.iter().find(|n| n.id == promoted_id).unwrap();
+        assert_eq!(promoted.scope, "global");
+        assert_eq!(promoted.content, "rewritten as global rule");
+        assert_eq!(promoted.promoted_from.as_deref(), Some(src.as_str()));
+        // Source row still exists at feature scope.
+        let source = notes.iter().find(|n| n.id == src).unwrap();
+        assert_eq!(source.scope, "feature");
+    }
+
+    #[tokio::test]
+    async fn migration_v1_to_v2_adds_scope_columns_and_counter() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Build a v1 database manually (stops short of MIGRATION_V2).
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(SCHEMA_NEW).unwrap();
+            conn.execute(
+                "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at)
+                 VALUES ('old-1','decision','pre-ATOS note','[]','[]','s0',1000,1000)",
+                [],
+            )
+            .unwrap();
+            let v: i64 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(v, 1, "baseline should be at v1");
+        }
+
+        // Reopen — MIGRATION_V2 runs.
+        let store = NoteStore::open(&db_path).unwrap();
+
+        // Old row preserved; gains scope='global', feature_id=NULL via column default.
+        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let old = notes.iter().find(|n| n.id == "old-1").unwrap();
+        assert_eq!(old.scope, "global");
+        assert!(old.feature_id.is_none());
+
+        // notes_version counter is available.
+        let v = store.notes_version().await.unwrap();
+        assert!(v >= 0);
+
+        // note_digest_cache table exists (query returns 0 rows, no error).
+        let conn = Connection::open(&db_path).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM note_digest_cache", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
     }
 }

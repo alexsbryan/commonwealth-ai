@@ -46,6 +46,9 @@ pub mod lint_results;
 pub mod notes;
 #[cfg(feature = "treesitter")]
 pub mod project_docs;
+// ATOS feature + milestone store.
+#[cfg(feature = "treesitter")]
+pub mod features;
 
 // ─── Public API Re-exports ──────────────────────────────
 
@@ -97,6 +100,8 @@ pub use update::lint_watcher::LintWatcher;
 pub use update::project_index_watcher::ProjectIndexWatcher;
 
 #[cfg(feature = "treesitter")]
-pub use notes::{NoteStore, NoteRow, ToolCallLogRow};
+pub use notes::{NoteRow, NoteScope, NoteStore, ScopeFilter, ToolCallLogRow};
 #[cfg(feature = "treesitter")]
-pub use project_docs::{ProjectDocsStore, DocResult, find_markdown_files};
+pub use project_docs::{DocResult, ProjectDocsStore, find_markdown_files};
+#[cfg(feature = "treesitter")]
+pub use features::{FeatureRow, FeatureState, FeatureStore, MilestoneRow};

@@ -50,6 +50,9 @@ pub enum Error {
     #[error("Shard mismatch: {0}")]
     ShardMismatch(String),
 
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     /// The ingest task observed a cancellation signal via
     /// [`CancellationFlag`](crate::CancellationFlag) and returned
     /// without completing. Not a failure per se — the caller (Desktop
