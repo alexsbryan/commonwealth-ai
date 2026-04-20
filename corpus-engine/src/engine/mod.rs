@@ -1,13 +1,66 @@
 //! CorpusEngine — orchestrates acquisition, extraction, chunking,
 //! embedding, and indexing of corpus data.
 
+pub mod article_stats;
 mod cancel;
 mod ingest;
 
 #[cfg(feature = "treesitter")]
 pub mod reindex;
 
+pub use article_stats::ArticleStats;
 pub use cancel::{CancellationFlag, CancellationRegistry};
+
+/// Consolidated on-disk state for a single corpus — what
+/// [`CorpusEngine::corpus_disk_status`] reports.
+///
+/// Intentionally flat and serde-friendly so the commonwealth-api
+/// `/internal/corpus/status` handler can drop it straight into its
+/// response.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CorpusDiskStatus {
+    pub corpus_id: String,
+    /// Canonical `<corpus>/` directory exists with a meta file.
+    pub canonical_present: bool,
+    /// Partition-of-self `<corpus>-partition-<self>/` directory
+    /// exists with a meta file.
+    pub partition_present: bool,
+    /// `ingestion_in_progress=true` on the canonical meta.
+    pub canonical_in_progress: bool,
+    /// `ingestion_in_progress=true` on the partition-of-self meta.
+    pub partition_in_progress: bool,
+    /// Latest `committed_iter_pos` across partition-of-self and
+    /// canonical (partition preferred when both are present).
+    pub committed_iter_pos: u64,
+    /// ZIP shard indices known to have been fully committed —
+    /// merged across canonical and every partition subdirectory
+    /// for this corpus.
+    pub shards_completed: Vec<usize>,
+    /// Total JSONL shard count inside the source ZIP. `0` when the
+    /// corpus does not have a multi-shard source (HF parquet, plain
+    /// JSONL, code corpora) — the UI treats that as "no shard-based
+    /// percent estimate available".
+    pub shards_total: usize,
+}
+
+impl CorpusDiskStatus {
+    /// Best-effort completion estimate in `[0.0, 1.0]`, or `None`
+    /// when the on-disk signals don't support a sensible estimate.
+    ///
+    /// Current heuristic: for multi-shard JSONL corpora the shard
+    /// completion ratio is both honest and responsive (processed
+    /// shards tick up coarsely but reliably). For everything else we
+    /// return `None` and let the UI fall back to a phase label — the
+    /// raw `IngestProgress` percent isn't reliable enough to bless as
+    /// a standalone completion estimate without more context.
+    pub fn estimated_fraction(&self) -> Option<f32> {
+        if self.shards_total > 0 {
+            Some(self.shards_completed.len() as f32 / self.shards_total as f32)
+        } else {
+            None
+        }
+    }
+}
 
 use std::path::{Path, PathBuf};
 
@@ -275,6 +328,125 @@ impl CorpusEngine {
             })
             .count();
         Ok(count)
+    }
+
+    /// Return a cached `ArticleStats` for a corpus's extracted JSONL
+    /// without doing any I/O beyond reading the sidecar file. Returns
+    /// `None` when no sidecar exists yet or when the sidecar's
+    /// `(mtime, size)` don't match the current source file.
+    ///
+    /// Callers that want to guarantee a stats value should fall
+    /// through to [`compute_article_stats`](Self::compute_article_stats)
+    /// on `None`.
+    pub fn cached_article_stats(&self, corpus_id: &str) -> Option<ArticleStats> {
+        let jsonl_path = self
+            .index_dir
+            .join("_downloads")
+            .join(format!("{corpus_id}.extracted.jsonl"));
+        article_stats::read_sidecar(&jsonl_path)
+    }
+
+    /// Sample the first ~100 MB of `<corpus>.extracted.jsonl` and
+    /// write a sidecar recording the article / section counts. This
+    /// is the `None`-case fallback for
+    /// [`cached_article_stats`](Self::cached_article_stats) — it
+    /// does 1–2 s of blocking I/O on first call per corpus, then
+    /// subsequent calls are sidecar-only.
+    ///
+    /// Returns `None` when no extracted JSONL exists yet (e.g. fresh
+    /// install still downloading). Errors from the sampler are
+    /// logged and coalesced to `None` so the UI falls back to an
+    /// indeterminate progress indicator rather than crashing out.
+    ///
+    /// **Blocking**: synchronous I/O. Wrap in `spawn_blocking` when
+    /// called from an async context.
+    pub fn compute_article_stats(&self, corpus_id: &str) -> Option<ArticleStats> {
+        let jsonl_path = self
+            .index_dir
+            .join("_downloads")
+            .join(format!("{corpus_id}.extracted.jsonl"));
+        if !jsonl_path.exists() {
+            return None;
+        }
+        if let Some(cached) = article_stats::read_sidecar(&jsonl_path) {
+            return Some(cached);
+        }
+        match article_stats::sample_article_stats(&jsonl_path) {
+            Ok(stats) => Some(stats),
+            Err(e) => {
+                tracing::warn!(
+                    corpus_id,
+                    error = %e,
+                    "compute_article_stats: sampler failed — UI percent will stay indeterminate"
+                );
+                None
+            }
+        }
+    }
+
+    /// Consolidated on-disk status for a single corpus, suitable for
+    /// rendering a status row in the Desktop settings UI.
+    ///
+    /// Reads every source in one pass — the canonical `_corpus_meta.json`,
+    /// the partition-of-self `_corpus_meta.json`, the merged
+    /// `processed_shards` view, and the ZIP's shard count — so
+    /// clients don't have to make four round-trips through the engine.
+    /// Everything is best-effort: a missing or unreadable file yields
+    /// the default value for the corresponding field rather than an
+    /// error, because the UI can still render a partial row.
+    pub fn corpus_disk_status(&self, corpus_id: &str) -> CorpusDiskStatus {
+        let canonical = self.index_dir.join(corpus_id);
+        let partition = self.partition_path(corpus_id);
+
+        let read_meta = |path: &Path| -> Option<serde_json::Value> {
+            let raw = std::fs::read_to_string(path.join("_corpus_meta.json")).ok()?;
+            serde_json::from_str(&raw).ok()
+        };
+
+        let canonical_meta = read_meta(&canonical);
+        let partition_meta = read_meta(&partition);
+
+        let canonical_present = canonical_meta.is_some();
+        let partition_present = partition_meta.is_some();
+
+        let canonical_in_progress = canonical_meta
+            .as_ref()
+            .and_then(|m| m["ingestion_in_progress"].as_bool())
+            .unwrap_or(false);
+        let partition_in_progress = partition_meta
+            .as_ref()
+            .and_then(|m| m["ingestion_in_progress"].as_bool())
+            .unwrap_or(false);
+
+        // committed_iter_pos: prefer the partition's (newer work
+        // goes there under the unified primitive), fall back to the
+        // canonical's for legacy resumes.
+        let committed_iter_pos = partition_meta
+            .as_ref()
+            .and_then(|m| m["committed_iter_pos"].as_u64())
+            .or_else(|| {
+                canonical_meta
+                    .as_ref()
+                    .and_then(|m| m["committed_iter_pos"].as_u64())
+            })
+            .unwrap_or(0);
+
+        let shards_completed = self.corpus_processed_shards(corpus_id);
+        // ZIP shard count is only relevant for JSONL multi-shard
+        // corpora (Wikipedia); other sources surface 0 here, which
+        // the UI interprets as "no shard-based percent estimate".
+        let shards_total = self.jsonl_source_shard_count(corpus_id).unwrap_or(0);
+
+        CorpusDiskStatus {
+            corpus_id: corpus_id.to_string(),
+            canonical_present,
+            partition_present,
+            canonical_in_progress,
+            partition_in_progress,
+            committed_iter_pos,
+            shards_completed,
+            shards_total,
+        }
     }
 
     /// Return the set of ZIP shard indices that have been fully
@@ -1594,6 +1766,61 @@ mod tests {
             }"#,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn corpus_disk_status_reports_partition_in_progress() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-nodeA")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia-partition-nodeA/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":1234,"processed_shards":[0,1,2]}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir,
+            mock_embed_fn(),
+        )
+        .with_self_node_id("nodeA");
+
+        let status = engine.corpus_disk_status("wikipedia");
+        assert!(status.partition_present);
+        assert!(status.partition_in_progress);
+        assert!(!status.canonical_present);
+        assert_eq!(status.committed_iter_pos, 1234);
+        assert_eq!(status.shards_completed, vec![0, 1, 2]);
+        // No ZIP on disk → shards_total is 0, estimated_fraction is None.
+        assert_eq!(status.shards_total, 0);
+        assert_eq!(status.estimated_fraction(), None);
+    }
+
+    #[test]
+    fn corpus_disk_status_reports_legacy_canonical_resume() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":3651456,"processed_shards":[]}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir,
+            mock_embed_fn(),
+        )
+        .with_self_node_id("nodeA");
+
+        let status = engine.corpus_disk_status("wikipedia");
+        assert!(status.canonical_present);
+        assert!(status.canonical_in_progress);
+        assert!(!status.partition_present);
+        assert_eq!(status.committed_iter_pos, 3651456);
+        assert!(status.shards_completed.is_empty());
     }
 
     #[test]
