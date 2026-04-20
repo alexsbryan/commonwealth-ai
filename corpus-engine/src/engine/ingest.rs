@@ -300,8 +300,17 @@ impl CorpusEngine {
             .into_iter()
             .collect();
 
+        // Per-run embed batch size — can be tuned per machine via env var
+        // without a rebuild. Lower values reduce Metal GPU pressure at the
+        // cost of slightly more Rust-to-GPU round trips.
+        let embed_batch_size: usize = std::env::var("SOVEREIGN_EMBED_BATCH_SIZE")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(EMBED_BATCH_SIZE);
+
         // Two-tier buffering:
-        //  1. pending_chunks/texts: accumulate until EMBED_BATCH_SIZE, then embed
+        //  1. pending_chunks/texts: accumulate until embed_batch_size, then embed
         //  2. index_buffer: accumulate embedded chunks until INDEX_FLUSH_SIZE, then write
         // This decouples embedding frequency from LanceDB insert frequency,
         // drastically reducing fragment count and compaction stalls.
@@ -314,14 +323,14 @@ impl CorpusEngine {
         if resume_iter_pos == 0 {
             tracing::info!(
                 corpus = %recipe.corpus.id,
-                embed_batch = EMBED_BATCH_SIZE,
+                embed_batch = embed_batch_size,
                 index_flush = INDEX_FLUSH_SIZE,
                 batch_embed = use_batch_embed,
                 "Starting embed+index pipeline"
             );
             eprintln!(
                 "[{}] Starting embed+index pipeline (embed_batch={}, index_flush={}, batch_embed={})",
-                recipe.corpus.id, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE, use_batch_embed,
+                recipe.corpus.id, embed_batch_size, INDEX_FLUSH_SIZE, use_batch_embed,
             );
         }
 
@@ -454,7 +463,7 @@ impl CorpusEngine {
                 }
 
                 // Tier 1: embed when we have enough pending chunks.
-                if pending_chunks.len() >= EMBED_BATCH_SIZE {
+                if pending_chunks.len() >= embed_batch_size {
                     let embed_start = Instant::now();
                     let embed_count = pending_texts.len();
                     let embeddings = if let Some(ref batch_embed) = self.batch_embed {
