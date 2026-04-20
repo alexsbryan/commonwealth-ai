@@ -325,16 +325,34 @@
             Remove
           </button>
         {:else if inProgress}
-          {#if progress[corpus.id]?.percent > 0}
-            <div class="progress-bar">
-              <div
-                class="progress-fill"
-                style="width: {progress[corpus.id].percent}%"
-              ></div>
-            </div>
-          {:else}
-            <span class="status-text">Working…</span>
-          {/if}
+          <div class="inprogress-controls">
+            {#if progress[corpus.id]?.percent > 0}
+              <div class="progress-bar">
+                <div
+                  class="progress-fill"
+                  style="width: {progress[corpus.id].percent}%"
+                ></div>
+              </div>
+            {:else}
+              <span class="status-text">Working…</span>
+            {/if}
+            <!--
+              Cancel and Remove both route through `removeCorpus`, which
+              POSTs `/internal/corpus/cancel` on the local daemon. That
+              endpoint fires the ingest's cancellation flag, waits for
+              the task to exit cleanly, then wipes the canonical
+              directory AND every `<corpus>-partition-*` sibling. No
+              separate "restart" affordance — the new flow is cancel →
+              click Install again.
+            -->
+            <button
+              class="action-btn cancel"
+              onclick={() => handleRemove(corpus.id)}
+              title="Stop this ingest and delete any partial data on this machine"
+            >
+              Cancel
+            </button>
+          </div>
         {:else}
           <button class="action-btn install" onclick={() => handleInstall(corpus.id)}>
             Install
@@ -489,6 +507,21 @@
   .action-btn.remove:hover {
     border-color: var(--error, #ef4444);
     color: var(--error, #ef4444);
+  }
+  .action-btn.cancel {
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .action-btn.cancel:hover {
+    border-color: var(--error, #ef4444);
+    color: var(--error, #ef4444);
+  }
+  .inprogress-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
   }
   .progress-bar {
     width: 80px;

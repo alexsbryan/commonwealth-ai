@@ -2271,105 +2271,198 @@ pub async fn diagnose_corpus(
     Ok(engine.diagnose_indexes().await)
 }
 
+/// Local daemon URL used by corpus install/cancel/progress commands.
+/// The internal API is always bound on `127.0.0.1:9742` (see
+/// `sovereign-mesh::daemon`). Keeping this constant here rather than
+/// threading a config value means a stale Desktop build can never
+/// point at the wrong port after a daemon update.
+const DAEMON_INTERNAL_URL: &str = "http://127.0.0.1:9742";
+
+/// Kick off a corpus install via the daemon's unified install
+/// endpoint, then poll the daemon's progress map so the Svelte UI
+/// keeps getting `corpus-progress` events whether the ingest was
+/// spawned by this Desktop tab or by the daemon's
+/// auto-collaborate loop (Desktop-closed case).
+///
+/// The daemon is the single owner of ingest lifecycle: Desktop is a
+/// thin client that says "start" and then watches. Clicking Install a
+/// second time while the daemon is already ingesting this corpus is a
+/// no-op because `/internal/corpus/install` is idempotent — the
+/// daemon returns `spawned: false` and the poller picks up the
+/// already-running task's progress.
 #[tauri::command]
 pub async fn install_corpus(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<(), String> {
-    let engine_guard = state.corpus_engine.read().await;
-    let engine = match engine_guard.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    drop(engine_guard);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
 
+    // 1. Tell the daemon to start (or resume) the ingest.
+    let install_url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/install");
+    let resp = client
+        .post(&install_url)
+        .json(&serde_json::json!({ "corpus_id": corpus_id }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/corpus/install: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/corpus/install returned {status}: {body}"
+        ));
+    }
+
+    // 2. Flip the UI state immediately so the Install button reacts
+    //    before the first poll completes.
+    let initial = CorpusProgressPayload {
+        corpus_id: corpus_id.clone(),
+        phase: "downloading".into(),
+        percent: 0.0,
+        chunks_processed: 0,
+        message: Some("Starting…".into()),
+    };
+    if let Ok(mut map) = state.install_progress.try_write() {
+        map.insert(corpus_id.clone(), initial.clone());
+    }
+    let _ = app_handle.emit("corpus-progress", initial);
+
+    // 3. Poll the daemon's progress snapshot until the corpus either
+    //    completes, fails, or is cancelled (i.e. disappears from the
+    //    snapshot and from active_ingests).
     let state_ref = Arc::clone(&state);
     let cid = corpus_id.clone();
-
+    let app = app_handle.clone();
     tokio::spawn(async move {
-        // Mark as installing right away so the UI flips state before the
-        // first IngestProgress event arrives.
-        {
-            let initial = CorpusProgressPayload {
-                corpus_id: cid.clone(),
-                phase: "downloading".into(),
-                percent: 0.0,
-                chunks_processed: 0,
-                message: Some("Starting…".into()),
-            };
-            if let Ok(mut map) = state_ref.install_progress.try_write() {
-                map.insert(cid.clone(), initial.clone());
-            }
-            let _ = app_handle.emit("corpus-progress", initial);
-        }
-
-        // The progress callback runs from inside the engine's async tasks.
-        let progress_cid = cid.clone();
-        let progress_handle = app_handle.clone();
-        let progress_state = Arc::clone(&state_ref);
-        let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
-            let payload = ingest_progress_to_payload(&progress_cid, &p);
-            if let Ok(mut map) = progress_state.install_progress.try_write() {
-                map.insert(payload.corpus_id.clone(), payload.clone());
-            }
-            let _ = progress_handle.emit("corpus-progress", payload);
-        });
-
-        let spec = corpus_engine::CorpusSpec::Builtin(cid.clone());
-        match engine.ingest(&spec, Some(progress_cb)).await {
-            Ok(result) => {
-                tracing::info!(
-                    "Corpus '{cid}' installed: {} chunks, {:.1} MB, {}s",
-                    result.chunks_created,
-                    result.index_size_bytes as f64 / 1_048_576.0,
-                    result.duration_secs,
-                );
-                let payload = CorpusProgressPayload {
-                    corpus_id: cid.clone(),
-                    phase: "complete".into(),
-                    percent: 100.0,
-                    chunks_processed: result.chunks_created,
-                    message: Some(format!("Done in {}s", result.duration_secs)),
-                };
-                if let Ok(mut map) = state_ref.install_progress.try_write() {
-                    map.insert(cid.clone(), payload.clone());
-                }
-                let _ = app_handle.emit("corpus-progress", payload);
-            }
-            Err(e) => {
-                tracing::error!("Corpus '{cid}' install failed: {e}");
-                let payload = CorpusProgressPayload {
-                    corpus_id: cid.clone(),
-                    phase: "failed".into(),
-                    percent: 0.0,
-                    chunks_processed: 0,
-                    message: Some(e.to_string()),
-                };
-                if let Ok(mut map) = state_ref.install_progress.try_write() {
-                    map.insert(cid.clone(), payload.clone());
-                }
-                let _ = app_handle.emit("corpus-progress", payload);
-            }
-        }
+        poll_corpus_progress(client, state_ref, app, cid).await;
     });
 
     Ok(())
 }
 
+/// Poll `/internal/corpus/progress` and forward each tick to the
+/// Tauri `corpus-progress` event channel. Terminates when the corpus
+/// either hits a `Complete` phase, is wiped by a cancel, or stops
+/// appearing in the snapshot for a grace window (terminal-by-absence).
+async fn poll_corpus_progress(
+    client: reqwest::Client,
+    state: Arc<AppState>,
+    app: tauri::AppHandle,
+    corpus_id: String,
+) {
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/progress");
+    let poll_interval = std::time::Duration::from_millis(500);
+    let mut consecutive_absent = 0u32;
+    // ~3 s grace window: the ingest task clears from active_ingests
+    // a few ticks before its final `Complete` payload lands in the
+    // progress map in rare races. Giving absence a handful of ticks
+    // before declaring "done by disappearance" prevents a flicker
+    // back to `not_installed`.
+    const MAX_ABSENT_TICKS: u32 = 6;
+
+    loop {
+        tokio::time::sleep(poll_interval).await;
+        let Ok(resp) = client.get(&url).send().await else {
+            // Daemon unreachable — back off and retry. Could be a
+            // restart in flight; the poll loop recovers on its own.
+            continue;
+        };
+        let Ok(body) = resp.json::<ProgressSnapshot>().await else {
+            continue;
+        };
+
+        match body.progress.get(&corpus_id) {
+            Some(progress) => {
+                consecutive_absent = 0;
+                let payload = ingest_progress_to_payload(&corpus_id, progress);
+                let is_complete = matches!(payload.phase.as_str(), "complete");
+                if let Ok(mut map) = state.install_progress.try_write() {
+                    map.insert(corpus_id.clone(), payload.clone());
+                }
+                let _ = app.emit("corpus-progress", payload);
+                if is_complete {
+                    return;
+                }
+            }
+            None => {
+                consecutive_absent += 1;
+                if consecutive_absent >= MAX_ABSENT_TICKS {
+                    // Absent from the snapshot long enough that a
+                    // terminal event must have landed (or the cancel
+                    // wipe ran). Emit a synthetic "complete" only if
+                    // the last recorded phase wasn't already terminal
+                    // — otherwise just stop.
+                    let already_terminal = state
+                        .install_progress
+                        .read()
+                        .await
+                        .get(&corpus_id)
+                        .map(|p| p.phase == "complete" || p.phase == "failed")
+                        .unwrap_or(false);
+                    if !already_terminal {
+                        if let Ok(mut map) = state.install_progress.try_write() {
+                            map.remove(&corpus_id);
+                        }
+                        let _ = app.emit(
+                            "corpus-progress",
+                            CorpusProgressPayload {
+                                corpus_id: corpus_id.clone(),
+                                phase: "complete".into(),
+                                percent: 100.0,
+                                chunks_processed: 0,
+                                message: Some("Done".into()),
+                            },
+                        );
+                    }
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/// Wire-level DTO for the daemon's progress snapshot. We deserialize
+/// the variant tag-free enum form that `IngestProgress`'s default
+/// derive emits.
+#[derive(Debug, serde::Deserialize)]
+struct ProgressSnapshot {
+    progress: std::collections::HashMap<String, corpus_engine::IngestProgress>,
+}
+
+/// Cancel (and wipe) a corpus on this node via the daemon.
+///
+/// Replaces the old direct `engine.remove_index` call — that path
+/// ignored in-flight ingest tasks and left `<corpus>-partition-*/`
+/// dirs on disk. The daemon route handles both (signal cancel, await
+/// task exit, wipe canonical + every partition sibling).
 #[tauri::command]
 pub async fn remove_corpus(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<(), String> {
-    let engine_guard = state.corpus_engine.read().await;
-    let engine = match engine_guard.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    drop(engine_guard);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
 
-    engine.remove_index(&corpus_id).map_err(|e| e.to_string())?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/cancel");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "corpus_id": corpus_id }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/corpus/cancel: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/corpus/cancel returned {status}: {body}"
+        ));
+    }
 
     // Clear any stale progress entry so the UI returns to "not_installed".
     if let Ok(mut map) = state.install_progress.try_write() {

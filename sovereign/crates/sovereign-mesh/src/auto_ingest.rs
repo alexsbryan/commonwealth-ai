@@ -78,23 +78,21 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             continue;
         };
 
-        // Filter out partition-scoped corpora
-        // (`<base>-partition-node-<hex>`). Those are the OUTPUT of
-        // collaborative ingestion — this daemon's own
-        // `corpus_collaborate` spawn writes them into dedicated
-        // subdirs. `in_progress_ingestions()` surfaces them because
-        // each carries an `ingestion_in_progress: true` meta, but
-        // feeding them back into `corpus_collaborate` is meaningless:
-        // there is no recipe registered for `wikipedia-partition-
-        // node-<hex>`, so every call logs "no compatible peers yet —
-        // reason: No source manifest for corpus ...". Exclude at the
-        // source so only user-visible corpora drive collaboration.
-        let is_partition_corpus = |id: &str| id.contains("-partition-node-");
-        let in_progress_vec: Vec<String> = engine
-            .in_progress_ingestions()
-            .into_iter()
-            .filter(|id| !is_partition_corpus(id))
-            .collect();
+        // Under the unified-ingest primitive (Layer 1),
+        // `in_progress_ingestions()` already maps both on-disk shapes
+        // to the user-visible corpus id:
+        //   - Canonical `<corpus>/` (legacy resume) → `<corpus>`.
+        //   - Partition-of-self `<corpus>-partition-<self>/` → `<corpus>`.
+        //   - Peer partitions `<corpus>-partition-<other>/` → skipped
+        //     (the coordinator's `coordinate_merge` owns those, not
+        //     this loop).
+        //
+        // So no additional filtering is needed here — every id the
+        // engine returns is one we can legitimately dispatch to
+        // `corpus_collaborate`. The previous `-partition-node-` filter
+        // was a belt-and-suspenders for a shape `in_progress_ingestions`
+        // never produces under the new model.
+        let in_progress_vec: Vec<String> = engine.in_progress_ingestions();
         let in_progress: HashSet<String> = in_progress_vec.iter().cloned().collect();
         let new_ingest_appeared = in_progress
             .iter()
@@ -148,19 +146,40 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         let in_progress = in_progress_vec;
 
         for corpus_id in &in_progress {
-            // Skip if this node is mid-ingest AND neither a new peer
-            // nor a new in-progress corpus just appeared. (When
-            // either appears we must still call corpus_collaborate:
-            // that handler checks active_ingests itself and skips the
-            // local partition spawn while still dispatching work to
-            // the peer or for the freshly-started corpus.)
+            // Ensure local work is running. The daemon is the single
+            // owner of "resume my in-progress partition-of-self" under
+            // the unified ingest primitive — Desktop used to spawn its
+            // own engine.ingest() task, but that process dies when the
+            // user closes the app. If the daemon survives and sees a
+            // partition-of-self dir marked in-progress, it has to pick
+            // up the work itself; otherwise Wikipedia never finishes
+            // unless the user leaves Desktop open for hours.
+            //
+            // We skip this path when (a) an ingest task is already
+            // tracked in active_ingests — avoids double-spawn racing
+            // the LanceDB writer — or (b) there is no partition-of-self
+            // directory, which means the corpus id came from legacy
+            // canonical state that the engine's ingest() will continue
+            // writing in place.
+            if !active_ingests.contains(corpus_id) {
+                let partition_path = engine.partition_path(corpus_id);
+                if partition_path.exists() {
+                    spawn_local_ingest(state.clone(), corpus_id.clone()).await;
+                }
+            }
+
+            // Skip the peer-dispatch step when we're already ingesting
+            // AND neither a new peer nor a new in-progress corpus just
+            // appeared. (When either appears we still call
+            // corpus_collaborate so the freshly-arrived peer gets its
+            // share of work.)
             if active_ingests.contains(corpus_id)
                 && !new_peer_appeared
                 && !new_ingest_appeared
             {
                 tracing::debug!(
                     corpus = %corpus_id,
-                    "auto_ingest: ingest task is active and no new trigger — skipping"
+                    "auto_ingest: ingest task is active and no new trigger — skipping collaborate dispatch"
                 );
                 continue;
             }
@@ -228,5 +247,33 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         }
 
         tokio::time::sleep(CHECK_INTERVAL).await;
+    }
+}
+
+/// Spawn a local ingest for `corpus_id` via the unified
+/// [`commonwealth_api::routes_internal::spawn_corpus_install`]
+/// helper.
+///
+/// Used by the auto-collaborate loop to pick up partition-of-self
+/// dirs that no other process is currently ingesting — typically
+/// after a daemon restart while the Desktop app is closed, or in a
+/// headless CLI daemon that never had a Desktop tab to drive the
+/// install. Sharing the helper with Desktop's `/internal/corpus/install`
+/// route means there is exactly one spawn path, so the cancel route,
+/// the progress map, and `active_ingests` bookkeeping all stay
+/// consistent regardless of who initiated the install.
+async fn spawn_local_ingest(state: AppState, corpus_id: String) {
+    use commonwealth_api::routes_internal::spawn_corpus_install;
+    let spawned = spawn_corpus_install(state, corpus_id.clone()).await;
+    if spawned {
+        tracing::info!(
+            corpus = %corpus_id,
+            "auto_ingest: kicked off local ingest via unified install helper"
+        );
+    } else {
+        tracing::debug!(
+            corpus = %corpus_id,
+            "auto_ingest: unified install helper reported already-active — leaving alone"
+        );
     }
 }
