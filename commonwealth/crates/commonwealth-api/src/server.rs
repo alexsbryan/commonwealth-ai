@@ -84,6 +84,14 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::corpus_cancel),
         )
         .route(
+            "/internal/corpus/install",
+            post(routes_internal::corpus_install),
+        )
+        .route(
+            "/internal/corpus/progress",
+            get(routes_internal::corpus_progress),
+        )
+        .route(
             "/internal/node/activity",
             post(routes_internal::node_activity),
         )

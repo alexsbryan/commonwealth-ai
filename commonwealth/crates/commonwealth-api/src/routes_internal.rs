@@ -560,6 +560,180 @@ pub async fn corpus_ingest_partition(
     )
 }
 
+/// POST /internal/corpus/install — start (or resume) a corpus ingest.
+///
+/// Thin entry point to [`CorpusEngine::ingest`]. Desktop's Tauri
+/// `install_corpus` command and the daemon's auto-collaborate loop
+/// both call this so there is exactly one place where an ingest gets
+/// spawned on this node: the shared helper
+/// [`spawn_corpus_install`]. That helper owns `active_ingests`
+/// bookkeeping and the `corpus_progress` map, so the
+/// `/internal/corpus/progress` route and the `/internal/corpus/cancel`
+/// route have consistent views of what is running.
+///
+/// Idempotent: a second call while the same corpus is already in
+/// `active_ingests` returns `spawned: false` without starting a new
+/// task. That's the "dual-path guard" — clicking Install in Desktop
+/// while the daemon is already working on this corpus just no-ops.
+pub async fn corpus_install(
+    State(state): State<AppState>,
+    Json(req): Json<InstallRequest>,
+) -> Result<Json<InstallResponse>, (StatusCode, Json<ErrorBody>)> {
+    if state.inner.corpus_engine.is_none() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: "no corpus engine available on this node".into(),
+            }),
+        ));
+    }
+    let spawned = spawn_corpus_install(state, req.corpus_id.clone()).await;
+    Ok(Json(InstallResponse {
+        corpus_id: req.corpus_id,
+        spawned,
+    }))
+}
+
+/// GET /internal/corpus/progress — snapshot of the latest progress
+/// event observed for every corpus currently in
+/// `active_ingests`, plus any corpus whose terminal `Complete` event
+/// has not yet been evicted by a subsequent install.
+///
+/// Clients poll this (the Desktop UI polls every ~500 ms while an
+/// install is in-flight). The response is a map keyed by corpus id
+/// for direct lookup; an empty object means nothing is currently
+/// ingesting on this node.
+pub async fn corpus_progress(
+    State(state): State<AppState>,
+) -> Json<ProgressSnapshotResponse> {
+    let snapshot = state.inner.corpus_progress.read().await.clone();
+    Json(ProgressSnapshotResponse { progress: snapshot })
+}
+
+/// Spawn an `engine.ingest` task for `corpus_id`, unifying the
+/// lifecycle bookkeeping across every entry point (install route,
+/// auto-collaborate loop, future CLI).
+///
+/// Responsibilities kept in this one place:
+///   - Idempotency guard: skip spawn when `corpus_id` is already in
+///     `active_ingests`. Returns `false` so the caller can surface
+///     "already ingesting" to the user.
+///   - `active_ingests` insert / remove around the spawn.
+///   - `corpus_progress` map updates via a progress callback that
+///     writes on every `IngestProgress` event.
+///   - Result logging with `Error::Cancelled` treated as a clean
+///     outcome (the `/internal/corpus/cancel` route has already
+///     wiped the partition when this returns).
+///
+/// Returns `true` when a new task was spawned, `false` when a task
+/// was already live for this corpus.
+pub async fn spawn_corpus_install(state: AppState, corpus_id: String) -> bool {
+    let Some(engine) = state.inner.corpus_engine.clone() else {
+        tracing::warn!(
+            corpus = %corpus_id,
+            "spawn_corpus_install: no corpus engine — ignoring"
+        );
+        return false;
+    };
+
+    {
+        let mut active = state.inner.active_ingests.write().await;
+        if active.contains(&corpus_id) {
+            tracing::info!(
+                corpus = %corpus_id,
+                "spawn_corpus_install: already active — not spawning a second task"
+            );
+            return false;
+        }
+        active.insert(corpus_id.clone());
+    }
+
+    let state_for_task = state.clone();
+    let corpus_id_for_task = corpus_id.clone();
+    tokio::spawn(async move {
+        // Progress callback: latest-wins per corpus. We hold the
+        // write lock only for the duration of an insert, so readers
+        // (the GET /internal/corpus/progress route) see an update
+        // on the next tick without blocking the ingest task.
+        let progress_state = state_for_task.clone();
+        let progress_cid = corpus_id_for_task.clone();
+        let progress_cb: corpus_engine::ProgressCallback =
+            Box::new(move |p| {
+                let progress_state = progress_state.clone();
+                let progress_cid = progress_cid.clone();
+                // The callback is synchronous but we need an async
+                // lock. Spawn a short-lived task to perform the
+                // insert; it finishes essentially instantly.
+                tokio::spawn(async move {
+                    progress_state
+                        .inner
+                        .corpus_progress
+                        .write()
+                        .await
+                        .insert(progress_cid, p);
+                });
+            });
+
+        let spec = corpus_engine::CorpusSpec::Builtin(corpus_id_for_task.clone());
+        let result = engine.ingest(&spec, Some(progress_cb)).await;
+
+        state_for_task
+            .inner
+            .active_ingests
+            .write()
+            .await
+            .remove(&corpus_id_for_task);
+
+        match result {
+            Ok(info) => tracing::info!(
+                corpus = %corpus_id_for_task,
+                chunks = info.chunks_created,
+                duration_secs = info.duration_secs,
+                "spawn_corpus_install: ingest complete"
+            ),
+            Err(corpus_engine::Error::Cancelled(_)) => {
+                // Cancel route handles the wipe; we only clean up
+                // the progress map so the UI returns to
+                // "not_installed" on the next poll.
+                state_for_task
+                    .inner
+                    .corpus_progress
+                    .write()
+                    .await
+                    .remove(&corpus_id_for_task);
+                tracing::info!(
+                    corpus = %corpus_id_for_task,
+                    "spawn_corpus_install: ingest cancelled"
+                );
+            }
+            Err(e) => tracing::warn!(
+                corpus = %corpus_id_for_task,
+                error = %e,
+                "spawn_corpus_install: ingest failed"
+            ),
+        }
+    });
+    true
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InstallRequest {
+    pub corpus_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InstallResponse {
+    pub corpus_id: String,
+    /// True when a new task was spawned, false when an ingest for
+    /// this corpus was already running on this node.
+    pub spawned: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProgressSnapshotResponse {
+    pub progress: std::collections::HashMap<String, corpus_engine::IngestProgress>,
+}
+
 /// POST /internal/corpus/cancel — user-initiated cancel + wipe.
 ///
 /// Flow:
@@ -627,6 +801,15 @@ pub async fn corpus_cancel(
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     }
+
+    // Drop the progress entry so polling clients see "not_installed"
+    // on their next tick instead of a stale final-embedding frame.
+    state
+        .inner
+        .corpus_progress
+        .write()
+        .await
+        .remove(&req.corpus_id);
 
     // Wipe canonical + every partition-* sibling for this corpus.
     if let Err(e) = engine.remove_corpus_everything(&req.corpus_id) {

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -102,6 +102,14 @@ pub struct AppStateInner {
     /// Prevents the auto-collaborate loop from firing a second
     /// `collaborate` call while a live ingest task is writing chunks.
     pub active_ingests: RwLock<HashSet<String>>,
+    /// Latest `IngestProgress` observed for each active corpus.
+    /// Populated by the daemon-side ingest spawn's progress callback
+    /// so the Desktop UI can poll `GET /internal/corpus/progress`
+    /// instead of taking a Tauri-event-only path that dies when the
+    /// app closes mid-ingest. Entries are retained until either a
+    /// terminal phase (`Complete`) overwrites them or an explicit
+    /// cancel wipes the corpus.
+    pub corpus_progress: RwLock<HashMap<String, corpus_engine::IngestProgress>>,
     /// Current inference availability (0.0–1.0). Written by sovereign-server's
     /// ActivityReporter via POST /internal/node/activity; read by gossip each
     /// round to populate NodeCapabilities.inference_availability. Default 1.0.
@@ -179,6 +187,7 @@ impl AppState {
                 app_registry,
                 app_port_map: AppPortMap::new(),
                 active_ingests: RwLock::new(HashSet::new()),
+                corpus_progress: RwLock::new(HashMap::new()),
                 local_inference_availability: RwLock::new(1.0_f32),
                 local_inference_capable: std::sync::atomic::AtomicBool::new(false),
                 on_mesh_mutation: None,
