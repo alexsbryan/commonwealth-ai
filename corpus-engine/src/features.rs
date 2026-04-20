@@ -71,18 +71,11 @@ pub struct FeatureRow {
     pub created_at: i64,
     pub updated_at: i64,
     pub archived_at: Option<i64>,
-<<<<<<< Updated upstream
-    /// Charter-declared opt-in for automatic red-team after the final
-    /// milestone passes. Defaults to `false`; the charter parser sets
-    /// it via `**Red team:** auto` in the preamble, and the CLI lifts
-    /// that into the DB via [`FeatureStore::set_auto_redteam`].
-=======
-    /// Charter opt-in for automated red-team runs. Stub: always `false`
-    /// until the `auto_redteam` column is added to the features schema
-    /// and `FeatureStore::set_auto_redteam` does a real UPDATE. The
-    /// call site in sovereign-cli::atos_cmd reads this to decide
+    /// Charter-declared opt-in for automated red-team runs after the
+    /// final milestone passes. Set by `FeatureStore::set_auto_redteam`;
+    /// the charter parser populates it via `**Red team:** auto` in the
+    /// preamble. `sovereign-cli::atos_cmd` reads this to decide
     /// whether to kick off `atos redteam` after a milestone completes.
->>>>>>> Stashed changes
     pub auto_redteam: bool,
 }
 
@@ -281,23 +274,6 @@ impl FeatureStore {
     /// Archive a feature (set state=archived and stamp archived_at).
     pub async fn archive(&self, id: &str, _reason: &str) -> Result<bool> {
         self.set_state(id, FeatureState::Archived).await
-    }
-
-    /// Set the `auto_redteam` opt-in flag on a feature row. Currently a
-    /// no-op stub — the column hasn't been added to the `features` schema
-    /// yet; commit 77c92a0 ("more atos") added the call site in
-    /// sovereign-atos/src/local.rs ahead of the storage migration. Returns
-    /// `Ok(false)` so callers don't observe a broken state. The real
-    /// implementation should (1) add `auto_redteam INTEGER NOT NULL DEFAULT 0`
-    /// to the features schema, (2) UPDATE it here, (3) surface it on
-    /// `FeatureRow`, (4) thread it through `ApprovalGate` / `atos run`.
-    pub async fn set_auto_redteam(&self, _id: &str, _enabled: bool) -> Result<bool> {
-        tracing::warn!(
-            "FeatureStore::set_auto_redteam is a compile-time stub — \
-             add the `auto_redteam` column to the features schema and \
-             wire the UPDATE before relying on the flag"
-        );
-        Ok(false)
     }
 
     // ── Feature reads ──────────────────────────────────────────────────────
@@ -879,16 +855,10 @@ fn map_feature_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeatureRow> {
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
         archived_at: row.get(8)?,
-<<<<<<< Updated upstream
         auto_redteam: {
             let v: i64 = row.get(9)?;
             v != 0
         },
-=======
-        // Column not yet in schema — default false. See
-        // `set_auto_redteam` for the storage-migration TODO.
-        auto_redteam: false,
->>>>>>> Stashed changes
     })
 }
 
