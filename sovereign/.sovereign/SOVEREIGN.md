@@ -2,7 +2,7 @@
 # Sovereign Code Intelligence
 
 MCP server: http://localhost:9741/mcp
-Corpus: sovereign
+Corpus: lcol-llm
 Languages: rust
 
 ## Tools
