@@ -429,19 +429,20 @@ impl EmbedSlot {
         // sequence exceeds its partition of the unified cache.
         let max_input_tokens = 1024;
         // Aggregate KV cache: `n_ctx` bounds the sum of tokens
-        // across all active sequences in a packed decode. 16384
-        // gives us 1024 tokens × 16 parallel slots, which covers
-        // the p99 chunk length for Wikipedia without forcing a
-        // second sub-batch per chunk.
-        let ctx_tokens: u32 = 16384;
+        // across all active sequences in a packed decode.
+        // 4096 = 1024 tokens × 4 parallel slots.  Keeping this at
+        // n_seq_max × max_input_tokens ensures every slot has a full
+        // 1024-token budget without saturating Metal's command buffers.
+        // The previous value (16384 × 16) filled the KV cache to 100%
+        // on every decode, which triggered ggml_metal_synchronize
+        // failures on machines with limited GPU memory.
+        let ctx_tokens: u32 = 4096;
         // Parallel slot count. The scheduler reserves
-        // `ctx_tokens / n_seq_max` tokens per slot, so raising
-        // this above 16 shrinks per-slot budget below what our
-        // chunker emits and trips `NoKvCacheSlot` at decode time.
-        // 16 gives a 16× throughput multiplier over the single-
-        // sequence path while staying comfortably inside
-        // llama.cpp's unified-cache semantics.
-        let n_seq_max: u32 = 16;
+        // `ctx_tokens / n_seq_max` tokens per slot. 4 keeps each Metal
+        // command buffer to 4 × 1024 = 4096 tokens — 25% of the old
+        // allocation — while the invariant ctx_tokens/n_seq_max ==
+        // max_input_tokens is preserved, so no KvCacheSlot errors.
+        let n_seq_max: u32 = 4;
         let model = Arc::new(model);
 
         let pooling_type = match embed_quirks.as_ref().map(|q| &q.pooling) {
@@ -456,7 +457,7 @@ impl EmbedSlot {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
-                .with_n_ubatch(2048)
+                .with_n_ubatch(512)
                 .with_n_seq_max(n_seq_max)
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)

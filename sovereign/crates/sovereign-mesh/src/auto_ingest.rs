@@ -146,6 +146,18 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         let in_progress = in_progress_vec;
 
         for corpus_id in &in_progress {
+            // Determine whether this node has local source data for this
+            // corpus (HF manifest or extracted JSONL cache).  Pure peer
+            // nodes that only receive ingest_partition assignments from a
+            // coordinator have neither — they must not attempt a local
+            // install, and there is nothing to coordinate from here.
+            let has_local_source = engine
+                .source_manifest(corpus_id)
+                .ok()
+                .flatten()
+                .is_some()
+                || engine.count_jsonl_articles(corpus_id).is_ok();
+
             // Ensure local work is running. The daemon is the single
             // owner of "resume my in-progress partition-of-self" under
             // the unified ingest primitive — Desktop used to spawn its
@@ -157,15 +169,30 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             //
             // We skip this path when (a) an ingest task is already
             // tracked in active_ingests — avoids double-spawn racing
-            // the LanceDB writer — or (b) there is no partition-of-self
+            // the LanceDB writer — (b) there is no partition-of-self
             // directory, which means the corpus id came from legacy
             // canonical state that the engine's ingest() will continue
-            // writing in place.
-            if !active_ingests.contains(corpus_id) {
+            // writing in place, or (c) this node has no local source
+            // data — calling spawn_corpus_install on a peer that was
+            // assigned a partition via ingest_partition would fail with
+            // "zero chunks" AND insert the corpus into active_ingests,
+            // causing the coordinator's next ingest_partition to bounce
+            // with a 409 and stall the whole pipeline.
+            if !active_ingests.contains(corpus_id) && has_local_source {
                 let partition_path = engine.partition_path(corpus_id);
                 if partition_path.exists() {
                     spawn_local_ingest(state.clone(), corpus_id.clone()).await;
                 }
+            }
+
+            // Peer-only node: no source data means no collaborate role here.
+            // The coordinator will send ingest_partition when it's ready.
+            if !has_local_source {
+                tracing::debug!(
+                    corpus = %corpus_id,
+                    "auto_ingest: no local source data — skipping collaborate (peer node, waiting for ingest_partition)"
+                );
+                continue;
             }
 
             // Skip the peer-dispatch step when we're already ingesting
