@@ -63,6 +63,16 @@ pub struct CorpusShardInfo {
 ///
 /// Persisted in gossip state as
 /// `AppState { app_id: "corpus-engine", key: "handoff:{handoff_id}" }`.
+///
+/// Two modes, selected by the `phase` field:
+/// - **Legacy static partitioning** (`phase == HandoffPhase::legacy_open()` with
+///   a non-empty `partitions`): each peer receives `ingest_partition` up-front
+///   with its assigned file_indices / article_range. Status reported via the
+///   per-partition `PartitionStatus` enum.
+/// - **Pull-based work queue** (`phase` progresses Open → Draining → Merging →
+///   Complete): the coordinator holds a queue of `WorkUnit`s in memory (see
+///   `commonwealth-knowledge::work_queue`). Peers pull units via HTTP. The
+///   `partitions` vec is empty; status lives in the queue, not in gossip.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IngestionHandoff {
     pub handoff_id: HandoffId,
@@ -70,26 +80,39 @@ pub struct IngestionHandoff {
     pub recipe_id: String,
     /// Embedding model that all participating nodes must share.
     pub embed_model: EmbedModelInfo,
+    /// Legacy static-partition assignments. Empty for pull-based handoffs.
+    #[serde(default)]
     pub partitions: Vec<IngestionPartition>,
     /// The node responsible for collecting peer shards and calling
     /// `merge_shards()`.  Defaults to the node with the lowest `NodeId`
-    /// among all partitions.  If that node goes offline, the next-lowest
-    /// `Complete` node takes over via LWW gossip update.
-    pub merge_assigned_to: Option<NodeId>,
+    /// among all partitions (legacy) or the coordinator (pull-based).
+    /// `merge_assigned_to` is the pre-rename field name; still accepted on
+    /// deserialize so old gossip blobs are readable during the upgrade window.
+    #[serde(alias = "merge_assigned_to")]
+    pub merge_leader: Option<NodeId>,
+    /// Pull-based handoff lifecycle phase. Defaults to the legacy "open"
+    /// marker for blobs that predate the pull-based path — the old static
+    /// `partitions` stay the source of truth in that case.
+    #[serde(default = "HandoffPhase::legacy_open")]
+    pub phase: HandoffPhase,
+    /// Monotonic counter bumped on every gossip write so peers can
+    /// distinguish a freshly-opened queue from a stale replay.
+    #[serde(default)]
+    pub queue_version: u32,
     pub created_at: u64,   // Unix timestamp (ms)
     pub updated_at: u64,   // Unix timestamp (ms)
 }
 
 impl IngestionHandoff {
-    /// Create a new handoff with the given partitions.
-    /// Sets `merge_assigned_to` to the lowest `NodeId` among all partitions.
+    /// Create a legacy static-partition handoff.
+    /// Sets `merge_leader` to the lowest `NodeId` among all partitions.
     pub fn new(
         corpus_id: impl Into<String>,
         recipe_id: impl Into<String>,
         embed_model: EmbedModelInfo,
         partitions: Vec<IngestionPartition>,
     ) -> Self {
-        let merge_assigned_to = partitions.iter().map(|p| p.node_id).min();
+        let merge_leader = partitions.iter().map(|p| p.node_id).min();
         let now = now_ms();
         Self {
             handoff_id: HandoffId::generate(),
@@ -97,14 +120,51 @@ impl IngestionHandoff {
             recipe_id: recipe_id.into(),
             embed_model,
             partitions,
-            merge_assigned_to,
+            merge_leader,
+            phase: HandoffPhase::legacy_open(),
+            queue_version: 0,
             created_at: now,
             updated_at: now,
         }
     }
+
+    /// Create a pull-based handoff announcement. The actual queue of units
+    /// lives on the coordinator's `WorkQueueManager`; this struct is only the
+    /// gossip-visible pointer that tells peers "there's work to pull here."
+    pub fn new_queue(
+        corpus_id: impl Into<String>,
+        recipe_id: impl Into<String>,
+        embed_model: EmbedModelInfo,
+        merge_leader: NodeId,
+    ) -> Self {
+        let now = now_ms();
+        Self {
+            handoff_id: HandoffId::generate(),
+            corpus_id: corpus_id.into(),
+            recipe_id: recipe_id.into(),
+            embed_model,
+            partitions: Vec::new(),
+            merge_leader: Some(merge_leader),
+            phase: HandoffPhase::Open,
+            queue_version: 1,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    /// True when this is a pull-based handoff (populated from `new_queue`
+    /// or deserialized from a peer that opened one).
+    pub fn is_queue_mode(&self) -> bool {
+        // Legacy handoffs set phase = legacy_open AND have non-empty partitions.
+        // Queue handoffs set phase through the real lifecycle AND have empty
+        // partitions. The disambiguator is `partitions.is_empty()` — phase
+        // alone is insufficient because legacy_open == Open.
+        self.partitions.is_empty() && matches!(self.phase, HandoffPhase::Open | HandoffPhase::Draining | HandoffPhase::Merging | HandoffPhase::Complete | HandoffPhase::Failed { .. })
+    }
 }
 
-/// One node's share of the ingestion work.
+/// One node's share of the ingestion work (legacy static partitioning).
+/// Pull-based handoffs use `WorkUnit` + the coordinator's queue instead.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IngestionPartition {
     pub node_id: NodeId,
@@ -118,7 +178,8 @@ pub struct IngestionPartition {
     pub status: PartitionStatus,
 }
 
-/// Lifecycle of a single partition.
+/// Lifecycle of a single partition (legacy static-partitioning path).
+/// Unused by the pull-based queue, which tracks status per-unit internally.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "state")]
 pub enum PartitionStatus {
@@ -137,6 +198,132 @@ pub enum PartitionStatus {
         reason: String,
     },
 }
+
+// -----------------------------------------------------------------
+// Pull-based work queue (new path)
+// -----------------------------------------------------------------
+
+/// Stable identifier for a work unit inside a handoff.
+/// Derived from its position in the initial queue (0..N).
+pub type UnitId = u32;
+
+/// One indivisible piece of ingestion work. Unifies the three corpus shapes
+/// so the queue can round-robin units across peers without branching on
+/// corpus type during dispatch.
+///
+/// The position in the coordinator's initial unit list becomes the unit's
+/// `UnitId` — stable for the lifetime of the handoff, used for merge-time
+/// dedup when lease expiry causes the same unit to be processed twice.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(tag = "kind", content = "value")]
+pub enum WorkUnit {
+    /// Index into the sorted HuggingFace parquet shard list for this recipe.
+    HfFile(usize),
+    /// Index into the ZIP archive's ordered shard table (e.g. one of the 76
+    /// `enwiki_namespace_*.jsonl` entries inside `wikipedia.zip`).
+    JsonlShard(usize),
+    /// Article range `[start, end)` for single-file JSONL corpora. The
+    /// coordinator slices the total article count into roughly-equal units
+    /// (typically ~32 per corpus) so there is enough granularity to load-
+    /// balance across peers.
+    JsonlRange { start: u64, end: u64 },
+}
+
+impl WorkUnit {
+    /// Convert to the `(file_indices, article_range)` pair that the
+    /// existing `ingest_with_overrides` / `ingest_partition` paths consume.
+    pub fn to_ingest_args(&self) -> (Option<Vec<usize>>, Option<(u64, u64)>) {
+        match self {
+            WorkUnit::HfFile(i) => (Some(vec![*i]), None),
+            WorkUnit::JsonlShard(i) => (Some(vec![*i]), None),
+            WorkUnit::JsonlRange { start, end } => (None, Some((*start, *end))),
+        }
+    }
+}
+
+/// Per-unit status inside the coordinator's queue. Lives in memory on the
+/// coordinator; not gossiped (too chatty for LWW; linearizable reads needed).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "state")]
+pub enum UnitStatus {
+    /// Waiting to be pulled by a peer. `prior_attempts` is 0 on the initial
+    /// enqueue and N after N failed leases — preserved across requeue so
+    /// `MAX_UNIT_ATTEMPTS` counts total attempts, not per-peer attempts.
+    Queued {
+        #[serde(default)]
+        prior_attempts: u32,
+    },
+    /// A peer holds the lease. Heartbeats extend `expires_at_ms`; the reaper
+    /// transitions this back to `Queued` (or terminal `Failed` after enough
+    /// attempts) when the lease lapses.
+    Leased {
+        peer: NodeId,
+        leased_at_ms: u64,
+        last_heartbeat_ms: u64,
+        expires_at_ms: u64,
+        /// 1 on first lease; incremented on every re-lease after expiry.
+        attempts: u32,
+    },
+    /// Peer successfully finished ingesting this unit.
+    Complete {
+        peer: NodeId,
+        completed_at_ms: u64,
+    },
+    /// Terminal after `MAX_UNIT_ATTEMPTS` failed leases. The merge leader
+    /// proceeds without this unit; the corpus will be missing its chunks.
+    Failed {
+        last_peer: NodeId,
+        reason: String,
+        attempts: u32,
+    },
+}
+
+/// Overall lifecycle of a pull-based handoff. Gossiped as part of
+/// `IngestionHandoff` so peers can recognize when a queue is open.
+///
+/// Transitions (coordinator-driven; peers observe):
+/// - `Open` → `Draining` when queue empties (some leases still outstanding)
+/// - `Draining` → `Merging` when all leases terminate (Complete or Failed)
+/// - `Merging` → `Complete` when the leader finishes `coordinate_merge`
+/// - Any → `Failed { reason }` on unrecoverable error
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "phase")]
+pub enum HandoffPhase {
+    Open,
+    Draining,
+    Merging,
+    Complete,
+    Failed { reason: String },
+}
+
+impl HandoffPhase {
+    /// Default for blobs predating the pull-based path. A legacy handoff's
+    /// partitions are the source of truth; this phase exists only so serde
+    /// deserializes older gossip without error.
+    pub fn legacy_open() -> Self {
+        HandoffPhase::Open
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, HandoffPhase::Complete | HandoffPhase::Failed { .. })
+    }
+}
+
+/// Outcome reported by a peer via `complete_unit`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum CompleteOutcome {
+    Complete,
+    Failed,
+}
+
+/// Maximum re-lease attempts before a unit becomes terminal `Failed`.
+/// Unit fails three peers in a row → the merge leader proceeds without it.
+pub const MAX_UNIT_ATTEMPTS: u32 = 3;
+
+/// Default lease duration in milliseconds (5 minutes). Heartbeats refresh
+/// the lease every `LEASE_MS / 3` on the peer side.
+pub const LEASE_MS: u64 = 300_000;
 
 fn now_ms() -> u64 {
     std::time::SystemTime::now()

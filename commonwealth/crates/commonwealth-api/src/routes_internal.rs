@@ -14,10 +14,23 @@ use commonwealth_discovery::membership;
 use commonwealth_inference::inference_plan::InferencePlan;
 use commonwealth_inference::oicp::{EmbedModelInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 use commonwealth_inference::scheduler::knowledge_assignment::{
+    build_work_units_hf, build_work_units_jsonl_sharded, build_work_units_jsonl_single,
     plan_collaborative_ingestion, plan_collaborative_ingestion_jsonl,
     plan_collaborative_ingestion_jsonl_sharded, CollaborativeIngestionError,
 };
 use commonwealth_knowledge::shard_manager::ShardManager;
+
+/// Env-flag gate for the pull-based work queue. Set to `1` or `true` on
+/// the coordinator to have `corpus_collaborate` build a unit queue
+/// instead of static per-peer partitions. Peers discover the open queue
+/// via the gossiped `IngestionHandoff` and run a pull loop.
+const PULL_QUEUE_ENV: &str = "SOVEREIGN_USE_WORK_QUEUE";
+
+fn use_pull_queue() -> bool {
+    std::env::var(PULL_QUEUE_ENV)
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
 
 use crate::state::AppState;
 
@@ -152,6 +165,130 @@ pub async fn corpus_collaborate(
     }
     let is_jsonl = !has_hf_manifest;
 
+    // ── Pull-based work queue path (env-gated) ──────────────────────────
+    //
+    // When SOVEREIGN_USE_WORK_QUEUE=1, build a flat unit list for this
+    // corpus shape and register it with `WorkQueueManager`. The returned
+    // handoff has `phase: Open` and an empty `partitions` vec — peers
+    // discover it via gossip and run a pull loop instead of receiving a
+    // one-shot `ingest_partition`. Compute-weighting emerges naturally
+    // because fast peers pull more often; fault tolerance comes from the
+    // lease reaper. See `commonwealth-knowledge::work_queue`.
+    if use_pull_queue() {
+        let units = if is_jsonl {
+            let shard_count = engine
+                .jsonl_source_shard_count(&req.corpus_id)
+                .unwrap_or(1);
+            if shard_count > 1 {
+                let processed: std::collections::HashSet<usize> = engine
+                    .corpus_processed_shards(&req.corpus_id)
+                    .into_iter()
+                    .collect();
+                let remaining: Vec<usize> = (0..shard_count)
+                    .filter(|i| !processed.contains(i))
+                    .collect();
+                build_work_units_jsonl_sharded(remaining)
+            } else {
+                let total_articles = jsonl_article_count.ok_or_else(|| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorBody {
+                            error: format!(
+                                "count_jsonl_articles failed for '{}'",
+                                req.corpus_id
+                            ),
+                        }),
+                    )
+                })?;
+                let committed_iter_pos =
+                    engine.corpus_committed_iter_pos(&req.corpus_id);
+                let current_article = engine
+                    .estimate_article_pos(&req.corpus_id, committed_iter_pos, 500)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ErrorBody { error: e.to_string() }),
+                        )
+                    })?
+                    .unwrap_or(0);
+                // Slice into ~32 units so a small mesh (2–4 peers) sees
+                // enough granularity for load-balancing without being chatty.
+                build_work_units_jsonl_single(current_article, total_articles, 32)
+            }
+        } else {
+            let remaining = engine
+                .remaining_source_files(&req.corpus_id)
+                .map_err(|e| {
+                    let status = if e.to_string().contains("No index found") {
+                        StatusCode::NOT_FOUND
+                    } else if e.to_string().contains("No source manifest") {
+                        StatusCode::UNPROCESSABLE_ENTITY
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    };
+                    (status, Json(ErrorBody { error: e.to_string() }))
+                })?;
+            build_work_units_hf(&remaining)
+        };
+
+        if units.is_empty() {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(ErrorBody {
+                    error: format!(
+                        "corpus '{}' has no remaining units — nothing to queue",
+                        req.corpus_id
+                    ),
+                }),
+            ));
+        }
+
+        let unit_count = units.len();
+        let handoff = IngestionHandoff::new_queue(
+            req.corpus_id.clone(),
+            recipe_id.to_string(),
+            local_embed_model.clone(),
+            self_id,
+        );
+
+        state
+            .inner
+            .work_queue
+            .register(
+                handoff.handoff_id,
+                handoff.corpus_id.clone(),
+                handoff.recipe_id.clone(),
+                handoff.embed_model.clone(),
+                units,
+                self_id,
+            )
+            .await;
+
+        // Gossip the handoff announcement so peers find it on their next
+        // auto_ingest tick. Write into the same `corpus-engine / handoff:*`
+        // key namespace the legacy path uses, so `ShardManager::load_handoff`
+        // keeps working unchanged.
+        let gossip_key = format!("handoff:{}", handoff.handoff_id);
+        if let Ok(bytes) = serde_json::to_vec(&handoff) {
+            let _ = state.inner.mesh_store.set(
+                "corpus-engine",
+                &gossip_key,
+                bytes::Bytes::from(bytes),
+                self_id,
+            );
+        }
+
+        tracing::info!(
+            corpus = %handoff.corpus_id,
+            handoff = %handoff.handoff_id,
+            units = unit_count,
+            "corpus_collaborate: pull-based queue registered"
+        );
+
+        return Ok(Json(handoff));
+    }
+
+    // ── Legacy static-partition path (default) ──────────────────────────
     let handoff = if is_jsonl {
         // ── JSONL path (Wikipedia) ──────────────────────────────────────────
         //
@@ -562,12 +699,16 @@ pub async fn corpus_ingest_partition(
     );
 
     // Spawn ingestion asynchronously — 202 Accepted returns immediately.
+    // Legacy static-partition path: no work-queue unit_id to stamp chunks
+    // with. Pull-based peers invoke `ingest_with_overrides` directly with
+    // `Some(unit_id)` from their own pull loop (see sovereign-mesh::auto_ingest).
     tokio::spawn(async move {
         let ingest_result = engine.ingest_with_overrides(
             &recipe_id,
             Some(file_indices),
             article_range,
             &output_path,
+            None,
             None,
         ).await;
         state_clone.inner.active_ingests.write().await
@@ -619,6 +760,220 @@ pub async fn corpus_ingest_partition(
             reason: None,
         }),
     )
+}
+
+// ── Pull-based work queue endpoints ────────────────────────
+//
+// Replaces the fire-and-forget `ingest_partition` dispatch with a
+// coordinator-held queue that peers pull from one unit at a time.
+// See `commonwealth-knowledge::work_queue` for the full design.
+// Peers call these three endpoints in a loop:
+//   1. `next_unit` — lease the next unit; 204 when queue drained
+//   2. `heartbeat` — refresh lease every LEASE_MS / 3 while ingesting
+//   3. `complete_unit` — report outcome (Complete or Failed)
+
+/// POST /internal/corpus/next_unit — lease the next work unit.
+pub async fn corpus_next_unit(
+    State(state): State<AppState>,
+    Json(req): Json<NextUnitRequest>,
+) -> (StatusCode, Json<NextUnitResponse>) {
+    use commonwealth_knowledge::QueueError;
+    match state
+        .inner
+        .work_queue
+        .next_unit(&req.handoff_id, req.peer_id)
+        .await
+    {
+        Ok(Some(leased)) => (
+            StatusCode::OK,
+            Json(NextUnitResponse::Leased {
+                unit_id: leased.unit_id,
+                unit: leased.unit,
+                lease_expires_at_ms: leased.lease_expires_at_ms,
+            }),
+        ),
+        Ok(None) => {
+            // Queue empty — include the current phase so the peer can
+            // distinguish "wait, more work is coming (Draining / Open)"
+            // from "done, move to merge (Merging / Complete)".
+            let phase = state
+                .inner
+                .work_queue
+                .snapshot(&req.handoff_id)
+                .await
+                .map(|q| q.phase)
+                .unwrap_or(commonwealth_core::knowledge::HandoffPhase::Complete);
+            (
+                StatusCode::NO_CONTENT,
+                Json(NextUnitResponse::Empty { phase }),
+            )
+        }
+        Err(QueueError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(NextUnitResponse::Error {
+                error: format!("no queue registered for handoff {}", req.handoff_id),
+            }),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(NextUnitResponse::Error {
+                error: format!("queue error: {e:?}"),
+            }),
+        ),
+    }
+}
+
+/// POST /internal/corpus/heartbeat — extend a lease.
+///
+/// Returns 410 Gone when the reaper reclaimed the lease (peer must
+/// abort the in-flight unit via its `CancellationFlag`).
+pub async fn corpus_heartbeat(
+    State(state): State<AppState>,
+    Json(req): Json<HeartbeatRequest>,
+) -> (StatusCode, Json<HeartbeatResponseBody>) {
+    use commonwealth_knowledge::{HeartbeatResult, QueueError};
+    match state
+        .inner
+        .work_queue
+        .heartbeat(&req.handoff_id, req.peer_id, req.unit_id)
+        .await
+    {
+        Ok(HeartbeatResult::Renewed { expires_at_ms }) => (
+            StatusCode::OK,
+            Json(HeartbeatResponseBody::Renewed {
+                lease_expires_at_ms: expires_at_ms,
+            }),
+        ),
+        Ok(HeartbeatResult::Reclaimed) => (
+            StatusCode::GONE,
+            Json(HeartbeatResponseBody::Reclaimed {
+                reason: "lease was reclaimed; abort current unit".into(),
+            }),
+        ),
+        Err(QueueError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(HeartbeatResponseBody::Reclaimed {
+                reason: "handoff not found".into(),
+            }),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(HeartbeatResponseBody::Reclaimed {
+                reason: format!("queue error: {e:?}"),
+            }),
+        ),
+    }
+}
+
+/// POST /internal/corpus/complete_unit — report unit outcome.
+///
+/// Returns 409 Conflict when the peer no longer holds the lease
+/// (the reaper already requeued it; the peer's local output may
+/// overlap with another peer's work — the merge step dedupes by
+/// content_hash + unit_id).
+pub async fn corpus_complete_unit(
+    State(state): State<AppState>,
+    Json(req): Json<CompleteUnitRequest>,
+) -> (StatusCode, Json<CompleteUnitResponse>) {
+    use commonwealth_core::knowledge::CompleteOutcome;
+    use commonwealth_knowledge::QueueError;
+    match state
+        .inner
+        .work_queue
+        .complete_unit(
+            &req.handoff_id,
+            req.peer_id,
+            req.unit_id,
+            match req.outcome {
+                CompleteOutcome::Complete => CompleteOutcome::Complete,
+                CompleteOutcome::Failed => CompleteOutcome::Failed,
+            },
+            req.reason.clone(),
+        )
+        .await
+    {
+        Ok(phase) => (
+            StatusCode::OK,
+            Json(CompleteUnitResponse::Ok { phase }),
+        ),
+        Err(QueueError::LeaseReclaimed) => (
+            StatusCode::CONFLICT,
+            Json(CompleteUnitResponse::Error {
+                error: "lease was already reclaimed by the reaper".into(),
+            }),
+        ),
+        Err(QueueError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(CompleteUnitResponse::Error {
+                error: format!("no queue registered for handoff {}", req.handoff_id),
+            }),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(CompleteUnitResponse::Error {
+                error: format!("queue error: {e:?}"),
+            }),
+        ),
+    }
+}
+
+// ── Pull-based queue request/response types ────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct NextUnitRequest {
+    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub peer_id: NodeId,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum NextUnitResponse {
+    Leased {
+        unit_id: commonwealth_core::knowledge::UnitId,
+        unit: commonwealth_core::knowledge::WorkUnit,
+        lease_expires_at_ms: u64,
+    },
+    Empty {
+        phase: commonwealth_core::knowledge::HandoffPhase,
+    },
+    Error {
+        error: String,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HeartbeatRequest {
+    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub peer_id: NodeId,
+    pub unit_id: commonwealth_core::knowledge::UnitId,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum HeartbeatResponseBody {
+    Renewed { lease_expires_at_ms: u64 },
+    Reclaimed { reason: String },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CompleteUnitRequest {
+    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub peer_id: NodeId,
+    pub unit_id: commonwealth_core::knowledge::UnitId,
+    pub outcome: commonwealth_core::knowledge::CompleteOutcome,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum CompleteUnitResponse {
+    Ok {
+        phase: commonwealth_core::knowledge::HandoffPhase,
+    },
+    Error {
+        error: String,
+    },
 }
 
 /// POST /internal/corpus/install — start (or resume) a corpus ingest.

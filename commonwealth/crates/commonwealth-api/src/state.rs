@@ -14,7 +14,9 @@ use commonwealth_core::mesh::{Mesh, NodeStatus};
 use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::model_aliases::ModelAliasTable;
 use commonwealth_inference::store_adapter::InferenceStateStore;
+use commonwealth_core::ids::HandoffId;
 use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
+use commonwealth_knowledge::WorkQueueManager;
 use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use futures::Stream;
@@ -151,6 +153,16 @@ pub struct AppStateInner {
     /// Commonwealth daemon — that path routes via the orchestrator
     /// to spawned `llama-server` processes instead.
     pub local_inference: Option<std::sync::Arc<dyn LocalInferenceService>>,
+    /// Pull-based corpus ingestion work queues keyed by `HandoffId`.
+    /// The coordinator's `corpus_collaborate` handler populates this with
+    /// a unit list; peers pull units via `POST /internal/corpus/next_unit`.
+    /// Only coordinators hold entries here — peer nodes never mutate it.
+    /// See `commonwealth-knowledge::work_queue` for the full design.
+    pub work_queue: Arc<WorkQueueManager>,
+    /// Handoff IDs for which this node is currently running a pull loop
+    /// (as a peer). Prevents `auto_ingest` from spawning duplicate pull
+    /// loops when the same open handoff is seen across multiple gossip ticks.
+    pub active_pull_loops: RwLock<HashSet<HandoffId>>,
 }
 
 impl AppState {
@@ -240,8 +252,21 @@ impl AppState {
                 local_inference_capable: std::sync::atomic::AtomicBool::new(false),
                 on_mesh_mutation: None,
                 local_inference: None,
+                work_queue: Arc::new(WorkQueueManager::new()),
+                active_pull_loops: RwLock::new(HashSet::new()),
             }),
         }
+    }
+
+    /// Spawn the coordinator's pull-based work-queue reaper. Must be called
+    /// once per daemon process after `new_with_platform_and_engine` so
+    /// leases whose heartbeats lapse get re-queued. Tests that don't use
+    /// the queue can skip this — the queue is dormant until a handoff is
+    /// registered. Returns the JoinHandle so the caller can abort at
+    /// shutdown, though the process normally exits before the handle
+    /// would matter.
+    pub fn start_work_queue_reaper(&self) -> tokio::task::JoinHandle<()> {
+        Arc::clone(&self.inner.work_queue).spawn_reaper()
     }
 
     /// This node's NodeId, by value. Cheap (atomic load + Arc deref).

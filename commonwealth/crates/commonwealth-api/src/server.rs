@@ -79,6 +79,20 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/corpus/ingest_partition",
             post(routes_internal::corpus_ingest_partition),
         )
+        // Pull-based work queue (new path; coexists with ingest_partition
+        // while `SOVEREIGN_USE_WORK_QUEUE` gates the coordinator).
+        .route(
+            "/internal/corpus/next_unit",
+            post(routes_internal::corpus_next_unit),
+        )
+        .route(
+            "/internal/corpus/heartbeat",
+            post(routes_internal::corpus_heartbeat),
+        )
+        .route(
+            "/internal/corpus/complete_unit",
+            post(routes_internal::corpus_complete_unit),
+        )
         .route(
             "/internal/corpus/cancel",
             post(routes_internal::corpus_cancel),

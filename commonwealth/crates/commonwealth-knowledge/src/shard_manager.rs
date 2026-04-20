@@ -170,10 +170,10 @@ impl ShardManager {
         }
 
         // Check if we are the merge leader.
-        if handoff.merge_assigned_to != Some(local_node_id) {
+        if handoff.merge_leader != Some(local_node_id) {
             tracing::info!(
                 handoff = %handoff_id,
-                leader = ?handoff.merge_assigned_to,
+                leader = ?handoff.merge_leader,
                 "coordinate_merge: not the merge leader, returning"
             );
             return Ok(None);

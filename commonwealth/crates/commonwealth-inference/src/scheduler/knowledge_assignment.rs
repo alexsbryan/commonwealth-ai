@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::{
     ChunkRange, IngestionHandoff, IngestionPartition, KnowledgeShardAssignment,
-    KnowledgeShardPlan, PartitionStatus,
+    KnowledgeShardPlan, PartitionStatus, WorkUnit,
 };
 use commonwealth_core::mesh::MemberRecord;
 use commonwealth_core::oicp::EmbedModelInfo;
@@ -332,6 +332,122 @@ pub fn plan_collaborative_ingestion_jsonl_sharded(
         local_embed_model.clone(),
         partitions,
     ))
+}
+
+// ─── Pull-based work-queue unit builders ────────────────────────────────────
+//
+// These helpers take the same inputs as the static planners above (remaining
+// files / remaining shards / article range) and turn them into a flat
+// `Vec<WorkUnit>` for the coordinator's `WorkQueueManager::register`. They
+// do NOT slice the work across peers — the queue does that at pull time,
+// weighted naturally by each peer's pull rate. Feasibility checks (embed-
+// model match, storage capacity) still live at the collaborate handler.
+
+/// Build work units for a Hugging Face parquet corpus from the list of
+/// source files that still need processing. One unit per file — the unit's
+/// payload is the file's index in the recipe's sorted manifest.
+pub fn build_work_units_hf(remaining: &[SourceFileRecord]) -> Vec<WorkUnit> {
+    remaining
+        .iter()
+        .map(|f| WorkUnit::HfFile(f.file_index))
+        .collect()
+}
+
+/// Build work units for a multi-shard JSONL corpus (Wikipedia ZIP's 76
+/// inner files). One unit per still-unprocessed shard index.
+pub fn build_work_units_jsonl_sharded(remaining_shards: Vec<usize>) -> Vec<WorkUnit> {
+    remaining_shards
+        .into_iter()
+        .map(WorkUnit::JsonlShard)
+        .collect()
+}
+
+/// Build work units for a single-file JSONL corpus by slicing the article
+/// index range `[start, end)` into roughly-equal sub-ranges. `target_units`
+/// caps the queue size — 32 gives enough granularity for 2–4 peers without
+/// being chatty. Returns a single unit when the range is shorter than
+/// `target_units` (e.g. a small resume-tail).
+pub fn build_work_units_jsonl_single(
+    start: u64,
+    end: u64,
+    target_units: u32,
+) -> Vec<WorkUnit> {
+    if end <= start {
+        return Vec::new();
+    }
+    let total = end - start;
+    let target = target_units.max(1) as u64;
+    let chunk_size = (total + target - 1) / target; // ceil(total / target)
+    let mut units = Vec::new();
+    let mut cursor = start;
+    while cursor < end {
+        let next = (cursor + chunk_size).min(end);
+        units.push(WorkUnit::JsonlRange {
+            start: cursor,
+            end: next,
+        });
+        cursor = next;
+    }
+    units
+}
+
+#[cfg(test)]
+mod work_unit_tests {
+    use super::*;
+
+    #[test]
+    fn hf_builder_one_unit_per_file() {
+        let files: Vec<SourceFileRecord> = (0..5)
+            .map(|i| SourceFileRecord {
+                file_index: i,
+                filename: format!("shard-{i}.parquet"),
+                size_bytes: 0,
+                status: corpus_engine::SourceFileStatus::Pending,
+            })
+            .collect();
+        let units = build_work_units_hf(&files);
+        assert_eq!(units.len(), 5);
+        assert_eq!(units[0], WorkUnit::HfFile(0));
+        assert_eq!(units[4], WorkUnit::HfFile(4));
+    }
+
+    #[test]
+    fn jsonl_sharded_builder_one_unit_per_shard() {
+        let units = build_work_units_jsonl_sharded(vec![3, 7, 11]);
+        assert_eq!(units.len(), 3);
+        assert_eq!(units[0], WorkUnit::JsonlShard(3));
+        assert_eq!(units[2], WorkUnit::JsonlShard(11));
+    }
+
+    #[test]
+    fn jsonl_single_builder_slices_range() {
+        let units = build_work_units_jsonl_single(0, 1000, 4);
+        assert_eq!(units.len(), 4);
+        assert_eq!(
+            units[0],
+            WorkUnit::JsonlRange { start: 0, end: 250 }
+        );
+        assert_eq!(
+            units[3],
+            WorkUnit::JsonlRange {
+                start: 750,
+                end: 1000,
+            }
+        );
+    }
+
+    #[test]
+    fn jsonl_single_builder_short_range_collapses() {
+        let units = build_work_units_jsonl_single(0, 5, 32);
+        // With chunk_size = ceil(5/32) = 1, we'd get 5 units of length 1.
+        assert_eq!(units.len(), 5);
+    }
+
+    #[test]
+    fn jsonl_single_builder_empty_on_degenerate_range() {
+        assert!(build_work_units_jsonl_single(100, 100, 8).is_empty());
+        assert!(build_work_units_jsonl_single(200, 100, 8).is_empty());
+    }
 }
 
 // ─── Existing knowledge shard assignment ────────────────────────────────────

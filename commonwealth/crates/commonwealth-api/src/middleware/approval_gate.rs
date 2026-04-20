@@ -100,6 +100,10 @@ impl Middleware for ApprovalGate {
                 approved_at: 0,
                 source: sovereign_atos::approval::ApprovalSource::Git,
                 witness: String::new(),
+                // Cached-approval path has no snapshot; callers that need
+                // content resolution fall back to `git show` via the
+                // witness. See `resolve_approved_spec_content` in
+                // sovereign-atos for the resolution priority.
                 spec_content_snapshot: None,
             })
         } else {
