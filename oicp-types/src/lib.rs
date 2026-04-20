@@ -321,7 +321,7 @@ pub struct ModelStatus {
 pub enum PoolingStrategy {
     /// Last non-padding token hidden state (Qwen3-Embedding).
     Last,
-    /// Average all non-padding hidden states (nomic-embed, mxbai).
+    /// Average all non-padding hidden states (mxbai, BERT-style embedders).
     Mean,
     /// [CLS] token hidden state (BERT-style models).
     Cls,
@@ -343,7 +343,7 @@ pub enum NormalizationStrategy {
 /// similarity across different embedding spaces is meaningless).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EmbedModelInfo {
-    /// Model identifier, e.g. `"nomic-embed-text-v2"`.
+    /// Model identifier, e.g. `"qwen3-embedding-0.6b"`.
     pub model_id: String,
     /// Output vector dimensionality.
     pub dimensions: usize,
