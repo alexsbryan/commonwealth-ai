@@ -63,6 +63,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "remove" => cmd_corpus_remove(&args[1..]).await,
         "status" => cmd_corpus_status().await,
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
+        "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
         other => {
             eprintln!("Unknown corpus subcommand: {other}");
             crate::util::help::print(&HELP_CORPUS);
@@ -145,10 +146,12 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("remove <id>",               "Remove an installed corpus"),
             ("status",                    "Show shard status for all corpora"),
             ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
+            ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
         ]),
         crate::util::help::HelpSection::Notes(
             "`reconstruct-manifest` accepts --source-dir <path> (default:\n\
-             ~/.sovereign/indexes/_downloads/<id>) and --yes (skip confirmation).",
+             ~/.sovereign/indexes/_downloads/<id>) and --yes (skip confirmation).\n\
+             `migrate-to-partition` accepts --dry-run to preview without touching disk.",
         ),
     ],
 };
@@ -491,6 +494,162 @@ async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
     println!("Next step: sovereign corpus collaborate {corpus_id}");
     println!();
     0
+}
+
+/// Migrate a pre-unified canonical index into a partition-of-self
+/// dir so the daemon's auto-collaborate loop will pick it up and
+/// participate in collaborative ingest alongside peers.
+///
+/// Before Layer 1's unified-ingest primitive, `engine.ingest()`
+/// wrote directly into `<index_dir>/<corpus_id>/`. New code writes
+/// into `<index_dir>/<corpus_id>-partition-<self_node_id>/` and
+/// promotes to canonical via `finalise_solo_ingest` or
+/// `coordinate_merge`. A user mid-ingest when they upgraded has a
+/// populated canonical and no partition-of-self — so auto_ingest
+/// skips spawning local work for them (`partition_path.exists()`
+/// is false), and `coordinate_merge` from a peer would collide on
+/// the output path.
+///
+/// This subcommand is the one-shot fix: it renames the canonical
+/// into the partition-of-self path and rewrites the meta so the
+/// new code treats it as "this node's share of a collaborative
+/// ingest in progress". No data is copied; the `chunks.lance`
+/// table is preserved verbatim.
+async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
+    let mut corpus_id: Option<String> = None;
+    let mut dry_run = false;
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--dry-run" => dry_run = true,
+            "--help" | "-h" => {
+                eprintln!(
+                    "Usage: sovereign corpus migrate-to-partition <corpus_id> [--dry-run]\n\
+                     \n\
+                     Renames ~/.sovereign/indexes/<id>/ to\n\
+                     ~/.sovereign/indexes/<id>-partition-<self_node_id>/ and\n\
+                     flips the meta to partition shape so the daemon's\n\
+                     auto-collaborate loop will resume the ingest and\n\
+                     peers can participate.\n\
+                     \n\
+                     The canonical must have ingestion_in_progress=true\n\
+                     (otherwise there's nothing to resume). Partition-of-self\n\
+                     must not already exist."
+                );
+                return 0;
+            }
+            other if !other.starts_with('-') => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(other.to_string());
+                }
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                eprintln!("Usage: sovereign corpus migrate-to-partition <corpus_id> [--dry-run]");
+                return 1;
+            }
+        }
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("Missing corpus ID");
+        eprintln!("Usage: sovereign corpus migrate-to-partition <corpus_id> [--dry-run]");
+        return 1;
+    };
+
+    // Resolve data_dir from the setup config so we read mesh.json
+    // + indexes from exactly the same place the running daemon does.
+    // Using `mesh_data_dir()` (platform data dir) would work for a
+    // Desktop-only deployment but not for CLI-daemon setups where
+    // `config.data.dir` commonly points at `~/.sovereign/`.
+    let config = match sovereign_core::setup_config::SetupConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "Failed to load setup config ({e}).\n\
+                 Run `sovereign setup` first so the migration knows which\n\
+                 data_dir your daemon uses."
+            );
+            return 1;
+        }
+    };
+    let data_dir = config.data.dir.clone();
+
+    // Load the self_node_id the daemon uses so the partition path
+    // matches. Prefer the explicit `<data_dir>/node_id` file; fall
+    // back to mesh.json's `self_node_id` for deployments that never
+    // materialised the separate file (the common path — the daemon
+    // only writes node_id when it generates a fresh one, and existing
+    // meshes carry the ID inside mesh.json).
+    let self_node_id = match sovereign_mesh::persist::load_node_id(&data_dir) {
+        Ok(Some(id)) => id,
+        _ => match sovereign_mesh::persist::load(&data_dir) {
+            Ok(Some(persisted)) => persisted.self_node_id,
+            Ok(None) => {
+                eprintln!(
+                    "No mesh state at {} — run `sovereign mesh create` or\n\
+                     `sovereign mesh join …` before migrating a corpus so the\n\
+                     daemon has a stable node id.",
+                    data_dir.display()
+                );
+                return 1;
+            }
+            Err(e) => {
+                eprintln!("Failed to load mesh state from {}: {e}", data_dir.display());
+                return 1;
+            }
+        },
+    };
+    let self_node_id_str = self_node_id.to_string();
+
+    let index_dir = data_dir.join("indexes");
+    let canonical = index_dir.join(&corpus_id);
+    let partition = index_dir.join(format!("{corpus_id}-partition-{self_node_id_str}"));
+
+    println!();
+    println!("Migration plan for '{corpus_id}':");
+    println!("  Canonical : {}", canonical.display());
+    println!("  Partition : {}", partition.display());
+    println!("  Node id   : {self_node_id_str}");
+
+    if dry_run {
+        println!();
+        println!("Dry run — no changes made. Re-run without --dry-run to apply.");
+        return 0;
+    }
+
+    // Engine just needs the directories + a no-op embed for this
+    // file-moving operation; ingestion won't run during migration.
+    let recipes_dir = data_dir.join("recipes");
+    let noop_embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
+        Box::pin(async { Ok(vec![0.0_f32; 0]) })
+    });
+    let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed)
+        .with_self_node_id(self_node_id_str.clone());
+
+    match engine.migrate_canonical_to_partition(&corpus_id) {
+        Ok(new_path) => {
+            println!();
+            println!("✓ Migration complete. New partition-of-self: {}", new_path.display());
+            println!();
+            println!("Next steps:");
+            println!(
+                "  - If the daemon is running, its auto-collaborate loop will\n\
+                   pick up the partition within 30 s and resume ingest."
+            );
+            println!(
+                "  - If the daemon is not running, start it with `sovereign daemon start`\n\
+                   (or reopen Sovereign Desktop)."
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!();
+            eprintln!("Migration failed: {e}");
+            1
+        }
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────
