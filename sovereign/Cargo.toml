@@ -9,6 +9,7 @@ members = [
     "crates/sovereign-server",
     "crates/sovereign-desktop/src-tauri",
     "crates/sovereign-cli",
+    "crates/sovereign-atos",
 ]
 
 [workspace.package]
@@ -22,6 +23,7 @@ sovereign-inference = { path = "crates/sovereign-inference" }
 sovereign-store = { path = "crates/sovereign-store" }
 sovereign-tools = { path = "crates/sovereign-tools" }
 sovereign-mesh = { path = "crates/sovereign-mesh" }
+sovereign-atos = { path = "crates/sovereign-atos" }
 corpus-engine = { path = "../corpus-engine" }
 
 # Shared dependencies
@@ -46,6 +48,8 @@ arc-swap = "1.7"
 # Portable `gethostname()` wrapper used as the default node name in
 # mesh create/join. Cheap, zero-runtime, no build-script dependencies.
 hostname = "0.4"
+# Markdown parsing for ATOS charter documents (sovereign-atos).
+pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
 
 # Fast dev builds: skip debug symbols (biggest single speedup for cargo check).
 [profile.dev]

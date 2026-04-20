@@ -1782,6 +1782,9 @@ async fn cmd_serve(args: &[String]) -> i32 {
     tools.register(Box::new(sovereign_tools::RecordAtosEventTool::new(
         Arc::clone(&features_store),
     )));
+    tools.register(Box::new(sovereign_tools::WriteRedteamFindingTool::new(
+        Arc::clone(&notes_store),
+    )));
 
     // ── Session reflection (feedback loop) ─────────────────────────────
     tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(

@@ -88,6 +88,8 @@ pub mod promote_note;
 pub mod read_note_digest;
 #[cfg(feature = "treesitter")]
 pub mod record_atos_event;
+#[cfg(feature = "treesitter")]
+pub mod write_redteam_finding;
 
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
@@ -138,6 +140,8 @@ pub use promote_note::PromoteNoteTool;
 pub use read_note_digest::ReadNoteDigestTool;
 #[cfg(feature = "treesitter")]
 pub use record_atos_event::RecordAtosEventTool;
+#[cfg(feature = "treesitter")]
+pub use write_redteam_finding::WriteRedteamFindingTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

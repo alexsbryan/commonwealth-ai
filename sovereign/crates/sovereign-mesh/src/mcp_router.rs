@@ -110,6 +110,8 @@ const MCP_TOOLS: &[&str] = &[
     "read_note_digest",
     // ATOS run ledger — driver-side tool-call telemetry.
     "record_atos_event",
+    // ATOS red-team findings.
+    "write_redteam_finding",
 ];
 
 /// Build the MCP router. Mounts `/mcp`, `/mcp/message`, and `/mcp/stats`

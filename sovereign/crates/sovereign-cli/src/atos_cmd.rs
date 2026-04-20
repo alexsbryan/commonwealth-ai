@@ -18,6 +18,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use corpus_engine::{FeatureStore, NoteScope, NoteStore};
+use sovereign_atos::{AtosOrchestrator, RunMode};
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -40,6 +41,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
     let rest = &args[1..];
     match first.as_str() {
         "provision" => cmd_provision(rest).await,
+        "next" => cmd_next(rest).await,
         "start-milestone" => cmd_start_milestone(rest).await,
         "end-milestone" => cmd_end_milestone(rest).await,
         "archive" => cmd_archive(rest).await,
@@ -48,6 +50,8 @@ pub async fn run_atos(args: &[String]) -> i32 {
         "diff" => cmd_diff(rest).await,
         "run-ab" => cmd_run_ab(rest).await,
         "probe-driver" => cmd_probe_driver(rest).await,
+        "report" => cmd_report(rest).await,
+        "teardown" => cmd_teardown(rest).await,
         other => {
             eprintln!("atos: unknown subcommand '{other}'");
             print_help();
@@ -63,7 +67,9 @@ fn print_help() {
          USAGE\n    sovereign atos <subcommand> [flags]\n\
          \n\
          SUBCOMMANDS\n\
+         \x20   provision <id>        --charter <path>   (structured charter: parses ## Milestones)\n\
          \x20   provision <id>        --title <t> --charter <path> [--sovereign-md <path>] [--stop-cmd <shell>]\n\
+         \x20   next [<feature-id>]   [--yes] [--driver claude|opencode]\n\
          \x20   start-milestone <id>  --brief <path> [--driver claude|opencode]\n\
          \x20   end-milestone <id>    [--ordinal N]\n\
          \x20   archive <id>          --reason <text>\n\
@@ -72,6 +78,8 @@ fn print_help() {
          \x20   diff <feature-id>     [--ordinal N]\n\
          \x20   run-ab <feature-id>   --brief <path> [--drivers claude,opencode]\n\
          \x20   probe-driver          [--url http://localhost:9741/v1/chat/completions]\n\
+         \x20   report <feature-id>   [--section milestone|red-team|epistemic|all] [--milestone N] [--out <path>]\n\
+         \x20   teardown <feature-id> [--auto] [--dry-run]\n\
          \n\
          FLAGS\n\
          \x20   --version             Print atos CLI version and exit.\n\
@@ -103,21 +111,26 @@ fn open_note_store() -> Result<Arc<NoteStore>, String> {
         .map_err(|e| format!("open notes.db at {}: {e}", path.display()))
 }
 
+/// Single-call orchestrator factory. Every M3+ subcommand path goes
+/// through this; the raw `open_feature_store` / `open_note_store`
+/// helpers above stay for now because the presentation code in
+/// `render_diff` / `render_artifact_checklist` still reads stores
+/// directly. Those will migrate in M3.6 when the report renderer
+/// becomes library-owned.
+fn open_orchestrator() -> Result<std::sync::Arc<sovereign_atos::LocalAtosOrchestrator>, String> {
+    let features = open_feature_store()?;
+    let notes = open_note_store()?;
+    Ok(std::sync::Arc::new(
+        sovereign_atos::LocalAtosOrchestrator::new(features, notes),
+    ))
+}
+
 // ─── Subcommand: provision ───────────────────────────────────────────────────
 
 async fn cmd_provision(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
-    let Some(id) = positional.first().cloned() else {
-        eprintln!("provision: missing <id>");
-        return 2;
-    };
-    let title = match get_flag(&flags, "--title") {
-        Some(t) => t,
-        None => {
-            eprintln!("provision: --title is required");
-            return 2;
-        }
-    };
+    let id_flag = positional.first().cloned();
+    let title_flag = get_flag(&flags, "--title");
     let charter_path = match get_flag(&flags, "--charter") {
         Some(p) => p,
         None => {
@@ -144,16 +157,46 @@ async fn cmd_provision(args: &[String]) -> i32 {
     };
     let stop_condition = get_flag(&flags, "--stop-cmd").unwrap_or_default();
 
-    let store = match open_feature_store() {
-        Ok(s) => s,
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
         Err(e) => {
             eprintln!("provision: {e}");
             return 1;
         }
     };
 
-    match store
-        .provision(&id, &title, &charter_md, &sovereign_md, &stop_condition)
+    // Structured path: when `--title` is NOT given, parse the charter.
+    // This preserves the M1/M2 parts-based flow for callers that want
+    // imperative control AND gives Yara's "write a charter, provision
+    // it" flow a first-class path.
+    if title_flag.is_none() {
+        match orc.provision_feature(&charter_md).await {
+            Ok(f) => {
+                let milestones = orc.list_milestones(&f.id).await.unwrap_or_default();
+                println!(
+                    "parsed {} milestone{} from charter",
+                    milestones.len(),
+                    if milestones.len() == 1 { "" } else { "s" }
+                );
+                println!("provisioned feature '{}': {}", f.id, f.title);
+                return 0;
+            }
+            Err(e) => {
+                eprintln!("provision: {e}");
+                return 1;
+            }
+        }
+    }
+
+    // Parts-based fallback. Requires <id> positional.
+    let Some(id) = id_flag else {
+        eprintln!("provision: missing <id> (required unless charter drives it)");
+        return 2;
+    };
+    let title = title_flag.unwrap_or_default();
+
+    match orc
+        .provision_feature_parts(&id, &title, &charter_md, &sovereign_md, &stop_condition)
         .await
     {
         Ok(f) => {
@@ -196,30 +239,48 @@ async fn cmd_start_milestone(args: &[String]) -> i32 {
     // spawn would increment the ordinal and `atos diff` would only
     // show one driver column.
     let reuse_last = flags.iter().any(|(k, _)| k == "reuse-last-milestone");
+    // `--milestone-id <uuid>` lets `cmd_next` target a specific
+    // charter-provisioned milestone without scanning or appending.
+    // Takes precedence over --reuse-last-milestone.
+    let milestone_id_override = get_flag(&flags, "--milestone-id");
+    // `--red-team` opens the run in `mode=redteam` so reports and
+    // teardown can exclude these runs from normal-progress gating.
+    // Driver env gains `ATOS_MODE=redteam` so the opencode plugin
+    // (M2.6) can restrict tool surface.
+    let red_team = flags.iter().any(|(k, _)| k == "red-team");
+    let run_mode = if red_team {
+        RunMode::Redteam
+    } else {
+        RunMode::Normal
+    };
     let driver = resolve_driver(driver_flag.as_deref()).await;
 
-    let feature_store = match open_feature_store() {
-        Ok(s) => s,
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
         Err(e) => {
             eprintln!("start-milestone: {e}");
             return 1;
         }
     };
 
-    if feature_store.get(&id).await.ok().flatten().is_none() {
+    if orc.get_feature(&id).await.ok().flatten().is_none() {
         eprintln!("start-milestone: feature '{id}' is not provisioned");
         return 1;
     }
 
-    let _ = feature_store
-        .set_state(&id, corpus_engine::FeatureState::Active)
-        .await;
-
-    let milestone = if reuse_last {
-        let list = feature_store
-            .list_milestones(&id)
-            .await
-            .unwrap_or_default();
+    let milestone = if let Some(mid) = milestone_id_override.as_ref() {
+        let list = orc.list_milestones(&id).await.unwrap_or_default();
+        match list.into_iter().find(|m| &m.id == mid) {
+            Some(m) => m,
+            None => {
+                eprintln!(
+                    "start-milestone: --milestone-id {mid} not found on feature '{id}'"
+                );
+                return 1;
+            }
+        }
+    } else if reuse_last {
+        let list = orc.list_milestones(&id).await.unwrap_or_default();
         match list.into_iter().last() {
             Some(m) => m,
             None => {
@@ -230,14 +291,14 @@ async fn cmd_start_milestone(args: &[String]) -> i32 {
             }
         }
     } else {
-        let ordinal = match feature_store.next_ordinal(&id).await {
+        let ordinal = match orc.next_ordinal(&id).await {
             Ok(n) => n,
             Err(e) => {
                 eprintln!("start-milestone: next_ordinal: {e}");
                 return 1;
             }
         };
-        match feature_store.add_milestone(&id, ordinal, &brief_md).await {
+        match orc.add_milestone(&id, ordinal, &brief_md).await {
             Ok(m) => m,
             Err(e) => {
                 eprintln!("start-milestone: {e}");
@@ -246,14 +307,14 @@ async fn cmd_start_milestone(args: &[String]) -> i32 {
         }
     };
     let ordinal = milestone.ordinal;
-    let _ = feature_store.mark_started(&milestone.id).await;
+    let _ = orc.mark_milestone_started(&milestone.id).await;
 
     // Open an atos_runs row so the driver subprocess's tool events can
     // be attributed back to this specific (feature, milestone, driver)
     // tuple. The id is exported via env so the opencode plugin can pass
     // it back to `record_atos_event`.
-    let run = match feature_store
-        .open_run(&id, &milestone.id, driver.as_label())
+    let run = match orc
+        .begin_run(&id, &milestone.id, driver.as_label(), run_mode)
         .await
     {
         Ok(r) => r,
@@ -266,7 +327,7 @@ async fn cmd_start_milestone(args: &[String]) -> i32 {
     println!(
         "start-milestone: feature='{id}' ordinal={ordinal} driver={} run_id={}",
         driver.as_label(),
-        run.id
+        run.run_id
     );
 
     if no_driver {
@@ -277,18 +338,17 @@ async fn cmd_start_milestone(args: &[String]) -> i32 {
         return 0;
     }
 
-    let spawn_result = driver.spawn(&id, &brief_md, &run.id);
+    let spawn_result = driver.spawn(&id, &brief_md, &run.run_id, run_mode);
     let exit_code = match &spawn_result {
         Ok(status) => status.code().unwrap_or(-1),
         Err(_) => -1,
     };
     // stop_passed at this point is unknown — end-milestone will
     // actually run the stop condition. We provisionally close the
-    // run here with stop_passed=false so an interrupted session
-    // isn't left dangling; end-milestone overwrites when it lands.
-    let _ = feature_store
-        .close_run(&run.id, exit_code as i64, false)
-        .await;
+    // run here with stop_passed=false and stop_stdout=None so an
+    // interrupted session isn't left dangling; end-milestone
+    // overwrites when it lands.
+    let _ = orc.close_run(&run.run_id, exit_code, false, None).await;
     match spawn_result {
         Ok(status) if status.success() => 0,
         Ok(status) => {
@@ -316,58 +376,78 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
     let ordinal_override: Option<i64> = get_flag(&flags, "--ordinal")
         .and_then(|s| s.parse::<i64>().ok());
 
-    let feature_store = match open_feature_store() {
-        Ok(s) => s,
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
         Err(e) => {
             eprintln!("end-milestone: {e}");
             return 1;
         }
     };
-    let Some(feature) = feature_store.get(&id).await.ok().flatten() else {
+    let Some(feature) = orc.get_feature(&id).await.ok().flatten() else {
         eprintln!("end-milestone: feature '{id}' not provisioned");
         return 1;
     };
 
-    let milestones = match feature_store.list_milestones(&id).await {
+    let milestones = match orc.list_milestones(&id).await {
         Ok(m) => m,
         Err(e) => {
             eprintln!("end-milestone: list_milestones: {e}");
             return 1;
         }
     };
-    // In the A/B case, multiple driver runs attach to a single
-    // milestone. end-milestone is safe to call after each driver;
-    // it updates the MATCHING RUN's stop_passed/exit_code (not the
-    // milestone row's ended_at, which only records when the last
-    // driver landed). Pick the most recent milestone if no ordinal
-    // override is given — the run-selection below then targets the
-    // most recent run within that milestone that's either open or
-    // provisionally closed.
+    // Pick the milestone tied to the most recent run. This matches
+    // what `atos next` (and its M3.4 descendants) expect: after
+    // start-milestone opens a run against milestone 1, end-milestone
+    // must close THAT milestone even if milestone 2 exists in the
+    // charter. The old `.last()` behavior silently closed the wrong
+    // milestone on a two-milestone charter.
+    //
+    // A/B parity: multiple runs can attach to the same milestone
+    // (`--milestone-id` / `--reuse-last-milestone`); picking the
+    // most-recent run still resolves to the right ordinal.
+    let all_runs = orc.list_runs(&id).await.unwrap_or_default();
     let target = match ordinal_override {
         Some(n) => milestones.iter().find(|m| m.ordinal == n).cloned(),
-        None => milestones.last().cloned(),
+        None => {
+            let latest_run = all_runs.iter().max_by_key(|r| r.started_at);
+            match latest_run {
+                Some(r) => milestones.iter().find(|m| m.id == r.milestone_id).cloned(),
+                None => milestones.last().cloned(),
+            }
+        }
     };
     let Some(milestone) = target else {
         eprintln!("end-milestone: no milestone to close");
         return 1;
     };
 
-    // Run the stop condition (shell). Zero exit = pass.
-    let stop_passed = run_stop_condition(&feature.stop_condition);
+    // Run the stop condition through the orchestrator. Library owns
+    // the shell spawn + stdout capture + 8KB cap.
+    // Prefer the milestone-scoped stop_condition (set by the charter
+    // provisioner) and fall back to the feature-level one for M1/M2
+    // features.
+    let stop_outcome = match orc.run_milestone_stop_condition(&feature, &milestone).await {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("end-milestone: stop_condition spawn: {e}");
+            return 1;
+        }
+    };
+    let stop_passed = stop_outcome.passed;
 
-    // Gather feature-scoped notes for the compliance report.
-    let notes_store = open_note_store().ok();
-    let feature_notes: Vec<serde_json::Value> = if let Some(ns) = notes_store {
-        let filter = corpus_engine::ScopeFilter {
-            scopes: vec![NoteScope::Feature],
-            feature_id: Some(id.clone()),
-        };
-        match ns
-            .read_notes_scoped(None, &[], &[], &[], 100, false, &filter)
-            .await
-        {
-            Ok(rows) => rows
-                .into_iter()
+    // Gather feature-scoped notes for the compliance report. Until
+    // M3.6 migrates rendering into the library, we keep a direct
+    // NoteStore read here — orc.notes() exposes the same handle.
+    let filter = corpus_engine::ScopeFilter {
+        scopes: vec![NoteScope::Feature],
+        feature_id: Some(id.clone()),
+    };
+    let feature_notes: Vec<serde_json::Value> = orc
+        .notes()
+        .read_notes_scoped(None, &[], &[], &[], 100, false, &filter)
+        .await
+        .map(|rows| {
+            rows.into_iter()
                 .map(|n| {
                     serde_json::json!({
                         "id": n.id,
@@ -376,21 +456,14 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
                         "created_at": n.created_at,
                     })
                 })
-                .collect(),
-            Err(_) => Vec::new(),
-        }
-    } else {
-        Vec::new()
-    };
-
-    // Find the open run for this milestone (if any) and update it
-    // with the real stop_condition verdict. Multiple runs can share a
-    // milestone (the A/B case); pick the most recent one that's still
-    // open, or the most recent overall.
-    let runs = feature_store
-        .list_runs_for_feature(&feature.id)
-        .await
+                .collect()
+        })
         .unwrap_or_default();
+
+    // Find the run for this milestone (A/B case allows multiple).
+    // Pick the most recent that's still open OR the most recent
+    // overall, and close it with the real verdict.
+    let runs = orc.list_runs(&feature.id).await.unwrap_or_default();
     let target_run = runs
         .iter()
         .filter(|r| r.milestone_id == milestone.id)
@@ -399,8 +472,13 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
         .cloned()
         .or_else(|| runs.iter().filter(|r| r.milestone_id == milestone.id).last().cloned());
     if let Some(run) = target_run.as_ref() {
-        let _ = feature_store
-            .close_run(&run.id, run.exit_code.unwrap_or(0), stop_passed)
+        let _ = orc
+            .close_run(
+                &run.id,
+                run.exit_code.map(|c| c as i32).unwrap_or(0),
+                stop_passed,
+                Some(stop_outcome.stdout.as_str()),
+            )
             .await;
     }
 
@@ -415,13 +493,39 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
         "driver": target_run.as_ref().map(|r| r.driver.clone()),
     });
     let report_json = report.to_string();
-    let _ = feature_store.mark_ended(&milestone.id, &report_json).await;
+    let _ = orc.mark_milestone_ended(&milestone.id, &report_json).await;
 
     if stop_passed {
         println!(
             "end-milestone: stop_condition PASSED for feature='{}' ordinal={}",
             feature.id, milestone.ordinal
         );
+        // Artifact hook: render milestone-<n>.md. Best-effort —
+        // failure to write the artifact should not fail the
+        // milestone closure.
+        match orc
+            .render_and_write_report(
+                &feature.id,
+                sovereign_atos::ReportSection::Milestone(milestone.ordinal),
+            )
+            .await
+        {
+            Ok(path) => println!("end-milestone: wrote {}", path.display()),
+            Err(e) => eprintln!("end-milestone: render milestone-{}.md failed: {e}", milestone.ordinal),
+        }
+        // Red-team runs always refresh the red-team.md artifact too,
+        // in case this end-milestone closes a --red-team run.
+        if let Some(run) = target_run.as_ref() {
+            if run.mode == "redteam" {
+                match orc
+                    .render_and_write_report(&feature.id, sovereign_atos::ReportSection::RedTeam)
+                    .await
+                {
+                    Ok(path) => println!("end-milestone: wrote {}", path.display()),
+                    Err(e) => eprintln!("end-milestone: render red-team.md failed: {e}"),
+                }
+            }
+        }
         0
     } else {
         eprintln!(
@@ -429,6 +533,59 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
             feature.id, milestone.ordinal
         );
         1
+    }
+}
+
+// ─── Subcommand: report ──────────────────────────────────────────────────────
+
+async fn cmd_report(args: &[String]) -> i32 {
+    let (positional, flags) = split_args(args);
+    let Some(feature_id) = positional.first().cloned() else {
+        eprintln!("report: missing <feature-id>");
+        return 2;
+    };
+    let section = match get_flag(&flags, "--section").as_deref() {
+        None | Some("all") => sovereign_atos::ReportSection::All,
+        Some("epistemic") => sovereign_atos::ReportSection::Epistemic,
+        Some("red-team") | Some("redteam") => sovereign_atos::ReportSection::RedTeam,
+        Some("milestone") => {
+            let n = get_flag(&flags, "--milestone")
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(1);
+            sovereign_atos::ReportSection::Milestone(n)
+        }
+        Some(other) => {
+            eprintln!("report: unknown --section '{other}'");
+            return 2;
+        }
+    };
+    let out_path = get_flag(&flags, "--out");
+
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("report: {e}");
+            return 1;
+        }
+    };
+
+    match orc.render_report(&feature_id, section).await {
+        Ok(md) => {
+            if let Some(p) = out_path {
+                if let Err(e) = std::fs::write(&p, md) {
+                    eprintln!("report: write {p}: {e}");
+                    return 1;
+                }
+                println!("report: wrote {p}");
+            } else {
+                print!("{md}");
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("report: {e}");
+            1
+        }
     }
 }
 
@@ -442,15 +599,15 @@ async fn cmd_archive(args: &[String]) -> i32 {
     };
     let reason = get_flag(&flags, "--reason").unwrap_or_else(|| "(no reason given)".into());
 
-    let store = match open_feature_store() {
-        Ok(s) => s,
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
         Err(e) => {
             eprintln!("archive: {e}");
             return 1;
         }
     };
 
-    match store.archive(&id, &reason).await {
+    match orc.archive_feature(&id, &reason).await {
         Ok(true) => {
             println!("archived feature '{id}'");
             0
@@ -470,8 +627,8 @@ async fn cmd_archive(args: &[String]) -> i32 {
 
 async fn cmd_status(args: &[String]) -> i32 {
     let (positional, _flags) = split_args(args);
-    let store = match open_feature_store() {
-        Ok(s) => s,
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
         Err(e) => {
             eprintln!("status: {e}");
             return 1;
@@ -479,12 +636,12 @@ async fn cmd_status(args: &[String]) -> i32 {
     };
 
     if let Some(id) = positional.first() {
-        match store.get(id).await {
+        match orc.get_feature(id).await {
             Ok(Some(f)) => {
                 println!("{}  [{}]", f.id, f.state);
                 println!("  title:   {}", f.title);
                 println!("  stop:    {}", f.stop_condition);
-                let milestones = store.list_milestones(&f.id).await.unwrap_or_default();
+                let milestones = orc.list_milestones(&f.id).await.unwrap_or_default();
                 for m in &milestones {
                     let status = match (m.started_at, m.ended_at) {
                         (_, Some(_)) => "ended",
@@ -515,7 +672,7 @@ async fn cmd_status(args: &[String]) -> i32 {
             }
         }
     } else {
-        match store.list(false).await {
+        match orc.list_features(false).await {
             Ok(features) => {
                 if features.is_empty() {
                     println!("no active features");
@@ -566,15 +723,15 @@ async fn cmd_promote(args: &[String]) -> i32 {
         None => None,
     };
 
-    let store = match open_note_store() {
-        Ok(s) => s,
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
         Err(e) => {
             eprintln!("promote: {e}");
             return 1;
         }
     };
 
-    match store
+    match orc
         .promote_note(&note_id, to, feature_id.as_deref(), content.as_deref())
         .await
     {
@@ -585,6 +742,178 @@ async fn cmd_promote(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("promote: {e}");
             1
+        }
+    }
+}
+
+// ─── Subcommand: teardown ────────────────────────────────────────────────────
+
+/// `sovereign atos teardown <feature>` — interactive note classification
+/// pass that ends with a frozen epistemic-report.md and the feature
+/// marked `completed`.
+///
+/// Default: interactive. `--auto`: retire everything (no promotions —
+/// promotions are cheap-but-consequential so auto-promote is
+/// deliberately absent until M4 adds a Fast-slot suggestion pass with
+/// a confirmation gate). `--dry-run`: print what would happen without
+/// mutating.
+async fn cmd_teardown(args: &[String]) -> i32 {
+    let (positional, flags) = split_args(args);
+    let Some(feature_id) = positional.first().cloned() else {
+        eprintln!("teardown: missing <feature-id>");
+        return 2;
+    };
+    let auto = flags.iter().any(|(k, _)| k == "auto");
+    let dry_run = flags.iter().any(|(k, _)| k == "dry-run");
+
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("teardown: {e}");
+            return 1;
+        }
+    };
+    let Some(feature) = orc.get_feature(&feature_id).await.ok().flatten() else {
+        eprintln!("teardown: feature '{feature_id}' not found");
+        return 1;
+    };
+    if feature.state == "completed" {
+        println!("teardown: feature '{}' is already completed.", feature.id);
+        return 0;
+    }
+
+    let candidates = match orc.teardown_candidates(&feature_id).await {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("teardown: load candidates: {e}");
+            return 1;
+        }
+    };
+
+    println!();
+    println!("  ── atos teardown ────────────────────────────────────────");
+    println!("  Feature: {}", feature.id);
+    println!("  Notes to review: {}", candidates.len());
+    if candidates.is_empty() {
+        println!("  (no feature-scoped decision/invariant/attempt/uncertainty/pointer notes)");
+    }
+    println!();
+
+    let mut actions: Vec<sovereign_atos::TeardownAction> = Vec::new();
+    for (idx, note) in candidates.iter().enumerate() {
+        let first = note.content.lines().next().unwrap_or("").trim();
+        let trimmed: String = first.chars().take(120).collect();
+        println!(
+            "  Note {}/{} [{}] {}\n    files: {}\n    id: {}",
+            idx + 1,
+            candidates.len(),
+            note.kind,
+            trimmed,
+            if note.files.is_empty() {
+                "(none)".into()
+            } else {
+                note.files.join(", ")
+            },
+            note.id
+        );
+
+        let choice = if auto {
+            // Conservative auto: retire everything. Future M4 adds
+            // Fast-slot suggestion for promotions.
+            'r'
+        } else {
+            match prompt_teardown_action() {
+                Some(c) => c,
+                None => {
+                    println!("teardown: aborted.");
+                    return 1;
+                }
+            }
+        };
+
+        let action = match choice {
+            'p' | 'P' => sovereign_atos::TeardownAction::Promote {
+                note_id: note.id.clone(),
+                rewritten_content: None,
+            },
+            'a' | 'A' => sovereign_atos::TeardownAction::Archive {
+                note_id: note.id.clone(),
+            },
+            'r' | 'R' => sovereign_atos::TeardownAction::Retire {
+                note_id: note.id.clone(),
+            },
+            _ => sovereign_atos::TeardownAction::Skip {
+                note_id: note.id.clone(),
+            },
+        };
+        actions.push(action);
+        println!();
+    }
+
+    if dry_run {
+        println!("  DRY RUN — no mutations applied. Action counts:");
+        let mut p = 0;
+        let mut a = 0;
+        let mut r = 0;
+        let mut s = 0;
+        for act in &actions {
+            match act {
+                sovereign_atos::TeardownAction::Promote { .. } => p += 1,
+                sovereign_atos::TeardownAction::Archive { .. } => a += 1,
+                sovereign_atos::TeardownAction::Retire { .. } => r += 1,
+                sovereign_atos::TeardownAction::Skip { .. } => s += 1,
+            }
+        }
+        println!("    promoted: {p}\n    archived: {a}\n    retired:  {r}\n    skipped:  {s}");
+        return 0;
+    }
+
+    let report = match orc.apply_teardown(&feature_id, actions).await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("teardown: apply: {e}");
+            return 1;
+        }
+    };
+
+    println!();
+    println!(
+        "  applied: promoted {} / archived {} / retired {} / skipped {}",
+        report.promoted.len(),
+        report.archived.len(),
+        report.retired.len(),
+        report.skipped.len()
+    );
+
+    // Final artifact: epistemic-report.md.
+    match orc
+        .render_and_write_report(&feature_id, sovereign_atos::ReportSection::Epistemic)
+        .await
+    {
+        Ok(path) => println!("  wrote {}", path.display()),
+        Err(e) => eprintln!("  warning: render epistemic-report.md failed: {e}"),
+    }
+
+    0
+}
+
+fn prompt_teardown_action() -> Option<char> {
+    use std::io::Write;
+    eprint!("    action [P]romote / [a]rchive / [r]etire / [s]kip / [q]uit (default: s): ");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line).is_err() {
+        return None;
+    }
+    match line.trim().to_lowercase().as_str() {
+        "q" | "quit" => None,
+        "p" | "promote" => Some('p'),
+        "a" | "archive" => Some('a'),
+        "r" | "retire" => Some('r'),
+        "" | "s" | "skip" => Some('s'),
+        other => {
+            eprintln!("    unknown response '{other}' — treating as skip.");
+            Some('s')
         }
     }
 }
@@ -600,22 +929,19 @@ async fn cmd_diff(args: &[String]) -> i32 {
     let ordinal: Option<i64> = get_flag(&flags, "--ordinal")
         .and_then(|s| s.parse::<i64>().ok());
 
-    let feature_store = match open_feature_store() {
-        Ok(s) => s,
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
         Err(e) => {
             eprintln!("diff: {e}");
             return 1;
         }
     };
 
-    let Some(feature) = feature_store.get(&feature_id).await.ok().flatten() else {
+    let Some(feature) = orc.get_feature(&feature_id).await.ok().flatten() else {
         eprintln!("diff: feature '{feature_id}' not found");
         return 1;
     };
-    let milestones = feature_store
-        .list_milestones(&feature_id)
-        .await
-        .unwrap_or_default();
+    let milestones = orc.list_milestones(&feature_id).await.unwrap_or_default();
     let target_milestone = match ordinal {
         Some(n) => milestones.iter().find(|m| m.ordinal == n).cloned(),
         None => milestones.last().cloned(),
@@ -625,10 +951,7 @@ async fn cmd_diff(args: &[String]) -> i32 {
         return 1;
     };
 
-    let runs_all = feature_store
-        .list_runs_for_feature(&feature_id)
-        .await
-        .unwrap_or_default();
+    let runs_all = orc.list_runs(&feature_id).await.unwrap_or_default();
     let runs: Vec<_> = runs_all
         .into_iter()
         .filter(|r| r.milestone_id == milestone.id)
@@ -641,7 +964,7 @@ async fn cmd_diff(args: &[String]) -> i32 {
         return 1;
     }
 
-    render_diff(&feature, &milestone, &runs, &feature_store).await;
+    render_diff(&feature, &milestone, &runs, orc.features()).await;
     0
 }
 
@@ -1001,6 +1324,176 @@ async fn cmd_probe_driver(args: &[String]) -> i32 {
     }
 }
 
+// ─── Subcommand: next ────────────────────────────────────────────────────────
+
+/// `sovereign atos next [<feature-id>]` — the seamless-handoff entry
+/// point. Finds the next unfinished milestone, prints a summary, asks
+/// for driver confirmation, and spawns.
+async fn cmd_next(args: &[String]) -> i32 {
+    let (positional, flags) = split_args(args);
+    let auto_yes = flags.iter().any(|(k, _)| k == "yes" || k == "y");
+    let driver_flag = get_flag(&flags, "--driver");
+
+    let feature_id = match positional.first().cloned() {
+        Some(id) => id,
+        None => match std::env::var("SOVEREIGN_FEATURE_ID") {
+            Ok(id) if !id.is_empty() => id,
+            _ => {
+                eprintln!(
+                    "next: missing <feature-id> and $SOVEREIGN_FEATURE_ID is unset.\n\
+                     Pass a feature id or run inside an ATOS-launched driver session."
+                );
+                return 2;
+            }
+        },
+    };
+
+    let orc = match open_orchestrator() {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("next: {e}");
+            return 1;
+        }
+    };
+    let Some(feature) = orc.get_feature(&feature_id).await.ok().flatten() else {
+        eprintln!("next: feature '{feature_id}' not found");
+        return 1;
+    };
+
+    let Some(brief) = orc
+        .next_milestone(&feature_id, RunMode::Normal)
+        .await
+        .unwrap_or(None)
+    else {
+        println!(
+            "feature '{}' has no unfinished milestone — every ordinal has a passing run.",
+            feature.id
+        );
+        println!("Run `sovereign atos teardown {}` to wrap it up.", feature.id);
+        return 0;
+    };
+
+    // Pre-spawn summary. Shows last milestone's status + what's next.
+    let runs = orc.list_runs(&feature_id).await.unwrap_or_default();
+    let milestones_all = orc.list_milestones(&feature_id).await.unwrap_or_default();
+    let ordinal_of = |milestone_id: &str| -> Option<i64> {
+        milestones_all
+            .iter()
+            .find(|m| m.id == milestone_id)
+            .map(|m| m.ordinal)
+    };
+    let last_passed_ordinal = runs
+        .iter()
+        .filter(|r| r.mode == "normal" && r.stop_passed == Some(true))
+        .filter_map(|r| ordinal_of(&r.milestone_id))
+        .max();
+
+    println!();
+    println!("  ── atos next ────────────────────────────────────────────");
+    println!("  Feature:        {} [{}]", feature.id, feature.state);
+    if let Some(ord) = last_passed_ordinal {
+        println!("  Last milestone: {} [PASS]", ord);
+    } else {
+        println!("  Last milestone: (none yet)");
+    }
+    println!("  Next milestone: {} — {}", brief.milestone_ordinal, brief.milestone_title);
+    if !brief.stop_condition.is_empty() {
+        println!("  Stop condition: {}", brief.stop_condition);
+    } else {
+        println!("  Stop condition: (manual review — no shell command)");
+    }
+    println!();
+
+    // Driver selection.
+    let chosen_driver = match driver_flag.as_deref() {
+        Some("claude") => "claude".to_string(),
+        Some("opencode") => "opencode".to_string(),
+        Some(other) => {
+            eprintln!("next: unknown driver '{other}'");
+            return 2;
+        }
+        None => {
+            if auto_yes {
+                "claude".to_string()
+            } else {
+                match prompt_driver_choice() {
+                    Some(d) => d,
+                    None => {
+                        println!("aborted.");
+                        return 0;
+                    }
+                }
+            }
+        }
+    };
+
+    // Delegate to start-milestone so the spawn/ledger path stays in
+    // one place. We write the composed brief to a tempfile; start-
+    // milestone reads it the usual way.
+    let rendered = brief.render();
+    let tmp = match write_brief_tempfile(&rendered) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("next: could not write tempfile: {e}");
+            return 1;
+        }
+    };
+    let start_args = vec![
+        feature_id.clone(),
+        "--brief".into(),
+        tmp.clone(),
+        "--driver".into(),
+        chosen_driver,
+        // `next` never creates a new milestone — milestones are
+        // charter-driven; `--milestone-id` pins the run to the
+        // exact one `next_milestone` picked.
+        "--milestone-id".into(),
+        brief.milestone_id.clone(),
+    ];
+    let rc = cmd_start_milestone(&start_args).await;
+    // Best-effort tempfile cleanup; leaving one behind is harmless.
+    let _ = std::fs::remove_file(&tmp);
+    if rc != 0 {
+        return rc;
+    }
+
+    // Close out the run by running the real stop_condition. We
+    // dispatch through cmd_end_milestone for the same reason: one
+    // implementation of end-milestone semantics.
+    cmd_end_milestone(&[feature_id]).await
+}
+
+fn prompt_driver_choice() -> Option<String> {
+    use std::io::Write;
+    eprint!("  spawn driver? [y=claude / o=opencode / N=abort]: ");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line).is_err() {
+        return None;
+    }
+    match line.trim().to_lowercase().as_str() {
+        "" | "n" | "no" => None,
+        "y" | "yes" | "c" | "claude" => Some("claude".into()),
+        "o" | "opencode" => Some("opencode".into()),
+        other => {
+            eprintln!("  unknown response '{other}' — aborting.");
+            None
+        }
+    }
+}
+
+fn write_brief_tempfile(contents: &str) -> std::io::Result<String> {
+    use std::io::Write;
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "atos-brief-{}.md",
+        uuid::Uuid::new_v4().as_simple()
+    ));
+    let mut f = std::fs::File::create(&path)?;
+    f.write_all(contents.as_bytes())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 // ─── Driver ──────────────────────────────────────────────────────────────────
 
 enum Driver {
@@ -1021,7 +1514,9 @@ impl Driver {
         feature_id: &str,
         brief_md: &str,
         run_id: &str,
+        mode: RunMode,
     ) -> std::io::Result<std::process::ExitStatus> {
+        let mode_str = mode.as_str();
         match self {
             // Claude Code speaks MCP over localhost today. The MCP
             // tool calls it issues already land in `tool_call_log`;
@@ -1033,6 +1528,7 @@ impl Driver {
                 .env("SOVEREIGN_FEATURE_ID", feature_id)
                 .env("ATOS_RUN_ID", run_id)
                 .env("ATOS_DRIVER", "claude")
+                .env("ATOS_MODE", mode_str)
                 .stdin(Stdio::inherit())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
@@ -1047,6 +1543,7 @@ impl Driver {
                 .env("SOVEREIGN_FEATURE_ID", feature_id)
                 .env("ATOS_RUN_ID", run_id)
                 .env("ATOS_DRIVER", "opencode")
+                .env("ATOS_MODE", mode_str)
                 .stdin(std::process::Stdio::piped())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
@@ -1081,31 +1578,14 @@ async fn resolve_driver(requested: Option<&str>) -> Driver {
     }
 }
 
-// ─── Stop condition runner ───────────────────────────────────────────────────
-
-fn run_stop_condition(cmd: &str) -> bool {
-    if cmd.trim().is_empty() {
-        // No stop command → treat as a manual-review feature; mark the
-        // milestone as passing so the operator can inspect artifacts.
-        return true;
-    }
-    match std::process::Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
-        .status()
-    {
-        Ok(s) => s.success(),
-        Err(e) => {
-            eprintln!("stop_condition failed to spawn: {e}");
-            false
-        }
-    }
-}
+// Stop-condition runner moved to sovereign_atos::LocalAtosOrchestrator
+// in M3.1. See `orc.run_stop_condition(&feature)`.
 
 // ─── Flag parsing ────────────────────────────────────────────────────────────
 
 /// Boolean flags that do not consume the next token as their value.
-const BOOLEAN_FLAGS: &[&str] = &["no-driver", "reuse-last-milestone"];
+const BOOLEAN_FLAGS: &[&str] =
+    &["no-driver", "reuse-last-milestone", "yes", "y", "red-team", "auto", "dry-run"];
 
 /// Split `args` into `(positional, flag_pairs)`. Value-taking flags
 /// (e.g. `--title "foo"`) consume the following token. Boolean flags

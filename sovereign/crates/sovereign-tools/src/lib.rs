@@ -39,7 +39,7 @@ pub use code::CheckDocPathsTool;
 #[cfg(feature = "treesitter")]
 pub use code::{
     ArchiveFeatureTool, PromoteNoteTool, ProvisionFeatureTool, ReadNoteByIdTool,
-    ReadNoteDigestTool, RecordAtosEventTool,
+    ReadNoteDigestTool, RecordAtosEventTool, WriteRedteamFindingTool,
 };
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
