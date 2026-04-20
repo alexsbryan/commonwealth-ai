@@ -1132,6 +1132,103 @@ impl CorpusEngine {
         Ok(())
     }
 
+    /// One-shot migration: rename the canonical `<corpus_id>/`
+    /// directory to `<corpus_id>-partition-<self>/` and mark its
+    /// meta as partition-shaped. Used by the `sovereign corpus
+    /// migrate-to-partition` CLI helper so users with pre-unified
+    /// canonical ingests (committed chunks from a prior daemon
+    /// version) can participate in collaborative ingest without
+    /// losing their progress.
+    ///
+    /// Preconditions (all required; error otherwise):
+    ///   - Canonical dir exists with a `_corpus_meta.json`.
+    ///   - The meta's `ingestion_in_progress` is `true` — migrating
+    ///     a completed corpus would turn a working index back into a
+    ///     work-in-progress partition, which is nonsense.
+    ///   - Partition-of-self dir does NOT exist (we refuse to
+    ///     overwrite it).
+    ///
+    /// Post-rename, the meta is rewritten with:
+    ///   - `is_shard = true`
+    ///   - `processed_shards = []` (legacy canonical predates
+    ///     per-shard tracking; the sharded extractor will re-emit
+    ///     the remaining shards and content-hash dedup catches any
+    ///     overlap with committed chunks)
+    ///   - `committed_iter_pos` and `ingestion_in_progress=true`
+    ///     preserved verbatim so resume semantics carry over.
+    pub fn migrate_canonical_to_partition(&self, corpus_id: &str) -> Result<PathBuf> {
+        let canonical = self.index_dir.join(corpus_id);
+        let partition = self.partition_path(corpus_id);
+
+        if !canonical.exists() {
+            return Err(Error::IndexNotFound(format!(
+                "No canonical index at {} — nothing to migrate",
+                canonical.display()
+            )));
+        }
+        let meta_path = canonical.join("_corpus_meta.json");
+        if !meta_path.exists() {
+            return Err(Error::IndexNotFound(format!(
+                "Canonical at {} has no _corpus_meta.json",
+                canonical.display()
+            )));
+        }
+        if partition.exists() {
+            return Err(Error::Database(format!(
+                "Partition-of-self already exists at {} — refusing to overwrite",
+                partition.display()
+            )));
+        }
+
+        let raw = std::fs::read_to_string(&meta_path)?;
+        let mut meta: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|e| Error::Serialization(format!("read meta: {e}")))?;
+        let in_progress = meta["ingestion_in_progress"].as_bool().unwrap_or(false);
+        if !in_progress {
+            return Err(Error::Database(format!(
+                "Canonical at {} is fully ingested (ingestion_in_progress=false); \
+                 migration would misrepresent a completed corpus as work-in-progress. \
+                 If you really want to re-participate in collaborative ingest from \
+                 this snapshot, clear ingestion_in_progress in _corpus_meta.json first.",
+                canonical.display()
+            )));
+        }
+
+        // Rename first; if the meta rewrite fails we still have a
+        // partition-of-self dir that matches the old meta (which is
+        // safe and recoverable by hand). Doing it in the other order
+        // would write partition-shape meta into the canonical dir,
+        // which is weird if the rename subsequently fails.
+        if let Some(parent) = partition.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::rename(&canonical, &partition)?;
+
+        if let Some(obj) = meta.as_object_mut() {
+            obj.insert("is_shard".into(), serde_json::Value::Bool(true));
+            obj.entry("processed_shards".to_string())
+                .or_insert(serde_json::Value::Array(Vec::new()));
+            // Ensure we leave ingestion_in_progress=true even if the
+            // source omitted it (older layouts defaulted to false via
+            // serde).
+            obj.insert(
+                "ingestion_in_progress".into(),
+                serde_json::Value::Bool(true),
+            );
+        }
+        let rewritten = serde_json::to_string_pretty(&meta)
+            .map_err(|e| Error::Serialization(format!("write meta: {e}")))?;
+        std::fs::write(partition.join("_corpus_meta.json"), rewritten)?;
+
+        tracing::info!(
+            corpus_id,
+            from = %canonical.display(),
+            to = %partition.display(),
+            "migrate_canonical_to_partition: legacy canonical promoted to partition-of-self"
+        );
+        Ok(partition)
+    }
+
     /// Promote this node's `<corpus_id>-partition-<self>` directory to
     /// the canonical `<corpus_id>/` by atomic rename, clearing the
     /// partition-specific metadata. Idempotent: returns `Ok(false)`
@@ -1821,6 +1918,126 @@ mod tests {
         assert!(!status.partition_present);
         assert_eq!(status.committed_iter_pos, 3651456);
         assert!(status.shards_completed.is_empty());
+    }
+
+    // ── migrate_canonical_to_partition ────────────────────────────────
+
+    fn seed_canonical_meta(dir: &std::path::Path, committed: u64, in_progress: bool) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(
+            dir.join("_corpus_meta.json"),
+            serde_json::json!({
+                "corpus_id": "wikipedia",
+                "ingestion_in_progress": in_progress,
+                "committed_iter_pos": committed,
+                "is_shard": false,
+            })
+            .to_string(),
+        )
+        .unwrap();
+        // Also drop a dummy chunks.lance subdir so assertions on
+        // directory move are faithful to the real LanceDB layout.
+        std::fs::create_dir_all(dir.join("chunks.lance")).unwrap();
+        std::fs::write(dir.join("chunks.lance/.keep"), "").unwrap();
+    }
+
+    #[test]
+    fn migrate_moves_canonical_to_partition_and_flags_meta() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        seed_canonical_meta(&idx_dir.join("wikipedia"), 3_651_456, true);
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir.clone(),
+            mock_embed_fn(),
+        )
+        .with_self_node_id("node-abc");
+
+        let new_path = engine.migrate_canonical_to_partition("wikipedia").unwrap();
+        assert_eq!(new_path, idx_dir.join("wikipedia-partition-node-abc"));
+        assert!(!idx_dir.join("wikipedia").exists());
+        assert!(idx_dir.join("wikipedia-partition-node-abc").exists());
+        // LanceDB contents carried across the rename.
+        assert!(
+            idx_dir
+                .join("wikipedia-partition-node-abc/chunks.lance/.keep")
+                .exists(),
+            "chunks.lance must travel with the rename — data preserved"
+        );
+
+        let raw = std::fs::read_to_string(
+            idx_dir.join("wikipedia-partition-node-abc/_corpus_meta.json"),
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(v["is_shard"], serde_json::Value::Bool(true));
+        assert_eq!(
+            v["ingestion_in_progress"],
+            serde_json::Value::Bool(true),
+            "ingestion_in_progress must stay true so resume picks up"
+        );
+        assert_eq!(
+            v["committed_iter_pos"].as_u64(),
+            Some(3_651_456),
+            "committed_iter_pos must be preserved exactly"
+        );
+        assert!(v["processed_shards"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn migrate_refuses_when_no_canonical() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir,
+            mock_embed_fn(),
+        )
+        .with_self_node_id("node-abc");
+        assert!(engine.migrate_canonical_to_partition("wikipedia").is_err());
+    }
+
+    #[test]
+    fn migrate_refuses_when_canonical_is_complete() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        seed_canonical_meta(&idx_dir.join("wikipedia"), 10, false);
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir.clone(),
+            mock_embed_fn(),
+        )
+        .with_self_node_id("node-abc");
+        let err = engine
+            .migrate_canonical_to_partition("wikipedia")
+            .unwrap_err();
+        // Canonical should stay untouched on the refusal path.
+        assert!(idx_dir.join("wikipedia").exists());
+        assert!(!idx_dir.join("wikipedia-partition-node-abc").exists());
+        let msg = err.to_string();
+        assert!(msg.contains("fully ingested"), "unexpected error: {msg}");
+    }
+
+    #[test]
+    fn migrate_refuses_when_partition_already_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        seed_canonical_meta(&idx_dir.join("wikipedia"), 5, true);
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-node-abc")).unwrap();
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir.clone(),
+            mock_embed_fn(),
+        )
+        .with_self_node_id("node-abc");
+
+        assert!(engine.migrate_canonical_to_partition("wikipedia").is_err());
+        // Canonical stays put.
+        assert!(idx_dir.join("wikipedia").exists());
     }
 
     #[test]
