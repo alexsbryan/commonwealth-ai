@@ -8142,6 +8142,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sovereign-atos",
  "sovereign-core",
  "sovereign-inference",
@@ -8155,6 +8156,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "which",
 ]
 
 [[package]]

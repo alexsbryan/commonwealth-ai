@@ -53,6 +53,8 @@ pub async fn run_project(args: &[String]) -> i32 {
 
     match args[0].as_str() {
         "init" => cmd_init(&args[1..]).await,
+        "found" => cmd_found(&args[1..]).await,
+        "amend" => cmd_amend(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
         "refresh" => cmd_refresh(&args[1..]).await,
         "serve" => cmd_serve(&args[1..]).await,
@@ -76,6 +78,8 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Usage("sovereign project <subcommand> [flags]"),
         crate::util::help::HelpSection::Subcommands(&[
             ("init",           "Set up code intelligence for the current workspace (also registers with the daemon)"),
+            ("found",          "Once per project: structured conversation that produces CHARTER.md + PHASES.md"),
+            ("amend",          "Edit CHARTER.md with an adversarial review — every amendment logs who, why, and what was argued against"),
             ("status",         "Show the status of code intelligence"),
             ("refresh",        "Nudge the daemon to rebuild the SCIP graph now"),
             ("serve",          "Foreground watcher mode for debugging test/lint scripts"),
@@ -353,11 +357,46 @@ async fn cmd_init(args: &[String]) -> i32 {
     println!("  Sovereign Project Intelligence");
     println!("  {}", "─".repeat(54));
 
-    // ── Step 1: Detect workspace ────────────────────────────────
-    println!();
-    println!("  Detecting workspace...");
+    // ── Observation pass (M6.1) ─────────────────────────────────
+    //
+    // Before touching anything on disk, gather every fact about the
+    // project we can derive without asking the user. The result
+    // feeds both the human-facing report below AND
+    // `.sovereign/project.toml` (written later in this function),
+    // which `status` / `found` / `doctor` read from rather than
+    // re-observing.
+    //
+    // The report is bucketed per the requirements:
+    //   READY      — everything the user doesn't need to act on
+    //   ACTIONABLE — install commands, copy-pasteable, unindented
+    //   DEFERRED   — things we note now but address in `found`
+    let observation = crate::observation::observe(&repo_root);
+    print_observation_report(&observation);
 
-    // Detect languages across all workspace roots (handles monorepo).
+    // Persist observations BEFORE any indexing/SCIP work so the
+    // durable record survives even if downstream init steps fail.
+    // Read-modify-write: preserve any existing lifecycle fields so
+    // re-running init after `sovereign project found` doesn't reset
+    // `founded`, `charter_version`, or `current_phase`.
+    let project_toml_path = repo_root.join(".sovereign").join("project.toml");
+    if let Err(e) = std::fs::create_dir_all(
+        project_toml_path
+            .parent()
+            .unwrap_or_else(|| Path::new(".")),
+    ) {
+        eprintln!("    \u{2717} Cannot create .sovereign/: {e}");
+        return 1;
+    }
+    let mut project_toml = crate::project_toml::ProjectTomlFile::read(&project_toml_path)
+        .unwrap_or_else(|_| crate::project_toml::ProjectTomlFile::from_observation(&observation));
+    project_toml.update_observation(&observation);
+    if let Err(e) = project_toml.write(&project_toml_path) {
+        eprintln!("    \u{2717} Cannot write project.toml: {e}");
+    }
+
+    // Detect languages across all workspace roots for downstream
+    // SCIP + indexing logic. Display already handled by
+    // `print_observation_report` above — no second pass of ✓-lines.
     let langs: Vec<DetectedLanguage> = {
         let mut seen = std::collections::HashSet::new();
         let mut all = Vec::new();
@@ -372,23 +411,20 @@ async fn cmd_init(args: &[String]) -> i32 {
     };
 
     if langs.is_empty() {
-        eprintln!("    ! No supported languages detected");
-        eprintln!("      Supported: Rust, TypeScript, JavaScript, Go, Python");
+        // Observation report already flagged "no supported languages"
+        // as an actionable gap. Repeat only the bail path.
         if !no_scip {
-            // Without a language index there's nothing to index — bail.
-            // Pass --no-scip to generate agent configs without indexing
-            // (useful for monorepo roots that have no source files at the top level).
-            eprintln!("      Pass --no-scip to skip indexing and only write agent configs.");
+            println!();
+            println!("    Pass --no-scip to skip indexing and write agent configs anyway.");
             return 1;
         }
-        eprintln!("      Continuing without indexing (--no-scip).");
-    }
-    for lang in &langs {
-        println!("    \u{2713} {}", lang.display);
+        println!();
+        println!("    Continuing without indexing (--no-scip).");
     }
     if workspace_root_arg.is_some() {
+        println!();
         println!(
-            "    \u{2713} Monorepo mode ({} workspace{})",
+            "    Monorepo mode ({} workspace{})",
             scip_workspace_roots.len(),
             if scip_workspace_roots.len() == 1 { "" } else { "s" }
         );
@@ -398,14 +434,6 @@ async fn cmd_init(args: &[String]) -> i32 {
                 root.file_name().and_then(|n| n.to_str()).unwrap_or("?")
             );
         }
-    }
-    if has_git {
-        let commit_count = git_commit_count(&repo_root).unwrap_or(0);
-        println!(
-            "    \u{2713} Git repository ({} commit{})",
-            commit_count,
-            if commit_count == 1 { "" } else { "s" }
-        );
     }
 
     // ── Step 2: Index symbols ───────────────────────────────────
@@ -691,6 +719,12 @@ vector = false
         eprintln!("    \u{2717} Cannot write project.json: {e}");
         // Non-fatal — status/refresh will just need flags.
     }
+
+    // project.toml was written earlier in the flow (right after
+    // observation) so its contents survive even if indexing fails.
+    // Surface it here alongside the other config artifacts for
+    // discoverability.
+    println!("    \u{2713} .sovereign/project.toml");
 
     // .sovereign/sovereign.toml — starter config for background watchers.
     // Only written if the file doesn't already exist (preserve user edits).
@@ -2031,6 +2065,772 @@ async fn scip_graph_reloader(
     }
 }
 
+
+// ─── sovereign project found (M6.3) ──────────────────────────
+//
+// Structured founding conversation. M6.3 ships Stage 1 only:
+// Understanding. Later milestones layer stages 2-4 on top.
+//
+// Flow:
+//   1. Read .sovereign/project.toml. If `lifecycle.founded == true`,
+//      refuse — founding is once per project (amendments come via
+//      `sovereign project amend`, M6.7).
+//   2. Load a design doc if --design <path> given. Missing path is
+//      treated the same as "no design doc" — we elicit instead.
+//   3. Run Stage 1 (see `found::run_stage1`): curated-catalog
+//      question selection filtered by observation + design presence,
+//      each Q&A persisted as a decision-kind note in Global scope.
+//   4. Print a summary with the count of recorded decisions and a
+//      pointer to where stage 2 picks up (when M6.4 lands).
+//
+// Every Q&A lives in the NoteStore permanently. A sessions six
+// weeks later reading notes by symbol or kind can see "this was
+// asked, answered, and committed to."
+
+async fn cmd_found(args: &[String]) -> i32 {
+    let mut design_path: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--design" => {
+                i += 1;
+                design_path = args.get(i).map(PathBuf::from);
+            }
+            "--help" | "-h" => {
+                println!("sovereign project found [--design <path>]");
+                println!();
+                println!("Once per project: the founding conversation that produces");
+                println!("CHARTER.md + PHASES.md. M6.3 ships Stage 1 (Understanding) —");
+                println!("later stages land in follow-up milestones.");
+                return 0;
+            }
+            flag if flag.starts_with("--") => {
+                eprintln!("warning: unknown flag '{flag}' — ignored");
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let repo_root = match find_repo_root() {
+        Some(r) => r,
+        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    };
+    let sovereign_dir = repo_root.join(".sovereign");
+    let project_toml_path = sovereign_dir.join("project.toml");
+
+    // Gate 1: project.toml must exist — `project init` is the
+    // prerequisite. A helpful message, not an opaque "file not found."
+    if !project_toml_path.exists() {
+        eprintln!();
+        eprintln!(
+            "  sovereign project found: no .sovereign/project.toml found.\n\
+             \n\
+             Run `sovereign project init` first so we have an observation\n\
+             of the project to anchor the founding conversation to."
+        );
+        return 1;
+    }
+
+    let mut project_toml = match crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("  sovereign project found: cannot read project.toml: {e}");
+            return 1;
+        }
+    };
+
+    // Gate 2: once-per-project. Amendments go through
+    // `sovereign project amend` (M6.7).
+    if project_toml.lifecycle.founded {
+        eprintln!();
+        eprintln!(
+            "  sovereign project found: this project was already founded\n\
+             (charter_version={}, current_phase={}).\n\
+             \n\
+             To revise the charter, use `sovereign project amend` (M6.7).",
+            project_toml.lifecycle.charter_version, project_toml.lifecycle.current_phase,
+        );
+        return 1;
+    }
+
+    // Re-observe: project.toml has a snapshot but it may be stale.
+    // Founding is a small moment; pay the <200ms cost for a fresh
+    // read rather than trust a potentially-days-old observation.
+    let observation = crate::observation::observe(&repo_root);
+
+    // Design doc handling.
+    let design_text: Option<String> = match design_path.as_deref() {
+        Some(p) => match crate::found::load_design(p) {
+            Some(text) => {
+                println!();
+                println!("  Using design document: {}", p.display());
+                let preview = crate::found::design_preview(&text);
+                if !preview.is_empty() {
+                    println!("    \u{2192} {}", preview);
+                }
+                Some(text)
+            }
+            None => {
+                eprintln!(
+                    "  sovereign project found: could not read --design {} — falling back to elicitation.",
+                    p.display()
+                );
+                None
+            }
+        },
+        None => None,
+    };
+
+    println!();
+    println!("  Sovereign Project Founding — Stage 1: Understanding");
+    println!("  {}", "─".repeat(54));
+    println!();
+    println!(
+        "  A few questions — each one is material (it changes what ends up in the charter)."
+    );
+    println!("  Hit Enter to skip any question; you can amend later.");
+
+    // Persistence: open the project's NoteStore under the
+    // canonical .sovereign/notes.db path.
+    let notes_path = sovereign_dir.join("notes.db");
+    let note_store = match corpus_engine::NoteStore::open(&notes_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("  sovereign project found: cannot open notes.db: {e}");
+            return 1;
+        }
+    };
+    let session_id = format!("found-{}", unix_now_secs());
+
+    // Handle is needed so the blocking recorder can reuse the
+    // current multi-thread runtime for its writes.
+    let rt_handle = tokio::runtime::Handle::current();
+    let mut recorder = crate::found::NoteStoreDecisionWriter {
+        store: &note_store,
+        session_id: &session_id,
+        written: Vec::new(),
+        rt: rt_handle,
+    };
+    let mut interlocutor = crate::found::StdinFoundInterlocutor::new();
+
+    let answers = crate::found::run_stage1(
+        &observation,
+        design_text.as_deref(),
+        &mut interlocutor,
+        &mut recorder,
+    );
+
+    // Stage 1 summary.
+    let recorded_s1 = recorder.written.len();
+    let answered: usize = answers.iter().filter(|a| !a.skipped).count();
+    let skipped: usize = answers.iter().filter(|a| a.skipped).count();
+    println!();
+    println!("  Stage 1 complete.");
+    println!(
+        "    {recorded_s1} decision note{} written ({answered} answered, {skipped} skipped).",
+        if recorded_s1 == 1 { "" } else { "s" },
+    );
+
+    // Stage 2 — Fault lines. The stage-1 answers become input
+    // signals for fault-line selection.
+    let rt_handle_2 = tokio::runtime::Handle::current();
+    let mut fault_recorder = crate::found::NoteStoreFaultLineWriter {
+        store: &note_store,
+        session_id: &session_id,
+        written: Vec::new(),
+        outcomes: Vec::new(),
+        rt: rt_handle_2,
+    };
+    let mut fault_interlocutor = crate::found::StdinFaultLineInterlocutor::new();
+    let selected_faults = crate::found::select_fault_lines(&observation, &answers);
+    let stage2_summary = if selected_faults.is_empty() {
+        println!();
+        println!("  Sovereign Project Founding — Stage 2: Fault lines");
+        println!("  {}", "─".repeat(54));
+        println!();
+        println!("  No fault lines fired for this project's shape — moving on.");
+        crate::found::Stage2Summary::default()
+    } else {
+        println!();
+        println!("  Sovereign Project Founding — Stage 2: Fault lines");
+        println!("  {}", "─".repeat(54));
+        println!();
+        println!(
+            "  {} genuine disagreement{} in your domain. These aren't recommendations —",
+            selected_faults.len(),
+            if selected_faults.len() == 1 { "" } else { "s" }
+        );
+        println!("  reasonable people pick different sides. Decide now, leave open, or skip.");
+        crate::found::run_stage2(
+            &observation,
+            &answers,
+            &mut fault_interlocutor,
+            &mut fault_recorder,
+        )
+    };
+
+    println!();
+    println!("  Stage 2 complete.");
+    println!(
+        "    {} resolved → decision notes, {} open → uncertainty notes, {} skipped (no note).",
+        stage2_summary.resolved, stage2_summary.open, stage2_summary.skipped,
+    );
+    println!(
+        "    Read them back with:  sovereign read-notes --session {session_id}",
+    );
+
+    // Persist the observation refresh before we head into the
+    // write-on-approval stages — if the user cancels in Stage 3/4,
+    // we still want the observation update to stick.
+    project_toml.update_observation(&observation);
+    if let Err(e) = project_toml.write(&project_toml_path) {
+        eprintln!("    \u{2717} Could not persist observation refresh: {e}");
+    }
+
+    // ── Stage 2.5 — Documentation URLs (M6.6) ───────────────────
+    //
+    // One question, asked once. Drop URLs → fetch + index into
+    // ProjectDocsStore. Empty answer → decision note explaining
+    // the runtime fallback. Either way, the user isn't asked this
+    // again inside a founding session.
+    let docs_prompt = crate::found::render_docs_prompt(&observation);
+    let mut docs_interlocutor = crate::found::StdinDocsInterlocutor::new();
+    let raw_urls = crate::found::DocsInterlocutor::ask_docs_urls(
+        &mut docs_interlocutor,
+        &docs_prompt,
+    );
+    let urls = crate::doc_fetcher::parse_urls(&raw_urls);
+
+    if !urls.is_empty() {
+        // Open ProjectDocsStore alongside the daemon's canonical
+        // path (.sovereign/project_docs.db). init already created
+        // .sovereign/ when it wrote project.toml.
+        let docs_db = sovereign_dir.join("project_docs.db");
+        match corpus_engine::ProjectDocsStore::open(&docs_db) {
+            Ok(store) => {
+                let rt = tokio::runtime::Handle::current();
+                let fetcher = crate::doc_fetcher::ProjectDocsFetcher {
+                    http: crate::doc_fetcher::reqwest_http(rt.clone()),
+                    store: &store,
+                    repo_root: repo_root.clone(),
+                    rt,
+                };
+                println!();
+                println!("  Fetching {} documentation URL{}…", urls.len(), if urls.len() == 1 { "" } else { "s" });
+                let summaries = fetcher.fetch_many(&urls);
+                let mut ok_count = 0usize;
+                let mut err_count = 0usize;
+                for s in &summaries {
+                    match &s.outcome {
+                        crate::honesty::FetchOutcome::Ok { bytes_indexed } => {
+                            ok_count += 1;
+                            println!(
+                                "    \u{2713} {} ({} chunk{})",
+                                s.url,
+                                bytes_indexed,
+                                if *bytes_indexed == 1 { "" } else { "s" }
+                            );
+                        }
+                        crate::honesty::FetchOutcome::Err(e) => {
+                            err_count += 1;
+                            println!("    \u{2717} {}  ({e})", s.url);
+                        }
+                    }
+                }
+                println!(
+                    "    → {} indexed, {} failed. Re-fetch failures later by editing\n      `.sovereign/docs/` and re-running `sovereign project refresh`.",
+                    ok_count, err_count
+                );
+            }
+            Err(e) => {
+                eprintln!("    \u{2717} Could not open project_docs.db: {e}");
+                eprintln!("    URLs recorded but not indexed. You can retry later.");
+            }
+        }
+    } else if !raw_urls.trim().is_empty() {
+        println!();
+        println!(
+            "    No HTTP(S) URLs parsed from your answer. Nothing fetched; \
+             runtime honesty prompts will surface gaps as they come up."
+        );
+    } else {
+        println!();
+        println!(
+            "    No URLs provided — runtime honesty prompts will surface gaps \
+             as they come up."
+        );
+    }
+
+    // Durable record: Stage-2.5 decision note regardless of the
+    // answer shape. Empty answer is itself a decision.
+    let docs_body = crate::found::render_docs_decision_body(&docs_prompt, &urls);
+    let rt_for_docs = tokio::runtime::Handle::current();
+    let _ = tokio::task::block_in_place(|| {
+        rt_for_docs.block_on(note_store.write_note_scoped(
+            "decision",
+            &docs_body,
+            Vec::new(),
+            Vec::new(),
+            &session_id,
+            corpus_engine::NoteScope::Global,
+            None,
+        ))
+    });
+
+    // ── Stages 3 + 4 — CHARTER.md + PHASES.md ───────────────────
+    //
+    // Collect the stage-2 outcomes for composition. The runner
+    // already recorded them; we need the parallel (fault, outcome)
+    // tuples here for rendering. We rebuild them by re-running the
+    // selection over the observation+stage1 answers and re-asking
+    // — but that'd be a second interactive pass. Instead, we track
+    // outcomes from the stage 2 loop we just ran, via the
+    // fault_recorder's side channel.
+    //
+    // The simplest correct path is to re-query the notes we just
+    // wrote in stage 2, since `NoteStoreFaultLineWriter` persists
+    // decision + uncertainty notes with stable id prefixes. But
+    // that's a round-trip through SQLite just to re-derive
+    // in-memory data. So here: we change the fault recorder to
+    // ALSO retain the (fault, outcome) pairs and expose them.
+    //
+    // That change is minimal — see `NoteStoreFaultLineWriter.outcomes`.
+
+    let mut approval_interlocutor = crate::found::StdinApprovalInterlocutor::new();
+
+    let phase1_stop =
+        crate::found::ApprovalInterlocutor::ask_phase1_stop(&mut approval_interlocutor);
+    if phase1_stop.trim().is_empty() {
+        eprintln!();
+        eprintln!(
+            "  sovereign project found: a Phase 1 stop condition is required.\n\
+             Stages 1 + 2 decision notes are already recorded — re-run\n\
+             `sovereign project found` when you have a concrete answer."
+        );
+        return 0; // cancel, not error — stage 1+2 work is preserved
+    }
+
+    let founded_date = today_iso();
+    let project_id = derive_project_id(&repo_root);
+    let stage2_pairs = fault_recorder.outcomes.clone();
+    let founding_inputs = crate::found::FoundingInputs {
+        project_id: &project_id,
+        founded_date: &founded_date,
+        observation: &observation,
+        design: design_text.as_deref(),
+        stage1_answers: &answers,
+        stage2_outcomes: &stage2_pairs,
+        phase1_stop_condition: &phase1_stop,
+    };
+
+    let charter = crate::found::compose_charter(&founding_inputs);
+    let phases = crate::found::compose_phases(&founding_inputs);
+
+    println!();
+    println!("  Sovereign Project Founding — Stage 3 + 4: Charter + Phases");
+    println!("  {}", "─".repeat(54));
+
+    // Drafts live in .sovereign/.pending/ during the edit loop so
+    // the user can $EDITOR them directly. Cleaned up after
+    // approval; retained on cancel so the user can inspect.
+    let pending_dir = sovereign_dir.join(".pending");
+    if let Err(e) = std::fs::create_dir_all(&pending_dir) {
+        eprintln!("    \u{2717} Could not create .pending directory: {e}");
+        return 1;
+    }
+
+    let outcome = crate::found::run_stage34(
+        charter,
+        phases,
+        &pending_dir,
+        &mut approval_interlocutor,
+    );
+
+    match outcome {
+        crate::found::FoundingApproval::Approved {
+            charter: final_charter,
+            phases: final_phases,
+        } => {
+            let charter_out = sovereign_dir.join("CHARTER.md");
+            let phases_out = sovereign_dir.join("PHASES.md");
+            if let Err(e) = std::fs::write(&charter_out, &final_charter) {
+                eprintln!("    \u{2717} Could not write CHARTER.md: {e}");
+                return 1;
+            }
+            if let Err(e) = std::fs::write(&phases_out, &final_phases) {
+                eprintln!("    \u{2717} Could not write PHASES.md: {e}");
+                return 1;
+            }
+            println!();
+            println!("    \u{2713} {}", charter_out.display());
+            println!("    \u{2713} {}", phases_out.display());
+
+            // Flip lifecycle + record charter hash.
+            project_toml.lifecycle.founded = true;
+            project_toml.lifecycle.charter_version = 1;
+            project_toml.lifecycle.current_phase = 0;
+            project_toml.lifecycle.charter_hash = crate::found::hash_charter(&final_charter);
+            if let Err(e) = project_toml.write(&project_toml_path) {
+                eprintln!("    \u{2717} Could not flip lifecycle.founded in project.toml: {e}");
+                return 1;
+            }
+            println!(
+                "    \u{2713} project.toml: founded=true, charter_version=1, current_phase=0"
+            );
+
+            // Clean up the pending drafts — the canonical files are
+            // the output now.
+            let _ = std::fs::remove_file(pending_dir.join("CHARTER.md"));
+            let _ = std::fs::remove_file(pending_dir.join("PHASES.md"));
+            let _ = std::fs::remove_dir(&pending_dir);
+
+            println!();
+            println!("  Project founded. Phase 0 begins.");
+            0
+        }
+        crate::found::FoundingApproval::Cancelled => {
+            println!();
+            println!("  Founding cancelled. Stage 1 + 2 decision notes are preserved;");
+            println!(
+                "  draft CHARTER.md + PHASES.md remain under {} for you to review.",
+                pending_dir.display()
+            );
+            println!("  Re-run `sovereign project found` when you're ready to approve.");
+            0
+        }
+    }
+}
+
+// ─── sovereign project amend (M6.7) ──────────────────────────
+
+/// Post-founding charter edit flow with adversarial review. See
+/// `crate::amend` for the policy; this function owns the I/O.
+///
+/// Flow:
+/// 1. Refuse unless founded.
+/// 2. Read current CHARTER.md; check hash against `charter_hash`.
+///    If drifted, ask the user to fold the drift in (y/N).
+/// 3. Spawn `$EDITOR` on CHARTER.md.
+/// 4. Diff → adversarial Q&A → preview → approve.
+/// 5. On approve: write CHARTER.md, bump `charter_version`,
+///    update `charter_hash`, persist a decision note with the full
+///    Q&A so readers six weeks later can find "why".
+async fn cmd_amend(args: &[String]) -> i32 {
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("sovereign project amend");
+        println!();
+        println!("Edit CHARTER.md with an adversarial review. Every amendment is");
+        println!("logged — what changed, what arguments the system raised, and");
+        println!("your responses. Requires the project to have been founded");
+        println!("(`sovereign project found`).");
+        return 0;
+    }
+
+    let repo_root = match find_repo_root() {
+        Some(r) => r,
+        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    };
+    let sovereign_dir = repo_root.join(".sovereign");
+    let project_toml_path = sovereign_dir.join("project.toml");
+    if !project_toml_path.exists() {
+        eprintln!();
+        eprintln!(
+            "  sovereign project amend: no .sovereign/project.toml found.\n\
+             Run `sovereign project init` first, then `sovereign project found`."
+        );
+        return 1;
+    }
+    let mut project_toml = match crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("  sovereign project amend: cannot read project.toml: {e}");
+            return 1;
+        }
+    };
+    if !project_toml.lifecycle.founded {
+        eprintln!();
+        eprintln!(
+            "  sovereign project amend: this project hasn't been founded yet.\n\
+             Run `sovereign project found` first — the charter it produces is \
+             what `amend` edits."
+        );
+        return 1;
+    }
+
+    let charter_path = crate::amend::charter_path(&repo_root);
+    let old_charter = match std::fs::read_to_string(&charter_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("  sovereign project amend: cannot read CHARTER.md: {e}");
+            return 1;
+        }
+    };
+
+    // Drift detection.
+    let disk_hash = crate::found::hash_charter(&old_charter);
+    let mut interlocutor = crate::amend::StdinAmendmentInterlocutor::new();
+    if disk_hash != project_toml.lifecycle.charter_hash {
+        let hint = crate::amend::drift_summary(&project_toml.lifecycle.charter_hash, &old_charter);
+        if !crate::amend::AmendmentInterlocutor::confirm_drift(&mut interlocutor, &hint) {
+            eprintln!();
+            eprintln!(
+                "  Amendment cancelled. To discard the drift first:\n    git checkout -- {}\n  Then re-run `sovereign project amend`.",
+                charter_path.display()
+            );
+            return 0;
+        }
+    }
+
+    // Editor.
+    println!();
+    println!("  Opening CHARTER.md in your editor… save and exit when done.");
+    let edited_charter = match crate::amend::invoke_editor(&charter_path) {
+        Some(c) => c,
+        None => {
+            eprintln!("  Amendment cancelled (editor did not complete).");
+            return 1;
+        }
+    };
+
+    let committer = git_committer_identity_for_amend(&repo_root)
+        .unwrap_or_else(|| "<unknown committer>".to_string());
+    let next_version = project_toml.lifecycle.charter_version.saturating_add(1);
+    let date = today_iso();
+
+    let outcome = crate::amend::run_amend(
+        &old_charter,
+        &edited_charter,
+        next_version,
+        &date,
+        &committer,
+        &mut interlocutor,
+    );
+
+    match outcome {
+        crate::amend::AmendOutcome::NoChange => {
+            println!();
+            println!("  No substantive changes detected — CHARTER.md left as-is.");
+            0
+        }
+        crate::amend::AmendOutcome::Cancelled => {
+            println!();
+            println!(
+                "  Amendment cancelled. Your editor changes are still in {} —\n\
+                 re-open and re-run when ready, OR discard with `git checkout --`.",
+                charter_path.display()
+            );
+            0
+        }
+        crate::amend::AmendOutcome::Approved {
+            new_charter,
+            entry,
+        } => {
+            if let Err(e) = std::fs::write(&charter_path, &new_charter) {
+                eprintln!("  Could not write CHARTER.md: {e}");
+                return 1;
+            }
+            project_toml.lifecycle.charter_version = entry.version;
+            project_toml.lifecycle.charter_hash = entry.new_charter_hash.clone();
+            if let Err(e) = project_toml.write(&project_toml_path) {
+                eprintln!("  Could not update project.toml: {e}");
+                return 1;
+            }
+
+            // Decision-kind note mirrors the amendment log entry so
+            // `read_notes --kind decision` surfaces it without
+            // parsing CHARTER.md.
+            let notes_path = sovereign_dir.join("notes.db");
+            if let Ok(note_store) = corpus_engine::NoteStore::open(&notes_path) {
+                let body = crate::amend::render_amendment_note_body(&entry);
+                let session_id = format!("amend-v{}", entry.version);
+                let rt = tokio::runtime::Handle::current();
+                let _ = tokio::task::block_in_place(|| {
+                    rt.block_on(note_store.write_note_scoped(
+                        "decision",
+                        &body,
+                        Vec::new(),
+                        Vec::new(),
+                        &session_id,
+                        corpus_engine::NoteScope::Global,
+                        None,
+                    ))
+                });
+            }
+
+            println!();
+            println!("    \u{2713} CHARTER.md updated");
+            println!(
+                "    \u{2713} project.toml: charter_version={}, charter_hash={}",
+                entry.version,
+                &entry.new_charter_hash[..8.min(entry.new_charter_hash.len())]
+            );
+            println!("    \u{2713} decision note written (session=amend-v{})", entry.version);
+            0
+        }
+    }
+}
+
+fn git_committer_identity_for_amend(repo_root: &Path) -> Option<String> {
+    let name = std::process::Command::new("git")
+        .args(["config", "user.name"])
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    let email = std::process::Command::new("git")
+        .args(["config", "user.email"])
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    if !name.status.success() || !email.status.success() {
+        return None;
+    }
+    Some(format!(
+        "{} <{}>",
+        String::from_utf8_lossy(&name.stdout).trim(),
+        String::from_utf8_lossy(&email.stdout).trim(),
+    ))
+}
+
+fn today_iso() -> String {
+    let secs = unix_now_secs();
+    let days = secs / 86400;
+    // Howard Hinnant's civil-from-days (same algorithm as
+    // middleware/artifact_surface::rfc3339_to_unix, in reverse).
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+fn derive_project_id(repo_root: &Path) -> String {
+    repo_root
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("project")
+        .to_string()
+}
+
+fn unix_now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+// ─── Observation report (M6.1) ──────────────────────────────
+//
+// Consumes `crate::observation::ProjectObservation` and renders it
+// in three buckets (Ready / Actionable / Deferred-to-found) per the
+// M6 requirements. Actionable items state the install command on
+// its own line, copy-pasteable, unindented — the user can paste and
+// run without editing.
+fn print_observation_report(obs: &crate::observation::ProjectObservation) {
+    use crate::observation::{DepKind, ScipTooling};
+
+    let mut ready: Vec<String> = Vec::new();
+    let mut actionable: Vec<(String, &'static str)> = Vec::new();
+    let mut deferred: Vec<String> = Vec::new();
+
+    // Languages & SCIP tooling.
+    if obs.languages.is_empty() {
+        actionable.push((
+            "No supported languages detected (Rust, TypeScript, JavaScript, Go, Python, Java)."
+                .into(),
+            "",
+        ));
+    } else {
+        for lang in &obs.languages {
+            match &lang.scip_tooling {
+                ScipTooling::Available { binary } => {
+                    ready.push(format!("{} ({binary} on PATH)", lang.display));
+                }
+                ScipTooling::NotRequired => {
+                    ready.push(lang.display.clone());
+                }
+                ScipTooling::Missing {
+                    binary,
+                    install_cmd,
+                } => {
+                    actionable.push((
+                        format!(
+                            "{} detected. Call-graph navigation requires `{binary}`:",
+                            lang.display
+                        ),
+                        *install_cmd,
+                    ));
+                }
+            }
+        }
+    }
+
+    if obs.has_git {
+        ready.push("Git repository".into());
+    } else {
+        // Not an actionable gap in the strict sense — git is
+        // optional for init — but worth surfacing so the user knows
+        // approvals-via-git won't be available.
+        deferred.push("No git repository — `atos feature approve` covers the gap.".into());
+    }
+
+    if obs.embed_model_available {
+        ready.push("Embed model".into());
+    } else {
+        actionable.push((
+            "Embed model not found (documentation search will be degraded).".into(),
+            "sovereign setup",
+        ));
+    }
+
+    // External dependencies — noted for `project found` (Stage 2
+    // fault lines draws on this list). Not resolved at init time.
+    let direct_deps: Vec<&crate::observation::DetectedDependency> = obs
+        .deps
+        .iter()
+        .filter(|d| d.kind == DepKind::Direct)
+        .collect();
+    if !direct_deps.is_empty() {
+        let n = direct_deps.len();
+        deferred.push(format!(
+            "{n} direct external dependenc{y} detected — surfaced to `sovereign project found`.",
+            y = if n == 1 { "y" } else { "ies" }
+        ));
+    }
+
+    // Render.
+    if !ready.is_empty() {
+        println!();
+        for r in &ready {
+            println!("    \u{2713} {r}");
+        }
+    }
+
+    if !actionable.is_empty() {
+        println!();
+        for (desc, cmd) in &actionable {
+            println!("    \u{26a0} {desc}");
+            if !cmd.is_empty() {
+                println!();
+                println!("{cmd}");
+                println!();
+            }
+        }
+    }
+
+    if !deferred.is_empty() {
+        println!();
+        for d in &deferred {
+            println!("    \u{2026} {d}");
+        }
+    }
+}
 
 // ─── Language detection ──────────────────────────────────────
 

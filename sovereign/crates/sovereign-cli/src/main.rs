@@ -1,10 +1,16 @@
+mod amend;
 mod atos_cmd;
 mod code_cmd;
 mod daemon_cmd;
+mod doc_fetcher;
 mod doctor_cmd;
+mod found;
+mod honesty;
 mod mcp_cmd;
 mod mesh_cmd;
+mod observation;
 mod project_cmd;
+mod project_toml;
 mod recipe_cmd;
 mod reflect_cmd;
 mod service_install;

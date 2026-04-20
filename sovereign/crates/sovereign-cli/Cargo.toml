@@ -30,6 +30,8 @@ dirs = "5"
 hostname = { workspace = true }
 oicp-types = { path = "../../../oicp-types" }
 tempfile = "3"
+which = "7"
+sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
