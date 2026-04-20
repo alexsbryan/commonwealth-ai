@@ -184,6 +184,20 @@ impl NoteStore {
             })?;
         }
 
+        // v2 → v3: expand the `kind` CHECK constraint to admit three
+        // new ATOS note kinds. SQLite can't alter a CHECK in-place, so
+        // we follow MIGRATION_V1's rename-recreate-copy pattern. The
+        // FTS5 virtual table and triggers must also be rebuilt because
+        // they reference the `notes` table by name.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 3 {
+            conn.execute_batch(MIGRATION_V3).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v3: {e}")))
+            })?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -799,7 +813,10 @@ PRAGMA journal_mode=WAL;
 
 CREATE TABLE IF NOT EXISTS notes (
     id         TEXT    PRIMARY KEY,
-    kind       TEXT    NOT NULL CHECK(kind IN ('decision','attempt','invariant','todo','reflection')),
+    kind       TEXT    NOT NULL CHECK(kind IN (
+        'decision','attempt','invariant','todo','reflection',
+        'uncertainty','postmortem_pointer','redteam_finding'
+    )),
     content    TEXT    NOT NULL,
     symbols    TEXT    NOT NULL DEFAULT '[]',
     files      TEXT    NOT NULL DEFAULT '[]',
@@ -848,6 +865,98 @@ CREATE INDEX IF NOT EXISTS idx_log_tool    ON tool_call_log(tool_name);
 CREATE INDEX IF NOT EXISTS idx_log_called  ON tool_call_log(called_at DESC);
 
 PRAGMA user_version = 1;
+";
+
+// ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
+//     postmortem_pointer, redteam_finding) ─────────────────────────────────
+
+/// Applied to databases at `user_version = 2`. Expands the `notes.kind`
+/// CHECK constraint. SQLite cannot alter a CHECK in-place, so we
+/// rename-copy-rebuild — same pattern as `MIGRATION_V1`. The FTS5
+/// virtual table and triggers are rebuilt because they reference the
+/// `notes` table by name; the rebuild trigger repopulates the index
+/// from the copied rows.
+///
+/// Idempotent across a single install: gated by `PRAGMA user_version <
+/// 3` in `NoteStore::open`.
+const MIGRATION_V3: &str = "
+BEGIN;
+
+ALTER TABLE notes RENAME TO notes_v2;
+
+CREATE TABLE notes (
+    id            TEXT    PRIMARY KEY,
+    kind          TEXT    NOT NULL CHECK(kind IN (
+        'decision','attempt','invariant','todo','reflection',
+        'uncertainty','postmortem_pointer','redteam_finding'
+    )),
+    content       TEXT    NOT NULL,
+    symbols       TEXT    NOT NULL DEFAULT '[]',
+    files         TEXT    NOT NULL DEFAULT '[]',
+    session_id    TEXT    NOT NULL,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    tool_name     TEXT,
+    retired_at    INTEGER,
+    retired_by    TEXT,
+    scope         TEXT    NOT NULL DEFAULT 'global'
+                  CHECK(scope IN ('global','feature','session')),
+    feature_id    TEXT,
+    promoted_from TEXT
+);
+
+INSERT INTO notes (
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from
+)
+SELECT
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from
+FROM notes_v2;
+
+DROP TABLE notes_v2;
+
+CREATE INDEX IF NOT EXISTS idx_notes_kind           ON notes(kind);
+CREATE INDEX IF NOT EXISTS idx_notes_created        ON notes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_tool_name      ON notes(tool_name);
+CREATE INDEX IF NOT EXISTS idx_notes_retired_at     ON notes(retired_at);
+CREATE INDEX IF NOT EXISTS idx_notes_scope_feature  ON notes(scope, feature_id);
+CREATE INDEX IF NOT EXISTS idx_notes_feature
+    ON notes(feature_id) WHERE feature_id IS NOT NULL;
+
+-- Rebuild FTS5 + triggers. The old `notes_v2` has been dropped, so
+-- any pre-existing rowid mappings in `notes_fts` are stale — blow it
+-- away and repopulate from the current `notes` table.
+DROP TABLE IF EXISTS notes_fts;
+CREATE VIRTUAL TABLE notes_fts USING fts5(
+    content, kind,
+    content='notes',
+    content_rowid='rowid'
+);
+INSERT INTO notes_fts(notes_fts) VALUES('rebuild');
+
+DROP TRIGGER IF EXISTS notes_fts_ai;
+DROP TRIGGER IF EXISTS notes_fts_ad;
+DROP TRIGGER IF EXISTS notes_fts_au;
+
+CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+END;
+
+CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+PRAGMA user_version = 3;
+
+COMMIT;
 ";
 
 // ─── Schema migration v1 → v2 (ATOS scoping) ─────────────────────────────────
@@ -1586,6 +1695,149 @@ mod tests {
         // Source row still exists at feature scope.
         let source = notes.iter().find(|n| n.id == src).unwrap();
         assert_eq!(source.scope, "feature");
+    }
+
+    // ── v3 kinds round-trip ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn write_uncertainty_kind_round_trip() {
+        let store = make_store().await;
+        let id = store
+            .write_note_scoped(
+                "uncertainty",
+                "Deep collection nesting in Zotero exports — flatten to nearest ancestor.",
+                vec![],
+                vec!["acquirers/zotero.rs".into()],
+                "s1",
+                NoteScope::Feature,
+                Some("zotero-acquirer"),
+            )
+            .await
+            .unwrap();
+        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let n = notes.iter().find(|n| n.id == id).unwrap();
+        assert_eq!(n.kind, "uncertainty");
+        assert_eq!(n.feature_id.as_deref(), Some("zotero-acquirer"));
+    }
+
+    #[tokio::test]
+    async fn write_postmortem_pointer_kind_round_trip() {
+        let store = make_store().await;
+        let id = store
+            .write_note_scoped(
+                "postmortem_pointer",
+                "zotero_rdf.rs::parse_item — RDF boundary detection is the most complex path.",
+                vec!["parse_item".into()],
+                vec!["extractors/zotero_rdf.rs".into()],
+                "s1",
+                NoteScope::Feature,
+                Some("zotero-acquirer"),
+            )
+            .await
+            .unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &["postmortem_pointer".to_string()], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].id, id);
+    }
+
+    #[tokio::test]
+    async fn write_redteam_finding_kind_round_trip() {
+        let store = make_store().await;
+        let id = store
+            .write_note_scoped(
+                "redteam_finding",
+                "ZoteroLibrary factory does not explicitly set scope=Local.",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Feature,
+                Some("zotero-acquirer"),
+            )
+            .await
+            .unwrap();
+        let notes = store.read_notes_scoped(
+            None, &[], &[], &["redteam_finding".to_string()], 10, false,
+            &ScopeFilter { scopes: vec![NoteScope::Feature], feature_id: Some("zotero-acquirer".into()) },
+        ).await.unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].id, id);
+    }
+
+    #[tokio::test]
+    async fn unknown_kind_still_rejected() {
+        let store = make_store().await;
+        let err = store
+            .write_note("not_a_kind", "hi", vec![], vec![], "s1")
+            .await
+            .unwrap_err();
+        // CHECK constraint violation surfaces via rusqlite → Error::Io.
+        let msg = format!("{err}");
+        assert!(msg.to_lowercase().contains("check") || msg.to_lowercase().contains("constraint"),
+                "unexpected error: {msg}");
+    }
+
+    #[tokio::test]
+    async fn migration_v2_to_v3_preserves_data_and_enables_new_kinds() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Build a v2 database manually — run SCHEMA_NEW (v1) + MIGRATION_V2 (v2),
+        // then stop short of MIGRATION_V3. Insert a pre-v3 row so we can
+        // prove it survives the rebuild.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(SCHEMA_NEW).unwrap();
+            conn.execute_batch(MIGRATION_V2).unwrap();
+            // Drop the post-migration CHECK back down to the v2 set so
+            // we're actually simulating a v2 DB (SCHEMA_NEW already has
+            // the expanded list after this file's M3.2 edit, but a
+            // real-world v2 DB on disk won't).
+            let v: i64 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(v, 2, "baseline should be v2");
+            conn.execute(
+                "INSERT INTO notes (id, kind, content, symbols, files, session_id,
+                    created_at, updated_at, scope)
+                 VALUES ('pre-v3','decision','survives migration','[]','[]','s0',1000,1000,'global')",
+                [],
+            )
+            .unwrap();
+        }
+
+        // Reopen — MIGRATION_V3 runs.
+        let store = NoteStore::open(&db_path).unwrap();
+
+        // Old row preserved.
+        let old = store.read_note_by_id("pre-v3").await.unwrap().unwrap();
+        assert_eq!(old.content, "survives migration");
+        assert_eq!(old.scope, "global");
+
+        // New kinds accepted.
+        let id = store
+            .write_note_scoped(
+                "uncertainty",
+                "post-migration",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(!id.is_empty());
+
+        // FTS5 still works (was rebuilt during the migration).
+        let hits = store
+            .read_notes(Some("survives"), &[], &[], &[], 5, false)
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, "pre-v3");
     }
 
     #[tokio::test]

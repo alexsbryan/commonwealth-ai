@@ -97,6 +97,13 @@ pub struct AtosRunRow {
     pub ended_at: Option<i64>,
     pub exit_code: Option<i64>,
     pub stop_passed: Option<bool>,
+    /// Run mode: `"normal"` (agent driver) or `"redteam"` (restricted
+    /// tool set). Populated on every row from M3.2 forward; pre-M3.2
+    /// rows default to `"normal"` via the column DEFAULT.
+    pub mode: String,
+    /// Captured stdout from the stop_condition run, bounded at 8KB by
+    /// the orchestrator. Populated only for the `end-milestone` path.
+    pub stop_stdout: Option<String>,
 }
 
 /// One row of the `atos_tool_events` table.
@@ -142,6 +149,20 @@ impl FeatureStore {
         })?;
         conn.execute_batch("PRAGMA journal_mode=WAL;")
             .map_err(sqlite_err)?;
+
+        // Pre-schema: detect whether `atos_runs` already exists WITHOUT
+        // the M3.2 columns. If so, ALTER them in before the main
+        // `CREATE TABLE IF NOT EXISTS` becomes a no-op and hides the
+        // old definition. ALTER TABLE ADD COLUMN on an existing row is
+        // legitimate SQLite — unlike CHECK changes — so this stays a
+        // plain additive migration.
+        add_column_if_missing(
+            &conn,
+            "atos_runs",
+            "mode",
+            "TEXT NOT NULL DEFAULT 'normal' CHECK(mode IN ('normal','redteam'))",
+        )?;
+        add_column_if_missing(&conn, "atos_runs", "stop_stdout", "TEXT")?;
         conn.execute_batch(SCHEMA).map_err(sqlite_err)?;
 
         Ok(Self {
@@ -389,21 +410,45 @@ impl FeatureStore {
     /// start-milestone`) hands the returned id to the driver subprocess
     /// via `$ATOS_RUN_ID` so every `record_tool_event` call can be
     /// attributed.
+    ///
+    /// Back-compat wrapper — defaults `mode` to `"normal"`. New
+    /// callers use [`open_run_with_mode`].
     pub async fn open_run(
         &self,
         feature_id: &str,
         milestone_id: &str,
         driver: &str,
     ) -> Result<AtosRunRow> {
+        self.open_run_with_mode(feature_id, milestone_id, driver, "normal")
+            .await
+    }
+
+    /// Open a new run with an explicit mode. Use `"redteam"` for the
+    /// restricted driver session on a milestone's invariants;
+    /// `"normal"` otherwise. The mode is persisted on `atos_runs.mode`
+    /// so reports can filter by it without round-tripping through
+    /// external env state.
+    pub async fn open_run_with_mode(
+        &self,
+        feature_id: &str,
+        milestone_id: &str,
+        driver: &str,
+        mode: &str,
+    ) -> Result<AtosRunRow> {
+        if !matches!(mode, "normal" | "redteam") {
+            return Err(Error::InvalidInput(format!(
+                "open_run_with_mode: mode must be 'normal' or 'redteam', got '{mode}'"
+            )));
+        }
         let id = uuid::Uuid::new_v4().to_string();
         let now = unix_now();
         let conn = self.conn.lock().await;
         conn.execute(
             "INSERT INTO atos_runs
                 (id, feature_id, milestone_id, driver, session_id, started_at,
-                 ended_at, exit_code, stop_passed)
-             VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL)",
-            params![id, feature_id, milestone_id, driver, now],
+                 ended_at, exit_code, stop_passed, mode, stop_stdout)
+             VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, NULL)",
+            params![id, feature_id, milestone_id, driver, now, mode],
         )
         .map_err(sqlite_err)?;
         Ok(AtosRunRow {
@@ -416,6 +461,8 @@ impl FeatureStore {
             ended_at: None,
             exit_code: None,
             stop_passed: None,
+            mode: mode.into(),
+            stop_stdout: None,
         })
     }
 
@@ -438,19 +485,38 @@ impl FeatureStore {
     /// Close out a run. `stop_passed` is what `atos end-milestone`
     /// computed from the feature's stop_condition; `exit_code` is the
     /// driver subprocess's exit status.
+    ///
+    /// Back-compat wrapper: does not persist `stop_stdout`. Use
+    /// [`close_run_with_stdout`] from the M3.2+ end-milestone path.
     pub async fn close_run(
         &self,
         run_id: &str,
         exit_code: i64,
         stop_passed: bool,
     ) -> Result<bool> {
+        self.close_run_with_stdout(run_id, exit_code, stop_passed, None)
+            .await
+    }
+
+    /// Close out a run and persist the stop_condition stdout so the
+    /// milestone-<n>.md renderer can quote it. Orchestrator caps
+    /// `stop_stdout` at 8KB before calling this.
+    pub async fn close_run_with_stdout(
+        &self,
+        run_id: &str,
+        exit_code: i64,
+        stop_passed: bool,
+        stop_stdout: Option<&str>,
+    ) -> Result<bool> {
         let now = unix_now();
         let conn = self.conn.lock().await;
         let affected = conn
             .execute(
-                "UPDATE atos_runs SET ended_at = ?1, exit_code = ?2, stop_passed = ?3
-                 WHERE id = ?4",
-                params![now, exit_code, stop_passed as i64, run_id],
+                "UPDATE atos_runs
+                 SET ended_at = ?1, exit_code = ?2, stop_passed = ?3,
+                     stop_stdout = ?4
+                 WHERE id = ?5",
+                params![now, exit_code, stop_passed as i64, stop_stdout, run_id],
             )
             .map_err(sqlite_err)?;
         Ok(affected > 0)
@@ -461,7 +527,8 @@ impl FeatureStore {
         let row = conn
             .query_row(
                 "SELECT id, feature_id, milestone_id, driver, session_id,
-                        started_at, ended_at, exit_code, stop_passed
+                        started_at, ended_at, exit_code, stop_passed,
+                        mode, stop_stdout
                  FROM atos_runs WHERE id = ?",
                 params![run_id],
                 map_run_row,
@@ -479,7 +546,8 @@ impl FeatureStore {
         let mut stmt = conn
             .prepare(
                 "SELECT id, feature_id, milestone_id, driver, session_id,
-                        started_at, ended_at, exit_code, stop_passed
+                        started_at, ended_at, exit_code, stop_passed,
+                        mode, stop_stdout
                  FROM atos_runs WHERE feature_id = ?
                  ORDER BY started_at ASC",
             )
@@ -592,7 +660,49 @@ fn map_run_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AtosRunRow> {
         ended_at: row.get(6)?,
         exit_code: row.get(7)?,
         stop_passed: stop_passed_int.map(|n| n != 0),
+        mode: row.get(9)?,
+        stop_stdout: row.get(10)?,
     })
+}
+
+/// Add a column to a table if the table exists and the column does
+/// not. Used by [`FeatureStore::open`] to land additive schema
+/// changes (M3.2: `atos_runs.mode`, `atos_runs.stop_stdout`) on
+/// pre-existing databases without disturbing fresh ones.
+fn add_column_if_missing(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    defn: &str,
+) -> Result<()> {
+    // Table absent → CREATE TABLE IF NOT EXISTS below will handle it.
+    let table_exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name = ?",
+            params![table],
+            |r| r.get(0),
+        )
+        .map_err(sqlite_err)?;
+    if table_exists == 0 {
+        return Ok(());
+    }
+    let pragma = format!("PRAGMA table_info({table})");
+    let mut stmt = conn.prepare(&pragma).map_err(sqlite_err)?;
+    let mut rows = stmt.query([]).map_err(sqlite_err)?;
+    let mut seen = false;
+    while let Some(r) = rows.next().map_err(sqlite_err)? {
+        let name: String = r.get(1).map_err(sqlite_err)?;
+        if name == column {
+            seen = true;
+            break;
+        }
+    }
+    if !seen {
+        let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {defn}");
+        conn.execute(&sql, []).map_err(sqlite_err)?;
+    }
+    Ok(())
 }
 
 fn map_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AtosToolEvent> {
@@ -642,6 +752,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_milestones_feat_ord
 -- orchestrator creates this row on `start-milestone`, exports its id
 -- as $ATOS_RUN_ID to the driver subprocess, and closes it out on
 -- `end-milestone` with stop_condition exit + duration.
+--
+-- `mode` added in M3.2: 'normal' runs are agent drivers; 'redteam'
+-- runs use a restricted tool surface + narrowed brief and land in the
+-- report renderer's Red Team Findings section. The column has a
+-- DEFAULT so V1/V2 rows created before M3.2 naturally become 'normal'.
+--
+-- `stop_stdout` added in M3.2: captures the shell output from
+-- `end-milestone`'s stop_condition run so the milestone-<n>.md renderer
+-- can quote test results inline without re-running anything.
+-- Bounded at 8KB by the orchestrator before insert.
 CREATE TABLE IF NOT EXISTS atos_runs (
     id            TEXT PRIMARY KEY,
     feature_id    TEXT NOT NULL,
@@ -651,10 +771,14 @@ CREATE TABLE IF NOT EXISTS atos_runs (
     started_at    INTEGER NOT NULL,
     ended_at      INTEGER,
     exit_code     INTEGER,
-    stop_passed   INTEGER
+    stop_passed   INTEGER,
+    mode          TEXT NOT NULL DEFAULT 'normal'
+                  CHECK(mode IN ('normal','redteam')),
+    stop_stdout   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_runs_feature   ON atos_runs(feature_id);
 CREATE INDEX IF NOT EXISTS idx_runs_milestone ON atos_runs(milestone_id);
+CREATE INDEX IF NOT EXISTS idx_runs_mode      ON atos_runs(mode);
 
 -- Per-tool event log. Populated by the opencode plugin via
 -- `record_atos_event`, and (eventually) by a Claude-side wrapper that
@@ -912,6 +1036,110 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, Error::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn open_run_defaults_to_normal_mode() {
+        let store = make_store().await;
+        store.provision("f1", "t", "c", "", "").await.unwrap();
+        let m = store.add_milestone("f1", 1, "brief").await.unwrap();
+        let run = store.open_run("f1", &m.id, "claude").await.unwrap();
+        assert_eq!(run.mode, "normal");
+        let loaded = store.get_run(&run.id).await.unwrap().unwrap();
+        assert_eq!(loaded.mode, "normal");
+    }
+
+    #[tokio::test]
+    async fn open_run_with_redteam_mode_persists() {
+        let store = make_store().await;
+        store.provision("f1", "t", "c", "", "").await.unwrap();
+        let m = store.add_milestone("f1", 1, "brief").await.unwrap();
+        let run = store
+            .open_run_with_mode("f1", &m.id, "claude", "redteam")
+            .await
+            .unwrap();
+        let loaded = store.get_run(&run.id).await.unwrap().unwrap();
+        assert_eq!(loaded.mode, "redteam");
+    }
+
+    #[tokio::test]
+    async fn invalid_mode_rejected() {
+        let store = make_store().await;
+        store.provision("f1", "t", "c", "", "").await.unwrap();
+        let m = store.add_milestone("f1", 1, "brief").await.unwrap();
+        let err = store
+            .open_run_with_mode("f1", &m.id, "claude", "adversarial")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn close_run_with_stdout_persists() {
+        let store = make_store().await;
+        store.provision("f1", "t", "c", "", "").await.unwrap();
+        let m = store.add_milestone("f1", 1, "brief").await.unwrap();
+        let run = store.open_run("f1", &m.id, "claude").await.unwrap();
+        let stdout = "test result: ok. 17 passed; 0 failed";
+        assert!(
+            store
+                .close_run_with_stdout(&run.id, 0, true, Some(stdout))
+                .await
+                .unwrap()
+        );
+        let loaded = store.get_run(&run.id).await.unwrap().unwrap();
+        assert_eq!(loaded.stop_stdout.as_deref(), Some(stdout));
+        assert_eq!(loaded.stop_passed, Some(true));
+    }
+
+    #[tokio::test]
+    async fn m32_additive_columns_on_prior_db() {
+        // Simulate a pre-M3.2 FeatureStore where atos_runs lacks the
+        // new `mode` and `stop_stdout` columns. The M3.2 `open()` must
+        // detect and ALTER them in rather than silently leaving the
+        // schema behind.
+        use rusqlite::Connection;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("features.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE features (
+                     id TEXT PRIMARY KEY, title TEXT NOT NULL, charter_md TEXT NOT NULL,
+                     sovereign_md TEXT NOT NULL DEFAULT '',
+                     state TEXT NOT NULL CHECK(state IN ('provisioned','active','paused','archived','completed')),
+                     stop_condition TEXT NOT NULL DEFAULT '',
+                     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                     archived_at INTEGER);
+                 CREATE TABLE feature_milestones (
+                     id TEXT PRIMARY KEY, feature_id TEXT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+                     ordinal INTEGER NOT NULL, brief_md TEXT NOT NULL,
+                     started_at INTEGER, ended_at INTEGER, compliance_report_json TEXT);
+                 CREATE TABLE atos_runs (
+                     id TEXT PRIMARY KEY, feature_id TEXT NOT NULL, milestone_id TEXT NOT NULL,
+                     driver TEXT NOT NULL CHECK(driver IN ('claude','opencode')),
+                     session_id TEXT, started_at INTEGER NOT NULL,
+                     ended_at INTEGER, exit_code INTEGER, stop_passed INTEGER);
+                 INSERT INTO features VALUES ('prior','t','c','','provisioned','true',1000,1000,NULL);
+                 INSERT INTO feature_milestones VALUES ('mm','prior',1,'brief',NULL,NULL,NULL);
+                 INSERT INTO atos_runs (id, feature_id, milestone_id, driver, started_at)
+                   VALUES ('r0','prior','mm','claude',1000);",
+            )
+            .unwrap();
+        }
+
+        // Reopen — the additive ALTERs should land without data loss.
+        let store = FeatureStore::open(&path).unwrap();
+        let loaded = store.get_run("r0").await.unwrap().unwrap();
+        assert_eq!(loaded.mode, "normal", "pre-M3.2 row defaults to normal mode");
+        assert!(loaded.stop_stdout.is_none(), "pre-M3.2 rows have NULL stdout");
+
+        // Future runs pick up the new column properly.
+        let fresh = store
+            .open_run_with_mode("prior", "mm", "claude", "redteam")
+            .await
+            .unwrap();
+        assert_eq!(fresh.mode, "redteam");
     }
 
     #[tokio::test]
