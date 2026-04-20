@@ -150,29 +150,53 @@ async fn run_daemon(_args: &[String]) -> i32 {
 
     // ── CorpusEngine ──────────────────────────────────────────────
     // Single shared instance: powers both the `/mcp` tool registry
-    // (find_callers, code_search, etc.) and the mesh daemon's
-    // `/internal/corpus/*` HTTP surface. Without sharing, the
-    // `auto_ingest` loop on the mesh side would hit `state.inner
-    // .corpus_engine == None` and silently no-op, and a manual
-    // POST to `/internal/corpus/collaborate` would 503 with
-    // "no corpus engine available on this node".
+    // (find_callers, code_search, etc.) AND — now that we wired
+    // the engine into the mesh daemon's AppState — the
+    // `corpus_collaborate` handler that runs the daemon's share of
+    // a partitioned Wikipedia/etc. ingest via
+    // `engine.ingest_with_overrides`.
     //
-    // Zero-vector embed for code indexes — real inference flows
-    // through `/v1/*` via the InferenceProvider, not the tool
-    // layer. (Wikipedia + other JSONL corpora are ingested by the
-    // desktop's own engine; the daemon only NEEDS to read the
-    // `_corpus_meta.json` files those ingests leave on disk to
-    // detect "in_progress" state, which doesn't require embed.)
+    // The embed function MUST be real. Earlier this session the
+    // daemon shipped a zero-vector stub here (correct for SCIP
+    // code graphs, which don't embed), and when collaborative
+    // ingestion started calling `ingest_with_overrides` it wrote
+    // ~4 million 768-dim all-zeros vectors into the partition's
+    // `chunks.lance` at "60,000 chunks/sec" — nonsense embeddings
+    // at the speed of the Lance writer, not the embed model. Any
+    // merge of that partition into the canonical index would have
+    // poisoned retrieval with zero vectors.
+    //
+    // Route EmbedFn through the already-loaded `provider`. Same
+    // llama.cpp embed slot the desktop's ingest uses, same 1024
+    // dims, same pooling. Also wire the batch variant: Wikipedia
+    // throughput is ~5× higher with batched embed calls on
+    // M-series Metal compared to per-chunk.
     let engine: Arc<CorpusEngine> = {
         let indexes_dir = data_dir.join("indexes");
-        let embed: EmbedFn = Arc::new(|_text: &str| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+        let provider_for_embed = Arc::clone(&provider);
+        let embed: EmbedFn = Arc::new(move |text: &str| {
+            let p = Arc::clone(&provider_for_embed);
+            let text = text.to_string();
+            Box::pin(async move {
+                p.embed(&text)
+                    .await
+                    .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+            })
         });
-        Arc::new(CorpusEngine::new(
-            indexes_dir.clone(),
-            indexes_dir,
-            embed,
-        ))
+        let provider_for_batch = Arc::clone(&provider);
+        let batch_embed: corpus_engine::types::BatchEmbedFn = Arc::new(move |texts: &[String]| {
+            let p = Arc::clone(&provider_for_batch);
+            let texts = texts.to_vec();
+            Box::pin(async move {
+                p.embed_batch(&texts)
+                    .await
+                    .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+            })
+        });
+        Arc::new(
+            CorpusEngine::new(indexes_dir.clone(), indexes_dir, embed)
+                .with_batch_embed_fn(batch_embed),
+        )
     };
 
     // ── Tool registry (code intelligence + notes) ─────────────────

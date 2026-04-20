@@ -209,18 +209,28 @@ pub async fn run_one_round(
             if *id == self_id {
                 continue;
             }
+            let prior_status = m.status;
             // Only decay if the record is actually stale AND not
             // already Offline (avoid unnecessary writes).
             if now.saturating_sub(m.last_seen) > threshold
                 && m.status != NodeStatus::Offline
             {
                 m.status = NodeStatus::Offline;
-                debug!(
+                info!(
                     peer = %m.node_id,
+                    name = %m.name,
                     staleness_secs = now.saturating_sub(m.last_seen),
-                    "gossip: marked peer Offline (stale last_seen)"
+                    "gossip: peer marked Offline (stale last_seen)"
                 );
             }
+            // The symmetric offline→online transition is logged at
+            // the actual point of transition, further down in this
+            // round where `merge_from` receives a peer's heartbeat
+            // and/or we successfully reach the peer ourselves.
+            // Here in the decay pass `m.status` can only move
+            // Online→Offline, so no online-transition log to emit.
+            let _ = prior_status; // reserved for future use
+
         }
         mesh.members
             .values()
@@ -285,9 +295,23 @@ pub async fn run_one_round(
                     // Also bump THIS peer's last_seen in case their
                     // view of themselves lagged — we successfully
                     // reached them just now, so they're Online.
+                    //
+                    // Log the offline→online transition at INFO so
+                    // the operator can see "B is back" without
+                    // polling mesh_state() by hand. Symmetric to the
+                    // offline-decay log in the pass above.
                     if let Some(peer) = mesh.members.get_mut(&peer_id) {
+                        let was_offline = peer.status == NodeStatus::Offline;
                         peer.last_seen = now_secs();
                         peer.status = NodeStatus::Online;
+                        if was_offline {
+                            info!(
+                                peer = %peer_id,
+                                peer_addr = %addr,
+                                name = %peer.name,
+                                "gossip: peer back Online"
+                            );
+                        }
                     }
                     break; // one working address is enough
                 }

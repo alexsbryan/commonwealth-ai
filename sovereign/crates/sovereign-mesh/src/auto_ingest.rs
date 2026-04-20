@@ -78,7 +78,23 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             continue;
         };
 
-        let in_progress_vec = engine.in_progress_ingestions();
+        // Filter out partition-scoped corpora
+        // (`<base>-partition-node-<hex>`). Those are the OUTPUT of
+        // collaborative ingestion — this daemon's own
+        // `corpus_collaborate` spawn writes them into dedicated
+        // subdirs. `in_progress_ingestions()` surfaces them because
+        // each carries an `ingestion_in_progress: true` meta, but
+        // feeding them back into `corpus_collaborate` is meaningless:
+        // there is no recipe registered for `wikipedia-partition-
+        // node-<hex>`, so every call logs "no compatible peers yet —
+        // reason: No source manifest for corpus ...". Exclude at the
+        // source so only user-visible corpora drive collaboration.
+        let is_partition_corpus = |id: &str| id.contains("-partition-node-");
+        let in_progress_vec: Vec<String> = engine
+            .in_progress_ingestions()
+            .into_iter()
+            .filter(|id| !is_partition_corpus(id))
+            .collect();
         let in_progress: HashSet<String> = in_progress_vec.iter().cloned().collect();
         let new_ingest_appeared = in_progress
             .iter()
