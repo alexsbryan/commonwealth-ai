@@ -14,7 +14,8 @@ use commonwealth_discovery::membership;
 use commonwealth_inference::inference_plan::InferencePlan;
 use commonwealth_inference::oicp::{EmbedModelInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 use commonwealth_inference::scheduler::knowledge_assignment::{
-    plan_collaborative_ingestion, plan_collaborative_ingestion_jsonl, CollaborativeIngestionError,
+    plan_collaborative_ingestion, plan_collaborative_ingestion_jsonl,
+    plan_collaborative_ingestion_jsonl_sharded, CollaborativeIngestionError,
 };
 use commonwealth_knowledge::shard_manager::ShardManager;
 
@@ -124,6 +125,55 @@ pub async fn corpus_collaborate(
 
     let handoff = if is_jsonl {
         // ── JSONL path (Wikipedia) ──────────────────────────────────────────
+        //
+        // Multi-shard JSONL sources (Wikipedia ships 76 JSONL shards
+        // inside one ZIP) partition on the ZIP's table of contents
+        // rather than on absolute article index. Shard boundaries
+        // come from the archive's own entry list, so two peers with
+        // the same ZIP will produce the same articles for a given
+        // shard index regardless of whether either has a partial
+        // `extracted.jsonl` cache or a snapshot drift. Article-index
+        // partitioning — which compared A's local counts to B's —
+        // was unsafe (silent corruption when snapshots drifted, a
+        // confusing "zero chunks" error when B's extraction was
+        // truncated) and is now only used for the single-shard case.
+        let shard_count = engine
+            .jsonl_source_shard_count(&req.corpus_id)
+            .unwrap_or(1);
+        if shard_count > 1 {
+            let processed: std::collections::HashSet<usize> = engine
+                .corpus_processed_shards(&req.corpus_id)
+                .into_iter()
+                .collect();
+            let remaining: Vec<usize> = (0..shard_count)
+                .filter(|i| !processed.contains(i))
+                .collect();
+
+            tracing::info!(
+                corpus = %req.corpus_id,
+                shard_count,
+                processed = processed.len(),
+                remaining = remaining.len(),
+                "collaborate: planning JSONL shard-index partition"
+            );
+
+            plan_collaborative_ingestion_jsonl_sharded(
+                &req.corpus_id,
+                recipe_id,
+                remaining,
+                &local_member,
+                &candidates,
+                &local_embed_model,
+            )
+            .map_err(|e| {
+                let body = Json(ErrorBody { error: e.to_string() });
+                match e {
+                    CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
+                    _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
+                }
+            })?
+        } else {
+
         let total_articles = engine.count_jsonl_articles(&req.corpus_id)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: e.to_string() })))?;
 
@@ -158,6 +208,8 @@ pub async fn corpus_collaborate(
                 _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
             }
         })?
+
+        }
     } else {
         // ── HF parquet path (Gutenberg, StackExchange, …) ─────────────────
         let remaining = engine
@@ -200,118 +252,30 @@ pub async fn corpus_collaborate(
         })?
     };
 
-    // Notify remote peers.  Fire-and-forget with tracing: failing to
+    // Notify remote peers. Fire-and-forget with tracing: failing to
     // reach a peer is logged but doesn't fail the collaborate call —
     // the partition is still in the handoff, and the peer will pick up
     // the assignment via gossip.
+    //
+    // NOTE: We do NOT spawn the coordinator's own local partition from
+    // here. Under the unified ingest primitive, local work for this
+    // node is already happening via `CorpusEngine::ingest` writing to
+    // `<corpus>-partition-<self>/` — Desktop's install command drives
+    // that path, and the auto-collaborate loop only fires when such a
+    // partition already exists (see `in_progress_ingestions`). Spawning
+    // another task here would race the Desktop-owned task on the same
+    // LanceDB writer. Finalisation: once the coordinator-local partition
+    // completes, the Desktop-owned spawn itself invokes
+    // `ShardManager::coordinate_merge` (via the existing peer-finalise
+    // hook), which stitches remote shards in and renames to canonical.
     {
         let mesh = state.inner.mesh.read().await;
-        // Start our own partition in the background — but only if this node
-        // doesn't already have an active ingest for this corpus. A running
-        // ingest holds the LanceDB write lock; spawning a second task on the
-        // same output path would corrupt the index. The existing task will
-        // naturally finish its range; peer partitions handle the rest.
-        let already_ingesting = state.inner.active_ingests.read().await.contains(&handoff.corpus_id);
-        if already_ingesting {
+        if let Some(local_partition) = handoff.partitions.iter().find(|p| p.node_id == self_id) {
             tracing::info!(
                 corpus = %handoff.corpus_id,
-                "collaborate: local ingest already running — skipping local partition spawn, peers will handle remaining range"
+                files = local_partition.file_indices.len(),
+                "collaborate: local share recorded in handoff — Desktop install pipeline owns the local ingest"
             );
-        } else if let Some(partition) = handoff.partitions.iter().find(|p| p.node_id == self_id).cloned() {
-            if let Some(engine) = state.inner.corpus_engine.clone() {
-                    let corpus_id = handoff.corpus_id.clone();
-                    let recipe_id = handoff.recipe_id.clone();
-                    let handoff_id = handoff.handoff_id;
-                    let mesh_store = Arc::clone(&state.inner.mesh_store);
-                    let state_clone = state.clone();
-                    let peer_urls: Vec<(NodeId, String)> = mesh
-                        .members
-                        .values()
-                        .filter(|m| m.node_id != self_id)
-                        .filter_map(|m| {
-                            m.addresses.first().map(|a| {
-                                (m.node_id, format!("http://{}:9742", a.ip()))
-                            })
-                        })
-                        .collect();
-                    tokio::spawn(async move {
-                        // ALWAYS write to a partition-scoped subdirectory —
-                        // never to the canonical `<corpus>/` path.
-                        //
-                        // Earlier, this "resumed into the existing partial
-                        // index" when `<corpus>/_corpus_meta.json` was
-                        // present, on the theory that we'd reuse the
-                        // chunks already committed there. But the desktop
-                        // process's in-tab ingest *also* writes to that
-                        // exact path, so the collaborate spawn and the
-                        // desktop ingest would race as two concurrent
-                        // writers on the same LanceDB table — manifesting
-                        // as the `arrow-array FixedSizeListBuilder` panic
-                        // ("Length of the child array ... must be the
-                        // multiple of the value length"). Isolating the
-                        // coordinator's local share into its own
-                        // `<corpus>-partition-<self>/` directory removes
-                        // the collision entirely; the existing
-                        // `shard_manager::coordinate_merge` path at the
-                        // bottom of this spawn already handles merging
-                        // partition outputs into the canonical index.
-                        let output_path = engine
-                            .index_dir()
-                            .join(format!("{corpus_id}-partition-{self_id}"));
-                        tracing::info!(
-                            corpus = %corpus_id,
-                            files = partition.file_indices.len(),
-                            output = %output_path.display(),
-                            "collaborate: starting local partition"
-                        );
-                        state_clone.inner.active_ingests.write().await
-                            .insert(corpus_id.clone());
-                        let ingest_result = engine.ingest_with_overrides(
-                            &recipe_id,
-                            Some(partition.file_indices),
-                            partition.article_range,
-                            &output_path,
-                            None,
-                        ).await;
-                        state_clone.inner.active_ingests.write().await
-                            .remove(&corpus_id);
-                        match ingest_result {
-                            Ok(result) => {
-                                tracing::info!(
-                                    corpus = %corpus_id,
-                                    chunks = result.chunks_created,
-                                    "collaborate: local partition complete — triggering merge check"
-                                );
-                                let shard_mgr = ShardManager::new(
-                                    Arc::clone(&engine),
-                                    engine.index_dir().to_path_buf(),
-                                    mesh_store,
-                                );
-                                match shard_mgr.coordinate_merge(handoff_id, self_id, &peer_urls).await {
-                                    Ok(Some(info)) => tracing::info!(
-                                        corpus = %corpus_id,
-                                        chunks = info.chunk_count,
-                                        "collaborate: merge complete"
-                                    ),
-                                    Ok(None) => tracing::info!(
-                                        corpus = %corpus_id,
-                                        "collaborate: not merge leader — leader will complete merge"
-                                    ),
-                                    Err(e) => tracing::error!(
-                                        corpus = %corpus_id,
-                                        error = %e,
-                                        "collaborate: merge failed"
-                                    ),
-                                }
-                            }
-                            Err(e) => tracing::error!(
-                                corpus = %corpus_id,
-                                error = %e,
-                                "collaborate: local partition failed"
-                            ),
-                        }
-                    });
-            }
         }
 
         for partition in &handoff.partitions {
@@ -325,14 +289,35 @@ pub async fn corpus_collaborate(
                 );
                 continue;
             };
-            let Some(addr) = peer.addresses.first() else {
+            if peer.addresses.is_empty() {
                 tracing::warn!(
                     node = %partition.node_id,
                     "collaborate: peer has no address — skipping notification"
                 );
                 continue;
-            };
-            let peer_url = format!("http://{}:{}/internal/corpus/ingest_partition", addr.ip(), 9742);
+            }
+            // Try addresses in preference order: Tailscale (100.64.0.0/10 CGNAT +
+            // fd7a:115c:a1e0::/48 ULA) first, then IPv4 LAN, then other v6.
+            // Tailscale works across Wi-Fi networks where LAN IPs silently
+            // fail (AP isolation, different subnets, captive portals on
+            // one side). When LAN fails first, we used to give up entirely
+            // — that's how Machine A ended up unable to dispatch to B
+            // even though both machines had routable Tailscale addresses
+            // advertised in `MemberRecord.addresses`.
+            let mut ordered_addrs: Vec<std::net::SocketAddr> =
+                peer.addresses.iter().copied().collect();
+            ordered_addrs.sort_by_key(|addr| match addr.ip() {
+                std::net::IpAddr::V4(v4) => {
+                    let o = v4.octets();
+                    // CGNAT 100.64.0.0/10 → Tailscale IPv4.
+                    if o[0] == 100 && (o[1] & 0xc0) == 64 { 0 } else { 1 }
+                }
+                std::net::IpAddr::V6(v6) => {
+                    let s = v6.segments();
+                    // Tailscale ULA fd7a:115c:a1e0::/48.
+                    if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 { 0 } else { 2 }
+                }
+            });
             let payload = IngestPartitionRequest {
                 handoff_id: handoff.handoff_id,
                 corpus_id: handoff.corpus_id.clone(),
@@ -341,39 +326,71 @@ pub async fn corpus_collaborate(
                 article_range: partition.article_range,
                 embed_model: handoff.embed_model.clone(),
             };
-            let peer_url_clone = peer_url.clone();
             let node_id = partition.node_id;
             tokio::spawn(async move {
-                let client = reqwest::Client::new();
-                match client.post(&peer_url_clone).json(&payload).send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        tracing::info!(node = %node_id, url = %peer_url_clone, "collaborate: peer accepted partition");
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                    .expect("build reqwest client");
+                let mut attempt_errors: Vec<String> = Vec::new();
+                let mut accepted = false;
+                for addr in &ordered_addrs {
+                    // Format with bracket rule for IPv6 (matches
+                    // what sovereign_mesh::daemon::format_relay_fragment
+                    // does for the share link).
+                    let host = match addr.ip() {
+                        std::net::IpAddr::V4(_) => addr.ip().to_string(),
+                        std::net::IpAddr::V6(v6) => format!("[{v6}]"),
+                    };
+                    let peer_url = format!(
+                        "http://{host}:{}/internal/corpus/ingest_partition",
+                        9742
+                    );
+                    match client.post(&peer_url).json(&payload).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            tracing::info!(
+                                node = %node_id,
+                                url = %peer_url,
+                                "collaborate: peer accepted partition"
+                            );
+                            accepted = true;
+                            break;
+                        }
+                        Ok(resp) => {
+                            // 409/503 from the peer means the peer answered
+                            // but refused — don't bother trying other
+                            // addresses, they'd all produce the same
+                            // rejection from the same peer process.
+                            let status = resp.status();
+                            let body = resp.text().await.unwrap_or_default();
+                            tracing::warn!(
+                                node = %node_id,
+                                url = %peer_url,
+                                status = %status,
+                                body = %body,
+                                "collaborate: peer rejected partition"
+                            );
+                            accepted = false;
+                            attempt_errors.clear();
+                            attempt_errors.push(format!(
+                                "{peer_url}: {status} {body}"
+                            ));
+                            break;
+                        }
+                        Err(e) => {
+                            // Transport-level failure on this address.
+                            // Try the next one (Tailscale → LAN fallback).
+                            attempt_errors.push(format!("{peer_url}: {e}"));
+                        }
                     }
-                    Ok(resp) => {
-                        // Capture the response body so the rejection
-                        // reason is visible in logs without grepping
-                        // the peer's daemon output. Most often this
-                        // is an embed_model mismatch (409) or a
-                        // bootstrap-in-progress 503 — both actionable
-                        // if the user can actually see the reason.
-                        let status = resp.status();
-                        let body = resp.text().await.unwrap_or_default();
-                        tracing::warn!(
-                            node = %node_id,
-                            url = %peer_url_clone,
-                            status = %status,
-                            body = %body,
-                            "collaborate: peer rejected partition"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            node = %node_id,
-                            url = %peer_url_clone,
-                            error = %e,
-                            "collaborate: could not reach peer"
-                        );
-                    }
+                }
+                if !accepted && !attempt_errors.is_empty() {
+                    tracing::warn!(
+                        node = %node_id,
+                        attempts = attempt_errors.len(),
+                        errors = ?attempt_errors,
+                        "collaborate: could not reach peer on any advertised address"
+                    );
                 }
             });
         }
@@ -541,6 +558,116 @@ pub async fn corpus_ingest_partition(
             reason: None,
         }),
     )
+}
+
+/// POST /internal/corpus/cancel — user-initiated cancel + wipe.
+///
+/// Flow:
+///   1. Fire the corpus's cancellation flag via the engine's registry.
+///      The ingest loop polls this flag at every document + flush
+///      boundary and exits with `Error::Cancelled` at the next safe
+///      point, without corrupting LanceDB.
+///   2. Wait (bounded, ~5 s) for the spawn to clear out of
+///      `active_ingests` so that no concurrent writer is left behind
+///      when we wipe the directories.
+///   3. Wipe canonical `<corpus>/` and every `<corpus>-partition-*/`
+///      sibling via `engine.remove_corpus_everything`. Peers' own
+///      partition dirs on other machines are not affected (per the
+///      "cancel is local" decision in the unified-ingest plan).
+///
+/// Returns 200 even when no ingest was active for this corpus — the
+/// wipe still runs, so a stale partition dir left over from a crashed
+/// earlier session gets cleaned up too. The response carries whether a
+/// cancel signal was actually delivered so callers can distinguish
+/// "cancelled a live ingest" from "idempotent cleanup".
+pub async fn corpus_cancel(
+    State(state): State<AppState>,
+    Json(req): Json<CancelRequest>,
+) -> Result<Json<CancelResponse>, (StatusCode, Json<ErrorBody>)> {
+    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: "no corpus engine available on this node".into(),
+            }),
+        )
+    })?;
+
+    let cancelled = engine.cancel_corpus_ingest(&req.corpus_id);
+
+    // Bounded poll until the spawn clears from active_ingests. We do
+    // this via polling rather than a notify because active_ingests is
+    // mutated from multiple task sites (collaborate spawn, peer
+    // partition spawn, future install command) — a single Notify would
+    // need to be fired from every one of them and we'd miss races.
+    // 5 s is generous: the ingest loop polls cancel between each doc
+    // and between every tier-2 flush (~60 s of work max), but each
+    // individual doc takes milliseconds, so the loop exits promptly
+    // in practice. The wait only hits the ceiling when cancel is
+    // fired during a slow embed call that can't be interrupted.
+    if cancelled {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let still_active = state
+                .inner
+                .active_ingests
+                .read()
+                .await
+                .contains(&req.corpus_id);
+            if !still_active {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                tracing::warn!(
+                    corpus = %req.corpus_id,
+                    "corpus_cancel: ingest task did not exit within 5s — wiping anyway"
+                );
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    }
+
+    // Wipe canonical + every partition-* sibling for this corpus.
+    if let Err(e) = engine.remove_corpus_everything(&req.corpus_id) {
+        tracing::warn!(
+            corpus = %req.corpus_id,
+            error = %e,
+            "corpus_cancel: wipe reported an error; returning failure to caller"
+        );
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                error: format!("failed to wipe corpus '{}': {e}", req.corpus_id),
+            }),
+        ));
+    }
+
+    tracing::info!(
+        corpus = %req.corpus_id,
+        cancel_signalled = cancelled,
+        "corpus_cancel: cleanup complete"
+    );
+
+    Ok(Json(CancelResponse {
+        cancel_signalled: cancelled,
+        wiped: true,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CancelRequest {
+    pub corpus_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CancelResponse {
+    /// True when a live ingest task for this corpus existed and was
+    /// signalled to stop. False for an idempotent cleanup call (no
+    /// task was running).
+    pub cancel_signalled: bool,
+    /// True when the on-disk wipe completed without error.
+    pub wiped: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -80,6 +80,10 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::corpus_ingest_partition),
         )
         .route(
+            "/internal/corpus/cancel",
+            post(routes_internal::corpus_cancel),
+        )
+        .route(
             "/internal/node/activity",
             post(routes_internal::node_activity),
         )

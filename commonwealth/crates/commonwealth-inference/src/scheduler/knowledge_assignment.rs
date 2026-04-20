@@ -245,6 +245,95 @@ pub fn plan_collaborative_ingestion_jsonl(
     ))
 }
 
+/// Partition a set of JSONL ZIP shard indices across the local node and
+/// compatible mesh peers, returning an `IngestionHandoff` ready to be
+/// gossiped.
+///
+/// Unlike `plan_collaborative_ingestion_jsonl` (which partitions a single
+/// merged JSONL by absolute article index and is only safe for single-shard
+/// sources), this planner carves up the set of still-outstanding ZIP shard
+/// entries. Shard boundaries come from the ZIP's table of contents, so two
+/// peers with byte-identical ZIPs will produce the same article set from
+/// the same shard index — correctness holds regardless of whether either
+/// peer has a partial `extracted.jsonl` cache or a drifted snapshot.
+///
+/// ### Arguments
+/// - `remaining_shards`: shard indices the coordinator has NOT yet
+///   observed committed (derived from `CorpusEngine::corpus_processed_shards`).
+///   Expected to be non-empty and sorted; the planner sorts+dedups
+///   defensively.
+///
+/// Each partition carries `file_indices` = its assigned shard indices
+/// and `article_range` = None.
+pub fn plan_collaborative_ingestion_jsonl_sharded(
+    corpus_id: &str,
+    recipe_id: &str,
+    remaining_shards: Vec<usize>,
+    local_node: &MemberRecord,
+    candidates: &[MemberRecord],
+    local_embed_model: &EmbedModelInfo,
+) -> Result<IngestionHandoff, CollaborativeIngestionError> {
+    let mut shards = remaining_shards;
+    shards.sort_unstable();
+    shards.dedup();
+
+    if shards.is_empty() {
+        return Err(CollaborativeIngestionError::AlreadyComplete(
+            corpus_id.to_string(),
+        ));
+    }
+
+    // Embed-model filter: identical to the non-sharded JSONL planner.
+    // A mismatched peer would accept the partition and then silently
+    // reject at ingest_partition; keep them out of the split upfront.
+    let compatible: Vec<&MemberRecord> = candidates
+        .iter()
+        .filter(|peer| match peer.capabilities.embed_model.as_ref() {
+            Some(em) => em == local_embed_model,
+            None => false,
+        })
+        .collect();
+    let mut all_nodes: Vec<NodeId> = std::iter::once(local_node.node_id)
+        .chain(compatible.iter().map(|p| p.node_id))
+        .collect();
+    all_nodes.dedup();
+    let n = all_nodes.len();
+
+    // Distribute shards in contiguous blocks so each peer pulls a
+    // locality-adjacent slice of the ZIP's TOC — keeps on-the-fly
+    // extraction cache-friendly and debug logs easy to read.
+    let total = shards.len();
+    let base = total / n;
+    let extra = total % n;
+
+    let mut partitions: Vec<IngestionPartition> = Vec::with_capacity(n);
+    let mut cursor = 0usize;
+    for (i, nid) in all_nodes.iter().enumerate() {
+        let count = base + if i < extra { 1 } else { 0 };
+        let slice = &shards[cursor..cursor + count];
+        cursor += count;
+        partitions.push(IngestionPartition {
+            node_id: *nid,
+            file_indices: slice.to_vec(),
+            article_range: None,
+            status: PartitionStatus::Assigned,
+        });
+    }
+
+    // Drop empty partitions (happens when there are more nodes than
+    // remaining shards). Peers with an empty slice have nothing to do;
+    // better to omit them than to ship a no-op assignment that the
+    // peer-side handler would have to special-case.
+    partitions.retain(|p| !p.file_indices.is_empty());
+
+    Ok(IngestionHandoff::new(
+        corpus_id,
+        recipe_id,
+        local_embed_model.clone(),
+        partitions,
+    ))
+}
+
 // ─── Existing knowledge shard assignment ────────────────────────────────────
 
 /// Information about a corpus to be assigned across the mesh.
@@ -541,6 +630,166 @@ mod tests {
             "only local should be assigned when peer hasn't advertised embed_model"
         );
         assert_eq!(handoff.partitions[0].node_id, local.node_id);
+    }
+
+    // ── sharded-JSONL planner tests ─────────────────────────
+
+    #[test]
+    fn sharded_plan_splits_76_shards_across_2_nodes() {
+        let local = member(1, Some(qwen_embed()));
+        let peer = member(2, Some(qwen_embed()));
+        let remaining: Vec<usize> = (0..76).collect();
+        let handoff = plan_collaborative_ingestion_jsonl_sharded(
+            "wikipedia",
+            "wikipedia",
+            remaining,
+            &local,
+            &[peer.clone()],
+            &qwen_embed(),
+        )
+        .unwrap();
+
+        assert_eq!(handoff.partitions.len(), 2);
+        let local_shards = &handoff
+            .partitions
+            .iter()
+            .find(|p| p.node_id == local.node_id)
+            .unwrap()
+            .file_indices;
+        let peer_shards = &handoff
+            .partitions
+            .iter()
+            .find(|p| p.node_id == peer.node_id)
+            .unwrap()
+            .file_indices;
+        // Contiguous, covers all 76, no overlap.
+        assert_eq!(local_shards.len() + peer_shards.len(), 76);
+        let mut union: Vec<usize> = local_shards
+            .iter()
+            .chain(peer_shards.iter())
+            .copied()
+            .collect();
+        union.sort_unstable();
+        assert_eq!(union, (0..76).collect::<Vec<_>>());
+        assert_eq!(local_shards.first(), Some(&0));
+        assert_eq!(peer_shards.last(), Some(&75));
+    }
+
+    #[test]
+    fn sharded_plan_distributes_across_3_nodes() {
+        let local = member(1, Some(qwen_embed()));
+        let p2 = member(2, Some(qwen_embed()));
+        let p3 = member(3, Some(qwen_embed()));
+        let remaining: Vec<usize> = (0..10).collect();
+        let handoff = plan_collaborative_ingestion_jsonl_sharded(
+            "wikipedia",
+            "wikipedia",
+            remaining,
+            &local,
+            &[p2.clone(), p3.clone()],
+            &qwen_embed(),
+        )
+        .unwrap();
+
+        assert_eq!(handoff.partitions.len(), 3);
+        let counts: Vec<usize> = handoff
+            .partitions
+            .iter()
+            .map(|p| p.file_indices.len())
+            .collect();
+        // 10 = 4 + 3 + 3
+        let total: usize = counts.iter().sum();
+        assert_eq!(total, 10);
+        assert!(counts.iter().max().unwrap() - counts.iter().min().unwrap() <= 1);
+    }
+
+    #[test]
+    fn sharded_plan_excludes_mismatched_embed_peer() {
+        let local = member(1, Some(qwen_embed()));
+        let peer_ok = member(2, Some(qwen_embed()));
+        let peer_bad = member(3, Some(other_embed()));
+        let handoff = plan_collaborative_ingestion_jsonl_sharded(
+            "wikipedia",
+            "wikipedia",
+            (0..4).collect(),
+            &local,
+            &[peer_ok.clone(), peer_bad.clone()],
+            &qwen_embed(),
+        )
+        .unwrap();
+        assert_eq!(handoff.partitions.len(), 2);
+        assert!(
+            handoff
+                .partitions
+                .iter()
+                .all(|p| p.node_id != peer_bad.node_id),
+            "mismatched peer must not receive a partition"
+        );
+    }
+
+    #[test]
+    fn sharded_plan_honors_remaining_subset() {
+        // Coordinator has already committed shards 0..37. Remaining =
+        // 37..76 should be split across local and peer.
+        let local = member(1, Some(qwen_embed()));
+        let peer = member(2, Some(qwen_embed()));
+        let remaining: Vec<usize> = (37..76).collect();
+        let handoff = plan_collaborative_ingestion_jsonl_sharded(
+            "wikipedia",
+            "wikipedia",
+            remaining.clone(),
+            &local,
+            &[peer.clone()],
+            &qwen_embed(),
+        )
+        .unwrap();
+
+        let mut union: Vec<usize> = handoff
+            .partitions
+            .iter()
+            .flat_map(|p| p.file_indices.iter().copied())
+            .collect();
+        union.sort_unstable();
+        assert_eq!(union, remaining);
+        // No shard < 37 should appear.
+        assert!(union.iter().all(|&i| i >= 37));
+    }
+
+    #[test]
+    fn sharded_plan_rejects_empty_remaining() {
+        let local = member(1, Some(qwen_embed()));
+        let err = plan_collaborative_ingestion_jsonl_sharded(
+            "wikipedia",
+            "wikipedia",
+            vec![],
+            &local,
+            &[],
+            &qwen_embed(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, CollaborativeIngestionError::AlreadyComplete(_)));
+    }
+
+    #[test]
+    fn sharded_plan_drops_empty_partitions_when_nodes_exceed_shards() {
+        // 2 shards, 3 nodes → only 2 partitions with work.
+        let local = member(1, Some(qwen_embed()));
+        let p2 = member(2, Some(qwen_embed()));
+        let p3 = member(3, Some(qwen_embed()));
+        let handoff = plan_collaborative_ingestion_jsonl_sharded(
+            "wikipedia",
+            "wikipedia",
+            vec![0, 1],
+            &local,
+            &[p2.clone(), p3.clone()],
+            &qwen_embed(),
+        )
+        .unwrap();
+        assert_eq!(handoff.partitions.len(), 2);
+        for p in &handoff.partitions {
+            assert!(!p.file_indices.is_empty());
+            assert!(p.article_range.is_none());
+        }
     }
 
     #[test]
