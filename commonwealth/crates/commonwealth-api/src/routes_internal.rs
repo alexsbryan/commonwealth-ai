@@ -114,14 +114,43 @@ pub async fn corpus_collaborate(
     // Detect whether this is a JSONL corpus (Wikipedia-style BulkDownload) or
     // an HF parquet corpus.  JSONL corpora have no source-file manifest, so we
     // use article-range partitioning instead of file-index partitioning.
-    let is_jsonl = engine
+    //
+    // Detection order:
+    //   1. If the engine has a source-file manifest → HF parquet corpus.
+    //   2. If `count_jsonl_articles` succeeds → JSONL corpus, source present.
+    //   3. If neither → this node has no source data at all. This happens when
+    //      a peer (e.g. LittleMac) has an in-progress partition-of-self dir but
+    //      the Wikipedia ZIP was not yet downloaded here. In this case the
+    //      auto-ingest loop's `spawn_local_ingest` will resume the ingest
+    //      (which downloads the ZIP on demand), but this node cannot act as a
+    //      collaboration *coordinator* — return 422 with a clear explanation so
+    //      the caller doesn't interpret "No source manifest" as a data-loss error
+    //      or prompt the user to run `reconstruct-manifest` unnecessarily.
+    let has_hf_manifest = engine
         .source_manifest(&req.corpus_id)
         .ok()
         .flatten()
-        .is_none()
-        && engine
-            .count_jsonl_articles(&req.corpus_id)
-            .is_ok();
+        .is_some();
+    let jsonl_article_count = if !has_hf_manifest {
+        engine.count_jsonl_articles(&req.corpus_id).ok()
+    } else {
+        None
+    };
+    if !has_hf_manifest && jsonl_article_count.is_none() {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorBody {
+                error: format!(
+                    "corpus '{}' source data not present on this node — \
+                     cannot plan collaboration here (this node may be a peer \
+                     receiving a partition assignment, not the coordinator). \
+                     Run collaborate from the node that initiated the install.",
+                    req.corpus_id
+                ),
+            }),
+        ));
+    }
+    let is_jsonl = !has_hf_manifest;
 
     let handoff = if is_jsonl {
         // ── JSONL path (Wikipedia) ──────────────────────────────────────────
@@ -174,8 +203,12 @@ pub async fn corpus_collaborate(
             })?
         } else {
 
-        let total_articles = engine.count_jsonl_articles(&req.corpus_id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: e.to_string() })))?;
+        // Re-use the count we already computed during corpus-type detection.
+        let total_articles = jsonl_article_count
+            .ok_or_else(|| (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody { error: format!("count_jsonl_articles failed for '{}'", req.corpus_id) }),
+            ))?;
 
         // Load committed_iter_pos to estimate how far Machine A has gone.
         let committed_iter_pos = engine.corpus_committed_iter_pos(&req.corpus_id);
@@ -486,22 +519,50 @@ pub async fn corpus_ingest_partition(
             .collect()
     };
 
+    // Guard: insert into active_ingests BEFORE spawning so there is no
+    // window between the 202 response and the task's first async yield
+    // where a concurrent call (another ingest_partition request or the
+    // auto-collaborate loop's spawn_local_ingest) could race past the
+    // guard and start a second task on the same LanceDB partition.  Two
+    // concurrent tasks writing the same partition double GPU memory
+    // pressure and reliably trigger the Metal backend's
+    // `ggml_metal_buffer_set_tensor: buf_src = NULL` abort.
+    {
+        let mut active = state.inner.active_ingests.write().await;
+        if active.contains(&corpus_id) {
+            tracing::info!(
+                corpus = %corpus_id,
+                handoff = %handoff_id,
+                "ingest_partition: corpus already active — refusing duplicate task"
+            );
+            return (
+                StatusCode::CONFLICT,
+                Json(IngestPartitionResponse {
+                    accepted: false,
+                    reason: Some(format!(
+                        "ingest for corpus '{}' is already running on this node",
+                        corpus_id
+                    )),
+                }),
+            );
+        }
+        active.insert(corpus_id.clone());
+    }
+
+    let output_path = engine.index_dir()
+        .join(format!("{corpus_id}-partition-{local_node_id}"));
+
+    tracing::info!(
+        corpus = %corpus_id,
+        recipe = %recipe_id,
+        handoff = %handoff_id,
+        files = file_indices.len(),
+        output = %output_path.display(),
+        "ingest_partition: starting ingestion for assigned files"
+    );
+
     // Spawn ingestion asynchronously — 202 Accepted returns immediately.
     tokio::spawn(async move {
-        let output_path = engine.index_dir()
-            .join(format!("{corpus_id}-partition-{local_node_id}"));
-
-        tracing::info!(
-            corpus = %corpus_id,
-            recipe = %recipe_id,
-            handoff = %handoff_id,
-            files = file_indices.len(),
-            output = %output_path.display(),
-            "ingest_partition: starting ingestion for assigned files"
-        );
-
-        state_clone.inner.active_ingests.write().await
-            .insert(corpus_id.clone());
         let ingest_result = engine.ingest_with_overrides(
             &recipe_id,
             Some(file_indices),
