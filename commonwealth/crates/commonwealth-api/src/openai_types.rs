@@ -21,6 +21,15 @@ pub struct ChatCompletionRequest {
     pub presence_penalty: Option<f32>,
     #[serde(default)]
     pub stop: Option<Vec<String>>,
+    /// Tools the model may call. When present, the adapter routes to the
+    /// Slow slot; Fast-slot models lack a tools-aware chat template and
+    /// requests that land on Fast are rejected with `InvalidInput`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDefinition>>,
+    /// "auto" | "none" | "required" | `{type:"function", function:{name:...}}`.
+    /// Stored as raw JSON so forward-compat shapes pass through untouched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<serde_json::Value>,
     /// Commonwealth extension: OICP requirements for model selection.
     #[serde(default)]
     pub oicp: Option<InferenceRequirements>,
@@ -30,6 +39,53 @@ pub struct ChatCompletionRequest {
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    /// Set on `role="tool"` messages to associate an execution result with
+    /// the assistant `tool_calls[].id` that requested it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// Present on `role="assistant"` replies when the model requested
+    /// tool calls. Populated by the adapter after parsing the model's
+    /// output; supplied by the caller when replaying prior turns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+/// OpenAI-compatible tool schema entry. Only `type="function"` is
+/// supported; other shapes round-trip as unknown fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub function: ToolFunction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolFunction {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// JSON Schema for the function's parameters. Held as an opaque
+    /// `serde_json::Value` so we don't have to track every JSON Schema
+    /// keyword.
+    pub parameters: serde_json::Value,
+}
+
+/// One tool call the assistant issued. `arguments` is the raw JSON
+/// string the model produced — it is NOT parsed by the adapter, so
+/// malformed tool-call bodies surface as a JSON parse error at the
+/// caller rather than a silent truncation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub function: FunctionCall,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionCall {
+    pub name: String,
+    pub arguments: String,
 }
 
 /// OpenAI-compatible chat completion response.
@@ -48,6 +104,20 @@ pub struct ChatChoice {
     pub index: u32,
     pub message: ChatMessage,
     pub finish_reason: Option<String>,
+}
+
+impl ChatMessage {
+    /// Convenience constructor for the common `{role, content}` shape —
+    /// avoids sprinkling `tool_call_id: None, tool_calls: None` across
+    /// every call site.
+    pub fn new(role: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            role: role.into(),
+            content: content.into(),
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,10 +223,7 @@ mod tests {
             model: "qwen3-coder-30b".into(),
             choices: vec![ChatChoice {
                 index: 0,
-                message: ChatMessage {
-                    role: "assistant".into(),
-                    content: "Hello!".into(),
-                },
+                message: ChatMessage::new("assistant", "Hello!"),
                 finish_reason: Some("stop".into()),
             }],
             usage: Some(Usage {
@@ -175,6 +242,81 @@ mod tests {
         let err = ErrorResponse::new("model not found", "invalid_request_error");
         let json = serde_json::to_string(&err).unwrap();
         assert!(json.contains("model not found"));
+    }
+
+    #[test]
+    fn chat_completion_request_with_tools_round_trip() {
+        let json = r#"{
+            "messages": [
+                {"role": "user", "content": "What's the weather in SF?"}
+            ],
+            "tools": [{
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Return the current weather",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}},
+                        "required": ["city"]
+                    }
+                }
+            }],
+            "tool_choice": "auto"
+        }"#;
+        let req: ChatCompletionRequest = serde_json::from_str(json).unwrap();
+        let tools = req.tools.as_ref().expect("tools present");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].kind, "function");
+        assert_eq!(tools[0].function.name, "get_weather");
+        assert_eq!(req.tool_choice.as_ref().and_then(|v| v.as_str()), Some("auto"));
+    }
+
+    #[test]
+    fn tool_message_preserves_tool_call_id() {
+        let json = r#"{
+            "role": "tool",
+            "content": "{\"temperature\": 62}",
+            "tool_call_id": "call_abc123"
+        }"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.role, "tool");
+        assert_eq!(msg.tool_call_id.as_deref(), Some("call_abc123"));
+        assert!(msg.tool_calls.is_none());
+    }
+
+    #[test]
+    fn assistant_message_with_tool_calls_round_trips() {
+        let msg = ChatMessage {
+            role: "assistant".into(),
+            content: String::new(),
+            tool_call_id: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "call_1".into(),
+                kind: "function".into(),
+                function: FunctionCall {
+                    name: "get_weather".into(),
+                    arguments: r#"{"city":"SF"}"#.into(),
+                },
+            }]),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: ChatMessage = serde_json::from_str(&json).unwrap();
+        let calls = back.tool_calls.expect("tool_calls survive");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "get_weather");
+        assert_eq!(calls[0].function.arguments, r#"{"city":"SF"}"#);
+    }
+
+    #[test]
+    fn legacy_message_without_tool_fields_deserializes() {
+        // Existing clients that don't know about tool_call_id / tool_calls
+        // must continue to work. This fixture is exactly what M1 emitted.
+        let json = r#"{"role":"user","content":"hi"}"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.role, "user");
+        assert!(msg.tool_call_id.is_none());
+        assert!(msg.tool_calls.is_none());
     }
 
     #[test]
