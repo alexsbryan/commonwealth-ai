@@ -198,6 +198,19 @@ impl NoteStore {
             })?;
         }
 
+        // v3 → v4: ATOS M4 adds the `deviation` kind for automatic
+        // spec-drift notes written by the approval-gate middleware.
+        // Same rename-recreate pattern as V3 — SQLite cannot ALTER a
+        // CHECK constraint in place.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 4 {
+            conn.execute_batch(MIGRATION_V4).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v4: {e}")))
+            })?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -815,7 +828,8 @@ CREATE TABLE IF NOT EXISTS notes (
     id         TEXT    PRIMARY KEY,
     kind       TEXT    NOT NULL CHECK(kind IN (
         'decision','attempt','invariant','todo','reflection',
-        'uncertainty','postmortem_pointer','redteam_finding'
+        'uncertainty','postmortem_pointer','redteam_finding',
+        'deviation'
     )),
     content    TEXT    NOT NULL,
     symbols    TEXT    NOT NULL DEFAULT '[]',
@@ -865,6 +879,90 @@ CREATE INDEX IF NOT EXISTS idx_log_tool    ON tool_call_log(tool_name);
 CREATE INDEX IF NOT EXISTS idx_log_called  ON tool_call_log(called_at DESC);
 
 PRAGMA user_version = 1;
+";
+
+// ─── Schema migration v3 → v4 (ATOS M4 deviation note kind) ─────────────────
+
+/// Applied to databases at `user_version = 3`. Expands the
+/// `notes.kind` CHECK constraint to admit `deviation`, the kind the
+/// M4 approval-gate middleware writes when it detects spec-hash
+/// drift. Rename-recreate pattern; rebuilds FTS5.
+const MIGRATION_V4: &str = "
+BEGIN;
+
+ALTER TABLE notes RENAME TO notes_v3;
+
+CREATE TABLE notes (
+    id            TEXT    PRIMARY KEY,
+    kind          TEXT    NOT NULL CHECK(kind IN (
+        'decision','attempt','invariant','todo','reflection',
+        'uncertainty','postmortem_pointer','redteam_finding',
+        'deviation'
+    )),
+    content       TEXT    NOT NULL,
+    symbols       TEXT    NOT NULL DEFAULT '[]',
+    files         TEXT    NOT NULL DEFAULT '[]',
+    session_id    TEXT    NOT NULL,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    tool_name     TEXT,
+    retired_at    INTEGER,
+    retired_by    TEXT,
+    scope         TEXT    NOT NULL DEFAULT 'global'
+                  CHECK(scope IN ('global','feature','session')),
+    feature_id    TEXT,
+    promoted_from TEXT
+);
+
+INSERT INTO notes (
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from
+)
+SELECT
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from
+FROM notes_v3;
+
+DROP TABLE notes_v3;
+
+CREATE INDEX IF NOT EXISTS idx_notes_kind           ON notes(kind);
+CREATE INDEX IF NOT EXISTS idx_notes_created        ON notes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_tool_name      ON notes(tool_name);
+CREATE INDEX IF NOT EXISTS idx_notes_retired_at     ON notes(retired_at);
+CREATE INDEX IF NOT EXISTS idx_notes_scope_feature  ON notes(scope, feature_id);
+CREATE INDEX IF NOT EXISTS idx_notes_feature
+    ON notes(feature_id) WHERE feature_id IS NOT NULL;
+
+DROP TABLE IF EXISTS notes_fts;
+CREATE VIRTUAL TABLE notes_fts USING fts5(
+    content, kind,
+    content='notes',
+    content_rowid='rowid'
+);
+INSERT INTO notes_fts(notes_fts) VALUES('rebuild');
+
+DROP TRIGGER IF EXISTS notes_fts_ai;
+DROP TRIGGER IF EXISTS notes_fts_ad;
+DROP TRIGGER IF EXISTS notes_fts_au;
+
+CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+END;
+
+CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+PRAGMA user_version = 4;
+
+COMMIT;
 ";
 
 // ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
@@ -1764,6 +1862,85 @@ mod tests {
         ).await.unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].id, id);
+    }
+
+    #[tokio::test]
+    async fn write_deviation_kind_round_trip() {
+        let store = make_store().await;
+        let id = store
+            .write_note_scoped(
+                "deviation",
+                "Spec content hash changed since approval (a3f1 → 8b7c).",
+                vec![],
+                vec![".sovereign/features/fx/spec.md".into()],
+                "atos-middleware",
+                NoteScope::Feature,
+                Some("fx"),
+            )
+            .await
+            .unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &["deviation".to_string()], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].id, id);
+        assert!(notes[0].content.contains("Spec content hash"));
+    }
+
+    #[tokio::test]
+    async fn migration_v3_to_v4_preserves_data_and_enables_deviation() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Build a v3 database by running SCHEMA_NEW + V2 + V3 and
+        // then seeding a row. We can't simulate a "v3 without V4's
+        // kind" from a clean DB because SCHEMA_NEW already has the
+        // expanded kind list after M4.2's edit — so we seed the
+        // note BEFORE V4 runs by opening and closing the store once
+        // at v3, then running V4 and checking behavior.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(SCHEMA_NEW).unwrap();
+            conn.execute_batch(MIGRATION_V2).unwrap();
+            conn.execute_batch(MIGRATION_V3).unwrap();
+            conn.execute(
+                "INSERT INTO notes (id, kind, content, symbols, files, session_id,
+                    created_at, updated_at, scope)
+                 VALUES ('pre-v4','decision','survived','[]','[]','s0',1000,1000,'global')",
+                [],
+            )
+            .unwrap();
+            let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+            assert_eq!(v, 3, "baseline should be v3");
+        }
+
+        // Reopen — MIGRATION_V4 runs.
+        let store = NoteStore::open(&db_path).unwrap();
+
+        let old = store.read_note_by_id("pre-v4").await.unwrap().unwrap();
+        assert_eq!(old.content, "survived");
+
+        let new_id = store
+            .write_note_scoped(
+                "deviation",
+                "post-migration",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(!new_id.is_empty());
+
+        // FTS5 still works after the rebuild.
+        let hits = store
+            .read_notes(Some("survived"), &[], &[], &[], 5, false)
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 1);
     }
 
     #[tokio::test]
