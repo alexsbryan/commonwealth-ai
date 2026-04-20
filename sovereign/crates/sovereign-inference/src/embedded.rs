@@ -424,28 +424,25 @@ impl EmbedSlot {
             .map_err(|e| Error::Inference(format!("Failed to load embed model: {e}")))?;
 
         let n_embd = model.n_embd() as usize;
-        // Per-input truncation: any single text longer than this
-        // is clipped. Set to match the per-slot KV budget below
-        // (ctx_tokens / n_seq_max) so a full-length chunk is
-        // guaranteed to fit in one of the packed slots — llama.cpp
-        // rejects a decode with `NoKvCacheSlot` if any single
-        // sequence exceeds its partition of the unified cache.
+        // Per-input truncation: any single text longer than this is
+        // clipped. Must satisfy max_input_tokens ≤ ctx_tokens / n_seq_max
+        // so a full-length chunk always fits in one KV cache slot.
         let max_input_tokens = 1024;
-        // Aggregate KV cache: `n_ctx` bounds the sum of tokens
-        // across all active sequences in a packed decode.
-        // 4096 = 1024 tokens × 4 parallel slots.  Keeping this at
-        // n_seq_max × max_input_tokens ensures every slot has a full
-        // 1024-token budget without saturating Metal's command buffers.
-        // The previous value (16384 × 16) filled the KV cache to 100%
-        // on every decode, which triggered ggml_metal_synchronize
-        // failures on machines with limited GPU memory.
-        let ctx_tokens: u32 = 4096;
-        // Parallel slot count. The scheduler reserves
-        // `ctx_tokens / n_seq_max` tokens per slot. 4 keeps each Metal
-        // command buffer to 4 × 1024 = 4096 tokens — 25% of the old
-        // allocation — while the invariant ctx_tokens/n_seq_max ==
-        // max_input_tokens is preserved, so no KvCacheSlot errors.
-        let n_seq_max: u32 = 4;
+        // Aggregate KV cache capacity. 16 slots × 1024 tokens = 16384.
+        // On CPU (Intel or Apple Silicon fallback) this is pure RAM —
+        // ~3.7 GB for a 28-layer/1024-dim model, well within 16 GB+.
+        // On Apple Silicon Metal the same 16384 tokens work fine (30 GB+
+        // unified memory). Intel Mac never reaches this path because the
+        // aarch64 gate above keeps requested_gpu_layers=0 there, so
+        // wants_metal=false and we always take the CPU context branch.
+        let ctx_tokens: u32 = 16384;
+        // 16 parallel sequence slots. Drives 256-seq batches through
+        // 256/16=16 decode calls instead of 256/4=64, giving ~4× the
+        // throughput. n_seq_max was temporarily reduced to 4 while
+        // debugging Metal OOM on Intel Macs; now that Intel never
+        // enters the Metal path (aarch64-only gate above) there is no
+        // GPU memory pressure and we can restore the original value.
+        let n_seq_max: u32 = 16;
         let model = Arc::new(model);
 
         let pooling_type = match embed_quirks.as_ref().map(|q| &q.pooling) {
@@ -460,7 +457,7 @@ impl EmbedSlot {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
-                .with_n_ubatch(512)
+                .with_n_ubatch(2048)
                 .with_n_seq_max(n_seq_max)
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
