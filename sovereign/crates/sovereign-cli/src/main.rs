@@ -1,5 +1,6 @@
 mod amend;
 mod atos_cmd;
+mod atos_plugin;
 mod code_cmd;
 mod daemon_cmd;
 mod doc_fetcher;
@@ -9,6 +10,7 @@ mod honesty;
 mod mcp_cmd;
 mod mesh_cmd;
 mod observation;
+mod phases;
 mod project_cmd;
 mod project_toml;
 mod recipe_cmd;

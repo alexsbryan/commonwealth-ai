@@ -55,6 +55,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
         "feature" => cmd_feature(rest).await,
         "spec" => cmd_spec(rest).await,
         "doctor" => cmd_doctor(rest).await,
+        "install-plugin" => cmd_install_plugin(rest).await,
         other => {
             eprintln!("atos: unknown subcommand '{other}'");
             print_help();
@@ -87,6 +88,7 @@ fn print_help() {
          \x20   spec diff <id>        Show unified diff between the approved spec and the current spec\n\
          \x20   spec accept <id>      [--reason <text>]  Accept the current spec as the new approved content\n\
          \x20   doctor                Health check: repo, .sovereign dir, DB schemas, plugin, per-feature\n\
+         \x20   install-plugin        (Re)install the opencode plugin at .opencode/plugins/sovereign-atos.ts\n\
          \n\
          AUTO RED-TEAM\n\
          \x20   Opt in from the charter preamble:\n\
@@ -715,6 +717,67 @@ fn derive_node_id_from_git(repo_root: &std::path::Path) -> Option<commonwealth_c
 
 /// `sovereign atos doctor` — a single pass that prints a per-check
 /// ✓ / ✗ / ⚠ line and exits 0 iff every check is ✓ or ⚠. Its job is
+// ─── Subcommand: install-plugin ───────────────────────────────
+
+/// (Re)install the opencode plugin shipped with this CLI into
+/// `<repo>/.opencode/plugins/sovereign-atos.ts`. Idempotent —
+/// second invocation reports `up to date`. Upgrades from a prior
+/// version report the transition explicitly so the operator sees
+/// that a plugin bump happened.
+async fn cmd_install_plugin(_args: &[String]) -> i32 {
+    let repo_root = find_repo_root().unwrap_or_else(|| {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    });
+    match crate::atos_plugin::install_plugin(&repo_root) {
+        Ok(crate::atos_plugin::InstallOutcome::Installed) => {
+            println!(
+                "\u{2713} Installed {} (v{}).",
+                crate::atos_plugin::plugin_rel_path(),
+                crate::atos_plugin::PLUGIN_VERSION
+            );
+            0
+        }
+        Ok(crate::atos_plugin::InstallOutcome::UpToDate) => {
+            println!(
+                "\u{2713} {} already at v{} — no change.",
+                crate::atos_plugin::plugin_rel_path(),
+                crate::atos_plugin::PLUGIN_VERSION
+            );
+            0
+        }
+        Ok(crate::atos_plugin::InstallOutcome::Replaced { prior_version }) => {
+            println!(
+                "\u{2713} Updated {} ({} → v{}).",
+                crate::atos_plugin::plugin_rel_path(),
+                prior_version
+                    .as_deref()
+                    .map(|v| format!("v{v}"))
+                    .unwrap_or_else(|| "unversioned".into()),
+                crate::atos_plugin::PLUGIN_VERSION
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!(
+                "\u{2717} Could not install {}: {e}",
+                crate::atos_plugin::plugin_rel_path()
+            );
+            1
+        }
+    }
+}
+
+fn find_repo_root() -> Option<PathBuf> {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()))
+}
+
 /// to tell Yara — or Marcus, landing on a new machine — exactly what
 /// in the ATOS surface is configured and what isn't, without making
 /// her read the code.
@@ -791,18 +854,43 @@ async fn cmd_doctor(_args: &[String]) -> i32 {
         );
     }
 
-    // 6. Opencode plugin present.
-    let plugin = anchor.join(".opencode").join("plugins").join("sovereign-atos.ts");
-    if plugin.exists() {
-        report.pass("opencode plugin", plugin.display().to_string());
-    } else {
+    // 6. Opencode plugin present + version freshness.
+    let plugin = anchor.join(crate::atos_plugin::plugin_rel_path());
+    if !plugin.exists() {
         report.warn(
             "opencode plugin",
             format!(
-                "{} not found — opencode sessions will still work but won't inject X-Feature-Id",
+                "{} not found — run `sovereign atos install-plugin`",
                 plugin.display()
             ),
         );
+    } else {
+        match std::fs::read_to_string(&plugin) {
+            Ok(contents) => {
+                let installed = crate::atos_plugin::parse_installed_version(&contents);
+                let expected = crate::atos_plugin::PLUGIN_VERSION;
+                match installed.as_deref() {
+                    Some(v) if v == expected => {
+                        report.pass("opencode plugin", format!("v{v} (current)"));
+                    }
+                    Some(v) => {
+                        report.warn(
+                            "opencode plugin",
+                            format!(
+                                "v{v} on disk, v{expected} in this CLI — run `sovereign atos install-plugin`"
+                            ),
+                        );
+                    }
+                    None => {
+                        report.warn(
+                            "opencode plugin",
+                            "present but unversioned (hand-authored or pre-embedded) — run `sovereign atos install-plugin`".into(),
+                        );
+                    }
+                }
+            }
+            Err(e) => report.warn("opencode plugin", format!("unreadable: {e}")),
+        }
     }
 
     // 8. Commonwealth daemon reachable (warn, not fail — dev mode valid).

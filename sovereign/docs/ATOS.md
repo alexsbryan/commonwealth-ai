@@ -1,333 +1,336 @@
 # ATOS — Agent Task Orchestration System
 
-ATOS is the "invisible orchestrator" that sits between a developer and
-a coding agent. It keeps the agent on spec, remembers why decisions
-were made, detects drift, and surfaces artifacts — without the
-developer having to configure anything beyond writing a charter
-markdown file and committing it.
+You use coding agents for non-trivial work. You've probably been
+burned a few times: the agent reversed a decision it made three
+turns ago; a reviewer asked "why did we pick X?" and nobody
+remembered; a milestone quietly missed its tests and the session
+moved on.
+
+ATOS is scaffolding that makes those failure modes visible. It
+sits inside your repo at `.sovereign/`. It records what you
+agreed, detects when the spec drifts, logs the arguments against
+every amendment, and hands a reviewer a one-page audit trail
+they can read instead of interviewing you.
+
+You don't configure anything. You write charter markdown. You
+commit it. The agent sees the spec in every turn.
 
 ← [back to README](../README.md)
 
-## The core promise
+## When this is for you
 
-You write a feature charter in markdown, someone else reviews it, and
-from that point on the agent *can't* silently deviate from it. The
-spec becomes the contract. Drift gets flagged. Decisions get logged.
-Red-team passes can run automatically. You keep working the way you
-already work.
+- You're starting a greenfield project and want to pin down
+  *what's expensive to change* before any code is written.
+- You pair with coding agents on a project that's outgrown
+  "vibes" — decisions are accumulating and nobody's writing them
+  down.
+- You've reversed a decision and two weeks later couldn't
+  remember why. Or worse: someone else reversed it without
+  realizing it had been decided.
+- You want an adversarial review when you change the charter —
+  something that asks "have you considered what this breaks?"
+- You're handing a project off (to yourself in six months, to a
+  colleague, to a reviewer) and want the artifacts to carry the
+  story.
 
-If you do nothing else:
+If none of those land — you're on a throwaway, your agent is
+disciplined, you don't need an audit trail — you don't need ATOS.
 
-1. Write `.sovereign/features/<id>/spec.md`.
-2. `git commit` it.
-3. Point opencode at `commonwealth/sovereign-coder` as the model.
+## Use cases — recognize yourself?
 
-You now have an ATOS-orchestrated session. Everything below is
-*optional* surface area for when you want to see or steer what ATOS
-is doing behind the agent.
+### "I want the agent to stay on spec"
+
+Point your agent at the `commonwealth/sovereign-coder` pipeline.
+Every turn's system prompt gets the project invariants (from
+`CHARTER.md`) and the feature spec (from `spec.md`) prepended.
+If anyone — you or the agent — edits the spec without
+committing, the next turn's preamble gets a drift warning
+pointing at the deviation note.
+
+### "I want an adversarial review when I change the charter"
+
+```
+sovereign project amend
+```
+
+Opens `CHARTER.md` in `$EDITOR`. On save, ATOS diffs your edit
+section-by-section. Invariants changed? You get:
+
+> Which callers / components assume the OLD invariant? Are there
+> tests that LOCK it?
+>
+> What's the replacement invariant, stated as strictly as the
+> old one was?
+
+Answer each, then approve. The amendment log, the Q&A, and the
+new charter hash are recorded. Future sessions see WHY the
+change went through despite the named risks.
+
+### "I want milestones that actually pass their tests before I declare them done"
+
+```
+sovereign atos end-milestone ingest-service
+```
+
+Runs the stop condition from your spec. On pass, writes
+`milestone-1.md` with the captured output. On fail, the
+milestone doesn't close — you fix and retry. Same pattern at the
+project layer: `sovereign project phase pass 1` runs Phase 1's
+stop condition from `PHASES.md` and only advances
+`current_phase` on green.
+
+### "I need to log decisions so I can come back later"
+
+Every decision, uncertainty, failed attempt, or accepted
+deviation gets a note in `.sovereign/notes.db`. The founding
+conversation writes them automatically (Stage 1 answers, Stage 2
+fault-line resolutions). Inside an agent session, the agent
+writes them on real choices. Read back with:
+
+```
+sovereign read-notes --kind decision
+sovereign read-notes --kind uncertainty
+```
+
+### "I'm handing this project off"
+
+```
+sovereign project audit > audit.md
+```
+
+Produces one page: founding state, phases passed (with artifact
+links), notes by kind, open questions, deviations, features list,
+drift status, full artifact inventory. Paste it into a PR
+description or an onboarding doc. The new reader has the context
+without having to ask.
+
+### "I want a red-team review on the final milestone"
+
+Add `**Red team:** auto` to your feature charter preamble. When
+the final milestone passes, ATOS auto-spawns a red-team pass: a
+second agent session with a restricted context (invariants only,
+no notes, no write tools) that tries to break what you built.
+Findings land in `red-team.md`.
+
+### "I don't have docs for this API and I don't want the agent to guess"
+
+During founding, one question asks for documentation URLs. Paste
+them; ATOS fetches each and indexes them into `project_context`.
+At runtime, when the agent hits a gap, the honest-uncertainty
+prompt fires:
+
+> I don't have documentation for the vendor's WebSocket reconnect
+> behavior.
+> Best guess: https://vendor.example/docs/ws
+> Fetch it? [Y/n, or paste a different URL]
+
+Fetches join the corpus. Declined gaps are recorded — the system
+doesn't re-ask speculatively.
+
+## The two layers
+
+ATOS operates at two granularities. You can use one or both.
+
+**Project layer** — before any code. `sovereign project init`
+observes the repo. `sovereign project found` runs a four-stage
+conversation and produces `CHARTER.md` + `PHASES.md`. Amendments
+go through `sovereign project amend` with adversarial review.
+Progression is tracked via `sovereign project phase pass`.
+
+**Feature layer** — inside a founded project (or any repo).
+Write `.sovereign/features/<id>/spec.md`; commit it; close
+milestones as work lands. Stop conditions run at
+end-of-milestone; drift is detected on every agent turn.
+
+The two are orthogonal — you can run the feature layer on a
+repo that was never founded. Founding adds a project-wide
+charter that the feature spec nests under.
 
 ## Mental model
 
 ```
-┌─────────────┐      ┌──────────────┐      ┌─────────────┐
-│   charter   │ ───▶ │  milestones  │ ───▶ │   report    │
-│  (spec.md)  │      │  (briefs)    │      │  artifacts  │
-└─────────────┘      └──────────────┘      └─────────────┘
-      │                     │                     │
-      ▼                     ▼                     ▼
-  approval            run + stop cmd         milestone-N.md
-  (git commit)        (agent + tests)        red-team.md
-                                             epistemic-report.md
+charter ──▶ decisions + uncertainties + invariants
+   │                       │
+   ▼                       ▼
+phases ◀────── every agent turn sees the spec
+   │                       │
+   ▼                       ▼
+artifacts (phase-N.md, milestone-N.md, amendment log, notes.db)
+                           │
+                           ▼
+           audit → reviewer reads one page
 ```
 
-Three things you'll encounter in daily use:
+Three terms worth knowing:
 
-**Feature** — a unit of work anchored to
-`.sovereign/features/<id>/spec.md`. The id is a filesystem-safe slug
-(`zotero-acquirer`, `atos-m5-artifacts`). ATOS treats the feature as
-"approved" the moment the spec has a git commit — solo developer or
-team, doesn't matter. The deliberate act of committing is the
-signal. Uncommitted working-tree edits don't count; that's the only
-threshold.
+**Charter** — the spec at whatever layer. `CHARTER.md` for the
+project; `spec.md` for a feature. Committing it is approval.
 
-**Milestone** — a labeled segment of the feature with a stop
-condition — usually `cargo test -p ...`. When the stop condition
-passes, the milestone's `milestone-N.md` report is written and indexed
-into `project_context` so future sessions can retrieve it.
+**Drift** — file changed since approval. Detected by hash
+comparison. Drift doesn't block — it surfaces a warning. You
+either revert or re-baseline (`atos spec accept` / `project
+amend`).
 
-**Drift** — any edit to `spec.md` after approval. ATOS detects this
-by hashing the file and comparing to the approved hash. Drift doesn't
-block — it writes a `deviation`-kind note and surfaces a warning in
-the next preamble. You either revert, or run `atos spec accept` to
-re-baseline.
+**Artifacts** — the markdown the work leaves behind. Outlives
+any session. What a reviewer reads.
 
-## Getting started
+## First: wire up `commonwealth/sovereign-coder`
 
-You're a solo developer who just wants to try ATOS end-to-end.
+ATOS rides on top of the Commonwealth inference daemon. Both
+quickstarts below assume these three pieces are in place — a
+one-time setup per workstation / repo:
 
-### 1. Check your environment
+**1. A running Commonwealth daemon** serving the OpenAI-compatible
+API at `http://localhost:9741/v1`. It registers the
+`commonwealth/sovereign-coder` pipeline (approval gate,
+context injector, tool injector, artifact surface) automatically.
 
 ```
-sovereign atos doctor
+commonwealth daemon start
+curl -s http://localhost:9741/v1/models | jq '.data[].id'  # sanity check
 ```
 
-Prints a ✓/✗/⚠ report:
+Daemon details, alternative ports, model selection — see
+[commonwealth/README.md](../../commonwealth/README.md).
+
+**2. opencode pointed at the daemon.** In your opencode config
+(usually `~/.config/opencode/config.json`), add a provider:
+
+```json
+{
+  "provider": {
+    "commonwealth": {
+      "base_url": "http://localhost:9741/v1",
+      "api_key": "not-required-for-local"
+    }
+  },
+  "model": "commonwealth/sovereign-coder"
+}
+```
+
+**3. The ATOS opencode plugin** at
+`.opencode/plugins/sovereign-atos.ts`. It injects the
+`X-Feature-Id` header based on the current git branch's feature
+directory so the daemon knows which feature's spec to inject.
+
+The plugin is embedded in the `sovereign-cli` binary and installed
+automatically the first time you run `sovereign project init` in
+a repo — no manual copy. Upgrade it after a CLI bump with:
 
 ```
-✓ repo root                  /home/yara/myrepo
-✓ .sovereign directory       /home/yara/myrepo/.sovereign
-✓ notes.db                   open + migrations OK
-✓ features.db                0 features
-✓ default pipelines          sovereign-coder resolves
-⚠ opencode plugin            .opencode/plugins/sovereign-atos.ts not found
-✓ commonwealth daemon        localhost:9741 responding
+sovereign atos install-plugin
 ```
 
-Warnings are fine. Failures (`✗`) are the only thing to act on.
+`sovereign atos doctor` cross-checks the installed version against
+the CLI binary and flags drift. Every installed copy carries a
+`// sovereign-atos-version: X.Y.Z` header so old installs are
+self-identifying.
 
-### 2. Write a charter
+Once those three are wired, everything in the two quickstarts
+below just works — the agent gets the charter preamble on every
+turn with no further configuration.
 
-Minimum viable charter at
-`.sovereign/features/zotero-acquirer/spec.md`:
+## Quickstart — greenfield
 
-```markdown
-# zotero-acquirer — Acquire from Zotero libraries
+```
+cd my-new-repo
+sovereign project init                 # observe
+sovereign project found                # 4-stage conversation → CHARTER.md + PHASES.md
+# ... write code in opencode ...
+sovereign project phase pass 0         # run stop condition, write phase-0.md
+```
 
-Short paragraph about the motivation.
+From the moment `project found` approves, the agent (via the
+wired-up pipeline above) sees your charter invariants + current
+phase in every turn.
+
+## Quickstart — feature layer on an existing repo
+
+```
+mkdir -p .sovereign/features/ingest-service
+cat > .sovereign/features/ingest-service/spec.md <<'EOF'
+# ingest-service — Acquire ticks from a vendor
 
 ## Invariants
-
-- Library id must be URL-safe.
-- Zotero collections deeper than 5 levels are rejected.
+- Tick timestamps are UTC at rest.
+- Schema changes require an amendment.
 
 ## Milestones
 
-### 1. Library type
+### 1. Acquirer skeleton
+**Stop condition:** `cargo test acquirers::vendor`
 
-Add the ZoteroLibrary variant to LocalCorpusSourceType.
-
-**Stop condition:** `cargo test -p corpus-engine acquirers::zotero`
-
-### 2. RDF parser
-
-Wire the RDF parser in.
-
-**Stop condition:** `cargo test -p corpus-engine extractors::zotero_rdf`
+### 2. Rate-limit handling
+**Stop condition:** `cargo test rate_limit`
+EOF
+git add . && git commit -m "spec: ingest-service"
 ```
 
-Two things the parser is strict about:
+Commit = approval. With the pipeline wired up (see above), the
+agent sees the spec every turn; writes are blocked until the
+spec is committed.
 
-- A `## Milestones` heading (level 2) must exist.
-- Every milestone (level 3 heading) must contain a `**Stop
-  condition:**` paragraph — even if the body is empty (manual review
-  is a legitimate stop).
-
-### 3. Provision + commit
+## The commands you'll actually use
 
 ```
-sovereign atos provision zotero-acquirer --charter .sovereign/features/zotero-acquirer/spec.md
-git add .sovereign/features/zotero-acquirer/spec.md
-git commit -m "spec: zotero-acquirer"
+# Project layer
+sovereign project init                      # observe
+sovereign project found [--design <path>]   # once: CHARTER.md + PHASES.md
+sovereign project phase status              # where are we?
+sovereign project phase pass [N]            # verify + advance
+sovereign project amend                     # adversarial charter edit
+sovereign project audit                     # one-page reviewer rollup
+
+# Feature layer
+sovereign atos provision <id> --charter <path>
+sovereign atos start-milestone <id> --brief <path>
+sovereign atos end-milestone <id>
+sovereign atos spec diff <id>               # show drift vs approved
+sovereign atos spec accept <id> --reason    # accept drift + log
+sovereign atos teardown <id>                # wrap + epistemic report
+sovereign atos doctor                       # health check
+sovereign atos install-plugin               # (re)install the opencode plugin after a CLI upgrade
 ```
 
-That commit IS the approval. The feature is now ready for the agent.
-If you're working off a branch where you'd rather not commit yet
-(prototyping, still editing), use `sovereign atos feature approve
-zotero-acquirer` to record a MeshStore approval against the current
-working-tree spec — no commit needed.
+Full reference: [CLI_REFERENCE.md](CLI_REFERENCE.md).
 
-### 4. Point your agent at it
+## Where the signal lives
 
-Configure opencode to use `commonwealth/sovereign-coder` as the model.
-The opencode plugin at `.opencode/plugins/sovereign-atos.ts` will
-inject `X-Feature-Id` based on the current git branch's feature
-directory. From here, the agent:
-
-- Sees the spec + active notes in every system prompt.
-- Can't call write tools (`str_replace_editor`, `bash`, etc.) on an
-  unapproved feature.
-- Gets a "Welcome back" briefing when you return after a break.
-- Sees "Since last turn — milestone 2 PASSED" when you close a
-  milestone between turns.
-
-You do nothing to make any of that happen.
-
-### 5. Close milestones as you go
-
-```
-sovereign atos start-milestone zotero-acquirer --brief brief.md
-# agent drives the work to green
-sovereign atos end-milestone zotero-acquirer
-# ✓ stop_condition PASSED → wrote .sovereign/features/zotero-acquirer/milestone-1.md
-```
-
-The milestone report auto-indexes into `project_context`, so a future
-session can run `project_context(query: "zotero BOM handling")` and
-pull the relevant excerpt.
-
-## The day-to-day loop
-
-Most turns you won't touch the CLI. The agent calls ATOS tools
-(`read_notes`, `write_note`, `project_context`) and the orchestrator
-takes care of the rest.
-
-When you DO reach for the CLI:
-
-| Situation | Command |
-|---|---|
-| "Where are we on this feature?" | `atos status <id>` |
-| "What did the model do in this run?" | `atos diff <id>` |
-| "I edited spec.md — what changed?" | `atos spec diff <id>` |
-| "The edit was intentional." | `atos spec accept <id> --reason "..."` |
-| "Something feels off." | `atos doctor` |
-| "Run a red-team pass now." | `atos start-milestone <id> --red-team --milestone-id <mid>` |
-
-## Spec drift, intentional edits, and `spec accept`
-
-Say you approved a charter, then noticed an invariant was wrong. You
-edit `spec.md`. The next time the agent starts a turn, its preamble
-shows:
-
-> ⚠ **Spec drift detected since approval.** See `[note:xyz]`.
-> Either write an intentional deviation note explaining the change,
-> or revert spec.md to the approved version before proceeding.
-
-Two paths:
-
-- **Revert** — `git checkout HEAD -- .sovereign/features/<id>/spec.md`.
-  Drift goes away.
-- **Accept** — `sovereign atos spec accept <id> --reason "fixing
-  invariant wording"`. Writes a `deviation`-kind note with the
-  unified diff as justification, updates the approved hash in
-  MeshStore, silences the drift warning. The original reviewer
-  attribution is preserved — you're not re-approving, you're updating.
-
-See what you'd be accepting first:
-
-```
-sovereign atos spec diff <id>
-```
-
-Prints `diff -u` between the approved content and the current file.
-
-## Opting into auto red-team
-
-Add a line to the charter preamble:
-
-```markdown
-# my-feature — Title
-
-**Red team:** auto
-
-Some prose...
-```
-
-Accepted values: `auto`, `true`, `yes`, `on` (case-insensitive).
-Alternate phrasings: `**Red-team:** auto`, `**Auto red-team:** true`.
-
-When the *final* milestone's `end-milestone` passes, ATOS
-automatically spawns:
-
-```
-⚙ auto-redteam: charter opted in — spawning red-team pass for milestone 2…
-```
-
-…which runs `start-milestone --red-team --milestone-id <id>` followed
-by another `end-milestone`. The red-team run writes `red-team.md`.
-The red-team session uses the `commonwealth/sovereign-red-team`
-pipeline, which:
-
-- Injects *only* the `## Invariants` section of the spec (no
-  implementation hints).
-- Doesn't inject notes.
-- Blocks write tools at the middleware layer.
-
-Red-team sessions can only write `redteam_finding` notes. Normal
-sessions can't see red-team sessions' notes, by design.
-
-## The artifacts
-
-Under `.sovereign/features/<id>/`:
-
-| File | Written when | Contains |
+| File | Written by | Tells a reviewer... |
 |---|---|---|
-| `spec.md` | You write it | The charter |
-| `milestone-N.md` | `end-milestone` passes | Stop output, uncertainty notes, decision log |
-| `red-team.md` | `end-milestone` on a `--red-team` run | Findings grouped by confidence |
-| `epistemic-report.md` | `atos teardown` | Promoted notes, pending uncertainties, postmortem pointers |
+| `CHARTER.md` | `project found` / `amend` | What you agreed; amendment log = history of reversals |
+| `PHASES.md` | `project found` | How you planned to get there |
+| `phase-N.md` | `project phase pass N` | Which phases actually verified green |
+| `project.toml` | `init` / `found` / `amend` / `phase` | Observations + lifecycle + charter hash |
+| `features/<id>/spec.md` | You | Feature contract |
+| `features/<id>/milestone-N.md` | `atos end-milestone` | Which feature milestones actually passed |
+| `features/<id>/red-team.md` | Red-team milestone run | Findings grouped by confidence |
+| `features/<id>/epistemic-report.md` | `atos teardown` | Promoted notes + postmortem |
+| `notes.db` | Agent + CLI | Decisions, invariants, attempts, uncertainties, deviations |
 
-All four are indexed into `project_context`. Search them like any
-other doc:
+All live under `.sovereign/`. All get indexed into
+`project_context`, so `project_context(query: "why UTC")` pulls
+the relevant decision without you going to find it.
 
-```
-project_context(query: "zotero collection depth limit")
-```
+## What ATOS won't do
 
-## Mental model for the pipeline (optional)
+- **Write code for you.** That's the agent. ATOS gives the agent
+  accountability structure; the code still comes from whoever
+  holds the keyboard.
+- **Replace testing.** Stop conditions run tests and record
+  verdicts; the tests are your job.
+- **Police you.** If you don't run `project found`, you never
+  get a charter. If you don't commit `spec.md`, the approval
+  gate never opens. ATOS surfaces when something's off — it
+  doesn't block.
 
-You can ignore this section entirely. If you want to understand what's
-happening between turns N and N+1:
+## Read next
 
-```
-opencode POST /v1/chat/completions model=commonwealth/sovereign-coder
-  ▼
-ApprovalGate       — blocks write-intent tools on unapproved features
-SessionBriefing    — "Welcome back" block on fresh/stale sessions
-ContextInjector    — prepends notes digest + spec + drift flag
-ToolInjector       — merges ATOS tool defs into the model's tool list
-  ▼
-inference
-  ▼
-ArtifactSurface    — records "notes written this turn" + "milestones passed"
-                     → staged on session; ContextInjector renders it on N+1
-  ▼
-response to client
-```
-
-You never configure any of this. The pipeline is resolved by name
-from `commonwealth/crates/commonwealth-core/src/default_pipelines.toml`.
-
-## Troubleshooting
-
-**"no approval found for <id>"** — the feature isn't approved. Either
-commit a reviewer change to `spec.md`, or run `atos feature approve
-<id>` to record a MeshStore approval.
-
-**"spec.md missing at ..."** — you deleted the spec but the feature
-row is still in `features.db`. Either put the spec back or
-`atos archive <id>`.
-
-**`atos doctor` says `no fast-capable model registered`** — the Fast
-slot is used for teardown suggestions. Not load-bearing for the
-core loop; a warning you can ignore in solo dev.
-
-**Drift detected but I didn't edit anything** — `git status` on the
-spec file. Whitespace changes or autocrlf can also shift the hash;
-normalize line endings (`.gitattributes` with `* text=auto`).
-
-## Cheat sheet
-
-```
-atos doctor                                   # health check
-atos provision <id> --charter <path>          # one-shot from charter
-atos status [<id>]                            # overview
-atos next [<id>]                              # what's the next milestone?
-atos start-milestone <id> --brief <path>      # kick off a run
-atos end-milestone <id>                       # close + write milestone-N.md
-atos spec diff <id>                           # show drift
-atos spec accept <id> --reason "…"            # accept drift + note it
-atos feature approve <id>                     # Commonwealth-native approval
-atos diff <id>                                # what the last run did
-atos report <id> [--section milestone|red-team|epistemic]
-atos teardown <id>                            # wrap feature + write epistemic report
-atos archive <id> --reason "…"                # shelve a feature
-```
-
-## Where to look next
-
-- [`CLI_REFERENCE.md`](CLI_REFERENCE.md) — every flag for every subcommand
-- [`CODE_INTELLIGENCE.md`](CODE_INTELLIGENCE.md) — `project_context`,
-  symbol lookup, call graph (the tools agents reach for alongside ATOS)
-- The spec examples under
-  [`.sovereign/atos-demo/`](../../.sovereign/atos-demo/) — working
-  charters that provisioned the ATOS milestones themselves
+- [CLI_REFERENCE.md](CLI_REFERENCE.md) — every flag for every
+  subcommand
+- [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) —
+  `project_context`, symbol lookup, call graph (the tools the
+  agent reaches for alongside ATOS)
+- Working examples under
+  [`.sovereign/atos-demo/`](../../.sovereign/atos-demo/) — the
+  charters that provisioned ATOS itself

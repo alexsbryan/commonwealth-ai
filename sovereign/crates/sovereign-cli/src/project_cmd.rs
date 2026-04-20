@@ -55,6 +55,8 @@ pub async fn run_project(args: &[String]) -> i32 {
         "init" => cmd_init(&args[1..]).await,
         "found" => cmd_found(&args[1..]).await,
         "amend" => cmd_amend(&args[1..]).await,
+        "phase" => cmd_phase(&args[1..]).await,
+        "audit" => cmd_audit(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
         "refresh" => cmd_refresh(&args[1..]).await,
         "serve" => cmd_serve(&args[1..]).await,
@@ -80,6 +82,8 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("init",           "Set up code intelligence for the current workspace (also registers with the daemon)"),
             ("found",          "Once per project: structured conversation that produces CHARTER.md + PHASES.md"),
             ("amend",          "Edit CHARTER.md with an adversarial review — every amendment logs who, why, and what was argued against"),
+            ("phase",          "phase status | phase pass [N] — track PHASES.md progression, run stop conditions, write phase-N.md"),
+            ("audit",          "One-page reviewer rollup: founding, phases passed, notes-by-kind, drift status, open questions, red-team findings"),
             ("status",         "Show the status of code intelligence"),
             ("refresh",        "Nudge the daemon to rebuild the SCIP graph now"),
             ("serve",          "Foreground watcher mode for debugging test/lint scripts"),
@@ -868,6 +872,41 @@ vector = false
             match std::fs::write(&config_path, &final_content) {
                 Ok(()) => println!("    \u{2713} .opencode/config.json"),
                 Err(e) => eprintln!("    \u{26a0} Cannot write .opencode/config.json: {e}"),
+            }
+
+            // ATOS opencode plugin — the binary embeds the
+            // canonical source and writes it here with a
+            // versioned header. Upgrades land with `sovereign
+            // atos install-plugin` or a subsequent `project init`.
+            match crate::atos_plugin::install_plugin(&repo_root) {
+                Ok(crate::atos_plugin::InstallOutcome::Installed) => {
+                    println!(
+                        "    \u{2713} {} (v{})",
+                        crate::atos_plugin::plugin_rel_path(),
+                        crate::atos_plugin::PLUGIN_VERSION
+                    );
+                }
+                Ok(crate::atos_plugin::InstallOutcome::UpToDate) => {
+                    println!(
+                        "    \u{2713} {} (up to date at v{})",
+                        crate::atos_plugin::plugin_rel_path(),
+                        crate::atos_plugin::PLUGIN_VERSION
+                    );
+                }
+                Ok(crate::atos_plugin::InstallOutcome::Replaced { prior_version }) => {
+                    println!(
+                        "    \u{2713} {} (v{} → v{})",
+                        crate::atos_plugin::plugin_rel_path(),
+                        prior_version.as_deref().unwrap_or("unversioned"),
+                        crate::atos_plugin::PLUGIN_VERSION
+                    );
+                }
+                Err(e) => {
+                    eprintln!(
+                        "    \u{26a0} Cannot write {}: {e}",
+                        crate::atos_plugin::plugin_rel_path()
+                    );
+                }
             }
         }
 
@@ -2500,6 +2539,675 @@ async fn cmd_found(args: &[String]) -> i32 {
             0
         }
     }
+}
+
+// ─── sovereign project phase (M7.1) ──────────────────────────
+//
+// Phase progression: parse PHASES.md, run or manually verify a
+// phase's stop condition, write phase-N.md, advance
+// lifecycle.current_phase, write a decision note. The artifact
+// trail closes the "was Phase N actually verified?" gap.
+
+async fn cmd_phase(args: &[String]) -> i32 {
+    let Some(sub) = args.first().cloned() else {
+        eprintln!("phase: missing subcommand (status | pass)");
+        return 2;
+    };
+    let rest = &args[1..];
+    match sub.as_str() {
+        "status" => cmd_phase_status(rest).await,
+        "pass" => cmd_phase_pass(rest).await,
+        "--help" | "-h" => {
+            println!("sovereign project phase <status|pass [N]>");
+            println!();
+            println!("status       Show current phase and what's next per PHASES.md");
+            println!("pass [N]     Run (or manually confirm) Phase N's stop condition,");
+            println!("             write phase-N.md, advance lifecycle.current_phase.");
+            println!("             Default N = current_phase + 1.");
+            0
+        }
+        other => {
+            eprintln!("phase: unknown subcommand '{other}'");
+            2
+        }
+    }
+}
+
+async fn cmd_phase_status(_args: &[String]) -> i32 {
+    let (repo_root, project_toml, _) = match load_phase_context() {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let phases_path = crate::phases::phases_md_path(&repo_root);
+    let md = match std::fs::read_to_string(&phases_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("phase status: cannot read PHASES.md: {e}");
+            return 1;
+        }
+    };
+    let phases = crate::phases::parse_phases(&md);
+    println!();
+    println!("  Phase progression");
+    println!("  {}", "─".repeat(54));
+    println!();
+    println!("  current_phase = {}", project_toml.lifecycle.current_phase);
+    println!();
+    for p in &phases {
+        let marker = if p.deferred {
+            "⋯"
+        } else if p.ordinal < project_toml.lifecycle.current_phase {
+            "✓"
+        } else if p.ordinal == project_toml.lifecycle.current_phase {
+            "▶"
+        } else {
+            " "
+        };
+        println!("  {marker} {}", p.heading);
+        if !p.stop_text.is_empty() {
+            println!("      stop: {}", p.stop_text);
+        }
+    }
+    println!();
+    let next = phases
+        .iter()
+        .find(|p| !p.deferred && p.ordinal > project_toml.lifecycle.current_phase);
+    match next {
+        Some(p) => println!(
+            "  Next: `sovereign project phase pass {}`",
+            p.ordinal
+        ),
+        None => println!("  All numbered phases complete."),
+    }
+    0
+}
+
+async fn cmd_phase_pass(args: &[String]) -> i32 {
+    let (repo_root, mut project_toml, project_toml_path) = match load_phase_context() {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+
+    let phases_path = crate::phases::phases_md_path(&repo_root);
+    let md = match std::fs::read_to_string(&phases_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("phase pass: cannot read PHASES.md: {e}");
+            return 1;
+        }
+    };
+    let phases = crate::phases::parse_phases(&md);
+
+    // Resolve which phase to pass. Positional arg OR default to
+    // current_phase + 1 (since `found` seeds current_phase = 0,
+    // the first pass targets Phase 0 only once — after that we
+    // advance linearly).
+    let target_ordinal: u32 = if let Some(s) = args.first() {
+        match s.parse() {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("phase pass: ordinal must be an integer, got '{s}'");
+                return 2;
+            }
+        }
+    } else if project_toml.lifecycle.current_phase == 0 && !already_passed(&repo_root, 0) {
+        // Haven't passed phase 0 yet.
+        0
+    } else {
+        project_toml.lifecycle.current_phase + 1
+    };
+
+    let phase = match phases.iter().find(|p| !p.deferred && p.ordinal == target_ordinal) {
+        Some(p) => p.clone(),
+        None => {
+            eprintln!(
+                "phase pass: no numbered Phase {target_ordinal} in PHASES.md. \
+                 Deferred phases (3+) aren't passed via this command — add them \
+                 via `sovereign project amend` first, or use a different ordinal."
+            );
+            return 1;
+        }
+    };
+
+    // Decide execution mode. Heuristic guard: the naive "single
+    // backticked block" parse mis-extracts a quoted dep name
+    // (`reqwest`) from prose. Treat any extracted "command" that
+    // doesn't contain a space OR a shell operator as suspicious
+    // and drop to manual confirmation.
+    let executable = phase.stop_command.as_ref().filter(|c| looks_shell_runnable(c));
+
+    println!();
+    println!("  Phase pass: {}", phase.heading);
+    println!("  {}", "─".repeat(54));
+    println!();
+    if phase.stop_text.is_empty() {
+        println!("  No stop condition recorded for this phase.");
+    } else {
+        println!("  Stop condition: {}", phase.stop_text);
+    }
+    println!();
+
+    let outcome = match executable {
+        Some(cmd) => {
+            println!("  Running: {cmd}");
+            let out = crate::phases::run_stop_command(cmd);
+            println!(
+                "  {} exit={} duration={}ms",
+                if out.passed { "\u{2713} PASSED" } else { "\u{2717} FAILED" },
+                out.exit_code
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "?".into()),
+                out.duration_ms
+            );
+            out
+        }
+        None => {
+            // Manual confirmation path.
+            println!(
+                "  No single unambiguous shell command extracted from the stop text."
+            );
+            println!("  Manual verification — run the stop condition yourself, then answer here.");
+            print!("  Did it pass? [y/N] ");
+            use std::io::Write;
+            let _ = std::io::stdout().flush();
+            let answer = crate::found::stdin_read_line().to_lowercase();
+            let passed = matches!(answer.chars().next(), Some('y'));
+            crate::phases::PhasePassOutcome {
+                passed,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: String::new(),
+                duration_ms: 0,
+                verification: crate::phases::Verification::ManualConfirm,
+            }
+        }
+    };
+
+    let date = today_iso();
+    let committer = git_committer_identity_for_amend(&repo_root)
+        .unwrap_or_else(|| "<unknown committer>".to_string());
+    let report = crate::phases::render_phase_report(&phase, &outcome, &date, &committer);
+    let report_path = crate::phases::phase_report_path(&repo_root, phase.ordinal);
+    if let Err(e) = std::fs::write(&report_path, &report) {
+        eprintln!("phase pass: could not write {}: {e}", report_path.display());
+        return 1;
+    }
+    println!("    \u{2713} {}", report_path.display());
+
+    // Durable decision note. Captures enough for `audit` to build
+    // a rollup without re-parsing the phase artifact.
+    let sovereign_dir = repo_root.join(".sovereign");
+    if let Ok(note_store) = corpus_engine::NoteStore::open(&sovereign_dir.join("notes.db")) {
+        let verdict = if outcome.passed { "PASSED" } else { "FAILED" };
+        let body = format!(
+            "Phase {} · {}\n\nVerdict: {}\nVerification: {}\nDate: {}\nCommitter: {}\n\nStop condition:\n{}\n",
+            phase.ordinal,
+            phase.heading,
+            verdict,
+            match &outcome.verification {
+                crate::phases::Verification::RanCommand { command } => {
+                    format!("ran `{command}` (exit {})", outcome.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "?".into()))
+                }
+                crate::phases::Verification::ManualConfirm => "manually confirmed".into(),
+            },
+            date,
+            committer,
+            if phase.stop_text.is_empty() {
+                "_(none)_"
+            } else {
+                phase.stop_text.as_str()
+            },
+        );
+        let rt = tokio::runtime::Handle::current();
+        let _ = tokio::task::block_in_place(|| {
+            rt.block_on(note_store.write_note_scoped(
+                "decision",
+                &body,
+                Vec::new(),
+                Vec::new(),
+                &format!("phase-{}-pass", phase.ordinal),
+                corpus_engine::NoteScope::Global,
+                None,
+            ))
+        });
+    }
+
+    // Advance current_phase ONLY when the run passed. Failing a
+    // phase is a recorded artifact (phase-N.md exists) but
+    // doesn't advance the counter — the operator retries.
+    if outcome.passed {
+        if phase.ordinal >= project_toml.lifecycle.current_phase {
+            project_toml.lifecycle.current_phase = phase.ordinal + 1;
+            if let Err(e) = project_toml.write(&project_toml_path) {
+                eprintln!("phase pass: could not update project.toml: {e}");
+                return 1;
+            }
+            println!(
+                "    \u{2713} project.toml: current_phase = {}",
+                project_toml.lifecycle.current_phase
+            );
+        }
+        0
+    } else {
+        println!();
+        println!("  Phase {} FAILED — current_phase unchanged.", phase.ordinal);
+        println!("  Read `{}` for the captured output.", report_path.display());
+        1
+    }
+}
+
+/// Load the usual project triple: repo root, parsed project.toml,
+/// project.toml path. Returns a reusable `Err(i32)` exit code
+/// when any precondition fails.
+fn load_phase_context(
+) -> Result<(PathBuf, crate::project_toml::ProjectTomlFile, PathBuf), i32> {
+    let repo_root = find_repo_root()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let project_toml_path = repo_root.join(".sovereign").join("project.toml");
+    if !project_toml_path.exists() {
+        eprintln!();
+        eprintln!(
+            "  sovereign project phase: no .sovereign/project.toml found.\n\
+             Run `sovereign project init` then `sovereign project found` first."
+        );
+        return Err(1);
+    }
+    let project_toml = match crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("  sovereign project phase: cannot read project.toml: {e}");
+            return Err(1);
+        }
+    };
+    if !project_toml.lifecycle.founded {
+        eprintln!();
+        eprintln!(
+            "  sovereign project phase: this project hasn't been founded yet.\n\
+             Run `sovereign project found` first — PHASES.md is produced at founding."
+        );
+        return Err(1);
+    }
+    Ok((repo_root, project_toml, project_toml_path))
+}
+
+/// Heuristic: does this extracted "command" look like a shell
+/// invocation, or is it likely a quoted identifier from prose?
+/// A real command usually has a space (for args), a shell
+/// operator (`&&`, `||`, `;`, `|`, `>`, `$`), or a path hint.
+fn looks_shell_runnable(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return false;
+    }
+    t.contains(' ')
+        || t.contains("&&")
+        || t.contains("||")
+        || t.contains(';')
+        || t.contains('|')
+        || t.contains('>')
+        || t.contains('$')
+        || t.starts_with("./")
+        || t.starts_with('/')
+        || t.starts_with("cargo ")
+        || t.starts_with("npm ")
+        || t.starts_with("go ")
+        || t.starts_with("python ")
+        || t.starts_with("pytest")
+        || t.starts_with("make")
+}
+
+fn already_passed(repo_root: &Path, ordinal: u32) -> bool {
+    crate::phases::phase_report_path(repo_root, ordinal).exists()
+}
+
+// ─── sovereign project audit (M7.3) ──────────────────────────
+//
+// Reviewer-ready rollup. Read-only scan of everything a reviewer
+// would otherwise have to assemble by hand: the lifecycle state,
+// phase progression, notes grouped by kind, drift status, feature
+// summary, red-team findings. One markdown page printed to stdout
+// so it can be piped to a file, a PR description, or a GitHub
+// issue.
+
+async fn cmd_audit(args: &[String]) -> i32 {
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("sovereign project audit");
+        println!();
+        println!("Prints a reviewer-ready rollup of project state to stdout.");
+        println!("Pipe it to a file or a PR description: `sovereign project audit > audit.md`.");
+        return 0;
+    }
+    let repo_root = find_repo_root()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let sov = repo_root.join(".sovereign");
+    let project_toml_path = sov.join("project.toml");
+    if !project_toml_path.exists() {
+        eprintln!(
+            "  sovereign project audit: no .sovereign/project.toml found. \
+             Run `sovereign project init` first."
+        );
+        return 1;
+    }
+    let project_toml = match crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("  sovereign project audit: cannot read project.toml: {e}");
+            return 1;
+        }
+    };
+
+    let report = build_audit_report(&repo_root, &project_toml).await;
+    println!("{report}");
+    0
+}
+
+/// Compose the audit markdown. Pure with respect to the filesystem
+/// + DBs (reads only, no writes) so tests can drive it with a
+/// seeded repo and assert the output directly.
+async fn build_audit_report(
+    repo_root: &Path,
+    project_toml: &crate::project_toml::ProjectTomlFile,
+) -> String {
+    let sov = repo_root.join(".sovereign");
+    let project_id = derive_project_id(repo_root);
+    let now = today_iso();
+
+    let mut out = String::new();
+    out.push_str(&format!("# {project_id} — Project audit\n\n"));
+    out.push_str(&format!("_Generated: {now}._\n\n"));
+
+    // ── Lifecycle ──────────────────────────────────────────────
+    out.push_str("## Lifecycle\n\n");
+    out.push_str(&format!(
+        "- **Founded:** {}\n- **Charter version:** {}\n- **Current phase:** {}\n",
+        if project_toml.lifecycle.founded { "yes" } else { "no" },
+        project_toml.lifecycle.charter_version,
+        project_toml.lifecycle.current_phase,
+    ));
+    // Charter drift detection — recompute vs. recorded hash.
+    let charter_path = sov.join("CHARTER.md");
+    let drift_line = if charter_path.exists() && !project_toml.lifecycle.charter_hash.is_empty() {
+        match std::fs::read_to_string(&charter_path) {
+            Ok(text) => {
+                let current = crate::found::hash_charter(&text);
+                if current == project_toml.lifecycle.charter_hash {
+                    "- **Charter drift:** none (on-disk CHARTER.md matches recorded hash)".into()
+                } else {
+                    format!(
+                        "- **Charter drift:** ⚠ on-disk hash `{}` differs from recorded `{}`",
+                        &current[..8.min(current.len())],
+                        &project_toml.lifecycle.charter_hash
+                            [..8.min(project_toml.lifecycle.charter_hash.len())]
+                    )
+                }
+            }
+            Err(_) => "- **Charter drift:** unknown (CHARTER.md unreadable)".into(),
+        }
+    } else if !charter_path.exists() {
+        "- **Charter drift:** n/a (no CHARTER.md — project not founded)".into()
+    } else {
+        "- **Charter drift:** n/a (no recorded hash)".into()
+    };
+    out.push_str(&drift_line);
+    out.push_str("\n\n");
+
+    // ── Phases ─────────────────────────────────────────────────
+    let phases_path = crate::phases::phases_md_path(repo_root);
+    out.push_str("## Phases\n\n");
+    if phases_path.exists() {
+        let md = std::fs::read_to_string(&phases_path).unwrap_or_default();
+        let phases = crate::phases::parse_phases(&md);
+        if phases.is_empty() {
+            out.push_str("_(PHASES.md exists but no phases parsed.)_\n\n");
+        } else {
+            out.push_str("| Phase | Status | Stop condition |\n|---|---|---|\n");
+            for p in &phases {
+                let status = if p.deferred {
+                    "deferred".into()
+                } else if p.ordinal < project_toml.lifecycle.current_phase {
+                    let artifact = crate::phases::phase_report_path(repo_root, p.ordinal);
+                    let verdict = read_phase_verdict(&artifact).unwrap_or("passed".into());
+                    format!("{verdict} → `{}`", relative(&artifact, repo_root))
+                } else if p.ordinal == project_toml.lifecycle.current_phase {
+                    "current".into()
+                } else {
+                    "not yet".into()
+                };
+                let stop = if p.stop_text.is_empty() {
+                    "_(none)_".into()
+                } else {
+                    p.stop_text.replace('|', "\\|")
+                };
+                out.push_str(&format!("| {} | {status} | {stop} |\n", p.heading));
+            }
+            out.push('\n');
+        }
+    } else {
+        out.push_str("_(no PHASES.md — project not founded)_\n\n");
+    }
+
+    // ── Notes by kind ──────────────────────────────────────────
+    out.push_str("## Notes by kind\n\n");
+    let notes_db = sov.join("notes.db");
+    let (note_counts, recent_open_questions, recent_deviations) = if notes_db.exists() {
+        match corpus_engine::NoteStore::open(&notes_db) {
+            Ok(store) => gather_note_summary(&store).await,
+            Err(_) => (Default::default(), Vec::new(), Vec::new()),
+        }
+    } else {
+        (Default::default(), Vec::new(), Vec::new())
+    };
+    if note_counts.is_empty() {
+        out.push_str("_(no notes recorded)_\n\n");
+    } else {
+        out.push_str("| Kind | Count |\n|---|---|\n");
+        for (kind, count) in &note_counts {
+            out.push_str(&format!("| {kind} | {count} |\n"));
+        }
+        out.push('\n');
+    }
+
+    if !recent_open_questions.is_empty() {
+        out.push_str("### Open questions\n\n");
+        for (id, first_line) in &recent_open_questions {
+            out.push_str(&format!("- `[note:{id}]` {first_line}\n"));
+        }
+        out.push('\n');
+    }
+    if !recent_deviations.is_empty() {
+        out.push_str("### Deviations (accepted drift + spec changes)\n\n");
+        for (id, first_line) in &recent_deviations {
+            out.push_str(&format!("- `[note:{id}]` {first_line}\n"));
+        }
+        out.push('\n');
+    }
+
+    // ── Features ───────────────────────────────────────────────
+    out.push_str("## Features\n\n");
+    let features_db = sov.join("features.db");
+    if features_db.exists() {
+        match corpus_engine::FeatureStore::open(&features_db) {
+            Ok(store) => match store.list(true).await {
+                Ok(features) if !features.is_empty() => {
+                    out.push_str("| Feature | State | Auto red-team |\n|---|---|---|\n");
+                    for f in &features {
+                        out.push_str(&format!(
+                            "| {} | {} | {} |\n",
+                            f.id,
+                            f.state,
+                            if f.auto_redteam { "yes" } else { "no" }
+                        ));
+                    }
+                    out.push('\n');
+                }
+                _ => {
+                    out.push_str("_(no features provisioned yet)_\n\n");
+                }
+            },
+            Err(_) => {
+                out.push_str("_(features.db unreadable)_\n\n");
+            }
+        }
+    } else {
+        out.push_str("_(no features.db yet)_\n\n");
+    }
+
+    // ── Artifact inventory ─────────────────────────────────────
+    out.push_str("## Artifact inventory\n\n");
+    let artifacts = collect_artifact_inventory(&sov);
+    if artifacts.is_empty() {
+        out.push_str("_(no ATOS artifacts found)_\n\n");
+    } else {
+        for a in &artifacts {
+            out.push_str(&format!("- `{a}`\n"));
+        }
+        out.push('\n');
+    }
+
+    // ── Footer ────────────────────────────────────────────────
+    out.push_str("---\n\n");
+    out.push_str(
+        "_Generated by `sovereign project audit`. Re-run to refresh; this document is not committed automatically._\n",
+    );
+    out
+}
+
+/// Scan a phase-N.md artifact for its verdict line. Defensive —
+/// if the header line doesn't match the expected shape, returns
+/// `None` and the caller falls back to a generic label.
+fn read_phase_verdict(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let first = text.lines().next()?;
+    if first.contains("PASSED") {
+        Some("✓ passed".into())
+    } else if first.contains("FAILED") {
+        Some("✗ failed".into())
+    } else {
+        None
+    }
+}
+
+/// Count notes by kind and pull up to 10 open-question + 10
+/// deviation notes. Uses the broad Global + Feature scope
+/// combined — auditor wants the whole picture.
+async fn gather_note_summary(
+    store: &corpus_engine::NoteStore,
+) -> (
+    std::collections::BTreeMap<String, u32>,
+    Vec<(String, String)>,
+    Vec<(String, String)>,
+) {
+    let filter = corpus_engine::ScopeFilter {
+        scopes: vec![
+            corpus_engine::NoteScope::Global,
+            corpus_engine::NoteScope::Feature,
+        ],
+        feature_id: None,
+    };
+    let rows = store
+        .read_notes_scoped(None, &[], &[], &[], 500, false, &filter)
+        .await
+        .unwrap_or_default();
+
+    let mut counts: std::collections::BTreeMap<String, u32> = Default::default();
+    let mut opens = Vec::new();
+    let mut devs = Vec::new();
+    for n in rows {
+        *counts.entry(n.kind.clone()).or_insert(0) += 1;
+        let first_line = n
+            .content
+            .lines()
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(120)
+            .collect::<String>();
+        if n.kind == "uncertainty" && opens.len() < 10 {
+            opens.push((n.id.clone(), first_line.clone()));
+        }
+        if n.kind == "deviation" && devs.len() < 10 {
+            devs.push((n.id.clone(), first_line));
+        }
+    }
+    (counts, opens, devs)
+}
+
+fn collect_artifact_inventory(sov: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    // Top-level markdown + toml artifacts.
+    for name in ["CHARTER.md", "PHASES.md", "project.toml"] {
+        if sov.join(name).exists() {
+            out.push(format!(".sovereign/{name}"));
+        }
+    }
+    // Phase reports.
+    if let Ok(entries) = std::fs::read_dir(sov) {
+        let mut phase_names: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let n = e.file_name().to_string_lossy().into_owned();
+                (n.starts_with("phase-") && n.ends_with(".md")).then_some(n)
+            })
+            .collect();
+        phase_names.sort();
+        for n in phase_names {
+            out.push(format!(".sovereign/{n}"));
+        }
+    }
+    // Feature artifacts.
+    let feats = sov.join("features");
+    if feats.exists() {
+        if let Ok(entries) = std::fs::read_dir(&feats) {
+            let mut dirs: Vec<PathBuf> =
+                entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+            dirs.sort();
+            for dir in dirs {
+                let name = dir.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                let mut items = Vec::new();
+                for f in ["spec.md", "red-team.md", "epistemic-report.md"] {
+                    if dir.join(f).exists() {
+                        items.push(f.to_string());
+                    }
+                }
+                if let Ok(ents) = std::fs::read_dir(&dir) {
+                    let mut ms: Vec<String> = ents
+                        .filter_map(|e| e.ok())
+                        .filter_map(|e| {
+                            let n = e.file_name().to_string_lossy().into_owned();
+                            (n.starts_with("milestone-") && n.ends_with(".md"))
+                                .then_some(n)
+                        })
+                        .collect();
+                    ms.sort();
+                    items.extend(ms);
+                }
+                for i in items {
+                    out.push(format!(".sovereign/features/{name}/{i}"));
+                }
+            }
+        }
+    }
+    // Fetched docs.
+    let docs = sov.join("docs");
+    if docs.exists() {
+        if let Ok(entries) = std::fs::read_dir(&docs) {
+            let mut fnames: Vec<String> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            fnames.sort();
+            for n in fnames {
+                out.push(format!(".sovereign/docs/{n}"));
+            }
+        }
+    }
+    out
+}
+
+fn relative(path: &Path, base: &Path) -> String {
+    path.strip_prefix(base)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.display().to_string())
 }
 
 // ─── sovereign project amend (M6.7) ──────────────────────────
