@@ -119,6 +119,65 @@ pub fn restart_service() -> Result<(), String> {
     }
 }
 
+/// Stop the running sovereign daemon without unregistering it from
+/// the service manager. A subsequent `sovereign daemon restart` (or
+/// `launchctl start`) will bring it back.
+///
+/// On macOS, sends SIGTERM via `launchctl stop`. Because the plist
+/// sets `KeepAlive.SuccessfulExit = false`, a clean exit (status 0)
+/// does NOT trigger an automatic restart, so the daemon stays down
+/// until explicitly started again.
+///
+/// Returns `Ok(())` when the stop command was accepted. The process
+/// may still be winding down — the daemon drains in-flight requests
+/// before it exits.
+pub fn stop_service() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let out = Command::new("launchctl")
+            .args(["stop", "com.sovereign.daemon"])
+            .output()
+            .map_err(|e| format!("spawn launchctl: {e}"))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if stderr.contains("No such process") || stderr.contains("not running") {
+                // Already stopped — treat as success.
+                return Ok(());
+            }
+            return Err(format!(
+                "launchctl stop com.sovereign.daemon failed: {}\n\
+                 hint: if the daemon isn't registered, run `sovereign setup` first.",
+                stderr.trim()
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        let out = Command::new("systemctl")
+            .args(["--user", "stop", "sovereign.service"])
+            .output()
+            .map_err(|e| format!("spawn systemctl: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "systemctl --user stop sovereign failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        Err(format!(
+            "service stop is not supported on this platform (os={}). \
+             Send SIGTERM to the `sovereign daemon run` process manually.",
+            std::env::consts::OS
+        ))
+    }
+}
+
 /// Stop + unregister the service. Idempotent — returns `Ok(())` if
 /// the service was never installed.
 pub fn uninstall_service() -> Result<(), String> {

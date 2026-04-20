@@ -402,16 +402,19 @@ impl EmbedSlot {
         n_gpu_layers: u32,
         embed_quirks: Option<EmbedQuirks>,
     ) -> Result<Self> {
-        // Force Metal offload on platforms where the feature was
-        // compiled in. Benchmarked on M2 Max with Qwen3-Embedding-
-        // 0.6B: CPU peaks at ~2.8 seq/sec @ 8 threads; Metal hits
-        // 33 seq/sec — a 12× speedup that directly unblocks
-        // Wikipedia-scale ingestion. The old `GGML_ASSERT(buf_src)`
-        // crash that forced CPU-only mode was fixed in llama-cpp-2
-        // 0.1.141; if it comes back for a given quant or platform,
-        // the fallback-to-CPU path below catches it.
-        let requested_gpu_layers = if cfg!(target_os = "macos") && n_gpu_layers == 0 {
-            999 // every layer on GPU
+        // Force Metal offload on Apple Silicon only. On M-series chips
+        // Metal embedding runs at ~33 seq/sec vs ~2.8 seq/sec on CPU —
+        // a 12× speedup. On Intel Macs the Metal scheduler crashes in
+        // ggml_metal_synchronize (hardware OOM or command-buffer timeout),
+        // so the override is gated on aarch64 (Apple Silicon) rather than
+        // the broader "macos" predicate.
+        // The old `GGML_ASSERT(buf_src)` crash was fixed in
+        // llama-cpp-2 0.1.141; the fallback-to-CPU path below still
+        // guards against context-creation failures on any platform.
+        let requested_gpu_layers = if cfg!(all(target_os = "macos", target_arch = "aarch64"))
+            && n_gpu_layers == 0
+        {
+            999 // every layer on GPU — Apple Silicon only
         } else {
             n_gpu_layers
         };

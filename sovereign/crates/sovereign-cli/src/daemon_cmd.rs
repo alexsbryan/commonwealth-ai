@@ -40,6 +40,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(&args[1..]).await,
+        Some("stop") => stop_daemon().await,
         Some("restart") => restart_daemon().await,
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
@@ -64,6 +65,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Subcommands(&[
             ("run",     "Run in the foreground; exits on SIGINT/SIGTERM. Normally the OS service manager invokes this, not you."),
             ("status",  "Report whether the daemon is running and answering on :9741."),
+            ("stop",    "Stop the daemon cleanly (SIGTERM). The service stays registered so `restart` will bring it back."),
             ("reload",  "Apply config changes without a restart (POST /v1/admin/reload). Use this after editing model paths in ~/.config/sovereign/config.toml."),
             ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests. Use when a model/port/data_dir change requires a full rebind or the daemon is wedged."),
         ]),
@@ -570,6 +572,20 @@ async fn build_merged_scip_graph(
 /// Most users reach for this when the daemon feels stuck or after a
 /// change that isn't hot-reloadable (port, data_dir). For model-only
 /// changes, prefer `sovereign daemon reload` — no gap in availability.
+async fn stop_daemon() -> i32 {
+    eprintln!("stopping sovereign daemon …");
+    match crate::service_install::stop_service() {
+        Ok(()) => {
+            eprintln!("✓ stop signal sent — daemon will exit after draining in-flight requests");
+            0
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            1
+        }
+    }
+}
+
 async fn restart_daemon() -> i32 {
     eprintln!("restarting sovereign daemon …");
     match crate::service_install::restart_service() {
