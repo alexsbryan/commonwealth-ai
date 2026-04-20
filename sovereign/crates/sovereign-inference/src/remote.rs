@@ -376,6 +376,8 @@ mod tests {
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         };
 
         let body = provider.build_request(&request);
@@ -425,6 +427,8 @@ mod tests {
                         preferred_tokens: None,
                     }),
             ),
+            tools: None,
+            tool_choice: None,
         };
 
         let body = provider.build_request(&request);

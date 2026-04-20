@@ -376,6 +376,8 @@ impl Executor {
                     top_k: None,
                     top_p: None,
                     oicp,
+                    tools: None,
+                    tool_choice: None,
                 };
 
                 // Best-of-N sampling or single completion.
@@ -654,6 +656,8 @@ impl Executor {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+                tools: None,
+                tool_choice: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -729,6 +733,8 @@ impl Executor {
                         top_k: None,
                         top_p: None,
                         oicp: None,
+                tools: None,
+                tool_choice: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;
 

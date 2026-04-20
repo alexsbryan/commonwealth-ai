@@ -818,6 +818,8 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             })
             .await?;
 
@@ -973,6 +975,8 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             })
             .await?;
 
@@ -1126,6 +1130,8 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             })
             .await?;
 
@@ -1237,6 +1243,8 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             })
             .await?;
 
@@ -1295,6 +1303,8 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             })
             .await?;
 
@@ -1353,6 +1363,8 @@ async fn detect_document_type(
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         })
         .await;
 
@@ -1449,6 +1461,8 @@ async fn build_skeleton(
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             })
             .await;
 
@@ -1595,6 +1609,8 @@ async fn generate_overview(
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         })
         .await
         .map(|r| r.text)

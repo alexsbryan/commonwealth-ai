@@ -61,6 +61,8 @@ impl DocumentTool {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -125,6 +127,8 @@ impl DocumentTool {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -306,6 +310,8 @@ impl DocumentTool {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             };
 
             let response = self.inference.complete(&request).await?;

@@ -84,6 +84,10 @@ pub mod archive_feature;
 pub mod read_note_by_id;
 #[cfg(feature = "treesitter")]
 pub mod promote_note;
+#[cfg(feature = "treesitter")]
+pub mod read_note_digest;
+#[cfg(feature = "treesitter")]
+pub mod record_atos_event;
 
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
@@ -130,6 +134,10 @@ pub use archive_feature::ArchiveFeatureTool;
 pub use read_note_by_id::ReadNoteByIdTool;
 #[cfg(feature = "treesitter")]
 pub use promote_note::PromoteNoteTool;
+#[cfg(feature = "treesitter")]
+pub use read_note_digest::ReadNoteDigestTool;
+#[cfg(feature = "treesitter")]
+pub use record_atos_event::RecordAtosEventTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

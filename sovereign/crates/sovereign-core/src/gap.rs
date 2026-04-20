@@ -102,6 +102,8 @@ pub async fn identify_gap(
             top_k: None,
             top_p: None,
             oicp: None,
+                tools: None,
+                tool_choice: None,
         })
         .await?;
 

@@ -45,6 +45,9 @@ pub async fn run_atos(args: &[String]) -> i32 {
         "archive" => cmd_archive(rest).await,
         "status" => cmd_status(rest).await,
         "promote" => cmd_promote(rest).await,
+        "diff" => cmd_diff(rest).await,
+        "run-ab" => cmd_run_ab(rest).await,
+        "probe-driver" => cmd_probe_driver(rest).await,
         other => {
             eprintln!("atos: unknown subcommand '{other}'");
             print_help();
@@ -66,6 +69,9 @@ fn print_help() {
          \x20   archive <id>          --reason <text>\n\
          \x20   status [<id>]\n\
          \x20   promote <note-id>     --to feature|global [--feature-id <id>] [--content <path>]\n\
+         \x20   diff <feature-id>     [--ordinal N]\n\
+         \x20   run-ab <feature-id>   --brief <path> [--drivers claude,opencode]\n\
+         \x20   probe-driver          [--url http://localhost:9741/v1/chat/completions]\n\
          \n\
          FLAGS\n\
          \x20   --version             Print atos CLI version and exit.\n\
@@ -185,6 +191,11 @@ async fn cmd_start_milestone(args: &[String]) -> i32 {
     };
     let driver_flag = get_flag(&flags, "--driver");
     let no_driver = flags.iter().any(|(k, _)| k == "no-driver");
+    // `--reuse-last-milestone` is set by `run-ab` so both A/B drivers
+    // attach to the same milestone ordinal. Without this, each driver
+    // spawn would increment the ordinal and `atos diff` would only
+    // show one driver column.
+    let reuse_last = flags.iter().any(|(k, _)| k == "reuse-last-milestone");
     let driver = resolve_driver(driver_flag.as_deref()).await;
 
     let feature_store = match open_feature_store() {
@@ -204,33 +215,81 @@ async fn cmd_start_milestone(args: &[String]) -> i32 {
         .set_state(&id, corpus_engine::FeatureState::Active)
         .await;
 
-    let ordinal = match feature_store.next_ordinal(&id).await {
-        Ok(n) => n,
-        Err(e) => {
-            eprintln!("start-milestone: next_ordinal: {e}");
-            return 1;
+    let milestone = if reuse_last {
+        let list = feature_store
+            .list_milestones(&id)
+            .await
+            .unwrap_or_default();
+        match list.into_iter().last() {
+            Some(m) => m,
+            None => {
+                eprintln!(
+                    "start-milestone: --reuse-last-milestone but feature '{id}' has no milestones"
+                );
+                return 1;
+            }
+        }
+    } else {
+        let ordinal = match feature_store.next_ordinal(&id).await {
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("start-milestone: next_ordinal: {e}");
+                return 1;
+            }
+        };
+        match feature_store.add_milestone(&id, ordinal, &brief_md).await {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("start-milestone: {e}");
+                return 1;
+            }
         }
     };
-    let milestone = match feature_store.add_milestone(&id, ordinal, &brief_md).await {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("start-milestone: {e}");
-            return 1;
-        }
-    };
+    let ordinal = milestone.ordinal;
     let _ = feature_store.mark_started(&milestone.id).await;
 
+    // Open an atos_runs row so the driver subprocess's tool events can
+    // be attributed back to this specific (feature, milestone, driver)
+    // tuple. The id is exported via env so the opencode plugin can pass
+    // it back to `record_atos_event`.
+    let run = match feature_store
+        .open_run(&id, &milestone.id, driver.as_label())
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("start-milestone: open_run: {e}");
+            return 1;
+        }
+    };
+
     println!(
-        "start-milestone: feature='{id}' ordinal={ordinal} driver={}",
-        driver.as_label()
+        "start-milestone: feature='{id}' ordinal={ordinal} driver={} run_id={}",
+        driver.as_label(),
+        run.id
     );
 
     if no_driver {
-        println!("start-milestone: --no-driver set; milestone {} recorded without spawning a driver", milestone.id);
+        println!(
+            "start-milestone: --no-driver set; milestone {} recorded without spawning a driver",
+            milestone.id
+        );
         return 0;
     }
 
-    match driver.spawn(&id, &brief_md) {
+    let spawn_result = driver.spawn(&id, &brief_md, &run.id);
+    let exit_code = match &spawn_result {
+        Ok(status) => status.code().unwrap_or(-1),
+        Err(_) => -1,
+    };
+    // stop_passed at this point is unknown — end-milestone will
+    // actually run the stop condition. We provisionally close the
+    // run here with stop_passed=false so an interrupted session
+    // isn't left dangling; end-milestone overwrites when it lands.
+    let _ = feature_store
+        .close_run(&run.id, exit_code as i64, false)
+        .await;
+    match spawn_result {
         Ok(status) if status.success() => 0,
         Ok(status) => {
             eprintln!(
@@ -276,16 +335,20 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
             return 1;
         }
     };
+    // In the A/B case, multiple driver runs attach to a single
+    // milestone. end-milestone is safe to call after each driver;
+    // it updates the MATCHING RUN's stop_passed/exit_code (not the
+    // milestone row's ended_at, which only records when the last
+    // driver landed). Pick the most recent milestone if no ordinal
+    // override is given — the run-selection below then targets the
+    // most recent run within that milestone that's either open or
+    // provisionally closed.
     let target = match ordinal_override {
         Some(n) => milestones.iter().find(|m| m.ordinal == n).cloned(),
-        None => milestones
-            .iter()
-            .rev()
-            .find(|m| m.ended_at.is_none())
-            .cloned(),
+        None => milestones.last().cloned(),
     };
     let Some(milestone) = target else {
-        eprintln!("end-milestone: no in-flight milestone to close");
+        eprintln!("end-milestone: no milestone to close");
         return 1;
     };
 
@@ -320,6 +383,27 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
         Vec::new()
     };
 
+    // Find the open run for this milestone (if any) and update it
+    // with the real stop_condition verdict. Multiple runs can share a
+    // milestone (the A/B case); pick the most recent one that's still
+    // open, or the most recent overall.
+    let runs = feature_store
+        .list_runs_for_feature(&feature.id)
+        .await
+        .unwrap_or_default();
+    let target_run = runs
+        .iter()
+        .filter(|r| r.milestone_id == milestone.id)
+        .rev()
+        .find(|r| r.ended_at.is_none())
+        .cloned()
+        .or_else(|| runs.iter().filter(|r| r.milestone_id == milestone.id).last().cloned());
+    if let Some(run) = target_run.as_ref() {
+        let _ = feature_store
+            .close_run(&run.id, run.exit_code.unwrap_or(0), stop_passed)
+            .await;
+    }
+
     let report = serde_json::json!({
         "feature_id": feature.id,
         "ordinal": milestone.ordinal,
@@ -327,6 +411,8 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
         "stop_passed": stop_passed,
         "note_count": feature_notes.len(),
         "notes": feature_notes,
+        "run_id": target_run.as_ref().map(|r| r.id.clone()),
+        "driver": target_run.as_ref().map(|r| r.driver.clone()),
     });
     let report_json = report.to_string();
     let _ = feature_store.mark_ended(&milestone.id, &report_json).await;
@@ -503,6 +589,418 @@ async fn cmd_promote(args: &[String]) -> i32 {
     }
 }
 
+// ─── Subcommand: diff ────────────────────────────────────────────────────────
+
+async fn cmd_diff(args: &[String]) -> i32 {
+    let (positional, flags) = split_args(args);
+    let Some(feature_id) = positional.first().cloned() else {
+        eprintln!("diff: missing <feature-id>");
+        return 2;
+    };
+    let ordinal: Option<i64> = get_flag(&flags, "--ordinal")
+        .and_then(|s| s.parse::<i64>().ok());
+
+    let feature_store = match open_feature_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("diff: {e}");
+            return 1;
+        }
+    };
+
+    let Some(feature) = feature_store.get(&feature_id).await.ok().flatten() else {
+        eprintln!("diff: feature '{feature_id}' not found");
+        return 1;
+    };
+    let milestones = feature_store
+        .list_milestones(&feature_id)
+        .await
+        .unwrap_or_default();
+    let target_milestone = match ordinal {
+        Some(n) => milestones.iter().find(|m| m.ordinal == n).cloned(),
+        None => milestones.last().cloned(),
+    };
+    let Some(milestone) = target_milestone else {
+        eprintln!("diff: no milestones for feature '{feature_id}'");
+        return 1;
+    };
+
+    let runs_all = feature_store
+        .list_runs_for_feature(&feature_id)
+        .await
+        .unwrap_or_default();
+    let runs: Vec<_> = runs_all
+        .into_iter()
+        .filter(|r| r.milestone_id == milestone.id)
+        .collect();
+    if runs.is_empty() {
+        eprintln!(
+            "diff: no runs for feature '{feature_id}' milestone {}",
+            milestone.ordinal
+        );
+        return 1;
+    }
+
+    render_diff(&feature, &milestone, &runs, &feature_store).await;
+    0
+}
+
+/// Count tool events per (tool_name, run_id) with a breakdown of
+/// outcomes and parse errors. Keyed on `tool_name` so the diff view
+/// can render one row per tool across drivers.
+#[derive(Default, Debug)]
+struct ToolCounts {
+    after: usize,
+    errors: usize,
+    parse_errors: usize,
+    total_duration_ms: i64,
+}
+
+async fn render_diff(
+    feature: &corpus_engine::FeatureRow,
+    milestone: &corpus_engine::MilestoneRow,
+    runs: &[corpus_engine::AtosRunRow],
+    feature_store: &std::sync::Arc<corpus_engine::FeatureStore>,
+) {
+    println!();
+    println!("  ── atos diff ────────────────────────────────────────────────");
+    println!("  Feature:   {}", feature.id);
+    println!("  Milestone: {}", milestone.ordinal);
+    println!("  Runs:");
+    for r in runs {
+        let duration = match (r.started_at, r.ended_at) {
+            (s, Some(e)) => format!("{}s", e - s),
+            _ => "in-flight".into(),
+        };
+        let verdict = match r.stop_passed {
+            Some(true) => "PASS",
+            Some(false) => "FAIL",
+            None => "?",
+        };
+        println!(
+            "    • {:9} [{}]  driver={:8}  duration={:>7}",
+            &r.id[..r.id.len().min(8)],
+            verdict,
+            r.driver,
+            duration
+        );
+    }
+
+    // Aggregate per-driver counts. Multiple runs for the same driver
+    // (e.g. retries) collapse into one column — what the operator
+    // wants is "how does claude typically behave here vs opencode."
+    use std::collections::BTreeMap;
+    let mut per_driver: BTreeMap<String, BTreeMap<String, ToolCounts>> = BTreeMap::new();
+    for run in runs {
+        let events = feature_store
+            .list_events_for_run(&run.id)
+            .await
+            .unwrap_or_default();
+        let entry = per_driver.entry(run.driver.clone()).or_default();
+        for e in events {
+            let counts = entry.entry(e.tool_name.clone()).or_default();
+            match e.phase.as_str() {
+                "after" => {
+                    counts.after += 1;
+                    if matches!(e.outcome.as_deref(), Some("error")) {
+                        counts.errors += 1;
+                    }
+                    if let Some(d) = e.duration_ms {
+                        counts.total_duration_ms += d;
+                    }
+                }
+                "parse_error" => {
+                    counts.parse_errors += 1;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Union of tool names across drivers, sorted for stable output.
+    let mut all_tools: std::collections::BTreeSet<String> = Default::default();
+    for m in per_driver.values() {
+        for k in m.keys() {
+            all_tools.insert(k.clone());
+        }
+    }
+
+    // Drivers we print columns for, in a stable order (claude first so
+    // it's the baseline column on the left).
+    let drivers: Vec<&String> = {
+        let mut v: Vec<&String> = per_driver.keys().collect();
+        v.sort_by(|a, b| {
+            // claude < opencode < any others alphabetically
+            let rank = |s: &str| match s {
+                "claude" => 0,
+                "opencode" => 1,
+                _ => 2,
+            };
+            rank(a).cmp(&rank(b)).then(a.cmp(b))
+        });
+        v
+    };
+
+    println!();
+    println!("  Per-tool activity:");
+    let mut header = String::from("    tool                    ");
+    for d in &drivers {
+        header.push_str(&format!("{:>10}", d));
+    }
+    header.push_str("   note");
+    println!("{header}");
+    println!(
+        "    ─────────────────────── {}   ─────────────────────────────",
+        "──────────".repeat(drivers.len())
+    );
+
+    for tool in &all_tools {
+        let mut line = format!("    {:<24}", truncate(tool, 24));
+        let mut counts: Vec<usize> = Vec::new();
+        let mut parse_err_here = false;
+        for d in &drivers {
+            let c = per_driver
+                .get(*d)
+                .and_then(|m| m.get(tool))
+                .map(|c| (c.after, c.parse_errors))
+                .unwrap_or((0, 0));
+            counts.push(c.0);
+            if c.1 > 0 {
+                parse_err_here = true;
+            }
+            if c.1 > 0 {
+                line.push_str(&format!("{:>8}×e{}", c.0, c.1));
+            } else {
+                line.push_str(&format!("{:>10}", format!("{}×", c.0)));
+            }
+        }
+        let note = classify_delta(&counts, parse_err_here);
+        line.push_str(&format!("   {note}"));
+        println!("{line}");
+    }
+
+    // Also surface a parse-error total so the operator sees it even if
+    // no per-tool row has parse errors (they could land on a tool the
+    // other driver didn't touch).
+    let total_parse_errors: usize = per_driver
+        .values()
+        .flat_map(|m| m.values())
+        .map(|c| c.parse_errors)
+        .sum();
+    if total_parse_errors > 0 {
+        println!();
+        println!(
+            "  ⚠ {total_parse_errors} tool_call parse error(s) across all runs — \
+             run `sovereign atos diff {} --ordinal {} --verbose` (TODO) to inspect payloads.",
+            feature.id, milestone.ordinal
+        );
+    }
+}
+
+fn truncate(s: &str, n: usize) -> String {
+    if s.len() <= n {
+        s.into()
+    } else {
+        format!("{}…", &s[..n.saturating_sub(1)])
+    }
+}
+
+/// Heuristic annotation for the diff table. Kept simple and
+/// iteration-friendly — this is the first lever we'll tune once we have
+/// real comparison data.
+fn classify_delta(counts: &[usize], parse_errors: bool) -> String {
+    if parse_errors {
+        return "parse failure (see above)".into();
+    }
+    if counts.len() < 2 {
+        return String::new();
+    }
+    let max = counts.iter().copied().max().unwrap_or(0);
+    let min = counts.iter().copied().min().unwrap_or(0);
+    if max == 0 {
+        return String::new();
+    }
+    if min == 0 {
+        return "only one driver used this tool".into();
+    }
+    let ratio = max as f64 / min as f64;
+    if ratio >= 3.0 && max - min >= 3 {
+        "large delta — inspect".into()
+    } else if max - min <= 2 {
+        "close".into()
+    } else {
+        "moderate delta".into()
+    }
+}
+
+// ─── Subcommand: run-ab ──────────────────────────────────────────────────────
+
+async fn cmd_run_ab(args: &[String]) -> i32 {
+    let (positional, flags) = split_args(args);
+    let Some(feature_id) = positional.first().cloned() else {
+        eprintln!("run-ab: missing <feature-id>");
+        return 2;
+    };
+    let Some(brief_path) = get_flag(&flags, "--brief") else {
+        eprintln!("run-ab: --brief <path> is required");
+        return 2;
+    };
+    let drivers_flag = get_flag(&flags, "--drivers").unwrap_or_else(|| "claude,opencode".into());
+    let drivers: Vec<String> = drivers_flag.split(',').map(|s| s.trim().to_string()).collect();
+    if drivers.is_empty() {
+        eprintln!("run-ab: --drivers cannot be empty");
+        return 2;
+    }
+    // Read brief once up-front so a path typo fails fast.
+    if let Err(e) = std::fs::read_to_string(&brief_path) {
+        eprintln!("run-ab: read {brief_path}: {e}");
+        return 1;
+    }
+
+    println!("run-ab: drivers = {}", drivers.join(", "));
+    let mut all_passed = true;
+    for (idx, d) in drivers.iter().enumerate() {
+        println!();
+        println!("── driver={d} ───────────────────────────────────────");
+        // Both drivers attach to the same milestone so `atos diff`
+        // shows a real side-by-side view. The first driver creates
+        // the milestone; subsequent drivers reuse it.
+        let mut start_args = vec![
+            feature_id.clone(),
+            "--brief".into(),
+            brief_path.clone(),
+            "--driver".into(),
+            d.clone(),
+        ];
+        if idx > 0 {
+            start_args.push("--reuse-last-milestone".into());
+        }
+        let rc = cmd_start_milestone(&start_args).await;
+        if rc != 0 {
+            eprintln!("run-ab: driver '{d}' exited non-zero ({rc})");
+            all_passed = false;
+        }
+        let end_rc = cmd_end_milestone(&[feature_id.clone()]).await;
+        if end_rc != 0 {
+            all_passed = false;
+        }
+    }
+
+    println!();
+    println!("── diff ──────────────────────────────────────────────");
+    cmd_diff(&[feature_id]).await;
+
+    if all_passed {
+        0
+    } else {
+        1
+    }
+}
+
+// ─── Subcommand: probe-driver ────────────────────────────────────────────────
+
+async fn cmd_probe_driver(args: &[String]) -> i32 {
+    let (_positional, flags) = split_args(args);
+    let url = get_flag(&flags, "--url").unwrap_or_else(|| {
+        "http://localhost:9741/v1/chat/completions".to_string()
+    });
+
+    let probe = serde_json::json!({
+        "model": "probe",
+        "messages": [
+            {"role": "user", "content": "Call the ping tool with {} as args."}
+        ],
+        "tools": [{
+            "type": "function",
+            "function": {
+                "name": "ping",
+                "description": "Trivial probe tool.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        }],
+        "tool_choice": "required",
+        "max_tokens": 64,
+        "stream": false
+    });
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build();
+    let client = match client {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("probe-driver: reqwest init: {e}");
+            return 1;
+        }
+    };
+
+    println!("probe-driver: POST {url}");
+    let res = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .body(probe.to_string())
+        .send()
+        .await;
+    let body = match res {
+        Ok(r) => {
+            let status = r.status();
+            match r.text().await {
+                Ok(b) => {
+                    println!("probe-driver: HTTP {}", status.as_u16());
+                    if !status.is_success() {
+                        println!("{b}");
+                        return 1;
+                    }
+                    b
+                }
+                Err(e) => {
+                    eprintln!("probe-driver: body read: {e}");
+                    return 1;
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("probe-driver: request failed: {e}");
+            return 1;
+        }
+    };
+
+    let parsed: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("probe-driver: parse response: {e}");
+            return 1;
+        }
+    };
+
+    // Accept both the structured `tool_calls` field (what M2 introduces)
+    // and the fallback text-in-content form (pre-M2 servers). The
+    // structured form is the success case.
+    let tool_calls = parsed
+        .pointer("/choices/0/message/tool_calls")
+        .and_then(|v| v.as_array());
+    match tool_calls {
+        Some(calls) if !calls.is_empty() => {
+            println!("probe-driver: PASS — server emitted {} structured tool_call(s)", calls.len());
+            // Print the first call so operators see what the model produced.
+            if let Some(first) = calls.first() {
+                println!("  {first}");
+            }
+            0
+        }
+        _ => {
+            println!("probe-driver: FAIL — response did not include structured tool_calls.");
+            println!("  Full message: {}",
+                     parsed.pointer("/choices/0/message").unwrap_or(&serde_json::Value::Null));
+            1
+        }
+    }
+}
+
 // ─── Driver ──────────────────────────────────────────────────────────────────
 
 enum Driver {
@@ -522,27 +1020,33 @@ impl Driver {
         &self,
         feature_id: &str,
         brief_md: &str,
+        run_id: &str,
     ) -> std::io::Result<std::process::ExitStatus> {
         match self {
-            // Claude Code speaks MCP over localhost today; this is the
-            // reliable path while sovereign-mesh `/v1/chat/completions`
-            // lacks tool_calls.
+            // Claude Code speaks MCP over localhost today. The MCP
+            // tool calls it issues already land in `tool_call_log`;
+            // the ATOS_RUN_ID export is carried for a future Claude
+            // wrapper that mirrors those into `atos_tool_events`.
             Self::Claude => std::process::Command::new("claude")
                 .arg("--print")
                 .arg(brief_md)
                 .env("SOVEREIGN_FEATURE_ID", feature_id)
+                .env("ATOS_RUN_ID", run_id)
+                .env("ATOS_DRIVER", "claude")
                 .stdin(Stdio::inherit())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .status(),
-            // opencode driver is gated on M2 (sovereign-mesh tool-use fix).
-            // For now it simply forwards stdin via `opencode run --input -`
-            // so the harness stays exercised when tool-use lands.
+            // Opencode + the sovereign-atos plugin feed tool events
+            // into `atos_tool_events` keyed by $ATOS_RUN_ID. The
+            // plugin is what M2.6 ships.
             Self::Opencode => std::process::Command::new("opencode")
                 .arg("run")
                 .arg("--input")
                 .arg("-")
                 .env("SOVEREIGN_FEATURE_ID", feature_id)
+                .env("ATOS_RUN_ID", run_id)
+                .env("ATOS_DRIVER", "opencode")
                 .stdin(std::process::Stdio::piped())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
@@ -601,7 +1105,7 @@ fn run_stop_condition(cmd: &str) -> bool {
 // ─── Flag parsing ────────────────────────────────────────────────────────────
 
 /// Boolean flags that do not consume the next token as their value.
-const BOOLEAN_FLAGS: &[&str] = &["no-driver"];
+const BOOLEAN_FLAGS: &[&str] = &["no-driver", "reuse-last-milestone"];
 
 /// Split `args` into `(positional, flag_pairs)`. Value-taking flags
 /// (e.g. `--title "foo"`) consume the following token. Boolean flags

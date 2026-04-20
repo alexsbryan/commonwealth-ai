@@ -144,6 +144,8 @@ pub async fn update_topic_context(
         top_k: None,
         top_p: None,
         oicp: None,
+                tools: None,
+                tool_choice: None,
     };
 
     let response = inference.complete(&request).await?;

@@ -156,6 +156,8 @@ impl DocumentOperationTool {
                         top_k: None,
                         top_p: None,
                         oicp: None,
+            tools: None,
+            tool_choice: None,
                     }
                 })
                 .collect();
@@ -292,6 +294,8 @@ impl DocumentOperationTool {
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -327,6 +331,8 @@ impl DocumentOperationTool {
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -553,6 +559,8 @@ impl DocumentOperationTool {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+            tools: None,
+            tool_choice: None,
             };
 
             self.inference.complete(&request).await?.text

@@ -1771,6 +1771,17 @@ async fn cmd_serve(args: &[String]) -> i32 {
     tools.register(Box::new(sovereign_tools::PromoteNoteTool::new(
         Arc::clone(&notes_store),
     )));
+    // ReadNoteDigestTool runs in fallback (header-only) mode here —
+    // `sovereign project serve` doesn't load a model, so the Fast-slot
+    // summarization path is unavailable. The banner in the fallback
+    // digest makes the degraded state visible to agents. The daemon
+    // binary wires inference in via `.with_inference(...)`.
+    tools.register(Box::new(sovereign_tools::ReadNoteDigestTool::new(
+        Arc::clone(&notes_store),
+    )));
+    tools.register(Box::new(sovereign_tools::RecordAtosEventTool::new(
+        Arc::clone(&features_store),
+    )));
 
     // ── Session reflection (feedback loop) ─────────────────────────────
     tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(

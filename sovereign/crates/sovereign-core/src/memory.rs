@@ -88,6 +88,8 @@ pub async fn compress_working_memory(
         top_k: None,
         top_p: None,
         oicp: None,
+                tools: None,
+                tool_choice: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -226,6 +228,8 @@ pub async fn extract_long_term_memories(
         top_k: None,
         top_p: None,
         oicp: None,
+                tools: None,
+                tool_choice: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -330,6 +334,8 @@ pub async fn detect_contradictions(
         top_k: None,
         top_p: None,
         oicp: None,
+                tools: None,
+                tool_choice: None,
     };
 
     let response = inference.complete(&request).await?;

@@ -488,6 +488,8 @@ Reply with ONLY the letter: A, B, or C"#
             top_k: None,
             top_p: None,
             oicp: None,
+                tools: None,
+                tool_choice: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify raw output: {:?}", response.text);
@@ -509,6 +511,8 @@ Reply with ONLY the letter: A, B, or C"#
             top_k: None,
             top_p: None,
             oicp: None,
+                tools: None,
+                tool_choice: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify_json raw output: {:?}", response.text);

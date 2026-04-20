@@ -106,6 +106,10 @@ const MCP_TOOLS: &[&str] = &[
     "read_note_by_id",
     // ATOS note promotion
     "promote_note",
+    // ATOS digest (Fast-slot summarization of scope-filtered notes)
+    "read_note_digest",
+    // ATOS run ledger — driver-side tool-call telemetry.
+    "record_atos_event",
 ];
 
 /// Build the MCP router. Mounts `/mcp`, `/mcp/message`, and `/mcp/stats`

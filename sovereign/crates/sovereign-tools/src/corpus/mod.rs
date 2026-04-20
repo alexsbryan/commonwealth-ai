@@ -76,6 +76,8 @@ pub fn inference_to_inference_fn(
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         };
         Box::pin(async move {
             let resp = inf

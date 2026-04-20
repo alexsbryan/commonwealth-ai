@@ -8,15 +8,20 @@
 //! shape. This adapter owns the translation in one place so neither
 //! side has to know about the other.
 //!
-//! Scope for v1: non-streaming + streaming chat completions, no
-//! tool calls, no function calling. The Sovereign runtime doesn't
-//! use those on its request path today; when it does, extend here.
+//! Scope for v2: non-streaming tool-call round-trip against the Slow
+//! slot. `request.tools` is injected into the model's chat template
+//! by `sovereign-inference::embedded::format_prompt`; the raw model
+//! output is parsed by `parse_tool_calls_with_errors` and the
+//! resulting structured `tool_calls` populated on the response.
+//! Streaming with tools is deferred (non-streaming is forced when
+//! `tools.is_some()`).
 use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use commonwealth_api::openai_types::{
-    ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Usage,
+    ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, FunctionCall,
+    ToolCall, Usage,
 };
 use commonwealth_api::state::LocalInferenceService;
 use commonwealth_inference::oicp::{
@@ -70,12 +75,47 @@ impl SovereignInferenceAdapter {
                 "assistant" => {
                     convo.push_str("Assistant: ");
                     convo.push_str(&msg.content);
+                    // Replay prior tool-call requests back into the
+                    // prompt in the same `<tool_call>{json}</tool_call>`
+                    // format the model emits. This keeps the agent loop
+                    // coherent when a client resends an entire
+                    // conversation history that includes earlier tool
+                    // invocations — the model sees its own prior calls
+                    // instead of a silent gap.
+                    if let Some(calls) = msg.tool_calls.as_ref() {
+                        for tc in calls {
+                            let entry = serde_json::json!({
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            });
+                            convo.push_str("<tool_call>");
+                            convo.push_str(&entry.to_string());
+                            convo.push_str("</tool_call>\n");
+                        }
+                    }
+                    convo.push_str("\n");
+                }
+                "tool" => {
+                    // Tool-result turn. Tag the content with the
+                    // call id so a downstream template layer (or the
+                    // model, for models that parse it) can correlate
+                    // the result with the originating `<tool_call>`.
+                    // Keeping this stringified rather than dropping
+                    // the id means a malformed replay is visible —
+                    // silent drops would masquerade as "tool
+                    // returned nothing".
+                    if let Some(id) = msg.tool_call_id.as_deref() {
+                        convo.push_str(&format!("Tool[{id}]: "));
+                    } else {
+                        convo.push_str("Tool: ");
+                    }
+                    convo.push_str(&msg.content);
                     convo.push_str("\n\n");
                 }
                 other => {
-                    // Tool / function roles go through verbatim as
-                    // labelled lines — harmless for models that
-                    // don't understand them.
+                    // Other roles (function, developer, …) go through
+                    // verbatim as labelled lines — harmless for models
+                    // that don't understand them.
                     convo.push_str(other);
                     convo.push_str(": ");
                     convo.push_str(&msg.content);
@@ -85,6 +125,26 @@ impl SovereignInferenceAdapter {
         }
         convo.push_str("Assistant:");
         (convo, system)
+    }
+
+    /// Translate OpenAI tool defs into Sovereign core `ToolSchema`.
+    /// Kept as a separate helper so the adapter stays testable without
+    /// needing a live inference provider.
+    fn forward_tools(request: &ChatCompletionRequest) -> Option<Vec<sovereign_core::types::ToolSchema>> {
+        let tools = request.tools.as_ref()?;
+        if tools.is_empty() {
+            return None;
+        }
+        Some(
+            tools
+                .iter()
+                .map(|t| sovereign_core::types::ToolSchema {
+                    name: t.function.name.clone(),
+                    description: t.function.description.clone(),
+                    parameters: t.function.parameters.clone(),
+                })
+                .collect(),
+        )
     }
 
     /// Build the internal `CompletionRequest` a peer-served chat
@@ -113,12 +173,80 @@ impl SovereignInferenceAdapter {
         if let Some(oicp) = &request.oicp {
             req = req.with_oicp(oicp.clone());
         }
-        let speed = crate::oicp_select::pick_slot_for_oicp(
-            self.provider.as_ref(),
-            &req,
-        );
+        // Tool-use: carry tool schemas + tool_choice through so the
+        // inference backend can inject them into the chat template
+        // (`sovereign-inference::embedded::format_prompt`). When tools
+        // are present we also bias the slot picker toward Slow — the
+        // policy guard (`guard_tools_on_fast`) rejects Fast+tools
+        // later in the pipeline, so biasing here avoids racing into a
+        // guaranteed-reject state.
+        req.tools = Self::forward_tools(request);
+        req.tool_choice = request.tool_choice.clone();
+        let speed = if req.tools.is_some() {
+            sovereign_core::types::Speed::Slow
+        } else {
+            crate::oicp_select::pick_slot_for_oicp(self.provider.as_ref(), &req)
+        };
         req.with_speed(speed)
     }
+}
+
+/// Remove every `<tool_call>...</tool_call>` block from the response
+/// text. Used when the adapter has already extracted tool calls into
+/// the structured `tool_calls` field — keeping the raw markup in
+/// `content` causes clients to double-render.
+pub(crate) fn strip_tool_call_blocks(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    while cursor < text.len() {
+        if let Some(rel) = text[cursor..].find("<tool_call>") {
+            let start = cursor + rel;
+            out.push_str(&text[cursor..start]);
+            match text[start..].find("</tool_call>") {
+                Some(end_rel) => {
+                    cursor = start + end_rel + "</tool_call>".len();
+                }
+                None => {
+                    // Unterminated — preserve the rest as-is so the
+                    // model's unfinished output remains visible.
+                    out.push_str(&text[start..]);
+                    return out;
+                }
+            }
+        } else {
+            out.push_str(&text[cursor..]);
+            break;
+        }
+    }
+    // Tidy up double-newlines left behind by stripped blocks.
+    out.trim().to_string()
+}
+
+/// Guard rejecting tool-enabled requests that would land on the Fast
+/// slot. The Fast slot (Qwen3-1.7B in the current stack) has no
+/// tools-aware chat template, so executing a tool request against it
+/// would silently drop every tool the caller listed. Per M2 scoping
+/// we fail loudly with a structured error instead of silently
+/// escalating — masking the latency/capacity implication hides
+/// capacity issues from operators.
+///
+/// Returns `Err(message)` only when **both** conditions hold:
+/// - `request.tools.is_some()` AND non-empty;
+/// - the slot picker landed on `Speed::Fast`.
+///
+/// Pure function; no I/O. Unit-tested without spinning up the mesh.
+pub(crate) fn guard_tools_on_fast(
+    tools_present: bool,
+    picked_speed: sovereign_core::types::Speed,
+) -> Result<(), String> {
+    if tools_present && picked_speed == sovereign_core::types::Speed::Fast {
+        return Err(
+            "fast slot does not support tool_calls; re-send with preferred_speed=Slow \
+             (see sovereign atos probe-driver for a capability probe)"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 #[async_trait]
@@ -128,18 +256,100 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, String> {
         let req = self.build_completion_request(&request);
+
+        // Slot-policy guard: fail loud when a tool-enabled request
+        // lands on the Fast slot. Emit a structured warn log so
+        // operators see the attempt even if the client buries the
+        // error. Intentionally checked BEFORE inference kicks off —
+        // a rejection costs a few microseconds, not a full inference
+        // call.
+        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        if let Err(msg) = guard_tools_on_fast(tools_present, req.preferred_speed) {
+            tracing::warn!(
+                tools_count = request.tools.as_ref().map(|t| t.len()).unwrap_or(0),
+                preferred_speed = ?req.preferred_speed,
+                "inference adapter: rejecting tool request on fast slot"
+            );
+            return Err(msg);
+        }
+
         let started = std::time::Instant::now();
         let resp = self
             .provider
             .complete(&req)
             .await
             .map_err(|e| format!("{e}"))?;
+
+        // Tool-call extraction. Only parse when the caller supplied
+        // tools; otherwise any stray `<tool_call>` text the model
+        // produced stays in `content` untouched. `with_errors` variant
+        // so parse failures are visible in telemetry instead of
+        // silently collapsing to zero calls.
+        let (parsed_calls, parse_errors) = if tools_present {
+            sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        for raw in &parse_errors {
+            tracing::warn!(
+                payload = %raw,
+                "inference adapter: tool_call parse failed"
+            );
+        }
+
+        let tool_calls_out: Option<Vec<ToolCall>> = if parsed_calls.is_empty() {
+            None
+        } else {
+            Some(
+                parsed_calls
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, c)| ToolCall {
+                        id: format!(
+                            "call_{}_{}",
+                            started.elapsed().as_micros(),
+                            i
+                        ),
+                        kind: "function".into(),
+                        function: FunctionCall {
+                            name: c.name,
+                            arguments: c.arguments,
+                        },
+                    })
+                    .collect(),
+            )
+        };
+
+        // When the model issued tool calls, strip the raw tool-call
+        // markup out of the returned content so downstream clients
+        // don't re-render it. The structured `tool_calls` field is
+        // the authoritative signal.
+        let clean_content = if tool_calls_out.is_some() {
+            strip_tool_call_blocks(&resp.text)
+        } else {
+            resp.text
+        };
+
         tracing::info!(
             latency_ms = started.elapsed().as_millis() as u64,
             model = %resp.model_id,
             tokens = resp.tokens_used,
+            tool_calls = tool_calls_out.as_ref().map(|c| c.len()).unwrap_or(0),
+            parse_errors = parse_errors.len(),
             "sovereign inference adapter: complete served"
         );
+
+        let finish_reason = if tool_calls_out.is_some() {
+            "tool_calls".to_string()
+        } else {
+            "stop".to_string()
+        };
+        let assistant_msg = ChatMessage {
+            role: "assistant".into(),
+            content: clean_content,
+            tool_call_id: None,
+            tool_calls: tool_calls_out,
+        };
         Ok(ChatCompletionResponse {
             id: format!("chatcmpl-{}", started.elapsed().as_micros()),
             object: "chat.completion".into(),
@@ -150,11 +360,8 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             model: resp.model_id,
             choices: vec![ChatChoice {
                 index: 0,
-                message: ChatMessage {
-                    role: "assistant".into(),
-                    content: resp.text,
-                },
-                finish_reason: Some("stop".into()),
+                message: assistant_msg,
+                finish_reason: Some(finish_reason),
             }],
             usage: Some(Usage {
                 // Sovereign's `CompletionResponse.tokens_used`
@@ -177,6 +384,24 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>,
         String,
     > {
+        // Streaming + tool_calls is not supported in M2. OpenAI's
+        // streaming tool-call frames (delta.tool_calls[i].function.
+        // arguments partial JSON) add enough complexity that we'd
+        // rather land the non-streaming tool path first and revisit.
+        // Fail loud so clients can downgrade rather than silently
+        // getting tool-less text.
+        if request.tools.as_ref().is_some_and(|t| !t.is_empty()) {
+            tracing::warn!(
+                tools_count = request.tools.as_ref().map(|t| t.len()).unwrap_or(0),
+                "inference adapter: streaming+tools is unsupported in M2"
+            );
+            return Err(
+                "streaming with tools is not supported yet; re-send with stream=false \
+                 (non-streaming tool round-trip is available)"
+                    .to_string(),
+            );
+        }
+
         let req = self.build_completion_request(&request);
         let inner = self
             .provider
@@ -330,5 +555,180 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         models,
         knowledge: None,
         federation: None,
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::guard_tools_on_fast;
+    use sovereign_core::types::Speed;
+
+    #[test]
+    fn tool_request_on_slow_slot_passes() {
+        assert!(guard_tools_on_fast(true, Speed::Slow).is_ok());
+        assert!(guard_tools_on_fast(true, Speed::Medium).is_ok());
+    }
+
+    #[test]
+    fn tool_request_on_fast_slot_rejected() {
+        let err = guard_tools_on_fast(true, Speed::Fast).unwrap_err();
+        assert!(err.contains("fast slot"));
+        assert!(err.contains("tool_calls"));
+        assert!(err.contains("preferred_speed=Slow"));
+    }
+
+    #[test]
+    fn toolless_request_on_fast_slot_passes() {
+        assert!(guard_tools_on_fast(false, Speed::Fast).is_ok());
+    }
+
+    #[test]
+    fn toolless_request_on_slow_slot_passes() {
+        assert!(guard_tools_on_fast(false, Speed::Slow).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod adapter_translation_tests {
+    use super::{strip_tool_call_blocks, SovereignInferenceAdapter};
+    use commonwealth_api::openai_types::{
+        ChatCompletionRequest, ChatMessage, FunctionCall, ToolCall, ToolDefinition, ToolFunction,
+    };
+
+    fn tool_def(name: &str) -> ToolDefinition {
+        ToolDefinition {
+            kind: "function".into(),
+            function: ToolFunction {
+                name: name.into(),
+                description: Some(format!("description of {name}")),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {"x": {"type": "string"}},
+                    "required": ["x"],
+                }),
+            },
+        }
+    }
+
+    fn user(content: &str) -> ChatMessage {
+        ChatMessage::new("user", content)
+    }
+
+    #[test]
+    fn flatten_preserves_tool_message_id() {
+        let req = ChatCompletionRequest {
+            model: None,
+            messages: vec![
+                user("what's the weather?"),
+                ChatMessage {
+                    role: "assistant".into(),
+                    content: String::new(),
+                    tool_call_id: None,
+                    tool_calls: Some(vec![ToolCall {
+                        id: "call_123".into(),
+                        kind: "function".into(),
+                        function: FunctionCall {
+                            name: "get_weather".into(),
+                            arguments: r#"{"city":"SF"}"#.into(),
+                        },
+                    }]),
+                },
+                ChatMessage {
+                    role: "tool".into(),
+                    content: r#"{"temperature":62}"#.into(),
+                    tool_call_id: Some("call_123".into()),
+                    tool_calls: None,
+                },
+            ],
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            tools: Some(vec![tool_def("get_weather")]),
+            tool_choice: Some(serde_json::json!("auto")),
+            oicp: None,
+        };
+        let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
+        // The prior tool call is replayed as a <tool_call> block so
+        // Qwen3.5's template sees the model's own previous turn in a
+        // shape it recognizes.
+        assert!(prompt.contains("<tool_call>"));
+        assert!(prompt.contains("get_weather"));
+        // The tool result carries its call id so the model can
+        // correlate it with the originating call.
+        assert!(prompt.contains("Tool[call_123]:"));
+        assert!(prompt.contains(r#"{"temperature":62}"#));
+    }
+
+    #[test]
+    fn forward_tools_translates_schema() {
+        let req = ChatCompletionRequest {
+            model: None,
+            messages: vec![user("hi")],
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            tools: Some(vec![tool_def("a"), tool_def("b")]),
+            tool_choice: None,
+            oicp: None,
+        };
+        let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
+        assert_eq!(forwarded.len(), 2);
+        assert_eq!(forwarded[0].name, "a");
+        assert_eq!(forwarded[1].name, "b");
+        assert_eq!(forwarded[0].description.as_deref(), Some("description of a"));
+    }
+
+    #[test]
+    fn forward_tools_empty_returns_none() {
+        let req = ChatCompletionRequest {
+            model: None,
+            messages: vec![],
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            tools: Some(Vec::new()),
+            tool_choice: None,
+            oicp: None,
+        };
+        assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
+    }
+
+    #[test]
+    fn strip_tool_call_blocks_removes_markup() {
+        let text = "Let me check.\n<tool_call>{\"name\":\"f\",\"arguments\":{}}</tool_call>\nDone.";
+        let stripped = strip_tool_call_blocks(text);
+        assert!(!stripped.contains("<tool_call>"));
+        assert!(!stripped.contains("</tool_call>"));
+        // Surrounding prose is preserved.
+        assert!(stripped.contains("Let me check."));
+        assert!(stripped.contains("Done."));
+    }
+
+    #[test]
+    fn strip_tool_call_blocks_handles_multiple() {
+        let text = "<tool_call>a</tool_call>mid<tool_call>b</tool_call>end";
+        let stripped = strip_tool_call_blocks(text);
+        assert_eq!(stripped, "midend");
+    }
+
+    #[test]
+    fn strip_tool_call_blocks_tolerates_unterminated() {
+        // Defensive: a truncated model output shouldn't panic — we
+        // preserve the tail so operators can see what happened.
+        let text = "ok <tool_call>{\"name\":\"never_closed\"";
+        let stripped = strip_tool_call_blocks(text);
+        assert!(stripped.contains("never_closed"));
     }
 }

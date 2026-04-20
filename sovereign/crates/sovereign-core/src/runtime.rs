@@ -302,6 +302,8 @@ pub(crate) async fn run_collaboration(
         top_k: inference_config.top_k,
         top_p: None,
         oicp: None,
+                tools: None,
+                tool_choice: None,
     };
 
     match inference.complete(&refine_req).await {
@@ -1248,6 +1250,8 @@ impl Runtime {
             top_k: self.inference_config.top_k,
             top_p: None,
             oicp,
+                    tools: None,
+                    tool_choice: None,
         };
 
         let search_method = kc.search_method;
@@ -1589,6 +1593,8 @@ impl Runtime {
             top_k: self.inference_config.top_k,
             top_p: None,
             oicp,
+                    tools: None,
+                    tool_choice: None,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -1701,6 +1707,8 @@ impl Runtime {
                 top_k: None,
                 top_p: None,
                 oicp: None,
+                tools: None,
+                tool_choice: None,
             };
             let completion = self.inference.complete(&request).await?;
 
@@ -1759,6 +1767,8 @@ impl Runtime {
             top_k: self.inference_config.top_k,
             top_p: None,
             oicp: self.build_oicp(LatencyPreference::BestEffort, &Intent::KnowledgeQuery),
+            tools: None,
+            tool_choice: None,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -1927,6 +1937,8 @@ impl Runtime {
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
@@ -2215,6 +2227,8 @@ impl Runtime {
                 top_k: self.inference_config.top_k,
                 top_p: None,
                 oicp: self.build_oicp(LatencyPreference::Throughput, &Intent::ComplexTask),
+            tools: None,
+            tool_choice: None,
             })
             .await?;
 

@@ -93,6 +93,8 @@ pub async fn generate_title_from_messages(
         top_k: None,
         top_p: None,
         oicp: None,
+                tools: None,
+                tool_choice: None,
     };
 
     let response = inference.complete(&request).await?;

@@ -98,6 +98,33 @@ pub struct CompletionRequest {
     /// OICP to select the best model. Ignored by providers that don't.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oicp: Option<oicp::InferenceRequirements>,
+    /// Tool schemas the model may call. Present only when the caller is
+    /// an agent driver (opencode, Claude Code via MCP) using
+    /// OpenAI-compatible function-calling.
+    ///
+    /// Invariant: when `tools.is_some()`, `preferred_speed` must be
+    /// `Slow` or `Medium` — Fast-slot models (Qwen3-1.7B in the current
+    /// stack) do not have tools-aware chat templates. The slot router
+    /// returns [`Error::InvalidInput`] for Fast + tools requests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolSchema>>,
+    /// Tool-choice hint (`"auto"` | `"none"` | `"required"` |
+    /// `{"type":"function","function":{"name":"..."}}`). Raw JSON so
+    /// forward-compatible shapes pass through untouched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<serde_json::Value>,
+}
+
+/// JSON-Schema view of a function the model may call. Mirrors
+/// `commonwealth_api::openai_types::ToolFunction` but lives in the
+/// provider-neutral core so `InferenceProvider` implementations don't
+/// depend on the Commonwealth API crate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSchema {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub parameters: serde_json::Value,
 }
 
 impl CompletionRequest {
@@ -113,6 +140,8 @@ impl CompletionRequest {
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         }
     }
 
@@ -146,6 +175,8 @@ impl CompletionRequest {
             top_k: None,
             top_p: None,
             oicp: None,
+            tools: None,
+            tool_choice: None,
         }
     }
 }

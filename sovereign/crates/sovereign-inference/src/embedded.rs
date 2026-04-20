@@ -1572,6 +1572,44 @@ fn format_prompt(model: &LlamaModel, request: &CompletionRequest, quirks: &Model
         ThinkingControl::AlwaysOn | ThinkingControl::None => base_system.to_string(),
     };
 
+    // Tool-use prompt augmentation. Qwen3.5's chat template expects tool
+    // schemas to appear in the system prompt inside a `<tools>...</tools>`
+    // block of newline-separated JSON objects. The model then emits tool
+    // calls as `<tool_call>{"name": "...", "arguments": {...}}</tool_call>`
+    // which `parse_tool_calls_from_text` below decodes.
+    //
+    // We append to the existing system prompt (rather than replacing or
+    // injecting a separate message) so the thinking-token augmentation
+    // above still lands. Tools without a system prompt get a minimal
+    // "You may call one of the following tools" lead-in so the model
+    // doesn't try to emit tool calls in free chat by default.
+    let system_with_tools = if let Some(tools) = request.tools.as_ref().filter(|t| !t.is_empty()) {
+        let mut block = String::from(
+            "\n\n# Tools\n\nYou may call one or more of the following tools by emitting a \
+             `<tool_call>{\"name\": ..., \"arguments\": {...}}</tool_call>` block. One call per \
+             block. After a block, stop — the runtime will execute the tool and feed the result \
+             back to you in the next turn.\n\n<tools>\n"
+        );
+        for t in tools {
+            let entry = serde_json::json!({
+                "name": t.name,
+                "description": t.description.clone().unwrap_or_default(),
+                "parameters": t.parameters,
+            });
+            block.push_str(&entry.to_string());
+            block.push('\n');
+        }
+        block.push_str("</tools>");
+        if system_with_thinking.is_empty() {
+            block.trim_start().to_string()
+        } else {
+            format!("{system_with_thinking}{block}")
+        }
+    } else {
+        system_with_thinking
+    };
+    let system_with_thinking = system_with_tools;
+
     if let Ok(template) = model.chat_template(None) {
         let mut messages = Vec::new();
         if !system_with_thinking.is_empty() {
@@ -1674,6 +1712,119 @@ fn rand_seed() -> u32 {
 
 /// Convert a JSON schema to a GBNF (GGML BNF) grammar string.
 ///
+/// A single tool call extracted from model output. The adapter maps
+/// this into `commonwealth_api::openai_types::ToolCall` (with a
+/// generated id) before emitting the chat-completion response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedToolCall {
+    pub name: String,
+    /// Raw JSON string for the tool arguments. Kept as a string so the
+    /// client sees exactly what the model produced — if the model emits
+    /// partial JSON we don't silently coerce it.
+    pub arguments: String,
+}
+
+/// Extract Qwen3.5-style tool calls from free-form model output.
+///
+/// Expected markup:
+///
+/// ```text
+/// <tool_call>{"name": "get_weather", "arguments": {"city": "SF"}}</tool_call>
+/// ```
+///
+/// Multiple blocks per response are supported. Whitespace inside a block
+/// is ignored. A block whose body is not valid JSON, or whose JSON lacks
+/// a top-level `"name"` field, is **skipped** — not treated as an error
+/// — and logged at `warn` so the adapter can tag an `atos_tool_events`
+/// row with `phase='parse_error'` and the raw payload. Returning an
+/// empty vec on all-malformed output is intentional: a tool-less
+/// response is a valid answer.
+///
+/// Observability: the parser stays pure (no I/O); the caller is
+/// responsible for logging. This keeps the function unit-testable
+/// without a tracing subscriber.
+pub fn parse_tool_calls_from_text(text: &str) -> Vec<ParsedToolCall> {
+    let mut out = Vec::new();
+    let mut cursor = 0usize;
+    while let Some(rel_start) = text[cursor..].find("<tool_call>") {
+        let start = cursor + rel_start + "<tool_call>".len();
+        // Find the matching closer. Use the literal `</tool_call>`
+        // marker — we intentionally do NOT allow nested `<tool_call>`
+        // blocks (Qwen3.5 never emits them).
+        let Some(rel_end) = text[start..].find("</tool_call>") else {
+            // Unterminated tag: stop scanning. Anything after this point
+            // can't be a valid tool call even if further `<tool_call>`
+            // markers exist, because nesting isn't allowed.
+            break;
+        };
+        let body = text[start..start + rel_end].trim();
+        cursor = start + rel_end + "</tool_call>".len();
+
+        // Parse the body. Accept either:
+        //   {"name": "...", "arguments": {...}}
+        //   {"name": "...", "arguments": "<string>"}
+        match serde_json::from_str::<serde_json::Value>(body) {
+            Ok(obj) => {
+                let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
+                    continue; // malformed — skip (caller may log via diagnostic API below)
+                };
+                let args_str = match obj.get("arguments") {
+                    Some(v) if v.is_string() => v.as_str().unwrap_or("").to_string(),
+                    Some(v) => v.to_string(),
+                    None => "{}".to_string(),
+                };
+                out.push(ParsedToolCall {
+                    name: name.to_string(),
+                    arguments: args_str,
+                });
+            }
+            Err(_) => {
+                // malformed JSON — skip; caller logs via tracing::warn!
+                continue;
+            }
+        }
+    }
+    out
+}
+
+/// Same as [`parse_tool_calls_from_text`] but returns the raw bodies
+/// of any blocks that failed to parse, so the caller can attribute
+/// parse-error telemetry (feeds `atos_tool_events.phase='parse_error'`).
+pub fn parse_tool_calls_with_errors(text: &str) -> (Vec<ParsedToolCall>, Vec<String>) {
+    let mut out = Vec::new();
+    let mut errors = Vec::new();
+    let mut cursor = 0usize;
+    while let Some(rel_start) = text[cursor..].find("<tool_call>") {
+        let start = cursor + rel_start + "<tool_call>".len();
+        let Some(rel_end) = text[start..].find("</tool_call>") else {
+            errors.push(text[start..].to_string());
+            break;
+        };
+        let body = text[start..start + rel_end].trim();
+        cursor = start + rel_end + "</tool_call>".len();
+
+        match serde_json::from_str::<serde_json::Value>(body) {
+            Ok(obj) => {
+                let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
+                    errors.push(body.to_string());
+                    continue;
+                };
+                let args_str = match obj.get("arguments") {
+                    Some(v) if v.is_string() => v.as_str().unwrap_or("").to_string(),
+                    Some(v) => v.to_string(),
+                    None => "{}".to_string(),
+                };
+                out.push(ParsedToolCall {
+                    name: name.to_string(),
+                    arguments: args_str,
+                });
+            }
+            Err(_) => errors.push(body.to_string()),
+        }
+    }
+    (out, errors)
+}
+
 /// Handles the subset of JSON schema used by tool descriptors:
 /// - `"type": "object"` with `"properties"` and `"required"`
 /// - `"type": "string"` / `"integer"` / `"number"` / `"boolean"`
@@ -1813,5 +1964,95 @@ mod clamp_tests {
     #[test]
     fn errs_when_prompt_is_strictly_oversized() {
         assert!(clamp_max_tokens(None, 9000, 8192).is_err());
+    }
+}
+
+#[cfg(test)]
+mod tool_call_parser_tests {
+    use super::{parse_tool_calls_from_text, parse_tool_calls_with_errors};
+
+    #[test]
+    fn happy_path_single_call() {
+        let text = r#"Sure, I'll check the weather.
+<tool_call>{"name": "get_weather", "arguments": {"city": "SF"}}</tool_call>"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "get_weather");
+        // Object arguments serialize with no spaces — lock the shape.
+        assert_eq!(calls[0].arguments, r#"{"city":"SF"}"#);
+    }
+
+    #[test]
+    fn multiple_calls_in_one_response() {
+        let text = r#"<tool_call>{"name":"a","arguments":{"x":1}}</tool_call>
+then <tool_call>{"name":"b","arguments":{"y":"hi"}}</tool_call>"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].name, "a");
+        assert_eq!(calls[1].name, "b");
+    }
+
+    #[test]
+    fn string_arguments_preserved_as_is() {
+        // Some models (including older Qwen variants) stringify the
+        // arguments object. We round-trip that form verbatim.
+        let text = r#"<tool_call>{"name":"f","arguments":"{\"x\":1}"}</tool_call>"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].arguments, r#"{"x":1}"#);
+    }
+
+    #[test]
+    fn missing_arguments_defaults_to_empty_object() {
+        let text = r#"<tool_call>{"name":"noargs"}</tool_call>"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "noargs");
+        assert_eq!(calls[0].arguments, "{}");
+    }
+
+    #[test]
+    fn malformed_json_is_skipped_silently() {
+        let text = r#"<tool_call>{"name": "truncated", "arguments": {</tool_call>
+and <tool_call>{"name":"ok","arguments":{}}</tool_call>"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "ok");
+    }
+
+    #[test]
+    fn unterminated_tag_stops_scanning() {
+        // No closing </tool_call> → parser stops rather than munching
+        // arbitrary text as JSON. Anything before the open tag is
+        // already ignored.
+        let text = r#"preamble <tool_call>{"name":"never_closed""#;
+        assert!(parse_tool_calls_from_text(text).is_empty());
+    }
+
+    #[test]
+    fn no_tool_call_tags_returns_empty() {
+        let text = "plain reply, no tools here";
+        assert!(parse_tool_calls_from_text(text).is_empty());
+    }
+
+    #[test]
+    fn error_variant_reports_malformed_bodies() {
+        let text = r#"<tool_call>{ not json }</tool_call>
+<tool_call>{"name":"ok","arguments":{}}</tool_call>
+<tool_call>{"missing_name":true}</tool_call>"#;
+        let (calls, errors) = parse_tool_calls_with_errors(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "ok");
+        assert_eq!(errors.len(), 2);
+        assert!(errors[0].contains("not json"));
+        assert!(errors[1].contains("missing_name"));
+    }
+
+    #[test]
+    fn whitespace_inside_block_tolerated() {
+        let text = "<tool_call>\n  {\"name\": \"spaced\", \"arguments\": {}}  \n</tool_call>";
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "spaced");
     }
 }
