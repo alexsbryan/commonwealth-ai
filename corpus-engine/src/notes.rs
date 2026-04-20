@@ -407,6 +407,53 @@ impl NoteStore {
         Ok(v)
     }
 
+    /// Look up a cached digest by `(scope_hash, notes_version)`.
+    ///
+    /// Returns `None` if no matching row exists — the caller
+    /// (`ReadNoteDigestTool`) should regenerate via the Fast slot and
+    /// write back with [`digest_cache_put`](Self::digest_cache_put).
+    pub async fn digest_cache_get(
+        &self,
+        scope_hash: &str,
+        notes_version: i64,
+    ) -> Result<Option<String>> {
+        let conn = self.conn.lock().await;
+        let row: rusqlite::Result<String> = conn.query_row(
+            "SELECT digest_md FROM note_digest_cache
+             WHERE scope_hash = ?1 AND notes_version = ?2",
+            params![scope_hash, notes_version],
+            |r| r.get(0),
+        );
+        match row {
+            Ok(s) => Ok(Some(s)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(sqlite_err(e)),
+        }
+    }
+
+    /// Store a digest for `(scope_hash, notes_version)`. `INSERT OR
+    /// REPLACE` semantics — racing regens (two callers computed the
+    /// same digest at the same version) converge on the later write
+    /// without erroring.
+    pub async fn digest_cache_put(
+        &self,
+        scope_hash: &str,
+        notes_version: i64,
+        digest_md: &str,
+        token_count: i64,
+    ) -> Result<()> {
+        let now = unix_now();
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT OR REPLACE INTO note_digest_cache
+                (scope_hash, notes_version, digest_md, token_count, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![scope_hash, notes_version, digest_md, token_count, now],
+        )
+        .map_err(sqlite_err)?;
+        Ok(())
+    }
+
     // ── Note reads ─────────────────────────────────────────────────────────
 
     /// Query notes. Filters compose with AND.
@@ -1539,6 +1586,36 @@ mod tests {
         // Source row still exists at feature scope.
         let source = notes.iter().find(|n| n.id == src).unwrap();
         assert_eq!(source.scope, "feature");
+    }
+
+    #[tokio::test]
+    async fn digest_cache_round_trip() {
+        let store = make_store().await;
+        let v = store.notes_version().await.unwrap();
+
+        // Miss on an empty cache.
+        assert!(store.digest_cache_get("abc", v).await.unwrap().is_none());
+
+        // Put and hit.
+        store
+            .digest_cache_put("abc", v, "## Digest\n\n[note:xyz] invariant", 8)
+            .await
+            .unwrap();
+        let hit = store.digest_cache_get("abc", v).await.unwrap();
+        assert_eq!(hit.as_deref(), Some("## Digest\n\n[note:xyz] invariant"));
+
+        // Same scope_hash, different version → miss. The cache is
+        // versioned precisely so a post-write read doesn't serve
+        // stale content.
+        assert!(store.digest_cache_get("abc", v + 1).await.unwrap().is_none());
+
+        // Put with replace at same key.
+        store
+            .digest_cache_put("abc", v, "## Digest v2", 3)
+            .await
+            .unwrap();
+        let replaced = store.digest_cache_get("abc", v).await.unwrap();
+        assert_eq!(replaced.as_deref(), Some("## Digest v2"));
     }
 
     #[tokio::test]

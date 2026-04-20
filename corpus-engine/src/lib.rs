@@ -104,4 +104,6 @@ pub use notes::{NoteRow, NoteScope, NoteStore, ScopeFilter, ToolCallLogRow};
 #[cfg(feature = "treesitter")]
 pub use project_docs::{DocResult, ProjectDocsStore, find_markdown_files};
 #[cfg(feature = "treesitter")]
-pub use features::{FeatureRow, FeatureState, FeatureStore, MilestoneRow};
+pub use features::{
+    AtosRunRow, AtosToolEvent, FeatureRow, FeatureState, FeatureStore, MilestoneRow,
+};

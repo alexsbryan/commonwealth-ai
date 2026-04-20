@@ -85,6 +85,39 @@ pub struct MilestoneRow {
     pub compliance_report_json: Option<String>,
 }
 
+/// One row of the `atos_runs` table.
+#[derive(Debug, Clone)]
+pub struct AtosRunRow {
+    pub id: String,
+    pub feature_id: String,
+    pub milestone_id: String,
+    pub driver: String,
+    pub session_id: Option<String>,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
+    pub exit_code: Option<i64>,
+    pub stop_passed: Option<bool>,
+}
+
+/// One row of the `atos_tool_events` table.
+#[derive(Debug, Clone)]
+pub struct AtosToolEvent {
+    pub id: String,
+    pub run_id: String,
+    pub call_id: String,
+    pub tool_name: String,
+    pub phase: String,
+    pub args_json: Option<String>,
+    pub outcome: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub fired_at: i64,
+}
+
+/// Cap on events stored per run. Matches the `tool_call_log`
+/// ring-buffer limit to keep `features.db` bounded under a runaway
+/// driver. Enforced inside `record_tool_event`.
+const ATOS_EVENTS_PER_RUN_LIMIT: i64 = 10_000;
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 /// SQLite store for ATOS features and milestones.
@@ -349,6 +382,231 @@ impl FeatureStore {
             .map_err(sqlite_err)?;
         Ok(max.unwrap_or(0) + 1)
     }
+
+    // ── ATOS run ledger ────────────────────────────────────────────────────
+
+    /// Open a new run row. The caller (usually `sovereign atos
+    /// start-milestone`) hands the returned id to the driver subprocess
+    /// via `$ATOS_RUN_ID` so every `record_tool_event` call can be
+    /// attributed.
+    pub async fn open_run(
+        &self,
+        feature_id: &str,
+        milestone_id: &str,
+        driver: &str,
+    ) -> Result<AtosRunRow> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = unix_now();
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT INTO atos_runs
+                (id, feature_id, milestone_id, driver, session_id, started_at,
+                 ended_at, exit_code, stop_passed)
+             VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL)",
+            params![id, feature_id, milestone_id, driver, now],
+        )
+        .map_err(sqlite_err)?;
+        Ok(AtosRunRow {
+            id,
+            feature_id: feature_id.into(),
+            milestone_id: milestone_id.into(),
+            driver: driver.into(),
+            session_id: None,
+            started_at: now,
+            ended_at: None,
+            exit_code: None,
+            stop_passed: None,
+        })
+    }
+
+    /// Set the driver-reported session id on a run. The opencode plugin
+    /// captures this from hook context on the first tool event and pings
+    /// back via `record_atos_event` — the run row then carries enough
+    /// info to join driver telemetry with `tool_call_log`.
+    pub async fn set_run_session(&self, run_id: &str, session_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().await;
+        let affected = conn
+            .execute(
+                "UPDATE atos_runs SET session_id = ?1
+                 WHERE id = ?2 AND session_id IS NULL",
+                params![session_id, run_id],
+            )
+            .map_err(sqlite_err)?;
+        Ok(affected > 0)
+    }
+
+    /// Close out a run. `stop_passed` is what `atos end-milestone`
+    /// computed from the feature's stop_condition; `exit_code` is the
+    /// driver subprocess's exit status.
+    pub async fn close_run(
+        &self,
+        run_id: &str,
+        exit_code: i64,
+        stop_passed: bool,
+    ) -> Result<bool> {
+        let now = unix_now();
+        let conn = self.conn.lock().await;
+        let affected = conn
+            .execute(
+                "UPDATE atos_runs SET ended_at = ?1, exit_code = ?2, stop_passed = ?3
+                 WHERE id = ?4",
+                params![now, exit_code, stop_passed as i64, run_id],
+            )
+            .map_err(sqlite_err)?;
+        Ok(affected > 0)
+    }
+
+    pub async fn get_run(&self, run_id: &str) -> Result<Option<AtosRunRow>> {
+        let conn = self.conn.lock().await;
+        let row = conn
+            .query_row(
+                "SELECT id, feature_id, milestone_id, driver, session_id,
+                        started_at, ended_at, exit_code, stop_passed
+                 FROM atos_runs WHERE id = ?",
+                params![run_id],
+                map_run_row,
+            )
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(sqlite_err(other)),
+            })?;
+        Ok(row)
+    }
+
+    pub async fn list_runs_for_feature(&self, feature_id: &str) -> Result<Vec<AtosRunRow>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, feature_id, milestone_id, driver, session_id,
+                        started_at, ended_at, exit_code, stop_passed
+                 FROM atos_runs WHERE feature_id = ?
+                 ORDER BY started_at ASC",
+            )
+            .map_err(sqlite_err)?;
+        let mapped = stmt.query_map(params![feature_id], map_run_row).map_err(sqlite_err)?;
+        let mut out = Vec::new();
+        for r in mapped {
+            out.push(r.map_err(sqlite_err)?);
+        }
+        Ok(out)
+    }
+
+    // ── Tool event stream ──────────────────────────────────────────────────
+
+    /// Record one tool-execution event. Orphan events (run_id not in
+    /// `atos_runs`) are rejected to keep the ledger honest — a plugin
+    /// that starts firing before `open_run` is a bug we want to see,
+    /// not silently swallow.
+    ///
+    /// Enforces the per-run 10k-event ring buffer in the same
+    /// transaction as the insert, so a runaway driver can't bloat
+    /// `features.db`.
+    pub async fn record_tool_event(
+        &self,
+        run_id: &str,
+        call_id: &str,
+        tool_name: &str,
+        phase: &str,
+        args_json: Option<&str>,
+        outcome: Option<&str>,
+        duration_ms: Option<i64>,
+    ) -> Result<String> {
+        if !matches!(phase, "before" | "after" | "parse_error") {
+            return Err(Error::InvalidInput(format!(
+                "record_tool_event: phase must be before|after|parse_error, got '{phase}'"
+            )));
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = unix_now();
+        let conn = self.conn.lock().await;
+
+        let parent_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM atos_runs WHERE id = ?",
+                params![run_id],
+                |r| r.get(0),
+            )
+            .map_err(sqlite_err)?;
+        if parent_exists == 0 {
+            return Err(Error::InvalidInput(format!(
+                "record_tool_event: run_id '{run_id}' not found"
+            )));
+        }
+
+        conn.execute(
+            "INSERT INTO atos_tool_events
+                (id, run_id, call_id, tool_name, phase, args_json, outcome, duration_ms, fired_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![id, run_id, call_id, tool_name, phase, args_json, outcome, duration_ms, now],
+        )
+        .map_err(sqlite_err)?;
+
+        // Ring-buffer trim per run — keep the 10k most recent events.
+        conn.execute(
+            "DELETE FROM atos_tool_events
+             WHERE run_id = ?1 AND id IN (
+                SELECT id FROM atos_tool_events
+                WHERE run_id = ?1
+                ORDER BY fired_at DESC
+                LIMIT -1 OFFSET ?2
+             )",
+            params![run_id, ATOS_EVENTS_PER_RUN_LIMIT],
+        )
+        .map_err(sqlite_err)?;
+
+        Ok(id)
+    }
+
+    pub async fn list_events_for_run(&self, run_id: &str) -> Result<Vec<AtosToolEvent>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, run_id, call_id, tool_name, phase,
+                        args_json, outcome, duration_ms, fired_at
+                 FROM atos_tool_events
+                 WHERE run_id = ?
+                 ORDER BY fired_at ASC",
+            )
+            .map_err(sqlite_err)?;
+        let mapped = stmt
+            .query_map(params![run_id], map_event_row)
+            .map_err(sqlite_err)?;
+        let mut out = Vec::new();
+        for r in mapped {
+            out.push(r.map_err(sqlite_err)?);
+        }
+        Ok(out)
+    }
+}
+
+fn map_run_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AtosRunRow> {
+    let stop_passed_int: Option<i64> = row.get(8)?;
+    Ok(AtosRunRow {
+        id: row.get(0)?,
+        feature_id: row.get(1)?,
+        milestone_id: row.get(2)?,
+        driver: row.get(3)?,
+        session_id: row.get(4)?,
+        started_at: row.get(5)?,
+        ended_at: row.get(6)?,
+        exit_code: row.get(7)?,
+        stop_passed: stop_passed_int.map(|n| n != 0),
+    })
+}
+
+fn map_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AtosToolEvent> {
+    Ok(AtosToolEvent {
+        id: row.get(0)?,
+        run_id: row.get(1)?,
+        call_id: row.get(2)?,
+        tool_name: row.get(3)?,
+        phase: row.get(4)?,
+        args_json: row.get(5)?,
+        outcome: row.get(6)?,
+        duration_ms: row.get(7)?,
+        fired_at: row.get(8)?,
+    })
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
@@ -379,6 +637,42 @@ CREATE TABLE IF NOT EXISTS feature_milestones (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_milestones_feat_ord
     ON feature_milestones(feature_id, ordinal);
+
+-- ATOS run ledger. One row per driver invocation of a milestone. The
+-- orchestrator creates this row on `start-milestone`, exports its id
+-- as $ATOS_RUN_ID to the driver subprocess, and closes it out on
+-- `end-milestone` with stop_condition exit + duration.
+CREATE TABLE IF NOT EXISTS atos_runs (
+    id            TEXT PRIMARY KEY,
+    feature_id    TEXT NOT NULL,
+    milestone_id  TEXT NOT NULL,
+    driver        TEXT NOT NULL CHECK(driver IN ('claude','opencode')),
+    session_id    TEXT,
+    started_at    INTEGER NOT NULL,
+    ended_at      INTEGER,
+    exit_code     INTEGER,
+    stop_passed   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_runs_feature   ON atos_runs(feature_id);
+CREATE INDEX IF NOT EXISTS idx_runs_milestone ON atos_runs(milestone_id);
+
+-- Per-tool event log. Populated by the opencode plugin via
+-- `record_atos_event`, and (eventually) by a Claude-side wrapper that
+-- mirrors MCP tool_call_log rows into this table. Ring-buffered at
+-- 10k rows per run so a runaway loop can't bloat features.db.
+CREATE TABLE IF NOT EXISTS atos_tool_events (
+    id          TEXT PRIMARY KEY,
+    run_id      TEXT NOT NULL REFERENCES atos_runs(id) ON DELETE CASCADE,
+    call_id     TEXT NOT NULL,
+    tool_name   TEXT NOT NULL,
+    phase       TEXT NOT NULL CHECK(phase IN ('before','after','parse_error')),
+    args_json   TEXT,
+    outcome     TEXT,
+    duration_ms INTEGER,
+    fired_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_run  ON atos_tool_events(run_id);
+CREATE INDEX IF NOT EXISTS idx_events_tool ON atos_tool_events(tool_name);
 ";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -534,6 +828,101 @@ mod tests {
         let store = make_store().await;
         let err = store
             .add_milestone("does-not-exist", 1, "brief")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::InvalidInput(_)));
+    }
+
+    // ── ATOS run ledger tests ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn run_lifecycle_and_event_attribution() {
+        let store = make_store().await;
+        store.provision("f1", "t", "c", "", "true").await.unwrap();
+        let m = store.add_milestone("f1", 1, "brief").await.unwrap();
+
+        let run = store.open_run("f1", &m.id, "claude").await.unwrap();
+        assert!(run.ended_at.is_none());
+        assert_eq!(run.driver, "claude");
+
+        // Session id filled in after the first event carries it.
+        assert!(store.set_run_session(&run.id, "opencode-sess-abc").await.unwrap());
+        let loaded = store.get_run(&run.id).await.unwrap().unwrap();
+        assert_eq!(loaded.session_id.as_deref(), Some("opencode-sess-abc"));
+
+        // Record a pair of events for one call_id (before + after).
+        let e1 = store
+            .record_tool_event(
+                &run.id,
+                "call_xyz",
+                "read_notes",
+                "before",
+                Some(r#"{"query":"hi"}"#),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let e2 = store
+            .record_tool_event(
+                &run.id,
+                "call_xyz",
+                "read_notes",
+                "after",
+                None,
+                Some("success"),
+                Some(42),
+            )
+            .await
+            .unwrap();
+        assert_ne!(e1, e2);
+
+        let events = store.list_events_for_run(&run.id).await.unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].phase, "before");
+        assert_eq!(events[1].phase, "after");
+        assert_eq!(events[1].outcome.as_deref(), Some("success"));
+        assert_eq!(events[1].duration_ms, Some(42));
+
+        // Close the run.
+        assert!(store.close_run(&run.id, 0, true).await.unwrap());
+        let closed = store.get_run(&run.id).await.unwrap().unwrap();
+        assert_eq!(closed.exit_code, Some(0));
+        assert_eq!(closed.stop_passed, Some(true));
+        assert!(closed.ended_at.is_some());
+
+        // Listing by feature returns our run.
+        let runs = store.list_runs_for_feature("f1").await.unwrap();
+        assert_eq!(runs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn orphan_events_rejected() {
+        let store = make_store().await;
+        let err = store
+            .record_tool_event(
+                "no-such-run",
+                "call_1",
+                "read_notes",
+                "before",
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn invalid_phase_rejected() {
+        let store = make_store().await;
+        store.provision("f1", "t", "c", "", "").await.unwrap();
+        let m = store.add_milestone("f1", 1, "brief").await.unwrap();
+        let run = store.open_run("f1", &m.id, "claude").await.unwrap();
+
+        let err = store
+            .record_tool_event(&run.id, "c1", "t", "during", None, None, None)
             .await
             .unwrap_err();
         assert!(matches!(err, Error::InvalidInput(_)));
