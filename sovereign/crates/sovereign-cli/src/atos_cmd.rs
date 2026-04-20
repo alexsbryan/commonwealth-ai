@@ -53,6 +53,8 @@ pub async fn run_atos(args: &[String]) -> i32 {
         "report" => cmd_report(rest).await,
         "teardown" => cmd_teardown(rest).await,
         "feature" => cmd_feature(rest).await,
+        "spec" => cmd_spec(rest).await,
+        "doctor" => cmd_doctor(rest).await,
         other => {
             eprintln!("atos: unknown subcommand '{other}'");
             print_help();
@@ -82,6 +84,15 @@ fn print_help() {
          \x20   report <feature-id>   [--section milestone|red-team|epistemic|all] [--milestone N] [--out <path>]\n\
          \x20   teardown <feature-id> [--auto] [--dry-run]\n\
          \x20   feature approve <id>  (Commonwealth-native fallback for branches where git-committer review won't apply)\n\
+         \x20   spec diff <id>        Show unified diff between the approved spec and the current spec\n\
+         \x20   spec accept <id>      [--reason <text>]  Accept the current spec as the new approved content\n\
+         \x20   doctor                Health check: repo, .sovereign dir, DB schemas, plugin, per-feature\n\
+         \n\
+         AUTO RED-TEAM\n\
+         \x20   Opt in from the charter preamble:\n\
+         \x20       **Red team:** auto\n\
+         \x20   After the last milestone passes, `end-milestone` spawns a\n\
+         \x20   red-team pass automatically and writes red-team.md.\n\
          \n\
          FLAGS\n\
          \x20   --version             Print atos CLI version and exit.\n\
@@ -122,9 +133,19 @@ fn open_note_store() -> Result<Arc<NoteStore>, String> {
 fn open_orchestrator() -> Result<std::sync::Arc<sovereign_atos::LocalAtosOrchestrator>, String> {
     let features = open_feature_store()?;
     let notes = open_note_store()?;
-    Ok(std::sync::Arc::new(
-        sovereign_atos::LocalAtosOrchestrator::new(features, notes),
-    ))
+    let mut orc = sovereign_atos::LocalAtosOrchestrator::new(features, notes);
+
+    // Wire the project-docs store so milestone reports flow into the
+    // same FTS index `project_context` searches. Opening this is
+    // best-effort; if the schema is unavailable we silently degrade to
+    // disk-only reports rather than failing the CLI.
+    let docs_path = sovereign_dir().join("project_docs.db");
+    let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    if let Ok(store) = corpus_engine::ProjectDocsStore::open(&docs_path) {
+        orc = orc.with_project_docs(std::sync::Arc::new(store), repo_root);
+    }
+
+    Ok(std::sync::Arc::new(orc))
 }
 
 // ─── Subcommand: provision ───────────────────────────────────────────────────
@@ -528,6 +549,33 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
                 }
             }
         }
+
+        // Auto red-team trigger — fires iff:
+        // - feature.auto_redteam was set (charter opt-in);
+        // - this is the final milestone (highest ordinal);
+        // - the just-closed run was `mode=normal` (we don't recurse
+        //   on red-team's own runs);
+        // - no redteam run already fired for this milestone
+        //   (idempotent on re-invocation).
+        let final_ordinal = milestones.iter().map(|m| m.ordinal).max().unwrap_or(0);
+        let just_run_was_normal = target_run
+            .as_ref()
+            .map(|r| r.mode == "normal")
+            .unwrap_or(false);
+        let redteam_already_fired = runs
+            .iter()
+            .any(|r| r.milestone_id == milestone.id && r.mode == "redteam");
+        if feature.auto_redteam
+            && milestone.ordinal == final_ordinal
+            && just_run_was_normal
+            && !redteam_already_fired
+        {
+            println!(
+                "⚙ auto-redteam: charter opted in — spawning red-team pass for milestone {}…",
+                milestone.ordinal
+            );
+            spawn_auto_redteam(&feature.id, &milestone.id, milestone.ordinal);
+        }
         0
     } else {
         eprintln!(
@@ -544,10 +592,11 @@ async fn cmd_end_milestone(args: &[String]) -> i32 {
 /// approval fallback.
 ///
 /// Records a `FeatureApproval` row in the gossip-replicated KV store
-/// so the middleware gate recognizes the feature as approved even
-/// when the git path doesn't apply. Use in collectives without
-/// strict git hygiene or when the reviewer is working from a
-/// different machine than the repo lives on.
+/// so the middleware gate recognizes the feature as approved without
+/// requiring a `git commit`. Use when you're prototyping on a branch
+/// you don't want to commit to yet, when the approval needs to live
+/// off-repo (cross-machine, mesh-replicated), or whenever else the
+/// git path doesn't fit your flow.
 async fn cmd_feature(args: &[String]) -> i32 {
     let Some(sub) = args.first().cloned() else {
         eprintln!("feature: missing subcommand (approve)");
@@ -627,8 +676,8 @@ async fn cmd_feature_approve(args: &[String]) -> i32 {
 }
 
 fn derive_node_id_from_git(repo_root: &std::path::Path) -> Option<commonwealth_core::ids::NodeId> {
-    // Hash the reviewer's "name <email>" into a u128 so the witness
-    // is reproducible per-reviewer per-machine. Not cryptographic —
+    // Hash the operator's "name <email>" into a u128 so the witness
+    // is reproducible per-operator per-machine. Not cryptographic —
     // we're not defending against impersonation, just producing a
     // stable id without inventing new identity ceremony.
     use std::collections::hash_map::DefaultHasher;
@@ -660,6 +709,719 @@ fn derive_node_id_from_git(repo_root: &std::path::Path) -> Option<commonwealth_c
     Some(commonwealth_core::ids::NodeId::from_u128(
         (high << 64) | low,
     ))
+}
+
+// ─── Subcommand: doctor ──────────────────────────────────────────────────────
+
+/// `sovereign atos doctor` — a single pass that prints a per-check
+/// ✓ / ✗ / ⚠ line and exits 0 iff every check is ✓ or ⚠. Its job is
+/// to tell Yara — or Marcus, landing on a new machine — exactly what
+/// in the ATOS surface is configured and what isn't, without making
+/// her read the code.
+///
+/// The checks are deliberately fast and non-mutating: open DBs
+/// read-only-ish (SQLite may upgrade journal mode but that's
+/// harmless), shell one HEAD at localhost:9741 with a 2s timeout.
+/// No long-running probes, no network beyond localhost.
+async fn cmd_doctor(_args: &[String]) -> i32 {
+    let mut report = DoctorReport::default();
+    let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    // 1. Repo root resolvable (prefer git; fall back to cwd).
+    let git_root = resolve_git_root(&repo_root);
+    match git_root.as_ref() {
+        Some(p) => report.pass("repo root", p.display().to_string()),
+        None => report.warn(
+            "repo root",
+            "git rev-parse failed; falling back to CWD (still works, just no git approvals)".into(),
+        ),
+    }
+    let anchor = git_root.clone().unwrap_or_else(|| repo_root.clone());
+
+    // 2. .sovereign/ directory present.
+    let sov = anchor.join(".sovereign");
+    if sov.is_dir() {
+        report.pass(".sovereign directory", sov.display().to_string());
+    } else {
+        report.fail(
+            ".sovereign directory",
+            format!("missing at {} — run `sovereign atos provision <id>` first", sov.display()),
+        );
+    }
+
+    // 3. notes.db reachable (opening applies the v4 migration as a
+    //    side-effect, so success implies schema is caught up).
+    let notes_db = sov.join("notes.db");
+    match corpus_engine::NoteStore::open(&notes_db) {
+        Ok(_) => report.pass("notes.db", "open + migrations OK".into()),
+        Err(e) => report.fail("notes.db", format!("{e}")),
+    }
+
+    // 4. features.db reachable + feature count.
+    let features_db = sov.join("features.db");
+    match FeatureStore::open(&features_db) {
+        Ok(store) => {
+            let count = store.list(true).await.map(|v| v.len()).unwrap_or(0);
+            report.pass(
+                "features.db",
+                format!("{count} feature{}", if count == 1 { "" } else { "s" }),
+            );
+            // 7. Per-feature checks.
+            let features = store.list(false).await.unwrap_or_default();
+            for f in features {
+                check_feature(&mut report, &anchor, &f).await;
+            }
+        }
+        Err(e) => report.fail("features.db", format!("{e}")),
+    }
+
+    // 5. Default pipelines loadable.
+    let pipelines_ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table()
+            .resolve("sovereign-coder")
+            .is_some()
+    }))
+    .unwrap_or(false);
+    if pipelines_ok {
+        report.pass("default pipelines", "sovereign-coder resolves".into());
+    } else {
+        report.fail(
+            "default pipelines",
+            "default_pipelines.toml parse or resolve failed".into(),
+        );
+    }
+
+    // 6. Opencode plugin present.
+    let plugin = anchor.join(".opencode").join("plugins").join("sovereign-atos.ts");
+    if plugin.exists() {
+        report.pass("opencode plugin", plugin.display().to_string());
+    } else {
+        report.warn(
+            "opencode plugin",
+            format!(
+                "{} not found — opencode sessions will still work but won't inject X-Feature-Id",
+                plugin.display()
+            ),
+        );
+    }
+
+    // 8. Commonwealth daemon reachable (warn, not fail — dev mode valid).
+    match probe_daemon_head().await {
+        Ok(()) => report.pass("commonwealth daemon", "localhost:9741 responding".into()),
+        Err(e) => report.warn(
+            "commonwealth daemon",
+            format!("localhost:9741: {e} (dev mode is fine)"),
+        ),
+    }
+
+    // 9. Fast inference slot — inspect /oicp/v1/capabilities.
+    match probe_fast_slot().await {
+        Ok(true) => report.pass("fast inference slot", "capability present".into()),
+        Ok(false) => report.warn(
+            "fast inference slot",
+            "no fast-capable model registered".into(),
+        ),
+        Err(e) => report.warn("fast inference slot", format!("probe failed: {e}")),
+    }
+
+    report.print();
+    if report.any_failed() {
+        1
+    } else {
+        0
+    }
+}
+
+async fn check_feature(
+    report: &mut DoctorReport,
+    repo_root: &Path,
+    f: &corpus_engine::FeatureRow,
+) {
+    let label = format!("feature `{}`", f.id);
+
+    // spec.md exists
+    let spec_path = sovereign_atos::approval::spec_path(repo_root, &f.id);
+    if !spec_path.exists() {
+        report.fail(&label, format!("spec.md missing at {}", spec_path.display()));
+        return;
+    }
+
+    // approval resolvable
+    let mesh_path = repo_root.join(".sovereign").join("mesh.db");
+    let mesh = commonwealth_state::MeshStore::open(&mesh_path).ok();
+    let approval =
+        sovereign_atos::approval::find_approval(repo_root, &f.id, mesh.as_ref());
+    let Some(appr) = approval else {
+        report.warn(
+            &label,
+            "unapproved — `git commit` the spec OR run `atos feature approve`".into(),
+        );
+        // Still report auto_redteam + other flags.
+        report.info(
+            &label,
+            format!(
+                "auto_redteam={}  state={}",
+                f.auto_redteam, f.state
+            ),
+        );
+        return;
+    };
+
+    // drift check
+    if sovereign_atos::approval::detect_drift(&appr, repo_root) {
+        report.warn(
+            &label,
+            format!(
+                "spec.md drifted since approval — run `atos spec diff {}` or `atos spec accept {}`",
+                f.id, f.id
+            ),
+        );
+    } else {
+        report.pass(
+            &label,
+            format!(
+                "approved via {:?} (by {})",
+                appr.source,
+                short_identity(&appr.approved_by)
+            ),
+        );
+    }
+
+    report.info(
+        &label,
+        format!(
+            "auto_redteam={}  state={}",
+            f.auto_redteam, f.state
+        ),
+    );
+}
+
+fn resolve_git_root(cwd: &Path) -> Option<PathBuf> {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(cwd)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8(out.stdout).ok()?;
+    Some(PathBuf::from(s.trim()))
+}
+
+async fn probe_daemon_head() -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .map_err(|e| format!("reqwest client: {e}"))?;
+    let res = client
+        .head("http://localhost:9741/v1/models")
+        .send()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+    if res.status().is_success() || res.status().is_redirection() {
+        Ok(())
+    } else {
+        Err(format!("HTTP {}", res.status()))
+    }
+}
+
+async fn probe_fast_slot() -> Result<bool, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .map_err(|e| format!("reqwest client: {e}"))?;
+    let res = client
+        .get("http://localhost:9741/oicp/v1/capabilities")
+        .send()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("HTTP {}", res.status()));
+    }
+    let body = res
+        .text()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+    Ok(body.to_lowercase().contains("fast"))
+}
+
+fn short_identity(s: &str) -> String {
+    // "Name <email>" — keep just the Name.
+    s.split('<').next().unwrap_or(s).trim().to_string()
+}
+
+#[derive(Default)]
+struct DoctorReport {
+    lines: Vec<DoctorLine>,
+}
+
+struct DoctorLine {
+    kind: DoctorKind,
+    check: String,
+    detail: String,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum DoctorKind {
+    Pass,
+    Fail,
+    Warn,
+    Info,
+}
+
+impl DoctorReport {
+    fn pass(&mut self, check: &str, detail: String) {
+        self.lines.push(DoctorLine {
+            kind: DoctorKind::Pass,
+            check: check.into(),
+            detail,
+        });
+    }
+    fn fail(&mut self, check: &str, detail: String) {
+        self.lines.push(DoctorLine {
+            kind: DoctorKind::Fail,
+            check: check.into(),
+            detail,
+        });
+    }
+    fn warn(&mut self, check: &str, detail: String) {
+        self.lines.push(DoctorLine {
+            kind: DoctorKind::Warn,
+            check: check.into(),
+            detail,
+        });
+    }
+    fn info(&mut self, check: &str, detail: String) {
+        self.lines.push(DoctorLine {
+            kind: DoctorKind::Info,
+            check: check.into(),
+            detail,
+        });
+    }
+    fn any_failed(&self) -> bool {
+        self.lines.iter().any(|l| l.kind == DoctorKind::Fail)
+    }
+    fn print(&self) {
+        let width = self
+            .lines
+            .iter()
+            .map(|l| l.check.len())
+            .max()
+            .unwrap_or(0)
+            .min(36);
+        for l in &self.lines {
+            let sym = match l.kind {
+                DoctorKind::Pass => "✓",
+                DoctorKind::Fail => "✗",
+                DoctorKind::Warn => "⚠",
+                DoctorKind::Info => " ",
+            };
+            println!("{sym} {:width$}  {}", l.check, l.detail, width = width);
+        }
+    }
+}
+
+/// Spawn a blocking red-team pass over `milestone_id` by re-invoking
+/// this binary. We use `std::process::Command` (not `tokio::spawn`)
+/// because Yara's stdout is the right surface: she sees the red-team
+/// run live in her terminal, same as a normal `start-milestone`.
+///
+/// Flow:
+/// 1. `sovereign atos start-milestone <feature> --red-team
+///     --milestone-id <mid>` opens the redteam run, spawns the driver,
+///     closes the run with an interim verdict.
+/// 2. `sovereign atos end-milestone <feature>` runs the stop
+///     condition + writes red-team.md.
+///
+/// Failures are noisy (printed to stderr) but never block the caller's
+/// exit code — the normal milestone already passed; a red-team
+/// hiccup shouldn't turn that into a "the whole thing failed."
+fn spawn_auto_redteam(feature_id: &str, milestone_id: &str, ordinal: i64) {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("auto-redteam: current_exe: {e} — skipping");
+            return;
+        }
+    };
+
+    let status = std::process::Command::new(&exe)
+        .args([
+            "atos",
+            "start-milestone",
+            feature_id,
+            "--red-team",
+            "--milestone-id",
+            milestone_id,
+        ])
+        .status();
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            eprintln!(
+                "auto-redteam: start-milestone --red-team exited {}",
+                s.code().unwrap_or(-1)
+            );
+            return;
+        }
+        Err(e) => {
+            eprintln!("auto-redteam: start-milestone --red-team spawn failed: {e}");
+            return;
+        }
+    }
+
+    let ord_str = ordinal.to_string();
+    let status = std::process::Command::new(&exe)
+        .args([
+            "atos",
+            "end-milestone",
+            feature_id,
+            "--ordinal",
+            &ord_str,
+        ])
+        .status();
+    match status {
+        Ok(s) if s.success() => {
+            println!("⚙ auto-redteam: red-team run closed and red-team.md written.");
+        }
+        Ok(s) => {
+            eprintln!(
+                "auto-redteam: end-milestone exited {}",
+                s.code().unwrap_or(-1)
+            );
+        }
+        Err(e) => {
+            eprintln!("auto-redteam: end-milestone spawn failed: {e}");
+        }
+    }
+}
+
+// ─── Subcommand: spec (diff, accept) ─────────────────────────────────────────
+
+/// `sovereign atos spec <sub>` — first-class gestures for spec drift.
+///
+/// `spec diff <id>` resolves the approved spec content (via MeshStore
+/// snapshot or `git show <witness>:<path>`), writes it to a temp file,
+/// and shells `diff -u` between that and the current on-disk spec.
+///
+/// `spec accept <id> [--reason <text>]` rewrites the MeshStore approval
+/// row with the current spec's hash + full snapshot. A `deviation`-kind
+/// note captures the diff + operator reason so future sessions see the
+/// justification inline. MeshStore wins over git at resolution time
+/// (see `find_approval`), so drift goes silent on the next request.
+async fn cmd_spec(args: &[String]) -> i32 {
+    let Some(sub) = args.first().cloned() else {
+        eprintln!("spec: missing subcommand (diff|accept)");
+        return 2;
+    };
+    let rest = &args[1..];
+    match sub.as_str() {
+        "diff" => cmd_spec_diff(rest).await,
+        "accept" => cmd_spec_accept(rest).await,
+        other => {
+            eprintln!("spec: unknown subcommand '{other}'");
+            2
+        }
+    }
+}
+
+async fn cmd_spec_diff(args: &[String]) -> i32 {
+    let (positional, _flags) = split_args(args);
+    let Some(feature_id) = positional.first().cloned() else {
+        eprintln!("spec diff: missing <feature-id>");
+        return 2;
+    };
+    let repo_root = match std::env::current_dir() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("spec diff: cwd: {e}");
+            return 1;
+        }
+    };
+
+    let mesh = open_repo_mesh(&repo_root).ok();
+    let approval = match sovereign_atos::approval::find_approval(
+        &repo_root,
+        &feature_id,
+        mesh.as_ref(),
+    ) {
+        Some(a) => a,
+        None => {
+            eprintln!(
+                "spec diff: no approval found for '{feature_id}' — \
+                 `git commit` the spec or run `sovereign atos feature approve {feature_id}`"
+            );
+            return 1;
+        }
+    };
+
+    let approved = match sovereign_atos::approval::resolve_approved_spec_content(
+        &repo_root, &approval,
+    ) {
+        Some(c) => c,
+        None => {
+            eprintln!(
+                "spec diff: could not resolve approved spec content \
+                 (witness commit may have been orphaned; run `spec accept` \
+                 to re-anchor)"
+            );
+            return 1;
+        }
+    };
+
+    let current_path = repo_root.join(&approval.spec_path);
+    if !current_path.exists() {
+        eprintln!("spec diff: current spec missing at {}", current_path.display());
+        return 1;
+    }
+
+    // Write the approved text to a scratch file so `diff -u` can see
+    // labels that include "approved". A heredoc-style stdin would
+    // work but loses the filename label.
+    let tmp = match tempfile::Builder::new()
+        .prefix("atos-spec-approved-")
+        .suffix(".md")
+        .tempfile()
+    {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("spec diff: tempfile: {e}");
+            return 1;
+        }
+    };
+    if let Err(e) = std::fs::write(tmp.path(), approved.as_bytes()) {
+        eprintln!("spec diff: write tempfile: {e}");
+        return 1;
+    }
+
+    let approved_label = format!("approved ({})", truncate_witness(&approval.witness));
+    let current_label = format!("current ({})", approval.spec_path);
+    let output = std::process::Command::new("diff")
+        .args([
+            "-u",
+            "--label",
+            &approved_label,
+            tmp.path().to_str().unwrap_or(""),
+            "--label",
+            &current_label,
+            current_path.to_str().unwrap_or(""),
+        ])
+        .output();
+    match output {
+        Ok(out) => {
+            // `diff -u` exits 0 if identical, 1 if different, 2+ on error.
+            // We print stdout in both cases (empty on identical).
+            if out.stdout.is_empty() && out.status.code() == Some(0) {
+                println!("spec diff: no drift — current spec matches approval.");
+                return 0;
+            }
+            print!("{}", String::from_utf8_lossy(&out.stdout));
+            if let Some(2) = out.status.code() {
+                eprint!("{}", String::from_utf8_lossy(&out.stderr));
+                return 1;
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("spec diff: exec diff: {e}");
+            1
+        }
+    }
+}
+
+async fn cmd_spec_accept(args: &[String]) -> i32 {
+    let (positional, flags) = split_args(args);
+    let Some(feature_id) = positional.first().cloned() else {
+        eprintln!("spec accept: missing <feature-id>");
+        return 2;
+    };
+    let reason = get_flag(&flags, "reason").unwrap_or_default();
+    let repo_root = match std::env::current_dir() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("spec accept: cwd: {e}");
+            return 1;
+        }
+    };
+
+    let mesh = match open_repo_mesh(&repo_root) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("spec accept: mesh open: {e}");
+            return 1;
+        }
+    };
+
+    let prior = match sovereign_atos::approval::find_approval(
+        &repo_root,
+        &feature_id,
+        Some(&mesh),
+    ) {
+        Some(a) => a,
+        None => {
+            eprintln!(
+                "spec accept: no prior approval for '{feature_id}' — \
+                 `feature approve` first, then iterate"
+            );
+            return 1;
+        }
+    };
+
+    // Capture diff BEFORE accepting, so the deviation note records
+    // the change. If the current spec matches the approval, bail —
+    // there's nothing to accept.
+    let approved_text = sovereign_atos::approval::resolve_approved_spec_content(
+        &repo_root, &prior,
+    )
+    .unwrap_or_default();
+    let current_path = repo_root.join(&prior.spec_path);
+    let current_text = match std::fs::read_to_string(&current_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("spec accept: read current spec: {e}");
+            return 1;
+        }
+    };
+    if approved_text == current_text {
+        println!("spec accept: current spec already matches approval — nothing to do.");
+        return 0;
+    }
+
+    let origin = derive_node_id_from_git(&repo_root).unwrap_or_else(|| {
+        commonwealth_core::ids::NodeId::from_u128(0xA7057E07_A7057E07u128)
+    });
+
+    let accepted = match sovereign_atos::approval::accept_drift(
+        &mesh, origin, &repo_root, &feature_id, &prior,
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("spec accept: {e}");
+            return 1;
+        }
+    };
+
+    // Write a deviation note capturing the diff + reason. The
+    // middleware's drift detector (now silent because the mesh hash
+    // matches) won't re-fire, but the operator's history of
+    // *deliberate* drift is preserved in the note log.
+    let diff_body = unified_diff_string(&approved_text, &current_text, &prior.spec_path);
+    let reason_line = if reason.is_empty() {
+        "(none provided)".to_string()
+    } else {
+        reason
+    };
+    let committer = git_committer_identity(&repo_root)
+        .unwrap_or_else(|| "<unknown committer>".to_string());
+    let note_content = format!(
+        "Spec drift accepted by {committer}.\n\n\
+         Reason: {reason_line}\n\n\
+         Previous hash: {}\n\
+         Current hash:  {}\n\n\
+         Diff:\n{diff_body}\n",
+        prior.spec_content_hash, accepted.spec_content_hash,
+    );
+    match open_note_store() {
+        Ok(notes) => {
+            if let Err(e) = notes
+                .write_note_scoped(
+                    "deviation",
+                    &note_content,
+                    Vec::new(),
+                    vec![prior.spec_path.clone()],
+                    "atos-spec-accept",
+                    corpus_engine::NoteScope::Feature,
+                    Some(&feature_id),
+                )
+                .await
+            {
+                // Non-fatal — the approval still succeeded. Warn so
+                // the operator knows the note log is incomplete.
+                eprintln!("spec accept: warning: note write failed: {e}");
+            }
+        }
+        Err(e) => eprintln!("spec accept: warning: notes.db open: {e}"),
+    }
+
+    println!(
+        "accepted spec drift for '{}' (new hash {})",
+        accepted.feature_id,
+        &accepted.spec_content_hash[..8]
+    );
+    0
+}
+
+fn open_repo_mesh(
+    repo_root: &Path,
+) -> Result<commonwealth_state::MeshStore, String> {
+    let mesh_path = repo_root.join(".sovereign").join("mesh.db");
+    if let Some(parent) = mesh_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    commonwealth_state::MeshStore::open(&mesh_path)
+        .map_err(|e| format!("open mesh.db at {}: {e}", mesh_path.display()))
+}
+
+fn truncate_witness(w: &str) -> String {
+    w.chars().take(12).collect()
+}
+
+fn git_committer_identity(repo_root: &Path) -> Option<String> {
+    let name = std::process::Command::new("git")
+        .args(["config", "user.name"])
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    let email = std::process::Command::new("git")
+        .args(["config", "user.email"])
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    if !name.status.success() || !email.status.success() {
+        return None;
+    }
+    Some(format!(
+        "{} <{}>",
+        String::from_utf8_lossy(&name.stdout).trim(),
+        String::from_utf8_lossy(&email.stdout).trim(),
+    ))
+}
+
+/// Shell out to `diff -u` to produce the deviation-note body. Falls
+/// back to a side-by-side dump when the diff binary is unavailable —
+/// the note is for human reference, not machine parse, so a degraded
+/// render is acceptable.
+fn unified_diff_string(old: &str, new: &str, label: &str) -> String {
+    fn write_tmp(prefix: &str, body: &str) -> std::io::Result<tempfile::NamedTempFile> {
+        use std::io::Write as _;
+        let mut f = tempfile::Builder::new().prefix(prefix).tempfile()?;
+        f.write_all(body.as_bytes())?;
+        Ok(f)
+    }
+    if let (Ok(a), Ok(b)) = (
+        write_tmp("atos-accept-old-", old),
+        write_tmp("atos-accept-new-", new),
+    ) {
+        let approved_label = format!("approved/{label}");
+        let current_label = format!("current/{label}");
+        if let Ok(out) = std::process::Command::new("diff")
+            .args([
+                "-u",
+                "--label",
+                &approved_label,
+                a.path().to_str().unwrap_or(""),
+                "--label",
+                &current_label,
+                b.path().to_str().unwrap_or(""),
+            ])
+            .output()
+        {
+            return String::from_utf8_lossy(&out.stdout).into_owned();
+        }
+    }
+    // Degraded fallback: dump both. Not a "diff" but not a lie either.
+    format!("--- approved/{label}\n{old}\n+++ current/{label}\n{new}\n")
 }
 
 // ─── Subcommand: report ──────────────────────────────────────────────────────

@@ -167,6 +167,7 @@ cargo run --release -p sovereign-server -- --config sovereign-server.toml
 |---|---|
 | [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md) | Full flag + subcommand reference; HTTP endpoint list |
 | [`docs/CODE_INTELLIGENCE.md`](docs/CODE_INTELLIGENCE.md) | `project init`, SCIP exporters, multi-project ecosystems |
+| [`docs/ATOS.md`](docs/ATOS.md) | Agent Task Orchestration System: charters, approvals, drift, auto red-team |
 | [`docs/KNOWLEDGE_BASES.md`](docs/KNOWLEDGE_BASES.md) | Corpora, tier sizing, coverage-aware search pipeline |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | Routing, memory, skills, provenance, OICP |
 | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Setup/daemon issues, uninstall, port conflicts |

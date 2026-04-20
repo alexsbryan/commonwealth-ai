@@ -35,6 +35,15 @@ pub struct LocalAtosOrchestrator {
     features: Arc<FeatureStore>,
     notes: Arc<NoteStore>,
     inference: Option<Arc<dyn sovereign_core::traits::InferenceProvider>>,
+    /// Optional doc store. When attached,
+    /// [`LocalAtosOrchestrator::render_and_write_report`] indexes each
+    /// written report into FTS so `project_context` retrieval surfaces
+    /// it alongside other markdown docs. None → reports stay on disk
+    /// only (still the authoritative artifact).
+    project_docs: Option<Arc<corpus_engine::ProjectDocsStore>>,
+    /// Repo root for computing relative paths during indexing. Defaults
+    /// to CWD when the orchestrator isn't told otherwise.
+    repo_root: Option<std::path::PathBuf>,
 }
 
 impl LocalAtosOrchestrator {
@@ -43,6 +52,8 @@ impl LocalAtosOrchestrator {
             features,
             notes,
             inference: None,
+            project_docs: None,
+            repo_root: None,
         }
     }
 
@@ -54,6 +65,20 @@ impl LocalAtosOrchestrator {
         inference: Arc<dyn sovereign_core::traits::InferenceProvider>,
     ) -> Self {
         self.inference = Some(inference);
+        self
+    }
+
+    /// Attach a `ProjectDocsStore` so written reports flow into the
+    /// `project_context` FTS index. `repo_root` is used to compute
+    /// stable relative paths; if absent, the store is still wired
+    /// but paths will be absolute (still searchable, just noisier).
+    pub fn with_project_docs(
+        mut self,
+        docs: Arc<corpus_engine::ProjectDocsStore>,
+        repo_root: std::path::PathBuf,
+    ) -> Self {
+        self.project_docs = Some(docs);
+        self.repo_root = Some(repo_root);
         self
     }
 
@@ -84,6 +109,14 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
             .features
             .provision(&id, &title, &parsed.preamble_md, "", "")
             .await?;
+
+        // Lift the charter-parsed auto-redteam opt-in into the row.
+        // `false` is the default; only flip when the author explicitly
+        // asked. We persist this as its own call rather than widening
+        // `provision` so M1–M4 callsites stay untouched.
+        if parsed.auto_redteam {
+            self.features.set_auto_redteam(&id, true).await?;
+        }
 
         // Seed one feature_milestones row per parsed milestone. Each
         // row's brief_md begins with a synthetic header so the
@@ -662,6 +695,31 @@ impl LocalAtosOrchestrator {
         };
         let path = dir.join(filename);
         std::fs::write(&path, rendered).map_err(Error::Io)?;
+
+        // Index into project_context so a future agent turn can pull
+        // "what did we learn on milestone-1?" via the same retrieval
+        // path as any other markdown doc. Failure is logged and
+        // ignored — the file on disk is the authoritative artifact;
+        // the FTS index is a convenience layer.
+        if let Some(store) = self.project_docs.as_ref() {
+            let repo_root = self
+                .repo_root
+                .clone()
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| dir.clone()));
+            match store.index_file(&path, &repo_root).await {
+                Ok(n) => tracing::debug!(
+                    path = %path.display(),
+                    chunks = n,
+                    "atos: indexed report into project_docs"
+                ),
+                Err(e) => tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "atos: project_docs index_file failed"
+                ),
+            }
+        }
+
         Ok(path)
     }
 
@@ -1053,5 +1111,73 @@ Add a CLI test.
         let outcome = orc.run_stop_condition(&f).await.unwrap();
         assert!(!outcome.passed);
         assert_eq!(outcome.exit_code, 7);
+    }
+
+    // ── M5.4: reports indexed into ProjectDocsStore ──────────────────────
+
+    #[tokio::test]
+    async fn written_report_is_searchable_via_project_docs() {
+        // The orchestrator writes milestone-N.md into
+        // <repo_root>/.sovereign/features/<id>/ and — when wired —
+        // indexes it into ProjectDocsStore. We verify the end-to-end:
+        // render → write → index → search returns the artifact.
+        let tmp = tempfile::tempdir().unwrap();
+        let repo_root = tmp.path().to_path_buf();
+
+        // Features+notes under .sovereign/ so the report write path
+        // lands in repo_root/.sovereign/features/fx/milestone-1.md.
+        let sovereign_dir = repo_root.join(".sovereign");
+        std::fs::create_dir_all(&sovereign_dir).unwrap();
+        let features = Arc::new(
+            FeatureStore::open(&sovereign_dir.join("features.db")).unwrap(),
+        );
+        let notes = Arc::new(NoteStore::open(&sovereign_dir.join("notes.db")).unwrap());
+        let docs = Arc::new(
+            corpus_engine::ProjectDocsStore::open(&sovereign_dir.join("project_docs.db"))
+                .unwrap(),
+        );
+        let orc = LocalAtosOrchestrator::new(features, notes)
+            .with_project_docs(Arc::clone(&docs), repo_root.clone());
+
+        // Seed: feature + one milestone + one passing run so the
+        // report renderer has material to format. The feature id
+        // carries a unique token ("permafrost") so the rendered
+        // header includes it and FTS can find it on search.
+        orc.provision_feature_parts("permafrost", "Title", "Charter.", "", "true")
+            .await
+            .unwrap();
+        let m = orc
+            .add_milestone("permafrost", 1, "Brief")
+            .await
+            .unwrap();
+        let ctx = orc
+            .begin_run("permafrost", &m.id, "claude", RunMode::Normal)
+            .await
+            .unwrap();
+        orc.close_run(&ctx.run_id, 0, true, Some("ok")).await.unwrap();
+
+        // The test runs with CWD = workspace, not the scratch repo.
+        // render_and_write_report uses `feature_dir(feature_id)`
+        // which resolves relative to cwd, so we must write relative
+        // to repo_root ourselves via env::set_current_dir. Cheapest
+        // approach: sandbox in repo_root for the duration of the
+        // write.
+        let prior = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&repo_root).unwrap();
+        let written = orc
+            .render_and_write_report("permafrost", ReportSection::Milestone(1))
+            .await
+            .unwrap();
+        std::env::set_current_dir(prior).unwrap();
+
+        assert!(written.exists(), "report should be written to disk");
+
+        // Search via ProjectDocsStore — the unique token must find
+        // the indexed chunk.
+        let hits = docs.search("permafrost", 5).await.unwrap();
+        assert!(
+            hits.iter().any(|h| h.file_path.contains("milestone-1.md")),
+            "project_docs search should surface the indexed report; got: {hits:#?}"
+        );
     }
 }

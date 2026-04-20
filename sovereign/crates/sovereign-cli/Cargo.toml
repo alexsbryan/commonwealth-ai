@@ -29,6 +29,7 @@ arc-swap = { workspace = true }
 dirs = "5"
 hostname = { workspace = true }
 oicp-types = { path = "../../../oicp-types" }
+tempfile = "3"
 
 [dev-dependencies]
 tempfile = "3"

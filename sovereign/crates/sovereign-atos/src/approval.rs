@@ -4,21 +4,23 @@
 //! The natural gesture a developer makes when they've agreed
 //! something is ready is committing it. This module anchors the
 //! approval gate to that gesture: the feature `<id>` is approved
-//! iff `.sovereign/features/<id>/spec.md` has a commit in the
-//! current branch's history whose committer is not the spec's
-//! author. No token, no manual invocation, no convention the
-//! operator has to remember.
+//! iff `.sovereign/features/<id>/spec.md` has at least one commit
+//! in the current branch's history. No token, no manual invocation,
+//! no second-committer ceremony, no convention the operator has to
+//! remember. Commit the spec and you're ready to go.
 //!
 //! A secondary path — Commonwealth-native approval — stores a
 //! `FeatureApproval` row in `MeshStore` under `app_id
 //! "atos-approvals"`. This covers:
-//! - collectives without strict git hygiene;
-//! - scenarios where a reviewer is on a different machine than the
-//!   repo and never lands a physical commit;
+//! - working trees where the spec hasn't been committed yet but the
+//!   operator wants to start iterating;
+//! - scenarios where the approval lives off-repo (cross-machine
+//!   review, mesh-replicated record);
 //! - the `sovereign atos feature approve <id>` CLI fallback.
 //!
-//! [`find_approval`] tries the git path first and falls back to
-//! MeshStore. Whichever resolves wins; both paths produce the same
+//! [`find_approval`] checks MeshStore first (an explicit `feature
+//! approve` or `spec accept` wins over an older git witness) and
+//! falls back to the git path. Both paths produce the same
 //! [`FeatureApproval`] shape so downstream code doesn't branch on
 //! origin.
 //!
@@ -61,6 +63,12 @@ pub struct FeatureApproval {
     pub source: ApprovalSource,
     /// Commit hash (git path) or node id hex (MeshStore path).
     pub witness: String,
+    /// Full spec text at approval/accept time. MeshStore approvals
+    /// populate this so `spec diff` works offline; git approvals
+    /// leave `None` and resolve via `git show <witness>:<path>`.
+    /// Also survives a force-push that orphans the witness commit.
+    #[serde(default)]
+    pub spec_content_snapshot: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,16 +80,20 @@ pub enum ApprovalSource {
 
 /// Resolve an approval for `feature_id` anchored at `repo_root`.
 ///
-/// Order:
-/// 1. **Git path.** Walk commits touching
-///    `.sovereign/features/<id>/spec.md` in HEAD order. Return the
-///    first commit whose committer identity is not the spec's
-///    original author. (Spec author = the committer of the FIRST
-///    commit that added the file; reviewer = any later committer.
-///    Two-commit minimum: author creates, reviewer approves.)
-/// 2. **Commonwealth-native path.** Read `atos-approvals`
-///    MeshStore row.
-/// 3. Neither → `None`.
+/// Order (MeshStore wins — by design):
+/// 1. **Commonwealth-native path.** Read `atos-approvals`
+///    MeshStore row. A MeshStore row exists when either the operator
+///    ran `sovereign atos feature approve <id>` explicitly OR
+///    `sovereign atos spec accept <id>` accepted a drift. Either way,
+///    the most recent deliberate gesture should take precedence over
+///    the original git witness.
+/// 2. **Git path.** Walk commits touching
+///    `.sovereign/features/<id>/spec.md` in HEAD order. Any commit
+///    that touched the spec is sufficient — a single-author repo is
+///    a valid approval as long as the spec has actually been
+///    committed (uncommitted working-tree edits don't count).
+/// 3. Neither → `None` (the spec file may exist but has never been
+///    committed, or the feature has no spec yet).
 ///
 /// Errors are intentionally silenced — a corrupt git repo or a
 /// missing MeshStore row returns `None` rather than crashing the
@@ -92,30 +104,28 @@ pub fn find_approval(
     feature_id: &str,
     mesh: Option<&MeshStore>,
 ) -> Option<FeatureApproval> {
-    if let Some(appr) = find_approval_via_git(repo_root, feature_id) {
-        return Some(appr);
-    }
     if let Some(mesh) = mesh {
         if let Some(appr) = find_approval_via_mesh(mesh, feature_id) {
             return Some(appr);
         }
     }
-    None
+    find_approval_via_git(repo_root, feature_id)
 }
 
 /// Find the approval via `git log`. Shells out to the `git` CLI;
 /// every user who has an ATOS feature has git already (the feature
-/// directory is a git tracked path), so the dependency is free.
+/// directory is a git-tracked path), so the dependency is free.
 ///
 /// Approach:
-/// 1. `git log --follow --format=%H\t%ce\t%ct -- <path>` lists
+/// 1. `git log --follow --format=%H\t%ce\t%cn\t%ct -- <path>` lists
 ///    commits that touched the spec, newest first.
-/// 2. The FIRST (newest) commit's committer is the "approval
-///    candidate." The LAST commit's committer is the "author." If
-///    they differ, we have a valid approval.
-/// 3. To build the FeatureApproval, we read the file at the
-///    approval commit via `git show <commit>:<path>` and hash it
-///    with SHA-256.
+/// 2. If there is at least one commit, the newest one is the
+///    approval witness — we trust that the developer committed the
+///    spec deliberately.
+/// 3. Build the [`FeatureApproval`] by reading the spec at that
+///    commit via `git show <commit>:<path>` and hashing it with
+///    SHA-256, so drift detection anchors to exactly what was
+///    committed (not the current working-tree state).
 fn find_approval_via_git(repo_root: &Path, feature_id: &str) -> Option<FeatureApproval> {
     let spec_relative = format!(".sovereign/features/{feature_id}/spec.md");
 
@@ -129,34 +139,21 @@ fn find_approval_via_git(repo_root: &Path, feature_id: &str) -> Option<FeatureAp
         return None;
     }
     let stdout = String::from_utf8(output.stdout).ok()?;
-    let mut commits: Vec<(String, String, String, i64)> = Vec::new(); // (hash, email, name, unix_ts)
-    for line in stdout.lines() {
-        let parts: Vec<&str> = line.split('\t').collect();
-        if parts.len() < 4 {
-            continue;
-        }
-        let hash = parts[0].to_string();
-        let email = parts[1].to_string();
-        let name = parts[2].to_string();
-        let ts = parts[3].parse::<i64>().unwrap_or(0);
-        commits.push((hash, email, name, ts));
-    }
-    if commits.len() < 2 {
-        // Fewer than two commits means no reviewer has yet touched
-        // the file; there's no one who could have played the
-        // approver role. Single-author commits are never approvals.
-        return None;
-    }
-
-    // Newest commit (first in log) is the approval candidate.
-    let (hash, email, name, ts) = commits.first()?.clone();
-    // Oldest commit (last in log) is the author.
-    let (_, author_email, _, _) = commits.last()?.clone();
-    if email == author_email {
-        // Same email top-to-bottom — author self-approved, not
-        // eligible.
-        return None;
-    }
+    let (hash, email, name, ts) = stdout
+        .lines()
+        .find_map(|line| {
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() < 4 {
+                return None;
+            }
+            let ts = parts[3].parse::<i64>().ok()?;
+            Some((
+                parts[0].to_string(),
+                parts[1].to_string(),
+                parts[2].to_string(),
+                ts,
+            ))
+        })?;
 
     // Read the spec content AT that commit and hash it. `git show
     // <hash>:<path>` streams the blob.
@@ -179,6 +176,7 @@ fn find_approval_via_git(repo_root: &Path, feature_id: &str) -> Option<FeatureAp
         approved_at: ts,
         source: ApprovalSource::Git,
         witness: hash,
+        spec_content_snapshot: None,
     })
 }
 
@@ -199,6 +197,7 @@ pub fn record_approval(
     let spec_path_rel = format!(".sovereign/features/{feature_id}/spec.md");
     let spec_full = repo_root.join(&spec_path_rel);
     let content = std::fs::read(&spec_full)?;
+    let snapshot = String::from_utf8(content.clone()).ok();
     let approval = FeatureApproval {
         feature_id: feature_id.to_string(),
         spec_path: spec_path_rel,
@@ -207,10 +206,84 @@ pub fn record_approval(
         approved_at: unix_now(),
         source: ApprovalSource::Commonwealth,
         witness: format!("{origin:?}"),
+        spec_content_snapshot: snapshot,
     };
     let encoded = serde_json::to_vec(&approval).map_err(|e| {
         std::io::Error::other(format!("serialize FeatureApproval: {e}"))
     })?;
+    mesh.set(
+        ATOS_APPROVALS_APP_ID,
+        feature_id,
+        Bytes::from(encoded),
+        origin,
+    )
+    .map_err(|e| std::io::Error::other(format!("mesh.set: {e}")))?;
+    Ok(approval)
+}
+
+/// Resolve the spec-at-approval content for `spec diff`.
+///
+/// Priority:
+/// 1. `approval.spec_content_snapshot` (set on MeshStore approvals and
+///    on `accept_drift` writes — survives force-push and MeshStore
+///    migrations).
+/// 2. Git path: `git show <witness>:<spec_path>`. The witness is the
+///    approval commit; this reads the blob from history.
+///
+/// Returns `None` if neither path produces content (e.g., git-only
+/// approval whose witness commit has been orphaned).
+pub fn resolve_approved_spec_content(
+    repo_root: &Path,
+    approval: &FeatureApproval,
+) -> Option<String> {
+    if let Some(s) = approval.spec_content_snapshot.as_ref() {
+        return Some(s.clone());
+    }
+    let output = std::process::Command::new("git")
+        .args(["show"])
+        .arg(format!("{}:{}", approval.witness, approval.spec_path))
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout).ok()
+}
+
+/// Accept the current on-disk spec as the new approved content.
+///
+/// Writes (or overwrites) the MeshStore approval row with the fresh
+/// hash + a full content snapshot. Preserves the original
+/// `approved_by` — the committer who reviewed the first time doesn't
+/// change; Yara is just updating the hash so the gate stops flagging
+/// drift. The deviation note carries her justification.
+///
+/// MeshStore wins over git at resolution time, so an accepted drift
+/// silences `detect_drift` immediately without any git churn.
+pub fn accept_drift(
+    mesh: &MeshStore,
+    origin: NodeId,
+    repo_root: &Path,
+    feature_id: &str,
+    prior: &FeatureApproval,
+) -> std::io::Result<FeatureApproval> {
+    let spec_path_rel = format!(".sovereign/features/{feature_id}/spec.md");
+    let spec_full = repo_root.join(&spec_path_rel);
+    let content = std::fs::read(&spec_full)?;
+    let snapshot = String::from_utf8(content.clone()).ok();
+    let approval = FeatureApproval {
+        feature_id: feature_id.to_string(),
+        spec_path: spec_path_rel,
+        spec_content_hash: hash_sha256(&content),
+        approved_by: prior.approved_by.clone(),
+        approved_at: unix_now(),
+        source: ApprovalSource::Commonwealth,
+        witness: format!("{origin:?}"),
+        spec_content_snapshot: snapshot,
+    };
+    let encoded = serde_json::to_vec(&approval)
+        .map_err(|e| std::io::Error::other(format!("serialize FeatureApproval: {e}")))?;
     mesh.set(
         ATOS_APPROVALS_APP_ID,
         feature_id,
@@ -316,20 +389,23 @@ mod tests {
     }
 
     #[test]
-    fn git_approval_distinct_committer_wins() {
+    fn git_approval_latest_commit_wins() {
         let tmp = tempfile::tempdir().unwrap();
         let repo = build_scratch_repo(tmp.path(), "fx");
         let appr = find_approval_via_git(&repo, "fx").expect("approval must be found");
         assert_eq!(appr.feature_id, "fx");
+        // `build_scratch_repo` lands two commits; the newest one is
+        // the witness regardless of committer identity.
         assert!(appr.approved_by.contains("Marcus"), "got: {}", appr.approved_by);
         assert_eq!(appr.source, ApprovalSource::Git);
-        // Blob hash should match the current file (reviewer's edit).
         let current = current_spec_hash(&repo, "fx").unwrap();
         assert_eq!(appr.spec_content_hash, current);
     }
 
     #[test]
-    fn git_approval_missing_when_only_one_committer() {
+    fn git_approval_single_committer_is_sufficient() {
+        // A solo developer commits their own spec — that one commit
+        // is a valid approval. No second-committer gate.
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         std::fs::create_dir_all(dir).unwrap();
@@ -341,6 +417,30 @@ mod tests {
         std::fs::write(spec_dir.join("spec.md"), "# solo spec\n").unwrap();
         run_git(dir, &["add", "."]);
         run_git(dir, &["commit", "-q", "-m", "only commit"]);
+        let appr = find_approval_via_git(dir, "solo").expect("solo commit must approve");
+        assert!(appr.approved_by.contains("Solo"));
+        assert_eq!(appr.source, ApprovalSource::Git);
+    }
+
+    #[test]
+    fn git_approval_absent_when_spec_uncommitted() {
+        // The spec file exists in the working tree but has never
+        // been committed — no approval.
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        std::fs::create_dir_all(dir).unwrap();
+        run_git(dir, &["init", "-q", "-b", "main"]);
+        run_git(dir, &["config", "user.name", "Solo"]);
+        run_git(dir, &["config", "user.email", "solo@example.test"]);
+        // A bootstrap commit that doesn't touch the spec, so git's
+        // HEAD exists but the spec itself is untracked.
+        std::fs::write(dir.join("README.md"), "hi\n").unwrap();
+        run_git(dir, &["add", "README.md"]);
+        run_git(dir, &["commit", "-q", "-m", "bootstrap"]);
+        let spec_dir = dir.join(".sovereign").join("features").join("solo");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        std::fs::write(spec_dir.join("spec.md"), "# solo spec\n").unwrap();
+        // spec.md is in the working tree but not added to git.
         assert!(find_approval_via_git(dir, "solo").is_none());
     }
 
@@ -359,44 +459,92 @@ mod tests {
 
     #[test]
     fn mesh_fallback_record_and_lookup() {
-        let tmp = tempfile::tempdir().unwrap();
-        let repo = build_scratch_repo(tmp.path(), "fx");
+        // Exercise the mesh path by working from an *uncommitted*
+        // spec — `git log` returns nothing, so `find_approval` must
+        // fall through to MeshStore.
+        let uncommitted_tmp = tempfile::tempdir().unwrap();
+        let uncommitted_dir = uncommitted_tmp.path();
+        std::fs::create_dir_all(uncommitted_dir).unwrap();
+        run_git(uncommitted_dir, &["init", "-q", "-b", "main"]);
+        run_git(uncommitted_dir, &["config", "user.name", "Solo"]);
+        run_git(uncommitted_dir, &["config", "user.email", "solo@example.test"]);
+        // Bootstrap commit that doesn't touch the spec path.
+        std::fs::write(uncommitted_dir.join("README.md"), "hi\n").unwrap();
+        run_git(uncommitted_dir, &["add", "README.md"]);
+        run_git(uncommitted_dir, &["commit", "-q", "-m", "bootstrap"]);
+        // Spec lives in the working tree but is never committed.
+        let spec_dir = uncommitted_dir.join(".sovereign").join("features").join("solo");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        std::fs::write(spec_dir.join("spec.md"), "# solo\n").unwrap();
+
         let mesh = MeshStore::in_memory().unwrap();
 
-        // No git-approval-eligible commit yet on this branch?
-        // Build a single-committer repo:
-        let solo_tmp = tempfile::tempdir().unwrap();
-        let solo_dir = solo_tmp.path();
-        std::fs::create_dir_all(solo_dir).unwrap();
-        run_git(solo_dir, &["init", "-q", "-b", "main"]);
-        run_git(solo_dir, &["config", "user.name", "Solo"]);
-        run_git(solo_dir, &["config", "user.email", "solo@example.test"]);
-        std::fs::create_dir_all(
-            solo_dir.join(".sovereign").join("features").join("solo"),
-        )
-        .unwrap();
-        std::fs::write(
-            solo_dir.join(".sovereign").join("features").join("solo").join("spec.md"),
-            "# solo\n",
-        )
-        .unwrap();
-        run_git(solo_dir, &["add", "."]);
-        run_git(solo_dir, &["commit", "-q", "-m", "x"]);
-
-        // No git approval here; record via mesh.
-        let appr = record_approval(&mesh, node_id(), solo_dir, "solo").unwrap();
+        // Git returns None (spec uncommitted); mesh is the only
+        // path that can grant approval here.
+        assert!(find_approval_via_git(uncommitted_dir, "solo").is_none());
+        let appr = record_approval(&mesh, node_id(), uncommitted_dir, "solo").unwrap();
         assert_eq!(appr.source, ApprovalSource::Commonwealth);
 
-        let resolved = find_approval(solo_dir, "solo", Some(&mesh)).unwrap();
+        let resolved = find_approval(uncommitted_dir, "solo", Some(&mesh)).unwrap();
         assert_eq!(resolved.source, ApprovalSource::Commonwealth);
         assert_eq!(resolved.feature_id, "solo");
 
-        // find_approval_via_git still returns None on the solo repo.
-        assert!(find_approval_via_git(solo_dir, "solo").is_none());
-
-        // And the two-committer repo still prefers git.
-        let git_appr = find_approval(&repo, "fx", Some(&mesh)).unwrap();
+        // A repo where the spec IS committed resolves via mesh FIRST
+        // when a mesh row exists for that feature id — mesh wins by
+        // design, so `spec accept` can override an old git witness.
+        let committed_tmp = tempfile::tempdir().unwrap();
+        let committed_repo = build_scratch_repo(committed_tmp.path(), "fx");
+        // No mesh row for "fx" yet — should fall through to git.
+        let git_appr = find_approval(&committed_repo, "fx", Some(&mesh)).unwrap();
         assert_eq!(git_appr.source, ApprovalSource::Git);
+    }
+
+    #[test]
+    fn resolve_approved_content_uses_snapshot_when_present() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = build_scratch_repo(tmp.path(), "fx");
+        let mesh = MeshStore::in_memory().unwrap();
+        let appr = record_approval(&mesh, node_id(), &repo, "fx").unwrap();
+        assert!(appr.spec_content_snapshot.is_some());
+        let content = resolve_approved_spec_content(&repo, &appr).unwrap();
+        assert!(content.starts_with("# feature spec"));
+    }
+
+    #[test]
+    fn resolve_approved_content_falls_back_to_git_show() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = build_scratch_repo(tmp.path(), "fx");
+        let appr = find_approval_via_git(&repo, "fx").unwrap();
+        assert!(appr.spec_content_snapshot.is_none());
+        let content = resolve_approved_spec_content(&repo, &appr)
+            .expect("git show path must resolve when witness is reachable");
+        assert!(content.contains("Approved."));
+    }
+
+    #[test]
+    fn accept_drift_rewrites_hash_and_silences_drift() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = build_scratch_repo(tmp.path(), "fx");
+        let mesh = MeshStore::in_memory().unwrap();
+        let original = find_approval_via_git(&repo, "fx").unwrap();
+
+        let spec = spec_path(&repo, "fx");
+        std::fs::write(&spec, "# mutated spec\n\nNew invariant.\n").unwrap();
+        assert!(detect_drift(&original, &repo));
+
+        let accepted =
+            accept_drift(&mesh, node_id(), &repo, "fx", &original).unwrap();
+        assert_ne!(accepted.spec_content_hash, original.spec_content_hash);
+        assert_eq!(accepted.approved_by, original.approved_by);
+        assert_eq!(accepted.source, ApprovalSource::Commonwealth);
+        assert!(!detect_drift(&accepted, &repo));
+
+        // find_approval now prefers git (returns Git source), BUT
+        // the mesh row is the source of truth for a future `accept`
+        // cycle. Confirm the mesh row survives round-trip.
+        let fetched = find_approval_via_mesh(&mesh, "fx").unwrap();
+        assert_eq!(fetched.spec_content_hash, accepted.spec_content_hash);
+        assert!(fetched.spec_content_snapshot.is_some());
     }
 
     #[test]

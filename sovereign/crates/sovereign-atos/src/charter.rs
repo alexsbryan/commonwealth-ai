@@ -59,6 +59,12 @@ pub struct CharterParse {
     pub preamble_md: String,
     /// Milestones in document order.
     pub milestones: Vec<MilestoneSpec>,
+    /// Author opted into automatic red-team after the last milestone.
+    /// Triggered by a line in the preamble matching
+    /// `**Red team:** auto` (case-insensitive; also `true`, `yes`, `on`;
+    /// also accepts the phrasing `**Auto red-team:** true`). Absent
+    /// or any unrecognized value → `false`.
+    pub auto_redteam: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,10 +86,58 @@ pub fn parse(md: &str) -> Result<CharterParse> {
     let body_after_heading = skip_first_line(body);
 
     let milestones = parse_milestones(body_after_heading)?;
+    let preamble_md = preamble.trim_end_matches('\n').to_string();
+    let auto_redteam = detect_auto_redteam(&preamble_md);
     Ok(CharterParse {
-        preamble_md: preamble.trim_end_matches('\n').to_string(),
+        preamble_md,
         milestones,
+        auto_redteam,
     })
+}
+
+/// Scan the preamble for an `**Red team:** auto` (or equivalent)
+/// opt-in. Case-insensitive. Accepted phrasings:
+///
+/// - `**Red team:** auto`
+/// - `**Red-team:** auto`
+/// - `**Auto red-team:** true`
+/// - (values: `auto`, `true`, `yes`, `on`; anything else → off)
+///
+/// Returns `false` when no line matches so legacy charters opt out
+/// by default.
+fn detect_auto_redteam(preamble: &str) -> bool {
+    for line in preamble.lines() {
+        let lower = line.to_lowercase();
+        let stripped = lower.trim();
+        let Some(rest) = split_on_bold_label(stripped) else {
+            continue;
+        };
+        let (label, value) = rest;
+        let label_ok = matches!(
+            label.trim(),
+            "red team" | "red-team" | "redteam" | "auto red-team" | "auto red team" | "auto-red-team"
+        );
+        if !label_ok {
+            continue;
+        }
+        let v = value.trim();
+        if matches!(v, "auto" | "true" | "yes" | "on") {
+            return true;
+        }
+    }
+    false
+}
+
+/// Extract `(label, value)` from a line shaped like
+/// `**label:** value` (bold + colon). Returns `None` when the
+/// markdown bolding is absent.
+fn split_on_bold_label(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("**")?;
+    let close = rest.find("**")?;
+    let inner = &rest[..close];
+    let label = inner.strip_suffix(':').unwrap_or(inner);
+    let after = &rest[close + 2..];
+    Some((label.to_string(), after.to_string()))
 }
 
 /// Locate the byte offset of the `## Milestones` heading. The parser
@@ -377,5 +431,65 @@ Wire the parser in.
         let md = "## Milestones\n\n### 1. t\n\n**Stop condition:** cargo test\n";
         let parsed = parse(md).unwrap();
         assert_eq!(parsed.milestones[0].stop_condition, "cargo test");
+    }
+
+    // ── auto-redteam opt-in (M5.7) ───────────────────────────────
+
+    #[test]
+    fn auto_redteam_absent_defaults_to_false() {
+        let parsed = parse(HAPPY_CHARTER).unwrap();
+        assert!(!parsed.auto_redteam);
+    }
+
+    #[test]
+    fn auto_redteam_opt_in_auto_value_recognized() {
+        let md = "# T\n\n**Red team:** auto\n\n## Milestones\n\n### 1. m\n\n**Stop condition:** `true`\n";
+        let parsed = parse(md).unwrap();
+        assert!(parsed.auto_redteam);
+    }
+
+    #[test]
+    fn auto_redteam_accepts_true_yes_on() {
+        for value in ["true", "yes", "on", "AUTO", "True"] {
+            let md = format!(
+                "# T\n\n**Red team:** {value}\n\n## Milestones\n\n### 1. m\n\n**Stop condition:** `true`\n"
+            );
+            let parsed = parse(&md).unwrap();
+            assert!(parsed.auto_redteam, "value `{value}` should opt in");
+        }
+    }
+
+    #[test]
+    fn auto_redteam_accepts_alt_phrasings() {
+        let variants = [
+            "**Red-team:** auto",
+            "**Auto red-team:** true",
+            "**Auto Red Team:** yes",
+        ];
+        for line in variants {
+            let md = format!(
+                "# T\n\n{line}\n\n## Milestones\n\n### 1. m\n\n**Stop condition:** `true`\n"
+            );
+            let parsed = parse(&md).unwrap();
+            assert!(parsed.auto_redteam, "phrasing `{line}` should opt in");
+        }
+    }
+
+    #[test]
+    fn auto_redteam_off_and_unknown_values_stay_false() {
+        for value in ["off", "false", "no", "maybe", ""] {
+            let md = format!(
+                "# T\n\n**Red team:** {value}\n\n## Milestones\n\n### 1. m\n\n**Stop condition:** `true`\n"
+            );
+            let parsed = parse(&md).unwrap();
+            assert!(!parsed.auto_redteam, "value `{value}` should NOT opt in");
+        }
+    }
+
+    #[test]
+    fn auto_redteam_unrelated_bold_lines_ignored() {
+        let md = "# T\n\n**Note:** nothing to do with red-team\n\n## Milestones\n\n### 1. m\n\n**Stop condition:** `true`\n";
+        let parsed = parse(md).unwrap();
+        assert!(!parsed.auto_redteam);
     }
 }

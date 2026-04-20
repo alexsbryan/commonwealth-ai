@@ -33,6 +33,31 @@ use tokio::sync::Mutex;
 /// because app_ids appear in the gossip protocol frames.
 pub const ATOS_SESSIONS_APP_ID: &str = "atos-sessions";
 
+/// What changed between the previous turn and now — staged by
+/// `ArtifactSurface`'s post_process, rendered by `ContextInjector`'s
+/// process on the next request. Pops on render so the preamble only
+/// shows it once.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ArtifactDelta {
+    /// Number of notes written this turn, grouped by kind.
+    pub notes_by_kind: std::collections::BTreeMap<String, u32>,
+    /// Up to 5 recent note ids per kind — surfaced so the agent can
+    /// reference them by `[note:<id>]` in its next turn.
+    pub recent_note_ids: std::collections::BTreeMap<String, Vec<String>>,
+    /// Milestones whose `stop_passed` flipped true since
+    /// `last_seen_at`. One entry per newly-passing milestone.
+    pub milestones_passed: Vec<MilestonePassEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MilestonePassEvent {
+    pub feature_id: String,
+    pub ordinal: i64,
+    /// Relative path to the rendered artifact, e.g.
+    /// `.sovereign/features/<id>/milestone-2.md`.
+    pub artifact_path: String,
+}
+
 /// Mutable state threaded through the middleware chain. One row per
 /// opencode session id.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +90,11 @@ pub struct AtosSessionState {
     /// replication can set the top-level timestamp for reasons
     /// unrelated to session liveness.
     pub last_seen_at: i64,
+    /// Delta staged by the post-path for the next turn's preamble.
+    /// `#[serde(default)]` so v1 rows (M4-era) decode cleanly with
+    /// this field absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_artifact_delta: Option<ArtifactDelta>,
 }
 
 impl AtosSessionState {
@@ -78,6 +108,7 @@ impl AtosSessionState {
             pending_deviation_ack: false,
             deviation_note_id: None,
             last_seen_at: unix_now(),
+            pending_artifact_delta: None,
         }
     }
 
@@ -348,6 +379,7 @@ mod tests {
             pending_deviation_ack: false,
             deviation_note_id: None,
             last_seen_at: 0,
+            pending_artifact_delta: None,
         };
         let bytes = serde_json::to_vec(&ancient).unwrap();
         store
