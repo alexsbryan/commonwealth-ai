@@ -92,6 +92,10 @@ pub fn internal_router(state: AppState) -> Router {
             get(routes_internal::corpus_progress),
         )
         .route(
+            "/internal/corpus/status",
+            get(routes_internal::corpus_status),
+        )
+        .route(
             "/internal/node/activity",
             post(routes_internal::node_activity),
         )

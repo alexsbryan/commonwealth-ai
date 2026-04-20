@@ -610,6 +610,169 @@ pub async fn corpus_progress(
     Json(ProgressSnapshotResponse { progress: snapshot })
 }
 
+/// GET /internal/corpus/status — richer per-corpus snapshot that
+/// combines every signal the Desktop UI needs to render the
+/// "Installing…" row without needing to have initiated the install
+/// itself.
+///
+/// Reports an entry for every corpus where any of:
+///   - an ingest task is currently in `active_ingests`;
+///   - a canonical or partition-of-self directory is present with
+///     `ingestion_in_progress=true` (daemon-owned resume after a
+///     Desktop close / crash);
+///   - a recent progress event is cached but the task has already
+///     exited (so terminal phases still propagate to a late
+///     subscriber).
+///
+/// Each entry fuses the latest `IngestProgress` with on-disk state
+/// (shard counts, committed_iter_pos, partition/canonical presence)
+/// plus a best-effort `estimated_fraction`. The Desktop poller reads
+/// this and emits `corpus-progress` events so the UI state stays in
+/// sync whether or not this particular Desktop session kicked off
+/// the install.
+pub async fn corpus_status(
+    State(state): State<AppState>,
+) -> Json<CorpusStatusResponse> {
+    let engine = match state.inner.corpus_engine.as_ref() {
+        Some(e) => e.clone(),
+        None => {
+            return Json(CorpusStatusResponse { entries: Vec::new() });
+        }
+    };
+
+    // Union of every corpus id worth reporting. Using a BTreeSet so
+    // the response is deterministically ordered — makes debugging
+    // and the integration test's snapshot comparisons less flaky.
+    let mut candidates: std::collections::BTreeSet<String> =
+        Default::default();
+    for id in state.inner.active_ingests.read().await.iter() {
+        candidates.insert(id.clone());
+    }
+    for id in state.inner.corpus_progress.read().await.keys() {
+        candidates.insert(id.clone());
+    }
+    candidates.extend(engine.in_progress_ingestions());
+
+    let active_snapshot = state.inner.active_ingests.read().await.clone();
+    let progress_snapshot = state.inner.corpus_progress.read().await.clone();
+
+    // Gather per-corpus data, then spawn sample jobs for any corpus
+    // that needs a fresh article-stats sidecar. We do this OFF the
+    // async runtime (`spawn_blocking`) because the first sample for
+    // a ~74 GB Wikipedia JSONL burns 1–2 s of synchronous I/O;
+    // doing it inline would block other handlers on this axum worker.
+    let mut entries: Vec<CorpusStatusEntry> = Vec::new();
+    for corpus_id in candidates {
+        let disk = engine.corpus_disk_status(&corpus_id);
+        let active = active_snapshot.contains(&corpus_id);
+        let progress = progress_snapshot.get(&corpus_id).cloned();
+        // Cheap sidecar read — no I/O beyond a small file if it
+        // exists. Sidecar is absent on the first daemon-session
+        // observation of a corpus; we kick off the sampler below and
+        // the next `/status` poll will pick up the fresh value.
+        let cached_stats = engine.cached_article_stats(&corpus_id);
+
+        if cached_stats.is_none() && disk.committed_iter_pos > 0 {
+            // Spawn the sampler in the background. It writes the
+            // sidecar on completion; the next poll reads it.
+            let engine_for_task = engine.clone();
+            let corpus_id_for_task = corpus_id.clone();
+            tokio::task::spawn_blocking(move || {
+                let _ = engine_for_task.compute_article_stats(&corpus_id_for_task);
+            });
+        }
+
+        let estimated_fraction = disk
+            .estimated_fraction()
+            .or_else(|| {
+                // Sample-derived fraction for the legacy / resume
+                // path: committed sections vs estimated total.
+                let stats = cached_stats.as_ref()?;
+                if stats.total_sections_estimate == 0 {
+                    return None;
+                }
+                Some(
+                    (disk.committed_iter_pos as f32
+                        / stats.total_sections_estimate as f32)
+                        .clamp(0.0, 1.0),
+                )
+            })
+            .or_else(|| progress.as_ref().and_then(progress_fraction));
+
+        entries.push(CorpusStatusEntry {
+            corpus_id: corpus_id.clone(),
+            active,
+            progress,
+            shards_completed: disk.shards_completed.len(),
+            shards_total: disk.shards_total,
+            committed_iter_pos: disk.committed_iter_pos,
+            canonical_present: disk.canonical_present,
+            partition_present: disk.partition_present,
+            canonical_in_progress: disk.canonical_in_progress,
+            partition_in_progress: disk.partition_in_progress,
+            estimated_fraction,
+            estimated_total_sections: cached_stats
+                .as_ref()
+                .map(|s| s.total_sections_estimate),
+            estimated_total_articles: cached_stats.as_ref().map(|s| s.total_articles),
+        });
+    }
+
+    Json(CorpusStatusResponse { entries })
+}
+
+fn progress_fraction(progress: &corpus_engine::IngestProgress) -> Option<f32> {
+    use corpus_engine::IngestProgress as P;
+    match progress {
+        P::Downloading { percent, .. } => Some((*percent / 100.0).clamp(0.0, 1.0)),
+        P::Embedding { chunks_embedded, total, .. } if *total > 0 => {
+            Some(((*chunks_embedded as f32) / (*total as f32)).clamp(0.0, 1.0))
+        }
+        P::Indexing { chunks_indexed, total } if *total > 0 => {
+            Some(((*chunks_indexed as f32) / (*total as f32)).clamp(0.0, 1.0))
+        }
+        P::Complete { .. } => Some(1.0),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct CorpusStatusResponse {
+    pub entries: Vec<CorpusStatusEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CorpusStatusEntry {
+    pub corpus_id: String,
+    /// A task is currently tracked in `active_ingests` for this
+    /// corpus. False means either no ingest is running, or an
+    /// ingest exited without clearing its entry (daemon crash).
+    pub active: bool,
+    /// Latest `IngestProgress` observed for this corpus, if any.
+    pub progress: Option<corpus_engine::IngestProgress>,
+    pub shards_completed: usize,
+    pub shards_total: usize,
+    pub committed_iter_pos: u64,
+    pub canonical_present: bool,
+    pub partition_present: bool,
+    pub canonical_in_progress: bool,
+    pub partition_in_progress: bool,
+    /// Best-effort completion fraction in `[0.0, 1.0]`. `None` when
+    /// we genuinely can't estimate (e.g. pre-first-embed-batch in
+    /// a legacy canonical resume where shards aren't tracked).
+    pub estimated_fraction: Option<f32>,
+    /// Cached sample estimate of total sections (extractor-emitted
+    /// documents) in the source JSONL. Drives the resume-path
+    /// percent via `committed_iter_pos / total`. `None` until the
+    /// sampler has written a sidecar for this corpus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_total_sections: Option<u64>,
+    /// Cached sample estimate of total JSONL lines (articles) in
+    /// the source. Exposed mainly for diagnostic display.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_total_articles: Option<u64>,
+}
+
 /// Spawn an `engine.ingest` task for `corpus_id`, unifying the
 /// lifecycle bookkeeping across every entry point (install route,
 /// auto-collaborate loop, future CLI).

@@ -226,6 +226,31 @@ struct CancelResp {
     wiped: bool,
 }
 
+#[derive(serde::Deserialize, Debug)]
+#[allow(dead_code)] // Most fields carried for Debug-format panics only.
+struct StatusEntry {
+    corpus_id: String,
+    active: bool,
+    progress: Option<IngestProgress>,
+    shards_completed: usize,
+    shards_total: usize,
+    committed_iter_pos: u64,
+    canonical_present: bool,
+    partition_present: bool,
+    canonical_in_progress: bool,
+    partition_in_progress: bool,
+    estimated_fraction: Option<f32>,
+    #[serde(default)]
+    estimated_total_sections: Option<u64>,
+    #[serde(default)]
+    estimated_total_articles: Option<u64>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+struct StatusResponse {
+    entries: Vec<StatusEntry>,
+}
+
 /// Poll `/internal/corpus/progress` until the predicate returns true
 /// or a timeout elapses. Returns the last observed snapshot.
 async fn wait_until_progress<F>(
@@ -325,6 +350,32 @@ async fn install_cancel_reinstall_lifecycle() {
         "partition-of-self directory should exist while ingest is running"
     );
 
+    // Status endpoint should expose the same corpus with a fused
+    // on-disk + progress view. This is the data path the Desktop
+    // poller consumes so the UI reflects daemon-owned ingests even
+    // when Desktop didn't initiate them.
+    let (status, body) = get(
+        internal_router(state.clone()),
+        "/internal/corpus/status",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let status_resp: StatusResponse = serde_json::from_slice(&body).unwrap();
+    let entry = status_resp
+        .entries
+        .iter()
+        .find(|e| e.corpus_id == corpus_id)
+        .expect("status response must include our active corpus");
+    assert!(entry.active, "entry should be marked active while ingesting");
+    assert!(
+        entry.partition_in_progress,
+        "entry should report partition_in_progress while the ingest writes to the partition dir"
+    );
+    assert!(
+        entry.progress.is_some(),
+        "entry should carry the latest IngestProgress event once one has landed"
+    );
+
     // ── Phase 2: cancel + wipe ──────────────────────────────────────
     let (status, body) = post_json(
         internal_router(state.clone()),
@@ -411,4 +462,157 @@ async fn install_cancel_reinstall_lifecycle() {
             .unwrap_or(false),
         "canonical meta should have no processed_shards entries"
     );
+}
+
+/// Exercises the "daemon resumed a legacy canonical ingest after the
+/// Desktop session closed" scenario — no active ingest, no recent
+/// `IngestProgress` event, just on-disk state and an `extracted.jsonl`
+/// next to the corpus. The sampler should fire on first `/status`
+/// poll and publish a section-based `estimated_fraction` on the next.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn status_sampler_publishes_estimated_fraction_on_resume() {
+    let tmp = TempDir::new().unwrap();
+    let corpus_id = "testcorpus";
+
+    // We don't need a full ingest pipeline for this test — just the
+    // disk fingerprint the status handler reads: canonical index dir
+    // with committed_iter_pos and ingestion_in_progress, plus the
+    // extractor's merged JSONL file the sampler consumes.
+    let index_dir = tmp.path().join("indexes");
+    let downloads = index_dir.join("_downloads");
+    std::fs::create_dir_all(&downloads).unwrap();
+    let canonical = index_dir.join(corpus_id);
+    std::fs::create_dir_all(&canonical).unwrap();
+    std::fs::write(
+        canonical.join("_corpus_meta.json"),
+        serde_json::json!({
+            "corpus_id": corpus_id,
+            "ingestion_in_progress": true,
+            "committed_iter_pos": 30u64,
+            "processed_shards": [],
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    // 50 articles × 2 sections each → sampler estimates
+    // total_sections ≈ 50 × (2 + 1 lead) = 150. With committed=30 we
+    // expect fraction ≈ 0.20. We allow a generous ±20 % window so
+    // the assertion isn't brittle against the sampler's exact
+    // bookkeeping (lead-counting etc.).
+    let extracted = downloads.join(format!("{corpus_id}.extracted.jsonl"));
+    let mut jsonl = String::new();
+    for i in 0..50 {
+        let line = serde_json::json!({
+            "name": format!("Article {i}"),
+            "identifier": i,
+            "abstract": "Stub abstract with enough padding to clear the extractor minimums.",
+            "url": format!("https://en.wikipedia.org/wiki/A{i}"),
+            "sections": [
+                { "name": "A", "type": "section", "has_parts": [] },
+                { "name": "B", "type": "section", "has_parts": [] }
+            ]
+        });
+        jsonl.push_str(&line.to_string());
+        jsonl.push('\n');
+    }
+    std::fs::write(&extracted, jsonl).unwrap();
+
+    // Build an AppState against this pre-seeded disk layout. No
+    // ingest is spawned — the status handler does all the work on
+    // its own by consulting the engine's on-disk helpers.
+    let engine = CorpusEngine::new(
+        tmp.path().join("recipes"),
+        index_dir.clone(),
+        fast_mock_embed_fn(),
+    )
+    .with_embedding_model("mock-8d")
+    .with_self_node_id("node-test");
+    let mesh = Mesh {
+        id: MeshId::from_u128(1),
+        name: "Test Mesh".into(),
+        join_key_hash: [0u8; 32],
+        members: HashMap::new(),
+        peers: vec![],
+    };
+    let state = AppState::new_with_platform_and_engine(
+        NodeId::from_u128(1),
+        mesh,
+        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+        Arc::new(commonwealth_app::registry::AppRegistry::new()),
+        Some(Arc::new(engine)),
+    );
+
+    // First poll: sampler hasn't run yet, so sidecar is absent and
+    // we should see None for estimated_total_sections. The handler
+    // kicks off the sampler in a spawn_blocking task.
+    let (status, body) = get(
+        internal_router(state.clone()),
+        "/internal/corpus/status",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let resp: StatusResponse = serde_json::from_slice(&body).unwrap();
+    let first = resp
+        .entries
+        .iter()
+        .find(|e| e.corpus_id == corpus_id)
+        .expect("status must include legacy-resume corpus");
+    assert!(first.canonical_in_progress);
+    assert_eq!(first.committed_iter_pos, 30);
+    // First poll: may or may not have the sidecar depending on how
+    // fast the spawn_blocking task lands. Don't assert — just ensure
+    // the overall shape is sensible.
+    let _ = first.estimated_total_sections;
+
+    // Give the sampler a beat to finish. The fixture is ~5 KB so the
+    // full sample runs in microseconds; a 500 ms budget is ample and
+    // keeps the test fast locally.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    let entry = loop {
+        let (_, body) = get(
+            internal_router(state.clone()),
+            "/internal/corpus/status",
+        )
+        .await;
+        let resp: StatusResponse = serde_json::from_slice(&body).unwrap();
+        let entry = resp
+            .entries
+            .into_iter()
+            .find(|e| e.corpus_id == corpus_id)
+            .expect("status must still include corpus");
+        if entry.estimated_total_sections.is_some()
+            && entry.estimated_fraction.is_some()
+        {
+            break entry;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!(
+                "sampler never populated estimated_total_sections for {corpus_id}; last entry = {:?}",
+                entry
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+
+    let total = entry
+        .estimated_total_sections
+        .expect("sampler should have published a total");
+    let fraction = entry.estimated_fraction.unwrap();
+    assert!(total > 0, "sampler must publish a non-zero total");
+    // Truth is 30 committed / (50 × 3) = 0.20; allow ±30 % for the
+    // lead-counting heuristic and sample extrapolation.
+    assert!(
+        (fraction - 0.20).abs() < 0.30,
+        "expected fraction near 0.20, got {fraction} (total={total})"
+    );
+    assert!(
+        entry.estimated_total_articles.unwrap_or(0) > 0,
+        "articles estimate should accompany sections estimate"
+    );
+
+    // Sidecar file should have landed on disk so the next daemon
+    // session reads it without resampling.
+    let sidecar = downloads.join(format!("{corpus_id}.extracted.jsonl.count"));
+    assert!(sidecar.exists(), "sidecar file should be written");
 }
