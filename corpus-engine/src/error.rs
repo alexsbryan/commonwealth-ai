@@ -49,4 +49,13 @@ pub enum Error {
 
     #[error("Shard mismatch: {0}")]
     ShardMismatch(String),
+
+    /// The ingest task observed a cancellation signal via
+    /// [`CancellationFlag`](crate::CancellationFlag) and returned
+    /// without completing. Not a failure per se — the caller (Desktop
+    /// "Cancel" / `POST /internal/corpus/cancel`) asked for this.
+    /// Distinct variant so callers can suppress the error log and run
+    /// the wipe-everything cleanup path.
+    #[error("Ingest of '{0}' cancelled by user")]
+    Cancelled(String),
 }

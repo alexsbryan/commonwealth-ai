@@ -248,6 +248,15 @@ struct IndexMeta {
     /// so pre-v2 indexes deserialize cleanly.
     #[serde(default)]
     source_path: Option<String>,
+
+    /// ZIP shard indices that have been fully committed for this
+    /// corpus. Populated by the JSONL extractor at shard boundaries
+    /// and used by the collaborative-ingestion coordinator to decide
+    /// which shards are still outstanding when computing a sharded
+    /// partition plan. Empty for corpora that do not ingest from a
+    /// multi-shard ZIP.
+    #[serde(default)]
+    processed_shards: Vec<usize>,
 }
 
 fn meta_path(index_dir: &Path) -> std::path::PathBuf {

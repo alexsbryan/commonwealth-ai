@@ -49,7 +49,7 @@ pub mod project_docs;
 
 // ─── Public API Re-exports ──────────────────────────────
 
-pub use engine::CorpusEngine;
+pub use engine::{CancellationFlag, CancellationRegistry, CorpusEngine};
 pub use enrichment::{
     Domain, EnrichmentProgress, FieldModelEngine, FieldModelStats, FieldSkeleton,
     reprocess_skeleton_failures,

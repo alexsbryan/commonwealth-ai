@@ -216,6 +216,7 @@ impl CorpusIndex {
             enriched_chunks: None,
             source_version: None,
             update_manifest_url: None,
+            processed_shards: Vec::new(),
         };
         write_meta(path, &meta)?;
 
@@ -324,6 +325,30 @@ impl CorpusIndex {
         let mut meta = read_meta(index_dir)?;
         meta.committed_iter_pos = iter_pos;
         write_meta(index_dir, &meta)
+    }
+
+    /// Mark a zip shard as fully committed. Idempotent — adding a
+    /// shard index that is already recorded is a no-op. The resulting
+    /// list is stored sorted to keep JSON diffs deterministic.
+    ///
+    /// Called by the ingest pipeline at each shard boundary so the
+    /// collaborative-ingestion coordinator can compute the set of
+    /// still-outstanding shards when planning a partition.
+    pub fn record_processed_shard(&self, shard_index: usize) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        if !meta.processed_shards.contains(&shard_index) {
+            meta.processed_shards.push(shard_index);
+            meta.processed_shards.sort_unstable();
+        }
+        write_meta(index_dir, &meta)
+    }
+
+    /// Read the set of fully-committed zip shard indices for this index.
+    pub fn processed_shards(&self) -> Result<Vec<usize>> {
+        let index_dir = Path::new(self.db.uri());
+        let meta = read_meta(index_dir)?;
+        Ok(meta.processed_shards)
     }
 
     /// Clear the `ingestion_in_progress` flag. Called by the engine once the

@@ -17,6 +17,100 @@ use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
 use crate::types::{ChunkRange, IndexInfo, IndexStats, ShardInfo};
 
+/// Promote a single partition directory to a canonical corpus index by
+/// renaming it into place, then rewriting `_corpus_meta.json` so it no
+/// longer carries partition-specific fields (`is_shard`, chunk range,
+/// `processed_shards`) and is marked ingestion-complete.
+///
+/// Zero-copy finalisation for the "no peers ever joined" case — avoids
+/// copying tens of gigabytes of chunks into a fresh LanceDB index only
+/// to end up with the same content.
+///
+/// Errors out (without touching either path) when:
+///   - the source does not exist, does not contain `_corpus_meta.json`,
+///     or is a file rather than a directory;
+///   - the output path already exists (caller should use the full
+///     `merge_shards` path to fold into existing canonical data).
+///
+/// The rename falls back to copy-then-remove when source and output are
+/// on different filesystems (common when `index_dir` is a bind mount).
+pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
+    if !source.is_dir() {
+        return Err(Error::NoShardsFound(format!(
+            "promote_single_shard: source {} is not a directory",
+            source.display()
+        )));
+    }
+    let source_meta = source.join("_corpus_meta.json");
+    if !source_meta.exists() {
+        return Err(Error::NoShardsFound(format!(
+            "promote_single_shard: {} has no _corpus_meta.json",
+            source.display()
+        )));
+    }
+    if output.exists() {
+        return Err(Error::Database(format!(
+            "promote_single_shard: refusing to overwrite existing {}",
+            output.display()
+        )));
+    }
+
+    // Same-filesystem rename is atomic. Fall back to recursive copy if
+    // rename fails with `EXDEV` or similar.
+    if let Some(parent) = output.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    if let Err(e) = std::fs::rename(source, output) {
+        tracing::warn!(
+            source = %source.display(),
+            output = %output.display(),
+            error = %e,
+            "promote_single_shard: atomic rename failed, falling back to copy"
+        );
+        copy_dir_recursive(source, output)?;
+        std::fs::remove_dir_all(source)?;
+    }
+
+    // Rewrite meta to drop partition-specific fields and mark complete.
+    let raw = std::fs::read_to_string(output.join("_corpus_meta.json"))?;
+    let mut meta: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| Error::Serialization(format!("read meta: {e}")))?;
+    if let Some(obj) = meta.as_object_mut() {
+        obj.insert("is_shard".into(), serde_json::Value::Bool(false));
+        obj.insert("chunk_range_start".into(), serde_json::Value::Null);
+        obj.insert("chunk_range_end".into(), serde_json::Value::Null);
+        obj.insert(
+            "processed_shards".into(),
+            serde_json::Value::Array(Vec::new()),
+        );
+        obj.insert(
+            "ingestion_in_progress".into(),
+            serde_json::Value::Bool(false),
+        );
+    }
+    std::fs::write(
+        output.join("_corpus_meta.json"),
+        serde_json::to_string_pretty(&meta)
+            .map_err(|e| Error::Serialization(format!("write meta: {e}")))?,
+    )?;
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_child = entry.path();
+        let dst_child = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&src_child, &dst_child)?;
+        } else {
+            std::fs::copy(&src_child, &dst_child)?;
+        }
+    }
+    Ok(())
+}
+
 /// Report chunk ID range, count, and size for an index.
 pub async fn index_stats(index_path: &Path) -> Result<IndexStats> {
     let index = CorpusIndex::open(index_path).await?;
@@ -137,6 +231,28 @@ pub async fn merge_shards(
 ) -> Result<IndexInfo> {
     if shard_paths.is_empty() {
         return Err(Error::NoShardsFound("no shard paths provided".into()));
+    }
+
+    // Single-shard fast path: when the coordinator (or a solo install)
+    // has only one input to "merge", copying every chunk into a fresh
+    // LanceDB index is pure waste — that's tens of gigabytes of I/O for
+    // Wikipedia. Atomic-rename the shard directory into place instead
+    // and rewrite `_corpus_meta.json` to shed its is_shard/partition
+    // metadata. The fast path refuses when the output path already
+    // holds data so we never clobber a prior canonical index; callers
+    // that actually do want to fold a partition into an existing
+    // canonical fall through to the full merge below (which dedupes
+    // via `content_hash`).
+    if shard_paths.len() == 1 {
+        let source = &shard_paths[0];
+        let output_has_data = output_path.join("_corpus_meta.json").exists();
+        if !output_has_data && source != output_path {
+            promote_single_shard(source, output_path)?;
+            return CorpusIndex::open(output_path)
+                .await?
+                .info()
+                .await;
+        }
     }
 
     // Read metadata from first shard.
@@ -479,6 +595,66 @@ mod tests {
         assert_eq!(merged_info.chunk_count, 10);
         assert!(!merged_info.is_shard);
         assert_eq!(merged_info.corpus_id, "test");
+    }
+
+    #[tokio::test]
+    async fn single_shard_merge_fast_paths_to_rename() {
+        // Given a single shard directory and no existing output, merge_shards
+        // must rename in place rather than copy every chunk through LanceDB.
+        // We verify the fast-path ran by: (a) the original directory no longer
+        // exists, and (b) the merged index has the same chunk count.
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 7).await;
+        let stats = index_stats(&source_path).await.unwrap();
+
+        let shard_path = dir.path().join("wikipedia-partition-local");
+        extract_shard(
+            &source_path,
+            ChunkRange::new(stats.min_chunk_id, stats.max_chunk_id),
+            &shard_path,
+        )
+        .await
+        .unwrap();
+        assert!(shard_path.exists());
+
+        let merged_path = dir.path().join("wikipedia");
+        let info = merge_shards(&[shard_path.clone()], &merged_path)
+            .await
+            .unwrap();
+        assert_eq!(info.chunk_count, 7);
+        assert!(
+            !shard_path.exists(),
+            "source partition dir should have been renamed away, got {}",
+            shard_path.display()
+        );
+        assert!(merged_path.join("_corpus_meta.json").exists());
+
+        // _corpus_meta.json must have shed partition-specific fields.
+        let raw = std::fs::read_to_string(merged_path.join("_corpus_meta.json")).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(v["is_shard"], serde_json::Value::Bool(false));
+        assert!(v["processed_shards"].as_array().unwrap().is_empty());
+        assert_eq!(v["ingestion_in_progress"], serde_json::Value::Bool(false));
+    }
+
+    #[tokio::test]
+    async fn single_shard_merge_refuses_when_output_exists() {
+        // If the output path already holds a corpus_meta, the fast-path
+        // refuses and we fall through to full merge — which in turn produces
+        // the expected error because LanceDB won't create a duplicate table.
+        // What we care about here is that promote_single_shard itself leaves
+        // everything alone when the output is populated.
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        create_test_index(&src, 3).await;
+        let dst = dir.path().join("dst");
+        create_test_index(&dst, 1).await;
+
+        let result = promote_single_shard(&src, &dst);
+        assert!(result.is_err(), "must refuse to overwrite populated output");
+        // Source stays untouched.
+        assert!(src.join("_corpus_meta.json").exists());
     }
 
     #[tokio::test]

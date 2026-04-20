@@ -119,7 +119,13 @@ pub enum ReconstructionMethod {
 // ─── Progress callbacks ────────────────────────────────────────────────────
 
 /// Progress updates during corpus ingestion.
-#[derive(Debug, Clone)]
+///
+/// `Serialize`/`Deserialize` are derived so the commonwealth-api
+/// `/internal/corpus/progress` endpoint can expose a snapshot of the
+/// per-corpus progress map to HTTP clients (the Sovereign Desktop
+/// command, the CLI, and any future headless consumer). The variant
+/// tag is represented externally as the variant name.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum IngestProgress {
     Downloading {
         percent: f32,

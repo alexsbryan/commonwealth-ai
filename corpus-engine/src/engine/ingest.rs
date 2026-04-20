@@ -85,14 +85,120 @@ impl CorpusEngine {
             recipe.index.embedding_dimensions = probe.len();
         }
 
+        // ── Choose output path ─────────────────────────────────────
+        //
+        // Unified primitive: all new ingests write to the per-node
+        // partition directory (`<corpus>-partition-<self>/`). The
+        // canonical `<corpus>/` directory is materialised only by
+        // `finalise_solo_ingest` (single-shard rename) or by
+        // `ShardManager::coordinate_merge` (peers participated).
+        //
+        // Compatibility shim: if the canonical directory already
+        // exists with committed data AND no partition-of-self exists,
+        // we stay on the legacy in-place path — the user has partial
+        // work from a pre-unification install that would otherwise
+        // be invisible under the new flow. They can complete the
+        // legacy ingest or `remove_corpus_everything` and restart
+        // under the new flow. New installs and fresh resumes from
+        // peers always use the partition path.
+        let corpus_id = recipe.corpus.id.clone();
+        let canonical = self.index_dir.join(&corpus_id);
+        let self_partition = self.partition_path(&corpus_id);
+        let legacy_resume = canonical.exists()
+            && CorpusIndex::has_committed_data(&canonical)
+            && !self_partition.exists();
+        let index_path = if legacy_resume {
+            tracing::info!(
+                corpus_id,
+                path = %canonical.display(),
+                "ingest: legacy canonical with committed data — resuming in place (no partition split)"
+            );
+            canonical.clone()
+        } else {
+            self_partition.clone()
+        };
+
+        // For multi-shard JSONL corpora, restrict this ingest to the
+        // shards that have NOT already been recorded as processed
+        // anywhere on disk (canonical + partition-of-self + peer
+        // partitions from a prior run). Missing or single-shard
+        // sources keep `shard_indices = None`, preserving the
+        // legacy extractor behaviour that reads everything.
+        if !legacy_resume {
+            let shard_count = self.jsonl_source_shard_count(&corpus_id).unwrap_or(1);
+            if shard_count > 1 {
+                let processed: std::collections::HashSet<usize> = self
+                    .corpus_processed_shards(&corpus_id)
+                    .into_iter()
+                    .collect();
+                let remaining: Vec<usize> = (0..shard_count)
+                    .filter(|i| !processed.contains(i))
+                    .collect();
+                if remaining.is_empty() {
+                    tracing::info!(
+                        corpus_id,
+                        shard_count,
+                        "ingest: all shards already processed — finaliser will promote"
+                    );
+                }
+                apply_jsonl_shard_override(&mut recipe, Some(remaining));
+            }
+        }
+
         // ── Run the actual pipeline with cleanup-on-failure ───────
-        let index_path = self.index_dir.join(&recipe.corpus.id);
         let result = self
             .ingest_inner(&recipe, &index_path, &progress)
             .await;
 
+        // On successful completion of a new-flow ingest, attempt to
+        // promote the partition to canonical. If peer partitions are
+        // already present (collaborative run), the finaliser defers
+        // to `ShardManager::coordinate_merge`; we log and return the
+        // partition IngestResult unchanged.
+        let result = match result {
+            Ok(r) if !legacy_resume => match self.finalise_solo_ingest(&corpus_id) {
+                Ok(true) => {
+                    tracing::info!(
+                        corpus_id,
+                        "ingest: promoted partition-of-self to canonical (solo run)"
+                    );
+                    Ok(r)
+                }
+                Ok(false) => {
+                    tracing::info!(
+                        corpus_id,
+                        "ingest: left partition on disk (peer partitions present or canonical already exists)"
+                    );
+                    Ok(r)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        corpus_id,
+                        error = %e,
+                        "ingest: finalise_solo_ingest failed — partition-of-self left in place"
+                    );
+                    Ok(r)
+                }
+            },
+            other => other,
+        };
+
         match result {
             Ok(r) => Ok(r),
+            Err(Error::Cancelled(corpus_id)) => {
+                // User-initiated cancel: the Desktop "Cancel" handler
+                // (via POST /internal/corpus/cancel) is responsible for
+                // calling `remove_corpus_everything` once the task exits.
+                // We must NOT wipe here because that would race the
+                // caller's own wipe and could swallow an in-flight
+                // recreation (e.g. a second install fired immediately
+                // after Cancel before the handler's wipe landed).
+                tracing::info!(
+                    corpus = %corpus_id,
+                    "ingest cancelled — caller owns cleanup"
+                );
+                Err(Error::Cancelled(corpus_id))
+            }
             Err(e) => {
                 if index_path.exists() {
                     if CorpusIndex::has_committed_data(&index_path) {
@@ -185,6 +291,14 @@ impl CorpusEngine {
         let mut chunks_per_file: HashMap<String, u64> = HashMap::new();
         // Per-file chunk counters for chunks already flushed (committed to LanceDB).
         let mut flushed_chunks_per_file: HashMap<String, u64> = HashMap::new();
+        // Track which shard indices have already been recorded in
+        // `processed_shards` this run so we don't rewrite the meta on
+        // every flush after the boundary passes.
+        let mut recorded_shards: std::collections::HashSet<usize> = index
+            .processed_shards()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
 
         // Two-tier buffering:
         //  1. pending_chunks/texts: accumulate until EMBED_BATCH_SIZE, then embed
@@ -211,12 +325,51 @@ impl CorpusEngine {
             );
         }
 
+        // Register (or look up) the cancellation flag for this corpus.
+        // Both the Desktop-originated install path and the peer
+        // ingest_partition HTTP handler share the same registry, so a
+        // cancel fired from Desktop stops whichever task is actually
+        // running on this node. The flag is polled at every doc,
+        // embed-batch, and tier-2 flush boundary.
+        let cancel_flag = self.cancel_registry.register(&recipe.corpus.id);
+        // RAII guard that unregisters on any exit path (success, cancel,
+        // error, panic-unwind). Crucial so a subsequent ingest for the
+        // same corpus gets a fresh flag rather than an already-tripped
+        // stale one.
+        struct CancelGuard<'a> {
+            registry: &'a crate::engine::CancellationRegistry,
+            corpus_id: &'a str,
+        }
+        impl Drop for CancelGuard<'_> {
+            fn drop(&mut self) {
+                self.registry.unregister(self.corpus_id);
+            }
+        }
+        let _cancel_guard = CancelGuard {
+            registry: &self.cancel_registry,
+            corpus_id: &recipe.corpus.id,
+        };
+
         for doc_result in doc_iter {
             iter_pos += 1;
 
             // Skip documents that were already committed in a previous run.
             if iter_pos <= resume_iter_pos {
                 continue;
+            }
+
+            // Cooperative cancellation — polled once per document (cheap
+            // atomic load). Exits between documents so the current flush
+            // boundary is respected and `committed_iter_pos` stays
+            // consistent with what's durably written.
+            if cancel_flag.is_cancelled() {
+                tracing::info!(
+                    corpus = %recipe.corpus.id,
+                    iter_pos,
+                    total_chunks,
+                    "ingest cancelled by user request — stopping cleanly"
+                );
+                return Err(Error::Cancelled(recipe.corpus.id.clone()));
             }
 
             let doc = match doc_result {
@@ -378,6 +531,12 @@ impl CorpusEngine {
                         source_manifest.as_mut(),
                         index_path,
                     );
+                    mark_complete_shards(
+                        iter_pos,
+                        &file_boundary_iter_pos,
+                        &mut recorded_shards,
+                        &index,
+                    );
 
                     if insert_ms > 5000 {
                         tracing::warn!(
@@ -450,6 +609,12 @@ impl CorpusEngine {
                 source_manifest.as_mut(),
                 index_path,
             );
+            mark_complete_shards(
+                iter_pos,
+                &file_boundary_iter_pos,
+                &mut recorded_shards,
+                &index,
+            );
         } else if let Some(ref last_sf) = prev_source_file {
             // No final flush needed (buffer empty) but we still need to close
             // the last file if there was one (can happen on resume when all
@@ -461,6 +626,12 @@ impl CorpusEngine {
                 &flushed_chunks_per_file,
                 source_manifest.as_mut(),
                 index_path,
+            );
+            mark_complete_shards(
+                iter_pos,
+                &file_boundary_iter_pos,
+                &mut recorded_shards,
+                &index,
             );
         }
 
@@ -748,11 +919,13 @@ impl CorpusEngine {
                 controversy_patterns,
                 factual_patterns,
                 article_range,
+                shard_indices,
             } => Box::new(
                 extractors::wikipedia_jsonl::WikipediaJsonlExtractor {
                     controversy_patterns: controversy_patterns.clone(),
                     factual_patterns: factual_patterns.clone(),
                     article_range: *article_range,
+                    shard_indices: shard_indices.clone(),
                 },
             ),
             #[cfg(feature = "treesitter")]
@@ -831,11 +1004,37 @@ impl CorpusEngine {
             .resolve_recipe(&crate::types::CorpusSpec::Builtin(recipe_id.to_string()))
             .await?;
 
-        // Override file_indices on the HF acquirer when provided.
-        if let (Some(indices), AcquirerConfig::HuggingFaceDataset { ref mut file_indices, .. }) =
-            (file_indices, &mut recipe.acquire)
-        {
-            *file_indices = Some(indices);
+        // Route file_indices to the right consumer based on recipe shape.
+        //
+        // - HF parquet corpora: indices select which parquet shards the
+        //   acquirer downloads.
+        // - JSONL ZIP corpora (Wikipedia): indices select which JSONL
+        //   entries inside the ZIP the extractor streams. This is the
+        //   safe partition key for multi-shard JSONL — article-range
+        //   partitioning is unsound across peers with non-identical
+        //   extractions (see scheduler::knowledge_assignment docs).
+        if let Some(indices) = file_indices {
+            match (&mut recipe.acquire, &mut recipe.extract) {
+                (
+                    AcquirerConfig::HuggingFaceDataset { ref mut file_indices, .. },
+                    _,
+                ) => {
+                    *file_indices = Some(indices);
+                }
+                (
+                    _,
+                    ExtractorConfig::WikipediaJsonl { ref mut shard_indices, .. },
+                ) => {
+                    *shard_indices = Some(indices);
+                }
+                _ => {
+                    tracing::warn!(
+                        "ingest_with_overrides received file_indices for a recipe \
+                         with neither an HF acquirer nor a WikipediaJsonl extractor \
+                         — indices will be ignored"
+                    );
+                }
+            }
         }
 
         // Override article_range on the Wikipedia JSONL extractor when provided.
@@ -864,6 +1063,24 @@ impl CorpusEngine {
         }
 
         self.ingest_inner(&recipe, output_path, &progress).await
+    }
+}
+
+/// Set the `shard_indices` field on a recipe's `WikipediaJsonl` extractor
+/// config. No-op for recipes with any other extractor — the caller has
+/// already determined that sharding applies to this corpus (see
+/// [`CorpusEngine::jsonl_source_shard_count`]).
+///
+/// Shared helper for both [`CorpusEngine::ingest`] (solo / legacy path)
+/// and [`CorpusEngine::ingest_with_overrides`] (peer / coordinator
+/// path) so the two entry points stay in sync about how partition
+/// assignments reach the extractor.
+pub(crate) fn apply_jsonl_shard_override(
+    recipe: &mut Recipe,
+    indices: Option<Vec<usize>>,
+) {
+    if let ExtractorConfig::WikipediaJsonl { ref mut shard_indices, .. } = recipe.extract {
+        *shard_indices = indices;
     }
 }
 
@@ -909,6 +1126,58 @@ fn mark_complete_files(
         manifest.updated_at = Utc::now();
         if let Err(e) = manifest.save(index_path) {
             tracing::warn!("Failed to persist source manifest: {e}");
+        }
+    }
+}
+
+/// JSONL counterpart of `mark_complete_files`.
+///
+/// When the Wikipedia JSONL extractor runs in sharded mode it stamps every
+/// document with `source_file = Some("shard:<n>")`. This helper parses those
+/// tags out of `file_boundary_iter_pos`, and for any shard whose boundary
+/// has now been durably committed to LanceDB (`committed_iter_pos >=
+/// boundary`), writes the shard index into `_corpus_meta.json`'s
+/// `processed_shards` array.
+///
+/// The coordinator reads `processed_shards` from every partition
+/// subdirectory when planning the next collaborative ingest so it knows
+/// which shards still need work — the sharded analogue of
+/// `remaining_source_files` for HF parquet corpora.
+///
+/// `recorded` is the in-run memoization of which shards we've already
+/// persisted, so a flush that passes the boundary of an already-recorded
+/// shard doesn't rewrite the meta file.
+fn mark_complete_shards(
+    committed_iter_pos: u64,
+    file_boundary_iter_pos: &HashMap<String, u64>,
+    recorded: &mut std::collections::HashSet<usize>,
+    index: &crate::index::CorpusIndex,
+) {
+    for (tag, &boundary) in file_boundary_iter_pos {
+        let Some(shard_index) = crate::extractors::wikipedia_jsonl::parse_shard_source_file(tag)
+        else {
+            continue;
+        };
+        if recorded.contains(&shard_index) || committed_iter_pos < boundary {
+            continue;
+        }
+        match index.record_processed_shard(shard_index) {
+            Ok(()) => {
+                tracing::info!(
+                    shard_index,
+                    committed_iter_pos,
+                    boundary,
+                    "JSONL shard fully committed to index"
+                );
+                recorded.insert(shard_index);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    shard_index,
+                    error = %e,
+                    "failed to persist processed_shards entry — will retry next flush"
+                );
+            }
         }
     }
 }

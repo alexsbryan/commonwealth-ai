@@ -1,10 +1,13 @@
 //! CorpusEngine — orchestrates acquisition, extraction, chunking,
 //! embedding, and indexing of corpus data.
 
+mod cancel;
 mod ingest;
 
 #[cfg(feature = "treesitter")]
 pub mod reindex;
+
+pub use cancel::{CancellationFlag, CancellationRegistry};
 
 use std::path::{Path, PathBuf};
 
@@ -21,6 +24,11 @@ use crate::registry::RecipeRegistry;
 use crate::types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, EmbedFn, IndexInfo, IndexStats, ShardInfo,
 };
+
+/// Default partition-suffix for engines constructed without a mesh
+/// node id (standalone CLI / tests). Mesh daemons override via
+/// [`CorpusEngine::with_self_node_id`] at startup.
+pub(crate) const DEFAULT_LOCAL_NODE_SUFFIX: &str = "local";
 
 /// Number of chunks to accumulate before calling the embed function.
 /// Kept moderate so that progress reporting stays responsive.
@@ -54,6 +62,18 @@ pub struct CorpusEngine {
     /// Used for claim extraction; falls back to `inference` when `None`.
     fast_inference: Option<crate::types::InferenceFn>,
     expected_embedding_model: String,
+    /// Display-formatted identifier for this node, used as the partition
+    /// suffix when ingesting into `<corpus>-partition-<self_node_id>`.
+    /// Callers (daemon startup, CLI) set this from the persistent node
+    /// id. Defaults to `"local"` for standalone CLI flows where no mesh
+    /// membership exists.
+    self_node_id: String,
+    /// Shared registry of cancellation flags for in-flight ingest tasks.
+    /// The install command, the peer ingest_partition handler, and any
+    /// future background finalizer all register their flag here so a
+    /// user-initiated cancel from Desktop can signal whichever task is
+    /// actually running.
+    cancel_registry: CancellationRegistry,
 }
 
 impl CorpusEngine {
@@ -75,7 +95,53 @@ impl CorpusEngine {
             inference: None,
             fast_inference: None,
             expected_embedding_model: "qwen3-embedding-0.6b".to_string(),
+            self_node_id: DEFAULT_LOCAL_NODE_SUFFIX.to_string(),
+            cancel_registry: CancellationRegistry::new(),
         }
+    }
+
+    /// Set the partition suffix used when writing to
+    /// `<corpus>-partition-<self_node_id>`. Expected input is the
+    /// Display form of a `NodeId` (the same value gossip carries and
+    /// the collaborate coordinator uses in its path formatting).
+    pub fn with_self_node_id(mut self, node_id: impl Into<String>) -> Self {
+        self.self_node_id = node_id.into();
+        self
+    }
+
+    /// Read-only accessor for the node-id suffix.
+    pub fn self_node_id(&self) -> &str {
+        &self.self_node_id
+    }
+
+    /// Handle into the shared cancellation registry. The daemon hands
+    /// this out to HTTP routes (`POST /internal/corpus/cancel`) and to
+    /// the install command so that both can signal the ingest loop.
+    pub fn cancel_registry(&self) -> CancellationRegistry {
+        self.cancel_registry.clone()
+    }
+
+    /// Signal a running ingest of `corpus_id` to stop cooperatively.
+    /// Returns true when a flag was found and flipped; false when no
+    /// ingest is registered for this corpus.
+    ///
+    /// The ingest task exits with [`Error::Cancelled`]; callers are
+    /// expected to await task exit and then run
+    /// [`remove_corpus_everything`](Self::remove_corpus_everything).
+    pub fn cancel_corpus_ingest(&self, corpus_id: &str) -> bool {
+        self.cancel_registry.cancel(corpus_id)
+    }
+
+    /// Canonical per-corpus partition directory for this node:
+    /// `<index_dir>/<corpus_id>-partition-<self_node_id>`.
+    ///
+    /// Every in-progress ingest writes here (solo install, coordinator's
+    /// local share, peer share). The canonical `<corpus>/` directory is
+    /// materialised only by the finalise/merge step, never by a direct
+    /// ingest write.
+    pub fn partition_path(&self, corpus_id: &str) -> PathBuf {
+        self.index_dir
+            .join(format!("{corpus_id}-partition-{}", self.self_node_id))
     }
 
     pub fn with_embedding_model(mut self, model: &str) -> Self {
@@ -157,6 +223,111 @@ impl CorpusEngine {
         Ok(count)
     }
 
+    /// Count JSONL shards inside the source ZIP for a corpus, without
+    /// extracting. Used by the collaborative-ingestion planner to
+    /// decide whether article-range partitioning is safe (works for
+    /// single-shard sources) or has to be deferred to file-index
+    /// partitioning (multi-shard sources like Wikipedia, where the
+    /// article-range split is unsafe across peers with non-identical
+    /// extractions).
+    ///
+    /// Returns `Err` if no `_downloads/{corpus_id}.zip` exists — the
+    /// caller treats that as "not applicable, proceed with the
+    /// single-shard fast path."
+    pub fn jsonl_source_shard_count(&self, corpus_id: &str) -> Result<usize> {
+        let zip_path = self
+            .index_dir
+            .join("_downloads")
+            .join(format!("{corpus_id}.zip"));
+        if !zip_path.exists() {
+            return Err(Error::Recipe(format!(
+                "No source ZIP at {} — cannot determine shard count",
+                zip_path.display()
+            )));
+        }
+        let file = std::fs::File::open(&zip_path)?;
+        let archive = zip::ZipArchive::new(file).map_err(|e| {
+            Error::Extraction(format!(
+                "Failed to read ZIP TOC at {}: {e}",
+                zip_path.display()
+            ))
+        })?;
+        let count = (0..archive.len())
+            .filter(|i| {
+                // Don't own archive across the filter — clone the
+                // name then bail. zip's API requires `by_index` to
+                // be called mutably, so the filter closure can't
+                // share a borrow; we re-open each entry briefly.
+                let mut local_archive = match std::fs::File::open(&zip_path)
+                    .and_then(|f| Ok(zip::ZipArchive::new(f).ok()))
+                {
+                    Ok(Some(a)) => a,
+                    _ => return false,
+                };
+                local_archive
+                    .by_index(*i)
+                    .ok()
+                    .map(|entry| {
+                        let n = entry.name().to_lowercase();
+                        n.ends_with(".jsonl") || n.ends_with(".ndjson")
+                    })
+                    .unwrap_or(false)
+            })
+            .count();
+        Ok(count)
+    }
+
+    /// Return the set of ZIP shard indices that have been fully
+    /// committed for a JSONL corpus, merged across the canonical
+    /// corpus index and any per-partition subdirectories produced
+    /// by a prior collaborative run.
+    ///
+    /// Used by the collaborative-ingestion coordinator to decide
+    /// which shards still need to be assigned. Returns an empty set
+    /// when no index (canonical or partition) exists yet — correct
+    /// for a fresh corpus.
+    pub fn corpus_processed_shards(&self, corpus_id: &str) -> Vec<usize> {
+        let mut shards: std::collections::BTreeSet<usize> = Default::default();
+
+        // Walk index_dir: include the canonical `<corpus>` dir and any
+        // `<corpus>-partition-*` directories whose meta records
+        // processed_shards.
+        let Ok(entries) = std::fs::read_dir(&self.index_dir) else {
+            return Vec::new();
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let is_canonical = name == corpus_id;
+            let is_partition = name
+                .strip_prefix(&format!("{corpus_id}-partition-"))
+                .is_some();
+            if !is_canonical && !is_partition {
+                continue;
+            }
+            let meta_path = path.join("_corpus_meta.json");
+            let Ok(content) = std::fs::read_to_string(&meta_path) else {
+                continue;
+            };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) else {
+                continue;
+            };
+            if let Some(arr) = v.get("processed_shards").and_then(|x| x.as_array()) {
+                for v in arr {
+                    if let Some(i) = v.as_u64() {
+                        shards.insert(i as usize);
+                    }
+                }
+            }
+        }
+        shards.into_iter().collect()
+    }
+
     /// Estimate how many articles Machine A has already processed for a
     /// Wikipedia JSONL corpus, given the stored `committed_iter_pos` (which
     /// counts sections, not articles).
@@ -219,28 +390,74 @@ impl CorpusEngine {
         Ok(Some(estimated))
     }
 
-    /// Return corpus IDs where ingestion has started but not finished
-    /// (`ingestion_in_progress: true` AND `committed_iter_pos > 0`).
+    /// Return corpus IDs where ingestion has started but not finished.
+    ///
+    /// Considers two on-disk shapes, both produced by the unified ingest
+    /// primitive:
+    ///
+    /// 1. **Canonical `<corpus>/`** with `ingestion_in_progress: true` AND
+    ///    `committed_iter_pos > 0`. Legacy shape from pre-unification
+    ///    ingests; still detected so existing partial indexes get resumed.
+    ///
+    /// 2. **Partition-of-self `<corpus>-partition-<self>/`** with
+    ///    `ingestion_in_progress: true`. The new-style partial output
+    ///    written by every install (solo, coordinator, or peer). We do
+    ///    not require `committed_iter_pos > 0` here because a partition
+    ///    that was registered but never flushed a batch is still in
+    ///    progress from the daemon's perspective — the auto-collaborate
+    ///    loop should still pick it up when peers become available.
+    ///
     /// Used by the auto-collaborate loop. Callers should cross-check
-    /// against `AppStateInner::active_ingests` to skip corpora with a
-    /// live ingest task already running.
+    /// against `active_ingests` to skip corpora with a live ingest task
+    /// already running.
     pub fn in_progress_ingestions(&self) -> Vec<String> {
-        let Ok(entries) = std::fs::read_dir(&self.index_dir) else { return vec![] };
-        entries
-            .filter_map(|e| e.ok())
-            .filter_map(|e| {
-                let meta_path = e.path().join("_corpus_meta.json");
-                let content = std::fs::read_to_string(&meta_path).ok()?;
-                let v: serde_json::Value = serde_json::from_str(&content).ok()?;
-                let in_progress = v["ingestion_in_progress"].as_bool() == Some(true);
-                let has_started = v["committed_iter_pos"].as_u64().unwrap_or(0) > 0;
-                if in_progress && has_started {
-                    e.file_name().into_string().ok()
-                } else {
-                    None
-                }
-            })
-            .collect()
+        let Ok(entries) = std::fs::read_dir(&self.index_dir) else {
+            return vec![];
+        };
+
+        let self_partition_prefix =
+            format!("-partition-{}", self.self_node_id);
+        let mut out: std::collections::BTreeSet<String> = Default::default();
+
+        for entry in entries.flatten() {
+            let name_os = entry.file_name();
+            let Some(name) = name_os.to_str() else { continue };
+            if name.starts_with('_') {
+                continue;
+            }
+
+            let meta_path = entry.path().join("_corpus_meta.json");
+            let Ok(content) = std::fs::read_to_string(&meta_path) else {
+                continue;
+            };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&content)
+            else {
+                continue;
+            };
+            if v["ingestion_in_progress"].as_bool() != Some(true) {
+                continue;
+            }
+
+            // Determine the corpus id this directory belongs to.
+            let corpus_id = if let Some(rest) = name.strip_suffix(&self_partition_prefix)
+            {
+                // <corpus>-partition-<self> for our own node.
+                rest.to_string()
+            } else if name.contains("-partition-") {
+                // <corpus>-partition-<peer>: skip — the coordinator's
+                // coordinate_merge is responsible for these, not the
+                // auto-collaborate loop.
+                continue;
+            } else if v["committed_iter_pos"].as_u64().unwrap_or(0) > 0 {
+                // Legacy canonical path with committed data.
+                name.to_string()
+            } else {
+                continue;
+            };
+            out.insert(corpus_id);
+        }
+
+        out.into_iter().collect()
     }
 
     /// Return a clone of the embedding function.
@@ -689,6 +906,111 @@ impl CorpusEngine {
         Ok(())
     }
 
+    /// Wipe all local on-disk state for `corpus_id`: the canonical
+    /// index directory **and** every `<corpus_id>-partition-*` sibling
+    /// left behind by a collaborative run.
+    ///
+    /// This is the implementation of the Desktop "Cancel / Remove"
+    /// action. It does **not** signal a running ingest task; callers
+    /// are expected to fire the corpus's cancellation flag via the
+    /// registry and await task exit before wiping, otherwise an
+    /// in-flight LanceDB writer may recreate files after the delete.
+    ///
+    /// Silently ignores missing directories — the end state is
+    /// idempotent ("corpus is absent on this node"). A partial failure
+    /// (some dirs removed, one errored) returns the first error but
+    /// does not attempt to roll back: the caller's next invocation
+    /// will complete the cleanup.
+    pub fn remove_corpus_everything(&self, corpus_id: &str) -> Result<()> {
+        let mut first_err: Option<std::io::Error> = None;
+
+        // Canonical first so a concurrent observer never sees the
+        // canonical disappear while partition dirs still claim
+        // "ingestion_in_progress=false" (which would briefly look
+        // "installed" to UI polls that skip partition dirs).
+        let canonical = self.index_dir.join(corpus_id);
+        if canonical.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&canonical) {
+                first_err = Some(e);
+            }
+        }
+
+        // Every <corpus>-partition-* sibling.
+        let prefix = format!("{corpus_id}-partition-");
+        if let Ok(entries) = std::fs::read_dir(&self.index_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let Some(name_str) = name.to_str() else { continue };
+                if !name_str.starts_with(&prefix) {
+                    continue;
+                }
+                if let Err(e) = std::fs::remove_dir_all(entry.path()) {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+
+        if let Some(e) = first_err {
+            return Err(Error::Database(format!(
+                "remove_corpus_everything({corpus_id}): {e}"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Promote this node's `<corpus_id>-partition-<self>` directory to
+    /// the canonical `<corpus_id>/` by atomic rename, clearing the
+    /// partition-specific metadata. Idempotent: returns `Ok(false)`
+    /// when there is nothing to promote.
+    ///
+    /// Refuses to run and returns `Ok(false)` when *any* other
+    /// `<corpus_id>-partition-*` directory is present — that means at
+    /// least one peer participated, so the correct finaliser is the
+    /// multi-partition `ShardManager::coordinate_merge`, not this
+    /// single-shard rename.
+    pub fn finalise_solo_ingest(&self, corpus_id: &str) -> Result<bool> {
+        let canonical = self.index_dir.join(corpus_id);
+        if canonical.exists() {
+            // Canonical already present (previous solo finalise, or
+            // merge leader already finished). Nothing to do.
+            return Ok(false);
+        }
+
+        let self_partition = self.partition_path(corpus_id);
+        if !self_partition.exists() {
+            return Ok(false);
+        }
+
+        // Check for any peer partitions — if present, defer to merge.
+        let prefix = format!("{corpus_id}-partition-");
+        let self_suffix = format!("{corpus_id}-partition-{}", self.self_node_id);
+        if let Ok(entries) = std::fs::read_dir(&self.index_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let Some(name_str) = name.to_str() else { continue };
+                if name_str.starts_with(&prefix) && name_str != self_suffix {
+                    tracing::info!(
+                        corpus_id,
+                        peer_partition = %entry.path().display(),
+                        "finalise_solo_ingest: peer partition present — deferring to coordinate_merge"
+                    );
+                    return Ok(false);
+                }
+            }
+        }
+
+        crate::sharding::promote_single_shard(&self_partition, &canonical)?;
+        tracing::info!(
+            corpus_id,
+            from = %self_partition.display(),
+            to = %canonical.display(),
+            "finalise_solo_ingest: promoted partition-of-self to canonical"
+        );
+        Ok(true)
+    }
+
     /// Open an index by corpus ID. Convenience wrapper for tools that
     /// don't want to construct a path manually.
     pub async fn open_index_for_corpus(&self, corpus_id: &str) -> Result<CorpusIndex> {
@@ -1082,6 +1404,55 @@ mod tests {
     }
 
     #[test]
+    fn partition_path_uses_default_local_suffix() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            dir.path().join("indexes"),
+            mock_embed_fn(),
+        );
+        assert_eq!(engine.self_node_id(), "local");
+        assert_eq!(
+            engine.partition_path("wikipedia"),
+            dir.path().join("indexes").join("wikipedia-partition-local")
+        );
+    }
+
+    #[test]
+    fn partition_path_reflects_with_self_node_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            dir.path().join("indexes"),
+            mock_embed_fn(),
+        )
+        .with_self_node_id("b88252e4325bc377");
+        assert_eq!(engine.self_node_id(), "b88252e4325bc377");
+        assert_eq!(
+            engine.partition_path("wikipedia"),
+            dir.path()
+                .join("indexes")
+                .join("wikipedia-partition-b88252e4325bc377")
+        );
+    }
+
+    #[test]
+    fn cancel_registry_handles_survive_cloning() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            dir.path().join("indexes"),
+            mock_embed_fn(),
+        );
+        let a = engine.cancel_registry();
+        let b = engine.cancel_registry();
+        let flag = a.register("wikipedia");
+        assert!(b.get("wikipedia").is_some());
+        b.cancel("wikipedia");
+        assert!(flag.is_cancelled());
+    }
+
+    #[test]
     fn in_progress_ingestions_skips_complete_corpora() {
         let dir = tempfile::tempdir().unwrap();
         let idx_dir = dir.path().join("indexes");
@@ -1093,5 +1464,192 @@ mod tests {
 
         let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
         assert!(engine.in_progress_ingestions().is_empty());
+    }
+
+    #[test]
+    fn in_progress_ingestions_includes_partition_of_self() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-nodeA")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia-partition-nodeA/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":0}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir,
+            mock_embed_fn(),
+        )
+        .with_self_node_id("nodeA");
+
+        assert_eq!(engine.in_progress_ingestions(), vec!["wikipedia".to_string()]);
+    }
+
+    #[test]
+    fn in_progress_ingestions_skips_other_nodes_partition_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        // A peer's partition dir sitting on disk (maybe cached before a prior
+        // merge). The auto-collaborate loop should NOT treat this as an
+        // in-progress ingest for *this* node — coordinate_merge owns those.
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-peerX")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia-partition-peerX/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":500}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir,
+            mock_embed_fn(),
+        )
+        .with_self_node_id("nodeA");
+
+        assert!(engine.in_progress_ingestions().is_empty());
+    }
+
+    #[test]
+    fn in_progress_ingestions_dedups_canonical_and_self_partition() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":100}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-nodeA")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia-partition-nodeA/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":0}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir,
+            mock_embed_fn(),
+        )
+        .with_self_node_id("nodeA");
+
+        assert_eq!(engine.in_progress_ingestions(), vec!["wikipedia".to_string()]);
+    }
+
+    // ── remove_corpus_everything ──────────────────────────────────────
+
+    #[test]
+    fn remove_corpus_everything_wipes_canonical_and_partitions() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-local")).unwrap();
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-abc123")).unwrap();
+        std::fs::create_dir_all(idx_dir.join("openalex")).unwrap(); // unrelated
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        engine.remove_corpus_everything("wikipedia").unwrap();
+
+        assert!(!idx_dir.join("wikipedia").exists());
+        assert!(!idx_dir.join("wikipedia-partition-local").exists());
+        assert!(!idx_dir.join("wikipedia-partition-abc123").exists());
+        // Other corpora are untouched.
+        assert!(idx_dir.join("openalex").exists());
+    }
+
+    #[test]
+    fn remove_corpus_everything_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        // No canonical, no partitions — must still return Ok.
+        engine.remove_corpus_everything("wikipedia").unwrap();
+    }
+
+    // ── finalise_solo_ingest ──────────────────────────────────────────
+
+    /// Write a minimal but valid `_corpus_meta.json` so the partition dir
+    /// looks like an ingest output to `promote_single_shard`.
+    fn seed_partition_meta(dir: &std::path::Path) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(
+            dir.join("_corpus_meta.json"),
+            r#"{
+                "corpus_id": "wikipedia",
+                "corpus_name": "Wikipedia",
+                "embedding_model": "m",
+                "embedding_dimensions": 8,
+                "mesh_sharing": true,
+                "license": "MIT",
+                "created_at": 0,
+                "last_updated": 0,
+                "is_shard": true,
+                "chunk_range_start": 0,
+                "chunk_range_end": 100,
+                "ingestion_in_progress": true,
+                "processed_shards": [0, 1, 2]
+            }"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn finalise_solo_ingest_promotes_partition_to_canonical() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        seed_partition_meta(&idx_dir.join("wikipedia-partition-local"));
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        let promoted = engine.finalise_solo_ingest("wikipedia").unwrap();
+        assert!(promoted);
+        assert!(!idx_dir.join("wikipedia-partition-local").exists());
+        assert!(idx_dir.join("wikipedia").exists());
+
+        let raw = std::fs::read_to_string(idx_dir.join("wikipedia/_corpus_meta.json")).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(v["is_shard"], serde_json::Value::Bool(false));
+        assert_eq!(v["ingestion_in_progress"], serde_json::Value::Bool(false));
+        assert!(v["processed_shards"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn finalise_solo_ingest_no_partition_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        assert!(!engine.finalise_solo_ingest("wikipedia").unwrap());
+    }
+
+    #[test]
+    fn finalise_solo_ingest_defers_when_peer_partition_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        seed_partition_meta(&idx_dir.join("wikipedia-partition-local"));
+        seed_partition_meta(&idx_dir.join("wikipedia-partition-peerX"));
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        let promoted = engine.finalise_solo_ingest("wikipedia").unwrap();
+        assert!(!promoted, "must defer to coordinate_merge when a peer partition exists");
+        assert!(idx_dir.join("wikipedia-partition-local").exists());
+        assert!(idx_dir.join("wikipedia-partition-peerX").exists());
+        assert!(!idx_dir.join("wikipedia").exists());
+    }
+
+    #[test]
+    fn finalise_solo_ingest_noop_when_canonical_already_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        seed_partition_meta(&idx_dir.join("wikipedia-partition-local"));
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        assert!(!engine.finalise_solo_ingest("wikipedia").unwrap());
+        // Partition dir stays — caller (the merge path, or a later cleanup)
+        // is responsible for resolving the conflict.
+        assert!(idx_dir.join("wikipedia-partition-local").exists());
     }
 }

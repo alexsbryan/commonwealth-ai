@@ -49,6 +49,16 @@ pub struct WikipediaJsonlExtractor {
     /// without JSON parsing — only the line is read and discarded — so the
     /// overhead is linear in `start` but CPU-cheap (no deserialization).
     pub article_range: Option<(u64, u64)>,
+    /// When set, restrict processing to a specific set of ZIP shard indices.
+    /// Used by the collaborative-ingestion planner to hand each peer a disjoint
+    /// set of shard indices. Each emitted document is tagged with
+    /// `source_file = Some("shard:<index>")` so the ingest loop can record
+    /// `processed_shards` at shard boundaries and peers can resume mid-partition.
+    ///
+    /// Takes precedence over the legacy "concatenate every JSONL entry into
+    /// one `extracted.jsonl`" path — the cache file is neither read nor
+    /// written when this field is set.
+    pub shard_indices: Option<Vec<usize>>,
 }
 
 impl Default for WikipediaJsonlExtractor {
@@ -62,8 +72,22 @@ impl Default for WikipediaJsonlExtractor {
             factual_patterns: DEFAULT_FACTUAL_PATTERNS
                 .iter().map(|s| s.to_string()).collect(),
             article_range: None,
+            shard_indices: None,
         }
     }
+}
+
+/// Source-file prefix used to tag documents yielded by the sharded iterator.
+/// The ingest loop parses this to maintain per-shard boundaries and record
+/// `processed_shards` in `_corpus_meta.json` as each shard finishes flushing.
+pub const SHARD_SOURCE_FILE_PREFIX: &str = "shard:";
+
+/// Parse the shard index from a `source_file` tag produced by the sharded
+/// extractor. Returns `None` when the tag does not follow the shard convention.
+pub fn parse_shard_source_file(source_file: &str) -> Option<usize> {
+    source_file
+        .strip_prefix(SHARD_SOURCE_FILE_PREFIX)
+        .and_then(|rest| rest.parse::<usize>().ok())
 }
 
 impl Extractor for WikipediaJsonlExtractor {
@@ -71,6 +95,23 @@ impl Extractor for WikipediaJsonlExtractor {
         &self,
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
+        // Sharded path: the collaborative-ingestion planner handed us a
+        // specific set of zip-entry indices. Read only those entries
+        // directly from the ZIP — skip the "concatenate every JSONL shard
+        // into one big extracted.jsonl" cache entirely. This is the only
+        // safe way to partition a multi-shard JSONL corpus across peers:
+        // shard boundaries are fixed by the ZIP's TOC, so two peers with
+        // the same ZIP will produce identical chunks for a given shard.
+        if let Some(ref indices) = self.shard_indices {
+            let zip_path = resolve_zip_path(source_path)?;
+            return Ok(Box::new(WikipediaJsonlShardedZipIterator::new(
+                zip_path,
+                indices.clone(),
+                self.controversy_patterns.clone(),
+                self.factual_patterns.clone(),
+            )?));
+        }
+
         let paths = collect_zip_paths(source_path)?;
         if paths.is_empty() {
             return Err(Error::Extraction(format!(
@@ -92,6 +133,24 @@ impl Extractor for WikipediaJsonlExtractor {
     }
 }
 
+/// When sharded ingestion points us at a `source_path`, normalise it to the
+/// concrete ZIP file. The collaborative flow always passes the downloaded ZIP
+/// directly; an enclosing directory is accepted for parity with the
+/// non-sharded `collect_zip_paths` helper and returns the first `.zip` found.
+fn resolve_zip_path(source_path: &Path) -> Result<PathBuf> {
+    if source_path.is_file() {
+        return Ok(source_path.to_path_buf());
+    }
+    let mut zips = collect_zip_paths(source_path)?;
+    if zips.is_empty() {
+        return Err(Error::Extraction(format!(
+            "No .zip found at: {}",
+            source_path.display()
+        )));
+    }
+    Ok(zips.remove(0))
+}
+
 fn collect_zip_paths(source_path: &Path) -> Result<Vec<PathBuf>> {
     if source_path.is_file() {
         return Ok(vec![source_path.to_path_buf()]);
@@ -106,6 +165,248 @@ fn collect_zip_paths(source_path: &Path) -> Result<Vec<PathBuf>> {
         .collect();
     paths.sort();
     Ok(paths)
+}
+
+// ─── Sharded (collaborative-ingestion) iterator ─────────────
+//
+// Streams a caller-specified set of ZIP entries without materialising
+// the merged `extracted.jsonl` cache. Each article yielded is tagged
+// with `source_file = Some("shard:<index>")` so the ingest loop sees a
+// source-file transition at every shard boundary and can call
+// `record_processed_shard` on flush.
+//
+// Why a temp file per shard rather than borrowing the ZipArchive
+// directly: `zip::ZipArchive::by_index` returns a `ZipFile<'_>` tied
+// to the archive's lifetime, which is awkward to embed in an iterator
+// that yields `ExtractedDoc`. Writing each shard to a temp file, then
+// reading lines from it, keeps the peak disk footprint at ~one shard
+// (Wikipedia shards are ~170 MB uncompressed). The temp file is
+// deleted as soon as the shard is exhausted.
+
+struct WikipediaJsonlShardedZipIterator {
+    zip_path: PathBuf,
+    /// Entry indices within the ZIP that this peer is responsible for.
+    /// The archive TOC is the ground truth for ordering — two peers with
+    /// the same ZIP see the same mapping, so disjoint sets here produce
+    /// disjoint article sets after merge.
+    assigned: VecDeque<usize>,
+    current: Option<ShardStreamState>,
+    controversy_patterns: Vec<String>,
+    factual_patterns: Vec<String>,
+}
+
+struct ShardStreamState {
+    shard_index: usize,
+    reader: Box<dyn BufRead + Send>,
+    pending: VecDeque<ExtractedDoc>,
+    temp_path: Option<PathBuf>,
+}
+
+impl Drop for ShardStreamState {
+    fn drop(&mut self) {
+        if let Some(ref p) = self.temp_path {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
+impl WikipediaJsonlShardedZipIterator {
+    fn new(
+        zip_path: PathBuf,
+        mut assigned: Vec<usize>,
+        controversy_patterns: Vec<String>,
+        factual_patterns: Vec<String>,
+    ) -> Result<Self> {
+        // Deterministic shard order regardless of input ordering —
+        // both peers must visit shards in the same order so that
+        // article indices are reproducible across machines.
+        assigned.sort_unstable();
+        assigned.dedup();
+
+        // Validate early that every assigned shard exists and names a
+        // JSONL entry. This turns "coordinator sent B a bogus shard
+        // index" from a mid-pipeline EOF into a clear up-front error.
+        let file = File::open(&zip_path).map_err(|e| {
+            Error::Extraction(format!("Failed to open {}: {e}", zip_path.display()))
+        })?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| {
+            Error::Extraction(format!(
+                "Failed to read ZIP TOC at {}: {e}",
+                zip_path.display()
+            ))
+        })?;
+        for &idx in &assigned {
+            if idx >= archive.len() {
+                return Err(Error::Extraction(format!(
+                    "Assigned shard index {idx} is out of range (ZIP has {} entries)",
+                    archive.len()
+                )));
+            }
+            let entry = archive.by_index(idx).map_err(|e| {
+                Error::Extraction(format!(
+                    "Failed to read ZIP entry {idx} in {}: {e}",
+                    zip_path.display()
+                ))
+            })?;
+            let name = entry.name().to_lowercase();
+            if !(name.ends_with(".jsonl") || name.ends_with(".ndjson")) {
+                return Err(Error::Extraction(format!(
+                    "Assigned shard index {idx} names non-JSONL entry '{}'",
+                    entry.name()
+                )));
+            }
+        }
+
+        eprintln!(
+            "[corpus-engine] Sharded extraction — ZIP {} assigned {} of {} shards: {assigned:?}",
+            zip_path.display(),
+            assigned.len(),
+            archive.len(),
+        );
+
+        Ok(Self {
+            zip_path,
+            assigned: assigned.into(),
+            current: None,
+            controversy_patterns,
+            factual_patterns,
+        })
+    }
+
+    fn open_next_shard(&mut self) -> Option<Result<ShardStreamState>> {
+        let shard_index = self.assigned.pop_front()?;
+        let file = match File::open(&self.zip_path) {
+            Ok(f) => f,
+            Err(e) => {
+                return Some(Err(Error::Extraction(format!(
+                    "Failed to open {}: {e}",
+                    self.zip_path.display()
+                ))));
+            }
+        };
+        let mut archive = match zip::ZipArchive::new(file) {
+            Ok(a) => a,
+            Err(e) => {
+                return Some(Err(Error::Extraction(format!(
+                    "Failed to read ZIP TOC at {}: {e}",
+                    self.zip_path.display()
+                ))));
+            }
+        };
+        let mut entry = match archive.by_index(shard_index) {
+            Ok(e) => e,
+            Err(e) => {
+                return Some(Err(Error::Extraction(format!(
+                    "Failed to open ZIP entry {shard_index}: {e}"
+                ))));
+            }
+        };
+        let entry_name = entry.name().to_string();
+
+        let mut tmp = match tempfile::NamedTempFile::new() {
+            Ok(t) => t,
+            Err(e) => {
+                return Some(Err(Error::Extraction(format!(
+                    "Failed to create temp file for shard {shard_index}: {e}"
+                ))));
+            }
+        };
+        if let Err(e) = std::io::copy(&mut entry, &mut tmp) {
+            return Some(Err(Error::Extraction(format!(
+                "Failed to extract shard {shard_index} ({entry_name}): {e}"
+            ))));
+        }
+        let (file, temp_path) = match tmp.keep() {
+            Ok((f, p)) => (f, p),
+            Err(e) => {
+                return Some(Err(Error::Extraction(format!(
+                    "Failed to persist shard {shard_index} temp file: {e}"
+                ))));
+            }
+        };
+        // Reopen as read-only — `keep()` hands back a writable handle.
+        let _ = file;
+        let read_file = match File::open(&temp_path) {
+            Ok(f) => f,
+            Err(e) => {
+                let _ = std::fs::remove_file(&temp_path);
+                return Some(Err(Error::Extraction(format!(
+                    "Failed to reopen shard {shard_index} temp file: {e}"
+                ))));
+            }
+        };
+        let reader: Box<dyn BufRead + Send> = Box::new(BufReader::with_capacity(
+            256 * 1024,
+            read_file,
+        ));
+        eprintln!(
+            "[corpus-engine] Sharded extraction → shard {shard_index} ({entry_name})"
+        );
+        Some(Ok(ShardStreamState {
+            shard_index,
+            reader,
+            pending: VecDeque::new(),
+            temp_path: Some(temp_path),
+        }))
+    }
+}
+
+impl Iterator for WikipediaJsonlShardedZipIterator {
+    type Item = Result<ExtractedDoc>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.current.is_none() {
+                match self.open_next_shard()? {
+                    Ok(state) => self.current = Some(state),
+                    Err(e) => return Some(Err(e)),
+                }
+            }
+            let state = self.current.as_mut().expect("current set above");
+
+            if let Some(doc) = state.pending.pop_front() {
+                return Some(Ok(doc));
+            }
+
+            let mut line_bytes = Vec::new();
+            match state.reader.read_until(b'\n', &mut line_bytes) {
+                Ok(0) => {
+                    // Shard exhausted — drop state (temp file removed
+                    // on Drop) and advance to the next assigned shard.
+                    self.current = None;
+                    continue;
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    return Some(Err(Error::Extraction(format!(
+                        "JSONL read error in shard {}: {e}",
+                        state.shard_index
+                    ))));
+                }
+            }
+
+            let line_cow = String::from_utf8_lossy(&line_bytes);
+            let line = line_cow.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let shard_tag = format!("{SHARD_SOURCE_FILE_PREFIX}{}", state.shard_index);
+            match process_article_line(
+                line,
+                &self.controversy_patterns,
+                &self.factual_patterns,
+            ) {
+                Ok(docs) => {
+                    for mut doc in docs {
+                        doc.source_file = Some(shard_tag.clone());
+                        state.pending.push_back(doc);
+                    }
+                }
+                Err(e) => return Some(Err(e)),
+            }
+        }
+    }
 }
 
 // ─── Shard-chaining iterator ────────────────────────────────

@@ -416,6 +416,14 @@ pub enum ExtractorConfig {
         /// single-file Wikipedia JSONL across mesh nodes. `None` = all.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         article_range: Option<(u64, u64)>,
+        /// Restrict processing to a specific set of ZIP shard entries
+        /// (by index into the ZIP's JSONL entries). Set by the
+        /// collaborative-ingestion planner for multi-shard JSONL
+        /// corpora such as Wikipedia (76 shards). Mutually exclusive
+        /// with `article_range` — the sharded path streams directly
+        /// from the ZIP and skips the merged-JSONL cache entirely.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shard_indices: Option<Vec<usize>>,
     },
     /// Tree-sitter code extractor. Walks the source directory, parses each
     /// supported file with its grammar, and yields one `ExtractedDoc` per
