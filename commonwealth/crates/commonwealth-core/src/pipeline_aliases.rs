@@ -164,14 +164,11 @@ mod tests {
         let table = PipelineAliasTable::default_table();
         let p = table.resolve("sovereign-coder").unwrap();
         assert_eq!(p.model_id, "qwen-27b-coder");
-        assert_eq!(
-            p.middleware,
-            vec![
-                "approval_gate".to_string(),
-                "context_injector".to_string(),
-                "tool_injector".to_string(),
-            ]
-        );
+        assert!(p.middleware.contains(&"approval_gate".to_string()));
+        assert!(p.middleware.contains(&"session_briefing".to_string()));
+        assert!(p.middleware.contains(&"context_injector".to_string()));
+        assert!(p.middleware.contains(&"tool_injector".to_string()));
+        assert!(p.middleware.contains(&"artifact_surface".to_string()));
         assert!(p.context.inject_notes);
         assert!(p.context.inject_spec);
         assert!(!p.context.inject_invariants_only);

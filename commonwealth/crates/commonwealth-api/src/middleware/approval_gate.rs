@@ -100,6 +100,7 @@ impl Middleware for ApprovalGate {
                 approved_at: 0,
                 source: sovereign_atos::approval::ApprovalSource::Git,
                 witness: String::new(),
+                spec_content_snapshot: None,
             })
         } else {
             find_approval(&ctx.repo_root, &feature_id, self.mesh.as_deref())
@@ -130,9 +131,10 @@ impl Middleware for ApprovalGate {
                     return Err(MiddlewareError::ApprovalRequired {
                         feature_id: feature_id.clone(),
                         hint: format!(
-                            "Commit `.sovereign/features/{feature_id}/spec.md` with a \
-                             reviewer identity, or run `sovereign atos feature approve \
-                             {feature_id}` for the mesh-native fallback."
+                            "`git commit` the file `.sovereign/features/{feature_id}/spec.md` \
+                             (any committer — one commit is enough), or run \
+                             `sovereign atos feature approve {feature_id}` for the \
+                             mesh-native fallback."
                         ),
                     });
                 }

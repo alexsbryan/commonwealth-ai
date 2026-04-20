@@ -15,7 +15,7 @@
 # automatic context injection, ATOS tool advertisement.
 name = "sovereign-coder"
 model_id = "qwen-27b-coder"
-middleware = ["approval_gate", "context_injector", "tool_injector"]
+middleware = ["approval_gate", "session_briefing", "context_injector", "tool_injector", "artifact_surface"]
 
 [pipeline.context]
 inject_notes = true

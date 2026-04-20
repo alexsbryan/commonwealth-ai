@@ -87,6 +87,17 @@ impl Middleware for ContextInjector {
         let mut preamble = String::new();
         preamble.push_str(ATOS_INSTRUCTIONS);
 
+        // "Since last turn" block — populated by ArtifactSurface's
+        // post_process on the PREVIOUS turn. Popped on render so it
+        // shows up exactly once.
+        if let Some(delta) = session.pending_artifact_delta.take() {
+            let block = render_artifact_delta(&delta);
+            if !block.trim().is_empty() {
+                preamble.push_str("\n");
+                preamble.push_str(&block);
+            }
+        }
+
         // Notes digest (if enabled for this pipeline).
         if ctx.context_config.inject_notes {
             let digest = compose_notes_digest(&ctx.repo_root, &feature_id).await;
@@ -230,6 +241,48 @@ fn extract_invariants_section(md: &str) -> String {
     lines[start_idx..end].join("\n")
 }
 
+/// Render the "Since last turn" preamble block from an
+/// [`ArtifactDelta`]. Compact by design — a few bullets per kind,
+/// no note bodies (just ids so the agent can expand via
+/// `read_note_by_id`).
+fn render_artifact_delta(delta: &sovereign_atos::session::ArtifactDelta) -> String {
+    let mut out = String::from("## Since last turn\n\n");
+    let mut any = false;
+
+    for event in &delta.milestones_passed {
+        any = true;
+        out.push_str(&format!(
+            "- ✓ Milestone {} PASSED → `{}`\n",
+            event.ordinal, event.artifact_path
+        ));
+    }
+    if !delta.notes_by_kind.is_empty() {
+        any = true;
+        let summary: Vec<String> = delta
+            .notes_by_kind
+            .iter()
+            .map(|(k, n)| format!("{n} {k}"))
+            .collect();
+        out.push_str(&format!(
+            "- Notes written this session: {}\n",
+            summary.join(", ")
+        ));
+        // Render the most interesting kinds' recent ids so the
+        // agent can reference them by `[note:<id>]`.
+        for kind in ["uncertainty", "deviation", "postmortem_pointer"] {
+            if let Some(ids) = delta.recent_note_ids.get(kind) {
+                for id in ids {
+                    out.push_str(&format!("  - `[note:{}]` [{kind}]\n", id));
+                }
+            }
+        }
+    }
+    if !any {
+        return String::new();
+    }
+    out
+}
+
 /// Prepend `text` to the first system message; or insert a fresh
 /// system message at position 0 when none exists.
 fn prepend_to_system(request: &mut ChatCompletionRequest, text: &str) {
@@ -368,5 +421,48 @@ mod tests {
         let md = "# title\n\nno invariants heading here\n";
         let slice = extract_invariants_section(md);
         assert!(slice.contains("no invariants"));
+    }
+
+    #[tokio::test]
+    async fn pending_artifact_delta_rendered_then_popped() {
+        use sovereign_atos::session::{ArtifactDelta, MilestonePassEvent};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let spec_dir = tmp.path().join(".sovereign").join("features").join("fx");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        std::fs::write(spec_dir.join("spec.md"), "# fx\n").unwrap();
+
+        let inj = ContextInjector::new();
+        let mut req = minimal_request();
+        let mut session = MiddlewareSession::default();
+        let mut delta = ArtifactDelta::default();
+        delta
+            .notes_by_kind
+            .insert("uncertainty".into(), 2);
+        delta
+            .recent_note_ids
+            .insert("uncertainty".into(), vec!["abc-1".into(), "abc-2".into()]);
+        delta.milestones_passed.push(MilestonePassEvent {
+            feature_id: "fx".into(),
+            ordinal: 2,
+            artifact_path: ".sovereign/features/fx/milestone-2.md".into(),
+        });
+        session.pending_artifact_delta = Some(delta);
+        let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
+        inj.process(&mut req, &mut session, &ctx).await.unwrap();
+
+        // Render landed in system message.
+        let sys = &req.messages[0].content;
+        assert!(sys.contains("Since last turn"));
+        assert!(sys.contains("Milestone 2 PASSED"));
+        assert!(sys.contains("[note:abc-1]"));
+        assert!(sys.contains("2 uncertainty"));
+
+        // Delta was popped — next call renders no "Since last turn"
+        // section.
+        assert!(session.pending_artifact_delta.is_none());
+        let mut req2 = minimal_request();
+        inj.process(&mut req2, &mut session, &ctx).await.unwrap();
+        assert!(!req2.messages[0].content.contains("Since last turn"));
     }
 }

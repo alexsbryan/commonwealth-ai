@@ -203,6 +203,8 @@ impl AppState {
         middleware_registry.register(Arc::new(crate::middleware::ApprovalGate::new()));
         middleware_registry.register(Arc::new(crate::middleware::ContextInjector::new()));
         middleware_registry.register(Arc::new(crate::middleware::ToolInjector::new()));
+        middleware_registry.register(Arc::new(crate::middleware::ArtifactSurface::new()));
+        middleware_registry.register(Arc::new(crate::middleware::SessionBriefing::new()));
         // `read_only_enforcer` is the red-team alias's gate. For M4
         // it shares the ApprovalGate implementation under a distinct
         // id — M5 splits them if the behavior actually diverges.

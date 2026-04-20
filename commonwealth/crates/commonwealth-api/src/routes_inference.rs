@@ -9,7 +9,9 @@ use tracing::{debug, info, warn};
 use commonwealth_core::ids::ModelId;
 use commonwealth_inference::oicp::{self, CapabilityRequirements, ShardingPrivacy};
 
-use crate::middleware::{MiddlewareError, MiddlewareSession, PipelineContext};
+use crate::middleware::{
+    MiddlewareError, MiddlewareSession, Pipeline, PipelineContext, ResponseView,
+};
 use crate::openai_types::*;
 use crate::state::AppState;
 
@@ -28,20 +30,28 @@ pub async fn chat_completions(
     // says to use, and we drop into priority-0 routing exactly as if
     // the client had sent the concrete name directly.
     //
+    // The pipeline also arms a `PostPathGuard` that spawns
+    // `run_post` as a detached task when this handler returns — any
+    // exit path triggers it via `Drop`, so the post-path fires
+    // whether we serve from local_inference, fall through to OICP
+    // routing, or return an error.
+    //
     // On failure — the usual cause is ApprovalRequired when a
     // feature hasn't been approved and the request tries to call a
     // write-intent tool — we short-circuit with a structured
     // OpenAI-compatible error so opencode surfaces it as a model
     // error rather than a transport failure.
     let requested_model = request.model.clone().unwrap_or_default();
+    let _post_guard: Option<PostPathGuard>;
     if let Some(pipeline_res) = state
         .inner
         .pipeline_aliases
         .resolve(&requested_model)
         .cloned()
     {
-        if let Err(resp) = run_atos_pipeline(&state, &headers, &mut request, &pipeline_res).await {
-            return resp;
+        match run_atos_pipeline(&state, &headers, &mut request, &pipeline_res).await {
+            Ok(guard) => _post_guard = guard,
+            Err(resp) => return resp,
         }
         // Rewrite the model field so downstream routing finds the
         // concrete model. Preserve the original only in a debug log.
@@ -51,6 +61,8 @@ pub async fn chat_completions(
             "atos pipeline resolved; rewriting request.model"
         );
         request.model = Some(pipeline_res.model_id.clone());
+    } else {
+        _post_guard = None;
     }
 
     // Privacy enforcement: reject local_only requests.
@@ -465,10 +477,10 @@ async fn run_atos_pipeline(
     headers: &HeaderMap,
     request: &mut ChatCompletionRequest,
     pipeline: &commonwealth_core::pipeline_aliases::PipelineResolution,
-) -> Result<(), Response> {
+) -> Result<Option<PostPathGuard>, Response> {
     let Some(session_store) = state.inner.session_store.clone() else {
         debug!("atos pipeline resolved but no session store configured; skipping middleware");
-        return Ok(());
+        return Ok(None);
     };
 
     // Extract headers. Strings are ASCII; non-ASCII values are
@@ -533,6 +545,8 @@ async fn run_atos_pipeline(
         spec_content_hash: handle.state.spec_content_hash.clone(),
         pending_deviation_ack: handle.state.pending_deviation_ack,
         deviation_note_id: handle.state.deviation_note_id.clone(),
+        pending_artifact_delta: handle.state.pending_artifact_delta.clone(),
+        last_seen_at: handle.state.last_seen_at,
     };
 
     let outcome = pipeline_exec.run(request, &mut mw_session, &ctx).await;
@@ -544,11 +558,81 @@ async fn run_atos_pipeline(
     handle.state.spec_content_hash = mw_session.spec_content_hash;
     handle.state.pending_deviation_ack = mw_session.pending_deviation_ack;
     handle.state.deviation_note_id = mw_session.deviation_note_id;
+    handle.state.pending_artifact_delta = mw_session.pending_artifact_delta;
     handle.save().await;
 
     match outcome {
-        Ok(()) => Ok(()),
+        Ok(()) => Ok(Some(PostPathGuard {
+            pipeline: std::sync::Arc::new(pipeline_exec),
+            ctx: std::sync::Arc::new(ctx),
+            session_store,
+            session_id,
+        })),
         Err(err) => Err(middleware_error_to_response(err)),
+    }
+}
+
+/// RAII guard that spawns the post-path middleware chain as a
+/// detached `tokio::spawn` when dropped.
+///
+/// Why a guard rather than an explicit call at every handler exit:
+/// `chat_completions` has many return paths (privacy reject, OICP
+/// unavailable, forward_to_model return, local_inference return,
+/// streaming SSE). A drop guard catches all of them with one
+/// insertion point. The spawn runs AFTER the response is on the
+/// wire — the client never waits on post-path telemetry.
+///
+/// Concurrency: the per-session mutex lives in `SessionStore`, so
+/// if the next request's pre-path arrives before post-path
+/// completes, the pre-path waits. That's the desired ordering —
+/// post-path mutations are visible to the next turn.
+pub(crate) struct PostPathGuard {
+    pipeline: std::sync::Arc<Pipeline>,
+    ctx: std::sync::Arc<PipelineContext>,
+    session_store: sovereign_atos::session::SessionStore,
+    session_id: String,
+}
+
+impl Drop for PostPathGuard {
+    fn drop(&mut self) {
+        let pipeline = self.pipeline.clone();
+        let ctx = self.ctx.clone();
+        let store = self.session_store.clone();
+        let session_id = self.session_id.clone();
+        tokio::spawn(async move {
+            // Re-load session state so post-path sees whatever MCP
+            // tool calls wrote during the turn. Pre-path's save
+            // already committed its mutations; we pick up from
+            // there.
+            let mut handle = store.load_and_lock(&session_id).await;
+            let mut mw_session = MiddlewareSession {
+                feature_id: handle.state.feature_id.clone(),
+                approval_validated: handle.state.approval_validated,
+                spec_content_hash: handle.state.spec_content_hash.clone(),
+                pending_deviation_ack: handle.state.pending_deviation_ack,
+                deviation_note_id: handle.state.deviation_note_id.clone(),
+                pending_artifact_delta: handle.state.pending_artifact_delta.clone(),
+                last_seen_at: handle.state.last_seen_at,
+            };
+            // For M5.1 we pass a synthetic empty response view.
+            // M5.2's ArtifactSurface reads from the DB, not from
+            // `content`, so this is sufficient. A future
+            // enhancement would capture the real response bytes.
+            let view = ResponseView {
+                content: "",
+                finish_reason: Some("stop"),
+                tool_calls_emitted: 0,
+            };
+            pipeline.run_post(&view, &mut mw_session, &ctx).await;
+            // Copy back + persist.
+            handle.state.feature_id = mw_session.feature_id;
+            handle.state.approval_validated = mw_session.approval_validated;
+            handle.state.spec_content_hash = mw_session.spec_content_hash;
+            handle.state.pending_deviation_ack = mw_session.pending_deviation_ack;
+            handle.state.deviation_note_id = mw_session.deviation_note_id;
+            handle.state.pending_artifact_delta = mw_session.pending_artifact_delta;
+            handle.save().await;
+        });
     }
 }
 
