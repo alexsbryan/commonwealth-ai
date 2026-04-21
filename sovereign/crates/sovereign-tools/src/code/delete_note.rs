@@ -51,6 +51,16 @@ impl Tool for DeleteNoteTool {
                     call: serde_json::json!({ "id": "note_abc123" }),
                 },
             ],
+            effect: Effect::Write,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "deleted": { "type": "boolean" }
+                }
+            })),
         }
     }
 

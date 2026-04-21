@@ -62,6 +62,13 @@ impl Tool for EmailTool {
                 "required": ["action"]
             }),
             examples: vec![],
+            effect: Effect::Write,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Slow,
+            scope: Scope::External,
+            // Shape varies with `action` — send returns confirmation
+            // text, read_inbox returns a list of message headers.
+            output_schema: None,
         }
     }
 

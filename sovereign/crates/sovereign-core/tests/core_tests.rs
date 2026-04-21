@@ -267,6 +267,11 @@ impl Tool for DummyTool {
             description: "test tool".to_string(),
             parameters: serde_json::json!({}),
             examples: vec![],
+            effect: sovereign_core::types::Effect::Read,
+            idempotency: sovereign_core::types::Idempotency::Idempotent,
+            latency: sovereign_core::types::Latency::Instant,
+            scope: sovereign_core::types::Scope::Session,
+            output_schema: None,
         }
     }
     fn required_permissions(&self) -> Vec<Permission> {
@@ -1186,6 +1191,11 @@ impl Tool for PermissionRequiringTool {
             description: "needs permission".to_string(),
             parameters: serde_json::json!({}),
             examples: vec![],
+            effect: sovereign_core::types::Effect::ReadWrite,
+            idempotency: sovereign_core::types::Idempotency::NonIdempotent,
+            latency: sovereign_core::types::Latency::Slow,
+            scope: sovereign_core::types::Scope::Session,
+            output_schema: None,
         }
     }
     fn required_permissions(&self) -> Vec<Permission> {

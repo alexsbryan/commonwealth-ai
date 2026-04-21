@@ -74,6 +74,16 @@ impl Tool for SearchTool {
                 "required": ["query"]
             }),
             examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::External,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Synthesised answer with inline citation markers \
+                                (`[1]`, `[2]`, ...) and a trailing `Sources:` list \
+                                tying markers to URLs. Output is prose, not JSON."
+            })),
         }
     }
 

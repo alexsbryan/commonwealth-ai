@@ -82,6 +82,17 @@ impl Tool for ProvisionFeatureTool {
                     "stop_condition": "cargo run -p sovereign-cli -- atos --version | grep -E '^atos [0-9]+\\.'"
                 }),
             }],
+            effect: Effect::Write,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id":    { "type": "string" },
+                    "title": { "type": "string" }
+                }
+            })),
         }
     }
 

@@ -925,6 +925,11 @@ mod tests {
             description: "Search the web".to_string(),
             parameters: serde_json::json!({}),
             examples: vec![],
+            effect: crate::types::Effect::Read,
+            idempotency: crate::types::Idempotency::Idempotent,
+            latency: crate::types::Latency::Slow,
+            scope: crate::types::Scope::External,
+            output_schema: None,
         }];
         if let Intent::SimpleAction { tool } = LlmRouter::parse_intent("action", &tools) {
             assert_eq!(tool, "web_search");

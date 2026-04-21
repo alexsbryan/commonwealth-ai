@@ -26,6 +26,12 @@ impl Tool for ComputeTool {
                 "required": ["code"]
             }),
             examples: vec![],
+            effect: Effect::ReadWrite,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Slow,
+            scope: Scope::Session,
+            // Python script output is script-dependent; no fixed shape.
+            output_schema: None,
         }
     }
 

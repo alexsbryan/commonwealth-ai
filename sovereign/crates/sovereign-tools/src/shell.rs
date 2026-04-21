@@ -29,6 +29,15 @@ impl Tool for ShellTool {
                 "required": ["command"]
             }),
             examples: vec![],
+            effect: Effect::ReadWrite,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Slow,
+            scope: Scope::Session,
+            // Shell output is whatever the command produces; shape
+            // depends entirely on the command. Downstream steps can
+            // pipe the full text via `{N.output}` or route through
+            // reasoning — no structured keys to reference.
+            output_schema: None,
         }
     }
 

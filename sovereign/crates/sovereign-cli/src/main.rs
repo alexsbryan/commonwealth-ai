@@ -18,6 +18,7 @@ mod reflect_cmd;
 mod service_install;
 mod setup_cmd;
 mod setup_config;
+mod tools_cmd;
 mod util;
 
 use std::io::{self, BufRead, Write};
@@ -156,6 +157,7 @@ const HELP: Help = Help {
             ("doctor",  "Diagnose setup and daemon health"),
             ("reflect", "Review session reflections; retire fixed ones"),
             ("recipe",  "Run a corpus ingestion recipe"),
+            ("tools",   "Invoke code-intelligence tools from the CLI (list / describe / call)"),
             ("mcp",     "MCP server diagnostics (list tools, proxy)"),
             ("daemon",  "(internal) Long-running service managed by launchd/systemd"),
         ]),
@@ -309,6 +311,10 @@ async fn main() {
             }
             "atos" => {
                 let code = atos_cmd::run_atos(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "tools" => {
+                let code = tools_cmd::run_tools(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "doctor" => {

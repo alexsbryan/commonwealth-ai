@@ -69,6 +69,16 @@ impl Tool for RecentChangesTool {
                     call: serde_json::json!({ "hours": 2 }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Markdown, grouped by file, showing symbols modified \
+                                within the last N hours. Each symbol line includes \
+                                `name  [kind]  mtime_ago`."
+            })),
         }
     }
 

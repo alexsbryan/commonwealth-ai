@@ -84,6 +84,28 @@ impl Tool for ProjectContextTool {
                     call: serde_json::json!({ "query": "testing strategy integration vs unit" }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "query":         { "type": "string" },
+                    "total_results": { "type": "integer" },
+                    "results":       {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string" },
+                                "snippet":   { "type": "string" },
+                                "score":     { "type": "number" }
+                            }
+                        }
+                    }
+                }
+            })),
         }
     }
 

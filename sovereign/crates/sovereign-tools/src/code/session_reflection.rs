@@ -114,6 +114,17 @@ impl Tool for SessionReflectionTool {
                     }),
                 },
             ],
+            effect: Effect::Write,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "recorded": { "type": "boolean" },
+                    "id":       { "type": "string" }
+                }
+            })),
         }
     }
 

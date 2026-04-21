@@ -78,6 +78,16 @@ impl Tool for FindCallersTool {
                     call: serde_json::json!({ "symbol": "embed", "depth": 2 }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Markdown list of inbound call sites, one per line, \
+                                with `file:line` locations. Use depth=2 to see \
+                                transitive callers; response groups by depth."
+            })),
         }
     }
 

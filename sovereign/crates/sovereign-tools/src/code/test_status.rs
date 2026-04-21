@@ -102,11 +102,48 @@ impl Tool for TestStatusTool {
                     call: serde_json::json!({}),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Session,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","never_run"] },
+                    "age_seconds":     { "type": "integer" },
+                    "pass_count":      { "type": "integer" },
+                    "fail_count":      { "type": "integer" },
+                    "watcher_active":  { "type": "boolean" },
+                    "watched_scope":   { "type": "string" },
+                    "failures":        { "type": "array" },
+                    "run_id":          { "type": "integer" },
+                    "output_truncated":{ "type": "boolean" }
+                }
+            })),
         }
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
         vec![]
+    }
+
+    /// Signal: one-liner when the last test run failed. Silent on a
+    /// clean run. SQLite point lookup — no extra work.
+    async fn signal(&self) -> Option<String> {
+        let summary = self.store.latest_run().await.ok().flatten()?;
+        if summary.passed() {
+            return None;
+        }
+        let age = summary
+            .finished_at
+            .elapsed()
+            .ok()
+            .map(|d| format!(" age {}s", d.as_secs()))
+            .unwrap_or_default();
+        Some(format!(
+            "last test run: {} passed, {} failed{age}",
+            summary.pass_count, summary.fail_count
+        ))
     }
 
     async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

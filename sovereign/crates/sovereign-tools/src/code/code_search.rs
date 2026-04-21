@@ -128,6 +128,17 @@ impl Tool for CodeSearchTool {
                     call: serde_json::json!({ "query": "tool permission validation before execute", "language": "rust" }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Fenced code blocks ranked by relevance; same format \
+                                as symbol_lookup (`// file:start-end [kind] (corpus)`). \
+                                Lower relevance than symbol_lookup — results are \
+                                approximate."
+            })),
         }
     }
 

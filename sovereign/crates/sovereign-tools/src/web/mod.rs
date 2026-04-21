@@ -235,6 +235,15 @@ impl Tool for WebSearchTool {
                 "required": ["query"]
             }),
             examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::External,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Synthesized answer text with inline citation markers \
+                                and a Sources list."
+            })),
         }
     }
 
@@ -347,6 +356,15 @@ impl Tool for WebFetchTool {
                 "required": ["url"]
             }),
             examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::External,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Plain-text body of the fetched URL, HTML-stripped \
+                                to main content."
+            })),
         }
     }
 

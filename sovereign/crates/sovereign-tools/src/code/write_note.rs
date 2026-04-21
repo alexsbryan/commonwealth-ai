@@ -107,6 +107,19 @@ impl Tool for WriteNoteTool {
                     }),
                 },
             ],
+            effect: Effect::Write,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id":         { "type": "string" },
+                    "kind":       { "type": "string" },
+                    "scope":      { "type": "string" },
+                    "feature_id": { "type": ["string", "null"] }
+                }
+            })),
         }
     }
 

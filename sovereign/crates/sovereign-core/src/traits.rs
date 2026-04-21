@@ -171,6 +171,23 @@ pub trait Tool: Send + Sync {
     fn retry_config(&self) -> Option<RetryConfig> {
         None
     }
+
+    /// Cheap summary of salient current state. Returns `None` when the
+    /// tool has no stateful signal to broadcast (the common case —
+    /// stateless query tools always return None).
+    ///
+    /// Called by the context assembler every turn during
+    /// `ReasonWithTools`. Must be fast (~ms), must not block, must not
+    /// mutate state. Tools that read watcher stores, NoteStore digests,
+    /// etc. can implement this to give the agent peripheral awareness
+    /// of "is there something salient here?" without the agent having
+    /// to poll each tool explicitly.
+    ///
+    /// Default returns `None`; the overwhelming majority of tools
+    /// have nothing to signal and keep the default.
+    async fn signal(&self) -> Option<String> {
+        None
+    }
 }
 
 // ─── 5. Storage (sub-traits) ──────────────────────────────────

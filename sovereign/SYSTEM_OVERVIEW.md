@@ -1527,11 +1527,19 @@ digest assembly, token estimation. Proposed split: `debouncer.rs`
 public façade and trait implementor. Introduce a `ViewKind` enum so the
 `VIEW_*` string constants and their match-like checks become type-safe.
 
-**`sovereign-cli/src/atos_cmd.rs`** (2,673 lines) and
-**`sovereign-atos/src/local.rs`** (1,183 lines) — same shape. Split the CLI
-module under `sovereign-cli/src/atos/{provision,milestone,spec,teardown,
-doctor,audit}.rs`; split the library module under `sovereign-atos/src/local/
-{orchestrator,driver,presentation}.rs`.
+~~**`sovereign-cli/src/atos_cmd.rs`** (2,673 lines)~~ — Done. Split into
+`sovereign-cli/src/atos_cmd/` directory with twelve files per subcommand
+family (`mod.rs` dispatcher + `args`, `stores`, `provision`, `milestone`,
+`feature`, `spec`, `status`, `teardown`, `doctor`, `plugin`, `ab`). Largest
+resulting file is `milestone.rs` at ~700 lines; all others under 450.
+
+~~**`sovereign-atos/src/local.rs`** (1,183 lines)~~ — Done. Split into
+`sovereign-atos/src/local/` directory: `orchestrator.rs` (struct + trait impl
++ inherent helpers + orchestrator-level tests) and `helpers.rs` (pure
+charter-text helpers — `extract_id_and_title`, `compose_milestone_brief`,
+`extract_milestone_stop_condition`, stop-condition marker stripping,
+prior-digest / global-invariants preamble assembly) with its own unit tests.
+`mod.rs` preserves the public surface (`pub use LocalAtosOrchestrator`).
 
 ### OCP: Registry patterns for pluggable dispatch
 

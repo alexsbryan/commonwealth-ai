@@ -105,6 +105,20 @@ impl Tool for WriteRedteamFindingTool {
                     "files": ["corpus-engine/src/acquirers/zotero.rs"]
                 }),
             }],
+            effect: Effect::Write,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id":         { "type": "string" },
+                    "feature_id": { "type": "string" },
+                    "invariant":  { "type": "string" },
+                    "status":     { "type": "string" },
+                    "confidence": { "type": "string" }
+                }
+            })),
         }
     }
 

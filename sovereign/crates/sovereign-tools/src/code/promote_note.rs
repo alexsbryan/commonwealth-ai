@@ -82,6 +82,18 @@ impl Tool for PromoteNoteTool {
                                     registries for source type dispatch."
                 }),
             }],
+            effect: Effect::Write,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "promoted_id": { "type": "string" },
+                    "from_scope":  { "type": "string" },
+                    "to_scope":    { "type": "string" }
+                }
+            })),
         }
     }
 

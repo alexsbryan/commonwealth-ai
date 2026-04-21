@@ -102,6 +102,19 @@ impl Tool for ReadNoteDigestTool {
                     "feature_id": "atos-version-flag"
                 }),
             }],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "markdown": { "type": "string" },
+                    "stale":    { "type": "boolean" },
+                    "hit":      { "type": "boolean",
+                                  "description": "True when the digest was served from cache" }
+                }
+            })),
         }
     }
 

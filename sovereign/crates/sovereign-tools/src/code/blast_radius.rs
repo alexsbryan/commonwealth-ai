@@ -120,6 +120,21 @@ impl Tool for BlastRadiusTool {
                     call: serde_json::json!({ "symbol": "ToolRegistry", "max_depth": 1 }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "symbol":         { "type": "string" },
+                    "depth_reached":  { "type": "integer" },
+                    "total_callers":  { "type": "integer" },
+                    "levels":         { "type": "array", "items": { "type": "object" } },
+                    "macro_hints":    { "type": "array", "items": { "type": "string" } },
+                    "health":         { "type": "string", "enum": ["ok", "stale", "missing"] }
+                }
+            })),
         }
     }
 

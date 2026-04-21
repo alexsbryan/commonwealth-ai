@@ -86,11 +86,64 @@ impl Tool for LintStatusTool {
                     call: serde_json::json!({}),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Session,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","never_run"] },
+                    "age_seconds":     { "type": "integer" },
+                    "pass_count":      { "type": "integer" },
+                    "fail_count":      { "type": "integer" },
+                    "warn_count":      { "type": "integer" },
+                    "watcher_active":  { "type": "boolean" },
+                    "watched_scope":   { "type": "string" },
+                    "errors":          { "type": "array" },
+                    "warnings":        { "type": "array" },
+                    "run_id":          { "type": "integer" },
+                    "output_truncated":{ "type": "boolean" }
+                }
+            })),
         }
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
         vec![]
+    }
+
+    /// Signal: a one-liner when the lint watcher shows failures or
+    /// stale state. Silent when the last run was clean. Read-only
+    /// SQLite point lookup — no extra I/O beyond what `execute()`
+    /// would do on the same call.
+    async fn signal(&self) -> Option<String> {
+        let summary = self.store.latest_run().await.ok().flatten()?;
+        if summary.passed() {
+            return None;
+        }
+        let age = summary
+            .finished_at
+            .elapsed()
+            .ok()
+            .map(|d| format!(" age {}s", d.as_secs()))
+            .unwrap_or_default();
+        // Find the file with the most recent failure to make the line
+        // actionable (operators can go straight there).
+        let top_file = self
+            .store
+            .latest_failures(1)
+            .await
+            .ok()
+            .and_then(|rs| rs.into_iter().next())
+            .map(|r| r.file);
+        let where_ = top_file
+            .map(|f| format!(" (first in {f})"))
+            .unwrap_or_default();
+        Some(format!(
+            "{} lint error(s){where_}{age}",
+            summary.fail_count
+        ))
     }
 
     async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

@@ -51,6 +51,18 @@ impl Tool for GetRunOutputTool {
                     call: serde_json::json!({ "run_id": 7 }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Session,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "run_id":           { "type": "integer" },
+                    "output":           { "type": "string" },
+                    "output_truncated": { "type": "boolean" }
+                }
+            })),
         }
     }
 

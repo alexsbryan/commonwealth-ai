@@ -41,6 +41,13 @@ impl Tool for CalendarTool {
                 "required": ["action"]
             }),
             examples: vec![],
+            effect: Effect::Write,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Slow,
+            scope: Scope::External,
+            // Shape varies with `action` — list returns events,
+            // create returns a confirmation blob.
+            output_schema: None,
         }
     }
 

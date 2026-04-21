@@ -70,6 +70,17 @@ impl Tool for SymbolLookupTool {
                     call: serde_json::json!({ "name": "InferenceProvider", "kind": "trait" }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Fenced code blocks, one per match. Each block is prefixed \
+                                with `// <file>:<start>-<end>  [<kind>]  (<corpus>)` \
+                                so downstream steps can extract locations via regex \
+                                or pipe to reasoning."
+            })),
         }
     }
 

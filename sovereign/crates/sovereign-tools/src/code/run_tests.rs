@@ -59,6 +59,18 @@ impl Tool for RunTestsTool {
                     call: serde_json::json!({}),
                 },
             ],
+            effect: Effect::Write,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Session,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "triggered": { "type": "boolean" },
+                    "run_id":    { "type": "integer" },
+                    "message":   { "type": "string" }
+                }
+            })),
         }
     }
 

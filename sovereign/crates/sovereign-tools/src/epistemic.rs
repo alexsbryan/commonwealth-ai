@@ -12,7 +12,9 @@ use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
-use sovereign_core::types::{Permission, StepOutput, ToolContext, ToolDescriptor};
+use sovereign_core::types::{
+    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
+};
 
 use corpus_engine::CorpusEngine;
 
@@ -57,6 +59,15 @@ impl Tool for ClaimSearchTool {
                 "required": ["query"]
             }),
             examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Markdown-formatted list of positions with epistemic \
+                                status and attribution."
+            })),
         }
     }
 
@@ -261,6 +272,16 @@ impl Tool for EpistemicLandscapeTool {
                 "required": ["topic"]
             }),
             examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Markdown summary of the epistemic landscape — \
+                                dominant view, contested positions, fault lines, \
+                                open questions."
+            })),
         }
     }
 

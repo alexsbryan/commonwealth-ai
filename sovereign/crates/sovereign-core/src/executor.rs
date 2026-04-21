@@ -121,9 +121,26 @@ pub fn resolve_inputs(
                 if input.key == "output" {
                     serde_json::to_string_pretty(v).unwrap_or_default()
                 } else {
-                    v.get(&input.key)
-                        .map(|v| v.to_string())
-                        .unwrap_or_default()
+                    // Composition glassbox (per ARCH_PRINCIPLES §9):
+                    // pulling a key that isn't in the Json output
+                    // used to silently resolve to "". That breaks
+                    // compositions in ways operators can't see. Now
+                    // we emit a tracing::warn! naming the missing
+                    // key and the step it came from.
+                    match v.get(&input.key) {
+                        Some(val) => val.to_string(),
+                        None => {
+                            tracing::warn!(
+                                from_step = input.step_id,
+                                key = %input.key,
+                                available = ?v.as_object().map(|o| o.keys().collect::<Vec<_>>()),
+                                "resolve_inputs: key not present in upstream Json output — \
+                                 downstream template will see an empty string. Check the \
+                                 upstream tool's `output_schema` for the correct key."
+                            );
+                            String::new()
+                        }
+                    }
                 }
             }
             StepOutput::ReasonWithToolsResult { ref text, .. } => text.clone(),
@@ -443,7 +460,24 @@ impl Executor {
                 let tool = self.tools.get(tool_id)?;
 
                 // 3. Check permissions.
-                for permission in tool.required_permissions() {
+                let perms = tool.required_permissions();
+                // Phase 1 observability: a Write/ReadWrite tool with
+                // an empty permissions vec bypasses approval entirely
+                // — that's almost always a missing declaration, not a
+                // deliberate choice. Surface it so per-tool permission
+                // tightening (see §12 Roadmap) has a visible signal.
+                if perms.is_empty()
+                    && tool.descriptor().effect != Effect::Read
+                {
+                    tracing::warn!(
+                        tool_id = %tool_id,
+                        effect = ?tool.descriptor().effect,
+                        "executor: write-effectful tool has empty required_permissions \
+                         — approval gate will not fire; declare permissions or wait for \
+                         Phase 1.5 MCP-parity fix"
+                    );
+                }
+                for permission in perms {
                     let scope = format!("{permission:?}");
                     let granted = self.store.get_permission(tool_id, &scope).await?;
 
@@ -483,6 +517,14 @@ impl Executor {
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();
+                // Phase 1 retry gate: a NonIdempotent tool never
+                // auto-retries, regardless of its retry_config or the
+                // error-string heuristic. Retrying a write that
+                // actually succeeded but returned a transient-looking
+                // error would create duplicate notes / emails /
+                // calendar entries. See ARCH_PRINCIPLES §7.
+                let descriptor = tool.descriptor();
+                let retry_is_safe = descriptor.idempotency == Idempotency::Idempotent;
                 let mut last_error = None;
 
                 for attempt in 0..=retry.max_retries {
@@ -510,9 +552,17 @@ impl Executor {
                                 || msg.contains("rate limit")
                                 || msg.contains("connection")
                                 || msg.contains("temporarily");
-                            if retryable && attempt < retry.max_retries {
+                            if retryable && retry_is_safe && attempt < retry.max_retries {
                                 last_error = Some(e);
                                 continue;
+                            }
+                            if retryable && !retry_is_safe && attempt < retry.max_retries {
+                                tracing::warn!(
+                                    tool_id = %tool_id,
+                                    error = %e,
+                                    "executor: NonIdempotent tool failed with a transient-looking \
+                                     error; retry suppressed to avoid duplicate side-effect"
+                                );
                             }
                             return Err(e);
                         }
@@ -624,17 +674,69 @@ impl Executor {
         max_iterations: usize,
         task: &Task,
     ) -> Result<StepOutput> {
-        // Build tool descriptions for the system prompt.
+        // Build tool descriptions for the system prompt. Annotation
+        // matches the planner prompt format (Phase 1.4) so the agent
+        // sees consistent effect/scope/latency tags across both paths.
         let tool_descs: Vec<String> = available_tools
             .iter()
             .filter_map(|id| self.tools.get(id).ok())
             .map(|t| {
                 let d = t.descriptor();
-                format!("- {} (id: {}): {}", d.name, d.id, d.description)
+                let effect = match d.effect {
+                    Effect::Read => "Read",
+                    Effect::Write => "Write",
+                    Effect::ReadWrite => "ReadWrite",
+                };
+                let scope = match d.scope {
+                    Scope::Session => "Session",
+                    Scope::Persistent => "Persistent",
+                    Scope::External => "External",
+                };
+                let latency = match d.latency {
+                    Latency::Instant => "Instant",
+                    Latency::Fast => "Fast",
+                    Latency::Slow => "Slow",
+                    Latency::Streaming => "Streaming",
+                };
+                // Composition hint: surface the tool's declared
+                // output keys so the agent can compose plans with
+                // {N.key} template substitution instead of piping
+                // the whole text output through reasoning.
+                let output_hint = d
+                    .output_schema
+                    .as_ref()
+                    .and_then(|s| s.get("properties"))
+                    .and_then(|p| p.as_object())
+                    .map(|o| o.keys().cloned().collect::<Vec<_>>())
+                    .filter(|k| !k.is_empty())
+                    .map(|k| format!("  (output keys: {})", k.join(", ")))
+                    .unwrap_or_default();
+                format!(
+                    "- {} (id: {}) [{effect} · {scope} · {latency}]: {}{}",
+                    d.name, d.id, d.description, output_hint
+                )
             })
             .collect();
 
-        let system = self.build_retrieval_reasoning_prompt(&tool_descs, max_iterations);
+        // Phase 2 signals: poll each available tool's cheap-state
+        // summary. Most tools return None. The ones that don't give
+        // the agent peripheral awareness of stale/failing/backlogged
+        // state every turn — replaces the ad-hoc REFLECT_HINT_INTERVAL
+        // text nudge in mcp_router with structured preamble data.
+        let mut tool_signals: Vec<String> = Vec::new();
+        for id in available_tools {
+            if let Ok(tool) = self.tools.get(id) {
+                if let Some(s) = tool.signal().await {
+                    tool_signals.push(format!("- {id}: {s}"));
+                }
+            }
+        }
+
+        let system = self.build_retrieval_reasoning_prompt(
+            &tool_descs,
+            &tool_signals,
+            max_iterations,
+        );
 
         // Build the growing conversation as a single prompt.
         let mut conversation = format!(
@@ -762,9 +864,20 @@ impl Executor {
     fn build_retrieval_reasoning_prompt(
         &self,
         tool_descriptions: &[String],
+        tool_signals: &[String],
         max_iterations: usize,
     ) -> String {
         let tools_list = tool_descriptions.join("\n");
+
+        // Phase 2: render an optional `## Tool state` block only when
+        // at least one tool returned a non-None signal. Silent
+        // otherwise (zero noise on a clean system). See ARCH_PRINCIPLES
+        // §9 for the glassbox rationale.
+        let signal_block = if tool_signals.is_empty() {
+            String::new()
+        } else {
+            format!("\n\n## Tool state\n\n{}", tool_signals.join("\n"))
+        };
 
         // Check if active skills have a retrieval reasoning addendum.
         let skill_addendum = self
@@ -809,7 +922,7 @@ When ready to answer (without a <tool_call>):
 
 ## Available tools
 
-{tools_list}
+{tools_list}{signal_block}
 
 {skill_addendum}"#
         )

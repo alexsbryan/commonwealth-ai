@@ -2038,7 +2038,7 @@ async fn cmd_serve(args: &[String]) -> i32 {
 /// Summary returned by [`load_merged_graph`] — aggregated counts for the
 /// startup banner and structured logging.
 #[derive(Debug, Clone, Copy, Default)]
-struct MergedGraphSummary {
+pub(crate) struct MergedGraphSummary {
     #[allow(dead_code)]
     graphs_found: usize,
     #[allow(dead_code)]
@@ -2050,7 +2050,10 @@ struct MergedGraphSummary {
 /// Walk `data_dir/*/scip_graph.db` and merge each into a fresh in-memory
 /// ScipGraph. If `verbose`, prints a per-graph line to stderr (used for
 /// the startup banner); reloads pass `false`.
-async fn load_merged_graph(
+///
+/// `pub(crate)` so `tools_cmd::registry` can reuse it without
+/// duplicating the discovery / merge logic.
+pub(crate) async fn load_merged_graph(
     data_dir: &Path,
     verbose: bool,
 ) -> (corpus_engine::ScipGraph, MergedGraphSummary) {

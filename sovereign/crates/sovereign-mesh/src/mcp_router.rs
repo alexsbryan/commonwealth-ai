@@ -28,7 +28,7 @@ use tower_http::cors::CorsLayer;
 
 use corpus_engine::NoteStore;
 use sovereign_core::registry::ToolRegistry;
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_core::types::{Effect, StepOutput, ToolContext};
 
 #[derive(Deserialize)]
 pub struct JsonRpcRequest {
@@ -145,9 +145,6 @@ pub fn mcp_router(
         .layer(Extension(call_counter))
         .layer(CorsLayer::permissive())
 }
-
-/// After this many tool calls in a session, append a reflection reminder.
-const REFLECT_HINT_INTERVAL: u64 = 10;
 
 fn is_localhost(addr: &SocketAddr) -> bool {
     addr.ip().is_loopback()
@@ -275,12 +272,14 @@ async fn dispatch(
     Some(response)
 }
 
-/// Execute a `tools/call` request. Logs the call to the tool_call_log ring
-/// buffer for pattern analysis by `sovereign reflect`. Log failures are
-/// silently ignored — they must never affect tool call outcomes.
+/// Execute a `tools/call` request. Logs the call to the tool_call_log
+/// ring buffer for pattern analysis by `sovereign reflect`. Log
+/// failures are silently ignored — they must never affect tool call
+/// outcomes.
 ///
-/// Every REFLECT_HINT_INTERVAL calls a short reminder is appended to the
-/// response text nudging the agent to call `session_reflection`.
+/// As of Phase 2 the tool response carries no trailing reminder text.
+/// Stateful tools advertise their salient state through `Tool::signal`,
+/// which the Runtime's ReasonWithTools preamble polls every turn.
 async fn handle_tool_call(
     id: Value,
     params: Option<Value>,
@@ -322,6 +321,33 @@ async fn handle_tool_call(
         return JsonRpcResponse::ok(id, call_tool_text(e.to_string(), true));
     }
 
+    // Phase 1.5 audit gate: MCP is stdio/HTTP non-interactive, so the
+    // executor's `ApprovalChannel::request_approval` path (which blocks
+    // on human input) can't fire here. Instead we AUDIT every write-
+    // effectful MCP call — tracing::warn!, plus a dedicated outcome
+    // tag in the ring buffer — so an operator running `sovereign
+    // reflect` sees every unapproved write after the fact. A future
+    // interactive-MCP protocol extension can upgrade this to a hard
+    // block without changing the surrounding structure.
+    //
+    // See ARCH_PRINCIPLES.md §7 (structural invariants) and §9
+    // (glassbox). The parity gate to the executor's StepKind::Tool
+    // path closes once MCP has an approval protocol; until then
+    // visibility is the achievable half.
+    let descriptor = tool.descriptor();
+    let is_write_effectful = descriptor.effect != Effect::Read;
+    if is_write_effectful {
+        tracing::warn!(
+            tool_id = %name,
+            effect = ?descriptor.effect,
+            idempotency = ?descriptor.idempotency,
+            session_id = %session_id,
+            "mcp: write-effectful tool invoked without approval gate \
+             (MCP protocol does not support interactive approval; \
+             audit-only per Phase 1.5)"
+        );
+    }
+
     let ctx = ToolContext {
         conversation_id: "mcp".to_string(),
         task_id: None,
@@ -332,8 +358,11 @@ async fn handle_tool_call(
     let result = tool.execute(&arguments, &ctx).await;
 
     // Log outcome to ring buffer. Fire-and-forget — a logging failure must
-    // never affect the tool call result.
-    let outcome = match &result {
+    // never affect the tool call result. Write-effectful calls get a
+    // distinct `"unapproved_write"` or `"unapproved_readwrite"` tag so
+    // `sovereign reflect` can surface them as a reviewable bucket
+    // separate from ordinary reads.
+    let base_outcome = match &result {
         Err(_) => "error",
         Ok(StepOutput::Json(v)) => {
             // Detect empty/null results to flag "index missing content" signals.
@@ -345,43 +374,27 @@ async fn handle_tool_call(
         }
         Ok(_) => "success",
     };
+    let outcome = match (base_outcome, descriptor.effect) {
+        ("success", Effect::Write) => "unapproved_write",
+        ("success", Effect::ReadWrite) => "unapproved_readwrite",
+        (other, _) => other,
+    };
     let _ = logger.log_tool_call(&session_id, &name, outcome).await;
 
-    // Increment the session call counter. When it crosses a multiple of
-    // REFLECT_HINT_INTERVAL, append a brief reflection reminder to the
-    // response. Skip the reminder when the tool IS session_reflection
-    // (no need to prompt what was just called) and on error results
-    // (don't dilute the error message).
-    let count = call_counter.fetch_add(1, Ordering::Relaxed) + 1;
-    let reflect_hint = if name != "session_reflection"
-        && count % REFLECT_HINT_INTERVAL == 0
-        && result.is_ok()
-    {
-        Some(format!(
-            "\n\n---\n[sovereign] {count} tool calls this session. \
-             Consider calling `session_reflection` to record what helped \
-             and what was missing while context is fresh."
-        ))
-    } else {
-        None
-    };
+    // The session call counter is kept for telemetry / rate-limit
+    // decisions even though the periodic reflection nudge was removed
+    // in Phase 2. Tools now surface their salient state via
+    // `Tool::signal()` which the ReasonWithTools preamble polls every
+    // turn — the 10-call text nudge ("Consider calling
+    // session_reflection…") is obsolete.
+    let _ = call_counter.fetch_add(1, Ordering::Relaxed);
 
     match result {
-        Ok(StepOutput::Text(text)) => {
-            let body = match reflect_hint {
-                Some(hint) => format!("{text}{hint}"),
-                None => text,
-            };
-            JsonRpcResponse::ok(id, call_tool_text(body, false))
-        }
+        Ok(StepOutput::Text(text)) => JsonRpcResponse::ok(id, call_tool_text(text, false)),
         Ok(StepOutput::Json(value)) => {
             let text = serde_json::to_string_pretty(&value)
                 .unwrap_or_else(|_| value.to_string());
-            let body = match reflect_hint {
-                Some(hint) => format!("{text}{hint}"),
-                None => text,
-            };
-            JsonRpcResponse::ok(id, call_tool_text(body, false))
+            JsonRpcResponse::ok(id, call_tool_text(text, false))
         }
         Ok(other) => JsonRpcResponse::ok(id, call_tool_text(format!("{other:?}"), false)),
         Err(e) => JsonRpcResponse::ok(

@@ -55,11 +55,28 @@ impl Tool for FileTool {
                 "required": ["action", "path"]
             }),
             examples: vec![],
+            effect: Effect::ReadWrite,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Instant,
+            scope: Scope::Session,
+            // Shape depends on action — read returns file contents,
+            // write returns a status string, list returns a newline
+            // list. Leave unschema'd rather than promise structure
+            // that doesn't hold across actions.
+            output_schema: None,
         }
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::FileRead]
+        // The tool multiplexes read/write/list/search on `action`.
+        // The approval gate walks this vec per invocation and stores
+        // a (tool_id, scope) grant per permission — so the operator
+        // grants `FileRead` the first time a `read`/`list`/`search`
+        // fires, and `FileWrite` the first time a `write` fires.
+        // Returning both keeps the check correct regardless of
+        // action; the Effect::ReadWrite declaration on the
+        // descriptor matches.
+        vec![Permission::FileRead, Permission::FileWrite]
     }
 
     async fn execute(

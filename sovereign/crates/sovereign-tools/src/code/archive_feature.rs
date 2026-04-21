@@ -62,6 +62,17 @@ impl Tool for ArchiveFeatureTool {
                     "reason": "shipped; --version flag lives in atos_cmd.rs"
                 }),
             }],
+            effect: Effect::Write,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "archived": { "type": "boolean" },
+                    "id":       { "type": "string" }
+                }
+            })),
         }
     }
 

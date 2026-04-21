@@ -173,7 +173,13 @@ impl Tool for DocumentTool {
         ToolDescriptor {
             id: "document".to_string(),
             name: "Document".to_string(),
-            description: "Process an entire ingested document (summarize, analyze)".to_string(),
+            description: "Process an entire ingested document with a fixed operation \
+                          (summarize | analyze). Reliable for those two common cases — \
+                          smaller models call it correctly because the operation is \
+                          constrained. For a custom operation described in natural \
+                          language (e.g. \"extract character arcs\", \"find legal \
+                          risks\"), use `document_operation` instead."
+                .to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -190,6 +196,15 @@ impl Tool for DocumentTool {
                 "required": ["source", "operation"]
             }),
             examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::Session,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Synthesised summary or analysis prose. Shape depends \
+                                on the `operation` param."
+            })),
         }
     }
 

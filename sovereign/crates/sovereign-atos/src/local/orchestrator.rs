@@ -2,10 +2,14 @@
 //! by a pair of local [`FeatureStore`] / [`NoteStore`] handles.
 //!
 //! Pure orchestration: no terminal I/O (that belongs to the CLI),
-//! no subprocess spawning (that belongs to whichever transport is
-//! driving). The methods compose existing corpus-engine operations
-//! and expose the result as trait-level types the caller can render
-//! however it likes.
+//! no subprocess spawning beyond the stop-condition runner, no
+//! rendering of user-facing banners. The methods compose existing
+//! corpus-engine operations and expose the result as trait-level
+//! types the caller can render however it likes.
+//!
+//! Pure text helpers live next door in [`super::helpers`]; this file
+//! is the orchestration surface and the tests that exercise it
+//! end-to-end against real SQLite tempdirs.
 
 use std::process::Stdio;
 use std::sync::Arc;
@@ -17,6 +21,7 @@ use corpus_engine::{
     NoteStore, ScopeFilter,
 };
 
+use super::helpers;
 use crate::{
     AtosOrchestrator, Error, ReportSection, Result, RunContext, RunMode, StopOutcome,
     TeardownAction, TeardownReport,
@@ -98,7 +103,7 @@ impl LocalAtosOrchestrator {
 impl AtosOrchestrator for LocalAtosOrchestrator {
     async fn provision_feature(&self, charter_md: &str) -> Result<FeatureRow> {
         let parsed = crate::charter::parse(charter_md)?;
-        let (id, title) = extract_id_and_title(charter_md)?;
+        let (id, title) = helpers::extract_id_and_title(charter_md)?;
 
         // features.stop_condition remains empty at the feature level
         // from M3.3 onward — each milestone carries its own. M1/M2
@@ -123,7 +128,7 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
         // rendered brief reads like a self-contained document when
         // `atos next` pipes it into the driver.
         for spec in &parsed.milestones {
-            let brief = compose_milestone_brief(spec);
+            let brief = helpers::compose_milestone_brief(spec);
             // Store the stop_condition at the end of brief_md for
             // M3.4's handoff path to pick up without a schema change.
             // A future migration can promote this to a real column.
@@ -190,9 +195,7 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
                 .iter()
                 .filter(|r| r.milestone_id == m.id && r.mode == "normal")
                 .max_by_key(|r| r.started_at);
-            let passed = latest_normal
-                .and_then(|r| r.stop_passed)
-                .unwrap_or(false);
+            let passed = latest_normal.and_then(|r| r.stop_passed).unwrap_or(false);
             if !passed {
                 target = Some(m.clone());
                 break;
@@ -203,25 +206,25 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
         };
 
         // Compose the prior-milestone digest from feature-scoped notes
-        // written before the target milestone started. M3.6 swaps this
-        // for the Fast-slot digest renderer; M3.4 uses a
-        // deterministic concatenation so the handoff flow is testable
-        // without inference.
+        // written before the target milestone started. Deterministic
+        // concatenation so the handoff flow is testable without
+        // inference; a future Fast-slot summarizer can swap in inside
+        // `helpers::compose_prior_digest`.
         let prior_digest_md = if milestone.ordinal > 1 {
-            compose_prior_digest(self, feature_id).await?
+            helpers::compose_prior_digest(&self.notes, feature_id).await?
         } else {
             String::new()
         };
 
-        let global_invariants_md = compose_global_invariants(self).await?;
-        let stop_condition = extract_milestone_stop_condition(&milestone.brief_md);
-        let charter_brief_md = strip_stop_condition_marker(&milestone.brief_md);
+        let global_invariants_md = helpers::compose_global_invariants(&self.notes).await?;
+        let stop_condition = helpers::extract_milestone_stop_condition(&milestone.brief_md);
+        let charter_brief_md = helpers::strip_stop_condition_marker(&milestone.brief_md);
 
         Ok(Some(crate::PreparedBrief {
             feature_id: feature_id.to_string(),
             milestone_id: milestone.id.clone(),
             milestone_ordinal: milestone.ordinal,
-            milestone_title: derive_milestone_title(&milestone.brief_md),
+            milestone_title: helpers::derive_milestone_title(&milestone.brief_md),
             charter_brief_md,
             stop_condition,
             prior_digest_md,
@@ -327,7 +330,10 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
         let mut report = TeardownReport::default();
         for action in actions {
             match action {
-                TeardownAction::Promote { ref note_id, ref rewritten_content } => {
+                TeardownAction::Promote {
+                    ref note_id,
+                    ref rewritten_content,
+                } => {
                     let _ = self
                         .notes
                         .promote_note(
@@ -360,225 +366,12 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
     }
 
     async fn active_global_invariants(&self) -> Result<Vec<NoteRow>> {
-        let filter = ScopeFilter {
-            scopes: vec![NoteScope::Global],
-            feature_id: None,
-        };
-        Ok(self
-            .notes
-            .read_notes_scoped(
-                None,
-                &[],
-                &[],
-                &["invariant".to_string()],
-                50,
-                false,
-                &filter,
-            )
-            .await?)
+        helpers::global_invariants_rows(&self.notes).await
     }
 }
 
-// ─── Charter helpers ─────────────────────────────────────────────────────────
+// ─── Inherent helpers used by the CLI ───────────────────────────────────────
 
-/// Compute the per-feature artifact directory. The renderer writes
-/// `milestone-<n>.md` / `red-team.md` / `epistemic-report.md` here.
-/// Rooted at `cwd/.sovereign/features/<id>` — matches where
-/// `features.db` itself lives so operators find reports next to the
-/// features they came from.
-pub fn feature_dir(feature_id: &str) -> std::path::PathBuf {
-    std::env::current_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        .join(".sovereign")
-        .join("features")
-        .join(feature_id)
-}
-
-/// Extract the feature id + human title from the charter's first
-/// level-1 heading. Accepted forms:
-///
-/// ```markdown
-/// # atos-version-flag — Add `--version` to atos
-/// # atos-version-flag -- Add `--version` to atos
-/// # atos-version-flag: Add `--version` to atos
-/// # atos-version-flag
-/// ```
-///
-/// The id is the slug up to the first separator; the title is
-/// whatever follows, or the id itself when the heading is slug-only.
-fn extract_id_and_title(charter_md: &str) -> Result<(String, String)> {
-    use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
-    let parser = Parser::new(charter_md);
-    let mut in_h1 = false;
-    let mut buf = String::new();
-    for event in parser {
-        match event {
-            Event::Start(Tag::Heading {
-                level: HeadingLevel::H1,
-                ..
-            }) => {
-                in_h1 = true;
-            }
-            Event::End(TagEnd::Heading(HeadingLevel::H1)) => {
-                if in_h1 {
-                    break;
-                }
-            }
-            Event::Text(t) if in_h1 => buf.push_str(&t),
-            Event::Code(c) if in_h1 => buf.push_str(&c),
-            _ => {}
-        }
-    }
-    let raw = buf.trim();
-    if raw.is_empty() {
-        return Err(Error::CharterParse(
-            "charter must open with a level-1 heading like `# <id> — <title>`"
-                .into(),
-        ));
-    }
-    // Split on the first recognized separator.
-    for sep in ["—", "--", ":"] {
-        if let Some(idx) = raw.find(sep) {
-            let id = raw[..idx].trim().to_string();
-            let title = raw[idx + sep.len()..].trim().to_string();
-            if !id.is_empty() && !title.is_empty() {
-                return Ok((id, title));
-            }
-        }
-    }
-    // No separator — treat the whole line as both id and title.
-    Ok((raw.to_string(), raw.to_string()))
-}
-
-/// Build the per-milestone brief that gets stored in
-/// `feature_milestones.brief_md`. Keeps Yara's `### N. Title` header
-/// + body intact so the brief reads like a self-contained document
-/// when piped into a driver session.
-fn compose_milestone_brief(spec: &crate::charter::MilestoneSpec) -> String {
-    format!(
-        "### {}. {}\n\n{}",
-        spec.ordinal,
-        spec.title,
-        spec.brief_md.trim_end()
-    )
-}
-
-/// Extract the `<!-- atos:stop_condition:... -->` marker the charter
-/// provisioner writes, so M3.4/M3.6 can read the per-milestone stop
-/// command without a schema change. Returns empty string when absent
-/// (manual-review milestone).
-pub fn extract_milestone_stop_condition(brief_md: &str) -> String {
-    const OPEN: &str = "<!-- atos:stop_condition:";
-    const CLOSE: &str = "-->";
-    let Some(start) = brief_md.find(OPEN) else {
-        return String::new();
-    };
-    let after = &brief_md[start + OPEN.len()..];
-    let Some(end) = after.find(CLOSE) else {
-        return String::new();
-    };
-    after[..end].trim().to_string()
-}
-
-/// Remove the stop-condition marker from a brief so it doesn't leak
-/// into the driver's view of the milestone. The marker is provisioner
-/// metadata — the agent sees the stop command via the brief header
-/// composed by [`PreparedBrief::render`].
-fn strip_stop_condition_marker(brief_md: &str) -> String {
-    const OPEN: &str = "<!-- atos:stop_condition:";
-    const CLOSE: &str = "-->";
-    let Some(start) = brief_md.find(OPEN) else {
-        return brief_md.trim().to_string();
-    };
-    let after = &brief_md[start..];
-    let Some(end_rel) = after.find(CLOSE) else {
-        return brief_md.trim().to_string();
-    };
-    let mut out = String::with_capacity(brief_md.len());
-    out.push_str(&brief_md[..start]);
-    out.push_str(&brief_md[start + end_rel + CLOSE.len()..]);
-    out.trim().to_string()
-}
-
-/// Derive a short human title from a milestone's brief. The
-/// provisioner prepends `### N. Title` so the first line is
-/// authoritative.
-fn derive_milestone_title(brief_md: &str) -> String {
-    let first = brief_md.lines().next().unwrap_or("").trim();
-    let stripped = first
-        .trim_start_matches('#')
-        .trim()
-        .trim_start_matches(|c: char| c.is_ascii_digit() || matches!(c, '.' | ')' | ':' | ' '))
-        .trim();
-    if stripped.is_empty() {
-        first.to_string()
-    } else {
-        stripped.to_string()
-    }
-}
-
-/// Compose the prior-milestone digest — feature-scoped notes, most
-/// recent first, bounded at 30 entries. Deterministic rendering so
-/// M3.4 is testable without an inference provider; M3.6 swaps this
-/// for the Fast-slot summarizer.
-async fn compose_prior_digest(
-    orc: &LocalAtosOrchestrator,
-    feature_id: &str,
-) -> Result<String> {
-    let filter = corpus_engine::ScopeFilter {
-        scopes: vec![corpus_engine::NoteScope::Feature],
-        feature_id: Some(feature_id.to_string()),
-    };
-    let notes = orc
-        .notes
-        .read_notes_scoped(
-            None,
-            &[],
-            &[],
-            &[
-                "decision".to_string(),
-                "invariant".to_string(),
-                "attempt".to_string(),
-                "uncertainty".to_string(),
-                "postmortem_pointer".to_string(),
-            ],
-            30,
-            false,
-            &filter,
-        )
-        .await?;
-    if notes.is_empty() {
-        return Ok(String::new());
-    }
-    let mut out = String::new();
-    for n in notes {
-        let first_line: String = n.content.lines().next().unwrap_or("").chars().take(160).collect();
-        out.push_str(&format!("- `[note:{}]` [{}] {}\n", n.id, n.kind, first_line));
-    }
-    Ok(out)
-}
-
-/// Gather active global invariants for every fresh session's
-/// preamble. Capped at 20 so large corpora don't blow the brief up.
-async fn compose_global_invariants(orc: &LocalAtosOrchestrator) -> Result<String> {
-    let rows = orc.active_global_invariants().await?;
-    if rows.is_empty() {
-        return Ok(String::new());
-    }
-    let mut out = String::new();
-    for n in rows.iter().take(20) {
-        let first_line: String = n.content.lines().next().unwrap_or("").chars().take(200).collect();
-        out.push_str(&format!("- `[note:{}]` {}\n", n.id, first_line));
-    }
-    Ok(out)
-}
-
-// ─── Extension methods used by the CLI until M3.3 lands ──────────────────────
-
-/// Convenience parts-based provisioning until M3.3 introduces charter
-/// parsing. Exists on `LocalAtosOrchestrator` rather than the trait so
-/// trait implementations can't disagree about the carving. Once M3.3
-/// lands and the CLI stops passing parts, this method goes away.
 impl LocalAtosOrchestrator {
     /// Resolve the shell command that gates a given (feature,
     /// milestone) tuple. Precedence:
@@ -589,12 +382,12 @@ impl LocalAtosOrchestrator {
     /// 2. `features.stop_condition` — the M1/M2 feature-level command,
     ///    kept for pre-M3.3 features.
     /// 3. Empty string — treated as a manual-review milestone by
-    ///    [`run_shell_command`] (returns `passed=true`).
+    ///    [`Self::run_shell_command`] (returns `passed=true`).
     pub fn resolve_milestone_stop_condition(
         feature: &FeatureRow,
         milestone: &MilestoneRow,
     ) -> String {
-        let per_milestone = extract_milestone_stop_condition(&milestone.brief_md);
+        let per_milestone = helpers::extract_milestone_stop_condition(&milestone.brief_md);
         if !per_milestone.is_empty() {
             return per_milestone;
         }
@@ -619,8 +412,6 @@ impl LocalAtosOrchestrator {
         &self,
         feature_id: &str,
     ) -> Result<Vec<corpus_engine::NoteRow>> {
-        use corpus_engine::{NoteScope, ScopeFilter};
-
         let filter = ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(feature_id.to_string()),
@@ -685,7 +476,7 @@ impl LocalAtosOrchestrator {
         section: crate::ReportSection,
     ) -> Result<std::path::PathBuf> {
         let rendered = self.render_report(feature_id, section.clone()).await?;
-        let dir = feature_dir(feature_id);
+        let dir = helpers::feature_dir(feature_id);
         std::fs::create_dir_all(&dir).map_err(Error::Io)?;
         let filename = match section {
             crate::ReportSection::Milestone(n) => format!("milestone-{n}.md"),
@@ -725,7 +516,7 @@ impl LocalAtosOrchestrator {
 
     /// Run a specific shell command and capture its outcome. Used by
     /// `end-milestone` to execute the per-milestone stop condition
-    /// resolved via [`resolve_milestone_stop_condition`].
+    /// resolved via [`Self::resolve_milestone_stop_condition`].
     pub async fn run_milestone_stop_condition(
         &self,
         feature: &FeatureRow,
@@ -736,7 +527,7 @@ impl LocalAtosOrchestrator {
     }
 
     /// Shared shell-runner. Used by the trait's `run_stop_condition`
-    /// (feature-level) and [`run_milestone_stop_condition`]
+    /// (feature-level) and [`Self::run_milestone_stop_condition`]
     /// (milestone-level). Single capture + truncation path.
     async fn run_shell_command(&self, cmd: &str) -> Result<StopOutcome> {
         if cmd.trim().is_empty() {
@@ -830,8 +621,6 @@ impl LocalAtosOrchestrator {
     }
 }
 
-// ─── Tests ───────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -861,7 +650,9 @@ mod tests {
     #[tokio::test]
     async fn archive_feature_round_trip() {
         let orc = make_orchestrator().await;
-        orc.provision_feature_parts("fx", "t", "c", "", "").await.unwrap();
+        orc.provision_feature_parts("fx", "t", "c", "", "")
+            .await
+            .unwrap();
         assert!(orc.archive_feature("fx", "done").await.unwrap());
         let active = orc.list_features(false).await.unwrap();
         assert!(active.iter().all(|f| f.id != "fx"));
@@ -872,9 +663,14 @@ mod tests {
     #[tokio::test]
     async fn begin_and_close_run() {
         let orc = make_orchestrator().await;
-        orc.provision_feature_parts("fx", "t", "c", "", "true").await.unwrap();
+        orc.provision_feature_parts("fx", "t", "c", "", "true")
+            .await
+            .unwrap();
         let m = orc.add_milestone("fx", 1, "brief").await.unwrap();
-        let ctx = orc.begin_run("fx", &m.id, "claude", RunMode::Normal).await.unwrap();
+        let ctx = orc
+            .begin_run("fx", &m.id, "claude", RunMode::Normal)
+            .await
+            .unwrap();
         assert_eq!(ctx.milestone_ordinal, 1);
         assert_eq!(ctx.driver, "claude");
         orc.close_run(&ctx.run_id, 0, true, None).await.unwrap();
@@ -946,10 +742,10 @@ Add a CLI test.
         assert_eq!(milestones.len(), 2);
         assert_eq!(milestones[0].ordinal, 1);
         assert!(milestones[0].brief_md.contains("Wire the flag"));
-        let stop = extract_milestone_stop_condition(&milestones[0].brief_md);
+        let stop = helpers::extract_milestone_stop_condition(&milestones[0].brief_md);
         assert_eq!(stop, "cargo run -p sovereign-cli -- atos --version");
         assert_eq!(milestones[1].ordinal, 2);
-        let stop2 = extract_milestone_stop_condition(&milestones[1].brief_md);
+        let stop2 = helpers::extract_milestone_stop_condition(&milestones[1].brief_md);
         assert_eq!(stop2, "cargo test -p sovereign-cli atos_version");
     }
 
@@ -973,20 +769,6 @@ Add a CLI test.
         assert!(matches!(err, Error::CharterParse(_)));
     }
 
-    #[test]
-    fn extract_stop_condition_from_brief() {
-        let brief = "### 1. Title\n\nBody.\n\n<!-- atos:stop_condition:cargo test -->\n";
-        assert_eq!(
-            extract_milestone_stop_condition(brief),
-            "cargo test".to_string()
-        );
-    }
-
-    #[test]
-    fn extract_stop_condition_absent_returns_empty() {
-        assert_eq!(extract_milestone_stop_condition("### 1. Title\n\nBody.\n"), "");
-    }
-
     // ── next_milestone selection (M3.4) ──────────────────────────────────
 
     #[tokio::test]
@@ -999,7 +781,10 @@ Add a CLI test.
             .unwrap()
             .expect("should have next milestone");
         assert_eq!(brief.milestone_ordinal, 1);
-        assert_eq!(brief.stop_condition, "cargo run -p sovereign-cli -- atos --version");
+        assert_eq!(
+            brief.stop_condition,
+            "cargo run -p sovereign-cli -- atos --version"
+        );
         assert!(brief.prior_digest_md.is_empty());
         assert_eq!(brief.mode, RunMode::Normal);
     }
@@ -1014,7 +799,9 @@ Add a CLI test.
             .begin_run("atos-version-flag", &milestones[0].id, "claude", RunMode::Normal)
             .await
             .unwrap();
-        orc.close_run(&ctx.run_id, 0, true, Some("stdout")).await.unwrap();
+        orc.close_run(&ctx.run_id, 0, true, Some("stdout"))
+            .await
+            .unwrap();
 
         let brief = orc
             .next_milestone("atos-version-flag", RunMode::Normal)
@@ -1034,7 +821,9 @@ Add a CLI test.
             .begin_run("atos-version-flag", &milestones[0].id, "claude", RunMode::Normal)
             .await
             .unwrap();
-        orc.close_run(&ctx.run_id, 1, false, Some("failed")).await.unwrap();
+        orc.close_run(&ctx.run_id, 1, false, Some("failed"))
+            .await
+            .unwrap();
 
         let brief = orc
             .next_milestone("atos-version-flag", RunMode::Normal)
@@ -1072,7 +861,12 @@ Add a CLI test.
         orc.provision_feature(CHARTER_TWO_MS).await.unwrap();
         let milestones = orc.list_milestones("atos-version-flag").await.unwrap();
         let ctx = orc
-            .begin_run("atos-version-flag", &milestones[0].id, "claude", RunMode::Redteam)
+            .begin_run(
+                "atos-version-flag",
+                &milestones[0].id,
+                "claude",
+                RunMode::Redteam,
+            )
             .await
             .unwrap();
         orc.close_run(&ctx.run_id, 0, true, None).await.unwrap();
@@ -1128,9 +922,7 @@ Add a CLI test.
         // lands in repo_root/.sovereign/features/fx/milestone-1.md.
         let sovereign_dir = repo_root.join(".sovereign");
         std::fs::create_dir_all(&sovereign_dir).unwrap();
-        let features = Arc::new(
-            FeatureStore::open(&sovereign_dir.join("features.db")).unwrap(),
-        );
+        let features = Arc::new(FeatureStore::open(&sovereign_dir.join("features.db")).unwrap());
         let notes = Arc::new(NoteStore::open(&sovereign_dir.join("notes.db")).unwrap());
         let docs = Arc::new(
             corpus_engine::ProjectDocsStore::open(&sovereign_dir.join("project_docs.db"))
@@ -1146,10 +938,7 @@ Add a CLI test.
         orc.provision_feature_parts("permafrost", "Title", "Charter.", "", "true")
             .await
             .unwrap();
-        let m = orc
-            .add_milestone("permafrost", 1, "Brief")
-            .await
-            .unwrap();
+        let m = orc.add_milestone("permafrost", 1, "Brief").await.unwrap();
         let ctx = orc
             .begin_run("permafrost", &m.id, "claude", RunMode::Normal)
             .await

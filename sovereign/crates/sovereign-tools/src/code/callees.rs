@@ -76,6 +76,16 @@ impl Tool for FindCalleesTool {
                     call: serde_json::json!({ "symbol": "run_embed_batch_sync" }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Markdown list of outbound call sites, one per line, \
+                                with `file:line` locations. Empty-result line when \
+                                the symbol has no outbound calls or is unknown."
+            })),
         }
     }
 

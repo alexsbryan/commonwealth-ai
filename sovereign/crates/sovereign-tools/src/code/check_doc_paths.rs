@@ -101,6 +101,19 @@ impl Tool for CheckDocPathsTool {
                     call: serde_json::json!({ "doc_path": "sovereign/.opencode/skills/sovereign-code/SKILL.md" }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Session,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "doc_path":  { "type": "string" },
+                    "valid":     { "type": "array", "items": { "type": "string" } },
+                    "not_found": { "type": "array", "items": { "type": "string" } },
+                    "skipped":   { "type": "array", "items": { "type": "string" } }
+                }
+            })),
         }
     }
 

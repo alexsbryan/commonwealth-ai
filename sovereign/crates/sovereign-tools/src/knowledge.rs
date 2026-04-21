@@ -47,6 +47,15 @@ impl Tool for KnowledgeTool {
                 "required": ["query"]
             }),
             examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Prose synthesis over local knowledge corpora, with \
+                                inline citations to source chunks."
+            })),
         }
     }
 

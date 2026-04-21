@@ -221,6 +221,79 @@ pub enum Intent {
 
 // ─── Tool Types ────────────────────────────────────────────────
 
+/// Read/write classification. Gates approval routing and — via
+/// Phase 1.5 — MCP-path approval parity. A `Read` tool never
+/// mutates state; a `Write` tool produces a persistent or
+/// session-scoped effect; `ReadWrite` tools (shell, compute) can
+/// do either depending on inputs.
+///
+/// Deliberately has **no `Default`** — every tool must classify
+/// itself explicitly so a future author cannot silently misclassify
+/// via boilerplate copy-paste. See ARCH_PRINCIPLES.md §7.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Effect {
+    /// No mutation. Safe to call speculatively, safe to retry.
+    Read,
+    /// Mutates persistent or session state. Retry only if also
+    /// `Idempotent`; approval-gate when permissions are empty.
+    Write,
+    /// Both — e.g. `shell` reading then writing, `file` whose
+    /// read/write split is dynamic. Treated as `Write` for retry /
+    /// approval purposes.
+    ReadWrite,
+}
+
+/// Whether calling the tool twice with identical arguments produces
+/// the same effect. Drives the executor's retry loop: a
+/// `NonIdempotent` tool never auto-retries on transient failure
+/// regardless of `retry_config()`, because retry would duplicate
+/// the original side-effect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Idempotency {
+    /// Second call with same args is a no-op (reads, idempotent
+    /// upserts, `delete` against an already-deleted row).
+    Idempotent,
+    /// Second call creates a duplicate or second side-effect
+    /// (`write_note`, `email`, `calendar`).
+    NonIdempotent,
+}
+
+/// Expected latency class. Used by the planner to build realistic
+/// DAGs (parallelise Fast reads; serialise Slow writes) and by
+/// future timeout policies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Latency {
+    /// Milliseconds — in-memory, SQLite point lookup.
+    Instant,
+    /// Sub-second — FTS query, small embedding, simple shell exec.
+    Fast,
+    /// Seconds to minutes — LLM chain, test run, web fetch,
+    /// document map-reduce.
+    Slow,
+    /// Long-running observation with incremental output.
+    Streaming,
+}
+
+/// Where the tool's effect lives. Informs "can this tool leak
+/// across sessions / machines?" and — via KnowledgeView precedent
+/// — privacy-related decisions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Scope {
+    /// Effect confined to the current conversation (working memory,
+    /// transient shell state).
+    Session,
+    /// Effect persists across sessions in a local store (NoteStore,
+    /// FeatureStore, corpus indexes).
+    Persistent,
+    /// Effect reaches outside this machine (email, web fetch, MCP
+    /// bridge).
+    External,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDescriptor {
     pub id: ToolId,
@@ -232,6 +305,35 @@ pub struct ToolDescriptor {
     /// into planner prompts so the model sees what correct calls look like.
     #[serde(default)]
     pub examples: Vec<ToolExample>,
+    /// Behavioural properties (Phase 1). Consulted by the executor's
+    /// retry gate, approval gate, and the planner's prompt
+    /// annotations so the agent can reason about a tool mechanically
+    /// rather than by parsing prose.
+    pub effect: Effect,
+    pub idempotency: Idempotency,
+    pub latency: Latency,
+    pub scope: Scope,
+    /// Shape of the tool's output (composition piece).
+    ///
+    /// When `Some`, the value is a JSON-schema-ish description of the
+    /// keys a downstream step can reference via `{N.key}` templates
+    /// in `resolve_inputs`. The planner surfaces this to the model so
+    /// it can write compositional plans (e.g. "call `symbol_lookup`
+    /// then pipe `{0.file}` into `find_callers`") deliberately rather
+    /// than by guessing.
+    ///
+    /// When `None`, downstream steps either accept the full text via
+    /// `{N.output}` or must route through a reasoning step. Common
+    /// for truly opaque outputs (`shell`, `compute`) where the
+    /// structure depends entirely on what command or script ran.
+    ///
+    /// Schema convention: loose JSON Schema — `type: object` plus a
+    /// `properties` map is standard, but since we don't enforce the
+    /// full spec, tools can also use informal "shape hints" that
+    /// communicate intent to the LLM more clearly than strict JSON
+    /// Schema.
+    #[serde(default)]
+    pub output_schema: Option<serde_json::Value>,
 }
 
 /// A concrete example of a correct tool invocation.

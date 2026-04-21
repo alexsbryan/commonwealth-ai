@@ -53,6 +53,19 @@ impl Tool for ReadNoteByIdTool {
                     .into(),
                 call: serde_json::json!({ "id": "abc-123" }),
             }],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "note": {
+                        "type": ["object", "null"],
+                        "description": "The full note row, or null if id not found"
+                    }
+                }
+            })),
         }
     }
 

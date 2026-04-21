@@ -348,7 +348,10 @@ impl Tool for DocumentOperationTool {
             name: "Document Operation".to_string(),
             description: "Run a user-defined map-reduce operation across a document. \
                           The map_prompt and reduce_prompt are written by the planner \
-                          based on the user's operation description."
+                          based on the user's operation description. \
+                          For the two common cases — summarize and analyze — prefer \
+                          the simpler `document` tool, which fixes the operation and \
+                          is easier for smaller models to invoke correctly."
                 .to_string(),
             parameters: serde_json::json!({
                 "type": "object",
@@ -391,6 +394,16 @@ impl Tool for DocumentOperationTool {
                     }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::Session,
+            output_schema: Some(serde_json::json!({
+                "type": "string",
+                "description": "Reduce-phase output text — shape follows whatever the \
+                                caller-supplied `reduce_prompt` asked the model to \
+                                produce."
+            })),
         }
     }
 

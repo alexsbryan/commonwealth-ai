@@ -100,11 +100,53 @@ impl Tool for ReadNotesTool {
                     call: serde_json::json!({ "kinds": ["reflection"], "query": "blast_radius" }),
                 },
             ],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Instant,
+            scope: Scope::Persistent,
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "notes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id":         { "type": "string" },
+                                "kind":       { "type": "string" },
+                                "content":    { "type": "string" },
+                                "symbols":    { "type": "array", "items": { "type": "string" } },
+                                "files":      { "type": "array", "items": { "type": "string" } },
+                                "scope":      { "type": "string" },
+                                "feature_id": { "type": "string" },
+                                "created_at": { "type": "integer" }
+                            }
+                        }
+                    },
+                    "total": { "type": "integer" }
+                }
+            })),
         }
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
         vec![]
+    }
+
+    /// Signal: count of unretired `todo`-kind notes. Surfaces backlog
+    /// the agent might otherwise miss, without needing a feature
+    /// context. Silent when the todo list is empty.
+    async fn signal(&self) -> Option<String> {
+        // Cap the query at 50 — we only need the count for the signal
+        // and an order-of-magnitude is enough context. If there are
+        // 50+ open todos the agent already knows there's a backlog.
+        let open = self.store.open_todos(50).await.ok()?;
+        if open.is_empty() {
+            return None;
+        }
+        let n = open.len();
+        let suffix = if n >= 50 { "+" } else { "" };
+        Some(format!("{n}{suffix} open todo note(s)"))
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

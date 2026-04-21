@@ -188,6 +188,30 @@ RULES:
 - Keep plans simple: 2-5 steps
 - Output ONLY the JSON object, nothing else"#;
 
+/// Format a tool's behavioural properties as a compact tag like
+/// `[Read · Persistent · Fast]`. Emitted in the planner prompt so the
+/// model can pick parallelisable reads vs. gate-required writes
+/// without parsing the natural-language description.
+fn format_behaviour_tag(t: &ToolDescriptor) -> String {
+    let effect = match t.effect {
+        Effect::Read => "Read",
+        Effect::Write => "Write",
+        Effect::ReadWrite => "ReadWrite",
+    };
+    let scope = match t.scope {
+        Scope::Session => "Session",
+        Scope::Persistent => "Persistent",
+        Scope::External => "External",
+    };
+    let latency = match t.latency {
+        Latency::Instant => "Instant",
+        Latency::Fast => "Fast",
+        Latency::Slow => "Slow",
+        Latency::Streaming => "Streaming",
+    };
+    format!("[{effect} · {scope} · {latency}]")
+}
+
 fn build_plan_prompt(
     goal: &str,
     context_summary: &str,
@@ -204,10 +228,32 @@ fn build_plan_prompt(
         let tools: String = available_tools
             .iter()
             .map(|t| {
-                let mut line = format!("- \"{}\" — {}", t.id, t.description);
+                // Phase 1 annotation: behavioural property tag lets the
+                // planner distinguish "safe to call speculatively" from
+                // "will persist to disk" mechanically, not by prose parse.
+                let tag = format_behaviour_tag(t);
+                let mut line = format!("- \"{}\" {tag} — {}", t.id, t.description);
                 if let Some(ex) = t.examples.first() {
                     if let Ok(json) = serde_json::to_string(&ex.call) {
                         line.push_str(&format!("\n  Example: {json}"));
+                    }
+                }
+                // Composition hint: when the tool declares an
+                // output_schema, show its top-level keys so the
+                // planner knows what `{N.key}` references are valid
+                // in downstream template substitution.
+                if let Some(schema) = &t.output_schema {
+                    if let Some(keys) = schema
+                        .get("properties")
+                        .and_then(|p| p.as_object())
+                        .map(|o| o.keys().cloned().collect::<Vec<_>>())
+                    {
+                        if !keys.is_empty() {
+                            line.push_str(&format!(
+                                "\n  Output keys: {}",
+                                keys.join(", ")
+                            ));
+                        }
                     }
                 }
                 line
