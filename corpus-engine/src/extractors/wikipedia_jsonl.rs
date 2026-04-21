@@ -185,11 +185,22 @@ fn collect_zip_paths(source_path: &Path) -> Result<Vec<PathBuf>> {
 
 struct WikipediaJsonlShardedZipIterator {
     zip_path: PathBuf,
-    /// Entry indices within the ZIP that this peer is responsible for.
-    /// The archive TOC is the ground truth for ordering — two peers with
-    /// the same ZIP see the same mapping, so disjoint sets here produce
-    /// disjoint article sets after merge.
+    /// **Logical** shard indices this peer is responsible for, in the
+    /// dense 0..N space over the canonical filtered list (see
+    /// `crate::engine::canonical_jsonl_shard_entries`). Two peers with
+    /// the same ZIP derive the same canonical list, so disjoint
+    /// logical sets produce disjoint article sets after merge even
+    /// when the ZIP carries macOS junk entries (`__MACOSX/`, `._*`).
+    ///
+    /// These indices flow out on every `ExtractedDoc.source_file` as
+    /// `"shard:<logical>"`, which the ingest loop persists via
+    /// `CorpusIndex::record_processed_shard` — so the coordinator's
+    /// `remaining = (0..shard_count) - processed_shards` arithmetic
+    /// works in a single, consistent index space.
     assigned: VecDeque<usize>,
+    /// Canonical logical → raw ZIP TOC mapping, built once at
+    /// construction. Indexed by logical shard index.
+    canonical: Vec<usize>,
     current: Option<ShardStreamState>,
     controversy_patterns: Vec<String>,
     factual_patterns: Vec<String>,
@@ -211,6 +222,13 @@ impl Drop for ShardStreamState {
 }
 
 impl WikipediaJsonlShardedZipIterator {
+    /// `assigned` — **logical** shard indices (0..N) over the filtered
+    /// canonical shard list, NOT raw ZIP TOC indices. The constructor
+    /// translates each logical index to its physical ZIP entry index via
+    /// [`crate::engine::canonical_jsonl_shard_entries`], ensuring two
+    /// peers looking at the same ZIP agree on what shard 0, shard 1, …
+    /// point at — regardless of how macOS-authored junk entries
+    /// (`__MACOSX/`, `._*`) are sprinkled through the raw TOC.
     fn new(
         zip_path: PathBuf,
         mut assigned: Vec<usize>,
@@ -223,50 +241,35 @@ impl WikipediaJsonlShardedZipIterator {
         assigned.sort_unstable();
         assigned.dedup();
 
-        // Validate early that every assigned shard exists and names a
-        // JSONL entry. This turns "coordinator sent B a bogus shard
-        // index" from a mid-pipeline EOF into a clear up-front error.
-        let file = File::open(&zip_path).map_err(|e| {
-            Error::Extraction(format!("Failed to open {}: {e}", zip_path.display()))
-        })?;
-        let mut archive = zip::ZipArchive::new(file).map_err(|e| {
-            Error::Extraction(format!(
-                "Failed to read ZIP TOC at {}: {e}",
-                zip_path.display()
-            ))
-        })?;
-        for &idx in &assigned {
-            if idx >= archive.len() {
+        // Build the canonical logical→raw mapping. Every "real" JSONL
+        // entry in the ZIP gets a dense logical index here.
+        let canonical = crate::engine::canonical_jsonl_shard_entries(&zip_path)?;
+
+        // Validate every assigned logical index up front. An out-of-range
+        // logical index is a coordinator bug worth surfacing immediately
+        // rather than as a mid-pipeline EOF.
+        for &logical in &assigned {
+            if logical >= canonical.len() {
                 return Err(Error::Extraction(format!(
-                    "Assigned shard index {idx} is out of range (ZIP has {} entries)",
-                    archive.len()
-                )));
-            }
-            let entry = archive.by_index(idx).map_err(|e| {
-                Error::Extraction(format!(
-                    "Failed to read ZIP entry {idx} in {}: {e}",
-                    zip_path.display()
-                ))
-            })?;
-            let name = entry.name().to_lowercase();
-            if !(name.ends_with(".jsonl") || name.ends_with(".ndjson")) {
-                return Err(Error::Extraction(format!(
-                    "Assigned shard index {idx} names non-JSONL entry '{}'",
-                    entry.name()
+                    "Assigned logical shard {logical} is out of range \
+                     (ZIP has {} real JSONL shards after filtering \
+                     __MACOSX/._* junk)",
+                    canonical.len()
                 )));
             }
         }
 
         eprintln!(
-            "[corpus-engine] Sharded extraction — ZIP {} assigned {} of {} shards: {assigned:?}",
+            "[corpus-engine] Sharded extraction — ZIP {} assigned logical {:?} of {} real shards",
             zip_path.display(),
-            assigned.len(),
-            archive.len(),
+            assigned,
+            canonical.len(),
         );
 
         Ok(Self {
             zip_path,
             assigned: assigned.into(),
+            canonical,
             current: None,
             controversy_patterns,
             factual_patterns,
@@ -274,7 +277,20 @@ impl WikipediaJsonlShardedZipIterator {
     }
 
     fn open_next_shard(&mut self) -> Option<Result<ShardStreamState>> {
-        let shard_index = self.assigned.pop_front()?;
+        let logical_index = self.assigned.pop_front()?;
+        // Logical → raw ZIP TOC. Validated in the constructor, so a
+        // bounds failure here would be an internal invariant break,
+        // not a caller error.
+        let raw_index = match self.canonical.get(logical_index) {
+            Some(&r) => r,
+            None => {
+                return Some(Err(Error::Extraction(format!(
+                    "Internal: logical shard {logical_index} has no canonical mapping \
+                     (canonical has {} entries)",
+                    self.canonical.len()
+                ))));
+            }
+        };
         let file = match File::open(&self.zip_path) {
             Ok(f) => f,
             Err(e) => {
@@ -293,11 +309,11 @@ impl WikipediaJsonlShardedZipIterator {
                 ))));
             }
         };
-        let mut entry = match archive.by_index(shard_index) {
+        let mut entry = match archive.by_index(raw_index) {
             Ok(e) => e,
             Err(e) => {
                 return Some(Err(Error::Extraction(format!(
-                    "Failed to open ZIP entry {shard_index}: {e}"
+                    "Failed to open ZIP entry {raw_index} (logical shard {logical_index}): {e}"
                 ))));
             }
         };
@@ -307,20 +323,20 @@ impl WikipediaJsonlShardedZipIterator {
             Ok(t) => t,
             Err(e) => {
                 return Some(Err(Error::Extraction(format!(
-                    "Failed to create temp file for shard {shard_index}: {e}"
+                    "Failed to create temp file for shard {logical_index}: {e}"
                 ))));
             }
         };
         if let Err(e) = std::io::copy(&mut entry, &mut tmp) {
             return Some(Err(Error::Extraction(format!(
-                "Failed to extract shard {shard_index} ({entry_name}): {e}"
+                "Failed to extract shard {logical_index} ({entry_name}): {e}"
             ))));
         }
         let (file, temp_path) = match tmp.keep() {
             Ok((f, p)) => (f, p),
             Err(e) => {
                 return Some(Err(Error::Extraction(format!(
-                    "Failed to persist shard {shard_index} temp file: {e}"
+                    "Failed to persist shard {logical_index} temp file: {e}"
                 ))));
             }
         };
@@ -331,7 +347,7 @@ impl WikipediaJsonlShardedZipIterator {
             Err(e) => {
                 let _ = std::fs::remove_file(&temp_path);
                 return Some(Err(Error::Extraction(format!(
-                    "Failed to reopen shard {shard_index} temp file: {e}"
+                    "Failed to reopen shard {logical_index} temp file: {e}"
                 ))));
             }
         };
@@ -340,10 +356,11 @@ impl WikipediaJsonlShardedZipIterator {
             read_file,
         ));
         eprintln!(
-            "[corpus-engine] Sharded extraction → shard {shard_index} ({entry_name})"
+            "[corpus-engine] Sharded extraction → logical shard {logical_index} \
+             (raw ZIP index {raw_index}, {entry_name})"
         );
         Some(Ok(ShardStreamState {
-            shard_index,
+            shard_index: logical_index,
             reader,
             pending: VecDeque::new(),
             temp_path: Some(temp_path),

@@ -259,20 +259,44 @@ impl CorpusEngine {
         // Step 3: Chunk, embed, and index.
         let chunker = self.make_chunker(&recipe.chunk);
 
+        // Unit-scoped runs (pull-queue workers) must NOT resume from the
+        // partition-wide `committed_iter_pos`, NOT build search indexes,
+        // and NOT finalize the partition — the source iterator is already
+        // bounded by the caller's file_indices/article_range, and
+        // finalization is the merge leader's job after every unit
+        // completes. See todo note `f152dfe7` for the 225-failure cascade
+        // that motivated this split.
+        let unit_scoped = unit_id.is_some();
+
         // Open or resume a partial index (supports resuming after process kill).
-        let (index, resume_iter_pos) = CorpusIndex::create_or_resume_with_sharing(
-            index_path,
-            &recipe.corpus.id,
-            &recipe.corpus.name,
-            // Use the engine's actual embedding model name (derived from the
-            // configured file path), not the recipe's hardcoded default string.
-            &self.expected_embedding_model,
-            recipe.index.embedding_dimensions,
-            recipe.corpus.mesh_sharing,
-            recipe.corpus.query_sharing,
-            &recipe.corpus.license,
-        )
-        .await?;
+        let (index, resume_iter_pos) = if unit_scoped {
+            let index = CorpusIndex::create_or_open_for_unit(
+                index_path,
+                &recipe.corpus.id,
+                &recipe.corpus.name,
+                &self.expected_embedding_model,
+                recipe.index.embedding_dimensions,
+                recipe.corpus.mesh_sharing,
+                recipe.corpus.query_sharing,
+                &recipe.corpus.license,
+            )
+            .await?;
+            (index, 0u64)
+        } else {
+            CorpusIndex::create_or_resume_with_sharing(
+                index_path,
+                &recipe.corpus.id,
+                &recipe.corpus.name,
+                // Use the engine's actual embedding model name (derived from the
+                // configured file path), not the recipe's hardcoded default string.
+                &self.expected_embedding_model,
+                recipe.index.embedding_dimensions,
+                recipe.corpus.mesh_sharing,
+                recipe.corpus.query_sharing,
+                &recipe.corpus.license,
+            )
+            .await?
+        };
 
         // Initialise counters. On resume these start from where we left off.
         let mut total_chunks = index.chunk_count().await.unwrap_or(0);
@@ -541,7 +565,12 @@ impl CorpusEngine {
                     let insert_start = Instant::now();
                     index.insert_batch(&index_buffer).await?;
                     let insert_ms = insert_start.elapsed().as_millis();
-                    let _ = index.update_committed_iter_pos(iter_pos);
+                    if !unit_scoped {
+                        // Partition-wide resume cursor is meaningless for
+                        // unit-scoped runs — the next unit comes with its
+                        // own bounded source iterator, not a continuation.
+                        let _ = index.update_committed_iter_pos(iter_pos);
+                    }
                     total_chunks += flush_count as u64;
 
                     // Tally chunks per file AFTER successful insert, then clear.
@@ -604,7 +633,9 @@ impl CorpusEngine {
             let flush_count = index_buffer.len();
             total_chunks += flush_count as u64;
             index.insert_batch(&index_buffer).await?;
-            let _ = index.update_committed_iter_pos(iter_pos);
+            if !unit_scoped {
+                let _ = index.update_committed_iter_pos(iter_pos);
+            }
 
             // Tally AFTER successful insert.
             for (chunk, _) in &index_buffer {
@@ -678,11 +709,20 @@ impl CorpusEngine {
         }
 
         // Build search indexes (IVF-PQ + FTS).
-        // Skip if already completed in a previous run — this is the common case
-        // when a process was killed after build_indexes() but before
-        // mark_ingestion_complete(). We detect it via the `indexes_built` flag
-        // so we don't waste minutes rebuilding what's already there.
-        if CorpusIndex::indexes_are_built(index_path) {
+        // Unit-scoped runs skip this entirely — the merge leader builds
+        // indexes once after every peer's unit is merged, so a per-unit
+        // build both wastes work and corrupts the partition-of-self state
+        // for the next unit that lands in this dir.
+        // Otherwise, skip if already completed in a previous run — this is
+        // the common case when a process was killed after build_indexes()
+        // but before mark_ingestion_complete(). We detect it via the
+        // `indexes_built` flag so we don't waste minutes rebuilding.
+        if unit_scoped {
+            eprintln!(
+                "[{}] Unit-scoped run — deferring index build to merge leader",
+                recipe.corpus.id,
+            );
+        } else if CorpusIndex::indexes_are_built(index_path) {
             eprintln!(
                 "[{}] Search indexes already built — skipping to completion",
                 recipe.corpus.id,
@@ -775,30 +815,37 @@ impl CorpusEngine {
         let duration_secs = start.elapsed().as_secs();
         let info = index.info().await?;
 
-        // Mark the index as fully committed so it survives a restart as "Indexed"
-        // rather than being treated as a partial/incomplete ingest.
-        if let Err(e) = index.mark_ingestion_complete() {
-            tracing::warn!("Failed to mark ingestion complete for '{}': {e}", recipe.corpus.id);
-        }
+        // Unit-scoped runs intentionally leave `ingestion_in_progress: true`
+        // and never set the source_path. The merge leader flips the flag
+        // once every peer's unit is merged — marking it here would make
+        // the next unit's create_or_resume fall through to fresh-create
+        // and hit "Table 'chunks' already exists" from LanceDB.
+        if !unit_scoped {
+            // Mark the index as fully committed so it survives a restart as "Indexed"
+            // rather than being treated as a partial/incomplete ingest.
+            if let Err(e) = index.mark_ingestion_complete() {
+                tracing::warn!("Failed to mark ingestion complete for '{}': {e}", recipe.corpus.id);
+            }
 
-        // For code corpora sourced from a local directory, record the
-        // absolute source path so the watcher can find the root without
-        // re-parsing the recipe. `reindex_file` and `sovereign code watch`
-        // both rely on this.
-        if matches!(recipe.extract, crate::recipe::ExtractorConfig::Code { .. }) {
-            if let crate::recipe::AcquirerConfig::LocalFile { path } = &recipe.acquire {
-                // Expand `~` the same way LocalFileAcquirer does —
-                // via $HOME so we don't take a `dirs` dep.
-                let resolved = if let Some(rest) = path.strip_prefix("~/") {
-                    std::env::var("HOME")
-                        .map(|h| PathBuf::from(h).join(rest))
-                        .unwrap_or_else(|_| PathBuf::from(path))
-                } else {
-                    PathBuf::from(path)
-                };
-                let abs = resolved.canonicalize().unwrap_or(resolved);
-                if let Err(e) = index.set_source_path(&abs) {
-                    tracing::warn!("Failed to set source_path for '{}': {e}", recipe.corpus.id);
+            // For code corpora sourced from a local directory, record the
+            // absolute source path so the watcher can find the root without
+            // re-parsing the recipe. `reindex_file` and `sovereign code watch`
+            // both rely on this.
+            if matches!(recipe.extract, crate::recipe::ExtractorConfig::Code { .. }) {
+                if let crate::recipe::AcquirerConfig::LocalFile { path } = &recipe.acquire {
+                    // Expand `~` the same way LocalFileAcquirer does —
+                    // via $HOME so we don't take a `dirs` dep.
+                    let resolved = if let Some(rest) = path.strip_prefix("~/") {
+                        std::env::var("HOME")
+                            .map(|h| PathBuf::from(h).join(rest))
+                            .unwrap_or_else(|_| PathBuf::from(path))
+                    } else {
+                        PathBuf::from(path)
+                    };
+                    let abs = resolved.canonicalize().unwrap_or(resolved);
+                    if let Err(e) = index.set_source_path(&abs) {
+                        tracing::warn!("Failed to set source_path for '{}': {e}", recipe.corpus.id);
+                    }
                 }
             }
         }

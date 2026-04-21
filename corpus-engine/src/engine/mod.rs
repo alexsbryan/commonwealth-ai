@@ -129,6 +129,58 @@ pub struct CorpusEngine {
     cancel_registry: CancellationRegistry,
 }
 
+/// Returns the raw ZIP entry indices (in TOC order) that represent real
+/// JSONL shard payloads.
+///
+/// Rejects:
+///   - Entries inside `__MACOSX/...` (macOS zip tool's metadata folder).
+///   - Entries whose **basename** starts with `._` (macOS resource forks
+///     like `._enwiki_namespace_0_37.jsonl` — the `.jsonl` extension is
+///     incidental; these are AppleDouble files and must not be treated
+///     as shard payloads).
+///   - Entries not ending in `.jsonl` or `.ndjson`.
+///
+/// This is the single source of truth for "what counts as a shard" —
+/// both [`CorpusEngine::jsonl_source_shard_count`] and the
+/// `WikipediaJsonlShardedZipIterator` consume this list so the logical
+/// shard index N → physical ZIP index mapping is identical on every
+/// peer. Adding a third TOC-walker elsewhere without going through this
+/// helper will re-introduce the drift that made peers pick up
+/// `__MACOSX/._*.jsonl` resource forks as data.
+pub(crate) fn canonical_jsonl_shard_entries(zip_path: &Path) -> Result<Vec<usize>> {
+    let file = std::fs::File::open(zip_path)?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| {
+        Error::Extraction(format!(
+            "Failed to read ZIP TOC at {}: {e}",
+            zip_path.display()
+        ))
+    })?;
+    let mut out = Vec::new();
+    for i in 0..archive.len() {
+        let entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let name = entry.name();
+        if name.starts_with("__MACOSX/") {
+            continue;
+        }
+        let basename = match name.rsplit('/').next() {
+            Some(b) => b,
+            None => name,
+        };
+        if basename.starts_with("._") {
+            continue;
+        }
+        let lower = name.to_lowercase();
+        if !(lower.ends_with(".jsonl") || lower.ends_with(".ndjson")) {
+            continue;
+        }
+        out.push(i);
+    }
+    Ok(out)
+}
+
 impl CorpusEngine {
     pub fn new(
         recipes_dir: PathBuf,
@@ -298,36 +350,7 @@ impl CorpusEngine {
                 zip_path.display()
             )));
         }
-        let file = std::fs::File::open(&zip_path)?;
-        let archive = zip::ZipArchive::new(file).map_err(|e| {
-            Error::Extraction(format!(
-                "Failed to read ZIP TOC at {}: {e}",
-                zip_path.display()
-            ))
-        })?;
-        let count = (0..archive.len())
-            .filter(|i| {
-                // Don't own archive across the filter — clone the
-                // name then bail. zip's API requires `by_index` to
-                // be called mutably, so the filter closure can't
-                // share a borrow; we re-open each entry briefly.
-                let mut local_archive = match std::fs::File::open(&zip_path)
-                    .and_then(|f| Ok(zip::ZipArchive::new(f).ok()))
-                {
-                    Ok(Some(a)) => a,
-                    _ => return false,
-                };
-                local_archive
-                    .by_index(*i)
-                    .ok()
-                    .map(|entry| {
-                        let n = entry.name().to_lowercase();
-                        n.ends_with(".jsonl") || n.ends_with(".ndjson")
-                    })
-                    .unwrap_or(false)
-            })
-            .count();
-        Ok(count)
+        Ok(canonical_jsonl_shard_entries(&zip_path)?.len())
     }
 
     /// Return a cached `ArticleStats` for a corpus's extracted JSONL
@@ -2096,5 +2119,70 @@ mod tests {
         // Partition dir stays — caller (the merge path, or a later cleanup)
         // is responsible for resolving the conflict.
         assert!(idx_dir.join("wikipedia-partition-local").exists());
+    }
+
+    fn build_zip_with_entries(dir: &Path, entries: &[(&str, &[u8])]) -> PathBuf {
+        use std::io::Write;
+        let zip_path = dir.join("test.zip");
+        let file = std::fs::File::create(&zip_path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for (name, body) in entries {
+            zip.start_file(*name, opts).unwrap();
+            zip.write_all(body).unwrap();
+        }
+        zip.finish().unwrap();
+        zip_path
+    }
+
+    #[test]
+    fn canonical_jsonl_shard_entries_filters_macos_junk() {
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = build_zip_with_entries(
+            dir.path(),
+            &[
+                ("real_one.jsonl", b"{}\n"),                      // raw 0 — keep
+                ("__MACOSX/._real_one.jsonl", b"resource fork"),  // raw 1 — drop (__MACOSX/)
+                ("._also_resource.jsonl", b"rf"),                 // raw 2 — drop (._ prefix)
+                ("real_two.ndjson", b"{}\n"),                     // raw 3 — keep
+                ("readme.txt", b"hi"),                            // raw 4 — drop (ext)
+                ("nested/real_three.jsonl", b"{}\n"),             // raw 5 — keep
+                ("nested/._rf.jsonl", b"rf"),                     // raw 6 — drop (basename ._)
+            ],
+        );
+
+        let canonical = canonical_jsonl_shard_entries(&zip_path).unwrap();
+        assert_eq!(canonical, vec![0, 3, 5]);
+    }
+
+    #[test]
+    fn jsonl_source_shard_count_reflects_canonical_after_filter() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("_downloads")).unwrap();
+
+        // Build a ZIP that would have appeared as 4 shards to the
+        // pre-fix counter (extension-only filter) because the
+        // __MACOSX resource fork happens to end in .jsonl. The
+        // canonical count is 2.
+        let zip_path = build_zip_with_entries(
+            &idx_dir.join("_downloads"),
+            &[
+                ("shard_0.jsonl", b"{}\n"),
+                ("__MACOSX/._shard_0.jsonl", b"rf"),
+                ("shard_1.jsonl", b"{}\n"),
+                ("._shard_2.jsonl", b"rf"),
+            ],
+        );
+        // rename to the expected filename for jsonl_source_shard_count
+        std::fs::rename(&zip_path, idx_dir.join("_downloads/wikipedia.zip")).unwrap();
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir,
+            mock_embed_fn(),
+        );
+        assert_eq!(engine.jsonl_source_shard_count("wikipedia").unwrap(), 2);
     }
 }

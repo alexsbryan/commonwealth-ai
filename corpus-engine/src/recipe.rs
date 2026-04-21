@@ -416,12 +416,14 @@ pub enum ExtractorConfig {
         /// single-file Wikipedia JSONL across mesh nodes. `None` = all.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         article_range: Option<(u64, u64)>,
-        /// Restrict processing to a specific set of ZIP shard entries
-        /// (by index into the ZIP's JSONL entries). Set by the
-        /// collaborative-ingestion planner for multi-shard JSONL
-        /// corpora such as Wikipedia (76 shards). Mutually exclusive
-        /// with `article_range` — the sharded path streams directly
-        /// from the ZIP and skips the merged-JSONL cache entirely.
+        /// Restrict processing to a specific set of **logical** shard
+        /// indices over the ZIP's canonical JSONL entries (as produced
+        /// by [`crate::engine::canonical_jsonl_shard_entries`], which
+        /// filters out `__MACOSX/` and `._*` resource-fork junk).
+        /// Set by the collaborative-ingestion planner for multi-shard
+        /// JSONL corpora such as Wikipedia (76 shards). Mutually
+        /// exclusive with `article_range` — the sharded path streams
+        /// directly from the ZIP and skips the merged-JSONL cache.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shard_indices: Option<Vec<usize>>,
     },

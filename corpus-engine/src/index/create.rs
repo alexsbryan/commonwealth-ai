@@ -317,6 +317,70 @@ impl CorpusIndex {
         Ok((index, 0))
     }
 
+    /// Open or create an index for a unit-scoped ingest (pull-queue worker).
+    ///
+    /// Unlike `create_or_resume_with_sharing`, this:
+    ///   - Does NOT read `committed_iter_pos` — unit-scoped source
+    ///     iterators are already bounded by the caller's `file_indices`
+    ///     / `article_range` overrides, so a global resume cursor would
+    ///     skip most of the unit's work.
+    ///   - Does NOT fail when `_corpus_meta.json` reports
+    ///     `ingestion_in_progress: false`. Multiple units land in the
+    ///     same per-node partition dir; only the merge leader flips
+    ///     the flag, so later units must tolerate a "complete"-looking
+    ///     meta and keep appending.
+    ///
+    /// If the partition dir exists with a valid chunks table, this opens
+    /// it in append mode. Otherwise a fresh index is created with
+    /// `ingestion_in_progress: true`.
+    pub async fn create_or_open_for_unit(
+        path: &Path,
+        corpus_id: &str,
+        corpus_name: &str,
+        embedding_model: &str,
+        embedding_dim: usize,
+        mesh_sharing: bool,
+        query_sharing: Option<bool>,
+        license: &str,
+    ) -> Result<Self> {
+        if path.exists() && read_meta(path).is_ok() {
+            match Self::open(path).await {
+                Ok(index) => {
+                    eprintln!(
+                        "[corpus] Opening unit-scoped partition '{}' at {} (append)",
+                        corpus_id,
+                        path.display(),
+                    );
+                    return Ok(index);
+                }
+                Err(e) => {
+                    // Corrupt partition — wipe and start fresh. Losing a
+                    // partial partition is safe: the merge leader dedupes
+                    // chunks by (chunk_id, unit_id) across all peers.
+                    tracing::warn!(
+                        "Unit-scoped partition at '{}' could not be opened ({e}); starting fresh",
+                        path.display()
+                    );
+                    if let Err(rm) = std::fs::remove_dir_all(path) {
+                        tracing::warn!("Failed to remove corrupt partition: {rm}");
+                    }
+                }
+            }
+        }
+
+        Self::create_with_sharing(
+            path,
+            corpus_id,
+            corpus_name,
+            embedding_model,
+            embedding_dim,
+            mesh_sharing,
+            query_sharing,
+            license,
+        )
+        .await
+    }
+
     /// Persist the current iterator position as a resume checkpoint.
     /// Called after each successful batch flush so that a subsequent restart
     /// can skip already-committed source documents.
