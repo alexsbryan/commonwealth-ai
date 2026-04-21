@@ -11,6 +11,7 @@ pub mod epistemic;
 pub mod file;
 pub mod index_validator;
 pub mod knowledge;
+pub mod knowledge_view;
 pub mod mcp;
 pub mod rag;
 pub mod search;

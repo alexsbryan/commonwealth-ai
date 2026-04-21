@@ -219,6 +219,7 @@ async fn deleted_memory_excluded_from_retrieval() {
         last_used: 0,
         version: 0,
         deleted_at: None,
+        source_conversation_id: None,
     };
     h.store.save_memory(&mem).await.unwrap();
     assert_eq!(h.store.get_all_memories().await.unwrap().len(), 1);
@@ -1204,3 +1205,100 @@ async fn post_stream_refinement_noops_when_user_skips() {
         .is_empty());
 }
 
+
+// ─── Tier 2: conversation skill_id tagging ───────────────────
+
+#[tokio::test]
+async fn handle_message_tags_conversation_with_active_local_only_skill() {
+    // End-to-end: construct a harness with a LocalOnly skill
+    // activated; send a message; verify the conversation row
+    // picks up `skill_id` automatically.
+    let mut skills = sovereign_core::SkillRegistry::new();
+    let skill_toml = r#"
+[skill]
+id = "inner-work"
+name = "Inner Work"
+version = "0.1.0"
+
+[inference]
+privacy = "local_only"
+"#;
+    skills.register(parse_skill_toml(skill_toml).unwrap());
+    skills.activate("inner-work");
+
+    let h = TestHarness::with_skills(skills);
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let _ = h.send_in("what does meaningful work look like for me?", &conv_id).await;
+
+    let conv = h.store.get_conversation(&conv_id).await.unwrap();
+    assert_eq!(
+        conv.skill_id.as_deref(),
+        Some("inner-work"),
+        "inner-work was active → conversation must be tagged with it \
+         so the conversational KnowledgeView filter keeps it private"
+    );
+}
+
+#[tokio::test]
+async fn handle_message_leaves_skill_id_none_when_no_skill_active() {
+    // Regression: the default harness (empty SkillRegistry) must
+    // not tag conversations, so existing behaviour is preserved for
+    // any caller that doesn't wire up skills.
+    let h = TestHarness::new();
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let _ = h.send_in("hello", &conv_id).await;
+    let conv = h.store.get_conversation(&conv_id).await.unwrap();
+    assert!(
+        conv.skill_id.is_none(),
+        "no active skill → conversation stays untagged"
+    );
+}
+
+#[tokio::test]
+async fn handle_message_skill_id_is_first_writer_wins_across_turns() {
+    // Even if the active skill changes mid-conversation, the tag
+    // from the first message sticks. This matches the spec:
+    // "skill active when this conversation started".
+    let mut skills = sovereign_core::SkillRegistry::new();
+    let toml_research = r#"
+[skill]
+id = "research-analyst"
+name = "Research"
+version = "0.1.0"
+
+[inference]
+privacy = "mesh_allowed"
+"#;
+    skills.register(parse_skill_toml(toml_research).unwrap());
+    skills.activate("research-analyst");
+
+    let h = TestHarness::with_skills(skills);
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let _ = h.send_in("first message", &conv_id).await;
+    let first_tag = h
+        .store
+        .get_conversation(&conv_id)
+        .await
+        .unwrap()
+        .skill_id;
+    assert_eq!(first_tag.as_deref(), Some("research-analyst"));
+
+    // Second turn in the same conversation. skill_id must not be
+    // rewritten even if we later mutated the registry; the
+    // first-writer-wins UPDATE clause (`WHERE skill_id IS NULL`)
+    // guarantees it. (We can't easily mutate the harness's Arc'd
+    // registry post-construction — the invariant is enforced at
+    // the SQL layer anyway.)
+    let _ = h.send_in("follow-up", &conv_id).await;
+    let second_tag = h
+        .store
+        .get_conversation(&conv_id)
+        .await
+        .unwrap()
+        .skill_id;
+    assert_eq!(
+        second_tag.as_deref(),
+        Some("research-analyst"),
+        "the skill tag must persist unchanged across turns"
+    );
+}

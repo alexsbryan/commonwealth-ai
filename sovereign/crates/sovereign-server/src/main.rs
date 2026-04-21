@@ -175,14 +175,19 @@ async fn main() {
             hybrid
         };
 
-    // Open database.
-    let store: Arc<dyn StateStore> = match SqliteStateStore::open(&config.store.path) {
+    // Open database. We keep two handles: a concrete
+    // `Arc<SqliteStateStore>` (so we can call `set_observer` once the
+    // KnowledgeViewManager is ready, later in this function) and the
+    // `Arc<dyn StateStore>` trait object used throughout the runtime
+    // and tools. Both point at the same underlying store.
+    let store_concrete: Arc<SqliteStateStore> = match SqliteStateStore::open(&config.store.path) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!("Failed to open database: {e}");
             std::process::exit(1);
         }
     };
+    let store: Arc<dyn StateStore> = store_concrete.clone();
 
     // Load skills.
     let mut skills = SkillRegistry::new();
@@ -216,8 +221,45 @@ async fn main() {
     let corpus_engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
             .with_batch_embed_fn(batch_embed_fn)
-            .with_inference_fn(inference_fn),
+            .with_inference_fn(inference_fn.clone()),
     );
+
+    // KnowledgeView integration: register the SQLite acquirer on the
+    // engine, build the manager with the `inner-work` skill's
+    // conversations excluded, and wire it as both the store's
+    // post-commit `StateStoreObserver` and the Runtime's
+    // `LandscapeDigestProvider`. The manager also spawns its
+    // debouncer task so Tier-3 enrichment fires on bursts of memory
+    // or message writes. See
+    // `sovereign_tools::knowledge_view::KnowledgeViewManager`.
+    // Resolve `local_only` skill ids dynamically so any skill whose
+    // `[inference] privacy = "local_only"` participates in the
+    // conversational-view exclusion without editing this bootstrap.
+    let local_only_skill_ids = skills.local_only_skill_ids();
+    tracing::info!(
+        local_only_skills = ?local_only_skill_ids,
+        "knowledge_view: skills excluded from conversational corpus"
+    );
+    let knowledge_view_manager = Arc::new(
+        sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+            Arc::clone(&corpus_engine),
+            inference_fn.clone(),
+            config.store.path.clone(),
+            local_only_skill_ids,
+        )
+        .await,
+    );
+    // Install as the store's observer now that the manager exists.
+    // The store was Arc-wrapped earlier; interior mutability on the
+    // observer slot lets us swap it in without restructuring.
+    store_concrete
+        .set_observer(knowledge_view_manager.clone() as sovereign_core::observer::SharedStateStoreObserver);
+    // Kick off initial ingest of empty views. Errors are logged,
+    // not fatal — the rest of the runtime proceeds even if a view
+    // fails to enrich on first start.
+    if let Err(e) = knowledge_view_manager.init().await {
+        tracing::warn!(error = %e, "knowledge_view: init() failed; landscape digests will be missing until a later manual enrich");
+    }
 
     // Register tools.
     let mut tools = ToolRegistry::new();
@@ -311,16 +353,23 @@ async fn main() {
     let (approval_channel, _event_rx) = ServerApprovalChannel::new();
     let approval = Arc::new(approval_channel);
 
-    let runtime = Arc::new(Runtime::new(
-        inference,
-        router,
-        Box::new(planner),
-        Arc::new(tools),
-        store,
-        skills,
-        approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
-        sovereign_core::types::InferenceConfig::default(),
-    ));
+    let runtime = Arc::new(
+        Runtime::new(
+            inference,
+            router,
+            Box::new(planner),
+            Arc::new(tools),
+            store,
+            skills,
+            approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
+            sovereign_core::types::InferenceConfig::default(),
+        )
+        .with_corpus_engine(Arc::clone(&corpus_engine))
+        .with_landscape_digests(
+            knowledge_view_manager.clone()
+                as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
+        ),
+    );
 
     // Auth state.
     let auth_state = if config.auth.mode == "api_key" && !config.auth.keys.is_empty() {

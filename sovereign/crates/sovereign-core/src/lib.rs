@@ -7,6 +7,7 @@ pub mod insight;
 pub mod memory;
 pub mod model_family;
 pub mod models_manifest;
+pub mod observer;
 pub use oicp_types as oicp;
 pub mod planner;
 pub mod registry;

@@ -356,16 +356,20 @@ async fn main() {
         inference.start_idle_monitor(60);
     }
 
-    // Open database.
+    // Open database. Two handles: the concrete `Arc<SqliteStateStore>`
+    // used below to install the KnowledgeView manager as the store's
+    // observer, and the `Arc<dyn StateStore>` used by the runtime +
+    // tools. Both point at the same store.
     let db_path = args.data_dir.join("sovereign.db");
     eprintln!("Database: {}", db_path.display());
-    let store: Arc<dyn StateStore> = match SqliteStateStore::open(&db_path) {
+    let store_concrete: Arc<SqliteStateStore> = match SqliteStateStore::open(&db_path) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!("Failed to open database: {e}");
             std::process::exit(1);
         }
     };
+    let store: Arc<dyn StateStore> = store_concrete.clone();
 
     // Build components.
     let inference_arc: Arc<dyn sovereign_core::traits::InferenceProvider> = inference;
@@ -443,8 +447,37 @@ async fn main() {
     let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference_arc));
     let corpus_engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
-            .with_inference_fn(inference_fn),
+            .with_inference_fn(inference_fn.clone()),
     );
+
+    // KnowledgeView: register the SQLite acquirer, construct the
+    // manager (excluding inner-work conversations from the
+    // conversational view), install it as the post-commit observer,
+    // and run initial ingest of empty views. See the server binary
+    // for the full rationale; this is the CLI mirror.
+    // Resolve local_only skill ids from the loaded registry rather
+    // than hardcoding. See server binary for rationale.
+    let local_only_skill_ids = skills.local_only_skill_ids();
+    eprintln!(
+        "knowledge_view: {} local-only skill(s) excluded from conversational corpus",
+        local_only_skill_ids.len()
+    );
+    let knowledge_view_manager = Arc::new(
+        sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+            Arc::clone(&corpus_engine),
+            inference_fn.clone(),
+            db_path.clone(),
+            local_only_skill_ids,
+        )
+        .await,
+    );
+    store_concrete.set_observer(
+        knowledge_view_manager.clone()
+            as sovereign_core::observer::SharedStateStoreObserver,
+    );
+    if let Err(e) = knowledge_view_manager.init().await {
+        eprintln!("knowledge_view: init() failed: {e}");
+    }
 
     // Register tools.
     let mut tools = ToolRegistry::new();
@@ -506,6 +539,11 @@ async fn main() {
         skills,
         approval,
         sovereign_core::types::InferenceConfig::default(),
+    )
+    .with_corpus_engine(Arc::clone(&corpus_engine))
+    .with_landscape_digests(
+        knowledge_view_manager.clone()
+            as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
     );
 
     // Resume or start conversation.

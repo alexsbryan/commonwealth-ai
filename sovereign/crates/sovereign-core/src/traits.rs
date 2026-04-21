@@ -6,6 +6,31 @@ use futures::Stream;
 use crate::error::Result;
 use crate::types::*;
 
+// Re-export observer types so `sovereign_core::StateStoreObserver`
+// works alongside `sovereign_core::StateStore`.
+pub use crate::observer::{noop_observer, NoopObserver, SharedStateStoreObserver, StateStoreObserver};
+
+/// Produces `knowledge_view_digests` for a
+/// [`ConversationContext`][crate::types::ConversationContext] after
+/// skill routing has resolved.
+///
+/// Defined in `sovereign-core` so [`Runtime`][crate::runtime::Runtime]
+/// can splice digests without depending on `sovereign-tools` (which
+/// would create a circular dependency). `KnowledgeViewManager` in
+/// `sovereign-tools` is the canonical implementation.
+///
+/// See `ConversationContext.knowledge_view_digests` for the invariant:
+/// a `None` value reaching the prompt-assembly site is a bug. Runtime
+/// calls `splice_landscape_digests` after resolving the active skill.
+#[async_trait]
+pub trait LandscapeDigestProvider: Send + Sync {
+    async fn splice_landscape_digests(
+        &self,
+        ctx: &mut ConversationContext,
+        active_skill: Option<&str>,
+    );
+}
+
 // ─── 1. Inference ──────────────────────────────────────────────
 
 #[async_trait]
@@ -160,6 +185,28 @@ pub trait ConversationStore: Send + Sync {
     /// Update the conversation's display title and bump `updated_at`.
     /// Used by both auto-title generation and user rename actions.
     async fn update_conversation_title(&self, id: &str, title: &str) -> Result<()>;
+
+    /// Tag a conversation with the skill that was active when it
+    /// started. **Only sets the value when `skill_id` is currently
+    /// NULL** — a conversation never changes the skill it was
+    /// started under, even if skill activation shifts mid-session.
+    ///
+    /// Used by the Runtime on first message to populate
+    /// `conversations.skill_id`, which the conversational
+    /// KnowledgeView acquirer uses to exclude `privacy = local_only`
+    /// conversations from the shared corpus.
+    ///
+    /// Default impl is a no-op so existing `ConversationStore`
+    /// implementations (test doubles, in-memory stores) keep
+    /// compiling. Real backends override.
+    #[allow(unused_variables)]
+    async fn set_conversation_skill_if_unset(
+        &self,
+        conversation_id: &str,
+        skill_id: &str,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]

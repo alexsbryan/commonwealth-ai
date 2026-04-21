@@ -306,6 +306,11 @@ pub struct AppState {
     /// Reusable across Runtime rebuilds (model stays loaded).
     pub inference: RwLock<Option<Arc<dyn InferenceProvider>>>,
     pub store: RwLock<Option<Arc<dyn StateStore>>>,
+    /// Concrete `Arc<SqliteStateStore>` kept alongside the trait-object
+    /// `store` so the KnowledgeView manager can be installed as an
+    /// observer via `set_observer` after the store is already Arc-
+    /// wrapped. Both handles point at the same underlying DB.
+    pub sqlite_store: RwLock<Option<Arc<SqliteStateStore>>>,
     /// The shared corpus engine. Set during bootstrap and used by both
     /// the install/list/remove Tauri commands and the in-runtime
     /// epistemic tools (`ClaimSearchTool`, `EpistemicLandscapeTool`).
@@ -377,6 +382,7 @@ impl AppState {
             config: RwLock::new(config),
             inference: RwLock::new(None),
             store: RwLock::new(None),
+            sqlite_store: RwLock::new(None),
             corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
             mesh,
@@ -503,8 +509,15 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             ));
             *state.insight_service.write().await = Some(insight_service);
 
-            let s: Arc<dyn StateStore> = Arc::new(sqlite_store);
+            // Two handles for KnowledgeView wire-up: concrete Arc for
+            // `set_observer` (called once the manager exists below),
+            // trait-object Arc for the runtime + tools.
+            let store_concrete: Arc<SqliteStateStore> = Arc::new(sqlite_store);
+            let s: Arc<dyn StateStore> = store_concrete.clone();
             *state.store.write().await = Some(Arc::clone(&s));
+            // Stash the concrete handle in the AppState so the later
+            // KnowledgeView wiring can call `set_observer` on it.
+            *state.sqlite_store.write().await = Some(store_concrete);
             s
         }
     };
@@ -674,10 +687,49 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
             .with_embedding_model(&embed_model_name)
             .with_batch_embed_fn(batch_embed_fn)
-            .with_inference_fn(inference_fn)
+            .with_inference_fn(inference_fn.clone())
             .with_self_node_id(self_node_id.to_string()),
     );
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
+
+    // KnowledgeView wire-up (desktop mirror of the server/CLI path).
+    // Registers the SQLite acquirer on the engine, constructs the
+    // manager, installs it as the store's post-commit observer via
+    // the concrete `Arc<SqliteStateStore>` stashed during store
+    // bootstrap, runs initial ingest of empty views, and exposes the
+    // manager for Runtime::with_landscape_digests below.
+    let knowledge_view_db_path = config.data_dir.join("sovereign.db");
+    // Resolve local_only skill ids from the registry loaded above.
+    // The desktop `skills` binding is an Arc<SkillRegistry>, so we
+    // dereference to call the accessor. Mirror of the server/CLI paths.
+    let local_only_skill_ids = skills.local_only_skill_ids();
+    tracing::info!(
+        local_only_skills = ?local_only_skill_ids,
+        "knowledge_view: skills excluded from conversational corpus"
+    );
+    let knowledge_view_manager = Arc::new(
+        sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+            Arc::clone(&corpus_engine),
+            inference_fn.clone(),
+            knowledge_view_db_path,
+            local_only_skill_ids,
+        )
+        .await,
+    );
+    if let Some(concrete) = state.sqlite_store.read().await.as_ref() {
+        concrete.set_observer(
+            knowledge_view_manager.clone()
+                as sovereign_core::observer::SharedStateStoreObserver,
+        );
+    } else {
+        tracing::warn!(
+            "KnowledgeView: desktop store was not SQLite-backed; \
+             observer not installed (memory-mode fallback?)"
+        );
+    }
+    if let Err(e) = knowledge_view_manager.init().await {
+        tracing::warn!(error = %e, "knowledge_view: init() failed");
+    }
 
     // Hand the engine to the embedded Commonwealth daemon so that
     // when a user creates or joins a mesh, `/v1/knowledge/search` on
@@ -1056,7 +1108,11 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         approval,
         inference_config,
     )
-    .with_corpus_engine(Arc::clone(&corpus_engine));
+    .with_corpus_engine(Arc::clone(&corpus_engine))
+    .with_landscape_digests(
+        knowledge_view_manager.clone()
+            as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
+    );
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
     }

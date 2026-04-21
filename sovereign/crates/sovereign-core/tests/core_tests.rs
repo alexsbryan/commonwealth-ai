@@ -105,6 +105,7 @@ impl ConversationStore for MockStore {
             updated_at: now(),
             version: 0,
             deleted_at: None,
+            skill_id: None,
         })
     }
     async fn list_conversations(&self, _limit: usize, _offset: usize) -> Result<Vec<Conversation>> {
@@ -445,12 +446,14 @@ fn format_history_empty() {
             updated_at: 0,
             version: 0,
             deleted_at: None,
+            skill_id: None,
         },
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
         topic_context: None,
+        knowledge_view_digests: None,
     };
     assert_eq!(format_history_as_prompt(&ctx, 10), "");
 }
@@ -485,12 +488,14 @@ fn format_history_multi_turn() {
             updated_at: 0,
             version: 0,
             deleted_at: None,
+            skill_id: None,
         },
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
         topic_context: None,
+        knowledge_view_digests: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 10);
@@ -521,12 +526,14 @@ fn format_history_truncates_to_max() {
             updated_at: 0,
             version: 0,
             deleted_at: None,
+            skill_id: None,
         },
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
         topic_context: None,
+        knowledge_view_digests: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 3);
@@ -550,12 +557,14 @@ async fn passthrough_router_always_simple_query() {
             updated_at: 0,
             version: 0,
             deleted_at: None,
+            skill_id: None,
         },
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
         topic_context: None,
+        knowledge_view_digests: None,
     };
 
     let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
@@ -574,12 +583,14 @@ async fn noop_planner_returns_not_implemented() {
             updated_at: 0,
             version: 0,
             deleted_at: None,
+            skill_id: None,
         },
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
         topic_context: None,
+        knowledge_view_digests: None,
     };
 
     let result = planner.plan("do something", &ctx, &[]).await;
@@ -985,12 +996,14 @@ async fn planner_generates_valid_plan() {
             updated_at: 0,
             version: 0,
             deleted_at: None,
+            skill_id: None,
         },
         memories: vec![],
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
         topic_context: None,
+        knowledge_view_digests: None,
     };
 
     let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
@@ -1016,12 +1029,14 @@ async fn planner_fallback_on_garbage() {
             updated_at: 0,
             version: 0,
             deleted_at: None,
+            skill_id: None,
         },
         memories: vec![],
         working_memory: None,
         installed_corpora: vec![],
         document_session: None,
         topic_context: None,
+        knowledge_view_digests: None,
     };
 
     // Should succeed with fallback plan (single step).

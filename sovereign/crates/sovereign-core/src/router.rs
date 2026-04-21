@@ -956,6 +956,7 @@ mod tests {
                 updated_at: 0,
                 version: 0,
                 deleted_at: None,
+                skill_id: None,
             },
             memories: vec![],
             working_memory: Some(WorkingMemory {
@@ -966,6 +967,7 @@ mod tests {
             installed_corpora: vec![],
             document_session: None,
             topic_context: None,
+            knowledge_view_digests: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -992,12 +994,14 @@ mod tests {
                 updated_at: 0,
                 version: 0,
                 deleted_at: None,
+                skill_id: None,
             },
             memories: vec![],
             working_memory: None,
             installed_corpora: vec![],
             document_session: None,
             topic_context: None,
+            knowledge_view_digests: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);

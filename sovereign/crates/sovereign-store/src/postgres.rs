@@ -1,8 +1,11 @@
+use std::sync::{Arc, RwLock};
+
 use async_trait::async_trait;
 use deadpool_postgres::{Config, Pool, Runtime};
 use tokio_postgres::NoTls;
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::observer::{noop_observer, SharedStateStoreObserver};
 use sovereign_core::traits::{
     BudgetStore, ConversationStore, CorpusStateStore, DocumentSessionStore,
     DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore,
@@ -12,6 +15,11 @@ use sovereign_core::types::*;
 
 pub struct PostgresStateStore {
     pool: Pool,
+    /// Post-commit observer. Mirror of the field on `SqliteStateStore`.
+    /// Uses `Arc<RwLock<_>>` so callers can install the observer
+    /// after the store is Arc-wrapped — same invariant described on
+    /// the SQLite store.
+    observer: Arc<RwLock<SharedStateStoreObserver>>,
 }
 
 impl PostgresStateStore {
@@ -24,9 +32,44 @@ impl PostgresStateStore {
             .create_pool(Some(Runtime::Tokio1), NoTls)
             .map_err(|e| Error::Storage(format!("Failed to create pool: {e}")))?;
 
-        let store = Self { pool };
+        let store = Self {
+            pool,
+            observer: Arc::new(RwLock::new(noop_observer())),
+        };
         store.run_migrations().await?;
         Ok(store)
+    }
+
+    /// Builder-style observer install. See
+    /// [`crate::sqlite::SqliteStateStore::with_observer`] for
+    /// semantics; this is the Postgres mirror.
+    pub fn with_observer(self, observer: SharedStateStoreObserver) -> Self {
+        self.set_observer(observer);
+        self
+    }
+
+    /// Runtime observer swap through a shared reference. Mirrors
+    /// [`crate::sqlite::SqliteStateStore::set_observer`].
+    pub fn set_observer(&self, observer: SharedStateStoreObserver) {
+        let mut guard = self
+            .observer
+            .write()
+            .expect("PostgresStateStore observer RwLock poisoned");
+        *guard = observer;
+    }
+
+    fn fire_observer<F>(&self, f: F)
+    where
+        F: FnOnce(&dyn sovereign_core::observer::StateStoreObserver),
+    {
+        let observer = {
+            let guard = self
+                .observer
+                .read()
+                .expect("PostgresStateStore observer RwLock poisoned");
+            Arc::clone(&*guard)
+        };
+        f(observer.as_ref());
     }
 
     async fn run_migrations(&self) -> Result<()> {
@@ -122,6 +165,12 @@ impl PostgresStateStore {
 
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'user';
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS corpus_id TEXT;
+
+            -- KnowledgeView v1 additive columns (mirror of the SQLite
+            -- run_knowledge_view_migrations). Nullable so existing rows
+            -- remain valid; populated on new writes.
+            ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_conversation_id TEXT;
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS skill_id TEXT;
             "#,
             )
             .await
@@ -168,6 +217,10 @@ impl ConversationStore for PostgresStateStore {
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
+        // Post-commit observer notification — mirror of the SQLite
+        // path. Safe to fire after the client is returned to the pool;
+        // the observer is documented as best-effort.
+        self.fire_observer(|o| o.on_message_written(&msg.conversation_id));
         Ok(())
     }
 
@@ -213,6 +266,9 @@ impl ConversationStore for PostgresStateStore {
             messages: msgs,
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            version: 0,
+            deleted_at: None,
+            skill_id: None,
         })
     }
 
@@ -236,6 +292,9 @@ impl ConversationStore for PostgresStateStore {
                 messages: vec![],
                 created_at: r.get("created_at"),
                 updated_at: r.get("updated_at"),
+                version: 0,
+                deleted_at: None,
+                skill_id: None,
             })
             .collect())
     }
@@ -271,12 +330,15 @@ impl ConversationStore for PostgresStateStore {
     }
 
     async fn delete_conversation(&self, id: &str) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
-        // CASCADE deletes messages.
-        client
-            .execute("DELETE FROM conversations WHERE id = $1", &[&id])
-            .await
-            .map_err(|e| Error::Storage(e.to_string()))?;
+        {
+            let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+            // CASCADE deletes messages.
+            client
+                .execute("DELETE FROM conversations WHERE id = $1", &[&id])
+                .await
+                .map_err(|e| Error::Storage(e.to_string()))?;
+        }
+        self.fire_observer(|o| o.on_conversation_deleted(id));
         Ok(())
     }
 
@@ -293,6 +355,23 @@ impl ConversationStore for PostgresStateStore {
         if rows == 0 {
             return Err(Error::NotFound(format!("conversation {id}")));
         }
+        Ok(())
+    }
+
+    async fn set_conversation_skill_if_unset(
+        &self,
+        conversation_id: &str,
+        skill_id: &str,
+    ) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "UPDATE conversations SET skill_id = $2 \
+                 WHERE id = $1 AND skill_id IS NULL",
+                &[&conversation_id, &skill_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
 }
@@ -351,16 +430,19 @@ impl TaskStore for PostgresStateStore {
 #[async_trait]
 impl MemoryStore for PostgresStateStore {
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
-        client
-            .execute(
-                "INSERT INTO memories (id, content, source, confidence, created_at, last_used) \
-                 VALUES ($1, $2, $3, $4, $5, $5) \
-                 ON CONFLICT (id) DO UPDATE SET content = $2, confidence = $4",
-                &[&memory.id, &memory.content, &memory.source, &memory.confidence, &memory.created_at],
-            )
-            .await
-            .map_err(|e| Error::Storage(e.to_string()))?;
+        {
+            let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+            client
+                .execute(
+                    "INSERT INTO memories (id, content, source, confidence, created_at, last_used) \
+                     VALUES ($1, $2, $3, $4, $5, $5) \
+                     ON CONFLICT (id) DO UPDATE SET content = $2, confidence = $4",
+                    &[&memory.id, &memory.content, &memory.source, &memory.confidence, &memory.created_at],
+                )
+                .await
+                .map_err(|e| Error::Storage(e.to_string()))?;
+        }
+        self.fire_observer(|o| o.on_memory_written(&memory.id));
         Ok(())
     }
 
@@ -384,6 +466,9 @@ impl MemoryStore for PostgresStateStore {
             confidence: r.get("confidence"),
             created_at: r.get("created_at"),
             last_used: r.get("last_used"),
+            version: 0,
+            deleted_at: None,
+            source_conversation_id: None,
         }).collect())
     }
 
@@ -401,6 +486,9 @@ impl MemoryStore for PostgresStateStore {
             confidence: r.get("confidence"),
             created_at: r.get("created_at"),
             last_used: r.get("last_used"),
+            version: 0,
+            deleted_at: None,
+            source_conversation_id: None,
         }).collect())
     }
 

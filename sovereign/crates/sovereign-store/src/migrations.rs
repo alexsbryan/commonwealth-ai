@@ -358,3 +358,29 @@ pub fn run_index_readiness_migration(conn: &Connection) -> rusqlite::Result<()> 
     );
     Ok(())
 }
+
+/// KnowledgeView v1 additive columns.
+///
+/// - `memories.source_conversation_id` — links an extracted memory
+///   back to the conversation it came from. The `personal-knowledge`
+///   acquirer joins on this column so the enrichment pipeline can
+///   surface cluster membership alongside conversation metadata.
+/// - `conversations.skill_id` — identifies which skill was active
+///   when the conversation started. The `conversation-history`
+///   acquirer filters conversations tagged with any `privacy =
+///   "local_only"` skill (notably `inner-work`) OUT of the view —
+///   strict structural privacy separation, no consent UI required
+///   for v1.
+///
+/// Both columns are `NULL` on existing rows. Read paths must tolerate
+/// `NULL` — a memory predating this migration simply has no linkage,
+/// and a conversation predating this migration has no skill attribution.
+pub fn run_knowledge_view_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch(
+        "ALTER TABLE memories ADD COLUMN source_conversation_id TEXT",
+    );
+    let _ = conn.execute_batch(
+        "ALTER TABLE conversations ADD COLUMN skill_id TEXT",
+    );
+    Ok(())
+}

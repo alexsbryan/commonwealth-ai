@@ -30,6 +30,10 @@ lancedb = "0.27"
 arrow-array = "57"
 # Document parsing (RAG pipeline)
 pdf-extract = "0.7"
+# KnowledgeView acquirers (SqliteAcquirer dumps rows to JSONL for the
+# existing Jsonl extractor). Uses the same `bundled` feature as
+# sovereign-store so both crates link against one libsqlite3.
+rusqlite = { version = "0.35", features = ["bundled"] }
 
 [features]
 default = []

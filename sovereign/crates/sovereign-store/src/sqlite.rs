@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -7,6 +7,7 @@ use rusqlite::{Connection, OptionalExtension};
 use tokio::sync::Mutex;
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::observer::{noop_observer, SharedStateStoreObserver};
 use sovereign_core::traits::{
     BudgetStore, ConversationStore, CorpusStateStore, DocumentAssetStore,
     DocumentSessionStore, DocumentStore, HealthStore, MemoryStore,
@@ -25,6 +26,18 @@ fn now() -> i64 {
 
 pub struct SqliteStateStore {
     conn: Arc<Mutex<Connection>>,
+    /// Observer fired after successful writes (post-commit). Defaults
+    /// to a no-op; callers install a real observer via
+    /// [`SqliteStateStore::with_observer`] (builder, pre-Arc) or
+    /// [`SqliteStateStore::set_observer`] (runtime swap, works on
+    /// `Arc<SqliteStateStore>`).
+    ///
+    /// The `RwLock` lets the server bootstrap create the store,
+    /// `Arc`-wrap it for the router and corpus tools, build the
+    /// `KnowledgeViewManager` (which needs the `CorpusEngine`), and
+    /// *then* register the manager as the observer — without
+    /// restructuring the initialization order.
+    observer: Arc<RwLock<SharedStateStoreObserver>>,
 }
 
 impl SqliteStateStore {
@@ -53,9 +66,12 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Document session migration failed: {e}")))?;
         migrations::run_document_asset_migration(&conn)
             .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
+        migrations::run_knowledge_view_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
+            observer: Arc::new(RwLock::new(noop_observer())),
         })
     }
 
@@ -63,6 +79,50 @@ impl SqliteStateStore {
     /// Used by `SqliteInsightStore` to share the same database connection.
     pub fn connection(&self) -> Arc<Mutex<Connection>> {
         Arc::clone(&self.conn)
+    }
+
+    /// Builder-style observer install. Equivalent to
+    /// [`SqliteStateStore::set_observer`] but consumes `self` so
+    /// callers can chain at construction.
+    ///
+    /// The observer fires **after** the write transaction commits, so a
+    /// panicking observer never corrupts the store. Dropped updates are
+    /// recoverable by the next scheduled full-enrichment pass.
+    pub fn with_observer(self, observer: SharedStateStoreObserver) -> Self {
+        self.set_observer(observer);
+        self
+    }
+
+    /// Swap the post-commit observer at runtime. Works through
+    /// `Arc<SqliteStateStore>` (shared reference) because the
+    /// observer slot uses interior mutability. The server bootstrap
+    /// uses this to install the `KnowledgeViewManager` once the
+    /// manager has been built (which requires the CorpusEngine that
+    /// is constructed *after* the store is Arc-wrapped).
+    pub fn set_observer(&self, observer: SharedStateStoreObserver) {
+        let mut guard = self
+            .observer
+            .write()
+            .expect("SqliteStateStore observer RwLock poisoned");
+        *guard = observer;
+    }
+
+    fn fire_observer<F>(&self, f: F)
+    where
+        F: FnOnce(&dyn sovereign_core::observer::StateStoreObserver),
+    {
+        // Clone the `Arc<dyn ...>` out from under the lock so the
+        // observer handler can run without holding the RwLock —
+        // avoids re-entrancy deadlocks if the observer calls back
+        // into the store.
+        let observer = {
+            let guard = self
+                .observer
+                .read()
+                .expect("SqliteStateStore observer RwLock poisoned");
+            Arc::clone(&*guard)
+        };
+        f(observer.as_ref());
     }
 
     /// Run `PRAGMA integrity_check` and return the first result row.
@@ -102,9 +162,12 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Document session migration failed: {e}")))?;
         migrations::run_document_asset_migration(&conn)
             .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
+        migrations::run_knowledge_view_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
+            observer: Arc::new(RwLock::new(noop_observer())),
         })
     }
 }
@@ -120,57 +183,62 @@ fn map_json(e: serde_json::Error) -> Error {
 #[async_trait]
 impl ConversationStore for SqliteStateStore {
     async fn save_message(&self, msg: &Message) -> Result<()> {
-        let conn = self.conn.lock().await;
+        {
+            let conn = self.conn.lock().await;
 
-        // Upsert conversation.
-        conn.execute(
-            "INSERT INTO conversations (id, title, created_at, updated_at)
-             VALUES (?1, NULL, ?2, ?2)
-             ON CONFLICT(id) DO UPDATE SET updated_at = ?2",
-            rusqlite::params![msg.conversation_id, now()],
-        )
-        .map_err(map_db)?;
+            // Upsert conversation.
+            conn.execute(
+                "INSERT INTO conversations (id, title, created_at, updated_at)
+                 VALUES (?1, NULL, ?2, ?2)
+                 ON CONFLICT(id) DO UPDATE SET updated_at = ?2",
+                rusqlite::params![msg.conversation_id, now()],
+            )
+            .map_err(map_db)?;
 
-        let metadata_json = msg
-            .metadata
-            .as_ref()
-            .map(|m| serde_json::to_string(m).unwrap_or_default());
+            let metadata_json = msg
+                .metadata
+                .as_ref()
+                .map(|m| serde_json::to_string(m).unwrap_or_default());
 
-        let role_str = match msg.role {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-            Role::System => "system",
-        };
+            let role_str = match msg.role {
+                Role::User => "user",
+                Role::Assistant => "assistant",
+                Role::System => "system",
+            };
 
-        conn.execute(
-            "INSERT OR REPLACE INTO messages (id, conversation_id, role, content, created_at, metadata)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![
-                msg.id,
-                msg.conversation_id,
-                role_str,
-                msg.content,
-                msg.created_at,
-                metadata_json,
-            ],
-        )
-        .map_err(map_db)?;
-
+            conn.execute(
+                "INSERT OR REPLACE INTO messages (id, conversation_id, role, content, created_at, metadata)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    msg.id,
+                    msg.conversation_id,
+                    role_str,
+                    msg.content,
+                    msg.created_at,
+                    metadata_json,
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        // Post-commit observer notification. Lock dropped above so the
+        // observer cannot deadlock on a store read from inside its handler.
+        self.fire_observer(|o| o.on_message_written(&msg.conversation_id));
         Ok(())
     }
 
     async fn get_conversation(&self, id: &str) -> Result<Conversation> {
         let conn = self.conn.lock().await;
 
-        let (title, created_at, updated_at) = conn
+        let (title, created_at, updated_at, skill_id) = conn
             .query_row(
-                "SELECT title, created_at, updated_at FROM conversations WHERE id = ?1 AND deleted_at IS NULL",
+                "SELECT title, created_at, updated_at, skill_id FROM conversations WHERE id = ?1 AND deleted_at IS NULL",
                 rusqlite::params![id],
                 |row| {
                     Ok((
                         row.get::<_, Option<String>>(0)?,
                         row.get::<_, i64>(1)?,
                         row.get::<_, i64>(2)?,
+                        row.get::<_, Option<String>>(3)?,
                     ))
                 },
             )
@@ -220,6 +288,7 @@ impl ConversationStore for SqliteStateStore {
             updated_at,
             version: 0,
             deleted_at: None,
+            skill_id,
         })
     }
 
@@ -228,7 +297,7 @@ impl ConversationStore for SqliteStateStore {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, title, created_at, updated_at
+                "SELECT id, title, created_at, updated_at, skill_id
                  FROM conversations WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
             )
             .map_err(map_db)?;
@@ -243,6 +312,7 @@ impl ConversationStore for SqliteStateStore {
                     updated_at: row.get(3)?,
                     version: 0,
                     deleted_at: None,
+                    skill_id: row.get(4)?,
                 })
             })
             .map_err(map_db)?
@@ -294,13 +364,18 @@ impl ConversationStore for SqliteStateStore {
     }
 
     async fn delete_conversation(&self, id: &str) -> Result<()> {
-        let conn = self.conn.lock().await;
-        let ts = now();
-        conn.execute(
-            "UPDATE conversations SET deleted_at = ?2, version = ?2 WHERE id = ?1 AND deleted_at IS NULL",
-            rusqlite::params![id, ts],
-        )
-        .map_err(map_db)?;
+        {
+            let conn = self.conn.lock().await;
+            let ts = now();
+            conn.execute(
+                "UPDATE conversations SET deleted_at = ?2, version = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+                rusqlite::params![id, ts],
+            )
+            .map_err(map_db)?;
+        }
+        // Post-commit notification so the KnowledgeView conversational
+        // acquirer can drop this conversation's chunks from its index.
+        self.fire_observer(|o| o.on_conversation_deleted(id));
         Ok(())
     }
 
@@ -317,6 +392,27 @@ impl ConversationStore for SqliteStateStore {
         if rows == 0 {
             return Err(Error::NotFound(format!("conversation {id}")));
         }
+        Ok(())
+    }
+
+    async fn set_conversation_skill_if_unset(
+        &self,
+        conversation_id: &str,
+        skill_id: &str,
+    ) -> Result<()> {
+        // `WHERE skill_id IS NULL` guarantees idempotence: a later
+        // skill activation cannot overwrite the first-message tag.
+        // Silently a no-op when the conversation doesn't exist or
+        // was already tagged — the Runtime calls this on every
+        // message write for simplicity, relying on the constraint
+        // to keep the first-writer-wins semantic.
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE conversations SET skill_id = ?2 \
+             WHERE id = ?1 AND skill_id IS NULL",
+            rusqlite::params![conversation_id, skill_id],
+        )
+        .map_err(map_db)?;
         Ok(())
     }
 }
@@ -400,20 +496,27 @@ impl TaskStore for SqliteStateStore {
 #[async_trait]
 impl MemoryStore for SqliteStateStore {
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
-        let conn = self.conn.lock().await;
-        conn.execute(
-            "INSERT OR REPLACE INTO memories (id, content, source, confidence, created_at, last_used)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![
-                memory.id,
-                memory.content,
-                memory.source,
-                memory.confidence,
-                memory.created_at,
-                memory.last_used,
-            ],
-        )
-        .map_err(map_db)?;
+        {
+            let conn = self.conn.lock().await;
+            conn.execute(
+                "INSERT OR REPLACE INTO memories
+                   (id, content, source, confidence, created_at, last_used, source_conversation_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    memory.id,
+                    memory.content,
+                    memory.source,
+                    memory.confidence,
+                    memory.created_at,
+                    memory.last_used,
+                    memory.source_conversation_id,
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        // Post-commit observer notification. Lock dropped above so the
+        // observer cannot deadlock on a store read from inside its handler.
+        self.fire_observer(|o| o.on_memory_written(&memory.id));
         Ok(())
     }
 
@@ -432,7 +535,7 @@ impl MemoryStore for SqliteStateStore {
 
         let mut stmt = conn
             .prepare(
-                "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used
+                "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used, m.source_conversation_id
                  FROM memories m
                  JOIN memories_fts fts ON m.rowid = fts.rowid
                  WHERE memories_fts MATCH ?1 AND m.deleted_at IS NULL
@@ -451,6 +554,7 @@ impl MemoryStore for SqliteStateStore {
                     last_used: row.get(5)?,
                     version: 0,
                     deleted_at: None,
+                    source_conversation_id: row.get(6)?,
                 })
             })
             .map_err(map_db)?
@@ -488,7 +592,7 @@ impl MemoryStore for SqliteStateStore {
     async fn get_all_memories(&self) -> Result<Vec<Memory>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
-            .prepare("SELECT id, content, source, confidence, created_at, last_used FROM memories WHERE deleted_at IS NULL")
+            .prepare("SELECT id, content, source, confidence, created_at, last_used, source_conversation_id FROM memories WHERE deleted_at IS NULL")
             .map_err(map_db)?;
 
         let memories: Vec<Memory> = stmt
@@ -502,6 +606,7 @@ impl MemoryStore for SqliteStateStore {
                     last_used: row.get(5)?,
                     version: 0,
                     deleted_at: None,
+                    source_conversation_id: row.get(6)?,
                 })
             })
             .map_err(map_db)?

@@ -276,6 +276,7 @@ fn parse_extracted_memories(text: &str) -> Result<Vec<Memory>> {
             last_used: current_time,
             version: current_time,
             deleted_at: None,
+            source_conversation_id: None,
         })
         .collect())
 }
@@ -452,6 +453,7 @@ mod tests {
             last_used: 0,
             version: 0,
             deleted_at: None,
+            source_conversation_id: None,
         };
         let one_month = 30 * 86400;
         let decayed = apply_confidence_decay(&mem, one_month);
@@ -469,6 +471,7 @@ mod tests {
             last_used: 0,
             version: 0,
             deleted_at: None,
+            source_conversation_id: None,
         };
         let six_months = 6 * 30 * 86400;
         let decayed = apply_confidence_decay(&mem, six_months);
@@ -486,6 +489,7 @@ mod tests {
             last_used: 0,
             version: 0,
             deleted_at: None,
+            source_conversation_id: None,
         };
         let two_years = 24 * 30 * 86400;
         let decayed = apply_confidence_decay(&mem, two_years);
@@ -509,6 +513,7 @@ mod tests {
                 last_used: 0,
                 version: 0,
                 deleted_at: None,
+                source_conversation_id: None,
             },
             Memory {
                 id: "2".to_string(),
@@ -519,6 +524,7 @@ mod tests {
                 last_used: 0,
                 version: 0,
                 deleted_at: None,
+                source_conversation_id: None,
             },
         ];
         let result = format_memories_for_prompt(&memories).unwrap();

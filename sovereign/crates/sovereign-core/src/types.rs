@@ -515,6 +515,13 @@ pub struct Conversation {
     pub version: i64,
     #[serde(default)]
     pub deleted_at: Option<i64>,
+    /// Skill active when this conversation started, if any.
+    /// Used by the `conversation-history` KnowledgeView acquirer to
+    /// filter conversations tagged with `privacy = "local_only"` skills
+    /// (e.g. `inner-work`) out of the conversational knowledge corpus.
+    /// `None` for conversations predating the KnowledgeView migration.
+    #[serde(default)]
+    pub skill_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -538,6 +545,30 @@ pub struct ConversationContext {
     /// questions as corpus queries.
     #[serde(default)]
     pub topic_context: Option<ConversationTopicContext>,
+    /// KnowledgeView landscape digests spliced in by the Runtime
+    /// **after** skill routing. `None` at `build_context()` time;
+    /// populated by `KnowledgeViewManager::landscape_digest` for each
+    /// active view before the prompt is assembled.
+    ///
+    /// A `None` value reaching the prompt-assembly site is a bug —
+    /// either the Runtime forgot to splice, or a caller built a
+    /// context without routing. The final-prompt path should
+    /// `debug_assert!` this is `Some(_)` in debug builds to surface
+    /// the oversight.
+    #[serde(default)]
+    pub knowledge_view_digests: Option<Vec<LandscapeDigest>>,
+}
+
+/// One view's contribution to the assembled context. Produced by
+/// `KnowledgeViewManager::landscape_digest`; consumed by the
+/// prompt-assembly layer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LandscapeDigest {
+    /// View id (e.g. `"personal-knowledge"`, `"conversation-history"`).
+    pub view_id: String,
+    /// Markdown-formatted digest body. Bounded by the token budget
+    /// the Runtime passed to `landscape_digest`.
+    pub body: String,
 }
 
 impl ConversationContext {
@@ -548,6 +579,34 @@ impl ConversationContext {
         } else {
             self.installed_corpora.join(", ")
         }
+    }
+
+    /// Replace the `knowledge_view_digests` field. Used by the
+    /// Runtime to splice in digests produced after skill routing.
+    pub fn set_landscape_digests(&mut self, digests: Vec<LandscapeDigest>) {
+        self.knowledge_view_digests = Some(digests);
+    }
+
+    /// Debug-build guard: assert the landscape-digest field has
+    /// been spliced. Call this right before handing the context
+    /// to the LLM prompt-assembly layer so that a missed splice
+    /// fails loudly in tests rather than silently leaking an
+    /// unfiltered digest into a user-facing prompt.
+    ///
+    /// In release builds this is a no-op — the Runtime is
+    /// structured so all production paths splice, and we don't
+    /// want to panic end-users on an edge case that integration
+    /// tests would have caught.
+    #[inline]
+    pub fn debug_assert_routed(&self) {
+        debug_assert!(
+            self.knowledge_view_digests.is_some(),
+            "ConversationContext reached the prompt-assembly site with \
+             knowledge_view_digests=None. The Runtime must call \
+             KnowledgeViewManager::splice_into between build_context() \
+             and the final prompt. See sovereign_core::types::ConversationContext \
+             field docs for the invariant."
+        );
     }
 }
 
@@ -613,6 +672,13 @@ pub struct Memory {
     pub version: i64,
     #[serde(default)]
     pub deleted_at: Option<i64>,
+    /// ID of the conversation this memory was extracted from, if any.
+    /// Populated going forward by memory extraction paths that know the
+    /// source conversation; `None` for memories predating the
+    /// KnowledgeView migration or for memories extracted outside a
+    /// conversational context.
+    #[serde(default)]
+    pub source_conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1292,5 +1358,110 @@ impl DocumentAssetOperation {
             DocumentAssetOperation::Transformation => "Applied transformation",
             DocumentAssetOperation::OffTopic { .. } => "Answered from general knowledge",
         }
+    }
+}
+
+#[cfg(test)]
+mod knowledge_view_digest_tests {
+    use super::*;
+
+    fn base_context() -> ConversationContext {
+        ConversationContext {
+            conversation: Conversation {
+                id: "c1".into(),
+                title: None,
+                messages: vec![],
+                created_at: 0,
+                updated_at: 0,
+                version: 0,
+                deleted_at: None,
+                skill_id: None,
+            },
+            memories: vec![],
+            working_memory: None,
+            installed_corpora: vec![],
+            document_session: None,
+            topic_context: None,
+            knowledge_view_digests: None,
+        }
+    }
+
+    #[test]
+    fn build_context_default_is_none() {
+        let ctx = base_context();
+        assert!(ctx.knowledge_view_digests.is_none());
+    }
+
+    #[test]
+    fn set_landscape_digests_populates_field() {
+        let mut ctx = base_context();
+        ctx.set_landscape_digests(vec![LandscapeDigest {
+            view_id: "personal-knowledge".into(),
+            body: "body".into(),
+        }]);
+        let digests = ctx.knowledge_view_digests.as_ref().unwrap();
+        assert_eq!(digests.len(), 1);
+        assert_eq!(digests[0].view_id, "personal-knowledge");
+    }
+
+    #[test]
+    fn set_landscape_digests_accepts_empty_vec() {
+        // Spec invariant: post-routing the field is `Some(_)` even
+        // when every view's digest was skipped (view not yet
+        // enriched). Downstream callers can rely on
+        // `knowledge_view_digests.is_some()`.
+        let mut ctx = base_context();
+        ctx.set_landscape_digests(vec![]);
+        assert!(ctx.knowledge_view_digests.is_some());
+        assert!(ctx.knowledge_view_digests.unwrap().is_empty());
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "knowledge_view_digests=None")]
+    fn debug_assert_routed_panics_when_unpopulated() {
+        let ctx = base_context();
+        ctx.debug_assert_routed();
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn debug_assert_routed_ok_when_populated() {
+        let mut ctx = base_context();
+        ctx.set_landscape_digests(vec![]);
+        ctx.debug_assert_routed(); // must not panic
+    }
+
+    #[test]
+    fn landscape_digest_round_trips_json() {
+        let d = LandscapeDigest {
+            view_id: "conversation-history".into(),
+            body: "Active domains: foo, bar".into(),
+        };
+        let json = serde_json::to_string(&d).unwrap();
+        let back: LandscapeDigest = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.view_id, "conversation-history");
+        assert_eq!(back.body, "Active domains: foo, bar");
+    }
+
+    #[test]
+    fn conversation_context_backwards_compatible_deserialization() {
+        // A context serialized before the KnowledgeView migration has
+        // no `knowledge_view_digests` field. `#[serde(default)]`
+        // must accept it as `None`.
+        let legacy = serde_json::json!({
+            "conversation": {
+                "id": "c1",
+                "title": null,
+                "messages": [],
+                "created_at": 0,
+                "updated_at": 0
+            },
+            "memories": [],
+            "working_memory": null
+        });
+        let ctx: ConversationContext = serde_json::from_value(legacy).unwrap();
+        assert!(ctx.knowledge_view_digests.is_none());
+        assert!(ctx.topic_context.is_none());
     }
 }

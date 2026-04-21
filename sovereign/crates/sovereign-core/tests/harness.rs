@@ -211,11 +211,18 @@ impl TestHarness {
     /// Create a harness with DeterministicInference, real in-memory SQLite,
     /// PassthroughRouter (SimpleQuery for all), and no tools.
     pub fn new() -> Self {
+        Self::with_skills(SkillRegistry::new())
+    }
+
+    /// Construct a harness with a caller-supplied `SkillRegistry`.
+    /// Used by tests that exercise skill-gated code paths (privacy
+    /// tagging, active-skill routing hints, etc.).
+    pub fn with_skills(skills: SkillRegistry) -> Self {
         let inference: Arc<dyn InferenceProvider> = Arc::new(DeterministicInference);
         let shared_store = Arc::new(SqliteStateStore::open_in_memory().unwrap());
         let store_trait: Arc<dyn StateStore> = Arc::clone(&shared_store) as Arc<dyn StateStore>;
 
-        let skills = Arc::new(SkillRegistry::new());
+        let skills = Arc::new(skills);
         let router: Box<dyn sovereign_core::traits::Router> =
             Box::new(PassthroughRouter);
         let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));

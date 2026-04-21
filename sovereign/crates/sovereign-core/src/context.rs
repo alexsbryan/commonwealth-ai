@@ -28,6 +28,7 @@ pub async fn build_context(
             updated_at: now(),
             version: 0,
             deleted_at: None,
+            skill_id: None,
         },
         Err(e) => return Err(e),
     };
@@ -59,6 +60,12 @@ pub async fn build_context(
         installed_corpora,
         document_session,
         topic_context: None,
+        // None here is intentional: landscape digests are spliced
+        // in by the Runtime after skill routing completes.
+        // See `ConversationContext::set_landscape_digests` and
+        // the KnowledgeViewManager integration note on the field
+        // docs.
+        knowledge_view_digests: None,
     })
 }
 

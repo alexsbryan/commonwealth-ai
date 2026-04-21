@@ -75,6 +75,7 @@ impl ConversationStore for InMemoryStateStore {
                 updated_at: now(),
                 version: 0,
                 deleted_at: None,
+                skill_id: None,
             });
 
         if let Some(convo) = convos.get_mut(&msg.conversation_id) {

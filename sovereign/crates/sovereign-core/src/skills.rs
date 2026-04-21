@@ -396,6 +396,45 @@ impl SkillRegistry {
             .collect()
     }
 
+    /// Return the ids of all registered skills whose inference config
+    /// declares `privacy = "local_only"`. Used by the KnowledgeView
+    /// conversational acquirer to strictly exclude those skills'
+    /// conversations from the shared conversational corpus.
+    ///
+    /// Iterates `list()` rather than `active_skills()` so a
+    /// skill that *can* be activated (and therefore may have
+    /// tagged past conversations) is respected even when currently
+    /// inactive — the filter is about what belongs in the corpus,
+    /// not which skill is talking now.
+    pub fn local_only_skill_ids(&self) -> Vec<String> {
+        self.skills
+            .iter()
+            .filter(|s| matches!(s.inference.privacy, ShardingPrivacy::LocalOnly))
+            .map(|s| s.id.clone())
+            .collect()
+    }
+
+    /// Resolve the active skill whose identity should tag a
+    /// newly-started conversation. When multiple skills are active,
+    /// the most privacy-restrictive one wins (`LocalOnly` >
+    /// `MeshAllowed`) so that a conversation started under
+    /// `inner-work` + a background skill is still tagged as
+    /// `inner-work` and therefore filtered out of the
+    /// conversational KnowledgeView. Returns `None` when no skill
+    /// is active.
+    pub fn primary_skill_id_for_conversation(&self) -> Option<String> {
+        let active = self.active_skills();
+        if active.is_empty() {
+            return None;
+        }
+        // Prefer LocalOnly skills; fall back to the first active skill.
+        active
+            .iter()
+            .find(|s| matches!(s.inference.privacy, ShardingPrivacy::LocalOnly))
+            .map(|s| s.id.clone())
+            .or_else(|| active.first().map(|s| s.id.clone()))
+    }
+
     pub fn routing_hints(&self) -> MergedRoutingHints {
         let mut merged = MergedRoutingHints::default();
         for skill in self.active_skills() {
@@ -601,6 +640,96 @@ version = "0.1.0"
     fn parse_malformed_toml_returns_none() {
         let toml = "this is not valid toml {{{{";
         assert!(parse_skill_toml(toml).is_none());
+    }
+
+    fn skill_with_privacy(id: &str, privacy: ShardingPrivacy) -> Skill {
+        let toml = format!(
+            r#"
+[skill]
+id = "{id}"
+name = "{id}"
+version = "0.1.0"
+
+[inference]
+privacy = "{}"
+"#,
+            match privacy {
+                ShardingPrivacy::LocalOnly => "local_only",
+                ShardingPrivacy::MeshAllowed => "mesh_allowed",
+            }
+        );
+        parse_skill_toml(&toml).expect("parse test skill")
+    }
+
+    #[test]
+    fn local_only_skill_ids_filters_by_privacy() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill_with_privacy("inner-work", ShardingPrivacy::LocalOnly));
+        reg.register(skill_with_privacy(
+            "research-analyst",
+            ShardingPrivacy::MeshAllowed,
+        ));
+        reg.register(skill_with_privacy("journal", ShardingPrivacy::LocalOnly));
+
+        let local_only = reg.local_only_skill_ids();
+        assert_eq!(local_only.len(), 2);
+        assert!(local_only.contains(&"inner-work".to_string()));
+        assert!(local_only.contains(&"journal".to_string()));
+        assert!(!local_only.contains(&"research-analyst".to_string()));
+    }
+
+    #[test]
+    fn local_only_skill_ids_includes_inactive_skills() {
+        // Regression guard: the filter is "what belongs in the corpus",
+        // not "what's talking now". A skill that's been loaded but not
+        // activated must still participate in the exclusion.
+        let mut reg = SkillRegistry::new();
+        reg.register(skill_with_privacy("inner-work", ShardingPrivacy::LocalOnly));
+        // Never call activate() — skill is inactive.
+        let local_only = reg.local_only_skill_ids();
+        assert_eq!(local_only, vec!["inner-work".to_string()]);
+    }
+
+    #[test]
+    fn primary_skill_id_for_conversation_prefers_local_only() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill_with_privacy(
+            "research-analyst",
+            ShardingPrivacy::MeshAllowed,
+        ));
+        reg.register(skill_with_privacy("inner-work", ShardingPrivacy::LocalOnly));
+        reg.activate("research-analyst");
+        reg.activate("inner-work");
+
+        // Both active; LocalOnly wins so the conversation gets tagged
+        // as inner-work and therefore filtered out of the shared
+        // conversational corpus.
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("inner-work")
+        );
+    }
+
+    #[test]
+    fn primary_skill_id_for_conversation_none_when_nothing_active() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill_with_privacy("x", ShardingPrivacy::MeshAllowed));
+        // No activate() — active set is empty.
+        assert!(reg.primary_skill_id_for_conversation().is_none());
+    }
+
+    #[test]
+    fn primary_skill_id_for_conversation_falls_back_to_first_active_when_no_local_only() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill_with_privacy(
+            "research-analyst",
+            ShardingPrivacy::MeshAllowed,
+        ));
+        reg.activate("research-analyst");
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("research-analyst")
+        );
     }
 
     #[test]

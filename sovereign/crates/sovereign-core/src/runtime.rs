@@ -481,6 +481,15 @@ pub struct Runtime {
     /// searches local + peer corpora. `None` means "no mesh" — the
     /// standalone (pre-mesh) behavior is preserved exactly.
     pub mesh_knowledge: Option<Arc<dyn crate::traits::MeshKnowledgeSource>>,
+    /// Optional [`LandscapeDigestProvider`][crate::traits::LandscapeDigestProvider]
+    /// (typically the `sovereign-tools` `KnowledgeViewManager`). When
+    /// present, Runtime calls it after routing to splice
+    /// `knowledge_view_digests` onto the `ConversationContext` — the
+    /// landscape-of-terrain summary consumed by the prompt assembly
+    /// layer. `None` = pre-KnowledgeView behaviour preserved exactly;
+    /// digests stay `None` and the context carries only memories and
+    /// corpus chunks.
+    pub landscape_digests: Option<Arc<dyn crate::traits::LandscapeDigestProvider>>,
 }
 
 impl Runtime {
@@ -505,11 +514,28 @@ impl Runtime {
             inference_config,
             corpus_engine: None,
             mesh_knowledge: None,
+            landscape_digests: None,
         }
     }
 
     pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
         self.corpus_engine = Some(engine);
+        self
+    }
+
+    /// Install a `KnowledgeView` landscape-digest provider. Typically
+    /// the `sovereign-tools::knowledge_view::KnowledgeViewManager`,
+    /// constructed alongside the `StateStore` so the same `Arc` can
+    /// also be passed as a `StateStoreObserver`.
+    ///
+    /// Opt-in: leaving this `None` preserves the pre-KnowledgeView
+    /// behaviour exactly. Test harnesses that don't wire KnowledgeView
+    /// inherit the no-op.
+    pub fn with_landscape_digests(
+        mut self,
+        provider: Arc<dyn crate::traits::LandscapeDigestProvider>,
+    ) -> Self {
+        self.landscape_digests = Some(provider);
         self
     }
 
@@ -997,6 +1023,23 @@ impl Runtime {
 
     /// Build a system message that includes memory context.
     fn build_system_message(&self, base: &str, context: &ConversationContext) -> String {
+        // Invariant check: the Runtime is required to splice
+        // `knowledge_view_digests` after routing (via
+        // `LandscapeDigestProvider::splice_landscape_digests`). If we
+        // reach system-message assembly with the field still `None`,
+        // something skipped the splice — most likely a new code path
+        // that builds its own ConversationContext and went straight
+        // to the LLM. Debug-builds panic loudly so the oversight is
+        // caught in tests; release builds proceed without the digest.
+        //
+        // The guard is tolerant of the no-KnowledgeView configuration
+        // (the field stays `None` when `Runtime::with_landscape_digests`
+        // wasn't called — e.g. unit-test harnesses). We only assert
+        // when a provider is installed.
+        if self.landscape_digests.is_some() {
+            context.debug_assert_routed();
+        }
+
         let mut parts = vec![base.to_string()];
 
         if let Some(mem_section) = memory::format_memories_for_prompt(&context.memories) {
@@ -1012,6 +1055,20 @@ impl Runtime {
                     "Session context:\n- {}",
                     wm.facts.join("\n- ")
                 ));
+            }
+        }
+
+        // KnowledgeView landscape digests — the person's recurring
+        // terrain (clusters, fault lines, open questions) that the
+        // model reads before answering. Bounded at splice time by
+        // `KnowledgeViewManager::splice_into`'s per-view token budget
+        // (300 + 200 in v1).
+        if let Some(digests) = context.knowledge_view_digests.as_ref() {
+            for d in digests {
+                let body = d.body.trim();
+                if !body.is_empty() {
+                    parts.push(body.to_string());
+                }
             }
         }
 
@@ -1114,7 +1171,14 @@ impl Runtime {
         .await?;
 
         tracing::info!(count = extracted.len(), "memory: extracted long-term memories");
-        for mem in extracted {
+        for mut mem in extracted {
+            // Tag each extracted memory with the conversation it
+            // came from. Enables the `personal-knowledge`
+            // KnowledgeView to surface cluster membership
+            // alongside conversation-level metadata (title, skill)
+            // at digest time, and makes `memories.source_conversation_id`
+            // no longer NULL on fresh writes post-migration.
+            mem.source_conversation_id = Some(conversation_id.to_string());
             memory::save_with_contradiction_check(
                 self.inference.as_ref(),
                 self.store.as_ref(),
@@ -1195,6 +1259,26 @@ impl Runtime {
         self.store.save_message(&user_msg).await?;
         context.conversation.messages.push(user_msg);
 
+        // 2b. Tag the conversation with the skill that was active
+        // when it started. The store upsert is idempotent — only
+        // the first call with a non-NULL skill wins, later calls
+        // are no-ops. The KnowledgeView conversational acquirer
+        // reads this column to exclude `privacy = local_only`
+        // skills (e.g. `inner-work`) from the shared corpus.
+        if let Some(skill_id) = self.skills.primary_skill_id_for_conversation() {
+            if let Err(e) = self
+                .store
+                .set_conversation_skill_if_unset(conversation_id, &skill_id)
+                .await
+            {
+                tracing::debug!(
+                    conversation_id,
+                    error = %e,
+                    "failed to tag conversation with skill_id; continuing"
+                );
+            }
+        }
+
         // 3. Route.
         let tool_descriptors = self.tools.descriptors();
         let RoutingOutcome { intent, coarse_intent, self_assessment } = self
@@ -1220,6 +1304,22 @@ impl Runtime {
             return Err(Error::NotImplemented(
                 "Streaming not supported for this intent".into(),
             ));
+        }
+
+        // 3b. Splice KnowledgeView landscape digests now that routing
+        // has resolved. The provider (typically the sovereign-tools
+        // KnowledgeViewManager) reads the enriched indexes for each
+        // built-in view and writes a markdown summary into
+        // `context.knowledge_view_digests` so prompt assembly can
+        // surface "here's the person's terrain" before synthesis.
+        // v1 passes `active_skill=None` — per-skill digest filtering
+        // is v2 work. The acquirer-level privacy separation already
+        // keeps `local_only` skill content out of the conversational
+        // corpus.
+        if let Some(provider) = &self.landscape_digests {
+            provider
+                .splice_landscape_digests(&mut context, None)
+                .await;
         }
 
         // 4. Search knowledge + build prompt (shared with handle_simple).
@@ -1416,6 +1516,22 @@ impl Runtime {
         };
         self.store.save_message(&user_msg).await?;
 
+        // Tag the conversation with the active skill on first message
+        // (idempotent — see the streaming-path equivalent).
+        if let Some(skill_id) = self.skills.primary_skill_id_for_conversation() {
+            if let Err(e) = self
+                .store
+                .set_conversation_skill_if_unset(conversation_id, &skill_id)
+                .await
+            {
+                tracing::debug!(
+                    conversation_id,
+                    error = %e,
+                    "failed to tag conversation with skill_id; continuing"
+                );
+            }
+        }
+
         self.handle_turn(message, conversation_id).await
     }
 
@@ -1494,6 +1610,16 @@ impl Runtime {
             self_assessment = ?self_assessment,
             "runtime: routed"
         );
+
+        // 2b. Splice KnowledgeView landscape digests (same hook as
+        // handle_message_stream). No-op when
+        // `Runtime::with_landscape_digests` wasn't called at build
+        // time. See the streaming path for rationale on `active_skill`.
+        if let Some(provider) = &self.landscape_digests {
+            provider
+                .splice_landscape_digests(&mut context, None)
+                .await;
+        }
 
         // When a legacy [Document attached: ...] prefix is used, bypass the
         // planner entirely and route to the map-reduce document_operation path.
