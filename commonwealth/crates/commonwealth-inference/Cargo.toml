@@ -21,4 +21,4 @@ tracing = { workspace = true }
 bytes = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 tokio-stream = "0.1"
-tokio-util = "0.7"
+tokio-util = { workspace = true }

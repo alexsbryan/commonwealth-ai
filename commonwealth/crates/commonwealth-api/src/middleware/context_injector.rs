@@ -5,9 +5,10 @@
 //! Composition (in order):
 //!
 //! 1. A fixed `<atos-instructions/>` block — tells the model when to
-//!    write decision/invariant/attempt/uncertainty notes. Baked
-//!    into the source so operators can edit it without a config
-//!    redeploy.
+//!    write decision/invariant/attempt/uncertainty notes. Sourced
+//!    from `assets/atos_instructions.md` via `include_str!` so the
+//!    instructions live as data, not code, and an operator can diff
+//!    / propose edits without reading Rust source.
 //! 2. The notes digest for `scope=[Global, Feature(feature_id)]`.
 //!    Cached in SQLite by `NoteStore::digest_cache_*`; on miss we
 //!    concatenate note headers rather than call the Fast slot here
@@ -33,25 +34,12 @@ use sovereign_atos::approval;
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
 use crate::openai_types::{ChatCompletionRequest, ChatMessage};
 
-const ATOS_INSTRUCTIONS: &str = r#"<atos-instructions>
-You are working inside an ATOS-orchestrated session.
-
-- **Before editing code**: call `read_notes` with the relevant symbols
-  or files. Honour invariants. Build on decisions. Don't repeat
-  documented failed attempts.
-- **When you choose one approach over another**: call `write_note`
-  with `kind="decision"`, including the alternatives you rejected
-  and why.
-- **When you discover a constraint** (something that would break if
-  violated): `kind="invariant"`.
-- **When an approach fails**: `kind="attempt"`, explaining why.
-- **When a spec clause under-specifies a real case**:
-  `kind="uncertainty"`, describing the case and your interim
-  decision. These surface in the epistemic report for human review.
-- Stop condition outputs are captured by the orchestrator. You do
-  NOT need to paste test output unless asked.
-</atos-instructions>
-"#;
+/// Agent-facing preamble (the `<atos-instructions>` XML block). Kept as
+/// an external asset so the instructions — which are *data* the model
+/// reads — don't have to round-trip through Rust source edits to
+/// update. `include_str!` pins them at compile time, so the final
+/// binary carries a copy and there is no runtime file dependency.
+const ATOS_INSTRUCTIONS: &str = include_str!("../../assets/atos_instructions.md");
 
 pub struct ContextInjector;
 
