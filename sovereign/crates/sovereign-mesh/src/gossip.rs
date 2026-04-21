@@ -17,7 +17,7 @@
 //!
 //! Reuses `Mesh::merge_from` for the actual last-writer-wins
 //! reconciliation. This module is just the network plumbing on top.
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::NodeId;
@@ -216,10 +216,17 @@ pub async fn run_one_round(
                 && m.status != NodeStatus::Offline
             {
                 m.status = NodeStatus::Offline;
+                // Extra diagnostic fields for the ~9 min flap
+                // (see todo `f152dfe7` #4). `threshold_secs` +
+                // `last_seen` makes each transition reproducible
+                // without having to cross-reference elsewhere.
                 info!(
                     peer = %m.node_id,
                     name = %m.name,
                     staleness_secs = now.saturating_sub(m.last_seen),
+                    threshold_secs = threshold,
+                    last_seen_unix = m.last_seen,
+                    addrs = ?m.addresses,
                     "gossip: peer marked Offline (stale last_seen)"
                 );
             }
@@ -272,8 +279,21 @@ pub async fn run_one_round(
             continue;
         }
         for addr in &addrs {
+            // Per-address timing so we can diagnose the Online↔Offline
+            // flap (see todo `f152dfe7` #4). Each line is one address
+            // attempt with elapsed ms and outcome, so offline decay can
+            // be correlated with a run of failed reaches on a specific
+            // address family (LAN vs Tailscale).
+            let attempt_start = Instant::now();
             match gossip_with_peer(&http, *addr, &my_snapshot).await {
                 Ok(their_view) => {
+                    let reach_ms = attempt_start.elapsed().as_millis() as u64;
+                    info!(
+                        peer = %peer_id,
+                        peer_addr = %addr,
+                        reach_ms,
+                        "gossip: reach ok"
+                    );
                     let mut mesh = app_state.inner.mesh.write().await;
                     let report = mesh.merge_from(self_id, &their_view);
                     if report.added > 0 {
@@ -316,9 +336,11 @@ pub async fn run_one_round(
                     break; // one working address is enough
                 }
                 Err(e) => {
-                    debug!(
+                    let reach_ms = attempt_start.elapsed().as_millis() as u64;
+                    warn!(
                         peer = %peer_id,
                         peer_addr = %addr,
+                        reach_ms,
                         error = %e,
                         "gossip: reach failed, trying next address"
                     );
@@ -378,29 +400,36 @@ pub async fn run_one_round(
             for (peer_id, addrs) in store_targets {
                 for addr in &addrs {
                     let url = format!("http://{addr}/internal/app/state");
+                    let push_start = Instant::now();
                     match http.post(&url).json(&store_body).send().await {
                         Ok(resp) if resp.status().is_success() => {
+                            let push_ms = push_start.elapsed().as_millis() as u64;
                             tracing::debug!(
                                 peer = %peer_id,
                                 url = %url,
+                                push_ms,
                                 entries = entries.len(),
                                 "gossip: mesh_store pushed to peer"
                             );
                             break; // one working address is enough
                         }
                         Ok(resp) => {
+                            let push_ms = push_start.elapsed().as_millis() as u64;
                             tracing::debug!(
                                 peer = %peer_id,
                                 url = %url,
+                                push_ms,
                                 status = %resp.status(),
                                 "gossip: mesh_store push rejected"
                             );
                             break;
                         }
                         Err(e) => {
+                            let push_ms = push_start.elapsed().as_millis() as u64;
                             tracing::debug!(
                                 peer = %peer_id,
                                 url = %url,
+                                push_ms,
                                 error = %e,
                                 "gossip: mesh_store push failed, trying next address"
                             );
