@@ -116,6 +116,7 @@ src/
 │   ├── paragraph.rs          # Hierarchical fallback splitter
 │   ├── sentence.rs
 │   ├── fixed.rs
+│   ├── passthrough.rs        # Identity chunker (one chunk per input record)
 │   └── semantic.rs           # Heading-aware
 ├── enrichment/
 │   ├── field_engine.rs       # FieldModelEngine: 5-phase enrichment coordinator
@@ -126,10 +127,14 @@ src/
 │   ├── open_questions.rs     # Open question detection
 │   ├── checkpoint.rs         # Resumable enrichment checkpointing
 │   ├── domain.rs             # Domain trait — single extension point
+│   ├── domain_registry.rs    # DomainRegistry: data-driven domain dispatch (replaces match)
 │   ├── filter.rs             # Chunk eligibility filtering
 │   └── domains/
 │       ├── philosophy.rs     # Fully implemented (423 lines)
 │       ├── multi.rs          # Wikipedia multi-domain
+│       ├── personal.rs       # Personal-knowledge map (powers KnowledgeView)
+│       ├── conversational.rs # Conversation-history map (powers KnowledgeView)
+│       ├── institutional.rs  # Institutional-notes map (powers KnowledgeView)
 │       ├── science.rs        # Stub
 │       ├── policy.rs         # Stub
 │       ├── legal.rs          # Stub
@@ -138,6 +143,13 @@ src/
 │                             #   NoteRow, ToolCallLogRow, write_note, write_reflection,
 │                             #   read_notes (retired-aware), retire_by_tool/id,
 │                             #   log_tool_call (10k ring buffer), read_reflections
+│                             #   + ATOS kinds (deviation, redteam_finding, postmortem_pointer)
+│                             #   + NoteScope dimension (Global / Feature / Session)
+├── features.rs               # FeatureStore: ATOS feature rows, milestones, runs, tool events
+├── sovereign_config.rs       # SovereignConfig loader (.sovereign/sovereign.toml)
+├── project_docs.rs           # ProjectDocsStore: indexed SOVEREIGN.md + docs for project_context
+├── lint_results.rs           # LintStore: persisted LintStatus output for agents
+├── test_results.rs           # TestStore: persisted TestStatus output for agents
 ├── scip_graph.rs             # ScipGraph: SCIP call graph (SQLite, staleness tracking)
 ├── scip_export.rs            # Language-agnostic SCIP exporter dispatch
 ├── scip_proto.rs             # Minimal SCIP protobuf types (prost)
@@ -199,19 +211,36 @@ crates/
 │   ├── knowledge.rs          # Direct corpus query tool
 │   ├── document.rs           # Map-reduce document summarizer
 │   ├── epistemic.rs          # ClaimSearchTool, EpistemicLandscapeTool
-│   ├── code/                 # Code Intelligence tools
+│   ├── knowledge_view/       # KnowledgeView landscape digest assembly (§4.12)
+│   │   ├── manager.rs        #   KnowledgeViewManager: lifecycle, observer, splice
+│   │   ├── cross_view.rs     #   Cross-view resonance (0.75 cosine, ≤5 matches)
+│   │   ├── recipes.rs        #   Three view recipes + SQL privacy filter
+│   │   └── acquirers/sqlite.rs # SqliteAcquirer for memory/message/note sources
+│   ├── code/                 # Code Intelligence + ATOS lifecycle tools
 │   │   ├── symbol_lookup.rs  #   Exact symbol-name lookup (LanceDB filter)
 │   │   ├── code_search.rs    #   Semantic code search (vector + FTS fallback)
 │   │   ├── recent_changes.rs #   Symbols modified in last N hours (mtime)
 │   │   ├── callees.rs        #   SCIP call graph: what does this function call?
-│   │   └── callers.rs        #   SCIP call graph: what calls this function?
+│   │   ├── callers.rs        #   SCIP call graph: what calls this function?
+│   │   ├── provision_feature.rs / archive_feature.rs    # ATOS FeatureStore writes
+│   │   ├── record_atos_event.rs / promote_note.rs       # ATOS lifecycle events
+│   │   ├── read_note_by_id.rs / read_note_digest.rs     # ATOS note surfaces
+│   │   └── write_redteam_finding.rs                     # red-team finding persistence
 │   ├── corpus/               # Corpus install + parsers (Wiki, OpenAlex, SEP,
 │   │                         #   StackExchange, Gutenberg, Parquet, HTML, CRS)
 │   ├── rag/{ingest.rs,parse.rs,chunk.rs}   # User-document RAG
 │   ├── mcp/                  # Model Context Protocol client (stdio + HTTP+SSE)
 │   ├── shell.rs file.rs email.rs calendar.rs compute.rs
 │
-├── sovereign-cli/            # Terminal REPL + mesh subcommands
+├── sovereign-atos/           # ATOS library (§4.13)
+│   ├── lib.rs                # AtosOrchestrator trait, RunMode, PreparedBrief
+│   ├── local.rs              # LocalAtosOrchestrator — provision, milestones, reports
+│   ├── charter.rs            # Charter markdown parser, auto-redteam detection
+│   ├── approval.rs           # SHA-256 drift detection; git + MeshStore approval sources
+│   ├── report.rs             # Milestone / red-team / epistemic report rendering
+│   └── session.rs            # ATOS session state
+│
+├── sovereign-cli/            # Terminal REPL + named subcommands + ATOS CLI surface
 ├── sovereign-server/         # Axum REST + WebSocket, multi-tenant, approvals
 ├── sovereign-desktop/        # Tauri 2 + Svelte 5 native app
 └── sovereign-mesh/           # In-process Commonwealth daemon embed
@@ -292,12 +321,21 @@ crates/
 │
 ├── commonwealth-api/         # HTTP servers
 │   ├── server.rs             # Dual listeners: client (9741) + internal (9742, mTLS)
-│   ├── routes_inference.rs   # /v1/chat/completions, /v1/models (OICP-aware routing)
+│   ├── routes_inference.rs   # /v1/chat/completions, /v1/models (OICP-aware + pipeline-alias routing)
 │   ├── routes_knowledge.rs   # /v1/knowledge/search (fan-out + merge)
 │   ├── routes_status.rs      # /status
 │   ├── routes_oicp.rs        # /oicp/v1/capabilities provider manifest
 │   ├── routes_internal.rs    # /internal/{gossip,scheduling,model,index,knowledge,latency}
-│   ├── openai_types.rs knowledge_types.rs state.rs
+│   ├── routes_apps.rs        # /v1/apps/* mesh-app lifecycle (register/list/start/stop)
+│   ├── routes_app_internal.rs # /internal/app/* app-to-mesh bridge (store, knowledge, inference)
+│   ├── middleware/           # Pipeline-alias middleware stack (ATOS sovereign-coder pipeline)
+│   │   ├── mod.rs            # Middleware trait + MiddlewareRegistry
+│   │   ├── approval_gate.rs  # Rejects writes until feature spec is committed
+│   │   ├── session_briefing.rs # Prepends session brief to first system message
+│   │   ├── context_injector.rs # Injects charter + spec + notes digest every turn
+│   │   ├── tool_injector.rs  # Merges ATOS tool defs (write_note, record_atos_event, ...)
+│   │   └── artifact_surface.rs # Surfaces post-turn artifacts + pending deviation acks
+│   ├── openai_types.rs state.rs
 │
 ├── commonwealth-knowledge/   # corpus-engine integration
 │   ├── mesh_corpus.rs        # MeshCorpusManager (install/list/remove)
@@ -435,14 +473,19 @@ analyzes the corpus as a whole in five phases:
 
 The `Domain` trait (`enrichment/domain.rs`) is the single extension point for
 generalizing across knowledge fields. It defines epistemic vocabulary, overview
-document filters, all LLM prompts, and clustering/alignment configuration. Six
-domain implementations exist: `philosophy` (fully implemented, 423 lines),
-`multi` (Wikipedia multi-domain, 81 lines), and `science`, `policy`, `legal`,
-`community` (stubs, 21 lines each).
+document filters, all LLM prompts, and clustering/alignment configuration.
+Nine domain implementations exist today: `philosophy` (fully implemented, 423
+lines), `multi` (Wikipedia multi-domain), and three domains that power
+Sovereign's **KnowledgeView** (see §4.12): `personal` (memory maps),
+`conversational` (180-day conversation history), `institutional` (architectural
+decisions + invariants from the NoteStore). The remaining four — `science`,
+`policy`, `legal`, `community` — are stubs.
 
 `FieldModelEngine` orchestrates all five phases with checkpoint-based
-resumability (`checkpoint.rs`). It contains zero domain-specific logic — the
-only `match` on domain strings is the factory method `from_recipe()`.
+resumability (`checkpoint.rs`). Domain construction goes through
+`enrichment/domain_registry.rs` — a data-driven `DomainRegistry` that resolves
+domain IDs to `Arc<dyn Domain>`. Adding a domain is a single `register` call,
+not a new match arm in `field_engine.rs`.
 
 This pass is opt-in per recipe (`[enrichment] enabled = true, domain =
 "philosophy"`). Without an `InferenceFn`, the engine logs a warning and skips
@@ -498,21 +541,27 @@ to web search or to a Commonwealth mesh.
 
 ### 4.1 Trait architecture
 
-`sovereign-core/src/traits.rs` defines five async trait boundaries that the
-entire runtime is built against. Every component is swappable for tests or
-alternate implementations.
+`sovereign-core/src/traits.rs` defines the async trait boundaries the entire
+runtime is built against. Every component is swappable for tests or alternate
+implementations.
 
-| Trait               | Surface                                                          |
-|---------------------|------------------------------------------------------------------|
-| `InferenceProvider` | `complete`, `complete_stream`, `embed`, `embed_query`, `capabilities` |
-| `Router`            | `classify(message) → Intent`                                    |
-| `Planner`           | `plan(goal, context, tools) → Plan`, `replan(...)`              |
-| `Tool`              | `descriptor`, `execute`, `validate`, `retry_config`, `required_permissions` |
-| `StateStore`        | ~25 methods: conversations, messages, tasks, memories, documents, corpus state, search budget, permissions, routing log |
+| Trait                  | Surface                                                        |
+|------------------------|----------------------------------------------------------------|
+| `InferenceProvider`    | `complete`, `complete_stream`, `complete_stream_with_id`, `embed`, `embed_query`, `capabilities` |
+| `Router`               | `classify(message) → Intent`                                   |
+| `Planner`              | `plan(goal, context, tools) → Plan`, `replan(...)`             |
+| `Tool`                 | `descriptor`, `execute`, `validate`, `retry_config`, `required_permissions` |
+| `LandscapeDigestProvider` | `splice_landscape_digests(ctx, active_skill)` — KnowledgeView hook (§4.12) |
+| `ApprovalChannel`      | human-in-the-loop tool approval; impls: `CliApprovalChannel`, `TauriApprovalChannel`, `ServerApprovalChannel`, `AutoApprovalChannel` (tests) |
+| `MeshKnowledgeSource`  | fan-out knowledge search to mesh peers                         |
+| `InsightStore` / `InsightSink` | long-term insight extraction + persistence                |
 
-A sixth trait, `ApprovalChannel`, exists for human-in-the-loop tool approval.
-Implementations: `CliApprovalChannel`, `TauriApprovalChannel`,
-`ServerApprovalChannel`, `AutoApprovalChannel` (tests).
+`StateStore` itself is decomposed per ISP into focused sub-traits that a
+single blanket impl re-aggregates: `ConversationStore`, `TaskStore`,
+`MemoryStore`, `RoutingStore`, `DocumentStore`, `CorpusStateStore`,
+`BudgetStore`, `PermissionStore`, `HealthStore`, `DocumentSessionStore`,
+`DocumentAssetStore`. Callers can narrow bounds to the exact capability they
+need; implementors still get a single aggregate trait to plug in.
 
 ### 4.2 Runtime data flow
 
@@ -608,18 +657,27 @@ schema (vLLM, Ollama, llama.cpp server, TGI, **Commonwealth**).
 | `ComputeTool`        | Cost estimation for mesh contribution accounting              |
 | `McpClient` + `McpToolAdapter` | stdio JSON-RPC client wraps remote MCP servers as native tools |
 
-**Code Intelligence** is a 17-tool MCP server started via `sovereign project serve`.
-Tools fall into six groups:
+**Code Intelligence** is a 24-tool MCP server started via `sovereign project serve`
+(for ad-hoc use) and `sovereign daemon` (for the long-running service owned by
+launchd/systemd). Tools fall into eight groups:
 
 | Group | Tools |
 |-------|-------|
-| Code index (LanceDB) | `symbol_lookup`, `code_search`, `recent_changes` |
-| SCIP call graph      | `find_callers`, `find_callees`, `blast_radius` |
-| Lint watcher         | `lint_status`, `get_lint_output` |
-| Test watcher         | `test_status`, `run_tests`, `get_run_output` |
-| Working notes        | `write_note`, `read_notes`, `delete_note`, `project_context` |
-| Session reflection   | `session_reflection` |
-| Doc health           | `check_doc_paths` |
+| Code index (LanceDB)    | `symbol_lookup`, `code_search`, `recent_changes` |
+| SCIP call graph         | `find_callers`, `find_callees`, `blast_radius` |
+| Lint watcher            | `lint_status`, `get_lint_output` |
+| Test watcher            | `test_status`, `run_tests`, `get_run_output` |
+| Working notes           | `write_note`, `read_notes`, `delete_note` |
+| ATOS feature lifecycle  | `provision_feature`, `archive_feature`, `read_note_by_id`, `promote_note`, `read_note_digest`, `record_atos_event`, `write_redteam_finding` |
+| Project context         | `project_context` |
+| Session reflection      | `session_reflection` |
+| Doc health              | `check_doc_paths` |
+
+The ATOS group powers the feature lifecycle (see §4.13). `provision_feature` and
+`archive_feature` write to `FeatureStore`; `read_note_by_id`, `promote_note`, and
+`read_note_digest` extend the NoteStore surface with feature-scoped operations;
+`record_atos_event` writes to `atos_tool_events`; `write_redteam_finding` persists
+a `redteam_finding`-kind note.
 
 The first three groups query either LanceDB indexes (built by tree-sitter via
 `sovereign code index <path>`) or a SQLite `ScipGraph` populated by SCIP exports
@@ -754,7 +812,7 @@ with HTTP 400 by Commonwealth.
 
 | Frontend     | Purpose                                                       |
 |--------------|--------------------------------------------------------------|
-| `sovereign-cli`     | Interactive REPL (default) plus named subcommands: `project` (serve/init/refresh/install-hooks), `code` (index), `mcp` (proxy), `mesh` (create/join/status/members/leave), `recipe` (run), `reflect` (review session reflections, retire fixed ones). Flags: `--model`, `--primary-model`, `--data-dir`, `--skills-dir`, `--router`, `--ingest`, `--brave-api-key`, `--tavily-api-key`. `project init` prompts interactively for AI assistant harness selection (Claude Code / opencode / all / skip) and writes `.opencode/config.json` + `AGENTS.md` for opencode; if `.sovereign/sovereign.toml` has a `[commonwealth]` section it also configures a Commonwealth OICP inference provider in the opencode config. |
+| `sovereign-cli`     | Interactive REPL (default) plus named subcommands: `setup` (first-run wizard), `project` (per-project code intelligence — `init`/`found`/`amend`/`phase`/`audit`/`serve`/`refresh`/`install-hooks`), `atos` (feature-layer orchestration — `provision`/`start-milestone`/`end-milestone`/`spec diff`/`spec accept`/`teardown`/`doctor`/`install-plugin`), `daemon` (long-running service started by launchd/systemd; owns :9741), `doctor` (diagnose setup + daemon health), `mesh` (create/join/rotate/status/members/leave), `corpus` (install/remove/update/list), `code` (index), `mcp` (proxy + `mcp list-tools`), `recipe` (run), `reflect` (review session reflections, retire fixed ones). Flags: `--model`, `--primary-model`, `--data-dir`, `--skills-dir`, `--router`, `--ingest`, `--brave-api-key`, `--tavily-api-key`, `--no-knowledge-view` (disable KnowledgeView landscape digests; see §4.12). `project init` prompts interactively for AI assistant harness selection (Claude Code / opencode / all / skip) and writes `.opencode/config.json` + `AGENTS.md` for opencode; if `.sovereign/sovereign.toml` has a `[commonwealth]` section it also configures a Commonwealth OICP inference provider in the opencode config. `project init` also installs the ATOS opencode plugin at `.opencode/plugins/sovereign-atos.ts` (see §4.13). |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port. Multi-tenant via `tenant.rs`. SSE streaming via `/v1/conversations/{id}/messages/stream`. WS streaming via `/v1/ws/{conversation_id}`. Server-side `ApprovalChannel` stores requests in DB and exposes `/v1/tasks/{id}/approve`. |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. Setup wizard (persona, hardware-driven model selection, knowledge tier, optional web search keys). Chat with streaming + source attribution. Knowledge base management (`KnowledgeStatus`, `CorpusProgressBanner`). Skill manager. Mesh status/settings UI. Deep-link handler for `sovereign://` URLs. System tray. |
 
@@ -778,6 +836,116 @@ manifest the desktop app uses for tier-driven install:
 | Research  | 105 GB| Wikipedia + SEP + OpenAlex + CRS              |
 | Technical | 95 GB | Wikipedia + Stack Exchange                    |
 | Full      | 170 GB| All six                                       |
+
+### 4.12 KnowledgeView — Landscape digest assembly
+
+Sovereign ships with an opt-in "map of the user's terrain" system that splices
+short, structured summaries of the user's own world into the system prompt
+before each turn. It composes three views, each sourced from an existing
+`StateStore` surface and enriched via the `corpus-engine` field-model pipeline:
+
+| View                   | Source                                   | Enrichment domain |
+|------------------------|------------------------------------------|-------------------|
+| `personal-knowledge`   | `memories` (confidence > 0.2, not deleted) | `personal`      |
+| `conversation-history` | `conversations + messages` (180-day window, `privacy = "local_only"` skills excluded) | `conversational` |
+| `institutional-notes`  | `notes` (decisions, invariants, todos, uncertainties, redteam findings — not reflections) | `institutional`  |
+
+Each view runs the usual corpus-engine pipeline (`SqliteAcquirer` → JSONL →
+ingest → enrichment) and writes a `field_skeleton.json` to
+`~/.sovereign/indexes/<view>/`. Before each message, the Runtime calls
+`LandscapeDigestProvider::splice_landscape_digests` (single method,
+`sovereign-core/src/traits.rs`). The only implementor in production is
+`sovereign-tools::knowledge_view::KnowledgeViewManager`, which:
+
+1. Formats each view's skeleton into a short markdown block bounded by a
+   per-view token budget (300 / 200 / 100 tokens by default).
+2. Computes **cross-view resonance** — embeds every canonical question and
+   open question across views, keeps matches above cosine similarity 0.75
+   (≤5 per digest), and phrases them tentatively: *"theme X (personal) may
+   resonate with theme Y (conversations)"*, never asserting identity.
+3. Splices the resulting `Vec<LandscapeDigest>` into `ConversationContext`,
+   which `build_system_message` then concatenates into the final system
+   prompt.
+
+**Structural privacy invariants** (enforced in code, not policy):
+
+- All three recipes hardcode `scope = "local"`, `mesh_sharing = false`,
+  `query_sharing = false` — these fields are not parameterized and cannot be
+  flipped by user configuration.
+- The conversational view's acquirer builds a SQL `WHERE skill_id NOT IN
+  (<local_only_ids>)` clause **at ingest time**, so messages tagged with a
+  `privacy = "local_only"` skill never enter the shared conversational map.
+- When the **active** skill is `local_only`, the splice call suppresses the
+  conversational + institutional + cross-view digests entirely, leaving only
+  the personal map.
+
+**Configuration.** KnowledgeView is on by default. Three disable paths:
+`--no-knowledge-view` (CLI), `[knowledge_view] enabled = false`
+(`sovereign-server.toml`), and the desktop Settings toggle. When disabled, the
+manager is never instantiated and the splice is a no-op — no digest ever
+reaches the prompt, no background enrichment runs.
+
+### 4.13 ATOS — Agent Task Orchestration System
+
+ATOS is Sovereign's scaffolding for driving coding agents against a specified
+contract. It operates at two orthogonal layers that share a single artifact
+directory, `.sovereign/`:
+
+**Project layer** — a single charter governs the whole repo:
+
+| Command                         | Effect                                                         |
+|---------------------------------|----------------------------------------------------------------|
+| `sovereign project init`        | Observe repo (languages, deps, git); write `project.toml`; install ATOS opencode plugin at `.opencode/plugins/sovereign-atos.ts` |
+| `sovereign project found`       | Four-stage founding conversation → `CHARTER.md` + `PHASES.md`, records answers as `decision` notes, sets `charter_hash = SHA-256(CHARTER.md)` |
+| `sovereign project amend`       | Opens `CHARTER.md` in `$EDITOR`; on save, diffs section-by-section and runs adversarial Q&A for each changed section; writes new hash + amendment-log entry |
+| `sovereign project phase pass N` | Runs phase N's stop condition from `PHASES.md`; on green, writes `phase-N.md` and bumps `current_phase` |
+| `sovereign project audit`       | One-page reviewer rollup (founding state, phases passed, notes by kind, open questions, deviations, drift status) |
+
+**Feature layer** — one charter per feature, nested under the project charter
+when present:
+
+| Command                                   | Effect                                                       |
+|-------------------------------------------|--------------------------------------------------------------|
+| `sovereign atos provision <id> --charter <path>` | Parse charter, seed `FeatureRow` + `MilestoneRow`s, detect `**Red team:** auto` opt-in |
+| `sovereign atos start-milestone <id> --brief <path>` | Export `ATOS_RUN_ID`/`ATOS_FEATURE_ID`/`ATOS_MODE` and hand control to the driver |
+| `sovereign atos end-milestone <id>`       | Run `stop_condition` (shell command), capture output, record verdict, write `milestone-N.md` |
+| `sovereign atos spec diff <id>`           | Line-level diff of `spec.md` vs. approved hash |
+| `sovereign atos spec accept <id> --reason` | Re-baseline to current content, log `deviation` note |
+| `sovereign atos teardown <id>`            | Wrap feature; render `epistemic-report.md`; promote feature-scope notes that generalize into global scope |
+| `sovereign atos doctor` / `install-plugin` | Compare installed plugin version to CLI binary; reinstall if stale |
+
+**Crate layout.** `sovereign-atos` (library) defines the `AtosOrchestrator`
+trait and the `LocalAtosOrchestrator` impl. Storage lives in two SQLite tables
+that share a connection with the existing NoteStore:
+
+- `FeatureStore` — `features`, `feature_milestones`, `atos_runs`, `atos_tool_events`
+- `NoteStore` — extended with kinds `deviation`, `redteam_finding`,
+  `postmortem_pointer` and a `NoteScope` dimension (`Global | Feature | Session`)
+
+**Drift detection.** Every agent turn recomputes SHA-256 of the feature
+`spec.md` and compares against the recorded approval hash. Mismatches **warn,
+not block** — the next turn's preamble carries a drift note pointing at the
+deviation; the agent either reverts or calls `atos spec accept --reason`.
+Approval is sourced from either git history (walking commits that touch the
+spec file) or a Commonwealth `atos-approvals` MeshStore app, so force-push
+doesn't silently erase it.
+
+**The `commonwealth/sovereign-coder` pipeline.** Defined in
+`commonwealth-core/src/default_pipelines.toml` and resolved via
+`PipelineAliasTable` on `/v1/chat/completions`. Its middleware chain runs in
+order: `approval_gate → session_briefing → context_injector → tool_injector →
+artifact_surface`. The `context_injector` prepends a fixed
+`<atos-instructions>` preamble, the project charter frame (invariants +
+current phase), a scoped notes digest (Global + Feature), and the spec body.
+A paired `sovereign-red-team` pipeline uses `read_only_enforcer +
+context_injector (invariants-only)` and is auto-spawned after the final
+milestone passes when the charter carries `**Red team:** auto`.
+
+**Plugin integration.** The opencode plugin source lives at
+`sovereign-cli/assets/sovereign-atos.ts`, embedded into the CLI binary via
+`include_str!` with a `// sovereign-atos-version: X.Y.Z` header. It injects
+`X-Feature-Id` (from the current git branch's feature dir) and `X-Session-Id`
+on every request so the daemon knows which feature's spec to splice.
 
 ---
 
@@ -1202,7 +1370,10 @@ runs unmodified against a Commonwealth-backed remote.
 | Sovereign hybrid provider + OICP selector | Production                                        |
 | Sovereign SQLite/Postgres/in-mem stores   | Production                                        |
 | Sovereign tools (search, web, RAG, document, MCP, shell, file) | Production                  |
-| Sovereign code intelligence (17-tool MCP server: symbol index, SCIP call graph, lint/test watchers, notes, session reflection, doc health) | Production |
+| Sovereign code intelligence (24-tool MCP server: symbol index, SCIP call graph, lint/test watchers, notes, ATOS feature lifecycle, project context, session reflection, doc health) | Production |
+| Sovereign KnowledgeView (3-view landscape digest assembly, cross-view resonance) | Production |
+| Sovereign ATOS project layer (init/found/amend/phase/audit) + feature layer (provision/milestones/teardown) | Production |
+| Commonwealth sovereign-coder pipeline + middleware stack (approval_gate / session_briefing / context_injector / tool_injector / artifact_surface) | Production |
 | Sovereign epistemic tools                 | Production (against enriched corpora)             |
 | Sovereign skills + planner templates      | Production                                        |
 | Sovereign desktop (Tauri 2 + Svelte 5)    | Production for single-user                         |
@@ -1254,6 +1425,13 @@ is currently happening. Everything above them is stable and covered by tests.
 | Understand enrichment domains         | `corpus-engine/src/enrichment/domain.rs` and `enrichment/domains/` |
 | Understand the recipe registry        | `corpus-engine/src/registry.rs`                      |
 | Understand delta updates              | `corpus-engine/src/update/delta.rs`                  |
+| Understand KnowledgeView digest assembly | `sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs` (lifecycle), `cross_view.rs` (resonance), `recipes.rs` (three-view + privacy) |
+| See where KnowledgeView is injected into the prompt | `sovereign/crates/sovereign-core/src/runtime.rs` (`splice_landscape_digests` + `build_system_message`) and `traits.rs` (`LandscapeDigestProvider`) |
+| Understand ATOS charter + spec lifecycle | `sovereign/crates/sovereign-atos/src/local.rs` (orchestrator), `charter.rs` (parsing), `approval.rs` (SHA-256 drift detection) |
+| See the ATOS CLI surface              | `sovereign/crates/sovereign-cli/src/atos_cmd.rs` and `project_cmd.rs` (`cmd_found`, `cmd_amend`, `cmd_phase`, `cmd_audit`) |
+| Trace a sovereign-coder pipeline turn | `commonwealth/crates/commonwealth-api/src/middleware/` (`mod.rs`, `approval_gate.rs`, `context_injector.rs`, `tool_injector.rs`, `artifact_surface.rs`) + `commonwealth-core/src/default_pipelines.toml` (alias table) |
+| Install / upgrade the ATOS opencode plugin | `sovereign/crates/sovereign-cli/assets/sovereign-atos.ts` (source) + `sovereign-cli/src/atos_plugin.rs` (`include_str!` + version header + installer) |
+| Run the long-running Sovereign daemon | `sovereign/crates/sovereign-cli/src/daemon_cmd.rs` (`run`) + `contrib/launchd` + `contrib/systemd` |
 
 ---
 
@@ -1300,6 +1478,26 @@ is currently happening. Everything above them is stable and covered by tests.
 - **EmbedFn / InferenceFn** — The two function types `corpus-engine` accepts
   from its caller for embedding text and (optionally) running an LLM during
   enrichment. Keeps the engine free of any specific runtime.
+- **KnowledgeView** — Sovereign's three-map landscape-digest system (personal
+  memories, 180-day conversation history, institutional notes) spliced into
+  the system prompt before each turn via `LandscapeDigestProvider`. Strict
+  local-scope privacy is structural, not policy. See §4.12.
+- **Landscape digest** — A compact markdown block summarizing one
+  KnowledgeView map within a per-view token budget. Cross-view resonance is
+  surfaced tentatively ("may resonate with"), never as an assertion.
+- **ATOS** — Agent Task Orchestration System. Two-layer repo scaffolding
+  (project charter + per-feature specs) that injects the relevant contract
+  into every agent turn, detects SHA-256 drift against the approved version,
+  and records every decision / deviation / milestone outcome under
+  `.sovereign/`. See §4.13.
+- **Charter** — ATOS specification document (`CHARTER.md` for the project,
+  `spec.md` for a feature). Committing it is approval.
+- **Drift** — ATOS term for "spec file changed since approval." Warns in the
+  next turn's preamble; does not block. Either revert or `atos spec accept`.
+- **Sovereign-coder pipeline** — Commonwealth middleware chain
+  (`approval_gate → session_briefing → context_injector → tool_injector →
+  artifact_surface`) that adapts a generic coder model into an ATOS-aware
+  one by splicing charter + spec + scoped notes into every request.
 
 ---
 
@@ -1321,17 +1519,59 @@ proposals, not active work.
 touch: move `get_overview_chunks()` to `filter.rs`, move skeleton parsing to
 `skeleton.rs`, keep the orchestrator method in place.
 
-### OCP: Domain registry pattern
+**`sovereign-tools/src/knowledge_view/manager.rs`** (1,332 lines) — five
+concerns in one module: lifecycle, `StateStoreObserver`, debouncer,
+digest assembly, token estimation. Proposed split: `debouncer.rs`
+(PendingView + channel), `tokens.rs` (pure estimators), `digest.rs`
+(`landscape_digest` + `format_landscape`), with `manager.rs` remaining as the
+public façade and trait implementor. Introduce a `ViewKind` enum so the
+`VIEW_*` string constants and their match-like checks become type-safe.
 
-`FieldModelEngine::from_recipe()` uses a `match` on domain ID strings to
-construct domains. Replace with a `DomainRegistry` hashmap so new domains can
-be registered without modifying `field_engine.rs`.
+**`sovereign-cli/src/atos_cmd.rs`** (2,673 lines) and
+**`sovereign-atos/src/local.rs`** (1,183 lines) — same shape. Split the CLI
+module under `sovereign-cli/src/atos/{provision,milestone,spec,teardown,
+doctor,audit}.rs`; split the library module under `sovereign-atos/src/local/
+{orchestrator,driver,presentation}.rs`.
 
-### ISP: StateStore decomposition
+### OCP: Registry patterns for pluggable dispatch
 
-`sovereign-core::StateStore` has ~30 methods across 8+ conceptual groups
-(conversations, tasks, memory, routing log, documents, corpus state, search
-budget, permissions). Most callers need only 1–2 groups. Proposed: split into
-focused sub-traits (`ConversationStore`, `MemoryStore`, `DocumentStore`, etc.)
-with a blanket `StateStore` supertrait. Incremental migration — introduce
-sub-traits, blanket-impl `StateStore`, then gradually narrow parameter bounds.
+~~**`FieldModelEngine` domain dispatch**~~ — Done. Replaced with
+`enrichment/domain_registry.rs` (`DomainRegistry`); `from_recipe` is now a
+lookup, not a match cascade.
+
+**`commonwealth-api/src/middleware/mod.rs`** — middleware discovery is a
+stringly-typed match. Proposed: `MiddlewareRegistry { factories:
+HashMap<&'static str, MiddlewareFactory> }` with a single `build_chain(ids:
+&[&str])` entry point. Adding middleware becomes one `register` call.
+
+**`sovereign-atos/src/report.rs`** — three sibling `render_milestone /
+render_red_team / render_full` functions with near-parallel heading,
+note-grouping, and markdown formatting. Propose a `ReportRenderer` trait with
+one shared driver and three concrete impls; the existing free functions
+become thin wrappers for back-compat.
+
+### ISP: trait boundaries to preserve
+
+`StateStore` is already decomposed (see §4.1); the sub-traits are live and
+callers should prefer narrow bounds (`impl ConversationStore + MemoryStore`
+over `impl StateStore`) in new code. No further splits proposed.
+
+`LandscapeDigestProvider` and `StateStoreObserver` are both single-method /
+tri-method traits; do not widen.
+
+### DIP / SICP: data-driven templates
+
+ATOS keeps the agent-facing instructions preamble, charter adversarial Q&A
+catalog, and report heading strings baked into the Rust source. Proposed:
+move to `sovereign-atos/assets/{atos_instructions.md,amend_questions.toml,
+report_templates.toml}` (embedded with `include_str!`) so the data and the
+code that walks it are separate concerns, and an operator can swap to a
+`read_to_string` debug-build variant without recompiling to experiment.
+
+### Glassbox observability
+
+`KnowledgeView` cross-view match selection, ATOS charter edits, drift
+detection line-level diffs, and red-team auto-spawn are all currently opaque
+to the operator. Proposed: low-cost `tracing::debug!`/`tracing::info!` events
+at decision points that let the operator answer "why did X happen?" from log
+output without a debugger.

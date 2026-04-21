@@ -137,30 +137,7 @@ fn render_red_team(feature: &FeatureRow, runs: &[AtosRunRow], notes: &[NoteRow])
     }
 
     out.push_str("## Findings\n\n");
-    for bucket in ["high", "medium", "low"] {
-        let in_bucket: Vec<&&NoteRow> = findings
-            .iter()
-            .filter(|n| decode_redteam_confidence(&n.content) == bucket)
-            .collect();
-        if in_bucket.is_empty() {
-            continue;
-        }
-        out.push_str(&format!("### {} confidence\n\n", bucket));
-        for n in in_bucket {
-            let f = decode_redteam_finding(&n.content);
-            out.push_str(&format!(
-                "- **{}** — `[note:{}]`\n  - Invariant: {}\n",
-                f.status, n.id, f.invariant
-            ));
-            if !f.evidence.is_empty() {
-                out.push_str(&format!("  - Evidence: {}\n", f.evidence));
-            }
-            if !n.files.is_empty() {
-                out.push_str(&format!("  - Files: {}\n", n.files.join(", ")));
-            }
-        }
-        out.push_str("\n");
-    }
+    render_redteam_findings_by_confidence(&mut out, &findings, RedteamStyle::Detailed);
     out
 }
 
@@ -243,27 +220,7 @@ fn render_full(
         .collect();
     if !findings.is_empty() {
         out.push_str("## Red team findings\n\n");
-        for bucket in ["high", "medium", "low"] {
-            let in_bucket: Vec<&&NoteRow> = findings
-                .iter()
-                .filter(|n| decode_redteam_confidence(&n.content) == bucket)
-                .collect();
-            if in_bucket.is_empty() {
-                continue;
-            }
-            out.push_str(&format!("### {} confidence\n\n", bucket));
-            for n in in_bucket {
-                let f = decode_redteam_finding(&n.content);
-                out.push_str(&format!(
-                    "- **{}** — `[note:{}]`: {}\n",
-                    f.status, n.id, f.invariant
-                ));
-                if !f.evidence.is_empty() {
-                    out.push_str(&format!("  - Evidence: {}\n", f.evidence));
-                }
-            }
-            out.push_str("\n");
-        }
+        render_redteam_findings_by_confidence(&mut out, &findings, RedteamStyle::Compact);
     }
 
     render_decision_log_summary(&mut out, &notes.iter().collect::<Vec<_>>());
@@ -323,6 +280,70 @@ fn render_postmortem(out: &mut String, notes: &[&NoteRow]) {
         out.push_str(&format!("{}. `[note:{}]` {}\n", i + 1, n.id, first));
     }
     out.push_str("\n");
+}
+
+/// Output shape for the red-team findings block. Both the stand-alone
+/// `red-team.md` report and the embedded "Red team findings" section
+/// of the epistemic report need the same confidence-bucket grouping;
+/// they differ only in per-finding verbosity.
+#[derive(Clone, Copy)]
+enum RedteamStyle {
+    /// Stand-alone red-team report. Each finding gets invariant +
+    /// evidence + the note's `files` list rendered as separate
+    /// sub-bullets.
+    Detailed,
+    /// Embedded in the epistemic report. Condensed: one bullet per
+    /// finding with the invariant inline; evidence stays as a
+    /// sub-bullet but the files list is omitted to keep the parent
+    /// report scannable.
+    Compact,
+}
+
+/// Shared renderer for `## Findings` (red-team report) and `## Red
+/// team findings` (epistemic report). Groups notes by confidence
+/// bucket (high → medium → low), dropping empty buckets.
+fn render_redteam_findings_by_confidence(
+    out: &mut String,
+    findings: &[&NoteRow],
+    style: RedteamStyle,
+) {
+    for bucket in ["high", "medium", "low"] {
+        let in_bucket: Vec<&&NoteRow> = findings
+            .iter()
+            .filter(|n| decode_redteam_confidence(&n.content) == bucket)
+            .collect();
+        if in_bucket.is_empty() {
+            continue;
+        }
+        out.push_str(&format!("### {} confidence\n\n", bucket));
+        for n in in_bucket {
+            let f = decode_redteam_finding(&n.content);
+            match style {
+                RedteamStyle::Detailed => {
+                    out.push_str(&format!(
+                        "- **{}** — `[note:{}]`\n  - Invariant: {}\n",
+                        f.status, n.id, f.invariant
+                    ));
+                    if !f.evidence.is_empty() {
+                        out.push_str(&format!("  - Evidence: {}\n", f.evidence));
+                    }
+                    if !n.files.is_empty() {
+                        out.push_str(&format!("  - Files: {}\n", n.files.join(", ")));
+                    }
+                }
+                RedteamStyle::Compact => {
+                    out.push_str(&format!(
+                        "- **{}** — `[note:{}]`: {}\n",
+                        f.status, n.id, f.invariant
+                    ));
+                    if !f.evidence.is_empty() {
+                        out.push_str(&format!("  - Evidence: {}\n", f.evidence));
+                    }
+                }
+            }
+        }
+        out.push_str("\n");
+    }
 }
 
 fn render_decision_log_summary(out: &mut String, notes: &[&NoteRow]) {

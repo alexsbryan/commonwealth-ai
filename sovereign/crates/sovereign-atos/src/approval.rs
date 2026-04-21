@@ -314,6 +314,14 @@ pub fn spec_path(repo_root: &Path, feature_id: &str) -> PathBuf {
 
 /// `true` when the on-disk spec differs from the one at approval
 /// time. Used by ApprovalGate.
+///
+/// Glassbox: on actual drift we emit a `tracing::warn!` naming the
+/// feature and carrying short prefixes of both hashes, so an operator
+/// tailing the daemon can see *when* the agent started seeing a
+/// drift warning without having to reconstruct it from request
+/// timestamps. Hash values are logged truncated (12 hex chars) — long
+/// enough to correlate across events, short enough to avoid leaking
+/// the full content fingerprint into log aggregators.
 pub fn detect_drift(approval: &FeatureApproval, repo_root: &Path) -> bool {
     let Some(current) = current_spec_hash(repo_root, &approval.feature_id) else {
         // File missing post-approval is its own kind of drift, but
@@ -322,7 +330,24 @@ pub fn detect_drift(approval: &FeatureApproval, repo_root: &Path) -> bool {
         // the spec and surface its own warning.
         return false;
     };
-    current != approval.spec_content_hash
+    let drifted = current != approval.spec_content_hash;
+    if drifted {
+        tracing::warn!(
+            feature_id = %approval.feature_id,
+            approved_hash = %short_hash(&approval.spec_content_hash),
+            current_hash = %short_hash(&current),
+            "drift: spec modified since approval"
+        );
+    }
+    drifted
+}
+
+fn short_hash(h: &str) -> &str {
+    if h.len() >= 12 {
+        &h[..12]
+    } else {
+        h
+    }
 }
 
 fn hash_sha256(bytes: &[u8]) -> String {

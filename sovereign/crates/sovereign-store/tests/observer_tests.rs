@@ -184,6 +184,48 @@ async fn write_still_commits_when_observer_panics() {
 }
 
 #[tokio::test]
+async fn store_catches_naked_observer_panic() {
+    // Hardening sweep: the store's `fire_observer` helper now
+    // wraps the observer invocation in `catch_unwind`, so an
+    // observer that panics WITHOUT its own internal guard must
+    // still leave the store usable (no poisoned locks, no aborted
+    // test process). Covers the realistic case where a callback
+    // dereferences a None and panics on unwrap().
+    struct NakedPanickingObserver;
+    impl StateStoreObserver for NakedPanickingObserver {
+        fn on_memory_written(&self, _: &str) {
+            panic!("observer panics without internal catch");
+        }
+        fn on_message_written(&self, _: &str) {
+            panic!("observer panics without internal catch");
+        }
+    }
+
+    let store = SqliteStateStore::open_in_memory()
+        .unwrap()
+        .with_observer(Arc::new(NakedPanickingObserver));
+
+    // These would abort the test before the hardening fix.
+    store.save_memory(&mem("m-panic-1")).await.unwrap();
+    store.save_message(&msg("msg-panic", "conv-panic")).await.unwrap();
+
+    // Store is still usable after a panicking handler.
+    let all = store.get_all_memories().await.unwrap();
+    assert_eq!(all.len(), 1);
+    let conv = store.get_conversation("conv-panic").await.unwrap();
+    assert_eq!(conv.messages.len(), 1);
+
+    // A subsequent non-panicking observer must also work (the
+    // isolation must not have left any poisoned state behind).
+    let good = Arc::new(CountingObserver::default());
+    let store2 = SqliteStateStore::open_in_memory()
+        .unwrap()
+        .with_observer(good.clone() as SharedStateStoreObserver);
+    store2.save_memory(&mem("m-post-panic")).await.unwrap();
+    assert_eq!(good.memory_writes.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn observer_sees_writes_from_multiple_sources() {
     let observer = Arc::new(CountingObserver::default());
     let shared: SharedStateStoreObserver = observer.clone();

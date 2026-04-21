@@ -77,6 +77,77 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
     }
 }
 
+/// The `institutional-notes` view — one document per working-note
+/// (decision / invariant / todo / postmortem_pointer / uncertainty)
+/// from the agent's NoteStore, enriched with the `institutional`
+/// domain. Acts as the project's living architectural record:
+/// settled stances, live tensions, open questions.
+///
+/// `db_path` is typically `~/.sovereign/notes.db`. The recipe
+/// filters out retired notes and the `reflection` kind (which is
+/// tool-calibration feedback, not institutional knowledge).
+pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
+    let params = json!({
+        "db_path": db_path.display().to_string(),
+        "query": "\
+            SELECT id, kind, content, updated_at AS version \
+            FROM notes \
+            WHERE retired_at IS NULL \
+              AND kind IN ('decision','invariant','postmortem_pointer','todo','uncertainty','redteam_finding') \
+            ORDER BY updated_at DESC\
+        ",
+        "content_column": "content",
+        "id_column": "id",
+        "version_column": "version",
+        // `kind` flows through as chunk metadata so the
+        // InstitutionalDomain's `metadata_in` overview filter can
+        // restrict skeleton extraction to decisions / invariants /
+        // postmortem pointers.
+        "metadata_columns": ["kind"]
+    });
+
+    Recipe {
+        corpus: CorpusMeta {
+            id: "institutional-notes".into(),
+            name: "Institutional knowledge".into(),
+            description: "Enriched perspective on the project's working \
+                          notes: architectural decisions, invariants, \
+                          live tensions, unresolved questions."
+                .into(),
+            license: "local-only".into(),
+            mesh_sharing: false,
+            scope: Some("local".into()),
+            query_sharing: Some(false),
+            size_compressed_gb: 0.0,
+            size_indexed_gb: 0.0,
+            schema_version: 1,
+        },
+        acquire: AcquirerConfig::Custom {
+            kind: "sqlite".into(),
+            params,
+        },
+        extract: ExtractorConfig::Jsonl {
+            content_field: Some("content".into()),
+            title_field: None,
+            filter: None,
+            decompress: None,
+        },
+        chunk: ChunkerConfig::Passthrough,
+        index: IndexConfig::default(),
+        enrichment: Some(EnrichmentConfig {
+            enabled: true,
+            enrichment_type: "field_model".into(),
+            domain: Some("institutional".into()),
+            prompt_version: Some("v1".into()),
+            clustering: None,
+            alignment: None,
+            fault_lines: None,
+        }),
+        update: None,
+        prebuilt: None,
+    }
+}
+
 /// The `conversation-history` view — one document per conversation
 /// assembled by the acquirer via group_concat, enriched with the
 /// `conversational` domain.
@@ -246,6 +317,46 @@ mod tests {
                 assert_eq!(overlap_chars, 100);
             }
             other => panic!("expected Paragraph chunker, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn institutional_recipe_filters_retired_and_reflections() {
+        let recipe = institutional_notes_recipe(&PathBuf::from("/tmp/notes.db"));
+        assert_eq!(recipe.corpus.id, "institutional-notes");
+        assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
+        match recipe.acquire {
+            AcquirerConfig::Custom { kind, params } => {
+                assert_eq!(kind, "sqlite");
+                let q = params["query"].as_str().unwrap();
+                assert!(q.contains("retired_at IS NULL"));
+                assert!(q.contains("kind IN"));
+                assert!(q.contains("'decision'"));
+                assert!(q.contains("'invariant'"));
+                assert!(
+                    !q.contains("'reflection'"),
+                    "reflections are tool-calibration feedback, not institutional knowledge"
+                );
+                // metadata_columns must include `kind` so the
+                // InstitutionalDomain's metadata_in filter can run.
+                let cols = params["metadata_columns"].as_array().unwrap();
+                assert!(cols.iter().any(|v| v.as_str() == Some("kind")));
+            }
+            other => panic!("expected Custom acquirer, got {other:?}"),
+        }
+        let enrichment = recipe.enrichment.unwrap();
+        assert_eq!(enrichment.domain.as_deref(), Some("institutional"));
+    }
+
+    #[test]
+    fn all_three_recipes_share_privacy_guarantees() {
+        let p = personal_knowledge_recipe(&PathBuf::from("/a"));
+        let c = conversation_history_recipe(&PathBuf::from("/b"), &[]);
+        let i = institutional_notes_recipe(&PathBuf::from("/c"));
+        for r in [p, c, i] {
+            assert_eq!(r.corpus.scope.as_deref(), Some("local"));
+            assert!(!r.corpus.mesh_sharing);
+            assert_eq!(r.corpus.query_sharing, Some(false));
         }
     }
 

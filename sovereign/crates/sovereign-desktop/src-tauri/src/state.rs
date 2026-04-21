@@ -100,6 +100,25 @@ pub struct DesktopConfig {
     /// `MemberRecord`s stay put until that member rejoins).
     #[serde(default)]
     pub node_name: String,
+
+    /// Whether the `KnowledgeView` landscape-digest layer is active.
+    /// When `true` (default), Sovereign builds + maintains three
+    /// enriched views over memories / conversations / notes and
+    /// splices their digest into every conversation's system prompt.
+    /// When `false`, the feature is skipped at Runtime construction —
+    /// Sovereign behaves exactly as it did before KnowledgeView existed.
+    ///
+    /// Toggling this requires a desktop restart: the Runtime is built
+    /// once at app startup, with or without the landscape-digest
+    /// provider. The setting persists across restarts.
+    ///
+    /// Default: on. Existing configs without the field read as `true`.
+    #[serde(default = "default_knowledge_view_enabled")]
+    pub knowledge_view_enabled: bool,
+}
+
+fn default_knowledge_view_enabled() -> bool {
+    true
 }
 
 fn default_auto_collaborate() -> bool {
@@ -204,6 +223,7 @@ impl Default for DesktopConfig {
             auto_collaborate: default_auto_collaborate(),
             embed_family: ModelFamily::Unknown,
             node_name: String::new(),
+            knowledge_view_enabled: default_knowledge_view_enabled(),
         }
     }
 }
@@ -693,42 +713,53 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
 
     // KnowledgeView wire-up (desktop mirror of the server/CLI path).
-    // Registers the SQLite acquirer on the engine, constructs the
-    // manager, installs it as the store's post-commit observer via
-    // the concrete `Arc<SqliteStateStore>` stashed during store
-    // bootstrap, runs initial ingest of empty views, and exposes the
-    // manager for Runtime::with_landscape_digests below.
-    let knowledge_view_db_path = config.data_dir.join("sovereign.db");
-    // Resolve local_only skill ids from the registry loaded above.
-    // The desktop `skills` binding is an Arc<SkillRegistry>, so we
-    // dereference to call the accessor. Mirror of the server/CLI paths.
-    let local_only_skill_ids = skills.local_only_skill_ids();
-    tracing::info!(
-        local_only_skills = ?local_only_skill_ids,
-        "knowledge_view: skills excluded from conversational corpus"
-    );
-    let knowledge_view_manager = Arc::new(
-        sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-            Arc::clone(&corpus_engine),
-            inference_fn.clone(),
-            knowledge_view_db_path,
-            local_only_skill_ids,
-        )
-        .await,
-    );
-    if let Some(concrete) = state.sqlite_store.read().await.as_ref() {
-        concrete.set_observer(
-            knowledge_view_manager.clone()
-                as sovereign_core::observer::SharedStateStoreObserver,
+    // Gated on Settings → Knowledge → "Enable KnowledgeView". When
+    // disabled, Sovereign behaves exactly as it did before the
+    // feature existed: no ingest, no observer, no landscape digests
+    // spliced into prompts. The toggle is read once at startup —
+    // changes require a desktop restart because the Runtime is
+    // built once with or without the landscape-digest provider.
+    let knowledge_view_manager = if config.knowledge_view_enabled {
+        let knowledge_view_db_path = config.data_dir.join("sovereign.db");
+        // Resolve local_only skill ids from the registry loaded above.
+        // Mirror of the server/CLI paths.
+        let local_only_skill_ids = skills.local_only_skill_ids();
+        tracing::info!(
+            local_only_skills = ?local_only_skill_ids,
+            "knowledge_view: enabled; skills excluded from conversational corpus"
         );
+        let mgr = Arc::new(
+            sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+                Arc::clone(&corpus_engine),
+                inference_fn.clone(),
+                knowledge_view_db_path,
+                local_only_skill_ids,
+            )
+            .await,
+        );
+        if let Some(concrete) = state.sqlite_store.read().await.as_ref() {
+            concrete.set_observer(
+                mgr.clone() as sovereign_core::observer::SharedStateStoreObserver,
+            );
+        } else {
+            tracing::warn!(
+                "KnowledgeView: desktop store was not SQLite-backed; \
+                 observer not installed (memory-mode fallback?)"
+            );
+        }
+        Some(mgr)
     } else {
-        tracing::warn!(
-            "KnowledgeView: desktop store was not SQLite-backed; \
-             observer not installed (memory-mode fallback?)"
+        tracing::info!(
+            "knowledge_view: disabled via Settings — landscape digests \
+             skipped, no ingest will run"
         );
-    }
-    if let Err(e) = knowledge_view_manager.init().await {
-        tracing::warn!(error = %e, "knowledge_view: init() failed");
+        None
+    };
+    // Background init — desktop launch must be snappy; see server
+    // binary for rationale. Skipped entirely when KnowledgeView is
+    // disabled via Settings.
+    if let Some(mgr) = knowledge_view_manager.as_ref() {
+        let _init_handle = Arc::clone(mgr).spawn_init();
     }
 
     // Hand the engine to the embedded Commonwealth daemon so that
@@ -1108,11 +1139,17 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         approval,
         inference_config,
     )
-    .with_corpus_engine(Arc::clone(&corpus_engine))
-    .with_landscape_digests(
-        knowledge_view_manager.clone()
-            as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
-    );
+    .with_corpus_engine(Arc::clone(&corpus_engine));
+    // Install the landscape-digest provider only when KnowledgeView
+    // is enabled. When disabled, Runtime.landscape_digests stays
+    // None and the entire splice path is a no-op — identical to
+    // pre-KnowledgeView behaviour.
+    if let Some(ref mgr) = knowledge_view_manager {
+        runtime = runtime.with_landscape_digests(
+            Arc::clone(mgr)
+                as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
+        );
+    }
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
     }

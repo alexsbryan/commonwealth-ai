@@ -19,6 +19,8 @@ pub struct ServerConfig {
     pub mcp: McpSection,
     #[serde(default)]
     pub commonwealth: CommonwealthSection,
+    #[serde(default)]
+    pub knowledge_view: KnowledgeViewSection,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -93,6 +95,38 @@ pub struct McpSection {
 pub struct CommonwealthSection {
     /// URL of the local Commonwealth internal API (e.g. `http://127.0.0.1:9742`).
     pub url: Option<String>,
+}
+
+/// KnowledgeView master-toggle section. When `enabled = false` the
+/// server skips the three enriched views (personal / conversational
+/// / institutional) + cross-view resonance entirely — no ingest,
+/// no observer, no landscape-digest splice. Equivalent to the
+/// desktop app's Settings → Knowledge → "Enable KnowledgeView"
+/// toggle. Default on; existing configs without the section read
+/// as enabled.
+///
+/// TOML shape:
+///
+/// ```toml
+/// [knowledge_view]
+/// enabled = false
+/// ```
+#[derive(Debug, Clone, Deserialize)]
+pub struct KnowledgeViewSection {
+    #[serde(default = "default_knowledge_view_enabled")]
+    pub enabled: bool,
+}
+
+impl Default for KnowledgeViewSection {
+    fn default() -> Self {
+        Self {
+            enabled: default_knowledge_view_enabled(),
+        }
+    }
+}
+
+fn default_knowledge_view_enabled() -> bool {
+    true
 }
 
 fn default_bind() -> String {

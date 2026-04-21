@@ -44,6 +44,17 @@ use sovereign_tools::knowledge_view::{
 };
 use tempfile::TempDir;
 
+/// Test-file-local mutex serialising the ingest-heavy tests in this
+/// file. LanceDB's table writer exhibits intermittent errors when
+/// two tests in the same process drive concurrent multi-view ingest
+/// pipelines — even with separate TempDirs and CorpusEngines. The
+/// race doesn't reproduce under `-- --test-threads=1` or when any
+/// individual test is run in isolation; serialising here is a
+/// pragmatic workaround that keeps the E2E coverage without
+/// requiring a global test-runner flag. Held across the entire
+/// test body, including the splice.
+static INGEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 const EMBED_DIMS: usize = 768;
 
 /// Deterministic embed stub: every call returns a fixed zero vector.
@@ -217,6 +228,7 @@ fn plant_skeleton(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn personal_view_ingest_plus_planted_skeleton_splices_into_context() {
+    let _serialise = INGEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
     let (engine, _tmp, db_path) = boot_engine().await;
 
     // Seed a few memories so the acquirer has rows to emit.
@@ -416,4 +428,271 @@ async fn splice_without_any_enrichment_still_sets_some_empty_vec() {
     // Bodies may be empty strings (the fallback) — the invariant is
     // only that the outer Option is not None.
     assert!(digests.len() <= 2);
+}
+
+/// Semantically-aware embed stub for the cross-view E2E: maps
+/// specific texts to vectors that encode their "topic". Identical
+/// or near-identical topics produce vectors with cosine similarity
+/// well above the 0.75 match threshold; unrelated topics embed
+/// orthogonally.
+///
+/// Keep the mapping small + explicit — the test's whole point is
+/// that semantically-similar items match across views.
+fn semantic_embed_stub() -> EmbedFn {
+    Arc::new(|text: &str| {
+        let t = text.to_lowercase();
+        let v = if t.contains("meaningful work") || t.contains("purpose") {
+            // "axis 0" — the work/purpose cluster.
+            vec![1.0f32, 0.05, 0.05]
+        } else if t.contains("autonomy") || t.contains("governance") {
+            // "axis 1" — the autonomy/governance cluster.
+            vec![0.05f32, 1.0, 0.05]
+        } else if t.contains("weather") || t.contains("cooking") {
+            // "axis 2" — an unrelated topic that must not match.
+            vec![0.05f32, 0.05, 1.0]
+        } else {
+            // Default: small off-axis vector so unmatched queries
+            // don't accidentally land on a cluster.
+            vec![0.3f32, 0.3, 0.3]
+        };
+        Box::pin(async move { Ok(v) })
+    })
+}
+
+/// Plant a field_skeleton.json for `view_id`. Resilient to
+/// partition-vs-canonical layout: the CorpusEngine's solo-ingest
+/// finalise typically promotes `<view>-partition-local` to
+/// `<view>`, but if another corpus is promoting concurrently the
+/// finalise may defer and leave the partition path in place.
+/// Plant into whichever directory actually holds committed data.
+fn plant_skeleton_into(engine: &CorpusEngine, view_id: &str, skeleton: &FieldSkeleton) {
+    let canonical = engine.index_dir().join(view_id);
+    let partition = engine.partition_path(view_id);
+    let target = if canonical.exists() {
+        canonical
+    } else if partition.exists() {
+        partition
+    } else {
+        panic!(
+            "no index directory for view '{view_id}' — canonical={} partition={}",
+            engine.index_dir().join(view_id).display(),
+            engine.partition_path(view_id).display()
+        );
+    };
+    let view = view_id.to_string();
+    let target = target.clone();
+    let skeleton_clone = skeleton.clone();
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async move {
+            let index = engine.open_index(&target).await.unwrap_or_else(|e| {
+                panic!("open index at {}: {e}", target.display())
+            });
+            index
+                .write_field_skeleton(&skeleton_clone)
+                .unwrap_or_else(|e| panic!("write skeleton for {view}: {e}"));
+        });
+    });
+}
+
+fn plant_personal_skeleton(engine: &CorpusEngine) {
+    let skeleton = FieldSkeleton {
+        schema_version: 1,
+        corpus_id: VIEW_PERSONAL_KNOWLEDGE.into(),
+        generated_at: "2026-04-20T00:00:00Z".into(),
+        extraction_method: "cross-view-e2e".into(),
+        prompt_version: "v1".into(),
+        domain_id: "personal".into(),
+        canonical_questions: vec![
+            CanonicalQuestion {
+                id: "p-q1".into(),
+                question: "What does meaningful work look like for me?".into(),
+                status: "contested".into(),
+                question_type: "normative".into(),
+                primary_entries: vec![],
+                positions: vec![],
+                fault_lines: vec![],
+            },
+            CanonicalQuestion {
+                id: "p-q2".into(),
+                question: "My relationship to autonomy".into(),
+                status: "held".into(),
+                question_type: "normative".into(),
+                primary_entries: vec![],
+                positions: vec![],
+                fault_lines: vec![],
+            },
+        ],
+        open_questions: vec![],
+        field_stats: FieldModelStats::default(),
+    };
+    plant_skeleton_into(engine, VIEW_PERSONAL_KNOWLEDGE, &skeleton);
+}
+
+fn plant_conversation_skeleton(engine: &CorpusEngine) {
+    let skeleton = FieldSkeleton {
+        schema_version: 1,
+        corpus_id: "conversation-history".into(),
+        generated_at: "2026-04-20T00:00:00Z".into(),
+        extraction_method: "cross-view-e2e".into(),
+        prompt_version: "v1".into(),
+        domain_id: "conversational".into(),
+        canonical_questions: vec![CanonicalQuestion {
+            id: "c-q1".into(),
+            question: "What's the purpose of this project?".into(),
+            status: "held".into(),
+            question_type: "conceptual".into(),
+            primary_entries: vec![],
+            positions: vec![],
+            fault_lines: vec![],
+        }],
+        open_questions: vec![SkeletonOpenQuestion {
+            id: "c-oq1".into(),
+            question: "How should governance handle user autonomy?".into(),
+            status: "open".into(),
+            related_question_id: None,
+            representative_chunk_ids: vec![],
+        }],
+        field_stats: FieldModelStats::default(),
+    };
+    plant_skeleton_into(engine, "conversation-history", &skeleton);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cross_view_digest_surfaces_resonance_across_personal_and_conversational() {
+    let _serialise = INGEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    use sovereign_tools::knowledge_view::VIEW_CROSS_VIEW;
+
+    // Builds two views with planted skeletons that share a
+    // semantic axis ("meaningful work" ↔ "purpose of this project"
+    // + autonomy), runs `splice_into`, and asserts the cross-view
+    // digest surfaces at least one tentative match with the right
+    // framing.
+    let tmp = TempDir::new().unwrap();
+    let indexes_dir = tmp.path().join("indexes");
+    let recipes_dir = tmp.path().join("recipes");
+    let db_path = tmp.path().join("sovereign.db");
+    let notes_path = tmp.path().join("notes.db");
+    std::fs::create_dir_all(&indexes_dir).unwrap();
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+    // Touch the notes DB so institutional ingest doesn't error on
+    // startup — it'll still produce no results and be skipped from
+    // the cross-view computation.
+    let _ = std::fs::File::create(&notes_path).unwrap();
+
+    let engine = Arc::new(
+        CorpusEngine::new(recipes_dir, indexes_dir, semantic_embed_stub())
+            .with_inference_fn(stub_inference()),
+    );
+
+    // Seed memories + a conversation so personal + conversational
+    // both ingest non-empty content.
+    let store = Arc::new(SqliteStateStore::open(&db_path).unwrap());
+    store
+        .save_memory(&mem("m1", "I've been reflecting on meaningful work", None))
+        .await
+        .unwrap();
+    store
+        .save_message(&Message {
+            id: "msg1".into(),
+            conversation_id: "c-seed".into(),
+            role: Role::User,
+            content: "thinking about the purpose of this project".into(),
+            created_at: now(),
+            metadata: None,
+            version: 0,
+        })
+        .await
+        .unwrap();
+
+    let manager = Arc::new(
+        KnowledgeViewManager::new_with_notes_path(
+            engine.clone(),
+            stub_inference(),
+            db_path.clone(),
+            notes_path.clone(),
+            vec![],
+        )
+        .await,
+    );
+    manager.init().await.expect("ingest views");
+
+    // Plant skeletons that share a "purpose / meaningful work"
+    // axis and an "autonomy" axis across two different views.
+    plant_personal_skeleton(&engine);
+    plant_conversation_skeleton(&engine);
+
+    let mut ctx = empty_context("c-cross-view");
+    manager.splice_into(&mut ctx, None).await;
+    let digests = ctx.knowledge_view_digests.expect("splice populates");
+    let cross = digests
+        .iter()
+        .find(|d| d.view_id == VIEW_CROSS_VIEW)
+        .unwrap_or_else(|| {
+            panic!(
+                "cross-view digest missing; digests present: {:?}",
+                digests.iter().map(|d| &d.view_id).collect::<Vec<_>>()
+            )
+        });
+    assert!(
+        cross.body.contains("Cross-view connections"),
+        "body has section header: {}",
+        cross.body
+    );
+    assert!(
+        cross.body.contains("may resonate with"),
+        "body uses tentative framing: {}",
+        cross.body
+    );
+    // The match that must be present: "meaningful work" in
+    // personal resonates with "purpose" in conversations, OR the
+    // autonomy theme matches across both views.
+    let has_work_purpose = cross.body.contains("meaningful work")
+        && cross.body.contains("purpose of this project");
+    let has_autonomy = cross.body.contains("autonomy");
+    assert!(
+        has_work_purpose || has_autonomy,
+        "expected at least one semantic match to surface: {}",
+        cross.body
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cross_view_digest_suppressed_under_local_only_skill() {
+    use sovereign_tools::knowledge_view::VIEW_CROSS_VIEW;
+
+    // When `inner-work` is the active skill, conversational and
+    // institutional are suppressed → cross-view has no peers to
+    // match against → the cross-view digest must not appear at all.
+    let tmp = TempDir::new().unwrap();
+    let indexes_dir = tmp.path().join("indexes");
+    let recipes_dir = tmp.path().join("recipes");
+    let db_path = tmp.path().join("sovereign.db");
+    let notes_path = tmp.path().join("notes.db");
+    std::fs::create_dir_all(&indexes_dir).unwrap();
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+    let _ = std::fs::File::create(&db_path).unwrap();
+    let _ = std::fs::File::create(&notes_path).unwrap();
+
+    let engine = Arc::new(
+        CorpusEngine::new(recipes_dir, indexes_dir, semantic_embed_stub())
+            .with_inference_fn(stub_inference()),
+    );
+    let manager = Arc::new(
+        KnowledgeViewManager::new_with_notes_path(
+            engine,
+            stub_inference(),
+            db_path,
+            notes_path,
+            vec!["inner-work".into()],
+        )
+        .await,
+    );
+
+    let mut ctx = empty_context("c-private");
+    manager.splice_into(&mut ctx, Some("inner-work")).await;
+    let digests = ctx.knowledge_view_digests.unwrap();
+    assert!(
+        !digests.iter().any(|d| d.view_id == VIEW_CROSS_VIEW),
+        "cross-view digest must be absent under local_only active skill"
+    );
 }

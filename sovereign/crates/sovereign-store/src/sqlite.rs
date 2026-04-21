@@ -110,6 +110,7 @@ impl SqliteStateStore {
     fn fire_observer<F>(&self, f: F)
     where
         F: FnOnce(&dyn sovereign_core::observer::StateStoreObserver),
+        F: std::panic::UnwindSafe,
     {
         // Clone the `Arc<dyn ...>` out from under the lock so the
         // observer handler can run without holding the RwLock —
@@ -122,7 +123,22 @@ impl SqliteStateStore {
                 .expect("SqliteStateStore observer RwLock poisoned");
             Arc::clone(&*guard)
         };
-        f(observer.as_ref());
+        // Defensive panic isolation: a buggy observer handler must
+        // not take the store's caller down. The write has already
+        // committed by the time we fire; dropping a panic here is
+        // strictly safer than letting it unwind through the async
+        // task boundary. Missed notifications are recoverable by
+        // the next Tier-3 sweep.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            f(observer.as_ref());
+        }));
+        if let Err(payload) = result {
+            let msg = panic_message(&payload);
+            tracing::warn!(
+                panic = %msg,
+                "StateStoreObserver handler panicked; write already committed"
+            );
+        }
     }
 
     /// Run `PRAGMA integrity_check` and return the first result row.
@@ -178,6 +194,19 @@ fn map_db(e: rusqlite::Error) -> Error {
 
 fn map_json(e: serde_json::Error) -> Error {
     Error::Storage(format!("JSON error: {e}"))
+}
+
+/// Extract a human-readable message from a panic payload. Used by
+/// the observer panic-isolation wrapper so `tracing::warn!` can log
+/// a useful string instead of `Any`.
+fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else if let Some(s) = payload.downcast_ref::<&'static str>() {
+        s.to_string()
+    } else {
+        "<non-string panic payload>".to_string()
+    }
 }
 
 #[async_trait]

@@ -60,7 +60,9 @@
     saving = false;
   }
 
-  let needsSave = $derived(activeTab === "models" || activeTab === "paths");
+  let needsSave = $derived(
+    activeTab === "models" || activeTab === "paths" || activeTab === "knowledge",
+  );
 
   // ── Semantic preset detection ──────────────────────────────────
 
@@ -454,6 +456,31 @@
           <p class="tab-intro">
             Knowledge bases are indexed locally. Sovereign searches them privately, without sending your queries anywhere.
           </p>
+
+          {#if config}
+            <p class="section-label">KnowledgeView</p>
+            <p class="slot-desc" style="margin-bottom: 12px;">
+              When on, Sovereign builds a compact map of what you return to, tensions that keep surfacing, and questions you haven't resolved — across your memories, conversations, and project notes. The model reads this map before answering. All enrichment stays on this machine. See <code>docs/knowledge-view.md</code> for the full picture.
+            </p>
+
+            <div class="param-card" style="margin-bottom: 24px;">
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  bind:checked={config.knowledge_view_enabled}
+                  onchange={markDirty}
+                />
+                <span class="toggle-label">
+                  <span class="toggle-title">Enable KnowledgeView</span>
+                  <span class="toggle-sub">
+                    Requires a desktop restart to take effect. When off, Sovereign starts every session from zero, as it did before this feature existed.
+                  </span>
+                </span>
+              </label>
+            </div>
+          {/if}
+
+          <p class="section-label">Installed corpora</p>
           <KnowledgeStatus />
         {/if}
 
@@ -1155,5 +1182,38 @@
     opacity: 0.55;
     letter-spacing: 0.04em;
     margin-bottom: 0;
+  }
+
+  /* KnowledgeView toggle row — lives inside a .param-card so its
+     border + radius match adjacent settings controls. */
+  .toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+  }
+
+  .toggle-row input[type="checkbox"] {
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+
+  .toggle-label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .toggle-title {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .toggle-sub {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.45;
   }
 </style>

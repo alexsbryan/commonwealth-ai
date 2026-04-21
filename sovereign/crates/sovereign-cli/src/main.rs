@@ -124,6 +124,13 @@ struct Args {
     ingest: Option<PathBuf>,
     brave_api_key: Option<String>,
     tavily_api_key: Option<String>,
+    /// Whether the KnowledgeView landscape-digest feature is active.
+    /// Default `true`; `--no-knowledge-view` on the command line flips
+    /// it to `false`. When disabled, the CLI skips the three enriched
+    /// views + cross-view resonance, matching the desktop app's
+    /// Settings → Knowledge toggle and the server's
+    /// `[knowledge_view] enabled = false` config.
+    knowledge_view_enabled: bool,
 }
 
 use crate::util::help::{Help, HelpSection};
@@ -159,6 +166,7 @@ const HELP: Help = Help {
             ("--skills-dir <path>",    "Skills directory (default: ~/.sovereign/skills)"),
             ("--ingest <path>",        "Ingest documents from directory before REPL"),
             ("--router",               "Enable LLM-based intent routing"),
+            ("--no-knowledge-view",    "Disable KnowledgeView landscape digests (default: enabled)"),
             ("--brave-api-key <key>",  "Brave Search key (optional)"),
             ("--tavily-api-key <key>", "Tavily Search key (optional)"),
             ("--help, -h",             "Show this message"),
@@ -183,6 +191,7 @@ fn parse_args() -> Option<Args> {
     let mut ingest = None;
     let mut brave_api_key = None;
     let mut tavily_api_key = None;
+    let mut knowledge_view_enabled = true;
 
     let mut i = 1;
     while i < args.len() {
@@ -218,6 +227,9 @@ fn parse_args() -> Option<Args> {
             "--router" => {
                 use_router = true;
             }
+            "--no-knowledge-view" => {
+                knowledge_view_enabled = false;
+            }
             _ => {}
         }
         i += 1;
@@ -232,6 +244,7 @@ fn parse_args() -> Option<Args> {
         ingest,
         brave_api_key,
         tavily_api_key,
+        knowledge_view_enabled,
     })
 }
 
@@ -455,29 +468,37 @@ async fn main() {
     // conversational view), install it as the post-commit observer,
     // and run initial ingest of empty views. See the server binary
     // for the full rationale; this is the CLI mirror.
-    // Resolve local_only skill ids from the loaded registry rather
-    // than hardcoding. See server binary for rationale.
-    let local_only_skill_ids = skills.local_only_skill_ids();
-    eprintln!(
-        "knowledge_view: {} local-only skill(s) excluded from conversational corpus",
-        local_only_skill_ids.len()
-    );
-    let knowledge_view_manager = Arc::new(
-        sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-            Arc::clone(&corpus_engine),
-            inference_fn.clone(),
-            db_path.clone(),
-            local_only_skill_ids,
-        )
-        .await,
-    );
-    store_concrete.set_observer(
-        knowledge_view_manager.clone()
-            as sovereign_core::observer::SharedStateStoreObserver,
-    );
-    if let Err(e) = knowledge_view_manager.init().await {
-        eprintln!("knowledge_view: init() failed: {e}");
-    }
+    // Gated on `--no-knowledge-view` CLI flag (default enabled).
+    // Mirror of the desktop Settings toggle + server config section.
+    // When disabled, skip ingest, observer install, and the landscape-
+    // digest splice entirely.
+    let knowledge_view_manager = if args.knowledge_view_enabled {
+        let local_only_skill_ids = skills.local_only_skill_ids();
+        eprintln!(
+            "knowledge_view: enabled; {} local-only skill(s) excluded from conversational corpus",
+            local_only_skill_ids.len()
+        );
+        let mgr = Arc::new(
+            sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+                Arc::clone(&corpus_engine),
+                inference_fn.clone(),
+                db_path.clone(),
+                local_only_skill_ids,
+            )
+            .await,
+        );
+        store_concrete.set_observer(
+            mgr.clone() as sovereign_core::observer::SharedStateStoreObserver,
+        );
+        // Background init — see the server binary for rationale.
+        let _init_handle = Arc::clone(&mgr).spawn_init();
+        Some(mgr)
+    } else {
+        eprintln!(
+            "knowledge_view: disabled via --no-knowledge-view; landscape digests skipped"
+        );
+        None
+    };
 
     // Register tools.
     let mut tools = ToolRegistry::new();
@@ -530,7 +551,7 @@ async fn main() {
 
     let approval = Arc::new(CliApprovalChannel::new(Arc::clone(&store)));
 
-    let runtime = Runtime::new(
+    let mut runtime = Runtime::new(
         inference_arc,
         router,
         Box::new(planner),
@@ -540,11 +561,16 @@ async fn main() {
         approval,
         sovereign_core::types::InferenceConfig::default(),
     )
-    .with_corpus_engine(Arc::clone(&corpus_engine))
-    .with_landscape_digests(
-        knowledge_view_manager.clone()
-            as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
-    );
+    .with_corpus_engine(Arc::clone(&corpus_engine));
+    // Install the landscape-digest provider only when KnowledgeView
+    // is enabled. When disabled, Runtime.landscape_digests stays None
+    // and the splice path is a no-op — identical to pre-KnowledgeView
+    // behaviour.
+    if let Some(ref mgr) = knowledge_view_manager {
+        runtime = runtime.with_landscape_digests(
+            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
+        );
+    }
 
     // Resume or start conversation.
     let conversation_id = match store.list_conversations(1, 0).await {

@@ -246,7 +246,7 @@ async fn fetch_commonwealth_models(commonwealth_url: &str) -> Vec<String> {
         _ => return vec![],
     };
 
-    resp.json::<oicp_types::ProviderManifest>()
+    resp.json::<sovereign_core::oicp::ProviderManifest>()
         .await
         .map(|m| {
             m.models

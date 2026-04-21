@@ -78,6 +78,12 @@ export interface DesktopConfig {
    *  mesh-create/join time. Takes effect on the next join, not
    *  retroactively. */
   node_name: string;
+  /** Master toggle for the KnowledgeView landscape-digest feature.
+   *  When false, Sovereign skips the three enriched views
+   *  (personal / conversational / institutional) + cross-view
+   *  resonance, and behaves exactly as it did before KnowledgeView
+   *  existed. Requires a desktop restart to take effect. Default on. */
+  knowledge_view_enabled: boolean;
 }
 
 export interface SearchBackendConfig {

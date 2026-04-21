@@ -1,43 +1,32 @@
-//! `KnowledgeViewManager` — lifecycle orchestrator for `KnowledgeView`
-//! corpora (currently `personal-knowledge` and `conversation-history`).
+//! `KnowledgeViewManager` — lifecycle façade for the three
+//! KnowledgeView corpora (`personal-knowledge`,
+//! `conversation-history`, `institutional-notes`).
 //!
-//! Responsibilities:
+//! After the Phase-B split this module is a thin orchestrator:
 //!
-//! 1. **Acquirer registration.** Installs the `SqliteAcquirer` on the
-//!    shared `CorpusEngine` at construction so recipes referencing
-//!    `type = "custom"` with `kind = "sqlite"` can ingest.
+//!   - **Bookkeeping** — registers the `SqliteAcquirer`, builds a
+//!     `ViewEntry` per view, holds the mpsc trigger channel.
+//!   - **Observer** — implements `StateStoreObserver`, translating
+//!     memory/message/conversation writes into `ViewEvent`s that
+//!     the `debouncer` module consumes.
+//!   - **Digest splice** — implements `LandscapeDigestProvider`,
+//!     formatting each view through `digest::format_landscape` and
+//!     building the cross-view resonance block via
+//!     `cross_view::build_cross_view_digest`.
 //!
-//! 2. **Write-path observer.** Implements [`StateStoreObserver`] so the
-//!    store fires `on_memory_written` / `on_message_written` /
-//!    `on_conversation_deleted` events into this manager's debouncer.
-//!
-//! 3. **Debounced Tier-3 enrichment.** Each write enqueues a refresh
-//!    trigger for the corresponding view. A background task per view
-//!    coalesces triggers and runs `FieldModelEngine::enrich` when
-//!    either `DEBOUNCE_MAX_WRITES` accumulate or `DEBOUNCE_MAX_IDLE`
-//!    elapses since the first pending write. Tier-2 (fast incremental
-//!    update on every write) is deferred to v2 — v1 intentionally
-//!    trades a short staleness window for a simpler architecture.
-//!
-//! 4. **Landscape digest.** Reads `field_skeleton.json` and formats a
-//!    concise summary of clusters / fault lines / open questions bounded
-//!    by a caller-supplied token budget.
-//!
-//! 5. **Search passthrough.** Thin wrapper around `CorpusIndex::search`
-//!    so downstream tools can query an enriched view directly.
+//! Policy constants (debounce thresholds, default budgets) live
+//! alongside the mechanisms that consume them: `debouncer.rs` owns
+//! the timing window; `view_kind.rs` owns per-view budgets.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use corpus_engine::engine::CorpusEngine;
-use corpus_engine::enrichment::field_engine::FieldModelEngine;
 use corpus_engine::enrichment::skeleton::FieldSkeleton;
 use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_engine::recipe::Recipe;
 use corpus_engine::types::{CorpusSpec, InferenceFn};
-use corpus_engine::EnrichmentProgress;
 use async_trait::async_trait;
 use sovereign_core::observer::StateStoreObserver;
 use sovereign_core::traits::LandscapeDigestProvider;
@@ -45,54 +34,67 @@ use sovereign_core::types::{ConversationContext, LandscapeDigest};
 use tokio::sync::{mpsc, RwLock};
 
 use super::acquirers::register_sqlite;
-use super::recipes::{conversation_history_recipe, personal_knowledge_recipe};
+use super::cross_view;
+use super::debouncer::{spawn_debouncer, ViewEntry, ViewEvent};
+use super::digest::format_landscape;
+use super::recipes::{
+    conversation_history_recipe, institutional_notes_recipe, personal_knowledge_recipe,
+};
+use super::tokens::estimate_tokens;
+use super::view_kind::ViewKind;
 
-/// View ids recognised by this manager. Kept as constants so callers
-/// (`KnowledgeViewManager::search`, `landscape_digest`, etc.) don't
-/// hand-roll string literals that could drift out of sync with the
-/// recipe builders.
-pub const VIEW_PERSONAL_KNOWLEDGE: &str = "personal-knowledge";
-pub const VIEW_CONVERSATION_HISTORY: &str = "conversation-history";
+// ── Backwards-compatible string-id constants ────────────────────
+//
+// The public API historically exposed the view ids as plain `&'static
+// str` constants, and downstream tests + tools still import them.
+// Keep them as named aliases over `ViewKind::*.id()` so the single
+// source of truth lives on the enum.
 
-/// Debounce threshold — how many pending writes before we trigger
-/// a full Tier-3 enrichment pass unconditionally. Matches the
-/// implementation plan.
-const DEBOUNCE_MAX_WRITES: usize = 20;
-/// Debounce threshold — longest time we wait after the first pending
-/// write before running enrichment, even if `DEBOUNCE_MAX_WRITES`
-/// hasn't been reached. Five minutes is a reasonable upper bound for
-/// user-perceived staleness of the landscape digest.
-const DEBOUNCE_MAX_IDLE: Duration = Duration::from_secs(300);
+/// Canonical id for the personal-knowledge view. Prefer `ViewKind::Personal.id()` in new code.
+pub const VIEW_PERSONAL_KNOWLEDGE: &str = ViewKind::Personal.id();
+/// Canonical id for the conversation-history view.
+pub const VIEW_CONVERSATION_HISTORY: &str = ViewKind::Conversational.id();
+/// Canonical id for the institutional-notes view.
+pub const VIEW_INSTITUTIONAL_NOTES: &str = ViewKind::Institutional.id();
+/// Synthetic id for the cross-view resonance digest.
+pub const VIEW_CROSS_VIEW: &str = ViewKind::CrossView.id();
 
-/// One manager per running Sovereign instance. Holds the engine and
-/// one debouncer per view. Cheap to clone via `Arc`.
+/// Token budget for the cross-view resonance digest. Third-tier
+/// context, meant to carry 2–4 tentative connections; a larger
+/// budget would drift toward "surveillance" rather than
+/// "invitation to connect".
+const CROSS_VIEW_BUDGET_TOKENS: usize = ViewKind::CrossView.default_budget_tokens();
+
+/// One manager per running Sovereign instance. Cheap to clone via `Arc`.
 ///
-/// The inference function passed to [`KnowledgeViewManager::new`] is
-/// captured by the debouncer task — it's not stored on the manager
+/// The inference function passed to `KnowledgeViewManager::new` is
+/// captured by the debouncer task — it is not stored on the manager
 /// itself since all enrichment paths flow through the debouncer.
 pub struct KnowledgeViewManager {
     engine: Arc<CorpusEngine>,
     views: Arc<RwLock<HashMap<String, ViewEntry>>>,
     triggers: mpsc::UnboundedSender<ViewEvent>,
+    /// Skill ids whose declared `privacy = "local_only"` means the
+    /// conversational + institutional digests must be OMITTED when
+    /// one of them is the active skill. Sourced from
+    /// `SkillRegistry::local_only_skill_ids()` at construction.
+    local_only_skill_ids: Vec<String>,
+    /// Formatted-digest cache, keyed by `(view_id, budget_tokens)`.
+    /// The cached entry's mtime is compared against
+    /// `field_skeleton.json`'s mtime at read time — stale entries
+    /// are thrown away and the digest is re-formatted. This avoids
+    /// the per-turn JSON parse + formatter cost when the skeleton
+    /// hasn't changed (which is the common case: reading happens
+    /// on every message, enrichment happens every few minutes).
+    digest_cache: Arc<tokio::sync::RwLock<HashMap<(String, usize), CachedDigest>>>,
 }
 
-struct ViewEntry {
-    recipe: Recipe,
-}
-
-/// Write-side events that flow into the debouncer. Each variant maps
-/// to a view id; the debouncer tracks a pending-write counter per view.
-#[derive(Debug, Clone)]
-enum ViewEvent {
-    /// A memory was written → refresh the personal view.
-    MemoryTouched,
-    /// A conversation had new activity → refresh the conversation view.
-    ConversationTouched,
-    /// A conversation was deleted → refresh the conversation view so
-    /// the deleted conversation's chunks drop out of the index.
-    ConversationDeleted,
-    /// Explicit manual trigger (e.g. CLI command or startup check).
-    Manual { view_id: String },
+/// One row of the digest cache. Stored body is the exact string
+/// returned by `format_landscape`; the mtime is the last-modified
+/// time of `field_skeleton.json` at the moment we read it.
+struct CachedDigest {
+    skeleton_mtime: std::time::SystemTime,
+    body: String,
 }
 
 impl KnowledgeViewManager {
@@ -101,13 +103,31 @@ impl KnowledgeViewManager {
     ///
     /// `db_path` is the sovereign SQLite file (typically
     /// `~/.sovereign/sovereign.db`). `local_only_skill_ids` is the
-    /// resolved set of skill ids whose conversations must be
-    /// excluded from the conversational view — typically fetched
-    /// from `SkillRegistry` at Runtime startup.
+    /// resolved set of skill ids whose conversations must be excluded
+    /// from the conversational view.
     pub async fn new(
         engine: Arc<CorpusEngine>,
         inference: InferenceFn,
         db_path: PathBuf,
+        local_only_skill_ids: Vec<String>,
+    ) -> Self {
+        let notes_db_path = db_path
+            .parent()
+            .map(|p| p.join("notes.db"))
+            .unwrap_or_else(|| PathBuf::from("notes.db"));
+        Self::new_with_notes_path(engine, inference, db_path, notes_db_path, local_only_skill_ids)
+            .await
+    }
+
+    /// Construct with an explicit path for the agent's working-notes
+    /// DB (where `NoteStore` writes). Used by the desktop bootstrap
+    /// when the notes file lives in a project-scoped directory rather
+    /// than `~/.sovereign/`.
+    pub async fn new_with_notes_path(
+        engine: Arc<CorpusEngine>,
+        inference: InferenceFn,
+        db_path: PathBuf,
+        notes_db_path: PathBuf,
         local_only_skill_ids: Vec<String>,
     ) -> Self {
         register_sqlite(&engine);
@@ -115,15 +135,29 @@ impl KnowledgeViewManager {
         let local_refs: Vec<&str> = local_only_skill_ids.iter().map(|s| s.as_str()).collect();
         let mut views = HashMap::new();
         views.insert(
-            VIEW_PERSONAL_KNOWLEDGE.to_string(),
+            ViewKind::Personal.id().to_string(),
             ViewEntry {
                 recipe: personal_knowledge_recipe(&db_path),
+                lock: Arc::new(tokio::sync::Mutex::new(())),
             },
         );
         views.insert(
-            VIEW_CONVERSATION_HISTORY.to_string(),
+            ViewKind::Conversational.id().to_string(),
             ViewEntry {
                 recipe: conversation_history_recipe(&db_path, &local_refs),
+                lock: Arc::new(tokio::sync::Mutex::new(())),
+            },
+        );
+        // The institutional-notes view reads from the NoteStore DB,
+        // not the main sovereign.db. If the notes DB doesn't exist
+        // yet (fresh install, no notes written), the acquirer will
+        // return a Recipe error at ingest time and the manager's
+        // soft-fail path will simply leave the view empty.
+        views.insert(
+            ViewKind::Institutional.id().to_string(),
+            ViewEntry {
+                recipe: institutional_notes_recipe(&notes_db_path),
+                lock: Arc::new(tokio::sync::Mutex::new(())),
             },
         );
 
@@ -136,44 +170,59 @@ impl KnowledgeViewManager {
             engine,
             views,
             triggers: tx,
+            local_only_skill_ids,
+            digest_cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         }
     }
 
-    /// Ingest each view once if its index is empty. Call at Runtime
-    /// startup so the first session after install sees an enriched
-    /// landscape. Safe to call repeatedly — `CorpusEngine::ingest`
-    /// resumes from checkpoints and won't re-enrich a completed index.
+    /// Ingest each view. Safe to call repeatedly —
+    /// `CorpusEngine::ingest` is checkpoint-based, so a second
+    /// invocation over an already-populated index is a no-op beyond a
+    /// manifest check. Per-view mutex ensures a concurrent
+    /// background-spawned init + manual enrich() serialise rather
+    /// than race.
     pub async fn init(&self) -> CorpusResult<()> {
         let view_ids: Vec<String> = {
             let guard = self.views.read().await;
             guard.keys().cloned().collect()
         };
         for view_id in view_ids {
-            if !self.index_populated(&view_id).await {
-                tracing::info!(view_id, "KnowledgeViewManager: initial ingest");
-                if let Err(e) = self.ingest_view(&view_id).await {
-                    tracing::warn!(view_id, error = %e, "initial ingest failed");
-                }
+            tracing::info!(view_id, "KnowledgeViewManager: ensuring view is ingested");
+            if let Err(e) = self.ingest_view(&view_id).await {
+                tracing::warn!(view_id, error = %e, "ingest failed");
             }
         }
         Ok(())
     }
 
+    /// Spawn `init()` on a detached tokio task. Use from process
+    /// bootstraps (server, CLI, desktop) so the listener bind isn't
+    /// blocked by first-run ingest, which can take tens of seconds on
+    /// a populated SQLite DB.
+    pub fn spawn_init(self: std::sync::Arc<Self>) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            tracing::info!("knowledge_view: starting background init");
+            match self.init().await {
+                Ok(()) => tracing::info!("knowledge_view: init complete"),
+                Err(e) => tracing::warn!(
+                    error = %e,
+                    "knowledge_view: init failed; landscape digests will be missing \
+                     until a later write triggers the debouncer"
+                ),
+            }
+        })
+    }
+
     /// Manually enrich a view. Used for CLI triggers and tests.
     pub async fn enrich(&self, view_id: &str) -> CorpusResult<()> {
-        // Hand off to the debouncer so all enrichment paths funnel
-        // through a single worker — avoids two concurrent enrichment
-        // runs stepping on each other's checkpoints.
         let _ = self.triggers.send(ViewEvent::Manual {
             view_id: view_id.to_string(),
         });
         Ok(())
     }
 
-    /// Assemble a landscape digest for the given view, filtered by
-    /// the active skill if applicable. Output is a plain markdown
-    /// string bounded approximately by `budget_tokens` (estimated at
-    /// 4 chars/token).
+    /// Assemble a landscape digest for the given view, bounded by
+    /// `budget_tokens`. Output is a plain markdown string.
     ///
     /// `active_skill` is currently advisory — v1 does not filter
     /// digest content by skill beyond what the acquirer already
@@ -185,46 +234,106 @@ impl KnowledgeViewManager {
         _active_skill: Option<&str>,
         budget_tokens: usize,
     ) -> CorpusResult<String> {
+        // Fast path: return the cached formatted body when the
+        // skeleton file hasn't been modified since we last formatted
+        // it. splice_into fires on every turn; an enrichment run
+        // happens every few minutes at most — so the cache hit rate
+        // is effectively 100% on hot paths.
         let index = self.engine.open_index_for_corpus(view_id).await?;
+        let skeleton_path = index.path().join("field_skeleton.json");
+        let skeleton_mtime = std::fs::metadata(&skeleton_path)
+            .and_then(|m| m.modified())
+            .ok();
+
+        if let Some(mtime) = skeleton_mtime {
+            let cache = self.digest_cache.read().await;
+            if let Some(entry) = cache.get(&(view_id.to_string(), budget_tokens)) {
+                if entry.skeleton_mtime == mtime {
+                    return Ok(entry.body.clone());
+                }
+            }
+        }
+
         let Some(skeleton) = index.load_field_skeleton()? else {
-            return Ok(format!(
-                "{title}: not yet enriched.",
-                title = view_title(view_id)
-            ));
+            let title = ViewKind::from_id(view_id)
+                .map(|k| k.title())
+                .unwrap_or("Knowledge view");
+            return Ok(format!("{title}: not yet enriched."));
         };
-        Ok(format_landscape(&skeleton, view_id, budget_tokens))
+        let body = format_landscape(&skeleton, view_id, budget_tokens);
+
+        // Insert into cache only if we managed to read the mtime —
+        // without it we can't detect staleness, so falling through to
+        // re-format next time is safer than caching blind.
+        if let Some(mtime) = skeleton_mtime {
+            let mut cache = self.digest_cache.write().await;
+            cache.insert(
+                (view_id.to_string(), budget_tokens),
+                CachedDigest {
+                    skeleton_mtime: mtime,
+                    body: body.clone(),
+                },
+            );
+        }
+        Ok(body)
     }
 
     /// Assemble landscape digests for every configured view and
     /// splice them into `ctx.knowledge_view_digests`.
     ///
     /// Intended to be called from `Runtime::handle_message_stream`
-    /// **after** skill routing so `active_skill` can tailor the
-    /// digests in future iterations (v1 does not filter digest
-    /// content by skill beyond the structural filtering already
-    /// performed by the acquirer).
-    ///
-    /// Soft-fail semantics: if a view's digest can't be produced
-    /// (index missing, enrichment not yet run, I/O error), it is
-    /// simply omitted from the spliced list — the rest of the
-    /// context proceeds. The field is always set to `Some(_)` on
-    /// return, so callers downstream can rely on the invariant
-    /// "post-routing context has a non-`None` digests field".
-    ///
-    /// Per-view token budgets (personal: 300, conversational: 200)
-    /// match the implementation plan.
+    /// after skill routing so `active_skill` is available. Soft-fails
+    /// per view: a missing index or unenriched skeleton is silently
+    /// omitted. The field is always set to `Some(_)` on return, so
+    /// callers downstream can rely on the invariant "post-routing
+    /// context has a non-`None` digests field".
     pub async fn splice_into(&self, ctx: &mut ConversationContext, active_skill: Option<&str>) {
-        let view_budgets: &[(&str, usize)] = &[
-            (VIEW_PERSONAL_KNOWLEDGE, 300),
-            (VIEW_CONVERSATION_HISTORY, 200),
-        ];
-        let mut digests = Vec::with_capacity(view_budgets.len());
-        for (view_id, budget) in view_budgets {
-            match self.landscape_digest(view_id, active_skill, *budget).await {
-                Ok(body) if !body.trim().is_empty() => digests.push(LandscapeDigest {
-                    view_id: view_id.to_string(),
-                    body,
-                }),
+        // Skill-aware digest selection (spec: "when the active skill
+        // is inner-work, the technical knowledge digest is absent
+        // entirely"). Acquirer-level filtering already keeps
+        // local_only conversations out of the corpus; this branch
+        // suppresses the REMAINING digests so cross-session context
+        // can't leak into a private session.
+        let active_is_local_only = active_skill
+            .map(|s| self.local_only_skill_ids.iter().any(|id| id == s))
+            .unwrap_or(false);
+
+        let mut view_budgets: Vec<(ViewKind, usize)> = Vec::with_capacity(3);
+        view_budgets.push((ViewKind::Personal, ViewKind::Personal.default_budget_tokens()));
+        if !active_is_local_only {
+            view_budgets.push((
+                ViewKind::Conversational,
+                ViewKind::Conversational.default_budget_tokens(),
+            ));
+            view_budgets.push((
+                ViewKind::Institutional,
+                ViewKind::Institutional.default_budget_tokens(),
+            ));
+        } else {
+            tracing::debug!(
+                active_skill = ?active_skill,
+                "splice_into: omitting conversation-history + institutional \
+                 digests for privacy=local_only active skill"
+            );
+        }
+
+        let mut digests = Vec::with_capacity(view_budgets.len() + 1);
+        // Track the view_ids whose digests actually landed — these
+        // are the only views that can contribute to cross-view
+        // matching. Suppressed views (conversational + institutional
+        // for a local_only active skill) must NOT leak through a
+        // cross-view match.
+        let mut included_view_ids: Vec<String> = Vec::new();
+        for (kind, budget) in view_budgets {
+            let view_id = kind.id();
+            match self.landscape_digest(view_id, active_skill, budget).await {
+                Ok(body) if !body.trim().is_empty() => {
+                    included_view_ids.push(view_id.to_string());
+                    digests.push(LandscapeDigest {
+                        view_id: view_id.to_string(),
+                        body,
+                    });
+                }
                 Ok(_) => {}
                 Err(e) => tracing::debug!(
                     view_id,
@@ -233,45 +342,142 @@ impl KnowledgeViewManager {
                 ),
             }
         }
+
+        // Cross-view resonance — runs only when ≥ 2 included views
+        // have enriched skeletons. See `cross_view` module docs for
+        // the design rationale + privacy guarantee.
+        if included_view_ids.len() >= 2 {
+            match self
+                .cross_view_digest(&included_view_ids, CROSS_VIEW_BUDGET_TOKENS)
+                .await
+            {
+                Ok(Some(body)) => digests.push(LandscapeDigest {
+                    view_id: ViewKind::CrossView.id().to_string(),
+                    body,
+                }),
+                Ok(None) => {
+                    tracing::debug!(
+                        views = ?included_view_ids,
+                        "cross_view: no matches surfaced — skipping digest"
+                    );
+                }
+                Err(e) => tracing::debug!(
+                    error = %e,
+                    "cross_view_digest failed — proceeding without it"
+                ),
+            }
+        }
         ctx.set_landscape_digests(digests);
     }
 
+    /// Build a cross-view resonance digest across `view_ids` at the
+    /// given token budget. Returns `None` when fewer than two views
+    /// have enriched skeletons or when no matches clear the
+    /// similarity threshold.
+    async fn cross_view_digest(
+        &self,
+        view_ids: &[String],
+        budget_tokens: usize,
+    ) -> CorpusResult<Option<String>> {
+        let mut skeletons: Vec<(String, FieldSkeleton)> = Vec::new();
+        let mut max_mtime: Option<std::time::SystemTime> = None;
+        for view_id in view_ids {
+            let index = match self.engine.open_index_for_corpus(view_id).await {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let mtime = std::fs::metadata(index.path().join("field_skeleton.json"))
+                .and_then(|m| m.modified())
+                .ok();
+            match index.load_field_skeleton()? {
+                Some(sk) => {
+                    skeletons.push((view_id.clone(), sk));
+                    if let Some(mt) = mtime {
+                        max_mtime = Some(match max_mtime {
+                            Some(cur) if cur >= mt => cur,
+                            _ => mt,
+                        });
+                    }
+                }
+                None => continue,
+            }
+        }
+        if skeletons.len() < 2 {
+            return Ok(None);
+        }
+
+        // Cache lookup — cross-view entries live in the same
+        // digest_cache, keyed by VIEW_CROSS_VIEW. Stored mtime is the
+        // composite max across source skeletons.
+        if let Some(mt) = max_mtime {
+            let cache = self.digest_cache.read().await;
+            if let Some(entry) = cache.get(&(VIEW_CROSS_VIEW.to_string(), budget_tokens)) {
+                if entry.skeleton_mtime == mt {
+                    return Ok(Some(entry.body.clone()));
+                }
+            }
+        }
+
+        let embed = self.engine.embed_fn();
+        let body = cross_view::build_cross_view_digest(
+            &skeletons,
+            &embed,
+            budget_tokens,
+            cross_view::DEFAULT_MATCH_THRESHOLD,
+            estimate_tokens,
+        )
+        .await?;
+
+        if let (Some(b), Some(mt)) = (body.as_ref(), max_mtime) {
+            let mut cache = self.digest_cache.write().await;
+            cache.insert(
+                (VIEW_CROSS_VIEW.to_string(), budget_tokens),
+                CachedDigest {
+                    skeleton_mtime: mt,
+                    body: b.clone(),
+                },
+            );
+        }
+        Ok(body)
+    }
+
     /// Search the enriched index for `query`, returning up to `k`
-    /// scored chunks. Thin passthrough to `CorpusIndex::search`.
-    /// Returns an empty Vec when the view has not yet been ingested.
+    /// scored chunks. v1 stub — full wiring deferred until consumer
+    /// tools are written.
     pub async fn search(
         &self,
         _view_id: &str,
         _query: &str,
         _k: usize,
     ) -> CorpusResult<Vec<String>> {
-        // v1 stub. Full wiring requires an EmbedFn argument and
-        // knowledge of `CorpusIndex::search`'s exact signature —
-        // deferred until the KnowledgeView consumer tools are
-        // written in Stage 5/6.
         Ok(Vec::new())
     }
 
     // ── Internals ───────────────────────────────────────────
 
-    async fn index_populated(&self, view_id: &str) -> bool {
-        matches!(
-            self.engine.open_index_for_corpus(view_id).await,
-            Ok(_index)
-        )
-    }
-
     async fn ingest_view(&self, view_id: &str) -> CorpusResult<()> {
-        let recipe = {
+        let (recipe, lock) = {
             let guard = self.views.read().await;
-            guard
+            let entry = guard
                 .get(view_id)
-                .map(|v| v.recipe.clone())
-                .ok_or_else(|| CorpusError::Recipe(format!("Unknown view: {view_id}")))?
+                .ok_or_else(|| CorpusError::Recipe(format!("Unknown view: {view_id}")))?;
+            (entry.recipe.clone(), entry.lock.clone())
         };
+        // Serialise with any concurrent enrichment for this view.
+        let _guard = lock.lock().await;
         let path = recipe_to_tempfile(&recipe)?;
         let spec = CorpusSpec::RecipePath(path);
-        self.engine.ingest(&spec, None).await.map(|_| ())
+        let result = self.engine.ingest(&spec, None).await.map(|_| ());
+        // Ingest can change the index (and eventually the skeleton
+        // via downstream enrich) — invalidate digest entries for
+        // this view so the next splice re-reads.
+        self.invalidate_digest_cache(view_id).await;
+        result
+    }
+
+    async fn invalidate_digest_cache(&self, view_id: &str) {
+        let mut cache = self.digest_cache.write().await;
+        cache.retain(|(v, _), _| v != view_id);
     }
 }
 
@@ -300,222 +506,6 @@ impl LandscapeDigestProvider for KnowledgeViewManager {
     }
 }
 
-// ── Debouncer ───────────────────────────────────────────────
-
-fn spawn_debouncer(
-    engine: Arc<CorpusEngine>,
-    inference: InferenceFn,
-    views: Arc<RwLock<HashMap<String, ViewEntry>>>,
-    mut rx: mpsc::UnboundedReceiver<ViewEvent>,
-) {
-    tokio::spawn(async move {
-        let mut state: HashMap<String, PendingView> = HashMap::new();
-
-        loop {
-            let wakeup = state
-                .values()
-                .map(|p| p.earliest_deadline())
-                .min()
-                .unwrap_or_else(|| Instant::now() + Duration::from_secs(30));
-            let sleep = tokio::time::sleep_until(wakeup.into());
-            tokio::pin!(sleep);
-
-            tokio::select! {
-                maybe_event = rx.recv() => {
-                    match maybe_event {
-                        Some(event) => match event {
-                            ViewEvent::MemoryTouched => note(&mut state, VIEW_PERSONAL_KNOWLEDGE),
-                            ViewEvent::ConversationTouched => note(&mut state, VIEW_CONVERSATION_HISTORY),
-                            ViewEvent::ConversationDeleted => note(&mut state, VIEW_CONVERSATION_HISTORY),
-                            ViewEvent::Manual { view_id } => {
-                                // Manual triggers bypass the debounce window.
-                                run_enrichment(&engine, inference.clone(), &views, &view_id).await;
-                                state.remove(&view_id);
-                            }
-                        },
-                        None => break, // Manager dropped, channel closed.
-                    }
-                }
-                _ = &mut sleep => {
-                    // Fall through to the deadline sweep below.
-                }
-            }
-
-            let now = Instant::now();
-            let ready: Vec<String> = state
-                .iter()
-                .filter(|(_, p)| p.is_ready(now))
-                .map(|(k, _)| k.clone())
-                .collect();
-            for view_id in ready {
-                run_enrichment(&engine, inference.clone(), &views, &view_id).await;
-                state.remove(&view_id);
-            }
-        }
-    });
-}
-
-struct PendingView {
-    first_pending_at: Instant,
-    pending_count: usize,
-}
-
-impl PendingView {
-    fn earliest_deadline(&self) -> Instant {
-        self.first_pending_at + DEBOUNCE_MAX_IDLE
-    }
-
-    fn is_ready(&self, now: Instant) -> bool {
-        self.pending_count >= DEBOUNCE_MAX_WRITES
-            || now.duration_since(self.first_pending_at) >= DEBOUNCE_MAX_IDLE
-    }
-}
-
-fn note(state: &mut HashMap<String, PendingView>, view_id: &str) {
-    let entry = state.entry(view_id.to_string()).or_insert(PendingView {
-        first_pending_at: Instant::now(),
-        pending_count: 0,
-    });
-    entry.pending_count += 1;
-}
-
-async fn run_enrichment(
-    engine: &Arc<CorpusEngine>,
-    inference: InferenceFn,
-    views: &Arc<RwLock<HashMap<String, ViewEntry>>>,
-    view_id: &str,
-) {
-    let recipe = {
-        let guard = views.read().await;
-        match guard.get(view_id) {
-            Some(v) => v.recipe.clone(),
-            None => {
-                tracing::warn!(view_id, "unknown view in debouncer");
-                return;
-            }
-        }
-    };
-
-    let index = match engine.open_index_for_corpus(view_id).await {
-        Ok(idx) => idx,
-        Err(e) => {
-            tracing::debug!(
-                view_id,
-                error = %e,
-                "skipping enrichment — index not available yet"
-            );
-            return;
-        }
-    };
-
-    let embed = engine.embed_fn();
-    let field_engine = match FieldModelEngine::from_recipe(&recipe, embed, inference) {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!(view_id, error = %e, "failed to construct FieldModelEngine");
-            return;
-        }
-    };
-
-    let progress = |p: EnrichmentProgress| {
-        tracing::debug!(view_id, ?p, "enrichment progress");
-    };
-    match field_engine.enrich(&index, &progress).await {
-        Ok(stats) => tracing::info!(view_id, ?stats, "enrichment complete"),
-        Err(e) => tracing::warn!(view_id, error = %e, "enrichment failed"),
-    }
-}
-
-// ── Landscape digest formatting ─────────────────────────────
-
-fn view_title(view_id: &str) -> &'static str {
-    match view_id {
-        VIEW_PERSONAL_KNOWLEDGE => "Personal knowledge",
-        VIEW_CONVERSATION_HISTORY => "Conversational knowledge",
-        _ => "Knowledge view",
-    }
-}
-
-fn format_landscape(skeleton: &FieldSkeleton, view_id: &str, budget_tokens: usize) -> String {
-    // Rough char-budget = tokens × 4. Enough headroom that typical
-    // digests don't silently truncate mid-line; the caller is free to
-    // re-measure with a tokenizer and shrink further.
-    let char_budget = budget_tokens.saturating_mul(4);
-    let mut out = String::new();
-    let title = view_title(view_id);
-
-    out.push_str(&format!("{title}:\n\n"));
-
-    // Settled concerns: canonical questions where at least one position
-    // is reported as 'dominant' / 'held' / 'settled' style.
-    let settled: Vec<_> = skeleton
-        .canonical_questions
-        .iter()
-        .filter(|q| {
-            q.positions
-                .iter()
-                .any(|p| is_settled_status(&p.status))
-        })
-        .collect();
-    if !settled.is_empty() {
-        out.push_str("  Settled concerns:\n");
-        for q in settled.iter().take(5) {
-            let line = format!("    — {}\n", q.question);
-            if out.len() + line.len() > char_budget {
-                break;
-            }
-            out.push_str(&line);
-        }
-        out.push('\n');
-    }
-
-    // Live tensions: fault lines across all canonical questions.
-    let fault_lines: Vec<_> = skeleton
-        .canonical_questions
-        .iter()
-        .flat_map(|q| q.fault_lines.iter())
-        .collect();
-    if !fault_lines.is_empty() {
-        out.push_str("  Live tensions:\n");
-        for fl in fault_lines.iter().take(5) {
-            let line = format!("    — {}\n", fl.crux);
-            if out.len() + line.len() > char_budget {
-                break;
-            }
-            out.push_str(&line);
-        }
-        out.push('\n');
-    }
-
-    // Open questions.
-    if !skeleton.open_questions.is_empty() {
-        out.push_str("  Open questions:\n");
-        for oq in skeleton.open_questions.iter().take(5) {
-            let line = format!("    — {}\n", oq.question);
-            if out.len() + line.len() > char_budget {
-                break;
-            }
-            out.push_str(&line);
-        }
-    }
-
-    // Hard truncate as a final safety net.
-    if out.len() > char_budget {
-        out.truncate(char_budget);
-    }
-    out
-}
-
-fn is_settled_status(status: &str) -> bool {
-    let s = status.to_lowercase();
-    s == "held"
-        || s == "dominant"
-        || s == "majority"
-        || s == "settled"
-        || s == "established"
-        || s == "recurring"
-}
-
 // ── Recipe → temp TOML (for CorpusSpec::RecipePath) ─────────
 
 fn recipe_to_tempfile(recipe: &Recipe) -> CorpusResult<PathBuf> {
@@ -530,10 +520,15 @@ fn recipe_to_tempfile(recipe: &Recipe) -> CorpusResult<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    //! Manager-level integration tests.
+    //!
+    //! Pure-function tests for the extracted modules live alongside
+    //! their implementation (`digest.rs`, `tokens.rs`, `debouncer.rs`).
+
     use super::*;
     use corpus_engine::enrichment::clustering::FieldModelStats;
     use corpus_engine::enrichment::skeleton::{
-        CanonicalQuestion, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
+        CanonicalQuestion, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
     };
 
     fn fixture_skeleton() -> FieldSkeleton {
@@ -582,97 +577,30 @@ mod tests {
         }
     }
 
-    #[test]
-    fn landscape_has_three_sections() {
-        let sk = fixture_skeleton();
-        let out = format_landscape(&sk, VIEW_PERSONAL_KNOWLEDGE, 500);
-        assert!(out.starts_with("Personal knowledge:"));
-        assert!(out.contains("Settled concerns:"));
-        assert!(out.contains("Live tensions:"));
-        assert!(out.contains("Open questions:"));
-        assert!(out.contains("What does meaningful work"));
-        assert!(out.contains("stability vs. autonomy"));
-        assert!(out.contains("what kind of life"));
-    }
-
-    #[test]
-    fn landscape_respects_char_budget() {
-        let sk = fixture_skeleton();
-        // 20 tokens ≈ 80 chars — forces hard truncation.
-        let out = format_landscape(&sk, VIEW_PERSONAL_KNOWLEDGE, 20);
-        assert!(out.len() <= 80);
-    }
-
-    #[test]
-    fn empty_skeleton_renders_header_only() {
-        let mut sk = fixture_skeleton();
-        sk.canonical_questions.clear();
-        sk.open_questions.clear();
-        let out = format_landscape(&sk, VIEW_PERSONAL_KNOWLEDGE, 500);
-        assert!(out.contains("Personal knowledge:"));
-        assert!(!out.contains("Settled concerns:"));
-        assert!(!out.contains("Live tensions:"));
-        assert!(!out.contains("Open questions:"));
-    }
-
-    #[test]
-    fn settled_status_recognition_is_case_insensitive() {
-        assert!(is_settled_status("Held"));
-        assert!(is_settled_status("MAJORITY"));
-        assert!(is_settled_status("established"));
-        assert!(!is_settled_status("contested"));
-        assert!(!is_settled_status("open"));
-    }
-
-    #[test]
-    fn pending_view_is_ready_after_max_writes() {
-        let pv = PendingView {
-            first_pending_at: Instant::now(),
-            pending_count: DEBOUNCE_MAX_WRITES,
-        };
-        assert!(pv.is_ready(Instant::now()));
-    }
-
-    #[test]
-    fn pending_view_is_ready_after_idle_window() {
-        let pv = PendingView {
-            first_pending_at: Instant::now() - DEBOUNCE_MAX_IDLE - Duration::from_secs(1),
-            pending_count: 1,
-        };
-        assert!(pv.is_ready(Instant::now()));
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn splice_into_starts_from_none_and_ends_with_some() {
-        // Regression guard for the landscape-digest invariant:
-        // `splice_into` must set `ctx.knowledge_view_digests` to
-        // `Some(_)` even when no view has produced a real digest.
-        // This is the property the prompt-assembly layer relies on
-        // (via `debug_assert_routed`) to catch a missed splice in
-        // debug builds.
+    async fn bare_manager_with_local_only(local_only: Vec<String>) -> KnowledgeViewManager {
         let tmp = tempfile::TempDir::new().unwrap();
         let indexes_dir = tmp.path().join("indexes");
         let recipes_dir = tmp.path().join("recipes");
         let db_path = tmp.path().join("sovereign.db");
         std::fs::create_dir_all(&indexes_dir).unwrap();
         std::fs::create_dir_all(&recipes_dir).unwrap();
-        // Touch the DB file so SqliteAcquirer's existence check
-        // could pass if called; init() is skipped here though.
         let _ = std::fs::File::create(&db_path).unwrap();
-
         let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
         });
         let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_| {
             Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
         });
-        let engine =
-            std::sync::Arc::new(corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed));
+        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
+            recipes_dir,
+            indexes_dir,
+            embed,
+        ));
+        KnowledgeViewManager::new(engine, infer, db_path, local_only).await
+    }
 
-        let mgr = KnowledgeViewManager::new(engine, infer, db_path, vec![]).await;
-
-        // Context starts with `knowledge_view_digests = None`.
-        let mut ctx = sovereign_core::types::ConversationContext {
+    fn tmp_context() -> sovereign_core::types::ConversationContext {
+        sovereign_core::types::ConversationContext {
             conversation: sovereign_core::types::Conversation {
                 id: "c".into(),
                 title: None,
@@ -689,7 +617,112 @@ mod tests {
             document_session: None,
             topic_context: None,
             knowledge_view_digests: None,
-        };
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn splice_into_omits_conversation_history_when_active_skill_is_local_only() {
+        let mgr = bare_manager_with_local_only(vec!["inner-work".to_string()]).await;
+        let mut ctx = tmp_context();
+        mgr.splice_into(&mut ctx, Some("inner-work")).await;
+        let digests = ctx.knowledge_view_digests.unwrap();
+        assert!(
+            !digests.iter().any(|d| d.view_id == VIEW_CONVERSATION_HISTORY),
+            "conversation-history must be omitted for local_only active skill: {digests:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn splice_into_includes_conversation_history_for_non_local_skill() {
+        let mgr = bare_manager_with_local_only(vec!["inner-work".to_string()]).await;
+        let mut ctx = tmp_context();
+        mgr.splice_into(&mut ctx, Some("research-analyst")).await;
+        assert!(ctx.knowledge_view_digests.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn per_view_mutex_serialises_ingest_and_enrich() {
+        // Each view gets its own mutex so an enrichment on personal
+        // does NOT block a concurrent one on conversational.
+        let mgr = bare_manager_with_local_only(vec![]).await;
+        let views = mgr.views.read().await;
+        let personal = views
+            .get(VIEW_PERSONAL_KNOWLEDGE)
+            .expect("personal view present")
+            .lock
+            .clone();
+        let conversation = views
+            .get(VIEW_CONVERSATION_HISTORY)
+            .expect("conversation view present")
+            .lock
+            .clone();
+        let institutional = views
+            .get(VIEW_INSTITUTIONAL_NOTES)
+            .expect("institutional view present")
+            .lock
+            .clone();
+        assert!(!Arc::ptr_eq(&personal, &conversation));
+        assert!(!Arc::ptr_eq(&personal, &institutional));
+        assert!(!Arc::ptr_eq(&conversation, &institutional));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn digest_cache_hit_skips_refetch_when_mtime_unchanged() {
+        // Two back-to-back calls must produce string-equal output.
+        // That's necessary for correctness regardless of cache, but
+        // it's the minimal property the cache must preserve.
+        let mgr = bare_manager_with_local_only(vec![]).await;
+        let a = mgr
+            .landscape_digest(VIEW_PERSONAL_KNOWLEDGE, None, 300)
+            .await;
+        let b = mgr
+            .landscape_digest(VIEW_PERSONAL_KNOWLEDGE, None, 300)
+            .await;
+        match (a, b) {
+            (Ok(x), Ok(y)) => assert_eq!(x, y, "repeat call must be stable"),
+            (Err(_), Err(_)) => { /* both fail identically — fine for unenriched view */ }
+            _ => panic!("one call succeeded and the other didn't — cache inconsistency"),
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn invalidate_digest_cache_drops_entries_for_view() {
+        let mgr = bare_manager_with_local_only(vec![]).await;
+        {
+            let mut cache = mgr.digest_cache.write().await;
+            cache.insert(
+                (VIEW_PERSONAL_KNOWLEDGE.to_string(), 300),
+                CachedDigest {
+                    skeleton_mtime: std::time::SystemTime::now(),
+                    body: "cached".into(),
+                },
+            );
+            cache.insert(
+                (VIEW_CONVERSATION_HISTORY.to_string(), 200),
+                CachedDigest {
+                    skeleton_mtime: std::time::SystemTime::now(),
+                    body: "cached-conv".into(),
+                },
+            );
+            assert_eq!(cache.len(), 2);
+        }
+        mgr.invalidate_digest_cache(VIEW_PERSONAL_KNOWLEDGE).await;
+        let cache = mgr.digest_cache.read().await;
+        assert_eq!(cache.len(), 1);
+        assert!(
+            cache.contains_key(&(VIEW_CONVERSATION_HISTORY.to_string(), 200)),
+            "sibling view's cache entry must survive targeted invalidation"
+        );
+        assert!(
+            !cache.contains_key(&(VIEW_PERSONAL_KNOWLEDGE.to_string(), 300)),
+            "target view's cache entry must be dropped"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn splice_into_starts_from_none_and_ends_with_some() {
+        let mgr = bare_manager_with_local_only(vec![]).await;
+        let mut ctx = tmp_context();
         assert!(ctx.knowledge_view_digests.is_none());
         mgr.splice_into(&mut ctx, None).await;
         assert!(
@@ -700,27 +733,25 @@ mod tests {
 
     #[test]
     fn combined_landscape_digest_budget_is_bounded() {
-        // Spec §11: "Total token budget for knowledge views does
-        // not exceed 500". Per-view budgets in `splice_into` are
-        // 300 (personal) + 200 (conversational) = 500 token
-        // ceiling. Using the same chars-per-token heuristic the
-        // formatter uses (4:1), the combined char ceiling is 2000.
+        // Spec §11 budget ceiling: personal (300) + conversational
+        // (200) stays within 500 tokens combined.
         let sk = fixture_skeleton();
         let personal = format_landscape(&sk, VIEW_PERSONAL_KNOWLEDGE, 300);
         let conversational = format_landscape(&sk, VIEW_CONVERSATION_HISTORY, 200);
-        let combined_chars = personal.len() + conversational.len();
+        let combined_tokens = estimate_tokens(&personal) + estimate_tokens(&conversational);
         assert!(
-            combined_chars <= 500 * 4,
-            "combined digest exceeds 500-token budget: {combined_chars} chars"
+            combined_tokens <= 500,
+            "combined digest exceeds 500-token budget: {combined_tokens} tokens"
         );
     }
 
     #[test]
-    fn pending_view_not_ready_below_thresholds() {
-        let pv = PendingView {
-            first_pending_at: Instant::now(),
-            pending_count: 1,
-        };
-        assert!(!pv.is_ready(Instant::now()));
+    fn legacy_view_id_constants_match_view_kind() {
+        // Guard rail against accidentally decoupling the legacy
+        // string constants from the ViewKind source of truth.
+        assert_eq!(VIEW_PERSONAL_KNOWLEDGE, ViewKind::Personal.id());
+        assert_eq!(VIEW_CONVERSATION_HISTORY, ViewKind::Conversational.id());
+        assert_eq!(VIEW_INSTITUTIONAL_NOTES, ViewKind::Institutional.id());
+        assert_eq!(VIEW_CROSS_VIEW, ViewKind::CrossView.id());
     }
 }

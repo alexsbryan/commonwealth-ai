@@ -86,6 +86,16 @@ pub struct SqliteAcquirerParams {
     /// newlines (`"\n\n"`) if `group_column` is set.
     #[serde(default)]
     pub group_separator: Option<String>,
+    /// Additional columns to pass through as metadata fields on the
+    /// emitted JSONL objects. Downstream `ChunkFilter::metadata_in` /
+    /// `metadata_compare` predicates read these. The `kind` column
+    /// on the institutional-notes recipe is a canonical example.
+    /// When `group_column` is set, metadata is taken from the FIRST
+    /// row of each group (the per-row metadata is documented to be
+    /// stable per group — e.g. every message in a conversation
+    /// shares the same `skill_id`).
+    #[serde(default)]
+    pub metadata_columns: Vec<String>,
 }
 
 impl SqliteAcquirerParams {
@@ -195,13 +205,22 @@ fn write_jsonl_from_sqlite(
                 .version_column
                 .as_deref()
                 .and_then(|col| row_value_as_string(row, &column_names, col));
+            let row_metadata =
+                collect_metadata(row, &column_names, &params.metadata_columns);
 
             let idx = if let Some(&idx) = seen.get(&group_key) {
                 idx
             } else {
                 let idx = groups.len();
                 seen.insert(group_key.clone(), idx);
-                groups.push((group_key.clone(), GroupAccum::new(id, version)));
+                // Metadata from the FIRST row of each group is
+                // treated as representative — matches the documented
+                // invariant that metadata is stable per group (e.g.
+                // skill_id is per-conversation, not per-message).
+                groups.push((
+                    group_key.clone(),
+                    GroupAccum::new(id, version, row_metadata),
+                ));
                 idx
             };
             groups[idx].1.append(&content, separator);
@@ -213,6 +232,7 @@ fn write_jsonl_from_sqlite(
                 &accum.id.unwrap_or(group_key),
                 &accum.content,
                 accum.version.as_deref(),
+                &accum.metadata,
             )?;
         }
     } else {
@@ -233,7 +253,9 @@ fn write_jsonl_from_sqlite(
                 .version_column
                 .as_deref()
                 .and_then(|col| row_value_as_string(row, &column_names, col));
-            write_doc(&mut writer, &id, &content, version.as_deref())?;
+            let metadata =
+                collect_metadata(row, &column_names, &params.metadata_columns);
+            write_doc(&mut writer, &id, &content, version.as_deref(), &metadata)?;
         }
     }
 
@@ -279,11 +301,14 @@ fn write_doc(
     id: &str,
     content: &str,
     version: Option<&str>,
+    metadata: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<()> {
     // Shape matches what the `Jsonl` extractor reads: a `content`
     // field. We include `id` and optional `version` for delta
-    // detection even if the extractor ignores them by default —
-    // the fields are passed through as chunk metadata.
+    // detection even if the extractor ignores them by default, plus
+    // any `metadata_columns` values the recipe requested — those
+    // flow as top-level JSONL fields and the extractor forwards
+    // them into chunk metadata.
     let mut obj = serde_json::Map::new();
     obj.insert("id".to_string(), serde_json::Value::String(id.to_string()));
     obj.insert(
@@ -296,24 +321,57 @@ fn write_doc(
             serde_json::Value::String(v.to_string()),
         );
     }
+    for (k, v) in metadata {
+        // Skip fields that collide with the extractor's reserved
+        // names — the request could only confuse downstream consumers.
+        if matches!(k.as_str(), "id" | "content" | "version" | "title" | "url") {
+            continue;
+        }
+        obj.insert(k.clone(), v.clone());
+    }
     let line = serde_json::to_string(&serde_json::Value::Object(obj))
         .map_err(|e| Error::Recipe(format!("JSONL serialize failed: {e}")))?;
     writeln!(writer, "{line}").map_err(Error::Io)?;
     Ok(())
 }
 
+/// Pull the named columns off `row` into a JSON map.
+/// Missing or NULL values are omitted rather than emitting explicit
+/// `null`s — the downstream `ChunkFilter::evaluate_metadata` fails
+/// closed on missing keys, so dropping vs. nulling is equivalent
+/// for predicate evaluation and slightly smaller on disk.
+fn collect_metadata(
+    row: &rusqlite::Row<'_>,
+    columns: &[String],
+    requested: &[String],
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    for name in requested {
+        if let Some(v) = row_value_as_string(row, columns, name) {
+            out.insert(name.clone(), serde_json::Value::String(v));
+        }
+    }
+    out
+}
+
 struct GroupAccum {
     id: Option<String>,
     content: String,
     version: Option<String>,
+    metadata: serde_json::Map<String, serde_json::Value>,
 }
 
 impl GroupAccum {
-    fn new(id: String, version: Option<String>) -> Self {
+    fn new(
+        id: String,
+        version: Option<String>,
+        metadata: serde_json::Map<String, serde_json::Value>,
+    ) -> Self {
         Self {
             id: Some(id),
             content: String::new(),
             version,
+            metadata,
         }
     }
 
@@ -364,6 +422,7 @@ mod tests {
             version_column: Some("version".into()),
             group_column: None,
             group_separator: None,
+            metadata_columns: vec![],
         };
 
         let out = write_jsonl_from_sqlite(&params, tmp.path()).unwrap();
@@ -423,6 +482,7 @@ mod tests {
             version_column: Some("version".into()),
             group_column: Some("conversation_id".into()),
             group_separator: Some("\n\n".into()),
+            metadata_columns: vec![],
         };
 
         let out = write_jsonl_from_sqlite(&params, tmp.path()).unwrap();
@@ -449,12 +509,105 @@ mod tests {
             version_column: None,
             group_column: None,
             group_separator: None,
+            metadata_columns: vec![],
         };
         let err = write_jsonl_from_sqlite(&params, tmp.path()).unwrap_err();
         match err {
             Error::Recipe(m) => assert!(m.contains("does not exist")),
             other => panic!("expected Recipe error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn metadata_columns_surface_as_jsonl_fields() {
+        // Tier 4 item 3 (institutional-notes recipe) depends on
+        // the acquirer copying arbitrary columns (e.g. `kind`)
+        // onto the emitted JSONL so the downstream `ChunkFilter::
+        // metadata_in` predicate has something to match against.
+        let tmp = TempDir::new().unwrap();
+        let db = tmp.path().join("notes.db");
+        let conn = Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE notes (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                content TEXT NOT NULL,
+                scope TEXT,
+                updated_at INTEGER
+            );
+            INSERT INTO notes VALUES ('n1','decision','chose FTS5 over LanceDB','global',100);
+            INSERT INTO notes VALUES ('n2','todo','explore wal_autocheckpoint tuning','feature',200);
+            INSERT INTO notes VALUES ('n3','invariant','corpus-engine stays DB-free','global',150);
+        ",
+        )
+        .unwrap();
+
+        let params = SqliteAcquirerParams {
+            db_path: db.display().to_string(),
+            query: "SELECT id, kind, content, scope, updated_at AS version FROM notes ORDER BY id".into(),
+            content_column: "content".into(),
+            id_column: "id".into(),
+            version_column: Some("version".into()),
+            group_column: None,
+            group_separator: None,
+            metadata_columns: vec!["kind".into(), "scope".into()],
+        };
+
+        let out = write_jsonl_from_sqlite(&params, tmp.path()).unwrap();
+        let body = std::fs::read_to_string(&out).unwrap();
+        let lines: Vec<&str> = body.lines().collect();
+        assert_eq!(lines.len(), 3);
+
+        let first: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(first["id"], "n1");
+        assert_eq!(first["content"], "chose FTS5 over LanceDB");
+        assert_eq!(first["kind"], "decision", "kind passed through");
+        assert_eq!(first["scope"], "global", "scope passed through");
+        assert_eq!(first["version"], "100");
+
+        let second: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(second["kind"], "todo");
+    }
+
+    #[test]
+    fn metadata_columns_skip_null_values() {
+        // NULL values must be omitted rather than emitted as JSON
+        // nulls — matches `collect_metadata`'s contract and keeps
+        // ChunkFilter::evaluate_metadata's fail-closed behaviour
+        // consistent across acquirer shapes.
+        let tmp = TempDir::new().unwrap();
+        let db = tmp.path().join("notes.db");
+        let conn = Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE notes (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                content TEXT NOT NULL,
+                feature_id TEXT
+            );
+            INSERT INTO notes VALUES ('n1','decision','hello', NULL);
+        ",
+        )
+        .unwrap();
+        let params = SqliteAcquirerParams {
+            db_path: db.display().to_string(),
+            query: "SELECT id, kind, content, feature_id FROM notes".into(),
+            content_column: "content".into(),
+            id_column: "id".into(),
+            version_column: None,
+            group_column: None,
+            group_separator: None,
+            metadata_columns: vec!["kind".into(), "feature_id".into()],
+        };
+        let out = write_jsonl_from_sqlite(&params, tmp.path()).unwrap();
+        let body = std::fs::read_to_string(&out).unwrap();
+        let parsed: serde_json::Value =
+            serde_json::from_str(body.lines().next().unwrap()).unwrap();
+        assert_eq!(parsed["kind"], "decision");
+        assert!(
+            parsed.get("feature_id").is_none(),
+            "NULL feature_id must be omitted, got {parsed}"
+        );
     }
 
     #[test]
@@ -486,6 +639,7 @@ mod tests {
             version_column: Some("version".into()),
             group_column: None,
             group_separator: None,
+            metadata_columns: vec![],
         };
 
         let out = write_jsonl_from_sqlite(&params, tmp.path())
@@ -513,6 +667,7 @@ mod tests {
             version_column: Some("version".into()),
             group_column: None,
             group_separator: None,
+            metadata_columns: vec![],
         };
 
         let out = write_jsonl_from_sqlite(&params, tmp.path()).unwrap();
@@ -536,6 +691,7 @@ mod tests {
             version_column: None,
             group_column: None,
             group_separator: None,
+            metadata_columns: vec![],
         };
         let err = write_jsonl_from_sqlite(&params, tmp.path()).unwrap_err();
         match err {

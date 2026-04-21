@@ -232,34 +232,48 @@ async fn main() {
     // debouncer task so Tier-3 enrichment fires on bursts of memory
     // or message writes. See
     // `sovereign_tools::knowledge_view::KnowledgeViewManager`.
-    // Resolve `local_only` skill ids dynamically so any skill whose
-    // `[inference] privacy = "local_only"` participates in the
-    // conversational-view exclusion without editing this bootstrap.
-    let local_only_skill_ids = skills.local_only_skill_ids();
-    tracing::info!(
-        local_only_skills = ?local_only_skill_ids,
-        "knowledge_view: skills excluded from conversational corpus"
-    );
-    let knowledge_view_manager = Arc::new(
-        sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-            Arc::clone(&corpus_engine),
-            inference_fn.clone(),
-            config.store.path.clone(),
-            local_only_skill_ids,
-        )
-        .await,
-    );
-    // Install as the store's observer now that the manager exists.
-    // The store was Arc-wrapped earlier; interior mutability on the
-    // observer slot lets us swap it in without restructuring.
-    store_concrete
-        .set_observer(knowledge_view_manager.clone() as sovereign_core::observer::SharedStateStoreObserver);
-    // Kick off initial ingest of empty views. Errors are logged,
-    // not fatal — the rest of the runtime proceeds even if a view
-    // fails to enrich on first start.
-    if let Err(e) = knowledge_view_manager.init().await {
-        tracing::warn!(error = %e, "knowledge_view: init() failed; landscape digests will be missing until a later manual enrich");
-    }
+    // Gated on `[knowledge_view] enabled` in sovereign-server.toml.
+    // When disabled, the server skips the three enriched views +
+    // cross-view resonance entirely — no ingest, no observer, no
+    // landscape-digest splice. Mirror of the desktop Settings toggle.
+    let knowledge_view_manager = if config.knowledge_view.enabled {
+        // Resolve `local_only` skill ids dynamically so any skill whose
+        // `[inference] privacy = "local_only"` participates in the
+        // conversational-view exclusion without editing this bootstrap.
+        let local_only_skill_ids = skills.local_only_skill_ids();
+        tracing::info!(
+            local_only_skills = ?local_only_skill_ids,
+            "knowledge_view: enabled; skills excluded from conversational corpus"
+        );
+        let mgr = Arc::new(
+            sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+                Arc::clone(&corpus_engine),
+                inference_fn.clone(),
+                config.store.path.clone(),
+                local_only_skill_ids,
+            )
+            .await,
+        );
+        // Install as the store's observer now that the manager exists.
+        // The store was Arc-wrapped earlier; interior mutability on the
+        // observer slot lets us swap it in without restructuring.
+        store_concrete.set_observer(
+            mgr.clone() as sovereign_core::observer::SharedStateStoreObserver,
+        );
+        // Kick off initial ingest in the background. First-run ingest
+        // can take 10–60s on a populated DB; blocking startup on it
+        // would delay the /v1/* listener binding for no good reason —
+        // the landscape digests are additive and can lag behind the
+        // first few conversations.
+        let _init_handle = Arc::clone(&mgr).spawn_init();
+        Some(mgr)
+    } else {
+        tracing::info!(
+            "knowledge_view: disabled via config — landscape digests \
+             skipped, no ingest will run"
+        );
+        None
+    };
 
     // Register tools.
     let mut tools = ToolRegistry::new();
@@ -353,23 +367,26 @@ async fn main() {
     let (approval_channel, _event_rx) = ServerApprovalChannel::new();
     let approval = Arc::new(approval_channel);
 
-    let runtime = Arc::new(
-        Runtime::new(
-            inference,
-            router,
-            Box::new(planner),
-            Arc::new(tools),
-            store,
-            skills,
-            approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
-            sovereign_core::types::InferenceConfig::default(),
-        )
-        .with_corpus_engine(Arc::clone(&corpus_engine))
-        .with_landscape_digests(
-            knowledge_view_manager.clone()
-                as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
-        ),
-    );
+    let mut runtime_builder = Runtime::new(
+        inference,
+        router,
+        Box::new(planner),
+        Arc::new(tools),
+        store,
+        skills,
+        approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
+        sovereign_core::types::InferenceConfig::default(),
+    )
+    .with_corpus_engine(Arc::clone(&corpus_engine));
+    // Install the landscape-digest provider only when KnowledgeView
+    // is enabled. When disabled, the splice path stays a no-op —
+    // identical to pre-KnowledgeView behaviour.
+    if let Some(ref mgr) = knowledge_view_manager {
+        runtime_builder = runtime_builder.with_landscape_digests(
+            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
+        );
+    }
+    let runtime = Arc::new(runtime_builder);
 
     // Auth state.
     let auth_state = if config.auth.mode == "api_key" && !config.auth.keys.is_empty() {

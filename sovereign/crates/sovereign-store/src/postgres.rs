@@ -61,6 +61,7 @@ impl PostgresStateStore {
     fn fire_observer<F>(&self, f: F)
     where
         F: FnOnce(&dyn sovereign_core::observer::StateStoreObserver),
+        F: std::panic::UnwindSafe,
     {
         let observer = {
             let guard = self
@@ -69,7 +70,24 @@ impl PostgresStateStore {
                 .expect("PostgresStateStore observer RwLock poisoned");
             Arc::clone(&*guard)
         };
-        f(observer.as_ref());
+        // Mirror of `SqliteStateStore::fire_observer` — see that
+        // implementation for the rationale on catching panics here.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            f(observer.as_ref());
+        }));
+        if let Err(payload) = result {
+            let msg = if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = payload.downcast_ref::<&'static str>() {
+                s.to_string()
+            } else {
+                "<non-string panic payload>".to_string()
+            };
+            tracing::warn!(
+                panic = %msg,
+                "StateStoreObserver handler panicked; write already committed"
+            );
+        }
     }
 
     async fn run_migrations(&self) -> Result<()> {

@@ -1312,13 +1312,15 @@ impl Runtime {
         // built-in view and writes a markdown summary into
         // `context.knowledge_view_digests` so prompt assembly can
         // surface "here's the person's terrain" before synthesis.
-        // v1 passes `active_skill=None` — per-skill digest filtering
-        // is v2 work. The acquirer-level privacy separation already
-        // keeps `local_only` skill content out of the conversational
-        // corpus.
+        //
+        // Pass the resolved primary active skill so the provider can
+        // suppress cross-skill context when the active skill is
+        // `privacy = "local_only"` (e.g. `inner-work` should not see
+        // the conversational-history digest at all).
         if let Some(provider) = &self.landscape_digests {
+            let active_skill = self.skills.primary_skill_id_for_conversation();
             provider
-                .splice_landscape_digests(&mut context, None)
+                .splice_landscape_digests(&mut context, active_skill.as_deref())
                 .await;
         }
 
@@ -1616,8 +1618,9 @@ impl Runtime {
         // `Runtime::with_landscape_digests` wasn't called at build
         // time. See the streaming path for rationale on `active_skill`.
         if let Some(provider) = &self.landscape_digests {
+            let active_skill = self.skills.primary_skill_id_for_conversation();
             provider
-                .splice_landscape_digests(&mut context, None)
+                .splice_landscape_digests(&mut context, active_skill.as_deref())
                 .await;
         }
 
