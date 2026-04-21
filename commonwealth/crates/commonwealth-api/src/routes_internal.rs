@@ -20,14 +20,15 @@ use commonwealth_inference::scheduler::knowledge_assignment::{
 };
 use commonwealth_knowledge::shard_manager::ShardManager;
 
-/// Env-flag gate for the pull-based work queue. Set to `1` or `true` on
-/// the coordinator to have `corpus_collaborate` build a unit queue
-/// instead of static per-peer partitions. Peers discover the open queue
-/// via the gossiped `IngestionHandoff` and run a pull loop.
-const PULL_QUEUE_ENV: &str = "SOVEREIGN_USE_WORK_QUEUE";
+/// Pull-based work queue is the default. Set `SOVEREIGN_USE_LEGACY_PARTITION=1`
+/// to fall back to the static per-peer partitioning path — kept for
+/// rolling-upgrade compatibility until the legacy `ingest_partition`
+/// route, `PartitionStatus`, and the `partitions: Vec<IngestionPartition>`
+/// gossip field are removed.
+const LEGACY_PARTITION_ENV: &str = "SOVEREIGN_USE_LEGACY_PARTITION";
 
 fn use_pull_queue() -> bool {
-    std::env::var(PULL_QUEUE_ENV)
+    !std::env::var(LEGACY_PARTITION_ENV)
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
@@ -264,24 +265,136 @@ pub async fn corpus_collaborate(
             )
             .await;
 
-        // Gossip the handoff announcement so peers find it on their next
-        // auto_ingest tick. Write into the same `corpus-engine / handoff:*`
-        // key namespace the legacy path uses, so `ShardManager::load_handoff`
-        // keeps working unchanged.
+        // Write the handoff announcement into the local mesh_store so
+        // `ShardManager::load_handoff` and `discover_and_spawn_pull_loops`
+        // can find it on this node.
         let gossip_key = format!("handoff:{}", handoff.handoff_id);
-        if let Ok(bytes) = serde_json::to_vec(&handoff) {
-            let _ = state.inner.mesh_store.set(
-                "corpus-engine",
-                &gossip_key,
-                bytes::Bytes::from(bytes),
-                self_id,
-            );
+        let handoff_bytes = match serde_json::to_vec(&handoff) {
+            Ok(b) => b,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: format!("serialize handoff: {e}"),
+                    }),
+                ));
+            }
+        };
+        let _ = state.inner.mesh_store.set(
+            "corpus-engine",
+            &gossip_key,
+            bytes::Bytes::from(handoff_bytes.clone()),
+            self_id,
+        );
+
+        // The gossip loop only replicates the `Mesh` member list; it does
+        // NOT yet replicate mesh_store entries (the sender half is
+        // missing — `all_entries_for_gossip` is defined but unused, and
+        // nothing POSTs to `/internal/app/state`). So without an explicit
+        // push here, peers never learn of the open queue and their
+        // `discover_and_spawn_pull_loops` has nothing to scan. Mirrors
+        // the legacy path's direct peer-dispatch, but pushes into the
+        // mesh_store namespace the pull-loop already scans.
+        let handoff_id_for_log = handoff.handoff_id;
+        let corpus_id_for_log = handoff.corpus_id.clone();
+        for peer in &candidates {
+            let mut ordered_addrs: Vec<std::net::SocketAddr> =
+                peer.addresses.iter().copied().collect();
+            if ordered_addrs.is_empty() {
+                tracing::warn!(
+                    node = %peer.node_id,
+                    handoff = %handoff_id_for_log,
+                    "queue broadcast: peer has no address — skipping"
+                );
+                continue;
+            }
+            ordered_addrs.sort_by_key(|addr| match addr.ip() {
+                std::net::IpAddr::V4(v4) => {
+                    let o = v4.octets();
+                    if o[0] == 100 && (o[1] & 0xc0) == 64 { 0 } else { 1 }
+                }
+                std::net::IpAddr::V6(v6) => {
+                    let s = v6.segments();
+                    if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 { 0 } else { 2 }
+                }
+            });
+            let body = serde_json::json!({
+                "entries": [{
+                    "app_id": "corpus-engine",
+                    "key": gossip_key.clone(),
+                    // `/internal/app/state` currently treats value_b64 as
+                    // raw UTF-8 (its base64_decode is a stub). JSON is
+                    // UTF-8, so round-trips cleanly.
+                    "value_b64": String::from_utf8_lossy(&handoff_bytes).into_owned(),
+                    "timestamp": std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0),
+                    "origin_hex": hex::encode(self_id.as_bytes()),
+                }]
+            });
+            let node_id = peer.node_id;
+            let corpus_log = corpus_id_for_log.clone();
+            tokio::spawn(async move {
+                let client = match reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "queue broadcast: reqwest build failed");
+                        return;
+                    }
+                };
+                for addr in &ordered_addrs {
+                    let host = match addr.ip() {
+                        std::net::IpAddr::V4(_) => addr.ip().to_string(),
+                        std::net::IpAddr::V6(v6) => format!("[{v6}]"),
+                    };
+                    let peer_url = format!("http://{host}:9742/internal/app/state");
+                    match client.post(&peer_url).json(&body).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            tracing::info!(
+                                node = %node_id,
+                                url = %peer_url,
+                                handoff = %handoff_id_for_log,
+                                corpus = %corpus_log,
+                                "queue broadcast: handoff delivered to peer"
+                            );
+                            return;
+                        }
+                        Ok(resp) => {
+                            tracing::warn!(
+                                node = %node_id,
+                                url = %peer_url,
+                                status = %resp.status(),
+                                "queue broadcast: peer rejected handoff"
+                            );
+                            return;
+                        }
+                        Err(e) => {
+                            tracing::debug!(
+                                node = %node_id,
+                                url = %peer_url,
+                                error = %e,
+                                "queue broadcast: transport error — trying next address"
+                            );
+                        }
+                    }
+                }
+                tracing::warn!(
+                    node = %node_id,
+                    handoff = %handoff_id_for_log,
+                    "queue broadcast: could not reach peer on any advertised address"
+                );
+            });
         }
 
         tracing::info!(
             corpus = %handoff.corpus_id,
             handoff = %handoff.handoff_id,
             units = unit_count,
+            peers_notified = candidates.len(),
             "corpus_collaborate: pull-based queue registered"
         );
 
@@ -778,20 +891,31 @@ pub async fn corpus_next_unit(
     Json(req): Json<NextUnitRequest>,
 ) -> (StatusCode, Json<NextUnitResponse>) {
     use commonwealth_knowledge::QueueError;
+    let handoff_id = req.handoff_id;
+    let peer_id = req.peer_id;
     match state
         .inner
         .work_queue
         .next_unit(&req.handoff_id, req.peer_id)
         .await
     {
-        Ok(Some(leased)) => (
+        Ok(Some(leased)) => {
+            tracing::info!(
+                handoff = %handoff_id,
+                peer = %peer_id,
+                unit_id = leased.unit_id,
+                lease_expires_at_ms = leased.lease_expires_at_ms,
+                "next_unit: leased unit to peer"
+            );
+            (
             StatusCode::OK,
             Json(NextUnitResponse::Leased {
                 unit_id: leased.unit_id,
                 unit: leased.unit,
                 lease_expires_at_ms: leased.lease_expires_at_ms,
             }),
-        ),
+        )
+        }
         Ok(None) => {
             // Queue empty — include the current phase so the peer can
             // distinguish "wait, more work is coming (Draining / Open)"
@@ -832,24 +956,43 @@ pub async fn corpus_heartbeat(
     Json(req): Json<HeartbeatRequest>,
 ) -> (StatusCode, Json<HeartbeatResponseBody>) {
     use commonwealth_knowledge::{HeartbeatResult, QueueError};
+    let handoff_id = req.handoff_id;
+    let peer_id = req.peer_id;
+    let unit_id = req.unit_id;
     match state
         .inner
         .work_queue
         .heartbeat(&req.handoff_id, req.peer_id, req.unit_id)
         .await
     {
-        Ok(HeartbeatResult::Renewed { expires_at_ms }) => (
+        Ok(HeartbeatResult::Renewed { expires_at_ms }) => {
+            tracing::debug!(
+                handoff = %handoff_id,
+                peer = %peer_id,
+                unit_id = unit_id,
+                "heartbeat: lease renewed"
+            );
+            (
             StatusCode::OK,
             Json(HeartbeatResponseBody::Renewed {
                 lease_expires_at_ms: expires_at_ms,
             }),
-        ),
-        Ok(HeartbeatResult::Reclaimed) => (
+        )
+        }
+        Ok(HeartbeatResult::Reclaimed) => {
+            tracing::warn!(
+                handoff = %handoff_id,
+                peer = %peer_id,
+                unit_id = unit_id,
+                "heartbeat: lease reclaimed — peer must abort"
+            );
+            (
             StatusCode::GONE,
             Json(HeartbeatResponseBody::Reclaimed {
                 reason: "lease was reclaimed; abort current unit".into(),
             }),
-        ),
+        )
+        }
         Err(QueueError::NotFound) => (
             StatusCode::NOT_FOUND,
             Json(HeartbeatResponseBody::Reclaimed {
@@ -877,6 +1020,10 @@ pub async fn corpus_complete_unit(
 ) -> (StatusCode, Json<CompleteUnitResponse>) {
     use commonwealth_core::knowledge::CompleteOutcome;
     use commonwealth_knowledge::QueueError;
+    let handoff_id = req.handoff_id;
+    let peer_id = req.peer_id;
+    let unit_id = req.unit_id;
+    let outcome_dbg = format!("{:?}", req.outcome);
     match state
         .inner
         .work_queue
@@ -892,10 +1039,20 @@ pub async fn corpus_complete_unit(
         )
         .await
     {
-        Ok(phase) => (
+        Ok(phase) => {
+            tracing::info!(
+                handoff = %handoff_id,
+                peer = %peer_id,
+                unit_id = unit_id,
+                outcome = %outcome_dbg,
+                phase = ?phase,
+                "complete_unit: unit completed by peer"
+            );
+            (
             StatusCode::OK,
             Json(CompleteUnitResponse::Ok { phase }),
-        ),
+        )
+        }
         Err(QueueError::LeaseReclaimed) => (
             StatusCode::CONFLICT,
             Json(CompleteUnitResponse::Error {
