@@ -16,6 +16,11 @@ corpus-engine = { workspace = true }
 # ATOS orchestrator library — middleware stack references it for
 # session state, approval lookups, and note-store access.
 sovereign-atos = { path = "../../../sovereign/crates/sovereign-atos" }
+# Shared tool manifest — the tool_injector middleware pulls the
+# canonical ATOS tool descriptors from here so schemas can't drift
+# from the tool implementations.
+sovereign-tools = { path = "../../../sovereign/crates/sovereign-tools", features = ["treesitter"] }
+sovereign-core  = { path = "../../../sovereign/crates/sovereign-core" }
 axum = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

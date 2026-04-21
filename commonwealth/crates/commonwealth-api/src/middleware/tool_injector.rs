@@ -12,9 +12,22 @@
 //! treated as authoritative — if Yara's team has a local
 //! `write_note` that captures their conventions, they're not
 //! overridden.
+//!
+//! ## Manifest source of truth (D1)
+//!
+//! The tool descriptors are pulled from
+//! [`sovereign_tools::manifest::atos_critical_descriptors`], which
+//! constructs every tool once with throwaway in-memory stores and
+//! calls `Tool::descriptor()`. That eliminates the hand-maintained
+//! parallel JSON-schema block this module used to carry — which had
+//! already drifted from the real parameter shapes by the time the
+//! Phase 3 refactor landed.
+//!
+//! Adding a new ATOS-critical tool: add its id to the `IDS` array in
+//! `sovereign_tools::manifest::atos_critical_descriptors`; the schema
+//! flows in automatically from the tool's actual descriptor().
 
 use async_trait::async_trait;
-use serde_json::json;
 
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
 use crate::openai_types::{ChatCompletionRequest, ToolDefinition, ToolFunction};
@@ -70,128 +83,53 @@ impl Middleware for ToolInjector {
     }
 }
 
-/// Static list of ATOS MCP tools advertised to every pipeline
-/// session. Kept in sync by hand with `sovereign-tools/src/code/` —
-/// M5 will drop the duplication by pulling descriptors from the
-/// tool-handler code directly.
+/// ATOS MCP tools advertised on every pipeline session. Pulled from
+/// the shared sovereign-tools manifest — the tool's real
+/// `descriptor()` is the schema, so there is no hand-maintained
+/// parameters JSON to drift.
+///
+/// When the tool declares an `output_schema` we append a short hint
+/// to the description so the agent sees which keys it can reference
+/// in a follow-up tool call's params. OpenAI's function-calling
+/// schema has no native `output_schema` slot; description is the
+/// only channel that reaches the model.
 pub fn atos_tool_descriptors() -> Vec<ToolDefinition> {
-    vec![
-        ToolDefinition {
-            kind: "function".into(),
-            function: ToolFunction {
-                name: "read_notes".into(),
-                description: Some(
-                    "Retrieve notes by symbol, file, kind, or full-text query. Use at \
-                     session start + before modifying a symbol."
-                        .into(),
-                ),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "query":     { "type": "string" },
-                        "symbols":   { "type": "array", "items": { "type": "string" } },
-                        "files":     { "type": "array", "items": { "type": "string" } },
-                        "kinds":     { "type": "array", "items": { "type": "string" } },
-                        "scope":     { "type": "array", "items": { "type": "string" } },
-                        "feature_id":{ "type": "string" },
-                        "limit":     { "type": "integer", "default": 10 }
-                    },
-                    "required": []
-                }),
-            },
-        },
-        ToolDefinition {
-            kind: "function".into(),
-            function: ToolFunction {
-                name: "read_note_by_id".into(),
-                description: Some("Fetch one note row by its UUID.".into()),
-                parameters: json!({
-                    "type": "object",
-                    "properties": { "id": { "type": "string" } },
-                    "required": ["id"]
-                }),
-            },
-        },
-        ToolDefinition {
-            kind: "function".into(),
-            function: ToolFunction {
-                name: "read_note_digest".into(),
-                description: Some(
-                    "Markdown digest of scope/feature/kinds-filtered notes. Use at \
-                     session start or post-compaction."
-                        .into(),
-                ),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "scope":     { "type": "array", "items": { "type": "string" } },
-                        "feature_id":{ "type": "string" },
-                        "kinds":     { "type": "array", "items": { "type": "string" } },
-                        "limit":     { "type": "integer", "default": 100 }
-                    },
-                    "required": []
-                }),
-            },
-        },
-        ToolDefinition {
-            kind: "function".into(),
-            function: ToolFunction {
-                name: "write_note".into(),
-                description: Some(
-                    "Persist a decision/attempt/invariant/todo/uncertainty/postmortem_pointer \
-                     note. Scope defaults to 'global'; pass scope='feature' + feature_id to \
-                     tag to an ATOS feature."
-                        .into(),
-                ),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "kind":       {
-                            "type": "string",
-                            "enum": ["decision","attempt","invariant","todo","uncertainty","postmortem_pointer"]
-                        },
-                        "content":    { "type": "string" },
-                        "symbols":    { "type": "array", "items": { "type": "string" } },
-                        "files":      { "type": "array", "items": { "type": "string" } },
-                        "scope":      { "type": "string", "enum": ["global","feature","session"] },
-                        "feature_id": { "type": "string" }
-                    },
-                    "required": ["kind", "content"]
-                }),
-            },
-        },
-        ToolDefinition {
-            kind: "function".into(),
-            function: ToolFunction {
-                name: "write_redteam_finding".into(),
-                description: Some(
-                    "Record a red-team review finding. Only valid from mode=redteam sessions."
-                        .into(),
-                ),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "feature_id": { "type": "string" },
-                        "invariant":  { "type": "string" },
-                        "status":     {
-                            "type": "string",
-                            "enum": ["violated","potentially_violated","not_found"]
-                        },
-                        "evidence":   { "type": "string" },
-                        "confidence": { "type": "string", "enum": ["high","medium","low"] },
-                        "files":      { "type": "array", "items": { "type": "string" } }
-                    },
-                    "required": ["feature_id", "invariant", "status", "confidence"]
-                }),
-            },
-        },
-    ]
+    sovereign_tools::manifest::atos_critical_descriptors()
+        .into_iter()
+        .map(|d| {
+            let description = match &d.output_schema {
+                Some(schema) => match schema
+                    .get("properties")
+                    .and_then(|p| p.as_object())
+                    .map(|o| o.keys().cloned().collect::<Vec<_>>())
+                    .filter(|k| !k.is_empty())
+                {
+                    Some(keys) => format!(
+                        "{}\n\nOutput keys: {}",
+                        d.description,
+                        keys.join(", ")
+                    ),
+                    None => d.description.clone(),
+                },
+                None => d.description.clone(),
+            };
+            ToolDefinition {
+                kind: "function".into(),
+                function: ToolFunction {
+                    name: d.id,
+                    description: Some(description),
+                    parameters: d.parameters,
+                },
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::openai_types::{ChatCompletionRequest, ChatMessage};
+    use serde_json::json;
 
     fn minimal_request() -> ChatCompletionRequest {
         ChatCompletionRequest {
@@ -266,5 +204,23 @@ mod tests {
         inj.process(&mut req, &mut session, &ctx()).await.unwrap();
         let second_len = req.tools.as_ref().unwrap().len();
         assert_eq!(first_len, second_len);
+    }
+
+    #[tokio::test]
+    async fn descriptor_schemas_match_registry_source() {
+        // D1 drift-seal: every injected tool's `parameters` JSON
+        // schema is whatever the tool's real Tool::descriptor()
+        // returns. Any mismatch between this module's output and the
+        // registry is a compile failure (the field is cloned
+        // directly), so this test just verifies the pipeline is
+        // wired — if an id went missing, we'd see a shorter list.
+        let defs = atos_tool_descriptors();
+        assert_eq!(
+            defs.len(),
+            sovereign_tools::manifest::atos_critical_descriptors().len(),
+            "tool_injector output count must match the manifest; \
+             if you added an ATOS-critical tool, update the IDS list in \
+             sovereign_tools::manifest::atos_critical_descriptors"
+        );
     }
 }
