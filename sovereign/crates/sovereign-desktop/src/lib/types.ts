@@ -603,3 +603,263 @@ export interface DocOpProgress {
   fragments?: number;
   depth?: number;
 }
+
+// ─── Local corpus (Folder Drop / Obsidian) ─────────────────────────
+
+export type LocalCorpusSourceType =
+  | { ObsidianVault: { parse_frontmatter: boolean; follow_wiki_links: boolean } }
+  | "DocumentFolder";
+
+export interface WriteBackConfig {
+  namespace: string;
+  index_dir: string;
+  snapshot_dir: string;
+  snapshot_retention: number;
+}
+
+export interface WatcherConfig {
+  enabled: boolean;
+  debounce_ms: number;
+}
+
+export interface PreScanConfig {
+  scanned_pdf_detection: boolean;
+  password_detection: boolean;
+  large_file_threshold_mb: number;
+}
+
+export type ChunkerKind =
+  | { Paragraph: { max_chars: number; overlap_chars: number } }
+  | {
+      Semantic: {
+        max_chars: number;
+        overlap_chars: number;
+        split_on_headings: number[];
+      };
+    };
+
+export interface LocalCorpusConfig {
+  id: string;
+  display_name: string;
+  root_path: string;
+  source_type: LocalCorpusSourceType;
+  extensions: string[];
+  chunker: ChunkerKind;
+  write_back: WriteBackConfig | null;
+  enrichment: { enabled: boolean } | null;
+  watcher: WatcherConfig;
+  pre_scan: PreScanConfig;
+  scope: "Local" | "Mesh" | "Public";
+}
+
+export interface FileMeta {
+  path: string;
+  size_bytes: number;
+  display_name: string;
+}
+
+export interface PreScanResult {
+  readable: FileMeta[];
+  scanned_pdfs: FileMeta[];
+  protected_pdfs: FileMeta[];
+  corrupt_files: FileMeta[];
+  large_files: FileMeta[];
+  ignored_types: number;
+  total_visited: number;
+}
+
+export interface PathValidation {
+  exists: boolean;
+  is_dir: boolean;
+  readable: boolean;
+  canonical_path: string | null;
+}
+
+export interface LcPreScanResponse {
+  job_id: string;
+  result: PreScanResult;
+  corpus_id: string;
+  display_name: string;
+}
+
+export interface RuntimeFailure {
+  file: FileMeta;
+  reason: string;
+}
+
+export interface ExcerptChunk {
+  text: string;
+  source_name: string;
+  page_ref: string | null;
+}
+
+export interface IngestStats {
+  corpus_id: string;
+  files_indexed: number;
+  chunks_written: number;
+  runtime_failures: RuntimeFailure[];
+  excerpt_chunks: ExcerptChunk[];
+  duration_secs: number;
+}
+
+export interface IncompleteJob {
+  corpus_id: string;
+  display_name: string;
+  files_done: number;
+  files_total: number;
+}
+
+/// Mirror of Rust's `LocalCorpusProgress` with `tag = "phase"`, `content = "data"`.
+export type LocalCorpusProgress =
+  | { phase: "scanning"; data: { done: number; total: number } }
+  | {
+      phase: "staging";
+      data: { done: number; total: number; current_file: string };
+    }
+  | {
+      phase: "ingesting";
+      data: {
+        done: number;
+        total: number;
+        phase_label: string;
+        current_file: string | null;
+      };
+    }
+  | { phase: "clustering"; data: { stage: ClusterStage } }
+  | { phase: "snapshotting"; data: { done: number; total: number } }
+  | { phase: "writing"; data: { done: number; total: number } }
+  | { phase: "rolling_back"; data: { done: number; total: number } }
+  | { phase: "complete"; data: { result: IngestStats } }
+  | {
+      phase: "error";
+      data: { message: string; recoverable: boolean };
+    };
+
+export type ClusterStage = {
+  stage:
+    | "embedding_matrix"
+    | "hdbscan_run"
+    | "llm_labeling"
+    | "open_question_detection";
+};
+
+// ─── Clustering + Preview (Obsidian M4) ────────────────────────────
+
+export type MultiClusterStrategy = "Dominant" | "All" | "Flag";
+
+export interface ClusterConfig {
+  min_cluster_size: number;
+  min_confidence: number;
+  multi_tag_threshold: number;
+  multi_cluster_strategy: MultiClusterStrategy;
+  /** Minimum distinct notes per cluster after the chunk-to-note
+   *  rollup. Clusters with fewer notes than this collapse — their
+   *  notes land in the outlier panel with reason `singleton_cluster`.
+   *  Default 2: a tag shared by only one note feels premature. */
+  min_notes_per_cluster: number;
+}
+
+export interface LabeledCluster {
+  id: number;
+  tag_path: string;
+  display_name: string;
+  description: string;
+  note_count: number;
+  centroid_chunk_ids: number[];
+}
+
+export interface FileAssignment {
+  chunk_id: number;
+  relative_path: string;
+  note_title: string;
+  primary_tag: string;
+  additional_tags: string[];
+  confidence: number;
+  existing_tags: string[];
+}
+
+export interface ClusterSummary {
+  cluster: LabeledCluster;
+  assignments: FileAssignment[];
+}
+
+export interface ClusterConfidence {
+  cluster_id: number;
+  confidence: number;
+}
+
+export type OutlierReason =
+  | { type: "low_confidence"; threshold: number }
+  | { type: "ambiguous_cluster"; top_clusters: ClusterConfidence[] }
+  | { type: "too_short"; char_count: number }
+  | { type: "singleton_cluster"; cluster_size: number };
+
+export interface OutlierNote {
+  chunk_id: number;
+  relative_path: string;
+  note_title: string;
+  best_cluster_id: number;
+  best_cluster_confidence: number;
+  reason: OutlierReason;
+}
+
+export interface OpenQuestion {
+  gap_description: string;
+  relevant_cluster_ids: number[];
+}
+
+export interface FlaggedNote {
+  chunk_id: number;
+  note_title: string;
+  candidate_clusters: ClusterConfidence[];
+}
+
+export interface VaultPreview {
+  clusters: ClusterSummary[];
+  outliers: OutlierNote[];
+  flagged: FlaggedNote[];
+  total_notes: number;
+  tagged_notes: number;
+  outlier_count: number;
+  open_questions: OpenQuestion[];
+  namespace: string;
+}
+
+// ─── WriteBack / Snapshots (Obsidian M5) ───────────────────────────
+
+export interface GitStatus {
+  current_branch: string;
+  has_uncommitted_changes: boolean;
+}
+
+export interface FailedWrite {
+  relative_path: string;
+  reason: string;
+}
+
+export interface WriteBackResult {
+  files_tagged: number;
+  files_skipped: FailedWrite[];
+  index_notes_created: number;
+  snapshot_path: string;
+  sovereign_version: number;
+}
+
+export interface SnapshotMeta {
+  taken_at: string;
+  sovereign_version: number;
+  file_count: number;
+  git_commit: string | null;
+  snapshot_path: string;
+}
+
+export interface RollbackResult {
+  files_restored: number;
+  files_skipped: FailedWrite[];
+  index_notes_deleted: number;
+}
+
+export interface CleanResult {
+  tags_removed_from: number;
+  index_notes_deleted: number;
+}

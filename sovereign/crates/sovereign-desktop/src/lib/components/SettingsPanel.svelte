@@ -3,6 +3,7 @@
   import { detectBootstrap, getConfig, saveConfig } from "../api";
   import type { BootstrapSnapshot, DesktopConfig } from "../types";
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
+  import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
   import MeshSettings from "./MeshSettings.svelte";
   import SkillManager from "./SkillManager.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
@@ -14,7 +15,14 @@
 
   let { onClose }: Props = $props();
 
-  type Tab = "models" | "knowledge" | "mesh" | "tools" | "paths" | "recipes";
+  type Tab =
+    | "models"
+    | "knowledge"
+    | "local-knowledge"
+    | "mesh"
+    | "tools"
+    | "paths"
+    | "recipes";
   let activeTab: Tab = $state("models");
 
   let config: DesktopConfig | null = $state(null);
@@ -166,12 +174,13 @@
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: "models",    label: "Models"    },
-    { id: "knowledge", label: "Knowledge" },
-    { id: "mesh",      label: "Mesh"      },
-    { id: "tools",     label: "Skills"    },
-    { id: "paths",     label: "Paths"     },
-    { id: "recipes",   label: "Recipes"   },
+    { id: "models",          label: "Models"          },
+    { id: "knowledge",       label: "Knowledge"       },
+    { id: "local-knowledge", label: "Local Knowledge" },
+    { id: "mesh",            label: "Mesh"            },
+    { id: "tools",           label: "Skills"          },
+    { id: "paths",           label: "Paths"           },
+    { id: "recipes",         label: "Recipes"         },
   ];
 </script>
 
@@ -482,6 +491,15 @@
 
           <p class="section-label">Installed corpora</p>
           <KnowledgeStatus />
+        {/if}
+
+        <!-- ──────────────── LOCAL KNOWLEDGE ──────────────── -->
+        {#if activeTab === "local-knowledge"}
+          <p class="tab-intro">
+            Point Sovereign at a folder of documents or an Obsidian vault.
+            Files stay on your computer. Nothing is uploaded.
+          </p>
+          <LocalKnowledgeSection />
         {/if}
 
         <!-- ──────────────── MESH ──────────────── -->

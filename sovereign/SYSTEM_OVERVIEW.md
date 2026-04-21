@@ -947,6 +947,72 @@ milestone passes when the charter carries `**Red team:** auto`.
 `X-Feature-Id` (from the current git branch's feature dir) and `X-Session-Id`
 on every request so the daemon knows which feature's spec to splice.
 
+### 4.14 Local Corpora — Folder Drop + Obsidian Vault
+
+Two user-visible flows in **Settings → Local Knowledge** — "Drop or
+browse a folder" (PDFs + TXT) and "Connect Obsidian vault" (markdown) —
+are instances of the same operation: the user points Sovereign at a
+local directory; Sovereign pre-scans it, ingests it through the shared
+corpus-engine pipeline, and maintains the relationship over time. The
+two flows differ only in configuration and extension points, not in
+architecture.
+
+**Crate layout** — `sovereign-tools/src/local_corpus/`:
+
+| Module          | Responsibility                                                                                              |
+|-----------------|-------------------------------------------------------------------------------------------------------------|
+| `config.rs`     | `LocalCorpusConfig`, `document_folder` + `obsidian_vault` factories, `recipe_toml` builder                  |
+| `pre_scanner.rs`| Directory walker + PDF classifier (`Readable` / `ScannedNoText` / `PasswordProtected` / `Corrupt`)          |
+| `humanise.rs`   | Filename → display-name rules (date normalisation, ordering-prefix strip, title-case, acronym allow-list)   |
+| `extract_stage.rs` | PDF/TXT/MD → JSONL staging; `safe_extract_pdf_text` catches pdf-extract panics so one bad file can't nuke the ingest |
+| `progress.rs`   | `LocalCorpusProgress` — one enum covering Scanning / Staging / Ingesting / Clustering / Snapshotting / Writing / RollingBack / Complete / Error |
+| `excerpt.rs`    | Post-ingest excerpt scorer (length + diversity) for the completion screen                                   |
+| `clusterer.rs`  | Obsidian-only: wraps `cluster_embeddings` (HDBSCAN) + LLM labelling pass using spec §6.3 `domain/subtopic` prompt |
+| `preview.rs`    | Pure builder for `VaultPreview` — cluster summaries, outlier classification (`LowConfidence`, `TooShort`, `AmbiguousCluster`) |
+| `frontmatter.rs`| YAML frontmatter merge + strip — value-perfect preservation of user keys; only `<namespace>/*` tags and `<namespace>_*` keys are ever touched |
+| `writeback.rs`  | `take_snapshot` → `write_file_tags` → `write_cluster_index` → `rollback` / `clean`; atomic per-file rename; 3-snapshot retention pruning |
+| `git.rs`        | `check_git_repo` + `git_commit_before_write` via `std::process::Command` (no `libgit2` dep)                 |
+| `manager.rs`    | `LocalCorpusManager` — owns `CorpusEngine` handle, registered-corpora map, in-memory cluster-result cache   |
+
+**Architectural invariants** (enforced by tests in-crate):
+
+- **Snapshot before any write.** `WriteBack::execute` takes an atomic
+  JSON snapshot under `~/.sovereign/vault-snapshots/{corpus_id}/`
+  **before** the first file is touched. Crash mid-write → snapshot
+  exists → rollback restores. Snapshot directory lives **outside** the
+  vault (inside would self-ingest on the next scan).
+- **`<namespace>/*` namespace is inviolable.** Only
+  `<namespace>/` tags and `<namespace>_*` frontmatter keys are added,
+  modified, or removed. Every other key and tag in every note
+  round-trips at the value level.
+- **Rollback is idempotent.** Running `rollback` twice on the same
+  snapshot produces the same result; deleted-since-snapshot files
+  are re-created from the snapshot payload, not reported as errors.
+- **pdf-extract panics are caught.** `safe_extract_pdf_text` runs
+  `pdf_extract::extract_text` inside `catch_unwind` so a DeviceN
+  colour-space panic (known failure mode in `pdf-extract 0.7.12`)
+  is classified as `Corrupt` rather than taking down the
+  `spawn_blocking` task.
+
+**Tauri command surface** (in `sovereign-desktop/src-tauri/src/local_corpus_commands.rs`):
+
+`lc_validate_path`, `lc_pre_scan`, `lc_ingest`, `lc_list`, `lc_remove`,
+`lc_incomplete_jobs`, `lc_search`, `lc_cluster`, `lc_get_preview`,
+`lc_check_git`, `lc_write_tags`, `lc_list_snapshots`, `lc_rollback`,
+`lc_clean`, `lc_cancel`. Progress events stream on
+`local-corpus://progress/{job_id}`.
+
+**Frontend component tree** lives under
+`sovereign-desktop/src/lib/components/local-knowledge/`; `folder/` and
+`obsidian/` subdirectories hold flow-specific components. Mounted as
+the "Local Knowledge" tab of `SettingsPanel.svelte`.
+
+**Resume-on-relaunch** is free: `CorpusEngine::ingest` checkpoints to
+`_source_manifest.json` on every flush; `lc_incomplete_jobs` surfaces
+any corpus with non-`Complete` entries; the ResumePrompt's "Continue"
+button just re-invokes `lc_ingest`, which picks up at the last
+completed shard.
+
 ---
 
 ## 5. Commonwealth — The Coordination Daemon

@@ -20,6 +20,7 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_store::insight_store::SqliteInsightStore;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::index_validator::EmbedSlotConfig;
+use sovereign_tools::local_corpus::LocalCorpusManager;
 use sovereign_tools::shell::ShellTool;
 use tokio_util::sync::CancellationToken;
 
@@ -357,6 +358,11 @@ pub struct AppState {
     /// Insight capture service. Created during bootstrap from the same
     /// SQLite connection as the state store.
     pub insight_service: RwLock<Option<Arc<InsightService>>>,
+    /// Manager for locally-sourced corpora — backs the "Local
+    /// Knowledge" settings section. `None` until bootstrap completes
+    /// and the `CorpusEngine` is ready; commands check this and
+    /// surface a "finish setup first" error when unset.
+    pub local_corpus: RwLock<Option<Arc<LocalCorpusManager>>>,
 }
 
 impl AppState {
@@ -410,6 +416,7 @@ impl AppState {
             health_monitor: RwLock::new(None),
             health_shutdown: CancellationToken::new(),
             insight_service: RwLock::new(None),
+            local_corpus: RwLock::new(None),
         }
     }
 }
@@ -711,6 +718,40 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             .with_self_node_id(self_node_id.to_string()),
     );
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
+
+    // Bring up the LocalCorpusManager alongside the engine. Loads any
+    // previously-registered corpora from their sidecar JSON so the
+    // "Local Knowledge" settings list populates immediately on launch.
+    {
+        let store_for_lcm = state
+            .store
+            .read()
+            .await
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| "state store not ready".to_string())?;
+        let snapshot_root = config.data_dir.join("vault-snapshots");
+        match LocalCorpusManager::init(
+            Arc::clone(&corpus_engine),
+            store_for_lcm,
+            Some(Arc::clone(&raw_inference)),
+            config.data_dir.clone(),
+            snapshot_root,
+        )
+        .await
+        {
+            Ok(mgr) => {
+                *state.local_corpus.write().await = Some(Arc::new(mgr));
+                tracing::info!("local_corpus manager initialised");
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "local_corpus manager init failed: {e} — \
+                     Local Knowledge section will show a setup error"
+                );
+            }
+        }
+    }
 
     // KnowledgeView wire-up (desktop mirror of the server/CLI path).
     // Gated on Settings → Knowledge → "Enable KnowledgeView". When

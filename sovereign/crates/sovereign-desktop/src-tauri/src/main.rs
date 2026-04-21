@@ -3,6 +3,7 @@ mod bootstrap;
 mod commands;
 mod friendly_names;
 mod insight_commands;
+mod local_corpus_commands;
 mod mesh_commands;
 mod state;
 mod tray;
@@ -199,6 +200,21 @@ fn main() {
             insight_commands::delete_insight,
             insight_commands::get_sink_status,
             insight_commands::explore_insights,
+            local_corpus_commands::lc_validate_path,
+            local_corpus_commands::lc_pre_scan,
+            local_corpus_commands::lc_ingest,
+            local_corpus_commands::lc_list,
+            local_corpus_commands::lc_remove,
+            local_corpus_commands::lc_incomplete_jobs,
+            local_corpus_commands::lc_search,
+            local_corpus_commands::lc_cluster,
+            local_corpus_commands::lc_get_preview,
+            local_corpus_commands::lc_check_git,
+            local_corpus_commands::lc_write_tags,
+            local_corpus_commands::lc_list_snapshots,
+            local_corpus_commands::lc_rollback,
+            local_corpus_commands::lc_clean,
+            local_corpus_commands::lc_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");

@@ -384,3 +384,100 @@ export async function promoteLegacyDocument(
 ): Promise<{ asset: DocumentAsset }> {
   return invoke("promote_legacy_document", { source });
 }
+
+// ─── Local corpus ──────────────────────────────────────────────
+
+import type {
+  LocalCorpusConfig,
+  PathValidation,
+  LcPreScanResponse,
+  IncompleteJob,
+} from "./types";
+
+export async function lcValidatePath(path: string): Promise<PathValidation> {
+  return invoke("lc_validate_path", { path });
+}
+
+export async function lcPreScan(
+  path: string,
+  sourceType: "folder" | "obsidian",
+  displayName?: string,
+): Promise<LcPreScanResponse> {
+  return invoke("lc_pre_scan", {
+    path,
+    sourceType,
+    displayName: displayName ?? null,
+  });
+}
+
+/** Begin ingestion for an already-registered corpus. Returns a job_id
+ *  to subscribe to `local-corpus://progress/{job_id}` on. */
+export async function lcIngest(corpusId: string): Promise<string> {
+  return invoke("lc_ingest", { corpusId });
+}
+
+export async function lcList(): Promise<LocalCorpusConfig[]> {
+  return invoke("lc_list");
+}
+
+export async function lcRemove(corpusId: string): Promise<void> {
+  return invoke("lc_remove", { corpusId });
+}
+
+export async function lcIncompleteJobs(): Promise<IncompleteJob[]> {
+  return invoke("lc_incomplete_jobs");
+}
+
+import type { ClusterConfig as LcClusterConfig, VaultPreview as LcVaultPreview } from "./types";
+
+export async function lcCluster(
+  corpusId: string,
+  config?: LcClusterConfig,
+): Promise<string> {
+  return invoke("lc_cluster", { corpusId, config: config ?? null });
+}
+
+export async function lcGetPreview(
+  corpusId: string,
+  config?: LcClusterConfig,
+): Promise<LcVaultPreview> {
+  return invoke("lc_get_preview", { corpusId, config: config ?? null });
+}
+
+import type {
+  GitStatus as LcGitStatus,
+  WriteBackResult as LcWriteBackResult,
+  SnapshotMeta as LcSnapshotMeta,
+  RollbackResult as LcRollbackResult,
+  CleanResult as LcCleanResult,
+} from "./types";
+
+export async function lcCheckGit(corpusId: string): Promise<LcGitStatus | null> {
+  return invoke("lc_check_git", { corpusId });
+}
+
+export async function lcWriteTags(
+  corpusId: string,
+  gitCommit: boolean,
+): Promise<LcWriteBackResult> {
+  return invoke("lc_write_tags", { corpusId, gitCommit });
+}
+
+export async function lcListSnapshots(corpusId: string): Promise<LcSnapshotMeta[]> {
+  return invoke("lc_list_snapshots", { corpusId });
+}
+
+export async function lcRollback(
+  corpusId: string,
+  snapshotPath: string,
+): Promise<LcRollbackResult> {
+  return invoke("lc_rollback", { corpusId, snapshotPath });
+}
+
+export async function lcClean(corpusId: string): Promise<LcCleanResult> {
+  return invoke("lc_clean", { corpusId });
+}
+
+export async function lcCancel(corpusId: string): Promise<boolean> {
+  return invoke("lc_cancel", { corpusId });
+}

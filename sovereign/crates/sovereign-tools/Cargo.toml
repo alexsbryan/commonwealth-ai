@@ -30,6 +30,18 @@ lancedb = "0.27"
 arrow-array = "57"
 # Document parsing (RAG pipeline)
 pdf-extract = "0.7"
+# Stable, cryptographic short-hash for deriving corpus IDs from a
+# canonicalised root path. Used by local_corpus::config.
+sha2 = "0.10"
+# Recursive directory walking for the PreScanner; keeps hidden-dir
+# filtering (`.obsidian`, `.git`) a single-call predicate.
+walkdir = "2"
+# Atomic config-file writes (write-to-temp + rename) in
+# `local_corpus::manager`.
+tempfile = "3"
+# YAML parsing for Obsidian frontmatter merge (M5 write-back). Uses
+# `indexmap` internally so key order round-trips.
+serde_yaml = "0.9"
 # KnowledgeView acquirers (SqliteAcquirer dumps rows to JSONL for the
 # existing Jsonl extractor). Uses the same `bundled` feature as
 # sovereign-store so both crates link against one libsqlite3.

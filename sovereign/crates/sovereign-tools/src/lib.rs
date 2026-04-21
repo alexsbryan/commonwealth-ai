@@ -12,6 +12,7 @@ pub mod file;
 pub mod index_validator;
 pub mod knowledge;
 pub mod knowledge_view;
+pub mod local_corpus;
 #[cfg(feature = "treesitter")]
 pub mod manifest;
 pub mod mcp;
