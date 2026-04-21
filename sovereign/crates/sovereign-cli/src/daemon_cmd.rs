@@ -40,6 +40,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(&args[1..]).await,
+        Some("start") => start_daemon().await,
         Some("stop") => stop_daemon().await,
         Some("restart") => restart_daemon().await,
         Some("reload") => reload_daemon().await,
@@ -64,8 +65,9 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Usage("sovereign daemon <subcommand>"),
         crate::util::help::HelpSection::Subcommands(&[
             ("run",     "Run in the foreground; exits on SIGINT/SIGTERM. Normally the OS service manager invokes this, not you."),
+            ("start",   "Start the daemon in the background (detached child + PID file at ~/.sovereign/daemon.pid). Waits for readiness. Use on dev boxes where you haven't registered a launchd/systemd service."),
             ("status",  "Report whether the daemon is running and answering on :9741."),
-            ("stop",    "Stop the daemon cleanly (SIGTERM). The service stays registered so `restart` will bring it back."),
+            ("stop",    "Stop the daemon cleanly (SIGTERM). Uses the PID file from `start` when present; otherwise falls back to launchctl / systemctl."),
             ("reload",  "Apply config changes without a restart (POST /v1/admin/reload). Use this after editing model paths in ~/.config/sovereign/config.toml."),
             ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests. Use when a model/port/data_dir change requires a full rebind or the daemon is wedged."),
         ]),
@@ -574,6 +576,43 @@ async fn build_merged_scip_graph(
 /// changes, prefer `sovereign daemon reload` — no gap in availability.
 async fn stop_daemon() -> i32 {
     eprintln!("stopping sovereign daemon …");
+
+    // Prefer the PID file written by `daemon start` — that's the only
+    // way we can reliably stop a daemon that wasn't launched via a
+    // service manager. Fall back to launchctl / systemctl when the
+    // PID file is absent (service-managed install) or stale.
+    if let Some(pid) = read_daemon_pid() {
+        #[cfg(unix)]
+        {
+            // SAFETY: POSIX kill is async-signal-safe; we're only sending
+            // SIGTERM to a pid we own (we wrote the pidfile ourselves).
+            let rc = unsafe { libc_kill(pid, 15 /* SIGTERM */) };
+            if rc == 0 {
+                // Wait up to 10s for graceful exit, polling liveness.
+                let deadline =
+                    std::time::Instant::now() + std::time::Duration::from_secs(10);
+                while std::time::Instant::now() < deadline {
+                    if unsafe { libc_kill(pid, 0) } != 0 {
+                        let _ = std::fs::remove_file(daemon_pid_path());
+                        eprintln!("✓ stopped (pid {pid})");
+                        return 0;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                }
+                eprintln!("⚠ pid {pid} didn't exit after 10s; leaving it alone");
+                return 1;
+            }
+            // kill() failed — pid likely stale. Clean up and fall
+            // through to service_install so a service-managed instance
+            // (if any) still gets stopped.
+            let _ = std::fs::remove_file(daemon_pid_path());
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = pid;
+        }
+    }
+
     match crate::service_install::stop_service() {
         Ok(()) => {
             eprintln!("✓ stop signal sent — daemon will exit after draining in-flight requests");
@@ -584,6 +623,176 @@ async fn stop_daemon() -> i32 {
             1
         }
     }
+}
+
+/// `sovereign daemon start` — spawn `daemon run` as a detached child
+/// so it keeps running after this CLI exits. Writes the child pid to
+/// `~/.sovereign/daemon.pid` and tails logs to `~/.sovereign/logs/`.
+///
+/// Idempotent: if `:9741` already answers, prints the running pid (if
+/// we wrote it) and returns 0.
+///
+/// This is the dev-workflow counterpart to `sovereign setup`'s
+/// launchd/systemd registration — when you don't want a service
+/// manager owning lifecycle, `start` gives you a one-liner.
+async fn start_daemon() -> i32 {
+    if wait_for_ready(std::time::Duration::from_millis(200)).await {
+        let pid_hint = read_daemon_pid()
+            .map(|p| format!(" (pid {p})"))
+            .unwrap_or_default();
+        eprintln!("✓ daemon already running on :9741{pid_hint}");
+        return 0;
+    }
+
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: cannot resolve current_exe: {e}");
+            return 1;
+        }
+    };
+
+    let log_dir = home_dir_buf().join(".sovereign").join("logs");
+    if let Err(e) = std::fs::create_dir_all(&log_dir) {
+        eprintln!("error: cannot create {}: {e}", log_dir.display());
+        return 1;
+    }
+    let out_path = log_dir.join("daemon.out");
+    let err_path = log_dir.join("daemon.err");
+
+    // Append so repeated start/stop cycles keep history rather than
+    // truncating on each launch — matches launchd's default rotation
+    // semantics (it also appends until an external log-rotator moves
+    // the file aside, which is the `.bak` pattern seen in the logs
+    // dir already).
+    let out_file = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&out_path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error: open {}: {e}", out_path.display());
+            return 1;
+        }
+    };
+    let err_file = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&err_path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error: open {}: {e}", err_path.display());
+            return 1;
+        }
+    };
+
+    // Clean up a stale PID file before writing a new one so `stop`
+    // can't target a recycled pid if the prior daemon crashed.
+    if let Some(pid) = read_daemon_pid() {
+        #[cfg(unix)]
+        if unsafe { libc_kill(pid, 0) } != 0 {
+            let _ = std::fs::remove_file(daemon_pid_path());
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = pid;
+        }
+    }
+
+    eprintln!("starting sovereign daemon (logs: {})…", log_dir.display());
+
+    let mut cmd = std::process::Command::new(&exe);
+    cmd.arg("daemon")
+        .arg("run")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::from(out_file))
+        .stderr(std::process::Stdio::from(err_file));
+
+    // Detach from the shell's process group so Ctrl-C in the invoking
+    // terminal doesn't take the daemon down with it. Combined with
+    // the /dev/null stdin + redirected stdio above, this is enough
+    // for the common dev case (launch-from-shell, close shell). For
+    // truly hostile environments (ssh disconnect on a flaky link),
+    // use the launchd/systemd path via `sovereign setup` instead.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    let child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: spawn daemon: {e}");
+            return 1;
+        }
+    };
+    let pid = child.id() as i32;
+
+    // Drop the Child handle so we don't wait on it — the process is
+    // now fully detached and owned by init (via process_group(0)).
+    drop(child);
+
+    let pid_path = daemon_pid_path();
+    if let Err(e) = std::fs::write(&pid_path, format!("{pid}\n")) {
+        eprintln!(
+            "⚠ started pid {pid} but could not write {}: {e}",
+            pid_path.display()
+        );
+        // Don't abort — the daemon is still coming up; caller can
+        // stop via `pkill -f 'sovereign daemon run'` if needed.
+    }
+
+    if wait_for_ready(std::time::Duration::from_secs(20)).await {
+        eprintln!("✓ daemon ready at http://127.0.0.1:9741 (pid {pid})");
+        return 0;
+    }
+    eprintln!(
+        "⚠ pid {pid} started but :9741 didn't respond within 20s\n\
+         tail {} for details",
+        err_path.display()
+    );
+    1
+}
+
+/// Path to the pidfile written by `daemon start`.
+fn daemon_pid_path() -> std::path::PathBuf {
+    home_dir_buf().join(".sovereign").join("daemon.pid")
+}
+
+/// Read the pidfile and return its pid if the process is still alive.
+/// Returns None for a missing, empty, unparseable, or stale pidfile.
+fn read_daemon_pid() -> Option<i32> {
+    let raw = std::fs::read_to_string(daemon_pid_path()).ok()?;
+    let pid: i32 = raw.trim().parse().ok()?;
+    #[cfg(unix)]
+    {
+        // `kill(pid, 0)` returns 0 iff the process exists and we have
+        // permission to signal it; any error (ESRCH, EPERM) means we
+        // shouldn't trust the pidfile.
+        if unsafe { libc_kill(pid, 0) } != 0 {
+            return None;
+        }
+    }
+    Some(pid)
+}
+
+// Minimal FFI shim for `kill(2)` so we can probe / signal the daemon
+// pid without pulling in the `libc` crate as a dep. Signature matches
+// POSIX: `int kill(pid_t pid, int sig)` where pid_t is i32 on every
+// platform Sovereign targets.
+#[cfg(unix)]
+extern "C" {
+    #[link_name = "kill"]
+    fn libc_kill(pid: i32, sig: i32) -> i32;
+}
+
+fn home_dir_buf() -> std::path::PathBuf {
+    std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
 }
 
 async fn restart_daemon() -> i32 {

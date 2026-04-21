@@ -1323,8 +1323,63 @@ async fn cmd_refresh(args: &[String]) -> i32 {
         }
     }
 
-    let graph = match corpus_engine::ScipGraph::open(&scip_graph_path, &corpus_id) {
+    // Use the integrity-checking open so a v1 / corrupt DB left over
+    // from a past schema is self-healed into a fresh v2 DB rather than
+    // wedging on `no such column: corpus_id` at index-creation time —
+    // which is exactly what `sovereign doctor`'s `scip_integrity`
+    // repair hint used to run into. Mirrors `Reindexer::register`.
+    let graph = match corpus_engine::ScipGraph::open_with_integrity(
+        &scip_graph_path,
+        &corpus_id,
+    ) {
         Ok(g) => g,
+        Err(corpus_engine::OpenError::Corrupt { moved_to }) => {
+            if !quiet {
+                eprintln!(
+                    "  \u{26a0} SCIP DB was corrupt; quarantined to {}",
+                    moved_to.display()
+                );
+                eprintln!("    Rebuilding from scratch.");
+            }
+            match corpus_engine::ScipGraph::open_with_integrity(
+                &scip_graph_path,
+                &corpus_id,
+            ) {
+                Ok(g) => g,
+                Err(e) => {
+                    eprintln!(
+                        "error: cannot open SCIP graph after quarantine: {e}"
+                    );
+                    return 1;
+                }
+            }
+        }
+        Err(corpus_engine::OpenError::SchemaMismatch { found, expected }) => {
+            if !quiet {
+                eprintln!(
+                    "  \u{26a0} SCIP DB schema v{found} is stale (current: v{expected}); resetting."
+                );
+            }
+            if let Err(e) = reset_scip_db(&scip_graph_path) {
+                eprintln!(
+                    "error: cannot reset stale SCIP DB at {}: {e}",
+                    scip_graph_path.display()
+                );
+                return 1;
+            }
+            match corpus_engine::ScipGraph::open_with_integrity(
+                &scip_graph_path,
+                &corpus_id,
+            ) {
+                Ok(g) => g,
+                Err(e) => {
+                    eprintln!(
+                        "error: cannot open SCIP graph after reset: {e}"
+                    );
+                    return 1;
+                }
+            }
+        }
         Err(e) => {
             eprintln!("error: cannot open SCIP graph: {e}");
             eprintln!("Run `sovereign project init` first.");
@@ -1406,6 +1461,29 @@ async fn cmd_refresh(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// Remove a SCIP graph DB file and its SQLite journal sidecars so
+/// a subsequent `open_with_integrity` starts from a clean slate.
+/// Missing files are not errors — a partial reset is still a reset.
+fn reset_scip_db(db_path: &Path) -> std::io::Result<()> {
+    for suffix in ["", "-wal", "-shm"] {
+        let p = if suffix.is_empty() {
+            db_path.to_path_buf()
+        } else {
+            let name = db_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("scip_graph.db");
+            db_path.with_file_name(format!("{name}{suffix}"))
+        };
+        match std::fs::remove_file(&p) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 // ─── Serve ───────────────────────────────────────────────────
