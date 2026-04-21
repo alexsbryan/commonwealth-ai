@@ -3817,6 +3817,24 @@ MCP server: http://localhost:{port}/mcp
 Corpus: {corpus_id}
 Languages: {langs}
 
+## Two ways to reach the tools
+
+**MCP (preferred when the daemon is running).** Clients like Claude Code
+auto-discover the full tool set via `tools/list` against the server above.
+Structured, fast, native.
+
+**CLI fallback.** The same 24 tools are callable as shell commands:
+
+```
+sovereign tools list                           # manifest, grouped by Effect × Scope
+sovereign tools describe <id>                  # full descriptor + parameters + output keys + examples
+sovereign tools call <id> [--key=value ...]    # invoke, plain text or --format json output
+```
+
+`sovereign tools call symbol_lookup --name=Foo` runs the same
+`Tool::execute()` as the MCP path — pick whichever is in front of you. Use
+the CLI when the daemon isn't up, when scripting, or to see `--help`.
+
 ## Tools
 
 | Tool | When to use | Notes |
@@ -4132,10 +4150,16 @@ fn generate_agents_md(corpus_id: &str, port: u16, has_scip: bool, commonwealth_u
     format!(
         "# Agent instructions — {corpus_id}\n\
          \n\
-         ## Code intelligence (MCP)\n\
+         ## Code intelligence (MCP preferred; CLI fallback)\n\
          \n\
          A sovereign MCP server at `http://localhost:{port}/mcp` exposes compiler-resolved\n\
          tools for this codebase. **Use MCP tools before reading files.**\n\
+         \n\
+         When MCP isn't available (daemon stopped, scripting, ad-hoc shell use), the\n\
+         same tools are reachable as `sovereign tools {{list|describe|call}} ...` —\n\
+         plain-text output, `--help` on every subcommand. `sovereign tools list`\n\
+         prints the live catalog grouped by Effect × Scope. Same `Tool::execute()`\n\
+         underneath either path.\n\
          \n\
          | Tool | Purpose |\n\
          |---|---|\n\
@@ -4272,7 +4296,10 @@ fn generate_claude_settings(
         "You have access to Sovereign code intelligence for \
          the {corpus_id} codebase via MCP. \
          Read .sovereign/SOVEREIGN.md for the full tool reference \
-         and project-specific invariants.\n\n\
+         and project-specific invariants. When MCP isn't available \
+         (daemon stopped, scripting, non-MCP client), the same tools \
+         are reachable as `sovereign tools {{list|describe|call}}` — \
+         see `.sovereign/SOVEREIGN.md` for the CLI section.\n\n\
          SESSION START — run these three calls before anything else:\n\
          1. recent_changes(hours: 24) — see which subsystems are active\n\
          2. project_context(\"<user task>\") — pull relevant conventions\n\

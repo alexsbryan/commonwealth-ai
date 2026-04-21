@@ -44,15 +44,22 @@ First-run onboarding. Detects hardware, downloads models, starts the daemon.
 
 ### `sovereign project`
 
-Per-project code intelligence. See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) for the full flow.
+Per-project code intelligence **and** the project-layer half of ATOS (charter + phases). See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) for the indexing flow and [ATOS.md](ATOS.md) for the charter flow.
 
 | Subcommand | Description |
 |---|---|
-| `init` | Set up code intelligence for the current workspace |
-| `status` | Show the status of code intelligence |
+| `init` | Set up code intelligence for the current workspace; also installs the opencode ATOS plugin |
+| `status` | Show the status of code intelligence + ATOS scaffold (founded? current phase?) |
 | `refresh` | Re-export the SCIP call graph |
 | `serve` | Start a lightweight MCP server (no model required) |
 | `install-hooks` | Upgrade (or install) the post-commit hook |
+| `found [--design <path>]` | Four-stage founding conversation; writes `.sovereign/CHARTER.md` and `PHASES.md`, records answers as `decision` notes |
+| `amend` | Open `CHARTER.md` in `$EDITOR`; on save, diff section-by-section and run adversarial Q&A for changed sections; write amendment log + new hash |
+| `phase status` | Show founding state + current phase |
+| `phase pass [N]` | Run phase N's stop condition from `PHASES.md`; write `phase-N.md` on green |
+| `audit` | One-page reviewer rollup: founding state, phases passed, notes by kind, open questions, drift status |
+| `register` | Register the project with the sovereign daemon for FS-watch + auto-refresh |
+| `watch status` | Inspect the daemon's watcher state for this project |
 
 ### `sovereign mesh`
 
@@ -131,6 +138,44 @@ Inspect and test configured MCP servers.
 | `list` | List configured MCP servers with status |
 | `test <server>` | Test connection to a named server |
 | `tools [server]` | List available MCP tools |
+
+### `sovereign tools`
+
+Invoke the 24 sovereign code-intelligence tools directly from the shell. Same `Tool::execute()` as the MCP path — use this when the daemon isn't running, when scripting, or for self-documenting `--help`. See [ARCH_PRINCIPLES.md](../ARCH_PRINCIPLES.md) §2 for the behavioural properties each tool declares.
+
+| Subcommand | Description |
+|---|---|
+| `list` | Print the tool manifest, grouped by Effect × Scope (Read/Write × Session/Persistent/External) |
+| `describe <id>` | Full descriptor for one tool: parameters JSON Schema, output schema (compose-able keys), examples with ready-to-copy `tools call` invocations |
+| `call <id> [--key=value ...]` | Invoke the tool. Flags become the JSON params object; `--format text\|json` picks output shape; write-effectful tools print an `[audit]` banner |
+
+Output is plain text by default, shaped for LLM consumption (fenced code blocks, markdown lists) — no JSON to parse. Agents running in a terminal can call these as primitives alongside `rg` / `cargo check`.
+
+### `sovereign atos`
+
+Feature-layer orchestration — the Agent Task Orchestration System CLI. See [ATOS.md](ATOS.md) for the full flow; this is the command reference only.
+
+| Subcommand | Description |
+|---|---|
+| `provision <id> --charter <path>` | Parse a charter, seed the feature + milestones |
+| `next [<feature-id>]` | Find the next unfinished milestone and hand off to a driver (`claude` / `opencode`) |
+| `start-milestone <id> --brief <path>` | Open a run, spawn the driver; `--red-team` for red-team mode |
+| `end-milestone <id>` | Run the stop condition, close the run, write `milestone-<N>.md` |
+| `archive <id> --reason <text>` | Mark a feature archived |
+| `status [<id>]` | Feature list, or detailed status + artifact checklist for one feature |
+| `promote <note-id> --to feature\|global` | Lift a note to a wider scope |
+| `diff <feature-id> [--ordinal N]` | Side-by-side per-tool activity across A/B driver runs |
+| `run-ab <feature-id> --brief <path> [--drivers claude,opencode]` | Run each driver against the same milestone, then diff |
+| `probe-driver [--url <endpoint>]` | Trivial tool-use sanity check against an OpenAI-compatible server |
+| `report <feature-id> [--section ...] [--out <path>]` | Render milestone / red-team / epistemic / all reports |
+| `teardown <feature-id> [--auto] [--dry-run]` | Interactive note-classification pass; writes `epistemic-report.md` |
+| `feature approve <id>` | Commonwealth-native approval fallback (no git commit required) |
+| `spec diff <id>` | Unified diff of current spec vs. approved content |
+| `spec accept <id> [--reason <text>]` | Accept current spec as new approved content, log a `deviation` note |
+| `doctor` | Health check: repo, `.sovereign/`, DB schemas, plugin freshness, per-feature approval + drift |
+| `install-plugin` | (Re)install the opencode plugin at `.opencode/plugins/sovereign-atos.ts` |
+
+Related project-layer commands (under `sovereign project`) for the charter-level flow: `found`, `amend`, `phase pass N`, `audit`.
 
 ### `sovereign daemon`
 

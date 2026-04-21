@@ -2,6 +2,25 @@
  * sovereign-atos — opencode plugin that plumbs an opencode session into
  * the ATOS run ledger + digest preamble.
  *
+ * ## Related surfaces (discoverability)
+ *
+ * The sovereign toolkit exposes its 24 code-intelligence tools through
+ * three routes. If you're in this plugin you're using #2 or #3:
+ *
+ *   1. MCP — `http://localhost:9741/mcp`. Claude Code and other MCP-native
+ *      clients auto-discover via `tools/list`. This plugin POSTs ledger
+ *      events to that same MCP endpoint.
+ *   2. Sovereign CLI — `sovereign tools list | describe <id> | call <id>`.
+ *      Useful when the daemon isn't running, for shell scripting, or when
+ *      you want `--help` documentation. Same underlying `Tool::execute()`
+ *      as MCP, just a different transport.
+ *   3. ATOS sovereign-coder pipeline — the context_injector middleware
+ *      auto-splices a "## Available via `sovereign tools` CLI" catalog
+ *      into every opencode session's preamble, generated live from the
+ *      shared tool manifest.
+ *
+ * ## Environment
+ *
  * Reads two environment variables set by `sovereign atos start-milestone`:
  *
  *   SOVEREIGN_FEATURE_ID    — active feature id (same one the sovereign
