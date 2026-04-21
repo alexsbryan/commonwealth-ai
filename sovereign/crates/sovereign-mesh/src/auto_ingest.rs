@@ -195,7 +195,21 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             if !active_ingests.contains(corpus_id) && has_local_source {
                 let partition_path = engine.partition_path(corpus_id);
                 if partition_path.exists() {
-                    spawn_local_ingest(state.clone(), corpus_id.clone()).await;
+                    // When a queue-mode handoff for this corpus is visible in
+                    // mesh_store, a pull_loop (spawned either locally or on
+                    // peers) owns the ingest. Skipping spawn_local_ingest
+                    // prevents two loops from writing to the same partition
+                    // dir and fighting over the single embed slot — the
+                    // reason LittleMac's pre-fix throughput stayed at CPU
+                    // rate even while it held a queue lease.
+                    if has_active_queue_handoff(&state, corpus_id).await {
+                        tracing::info!(
+                            corpus = %corpus_id,
+                            "auto_ingest: queue handoff active — pull_loops own this corpus, skipping spawn_local_ingest"
+                        );
+                    } else {
+                        spawn_local_ingest(state.clone(), corpus_id.clone()).await;
+                    }
                 }
             }
 
@@ -303,6 +317,31 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 /// route means there is exactly one spawn path, so the cancel route,
 /// the progress map, and `active_ingests` bookkeeping all stay
 /// consistent regardless of who initiated the install.
+/// Returns `true` when mesh_store carries an Open-phase, queue-mode
+/// IngestionHandoff for `corpus_id`. Used by the tick loop to avoid
+/// double-ingesting: if the queue owns this corpus, neither coordinator
+/// nor peer should run a separate spawn_local_ingest — the pull_loop
+/// (self or remote) is the single writer into `<corpus>-partition-<node>/`.
+async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
+    let entries = match state.inner.mesh_store.scan("corpus-engine", "handoff:") {
+        Ok(e) => e,
+        Err(_) => return false,
+    };
+    for entry in entries {
+        let handoff: IngestionHandoff = match serde_json::from_slice(&entry.value) {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+        if handoff.corpus_id == corpus_id
+            && handoff.is_queue_mode()
+            && matches!(handoff.phase, HandoffPhase::Open)
+        {
+            return true;
+        }
+    }
+    false
+}
+
 async fn spawn_local_ingest(state: AppState, corpus_id: String) {
     use commonwealth_api::routes_internal::spawn_corpus_install;
     let spawned = spawn_corpus_install(state, corpus_id.clone()).await;
@@ -380,12 +419,12 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
         if !matches!(handoff.phase, HandoffPhase::Open) {
             continue;
         }
-        // Skip handoffs we're the coordinator for — we pull via direct
-        // in-process calls (not HTTP) elsewhere; a self-loop would work
-        // but adds no value and pollutes the logs.
-        if handoff.merge_leader == Some(self_id) {
-            continue;
-        }
+        // Coordinators pull from their own queue too. Without this, a
+        // fast Metal-backed coordinator sits idle after registering the
+        // queue while a slow CPU peer chews one unit at a time — no
+        // work-sharing benefit. The self-pull is a localhost HTTP hop
+        // (cheap) and exercises the same code path as a remote pull,
+        // so there's no special case downstream.
         // Must match embed model exactly. EmbedModelInfo equality covers
         // model_id, dimensions, pooling, normalization.
         if handoff.embed_model != local_embed {

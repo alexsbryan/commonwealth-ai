@@ -328,6 +328,89 @@ pub async fn run_one_round(
         }
     }
 
+    // ── Step 4: mesh_store replication ──────────────────────────────
+    //
+    // The Mesh gossip above only syncs the member list. Entries in
+    // `mesh_store` (queue-mode IngestionHandoffs, app-state blobs,
+    // app manifests) need their own push — `/internal/app/state`
+    // has been the receiver since before the work-queue work, but
+    // nothing has ever been the *sender*. Without this step, a
+    // coordinator-registered pull-based handoff stays invisible to
+    // peers, their `discover_and_spawn_pull_loops` finds nothing to
+    // scan, and the queue path silently does nothing despite both
+    // nodes thinking they set it up.
+    //
+    // Payload: full snapshot (anti-entropy). LWW merge on the receiver
+    // (`mesh_store::merge_entry`) makes duplicates cheap — the cost is
+    // one POST per online peer per round, and at 10s cadence with a
+    // handful of handoffs that's negligible.
+    if let Ok(entries) = app_state.inner.mesh_store.all_entries_for_gossip() {
+        if !entries.is_empty() {
+            let wire_entries: Vec<serde_json::Value> = entries
+                .iter()
+                .map(|e| {
+                    serde_json::json!({
+                        "app_id": e.app_id,
+                        "key": e.key,
+                        // `/internal/app/state`'s base64_decode stub
+                        // passes the value through as raw UTF-8. All
+                        // current mesh_store entries are JSON blobs
+                        // (handoffs, app manifests) that round-trip
+                        // cleanly through UTF-8.
+                        "value_b64": String::from_utf8_lossy(&e.value).into_owned(),
+                        "timestamp": e.timestamp,
+                        "origin_hex": hex::encode(e.origin.as_bytes()),
+                    })
+                })
+                .collect();
+            let store_body = serde_json::json!({ "entries": wire_entries });
+
+            // Re-read the peer list — the earlier loop consumed `selection`.
+            let store_targets: Vec<(NodeId, Vec<std::net::SocketAddr>)> = {
+                let mesh = app_state.inner.mesh.read().await;
+                mesh.members
+                    .values()
+                    .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
+                    .map(|m| (m.node_id, m.addresses.iter().copied().collect()))
+                    .collect()
+            };
+
+            for (peer_id, addrs) in store_targets {
+                for addr in &addrs {
+                    let url = format!("http://{addr}/internal/app/state");
+                    match http.post(&url).json(&store_body).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            tracing::debug!(
+                                peer = %peer_id,
+                                url = %url,
+                                entries = entries.len(),
+                                "gossip: mesh_store pushed to peer"
+                            );
+                            break; // one working address is enough
+                        }
+                        Ok(resp) => {
+                            tracing::debug!(
+                                peer = %peer_id,
+                                url = %url,
+                                status = %resp.status(),
+                                "gossip: mesh_store push rejected"
+                            );
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::debug!(
+                                peer = %peer_id,
+                                url = %url,
+                                error = %e,
+                                "gossip: mesh_store push failed, trying next address"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
