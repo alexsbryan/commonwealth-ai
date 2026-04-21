@@ -172,47 +172,6 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                 .is_some()
                 || engine.count_jsonl_articles(corpus_id).is_ok();
 
-            // Ensure local work is running. The daemon is the single
-            // owner of "resume my in-progress partition-of-self" under
-            // the unified ingest primitive — Desktop used to spawn its
-            // own engine.ingest() task, but that process dies when the
-            // user closes the app. If the daemon survives and sees a
-            // partition-of-self dir marked in-progress, it has to pick
-            // up the work itself; otherwise Wikipedia never finishes
-            // unless the user leaves Desktop open for hours.
-            //
-            // We skip this path when (a) an ingest task is already
-            // tracked in active_ingests — avoids double-spawn racing
-            // the LanceDB writer — (b) there is no partition-of-self
-            // directory, which means the corpus id came from legacy
-            // canonical state that the engine's ingest() will continue
-            // writing in place, or (c) this node has no local source
-            // data — calling spawn_corpus_install on a peer that was
-            // assigned a partition via ingest_partition would fail with
-            // "zero chunks" AND insert the corpus into active_ingests,
-            // causing the coordinator's next ingest_partition to bounce
-            // with a 409 and stall the whole pipeline.
-            if !active_ingests.contains(corpus_id) && has_local_source {
-                let partition_path = engine.partition_path(corpus_id);
-                if partition_path.exists() {
-                    // When a queue-mode handoff for this corpus is visible in
-                    // mesh_store, a pull_loop (spawned either locally or on
-                    // peers) owns the ingest. Skipping spawn_local_ingest
-                    // prevents two loops from writing to the same partition
-                    // dir and fighting over the single embed slot — the
-                    // reason LittleMac's pre-fix throughput stayed at CPU
-                    // rate even while it held a queue lease.
-                    if has_active_queue_handoff(&state, corpus_id).await {
-                        tracing::info!(
-                            corpus = %corpus_id,
-                            "auto_ingest: queue handoff active — pull_loops own this corpus, skipping spawn_local_ingest"
-                        );
-                    } else {
-                        spawn_local_ingest(state.clone(), corpus_id.clone()).await;
-                    }
-                }
-            }
-
             // Peer-only node: no source data means no collaborate role here.
             // The coordinator will send ingest_partition when it's ready.
             if !has_local_source {
@@ -223,80 +182,127 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                 continue;
             }
 
-            // Skip the peer-dispatch step when we're already ingesting
-            // AND neither a new peer nor a new in-progress corpus just
-            // appeared. (When either appears we still call
-            // corpus_collaborate so the freshly-arrived peer gets its
-            // share of work.)
-            if active_ingests.contains(corpus_id)
+            // ── 1. Dispatch collaboration FIRST ─────────────────────────
+            //
+            // Register the pull-queue handoff before any decision about
+            // spawning a solo local ingest. The previous ordering fired
+            // spawn_local_ingest first, registered the handoff a few
+            // hundred ms later, then on the next tick the pull_loop
+            // discovered the handoff and began self-pulling — racing
+            // the already-running solo task on the same partition dir.
+            // That collision surfaced as an endless "Table 'chunks'
+            // already exists" crash loop on every unit after the first
+            // (see `pull_loop: ingest_with_overrides failed` in prod
+            // logs from 2026-04-21). Running corpus_collaborate first
+            // lets `has_active_queue_handoff` below observe the handoff
+            // we just registered and cleanly hand ownership to pull_loops.
+            let should_collab = !(active_ingests.contains(corpus_id)
                 && !new_peer_appeared
-                && !new_ingest_appeared
-            {
-                tracing::debug!(
+                && !new_ingest_appeared)
+                && !(triggered.get(corpus_id).map_or(false, |t| t.elapsed() < COOLDOWN)
+                    && !new_peer_appeared
+                    && !new_ingest_appeared);
+
+            if should_collab {
+                tracing::info!(
                     corpus = %corpus_id,
-                    "auto_ingest: ingest task is active and no new trigger — skipping collaborate dispatch"
+                    new_peer = new_peer_appeared,
+                    is_restart = triggered.get(corpus_id).is_none(),
+                    "auto_ingest: triggering collaboration"
                 );
-                continue;
+
+                let url = format!(
+                    "http://127.0.0.1:{daemon_port}/internal/corpus/collaborate"
+                );
+                let body = serde_json::json!({ "corpus_id": corpus_id });
+                match client.post(&url).json(&body).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        tracing::info!(corpus = %corpus_id, "auto_ingest: collaboration started");
+                        triggered.insert(corpus_id.clone(), Instant::now());
+                    }
+                    Ok(resp) if resp.status().as_u16() == 409 => {
+                        tracing::info!(
+                            corpus = %corpus_id,
+                            "auto_ingest: corpus already complete — cooling down"
+                        );
+                        triggered.insert(corpus_id.clone(), Instant::now());
+                    }
+                    Ok(resp) if resp.status().as_u16() == 422 => {
+                        // No compatible peers — don't cooldown, retry on
+                        // next peer join. INFO (not debug) so the user
+                        // sees *why* Machine B isn't getting work when
+                        // they check the log: mismatched embed model,
+                        // offline peers, etc. The coordinator's own
+                        // log line carries the specific reason.
+                        let body = resp.text().await.unwrap_or_default();
+                        tracing::info!(
+                            corpus = %corpus_id,
+                            reason = %body,
+                            "auto_ingest: no compatible peers yet — will retry on peer/ingest change"
+                        );
+                    }
+                    Ok(resp) => {
+                        let status = resp.status().as_u16();
+                        let body = resp.text().await.unwrap_or_default();
+                        tracing::warn!(
+                            corpus = %corpus_id,
+                            status,
+                            body = %body,
+                            "auto_ingest: unexpected response from collaborate handler"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            corpus = %corpus_id,
+                            error = %e,
+                            "auto_ingest: request to local collaborate endpoint failed"
+                        );
+                    }
+                }
             }
 
-            if triggered.get(corpus_id).map_or(false, |t| t.elapsed() < COOLDOWN)
-                && !new_peer_appeared
-                && !new_ingest_appeared
-            {
-                continue;
-            }
-
-            tracing::info!(
-                corpus = %corpus_id,
-                new_peer = new_peer_appeared,
-                is_restart = triggered.get(corpus_id).is_none(),
-                "auto_ingest: triggering collaboration"
-            );
-
-            let url = format!("http://127.0.0.1:{daemon_port}/internal/corpus/collaborate");
-            let body = serde_json::json!({ "corpus_id": corpus_id });
-            match client.post(&url).json(&body).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    tracing::info!(corpus = %corpus_id, "auto_ingest: collaboration started");
-                    triggered.insert(corpus_id.clone(), Instant::now());
-                }
-                Ok(resp) if resp.status().as_u16() == 409 => {
-                    tracing::info!(
-                        corpus = %corpus_id,
-                        "auto_ingest: corpus already complete — cooling down"
-                    );
-                    triggered.insert(corpus_id.clone(), Instant::now());
-                }
-                Ok(resp) if resp.status().as_u16() == 422 => {
-                    // No compatible peers — don't cooldown, retry on
-                    // next peer join. INFO (not debug) so the user
-                    // sees *why* Machine B isn't getting work when
-                    // they check the log: mismatched embed model,
-                    // offline peers, etc. The coordinator's own
-                    // log line carries the specific reason.
-                    let body = resp.text().await.unwrap_or_default();
-                    tracing::info!(
-                        corpus = %corpus_id,
-                        reason = %body,
-                        "auto_ingest: no compatible peers yet — will retry on peer/ingest change"
-                    );
-                }
-                Ok(resp) => {
-                    let status = resp.status().as_u16();
-                    let body = resp.text().await.unwrap_or_default();
-                    tracing::warn!(
-                        corpus = %corpus_id,
-                        status,
-                        body = %body,
-                        "auto_ingest: unexpected response from collaborate handler"
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        corpus = %corpus_id,
-                        error = %e,
-                        "auto_ingest: request to local collaborate endpoint failed"
-                    );
+            // ── 2. Ensure local work is running ─────────────────────────
+            //
+            // The daemon is the single owner of "resume my in-progress
+            // partition-of-self" under the unified ingest primitive —
+            // Desktop used to spawn its own engine.ingest() task, but
+            // that process dies when the user closes the app. If the
+            // daemon survives and sees a partition-of-self dir marked
+            // in-progress, it has to pick up the work itself; otherwise
+            // Wikipedia never finishes unless the user leaves Desktop
+            // open for hours.
+            //
+            // We skip this path when (a) an ingest task is already
+            // tracked in active_ingests — avoids double-spawn racing
+            // the LanceDB writer — (b) there is no partition-of-self
+            // directory, which means the corpus id came from legacy
+            // canonical state that the engine's ingest() will continue
+            // writing in place, or (c) a queue-mode handoff is present
+            // — pull_loops (local self-pull + remote peers) will own
+            // the ingest and a solo writer would deadlock the partition.
+            if !active_ingests.contains(corpus_id) {
+                let partition_path = engine.partition_path(corpus_id);
+                if partition_path.exists() {
+                    // When a queue-mode handoff for this corpus is visible in
+                    // mesh_store, a pull_loop (spawned either locally or on
+                    // peers) owns the ingest. Skipping spawn_local_ingest
+                    // prevents two loops from writing to the same partition
+                    // dir and fighting over the single embed slot — the
+                    // reason LittleMac's pre-fix throughput stayed at CPU
+                    // rate even while it held a queue lease.
+                    //
+                    // Because the collaborate dispatch above ran first, a
+                    // freshly-registered handoff from *this* tick is
+                    // already visible to this check — closing the
+                    // spawn-before-register race window.
+                    if has_active_queue_handoff(&state, corpus_id).await {
+                        tracing::info!(
+                            corpus = %corpus_id,
+                            "auto_ingest: queue handoff active — pull_loops own this corpus, skipping spawn_local_ingest"
+                        );
+                    } else {
+                        spawn_local_ingest(state.clone(), corpus_id.clone()).await;
+                    }
                 }
             }
         }
