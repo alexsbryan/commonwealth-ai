@@ -287,6 +287,21 @@ pub async fn corpus_collaborate(
             self_id,
         );
 
+        // Close the duplicate-ingest race: on fresh daemon the auto_ingest
+        // tick can fire `spawn_local_ingest` microseconds before this
+        // handoff becomes visible via `has_active_queue_handoff`. Tripping
+        // the engine's per-corpus cancel flag here signals any in-flight
+        // `engine.ingest(...)` task to bail at its next cancel check,
+        // leaving the pull_loops as the single writer into
+        // `<corpus>-partition-<node>/`. No-op when nothing is running.
+        if engine.cancel_corpus_ingest(&req.corpus_id) {
+            tracing::info!(
+                corpus = %req.corpus_id,
+                handoff = %handoff.handoff_id,
+                "corpus_collaborate: queue handoff registered — cancelling in-flight spawn_local_ingest"
+            );
+        }
+
         // The gossip loop only replicates the `Mesh` member list; it does
         // NOT yet replicate mesh_store entries (the sender half is
         // missing — `all_entries_for_gossip` is defined but unused, and
