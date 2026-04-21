@@ -847,6 +847,7 @@ fn acquirer_source_url(recipe: &Recipe) -> String {
         }
         AcquirerConfig::ApiPaginated { base_url, .. } => base_url.clone(),
         AcquirerConfig::LocalFile { path } => format!("file://{path}"),
+        AcquirerConfig::Custom { kind, .. } => format!("custom:{kind}"),
     }
 }
 

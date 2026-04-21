@@ -38,6 +38,14 @@ impl DomainRegistry {
         registry.register("multi", || {
             Arc::new(super::domains::multi::MultiDomain::wikipedia_default())
         });
+        // KnowledgeView domains — enrich SQLite-sourced corpora
+        // (memories → personal, conversations → conversational).
+        registry.register("personal", || {
+            Arc::new(super::domains::personal::PersonalDomain)
+        });
+        registry.register("conversational", || {
+            Arc::new(super::domains::conversational::ConversationalDomain)
+        });
         registry
     }
 
@@ -62,9 +70,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builtin_has_all_six_domains() {
+    fn builtin_has_all_domains() {
         let reg = DomainRegistry::builtin();
-        for id in ["philosophy", "science", "policy", "legal", "community", "multi"] {
+        for id in [
+            "philosophy",
+            "science",
+            "policy",
+            "legal",
+            "community",
+            "multi",
+            "personal",
+            "conversational",
+        ] {
             assert!(reg.get(id).is_some(), "missing domain: {id}");
         }
     }

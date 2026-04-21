@@ -62,7 +62,11 @@ impl CorpusDiskStatus {
     }
 }
 
+use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::sync::{Arc, RwLock};
 
 use chrono::Utc;
 
@@ -77,6 +81,29 @@ use crate::registry::RecipeRegistry;
 use crate::types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, EmbedFn, IndexInfo, IndexStats, ShardInfo,
 };
+
+/// Runtime-registered acquirer closure. Receives the custom acquirer
+/// `params` blob from the recipe and the per-ingest `download_dir`;
+/// returns the local path that the extractor should read (typically a
+/// JSONL file).
+///
+/// Uses `Pin<Box<dyn Future>>` rather than the static-dispatch [`Acquirer`]
+/// trait because it must be object-safe: the registry stores heterogeneous
+/// implementations keyed by `kind` string.
+///
+/// Progress reporting is intentionally omitted here. The
+/// `ProgressCallback` type is not `Clone`, and KnowledgeView-style
+/// acquirers (SQLite → JSONL) finish in sub-second time, so a progress
+/// bar buys nothing. If a future custom acquirer needs progress, the
+/// closure can emit it via its own side channel.
+pub type CustomAcquirerFn = Arc<
+    dyn Fn(
+            serde_json::Value,
+            PathBuf,
+        ) -> Pin<Box<dyn Future<Output = Result<PathBuf>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Default partition-suffix for engines constructed without a mesh
 /// node id (standalone CLI / tests). Mesh daemons override via
@@ -127,6 +154,11 @@ pub struct CorpusEngine {
     /// user-initiated cancel from Desktop can signal whichever task is
     /// actually running.
     cancel_registry: CancellationRegistry,
+    /// Runtime-registered acquirers, keyed by the `kind` string on
+    /// [`AcquirerConfig::Custom`]. Populated by callers (typically
+    /// `sovereign-tools` via [`CorpusEngine::register_acquirer`]) so
+    /// DB-reading acquirers can live outside this crate.
+    custom_acquirers: Arc<RwLock<HashMap<String, CustomAcquirerFn>>>,
 }
 
 /// Returns the raw ZIP entry indices (in TOC order) that represent real
@@ -202,7 +234,32 @@ impl CorpusEngine {
             expected_embedding_model: "qwen3-embedding-0.6b".to_string(),
             self_node_id: DEFAULT_LOCAL_NODE_SUFFIX.to_string(),
             cancel_registry: CancellationRegistry::new(),
+            custom_acquirers: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Register a custom acquirer keyed by `kind`. Recipes referencing
+    /// `[acquire] type = "custom" kind = "<kind>" params = { ... }`
+    /// will dispatch through this closure at ingest time.
+    ///
+    /// Overwrites any previously registered acquirer with the same
+    /// `kind`. Call before [`CorpusEngine::ingest`].
+    pub fn register_acquirer(&self, kind: impl Into<String>, acquirer: CustomAcquirerFn) {
+        let mut guard = self
+            .custom_acquirers
+            .write()
+            .expect("custom_acquirers RwLock poisoned");
+        guard.insert(kind.into(), acquirer);
+    }
+
+    /// Look up a registered custom acquirer by `kind`. Used by the
+    /// ingest dispatch in [`acquire_source`].
+    pub(crate) fn custom_acquirer(&self, kind: &str) -> Option<CustomAcquirerFn> {
+        let guard = self
+            .custom_acquirers
+            .read()
+            .expect("custom_acquirers RwLock poisoned");
+        guard.get(kind).cloned()
     }
 
     /// Set the partition suffix used when writing to

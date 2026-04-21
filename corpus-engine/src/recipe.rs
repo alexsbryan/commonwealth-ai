@@ -235,6 +235,14 @@ pub struct CorpusMeta {
     pub license: String,
     #[serde(default = "default_true")]
     pub mesh_sharing: bool,
+    /// Distribution scope. `Some("local")` pins a corpus to the host
+    /// machine: it may never be shared via the mesh regardless of
+    /// `mesh_sharing`. Used by `KnowledgeView` corpora sourced from
+    /// private state (e.g. `personal-knowledge`, `conversation-history`)
+    /// so the privacy guarantee is structural, not policy-layer.
+    /// `None` = default behaviour governed by `mesh_sharing`.
+    #[serde(default)]
+    pub scope: Option<String>,
     /// Whether peers may run federated knowledge-search queries
     /// against a node that hosts this corpus. Distinct from
     /// `mesh_sharing`, which governs byte-level redistribution
@@ -313,6 +321,18 @@ pub enum AcquirerConfig {
         /// `None` = download all files (default; preserves existing behaviour).
         #[serde(default)]
         file_indices: Option<Vec<usize>>,
+    },
+    /// Runtime-registered acquirer. `kind` selects an implementation
+    /// previously registered via [`CorpusEngine::register_acquirer`];
+    /// `params` is passed through unchanged so the implementation can
+    /// deserialize its own config. Used by `KnowledgeView` so that
+    /// DB-reading acquirers (SQLite, Postgres) can live outside the
+    /// `corpus-engine` crate, which stays free of database dependencies.
+    #[serde(rename = "custom")]
+    Custom {
+        kind: String,
+        #[serde(default)]
+        params: serde_json::Value,
     },
 }
 

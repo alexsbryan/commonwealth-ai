@@ -1,0 +1,367 @@
+//! PersonalDomain — enrichment for personal memories surfaced as a
+//! `KnowledgeView` over the `memories` table.
+//!
+//! Unlike `PhilosophyDomain`, which models a field of shared inquiry,
+//! `PersonalDomain` models a single person's intellectual and emotional
+//! terrain. "Positions" here are the stances a person has taken across
+//! memories; "fault lines" are places where those stances are in tension;
+//! "open questions" are the questions the person keeps returning to
+//! without resolution.
+//!
+//! The prompts are framed as a thoughtful friend might frame them —
+//! not as a clinical observer. The output surfaces a landscape, not a
+//! diagnosis.
+
+use super::super::domain::{
+    AlignmentConfig, Chunk, ChunkFilter, ClusteringConfig, Domain, FaultLineConfig,
+    PositionStatusVocab, QuestionType, SkeletonStorage,
+};
+
+/// Personal corpora are small by design — one person's memories over
+/// months or years, typically hundreds to low thousands of rows.
+/// `min_cluster_size` must be small enough that meaningful clusters
+/// emerge on a few dozen memories.
+const CLUSTERING_MIN_CLUSTER_SIZE: usize = 3;
+const CLUSTERING_EPSILON: f32 = 0.15;
+const CLUSTERING_LABEL_SAMPLE_SIZE: usize = 5;
+const ALIGNMENT_THRESHOLD: f32 = 0.55;
+const ALIGNMENT_MIN_CHUNKS_DISCOVERY: usize = 12;
+const FAULT_LINE_PROXIMITY_THRESHOLD: f32 = 0.55;
+const FAULT_LINE_MIN_CONFIDENCE: f32 = 0.65;
+const OVERVIEW_MIN_TOKEN_COUNT: usize = 30;
+
+pub struct PersonalDomain;
+
+impl Domain for PersonalDomain {
+    fn id(&self) -> &str {
+        "personal"
+    }
+
+    fn name(&self) -> &str {
+        "Personal knowledge"
+    }
+
+    fn position_statuses(&self) -> &PositionStatusVocab {
+        &PositionStatusVocab {
+            dominant: "Held",
+            minority: "Tentative",
+            contested: "In tension",
+            settled: "Settled",
+        }
+    }
+
+    fn question_types(&self) -> &[QuestionType] {
+        &[
+            QuestionType::Normative,  // values, what matters
+            QuestionType::Conceptual, // self-understanding, framing
+            QuestionType::Factual,    // lived events recalled
+        ]
+    }
+
+    fn overview_filter(&self) -> ChunkFilter {
+        // The existing `ChunkFilter` has no predicate for "confidence > 0.7"
+        // (the spec's ideal), so we approximate with a length threshold:
+        // substantive memories are long enough to contain a position.
+        // A richer filter is tracked as v2 follow-up; see the
+        // KnowledgeView implementation plan.
+        ChunkFilter {
+            is_first_in_entry: None,
+            section_name_in: None,
+            min_token_count: Some(OVERVIEW_MIN_TOKEN_COUNT),
+            metadata_key_values: vec![],
+        }
+    }
+
+    fn skeleton_extraction_prompt(&self, chunks: &[&Chunk]) -> String {
+        let passages = chunks
+            .iter()
+            .enumerate()
+            .map(|(i, c)| format!("[Memory {}]\n{}", i + 1, c.content))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        format!(
+            r#"You are reading memories from one person's long-term record. These
+are things the person has said about themselves, their work, their
+relationships, and what they care about.
+
+For EACH memory, identify (if present):
+- The central concern, value, or question it expresses — stated as
+  the person would recognize it, not as a clinical category
+- The stance the memory takes on that concern (held, tentative,
+  in tension with something else)
+
+IMPORTANT:
+- Do not invent framings the memory does not support
+- Do not treat one-time statements as settled positions
+- If a memory is purely factual or logistical, return an empty
+  positions array
+
+Memories:
+{passages}
+
+Return ONLY a JSON array, one object per memory:
+[
+  {{
+    "passage_index": 0,
+    "canonical_question": "...",
+    "question_type": "normative|conceptual|factual",
+    "positions": [
+      {{
+        "name": "...",
+        "claim": "...",
+        "status": "held|tentative|in tension|settled",
+        "proponents": []
+      }}
+    ]
+  }}
+]"#,
+            passages = passages
+        )
+    }
+
+    fn cluster_labeling_prompt(&self, representative_chunks: &[&Chunk]) -> String {
+        let passages = representative_chunks
+            .iter()
+            .map(|c| c.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n---\n\n");
+
+        format!(
+            r#"These memories from one person's record cluster together — they
+share a theme the person returns to.
+
+Memories:
+{passages}
+
+Name the domain of concern they share, as a thoughtful friend would
+name it — not as a clinical category. Two to four words. Lowercase.
+
+Return JSON:
+{{
+  "topic": "...",
+  "position_name": "...",
+  "is_argumentative": false,
+  "is_objection": false,
+  "is_open_question": false,
+  "is_coherent": true
+}}
+
+`is_open_question` = true if the cluster is primarily unresolved
+inquiry rather than a settled concern.
+`is_argumentative` = true if the memories stake out a stance (as
+opposed to describing events or logistics).
+`is_coherent` = false if the memories don't actually share a theme
+on re-reading."#,
+            passages = passages
+        )
+    }
+
+    fn fault_line_detection_prompt(
+        &self,
+        chunks_a: &[&Chunk],
+        chunks_b: &[&Chunk],
+        position_a: &str,
+        position_b: &str,
+    ) -> String {
+        let format_passages = |chunks: &[&Chunk]| {
+            chunks
+                .iter()
+                .map(|c| c.content.as_str())
+                .collect::<Vec<_>>()
+                .join("\n---\n")
+        };
+
+        format!(
+            r#"Two stances from the same person's memories are in tension. Name
+the specific tension without trying to resolve it.
+
+Stance A: {position_a}
+Memories expressing this stance:
+{passages_a}
+
+Stance B: {position_b}
+Memories expressing this stance:
+{passages_b}
+
+Identify:
+1. The specific point where the stances are in genuine tension
+   (not a surface contradiction — a place where the person's
+   thinking is live, not settled)
+2. What each stance says that the other would have to answer to
+
+Return JSON:
+{{
+  "crux": "...",
+  "confidence": 0.0,
+  "resolution_condition": "..."
+}}
+
+`confidence` reflects how clearly the tension is in the memories
+themselves (0.0 = reading it in, 1.0 = explicit in the text)."#,
+            position_a = position_a,
+            position_b = position_b,
+            passages_a = format_passages(chunks_a),
+            passages_b = format_passages(chunks_b),
+        )
+    }
+
+    fn open_question_prompt(&self, chunks: &[&Chunk]) -> String {
+        let passages = chunks
+            .iter()
+            .map(|c| c.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n---\n");
+
+        format!(
+            r#"These memories reflect something the person keeps returning to
+without arriving at a stable answer.
+
+Memories:
+{passages}
+
+Name the question they are asking — as the person might phrase it
+if they were to name their own inquiry. Not as a research question,
+as a live uncertainty.
+
+Return JSON:
+{{
+  "question": "...",
+  "why_unresolved": "..."
+}}"#,
+            passages = passages
+        )
+    }
+
+    fn clustering_config(&self) -> ClusteringConfig {
+        ClusteringConfig {
+            min_cluster_size: CLUSTERING_MIN_CLUSTER_SIZE,
+            epsilon: CLUSTERING_EPSILON,
+            label_sample_size: CLUSTERING_LABEL_SAMPLE_SIZE,
+            max_cluster_points: 0, // no cap — personal corpora are small
+            reduced_dims: 0,       // no projection on small data
+        }
+    }
+
+    fn alignment_config(&self) -> AlignmentConfig {
+        AlignmentConfig {
+            alignment_threshold: ALIGNMENT_THRESHOLD,
+            min_chunks_for_discovery: ALIGNMENT_MIN_CHUNKS_DISCOVERY,
+        }
+    }
+
+    fn fault_line_config(&self) -> FaultLineConfig {
+        FaultLineConfig {
+            proximity_threshold: FAULT_LINE_PROXIMITY_THRESHOLD,
+            min_confidence: FAULT_LINE_MIN_CONFIDENCE,
+        }
+    }
+
+    fn skeleton_storage(&self) -> SkeletonStorage {
+        // Personal corpora are bounded and small — `JsonAndLance` lets
+        // the KnowledgeView landscape digest read `field_skeleton.json`
+        // directly without a LanceDB scan.
+        SkeletonStorage::JsonAndLance
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn personal_domain_identity() {
+        let d = PersonalDomain;
+        assert_eq!(d.id(), "personal");
+        assert_eq!(d.name(), "Personal knowledge");
+    }
+
+    #[test]
+    fn personal_domain_is_object_safe() {
+        let domain: std::sync::Arc<dyn Domain> = std::sync::Arc::new(PersonalDomain);
+        assert_eq!(domain.id(), "personal");
+    }
+
+    #[test]
+    fn clustering_config_values() {
+        let c = PersonalDomain.clustering_config();
+        assert_eq!(c.min_cluster_size, CLUSTERING_MIN_CLUSTER_SIZE);
+        assert!((c.epsilon - CLUSTERING_EPSILON).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn overview_filter_uses_token_count() {
+        let f = PersonalDomain.overview_filter();
+        assert_eq!(f.min_token_count, Some(OVERVIEW_MIN_TOKEN_COUNT));
+        assert!(f.section_name_in.is_none());
+    }
+
+    #[test]
+    fn skeleton_extraction_prompt_mentions_memories() {
+        let chunk = Chunk {
+            id: 1,
+            content: "I've been thinking about what good work looks like.".into(),
+            title: None,
+        };
+        let prompt = PersonalDomain.skeleton_extraction_prompt(&[&chunk]);
+        assert!(prompt.contains("memories from one person"));
+        assert!(prompt.contains("[Memory 1]"));
+        assert!(prompt.contains("canonical_question"));
+    }
+
+    #[test]
+    fn cluster_labeling_prompt_mentions_theme() {
+        let chunk = Chunk {
+            id: 1,
+            content: "I keep coming back to this question about autonomy.".into(),
+            title: None,
+        };
+        let prompt = PersonalDomain.cluster_labeling_prompt(&[&chunk]);
+        assert!(prompt.contains("theme"));
+        assert!(prompt.contains("is_coherent"));
+    }
+
+    #[test]
+    fn fault_line_prompt_frames_tension() {
+        let chunk_a = Chunk {
+            id: 1,
+            content: "I value simplicity in everything I build.".into(),
+            title: None,
+        };
+        let chunk_b = Chunk {
+            id: 2,
+            content: "I'm excited to architect this complex system.".into(),
+            title: None,
+        };
+        let prompt = PersonalDomain.fault_line_detection_prompt(
+            &[&chunk_a],
+            &[&chunk_b],
+            "simplicity",
+            "complexity attraction",
+        );
+        assert!(prompt.contains("Stance A: simplicity"));
+        assert!(prompt.contains("Stance B: complexity attraction"));
+        assert!(prompt.contains("without trying to resolve it"));
+    }
+
+    #[test]
+    fn open_question_prompt_frames_live_uncertainty() {
+        let chunk = Chunk {
+            id: 1,
+            content: "What kind of life do I actually want?".into(),
+            title: None,
+        };
+        let prompt = PersonalDomain.open_question_prompt(&[&chunk]);
+        assert!(prompt.contains("stable answer"));
+        assert!(prompt.contains("live uncertainty"));
+        assert!(prompt.contains("why_unresolved"));
+    }
+
+    #[test]
+    fn skeleton_storage_is_json_and_lance() {
+        assert!(matches!(
+            PersonalDomain.skeleton_storage(),
+            SkeletonStorage::JsonAndLance
+        ));
+    }
+}

@@ -912,6 +912,16 @@ impl CorpusEngine {
             AcquirerConfig::ApiPaginated { .. } => {
                 Err(Error::Recipe("API paginated acquirer not yet implemented".into()))
             }
+            AcquirerConfig::Custom { kind, params } => {
+                let _ = progress; // Custom acquirers do not emit progress; see CustomAcquirerFn docs.
+                let acquirer = self.custom_acquirer(kind).ok_or_else(|| {
+                    Error::Recipe(format!(
+                        "No custom acquirer registered for kind '{kind}'. \
+                         Call CorpusEngine::register_acquirer before ingest."
+                    ))
+                })?;
+                (acquirer)(params.clone(), download_dir.to_path_buf()).await
+            }
         }
     }
 

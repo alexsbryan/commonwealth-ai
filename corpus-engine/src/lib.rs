@@ -52,7 +52,9 @@ pub mod features;
 
 // ─── Public API Re-exports ──────────────────────────────
 
-pub use engine::{CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine};
+pub use engine::{
+    CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
+};
 pub use enrichment::{
     Domain, EnrichmentProgress, FieldModelEngine, FieldModelStats, FieldSkeleton,
     reprocess_skeleton_failures,
