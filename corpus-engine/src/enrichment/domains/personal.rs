@@ -13,8 +13,8 @@
 //! diagnosis.
 
 use super::super::domain::{
-    AlignmentConfig, Chunk, ChunkFilter, ClusteringConfig, Domain, FaultLineConfig,
-    PositionStatusVocab, QuestionType, SkeletonStorage,
+    AlignmentConfig, Chunk, ChunkFilter, ClusteringConfig, ComparisonOp, Domain, FaultLineConfig,
+    MetadataComparison, PositionStatusVocab, QuestionType, SkeletonStorage,
 };
 
 /// Personal corpora are small by design — one person's memories over
@@ -59,16 +59,23 @@ impl Domain for PersonalDomain {
     }
 
     fn overview_filter(&self) -> ChunkFilter {
-        // The existing `ChunkFilter` has no predicate for "confidence > 0.7"
-        // (the spec's ideal), so we approximate with a length threshold:
-        // substantive memories are long enough to contain a position.
-        // A richer filter is tracked as v2 follow-up; see the
-        // KnowledgeView implementation plan.
+        // Spec-aligned predicate (Tier 3 item 4): a memory counts as
+        // an "overview document" when its extracted confidence is
+        // high enough that the position it expresses is settled
+        // rather than passing. The length threshold is kept as an
+        // AND-guard against pathologically short high-confidence
+        // memories ("I'm tired") that would add noise.
         ChunkFilter {
             is_first_in_entry: None,
             section_name_in: None,
             min_token_count: Some(OVERVIEW_MIN_TOKEN_COUNT),
             metadata_key_values: vec![],
+            metadata_in: vec![],
+            metadata_compare: vec![MetadataComparison {
+                key: "confidence".to_string(),
+                op: ComparisonOp::Gt,
+                value: 0.7,
+            }],
         }
     }
 

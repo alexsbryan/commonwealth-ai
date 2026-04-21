@@ -63,18 +63,24 @@ impl Domain for ConversationalDomain {
     }
 
     fn overview_filter(&self) -> ChunkFilter {
-        // Spec called for a skill-id metadata filter (research-analyst,
-        // epistemic-research) but the `ChunkFilter` vocabulary doesn't
-        // support "metadata key IN values" — its `metadata_key_values`
-        // is an AND-join of exact equality pairs. Substantive length
-        // is a decent proxy: conversations that establish a new research
-        // or framing question tend to be long. Richer predicates tracked
-        // for v2.
+        // Tier 3 item 4: `metadata_in` now lets us express the
+        // spec's intended predicate — a conversation is an overview
+        // document when the active skill was one of the research /
+        // framing skills. Length threshold kept as an AND-guard
+        // against pathologically short one-message conversations.
         ChunkFilter {
             is_first_in_entry: None,
             section_name_in: None,
             min_token_count: Some(OVERVIEW_MIN_TOKEN_COUNT),
             metadata_key_values: vec![],
+            metadata_in: vec![(
+                "skill_id".to_string(),
+                vec![
+                    "research-analyst".to_string(),
+                    "epistemic-research".to_string(),
+                ],
+            )],
+            metadata_compare: vec![],
         }
     }
 

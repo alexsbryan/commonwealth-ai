@@ -61,6 +61,8 @@ impl Domain for PhilosophyDomain {
             ),
             min_token_count: Some(OVERVIEW_MIN_TOKEN_COUNT),
             metadata_key_values: vec![],
+            metadata_in: vec![],
+            metadata_compare: vec![],
         }
     }
 

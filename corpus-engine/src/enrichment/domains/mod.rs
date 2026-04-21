@@ -1,5 +1,6 @@
 pub mod community;
 pub mod conversational;
+pub mod institutional;
 pub mod legal;
 pub mod multi;
 pub mod personal;

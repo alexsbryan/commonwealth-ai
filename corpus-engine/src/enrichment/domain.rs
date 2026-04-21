@@ -104,12 +104,103 @@ pub enum SkeletonStorage {
     LanceOnly,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ChunkFilter {
     pub is_first_in_entry: Option<bool>,
     pub section_name_in: Option<Vec<String>>,
     pub min_token_count: Option<usize>,
+    /// AND-join of exact equality pairs. Kept for backwards compat —
+    /// new code should prefer `metadata_in` (OR within key) or
+    /// `metadata_compare` (numeric predicates).
     pub metadata_key_values: Vec<(String, String)>,
+    /// OR-join per key: a chunk passes iff
+    /// `chunk.metadata[key]` is one of `allowed_values`. Multiple
+    /// entries for the same key are ANDed, so two disjoint IN lists
+    /// can be combined. Typical use:
+    /// `("skill_id", ["research-analyst", "epistemic-research"])`.
+    pub metadata_in: Vec<(String, Vec<String>)>,
+    /// Numeric comparison predicates. All entries AND together.
+    /// Typical use: `confidence > 0.7`.
+    pub metadata_compare: Vec<MetadataComparison>,
+}
+
+/// Numeric comparison predicate on a metadata field.
+/// The field is parsed as `f64` at eval time; missing or
+/// non-numeric values fail closed.
+#[derive(Debug, Clone)]
+pub struct MetadataComparison {
+    pub key: String,
+    pub op: ComparisonOp,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComparisonOp {
+    Gt,
+    Ge,
+    Lt,
+    Le,
+    Eq,
+    Ne,
+}
+
+impl ChunkFilter {
+    /// True when the filter imposes any predicate that requires
+    /// access to raw chunk metadata. Callers use this as a fast-path
+    /// guard to decide whether to load the heavier
+    /// `StoredChunkWithMetadata` variant instead of `StoredChunk`.
+    pub fn requires_metadata(&self) -> bool {
+        !self.metadata_key_values.is_empty()
+            || !self.metadata_in.is_empty()
+            || !self.metadata_compare.is_empty()
+    }
+
+    /// Evaluate all metadata-based predicates against `metadata`
+    /// (expected to be a JSON object from the chunk's stored
+    /// metadata blob). Returns true only when every declared
+    /// predicate passes. Missing keys fail closed.
+    ///
+    /// Does NOT evaluate `is_first_in_entry`, `section_name_in`,
+    /// or `min_token_count` — those live on the chunk itself, not
+    /// the metadata map.
+    pub fn evaluate_metadata(&self, metadata: &serde_json::Value) -> bool {
+        for (k, v) in &self.metadata_key_values {
+            match metadata.get(k).and_then(|x| x.as_str()) {
+                Some(s) if s == v.as_str() => continue,
+                _ => return false,
+            }
+        }
+        for (k, allowed) in &self.metadata_in {
+            match metadata.get(k).and_then(|x| x.as_str()) {
+                Some(s) if allowed.iter().any(|a| a == s) => continue,
+                _ => return false,
+            }
+        }
+        for cmp in &self.metadata_compare {
+            let actual = metadata.get(&cmp.key).and_then(|x| {
+                // Accept numbers OR numeric strings ("0.85" stored as
+                // JSON string — the SQLite acquirer emits all non-text
+                // values as strings, so both shapes may appear in the
+                // wild).
+                x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse::<f64>().ok()))
+            });
+            let Some(v) = actual else {
+                return false;
+            };
+            let ok = match cmp.op {
+                ComparisonOp::Gt => v > cmp.value,
+                ComparisonOp::Ge => v >= cmp.value,
+                ComparisonOp::Lt => v < cmp.value,
+                ComparisonOp::Le => v <= cmp.value,
+                ComparisonOp::Eq => (v - cmp.value).abs() < f64::EPSILON,
+                ComparisonOp::Ne => (v - cmp.value).abs() >= f64::EPSILON,
+            };
+            if !ok {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -183,6 +274,175 @@ pub struct ClusterLabel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── ChunkFilter evaluation tests ──────────────────────────
+
+    fn meta(json: &str) -> serde_json::Value {
+        serde_json::from_str(json).expect("fixture json")
+    }
+
+    #[test]
+    fn chunk_filter_requires_metadata_reflects_declared_predicates() {
+        let empty = ChunkFilter::default();
+        assert!(!empty.requires_metadata());
+
+        let with_in = ChunkFilter {
+            metadata_in: vec![("skill_id".into(), vec!["x".into()])],
+            ..Default::default()
+        };
+        assert!(with_in.requires_metadata());
+
+        let with_compare = ChunkFilter {
+            metadata_compare: vec![MetadataComparison {
+                key: "confidence".into(),
+                op: ComparisonOp::Gt,
+                value: 0.7,
+            }],
+            ..Default::default()
+        };
+        assert!(with_compare.requires_metadata());
+
+        let with_kv = ChunkFilter {
+            metadata_key_values: vec![("source".into(), "manual".into())],
+            ..Default::default()
+        };
+        assert!(with_kv.requires_metadata());
+    }
+
+    #[test]
+    fn evaluate_metadata_in_or_within_key() {
+        let f = ChunkFilter {
+            metadata_in: vec![(
+                "skill_id".into(),
+                vec!["research-analyst".into(), "epistemic-research".into()],
+            )],
+            ..Default::default()
+        };
+        assert!(f.evaluate_metadata(&meta(r#"{"skill_id":"research-analyst"}"#)));
+        assert!(f.evaluate_metadata(&meta(r#"{"skill_id":"epistemic-research"}"#)));
+        assert!(!f.evaluate_metadata(&meta(r#"{"skill_id":"inner-work"}"#)));
+        assert!(
+            !f.evaluate_metadata(&meta(r#"{"other":"value"}"#)),
+            "missing key fails closed"
+        );
+    }
+
+    #[test]
+    fn evaluate_metadata_multiple_in_groups_are_anded() {
+        let f = ChunkFilter {
+            metadata_in: vec![
+                ("skill_id".into(), vec!["research".into()]),
+                ("lang".into(), vec!["en".into(), "de".into()]),
+            ],
+            ..Default::default()
+        };
+        assert!(f.evaluate_metadata(&meta(r#"{"skill_id":"research","lang":"en"}"#)));
+        assert!(f.evaluate_metadata(&meta(r#"{"skill_id":"research","lang":"de"}"#)));
+        assert!(!f.evaluate_metadata(&meta(r#"{"skill_id":"research","lang":"fr"}"#)));
+        assert!(!f.evaluate_metadata(&meta(r#"{"skill_id":"other","lang":"en"}"#)));
+    }
+
+    #[test]
+    fn evaluate_metadata_comparison_gt_matches_numeric() {
+        let f = ChunkFilter {
+            metadata_compare: vec![MetadataComparison {
+                key: "confidence".into(),
+                op: ComparisonOp::Gt,
+                value: 0.7,
+            }],
+            ..Default::default()
+        };
+        assert!(f.evaluate_metadata(&meta(r#"{"confidence":0.9}"#)));
+        assert!(!f.evaluate_metadata(&meta(r#"{"confidence":0.7}"#)));
+        assert!(!f.evaluate_metadata(&meta(r#"{"confidence":0.5}"#)));
+    }
+
+    #[test]
+    fn evaluate_metadata_comparison_accepts_numeric_strings() {
+        // The SqliteAcquirer emits non-text values as JSON strings.
+        // The evaluator must parse them as f64 to keep the
+        // domain-level predicates portable across acquirer shapes.
+        let f = ChunkFilter {
+            metadata_compare: vec![MetadataComparison {
+                key: "confidence".into(),
+                op: ComparisonOp::Gt,
+                value: 0.7,
+            }],
+            ..Default::default()
+        };
+        assert!(f.evaluate_metadata(&meta(r#"{"confidence":"0.85"}"#)));
+        assert!(!f.evaluate_metadata(&meta(r#"{"confidence":"0.6"}"#)));
+        assert!(
+            !f.evaluate_metadata(&meta(r#"{"confidence":"not-a-number"}"#)),
+            "non-numeric fails closed"
+        );
+    }
+
+    #[test]
+    fn evaluate_metadata_all_comparison_ops() {
+        use ComparisonOp::*;
+        let cases: &[(ComparisonOp, f64, f64, bool)] = &[
+            (Gt, 1.0, 0.5, true),
+            (Gt, 1.0, 1.0, false),
+            (Ge, 1.0, 1.0, true),
+            (Lt, 0.5, 1.0, true),
+            (Le, 1.0, 1.0, true),
+            (Eq, 1.0, 1.0, true),
+            (Eq, 1.0, 1.01, false),
+            (Ne, 1.0, 2.0, true),
+            (Ne, 1.0, 1.0, false),
+        ];
+        for (op, actual, threshold, expected) in cases {
+            let f = ChunkFilter {
+                metadata_compare: vec![MetadataComparison {
+                    key: "x".into(),
+                    op: *op,
+                    value: *threshold,
+                }],
+                ..Default::default()
+            };
+            let json = format!(r#"{{"x":{actual}}}"#);
+            assert_eq!(
+                f.evaluate_metadata(&meta(&json)),
+                *expected,
+                "op {op:?} actual={actual} threshold={threshold}"
+            );
+        }
+    }
+
+    #[test]
+    fn evaluate_metadata_compound_predicates() {
+        // Covers the realistic domain-level case: "skill_id IN [...]
+        // AND confidence > 0.7". All declared predicates must pass.
+        let f = ChunkFilter {
+            metadata_in: vec![("skill_id".into(), vec!["research".into()])],
+            metadata_compare: vec![MetadataComparison {
+                key: "confidence".into(),
+                op: ComparisonOp::Gt,
+                value: 0.7,
+            }],
+            ..Default::default()
+        };
+        assert!(f.evaluate_metadata(&meta(r#"{"skill_id":"research","confidence":0.9}"#)));
+        assert!(
+            !f.evaluate_metadata(&meta(r#"{"skill_id":"research","confidence":0.5}"#)),
+            "skill matches but confidence fails → overall false"
+        );
+        assert!(
+            !f.evaluate_metadata(&meta(r#"{"skill_id":"chat","confidence":0.9}"#)),
+            "confidence matches but skill fails → overall false"
+        );
+    }
+
+    #[test]
+    fn evaluate_metadata_empty_filter_accepts_everything() {
+        // Regression guard: the default-constructed filter must not
+        // accidentally reject chunks. Legacy domains rely on this
+        // because they set only length-based predicates.
+        let f = ChunkFilter::default();
+        assert!(f.evaluate_metadata(&meta(r#"{}"#)));
+        assert!(f.evaluate_metadata(&meta(r#"{"anything":"goes"}"#)));
+    }
 
     #[test]
     fn chunk_role_as_str_round_trip() {

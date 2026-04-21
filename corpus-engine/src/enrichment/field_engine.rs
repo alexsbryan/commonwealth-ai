@@ -285,6 +285,39 @@ impl FieldModelEngine {
 
         let min_words = filter.min_token_count.unwrap_or(0);
 
+        // Tier 3 item 4: when the domain declares metadata-based
+        // predicates (metadata_in / metadata_compare / legacy
+        // metadata_key_values), fetch the metadata sidecar and keep
+        // only chunks whose metadata passes. Done here before the
+        // title/sampling branches so both downstream paths inherit
+        // the narrowing.
+        //
+        // Legacy domains (no metadata predicates) skip this entirely
+        // — `requires_metadata()` returns false, we don't load the
+        // heavier column, and the function behaves as before.
+        if filter.requires_metadata() {
+            let meta_chunks = index.all_chunks_with_raw_metadata().await?;
+            let allowed_ids: std::collections::HashSet<u64> = meta_chunks
+                .iter()
+                .filter_map(|m| {
+                    let raw = m.metadata_raw.as_deref()?;
+                    let parsed: serde_json::Value = serde_json::from_str(raw).ok()?;
+                    if filter.evaluate_metadata(&parsed) {
+                        Some(m.id)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let before = all.len();
+            all.retain(|c| allowed_ids.contains(&c.id));
+            tracing::info!(
+                before,
+                after = all.len(),
+                "Overview filter: metadata predicates narrowed candidates"
+            );
+        }
+
         // Count distinct titles to decide if title-based dedup is viable.
         let distinct_titles = {
             let mut titles: std::collections::HashSet<&str> = std::collections::HashSet::new();

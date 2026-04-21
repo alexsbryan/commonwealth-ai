@@ -148,12 +148,39 @@ impl Iterator for JsonlIterator {
                 .unwrap_or("unknown")
                 .to_string();
 
+            // Pass-through metadata: strip out the fields we already
+            // copied onto the ExtractedDoc (content / title / url /
+            // id) and keep the rest as a metadata object so
+            // downstream ChunkFilter predicates (see
+            // ChunkFilter::metadata_in / metadata_compare) can reach
+            // them. Legacy callers that don't need metadata simply
+            // ignore the field.
+            let metadata = match obj.as_object() {
+                Some(map) => {
+                    let mut filtered = serde_json::Map::new();
+                    for (k, v) in map {
+                        match k.as_str() {
+                            "content" | "title" | "url" | "id" | "text" => continue,
+                            _ => {
+                                filtered.insert(k.clone(), v.clone());
+                            }
+                        }
+                    }
+                    if filtered.is_empty() {
+                        None
+                    } else {
+                        Some(serde_json::Value::Object(filtered))
+                    }
+                }
+                None => None,
+            };
+
             self.pending.push_back(ExtractedDoc {
                 title,
                 content,
                 url: obj.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()),
                 source_id: id,
-                metadata: None,
+                metadata,
                 source_file: None,
             });
         }

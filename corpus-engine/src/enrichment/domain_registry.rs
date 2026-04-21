@@ -46,6 +46,9 @@ impl DomainRegistry {
         registry.register("conversational", || {
             Arc::new(super::domains::conversational::ConversationalDomain)
         });
+        registry.register("institutional", || {
+            Arc::new(super::domains::institutional::InstitutionalDomain)
+        });
         registry
     }
 
@@ -81,6 +84,7 @@ mod tests {
             "multi",
             "personal",
             "conversational",
+            "institutional",
         ] {
             assert!(reg.get(id).is_some(), "missing domain: {id}");
         }
