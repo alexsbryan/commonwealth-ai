@@ -75,6 +75,15 @@ impl Middleware for ContextInjector {
         let mut preamble = String::new();
         preamble.push_str(ATOS_INSTRUCTIONS);
 
+        // Sovereign CLI tools catalog — Phase 3.6. Pulled live from
+        // the shared manifest so it can't drift. The CLI path is the
+        // MCP-less fallback (and preferred surface for ad-hoc
+        // scripting); agents with MCP configured should still prefer
+        // the native MCP calls because they're faster and structured,
+        // but we want opencode to KNOW the CLI exists so it can use
+        // it when MCP isn't available.
+        preamble.push_str(&compose_cli_tools_catalog());
+
         // "Since last turn" block — populated by ArtifactSurface's
         // post_process on the PREVIOUS turn. Popped on render so it
         // shows up exactly once.
@@ -138,6 +147,101 @@ impl Middleware for ContextInjector {
 }
 
 // ─── Composition helpers ─────────────────────────────────────────────────────
+
+/// Phase 3.6: live catalog of `sovereign tools` CLI commands,
+/// grouped by effect + scope. Pulled from
+/// `sovereign_tools::manifest::all_descriptors` (cached via
+/// `OnceLock`), so adding a tool auto-surfaces in the agent
+/// preamble.
+///
+/// Rendered as a compact markdown block — one line per tool, effect
+/// tag up front, one-sentence description. The agent uses this to
+/// know a CLI alternative exists when MCP isn't available; it
+/// doesn't replace the MCP tool list the agent sees via the
+/// client-side `tools/list` handshake.
+fn compose_cli_tools_catalog() -> String {
+    use sovereign_core::types::{Effect, Scope, ToolDescriptor};
+    use std::collections::BTreeMap;
+
+    let descriptors: Vec<ToolDescriptor> =
+        sovereign_tools::manifest::all_descriptors().to_vec();
+    if descriptors.is_empty() {
+        return String::new();
+    }
+
+    // Stable group order — reads first, writes after, session before
+    // persistent before external. Matches what `sovereign tools list`
+    // produces so the CLI and the preamble tell the same story.
+    let group_order: &[(Effect, Scope, &str)] = &[
+        (Effect::Read, Scope::Session, "Read · Session"),
+        (Effect::Read, Scope::Persistent, "Read · Persistent"),
+        (Effect::Read, Scope::External, "Read · External"),
+        (Effect::Write, Scope::Session, "Write · Session"),
+        (Effect::Write, Scope::Persistent, "Write · Persistent"),
+        (Effect::Write, Scope::External, "Write · External"),
+        (Effect::ReadWrite, Scope::Session, "ReadWrite · Session"),
+        (Effect::ReadWrite, Scope::Persistent, "ReadWrite · Persistent"),
+        (Effect::ReadWrite, Scope::External, "ReadWrite · External"),
+    ];
+    let mut grouped: BTreeMap<(u8, u8), Vec<&ToolDescriptor>> = BTreeMap::new();
+    for d in &descriptors {
+        let e = match d.effect {
+            Effect::Read => 0,
+            Effect::Write => 1,
+            Effect::ReadWrite => 2,
+        };
+        let s = match d.scope {
+            Scope::Session => 0,
+            Scope::Persistent => 1,
+            Scope::External => 2,
+        };
+        grouped.entry((e, s)).or_default().push(d);
+    }
+
+    let mut out = String::from(
+        "\n## Available via `sovereign tools` CLI\n\n\
+         These tools are callable as shell commands when MCP isn't available.\n\
+         `sovereign tools call <id> --key=value ...` invokes; \
+         `sovereign tools describe <id>` prints the full schema incl. output keys.\n\n",
+    );
+    for (idx, (effect, scope, label)) in group_order.iter().enumerate() {
+        let e_idx = match effect {
+            Effect::Read => 0u8,
+            Effect::Write => 1,
+            Effect::ReadWrite => 2,
+        };
+        let s_idx = match scope {
+            Scope::Session => 0u8,
+            Scope::Persistent => 1,
+            Scope::External => 2,
+        };
+        let Some(tools) = grouped.get(&(e_idx, s_idx)) else {
+            continue;
+        };
+        let _ = idx;
+        out.push_str(&format!("**{label}**  \n"));
+        let mut sorted = tools.clone();
+        sorted.sort_by(|a, b| a.id.cmp(&b.id));
+        for d in sorted {
+            // First sentence, capped at 80 chars, matches the CLI's
+            // `tools list` formatting.
+            let desc = first_sentence(&d.description);
+            out.push_str(&format!("- `{}` — {desc}\n", d.id));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn first_sentence(desc: &str) -> String {
+    let cleaned: String = desc.split_whitespace().collect::<Vec<_>>().join(" ");
+    let cut = cleaned.find(". ").map(|i| &cleaned[..i]).unwrap_or(&cleaned);
+    if cut.len() > 80 {
+        format!("{}…", &cut[..77])
+    } else {
+        cut.to_string()
+    }
+}
 
 /// M7.2: assemble the project-layer charter frame for the
 /// preamble. Returns `None` when:
@@ -481,6 +585,41 @@ mod tests {
         assert_eq!(req.messages[0].role, "system");
         assert!(req.messages[0].content.contains("<atos-instructions>"));
         assert!(req.messages[0].content.contains("foo must not bar"));
+    }
+
+    #[tokio::test]
+    async fn cli_tools_catalog_is_surfaced_in_preamble() {
+        // Phase 3.6 pin — every session preamble carries a live
+        // `sovereign tools` catalog so opencode agents discover the
+        // CLI path without reading CLAUDE.md. Regresses if someone
+        // removes the compose_cli_tools_catalog call.
+        let tmp = tempfile::tempdir().unwrap();
+        let spec_dir = tmp.path().join(".sovereign").join("features").join("fx");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        std::fs::write(spec_dir.join("spec.md"), "# fx\n").unwrap();
+
+        let inj = ContextInjector::new();
+        let mut req = minimal_request();
+        let mut session = MiddlewareSession::default();
+        let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
+        inj.process(&mut req, &mut session, &ctx).await.unwrap();
+        let content = &req.messages[0].content;
+
+        assert!(
+            content.contains("Available via `sovereign tools` CLI"),
+            "CLI catalog header missing from preamble"
+        );
+        // Sample tool from the manifest — regresses if the manifest
+        // integration stops pulling descriptors.
+        assert!(
+            content.contains("symbol_lookup"),
+            "expected a code-intel tool id in the catalog"
+        );
+        // Grouping tag from the catalog layout.
+        assert!(
+            content.contains("Read · Persistent"),
+            "expected Effect × Scope grouping in the catalog"
+        );
     }
 
     #[tokio::test]
