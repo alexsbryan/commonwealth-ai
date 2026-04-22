@@ -232,6 +232,7 @@ mod tests {
                 primary: "/p".into(),
                 fast: "/f".into(),
                 embed: "/e".into(),
+                code: None,
             },
             daemon: sovereign_core::setup_config::DaemonSection {
                 client_port: 19_741,

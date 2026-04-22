@@ -27,14 +27,25 @@ pub struct SetupConfig {
     pub data: DataSection,
 }
 
-/// Absolute paths to the three loaded GGUF models.
+/// Absolute paths to the loaded GGUF models. Three slots are
+/// required (`fast` + `primary` + `embed`); a fourth optional slot
+/// (`code`) is the specialization added in PR-E2, loaded lazily
+/// when a code-hinted request arrives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelsSection {
-    /// The "primary" model — what the UX calls the main inference slot.
+    /// The "primary" model — what the UX calls the Main responder.
     /// Internally this is the `thoughtful` profile slot.
     pub primary: PathBuf,
     pub fast: PathBuf,
     pub embed: PathBuf,
+    /// Optional code-specialist model. When present, `code`-hinted
+    /// inference requests route here instead of the primary. Lazy-
+    /// loaded on first use and unloaded after the same 60 s idle
+    /// window as the primary. `None` means the node relies on the
+    /// primary model for code work (the common case; a well-rounded
+    /// general model still handles code adequately per v0.3 §4.4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<PathBuf>,
 }
 
 /// Network listener configuration. Defaults match the spec:
@@ -191,6 +202,7 @@ mod tests {
                 primary: PathBuf::from("/models/primary.gguf"),
                 fast: PathBuf::from("/models/fast.gguf"),
                 embed: PathBuf::from("/models/embed.gguf"),
+                code: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

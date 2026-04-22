@@ -532,6 +532,65 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             claims,
         });
     }
+
+    // PR-E2: Code specialist. Separate ProviderModel entry so peer
+    // schedulers can see the `code` hint claim without having to
+    // first elicit a hot-swap. Only emitted when the provider
+    // actually has a Code specialist configured — the default
+    // `InferenceProvider::code_model_id()` returns `None`, so
+    // single-model / remote providers skip this branch.
+    //
+    // We mark the code slot `loaded: false` because it shares the
+    // lazy chat mutex with the primary — one of them can be
+    // resident at a time. That lets the selector treat code and
+    // primary as equally "warm-ish" rather than double-counting
+    // either one.
+    if let Some(code_name) = provider.code_model_id() {
+        if !code_name.is_empty()
+            && code_name != "unknown"
+            && seen_ids.insert(code_name.clone())
+        {
+            let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
+                .info_for_file(&code_name);
+            let (capabilities, size_gb) = match info {
+                Some(slot) => (slot.capabilities, slot.size_gb),
+                None => {
+                    let mut caps = std::collections::HashMap::new();
+                    caps.insert(Capability::Code, 3u8);
+                    caps.insert(Capability::General, 2u8);
+                    (caps, None)
+                }
+            };
+            tracing::info!(
+                model = %code_name,
+                caps = ?capabilities,
+                size_gb = ?size_gb,
+                "build_self_manifest: advertised code specialist"
+            );
+            // Code slot always advertises as Slow-tier — it carries
+            // the full context window and long output budget, and a
+            // code-hinted request is never a routing/classification
+            // Fast call. The hint is forced to `code` regardless of
+            // the filename heuristic, because this slot's entire
+            // reason for existing is the `code` claim.
+            let code_hint_claims = synthesize_code_slot_claims(&code_name, &capabilities);
+            models.push(ProviderModel {
+                id: code_name,
+                base_model: None,
+                quantization: None,
+                context_tokens: 32_768,
+                status: ModelStatus {
+                    available: true,
+                    loaded: false,
+                    estimated_tokens_per_sec: None,
+                    estimated_ttft_ms: None,
+                    estimated_load_time_sec: None,
+                },
+                size_gb,
+                claims: code_hint_claims,
+            });
+        }
+    }
     // Provider name still reflects the primary — that's the name
     // response attribution uses ("qwen3.5-27b @ peer BeefyMac").
     // Fall back to whatever single model we have, or a sentinel.
@@ -626,6 +685,47 @@ fn synthesize_slot_claims(
             affinity,
         )],
     }
+}
+
+/// PR-E2: synthesize claims for a dedicated Code specialist model.
+///
+/// Unlike `synthesize_slot_claims`, the hint is pinned to `code`
+/// regardless of filename — this model is the code slot by
+/// configuration, not by heuristic. Affinity is read from the v0.2
+/// Code proficiency (same source of truth the filename heuristic
+/// consults) so peer scoring lines up with what the local provider
+/// would self-report for the same model.
+///
+/// Latency is `LatencyClass::Normal` — the slot hot-swaps with the
+/// primary in `EmbeddedLlamaCpp`, so first-request TTFT is dominated
+/// by a 5–30s reload. Advertising it as Fast would produce incorrect
+/// routing for single-turn classification calls. Output budget is
+/// generous (4000 tokens) so long refactors and documentation
+/// generation aren't clipped mid-diff.
+fn synthesize_code_slot_claims(
+    model_name: &str,
+    profile: &CapabilityProfile,
+) -> Vec<CapabilityClaim> {
+    let code = profile.get(&Capability::Code).copied().unwrap_or(0);
+    // Floor affinity at 0.5 when the filename smells like a code
+    // model even if the manifest doesn't report Code proficiency
+    // — a BYOM code GGUF not yet in `models.toml` should still be
+    // discoverable as code-capable by peers.
+    let lower = model_name.to_lowercase();
+    let filename_signals_code = lower.contains("coder")
+        || lower.contains("code-llama")
+        || lower.contains("codellama")
+        || lower.contains("deepseek-coder");
+    let affinity_floor = if filename_signals_code { 0.5 } else { 0.0 };
+    let affinity = ((code as f32 / 4.0).clamp(0.0, 1.0)).max(affinity_floor);
+
+    vec![CapabilityClaim::new(
+        CapabilityHint::code(),
+        LatencyClass::Normal,
+        32_768,
+        4_000,
+        affinity,
+    )]
 }
 
 #[cfg(test)]
@@ -800,5 +900,174 @@ mod adapter_translation_tests {
         let text = "ok <tool_call>{\"name\":\"never_closed\"";
         let stripped = strip_tool_call_blocks(text);
         assert!(stripped.contains("never_closed"));
+    }
+}
+
+#[cfg(test)]
+mod self_manifest_tests {
+    //! PR-E2: verify `build_self_manifest` surfaces a third
+    //! ProviderModel with a `code`-hinted claim when the underlying
+    //! provider reports `code_model_id() == Some(...)`. Regression
+    //! coverage for the "peer can't see my code slot" bug that
+    //! would cause mesh routing to round-trip code requests through
+    //! a hot-swap instead of picking the configured specialist.
+    use super::{build_self_manifest, synthesize_code_slot_claims};
+    use async_trait::async_trait;
+    use commonwealth_inference::oicp::{Capability, CapabilityHint, CapabilityProfile, LatencyClass};
+    use futures::Stream;
+    use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::types::{
+        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
+    };
+    use sovereign_core::Result;
+    use std::pin::Pin;
+
+    /// Minimal stub that mimics the three-slot shape: fast + primary
+    /// + optional code. We intentionally don't need a real model —
+    /// only the metadata methods are consulted by
+    /// `build_self_manifest`.
+    struct SlotStub {
+        fast_id: &'static str,
+        primary_id: &'static str,
+        code_id: Option<&'static str>,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for SlotStub {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
+            unreachable!("build_self_manifest never calls complete")
+        }
+        async fn complete_stream(
+            &self,
+            _req: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            unreachable!("build_self_manifest never calls complete_stream")
+        }
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            unreachable!("build_self_manifest never calls embed")
+        }
+        fn model_id_for(&self, speed: Speed) -> String {
+            match speed {
+                Speed::Fast => self.fast_id.to_string(),
+                Speed::Medium | Speed::Slow => self.primary_id.to_string(),
+            }
+        }
+        fn code_model_id(&self) -> Option<String> {
+            self.code_id.map(|s| s.to_string())
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 32_768,
+                supports_structured_output: false,
+                relative_speed: Speed::Medium,
+                relative_reasoning: Depth::Deep,
+            }
+        }
+    }
+
+    #[test]
+    fn manifest_omits_code_entry_when_no_code_slot() {
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: None,
+        };
+        let manifest = build_self_manifest(&stub);
+        // No model in the manifest carries a `code` claim when
+        // the provider has no code slot configured.
+        let any_code_claim = manifest.models.iter().flat_map(|m| m.claims.iter())
+            .any(|c| c.hint == CapabilityHint::code());
+        assert!(
+            !any_code_claim,
+            "manifest leaked a code claim even without a code slot: {:#?}",
+            manifest.models
+        );
+        assert_eq!(manifest.models.len(), 2, "expected fast + primary only");
+    }
+
+    #[test]
+    fn manifest_emits_third_entry_with_code_claim_when_code_slot_configured() {
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
+        };
+        let manifest = build_self_manifest(&stub);
+        assert_eq!(
+            manifest.models.len(),
+            3,
+            "expected fast + primary + code, got {:#?}",
+            manifest.models
+        );
+        let code_model = manifest
+            .models
+            .iter()
+            .find(|m| m.id == "qwen-coder-32b-instruct.Q4_K_M")
+            .expect("code model should be in manifest");
+        assert!(
+            !code_model.status.loaded,
+            "code slot shares the lazy chat mutex — must not claim to be resident"
+        );
+        let code_claim = code_model
+            .claims
+            .iter()
+            .find(|c| c.hint == CapabilityHint::code())
+            .expect("code model must carry a `code` hint claim");
+        assert_eq!(code_claim.latency_class, LatencyClass::Normal);
+        // Affinity floors at 0.5 even when v2 proficiency data is
+        // missing, because the filename signals code-specialist
+        // strongly enough.
+        assert!(
+            code_claim.affinity >= 0.5,
+            "code affinity should floor at 0.5 for filename-signalled BYOM coders: {}",
+            code_claim.affinity
+        );
+    }
+
+    #[test]
+    fn manifest_does_not_duplicate_when_code_id_equals_primary_id() {
+        // Defensive: misconfig where the user points the code slot
+        // at the same GGUF as the primary. The manifest should not
+        // emit a duplicate model entry with a different hint.
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "shared.Q5_K_M",
+            code_id: Some("shared.Q5_K_M"),
+        };
+        let manifest = build_self_manifest(&stub);
+        let ids: Vec<_> = manifest.models.iter().map(|m| m.id.clone()).collect();
+        let mut uniq = ids.clone();
+        uniq.sort();
+        uniq.dedup();
+        assert_eq!(ids.len(), uniq.len(), "no duplicate ids: {ids:?}");
+    }
+
+    #[test]
+    fn synthesize_code_claim_uses_v2_proficiency_when_available() {
+        let mut profile: CapabilityProfile = std::collections::HashMap::new();
+        profile.insert(Capability::Code, 4u8); // max proficiency
+        let claims = synthesize_code_slot_claims("my-custom-coder", &profile);
+        assert_eq!(claims.len(), 1);
+        // v2 proficiency 4/4 → affinity 1.0.
+        assert!((claims[0].affinity - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn synthesize_code_claim_uses_floor_for_unknown_byom_coder() {
+        // Empty profile → 0 proficiency → floor kicks in because the
+        // filename matches the heuristic.
+        let profile: CapabilityProfile = std::collections::HashMap::new();
+        let claims = synthesize_code_slot_claims("codellama-13b-byom.Q4_K_M", &profile);
+        assert!(claims[0].affinity >= 0.5);
+    }
+
+    #[test]
+    fn synthesize_code_claim_no_floor_for_non_code_filename() {
+        // If the filename doesn't signal code and no v2 proficiency
+        // is known, affinity stays at 0.0 — peers will rank this
+        // slot behind ones with real coding signal.
+        let profile: CapabilityProfile = std::collections::HashMap::new();
+        let claims = synthesize_code_slot_claims("mystery-model.Q4_K_M", &profile);
+        assert_eq!(claims[0].affinity, 0.0);
     }
 }

@@ -1728,6 +1728,7 @@ mod tests {
                 primary: PathBuf::from("/m/qwen3-coder-30b.gguf"),
                 fast: PathBuf::from("/m/qwen3-1.7b.gguf"),
                 embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
+                code: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

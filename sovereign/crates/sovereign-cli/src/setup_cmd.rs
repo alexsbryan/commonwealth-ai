@@ -192,7 +192,17 @@ pub async fn run_setup(args: &[String]) -> i32 {
     println!("  \u{2713} Models ready");
 
     finish_with_paths(
-        ModelPaths { primary: primary_path, fast: fast_path, embed: embed_path },
+        ModelPaths {
+            primary: primary_path,
+            fast: fast_path,
+            embed: embed_path,
+            // Curated download path doesn't surface a code slot
+            // yet — PR-E2 only wires it on the BYOM flow. Adding
+            // a Qwen Coder recommendation here would couple the
+            // bundled manifest to a specific code-model choice;
+            // BYOM leaves that decision to the user.
+            code: None,
+        },
         &opts,
     )
     .await
@@ -436,6 +446,9 @@ struct ModelPaths {
     primary: PathBuf,
     fast: PathBuf,
     embed: PathBuf,
+    /// PR-E2: optional Code specialist GGUF. `None` is the common
+    /// case — most users let the Main responder handle code work.
+    code: Option<PathBuf>,
 }
 
 /// Prompt for all three GGUF paths. BYOM is committed — if the user
@@ -465,7 +478,12 @@ fn prompt_byom_paths(opts: &Opts) -> Result<ModelPaths, String> {
         "  Knowledge embedder GGUF path: ",
         "knowledge-embedder path is required for BYOM",
     )?;
-    Ok(ModelPaths { primary, fast, embed })
+    // Code specialist is optional — blank input means "my Main
+    // responder handles code fine, don't load a second substantive
+    // model." Users who want a dedicated coder can add one later
+    // via Settings.
+    let code = prompt_path("  Code specialist GGUF path (optional, Enter to skip): ")?;
+    Ok(ModelPaths { primary, fast, embed, code })
 }
 
 /// Prompt for a path, error out if the user leaves it blank.
@@ -844,6 +862,7 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             primary: paths.primary,
             fast: paths.fast,
             embed: paths.embed,
+            code: paths.code,
         },
         daemon: DaemonSection::default(),
         data: DataSection { dir: data_dir.clone() },

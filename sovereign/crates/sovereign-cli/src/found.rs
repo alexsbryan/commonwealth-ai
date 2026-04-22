@@ -54,6 +54,7 @@
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use corpus_engine::design_signals::DesignSignals;
 use crate::observation::{DepKind, DetectedDependency, ProjectObservation};
 
 // ─── Stage 1 data ────────────────────────────────────────────────────────────
@@ -102,8 +103,14 @@ struct CatalogEntry {
     prompt: &'static str,
     why: &'static str,
     /// Predicate: should this question fire for the given
-    /// observation + design-doc presence?
-    applicable: fn(&ProjectObservation, bool) -> bool,
+    /// observation + design-doc presence + structural signals?
+    ///
+    /// The third arg is `Option<&DesignSignals>` rather than
+    /// `&DesignSignals` because callers don't always have a parsed
+    /// DESIGN.md — solo fallback with no doc, legacy callers during
+    /// the step-3 rollout, or tests. Predicates must handle `None`
+    /// by falling back to observation-only logic.
+    applicable: fn(&ProjectObservation, bool, Option<&DesignSignals>) -> bool,
 }
 
 fn catalog() -> &'static [CatalogEntry] {
@@ -114,33 +121,45 @@ fn catalog() -> &'static [CatalogEntry] {
             id: "found.stage1.project-purpose",
             prompt: "In one paragraph: what is this project building, and who is it for?",
             why: "We need the problem statement in the user's own words so the charter doesn't invent one.",
-            applicable: |_obs, has_design| !has_design,
+            applicable: |_obs, has_design, _sig| !has_design,
         },
-        // Q2 — data/persistence contract. Always fires: every project
-        // has SOMETHING that must survive across deploys, and getting
-        // its shape wrong is expensive.
+        // Q2 — data/persistence contract. Fires by default, but
+        // SKIPS when the DESIGN.md Anchors block already names a
+        // primary persistence technology. Rationale (plan step 3c):
+        // the most common reason to re-ask was that we had no doc;
+        // when a doc exists and names it in the Anchors block, the
+        // answer's already on the record.
         CatalogEntry {
             id: "found.stage1.persistence-contract",
             prompt: "What state must survive across restarts / deploys, and what downstream or external consumer relies on its shape?",
             why: "Persistence contracts are expensive to change later — anyone reading the field you rename has to change too.",
-            applicable: |_obs, _has_design| true,
+            applicable: |_obs, _has_design, sig| !anchors_cover_persistence(sig),
         },
-        // Q3 — interface boundary. Always fires when there's at
-        // least one detected external dependency; otherwise skip.
+        // Q3 — interface boundary. Fires when the project has direct
+        // deps, OR when the design explicitly mentions external APIs
+        // but the anchors don't commit to an interface. Skips when
+        // the Anchors block already names the primary interface
+        // (so the user doesn't re-answer what their doc already said).
         CatalogEntry {
             id: "found.stage1.external-interface",
             prompt: "For each external service or library the project depends on, what assumption about its behavior are you trusting most? (Rate limits, ordering guarantees, schema stability, …)",
             why: "The assumptions you trust become the invariants the charter must name. When they break, you want the decision note explaining what you were counting on.",
-            applicable: |obs, _has_design| obs.deps.iter().any(|d| d.kind == DepKind::Direct),
+            applicable: |obs, _has_design, sig| {
+                let has_deps = obs.deps.iter().any(|d| d.kind == DepKind::Direct);
+                let design_mentions_api = sig.map(|s| s.keywords.api).unwrap_or(false);
+                (has_deps || design_mentions_api) && !anchors_cover_interface(sig)
+            },
         },
         // Q4 — evolution vs stability. Always fires: forces an
         // explicit answer to "what's the stable spine vs the
-        // rapidly-iterating edge?"
+        // rapidly-iterating edge?" No structural signal reliably
+        // covers this — a doc can be fully anchored and still leave
+        // stability-vs-velocity implicit.
         CatalogEntry {
             id: "found.stage1.evolution-spine",
             prompt: "Which parts of the system do you expect to evolve rapidly, and which parts should stay stable for at least the first few months?",
             why: "ATOS milestones + the charter's invariants should protect the stable spine and leave the rapid parts unconstrained.",
-            applicable: |_obs, _has_design| true,
+            applicable: |_obs, _has_design, _sig| true,
         },
         // Q5 — naming/convention decision. Only fires when the
         // project has enough scope (any external dep OR a workspace
@@ -150,7 +169,7 @@ fn catalog() -> &'static [CatalogEntry] {
             id: "found.stage1.convention-risk",
             prompt: "Is there a domain convention you've already chosen over an alternative (e.g., dealer gamma vs market-maker gamma, UTC vs local time, dollars vs cents, singular vs plural resource names)?",
             why: "These are cheap to decide once and expensive to change later — someone will assume the other convention if it's not documented.",
-            applicable: |obs, _has_design| {
+            applicable: |obs, _has_design, _sig| {
                 !obs.deps.is_empty() || obs.languages.len() > 1
             },
         },
@@ -162,12 +181,18 @@ fn catalog() -> &'static [CatalogEntry] {
 /// time rather than relying on editorial discipline.
 const MAX_QUESTIONS: usize = 5;
 
-/// Pick the questions that fire for this `(observation, has_design)`
-/// combo, honoring [`MAX_QUESTIONS`].
-fn select_questions(obs: &ProjectObservation, has_design: bool) -> Vec<Stage1Question> {
+/// Pick the questions that fire for this
+/// `(observation, has_design, signals)` combo, honoring
+/// [`MAX_QUESTIONS`]. Signals are optional — when `None`, predicates
+/// behave as they did pre-DesignSignals (observation-only).
+fn select_questions(
+    obs: &ProjectObservation,
+    has_design: bool,
+    signals: Option<&DesignSignals>,
+) -> Vec<Stage1Question> {
     catalog()
         .iter()
-        .filter(|c| (c.applicable)(obs, has_design))
+        .filter(|c| (c.applicable)(obs, has_design, signals))
         .take(MAX_QUESTIONS)
         .map(|c| Stage1Question {
             id: c.id.into(),
@@ -175,6 +200,34 @@ fn select_questions(obs: &ProjectObservation, has_design: bool) -> Vec<Stage1Que
             why: c.why.into(),
         })
         .collect()
+}
+
+/// True if a DESIGN.md Anchors bullet names the primary persistence
+/// technology. Conservative — keyword-only body mentions elsewhere in
+/// the doc don't count (see plan step 3c "skip only when anchor
+/// matches; keyword-only is partial evidence").
+fn anchors_cover_persistence(signals: Option<&DesignSignals>) -> bool {
+    let Some(s) = signals else { return false };
+    s.anchors.iter().any(|a| {
+        let t = a.text.to_lowercase();
+        t.contains("primary persistence")
+            || t.starts_with("persistence:")
+            || t.contains("persistence layer")
+            || t.starts_with("database:")
+            || t.starts_with("storage:")
+    })
+}
+
+/// True if a DESIGN.md Anchors bullet names the primary interface.
+fn anchors_cover_interface(signals: Option<&DesignSignals>) -> bool {
+    let Some(s) = signals else { return false };
+    s.anchors.iter().any(|a| {
+        let t = a.text.to_lowercase();
+        t.contains("primary interface")
+            || t.starts_with("interface:")
+            || t.starts_with("surfaces:")
+            || t.contains("runtime surface")
+    })
 }
 
 // ─── Interlocutor seam ───────────────────────────────────────────────────────
@@ -312,11 +365,12 @@ impl<'a> DecisionRecorder for NoteStoreDecisionWriter<'a> {
 pub fn run_stage1<I: FoundInterlocutor, R: DecisionRecorder>(
     obs: &ProjectObservation,
     design: Option<&str>,
+    signals: Option<&DesignSignals>,
     interlocutor: &mut I,
     recorder: &mut R,
 ) -> Vec<Stage1Answer> {
     let has_design = design.is_some();
-    let questions = select_questions(obs, has_design);
+    let questions = select_questions(obs, has_design, signals);
     let mut answers = Vec::with_capacity(questions.len());
     for q in &questions {
         let a = interlocutor.ask_stage1(q);
@@ -421,8 +475,13 @@ struct FaultLineEntry {
     summary: &'static str,
     sides: &'static [(&'static str, &'static str)],
     /// Predicate: should this fault line surface given the
-    /// observation + the prior stage-1 answers?
-    applicable: fn(&ProjectObservation, &[String]) -> bool,
+    /// observation + the prior stage-1 answers + design signals?
+    ///
+    /// Signals is `Option<&DesignSignals>` to match the pattern for
+    /// Stage 1 catalog entries (same reasoning — callers without a
+    /// doc pass `None`). Every predicate MUST handle `None` by
+    /// falling back to observation + answers only.
+    applicable: fn(&ProjectObservation, &[String], Option<&DesignSignals>) -> bool,
 }
 
 fn fault_line_catalog() -> &'static [FaultLineEntry] {
@@ -441,8 +500,13 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
                     "Ingested timestamps retain their original offset; conversions happen at specific seams. Matches human intuition for domain-local events; easy to mis-convert at the wrong seam. Requires a discipline about `chrono::DateTime<Tz>` vs naive types throughout.",
                 ),
             ],
-            // Time is universal; fire always.
-            applicable: |_obs, _ans| true,
+            // Time is NOT universal. Fire only when the design text,
+            // observation, or prior answers mention time. Pre-step-3
+            // this fired on every project — including ones with no
+            // temporal concerns — which made founding feel like a
+            // generic questionnaire. See plan §3b and the session
+            // note on `fault.time-representation`.
+            applicable: has_time_signal,
         },
         FaultLineEntry {
             id: "fault.id-scheme",
@@ -466,7 +530,7 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
                     "Time-sortable + shard-encoded. Requires a coordinator or clever epoch handling; tooling cost.",
                 ),
             ],
-            applicable: has_persistence_signal,
+            applicable: |obs, ans, _sig| has_persistence_signal(obs, ans),
         },
         FaultLineEntry {
             id: "fault.persistence-shape",
@@ -486,7 +550,7 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
                     "Audit where you need it, speed where you don't. Two stores to keep consistent; overhead if the audit is never used.",
                 ),
             ],
-            applicable: has_persistence_signal,
+            applicable: |obs, ans, _sig| has_persistence_signal(obs, ans),
         },
         FaultLineEntry {
             id: "fault.error-surface",
@@ -506,7 +570,7 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
                     "Minimal coupling; downstreams interpret status codes. Loses structured detail; error recovery across services depends on convention.",
                 ),
             ],
-            applicable: has_web_framework_signal,
+            applicable: |obs, ans, _sig| has_web_framework_signal(obs, ans),
         },
         FaultLineEntry {
             id: "fault.schema-evolution",
@@ -522,7 +586,7 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
                     "No breaking changes; downstream safety is structural. Accretion of unused fields; deletions require long-held commitments; some changes genuinely need a break.",
                 ),
             ],
-            applicable: has_external_consumer_signal,
+            applicable: |obs, ans, _sig| has_external_consumer_signal(obs, ans),
         },
         FaultLineEntry {
             id: "fault.concurrency-model",
@@ -542,7 +606,7 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
                     "Message-passing forces explicit state boundaries; scales well horizontally. Library / runtime buy-in; debugging distributed actors is a specialty.",
                 ),
             ],
-            applicable: has_concurrency_signal,
+            applicable: |obs, ans, _sig| has_concurrency_signal(obs, ans),
         },
         FaultLineEntry {
             id: "fault.secrets",
@@ -562,7 +626,7 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
                     "Rotation is live; audit is centralized; credentials never sit on disk decrypted. Adds a runtime dependency and a failure mode on the hot path.",
                 ),
             ],
-            applicable: has_external_api_signal,
+            applicable: |obs, ans, _sig| has_external_api_signal(obs, ans),
         },
         FaultLineEntry {
             id: "fault.delivery-semantics",
@@ -582,7 +646,7 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
                     "Strongest guarantee. Requires coordinated state (dedup window + ack log); operational burden on the whole pipeline.",
                 ),
             ],
-            applicable: has_queue_signal,
+            applicable: |obs, ans, _sig| has_queue_signal(obs, ans),
         },
     ]
 }
@@ -593,6 +657,31 @@ fn fault_line_catalog() -> &'static [FaultLineEntry] {
 // fault line material. They're conservative: we'd rather surface a
 // relevant fault line than skip one, but we also won't fire
 // fault.delivery-semantics on a static-site project.
+
+/// Signal-gated predicate for `fault.time-representation`. Fires when
+/// ANY of:
+///   - the DESIGN.md text mentions time/timestamp/utc/schedule/timezone
+///   - a direct dep is time-related (`chrono`, `time`, `moment`, `dayjs`)
+///   - a Stage-1 answer mentions time/timestamp/schedule/utc/local
+///
+/// This replaces the pre-step-3 `|_obs, _ans| true` predicate, which
+/// fired on every project regardless of whether time mattered — the
+/// "weirdly-worded timestamp question" complaint that drove the
+/// redesign.
+fn has_time_signal(
+    obs: &ProjectObservation,
+    answers: &[String],
+    signals: Option<&DesignSignals>,
+) -> bool {
+    if signals.map(|s| s.keywords.time).unwrap_or(false) {
+        return true;
+    }
+    let time_deps = ["chrono", "time", "moment", "dayjs", "luxon", "pytz", "arrow"];
+    if has_any_dep_matching(obs, &time_deps) {
+        return true;
+    }
+    answers_mention_any(answers, &["time", "timestamp", "schedule", "utc", "local time"])
+}
 
 fn has_persistence_signal(obs: &ProjectObservation, answers: &[String]) -> bool {
     let persistence_deps = [
@@ -674,7 +763,11 @@ fn answers_mention_any(answers: &[String], keywords: &[&str]) -> bool {
 /// Pick the fault lines that apply. Returns them in catalog order
 /// — deterministic, so the UX is stable across runs on the same
 /// project.
-pub fn select_fault_lines(obs: &ProjectObservation, stage1_answers: &[Stage1Answer]) -> Vec<FaultLine> {
+pub fn select_fault_lines(
+    obs: &ProjectObservation,
+    stage1_answers: &[Stage1Answer],
+    signals: Option<&DesignSignals>,
+) -> Vec<FaultLine> {
     let answer_texts: Vec<String> = stage1_answers
         .iter()
         .filter(|a| !a.skipped)
@@ -682,7 +775,7 @@ pub fn select_fault_lines(obs: &ProjectObservation, stage1_answers: &[Stage1Answ
         .collect();
     fault_line_catalog()
         .iter()
-        .filter(|e| (e.applicable)(obs, &answer_texts))
+        .filter(|e| (e.applicable)(obs, &answer_texts, signals))
         .map(|e| FaultLine {
             id: e.id.into(),
             title: e.title.into(),
@@ -882,10 +975,11 @@ pub struct Stage2Summary {
 pub fn run_stage2<I: FaultLineInterlocutor, R: FaultLineRecorder>(
     obs: &ProjectObservation,
     stage1_answers: &[Stage1Answer],
+    signals: Option<&DesignSignals>,
     interlocutor: &mut I,
     recorder: &mut R,
 ) -> Stage2Summary {
-    let faults = select_fault_lines(obs, stage1_answers);
+    let faults = select_fault_lines(obs, stage1_answers, signals);
     let total = faults.len();
     let mut summary = Stage2Summary::default();
     for (i, fault) in faults.iter().enumerate() {
@@ -1675,15 +1769,48 @@ mod tests {
         // Sanity: today's catalog never exceeds 5 even in the
         // widest-applicable shape. Locks the contract.
         let obs = obs_with_deps();
-        let qs = select_questions(&obs, /* has_design */ false);
+        let qs = select_questions(&obs, /* has_design */ false, None);
         assert!(qs.len() <= MAX_QUESTIONS);
+    }
+
+    #[test]
+    fn persistence_question_skipped_when_anchor_names_it() {
+        // Plan step 3c: if the DESIGN.md Anchors block already names
+        // the primary persistence technology, Stage 1's
+        // persistence-contract question is redundant — the user already
+        // committed. Skip it.
+        let obs = obs_with_deps();
+        let doc = "## Anchors\n\n- Primary persistence: sqlite, single-writer\n- Primary interface: HTTP\n- Language: Rust\n\n## Plan\n\nbody\n";
+        let sig = corpus_engine::design_signals::extract(doc);
+        let qs = select_questions(&obs, true, Some(&sig));
+        assert!(
+            qs.iter()
+                .all(|q| q.id != "found.stage1.persistence-contract"),
+            "anchors covering persistence should suppress the persistence question"
+        );
+    }
+
+    #[test]
+    fn persistence_question_asked_when_design_silent_on_it() {
+        // Conservative default: keyword-only body mentions don't count
+        // as "anchor covers it". Design mentions `persist` in prose
+        // without an Anchors line → still ask.
+        let obs = obs_with_deps();
+        let doc = "## Anchors\n\n- Primary interface: HTTP\n- Language: Rust\n- Runtime: one process\n\n## Plan\n\nWe persist some things to disk.\n";
+        let sig = corpus_engine::design_signals::extract(doc);
+        let qs = select_questions(&obs, true, Some(&sig));
+        assert!(
+            qs.iter()
+                .any(|q| q.id == "found.stage1.persistence-contract"),
+            "keyword-only body mention is not enough to suppress the question"
+        );
     }
 
     #[test]
     fn design_doc_skips_project_purpose_question() {
         let obs = minimal_obs();
-        let without = select_questions(&obs, false);
-        let with = select_questions(&obs, true);
+        let without = select_questions(&obs, false, None);
+        let with = select_questions(&obs, true, None);
         assert!(without
             .iter()
             .any(|q| q.id == "found.stage1.project-purpose"));
@@ -1696,14 +1823,14 @@ mod tests {
 
     #[test]
     fn interface_question_fires_only_when_direct_deps_exist() {
-        let without_deps = select_questions(&minimal_obs(), false);
+        let without_deps = select_questions(&minimal_obs(), false, None);
         assert!(
             without_deps
                 .iter()
                 .all(|q| q.id != "found.stage1.external-interface"),
             "no deps → no interface question"
         );
-        let with_deps = select_questions(&obs_with_deps(), false);
+        let with_deps = select_questions(&obs_with_deps(), false, None);
         assert!(with_deps
             .iter()
             .any(|q| q.id == "found.stage1.external-interface"));
@@ -1713,13 +1840,13 @@ mod tests {
     fn convention_question_fires_on_scope_signal() {
         // Trivial rust-only no-dep project: convention question is
         // noise, skip.
-        let trivial = select_questions(&minimal_obs(), true);
+        let trivial = select_questions(&minimal_obs(), true, None);
         assert!(trivial
             .iter()
             .all(|q| q.id != "found.stage1.convention-risk"));
 
         // Polyglot project: convention question fires.
-        let poly = select_questions(&obs_polyglot(), true);
+        let poly = select_questions(&obs_polyglot(), true, None);
         assert!(poly
             .iter()
             .any(|q| q.id == "found.stage1.convention-risk"));
@@ -1754,12 +1881,12 @@ mod tests {
     #[test]
     fn runner_asks_every_selected_question_and_records_each() {
         let obs = obs_with_deps();
-        let selected = select_questions(&obs, false);
+        let selected = select_questions(&obs, false, None);
         let mut interlocutor = ScriptedInterlocutor::new(
             (0..selected.len()).map(|i| free_text(&format!("answer{i}"))).collect(),
         );
         let mut recorder = RecordingWriter::default();
-        let answers = run_stage1(&obs, None, &mut interlocutor, &mut recorder);
+        let answers = run_stage1(&obs, None, None, &mut interlocutor, &mut recorder);
         assert_eq!(answers.len(), selected.len());
         assert_eq!(
             interlocutor.asked_ids(),
@@ -1771,14 +1898,14 @@ mod tests {
     #[test]
     fn skipped_answer_still_recorded_with_skipped_marker() {
         let obs = minimal_obs();
-        let selected = select_questions(&obs, true); // design-doc mode → short list
+        let selected = select_questions(&obs, true, None); // design-doc mode → short list
         assert!(!selected.is_empty(), "selection must produce at least one question");
         let n = selected.len();
         // Script ALL skipped.
         let mut interlocutor =
             ScriptedInterlocutor::new((0..n).map(|_| skipped()).collect());
         let mut recorder = RecordingWriter::default();
-        let answers = run_stage1(&obs, Some("design"), &mut interlocutor, &mut recorder);
+        let answers = run_stage1(&obs, Some("design"), None, &mut interlocutor, &mut recorder);
         assert_eq!(answers.len(), n);
         assert!(answers.iter().all(|a| a.skipped));
         assert_eq!(recorder.records.len(), n);
@@ -1919,24 +2046,62 @@ mod tests {
     }
 
     #[test]
-    fn time_representation_fault_fires_on_every_project() {
+    fn time_representation_fault_is_signal_gated() {
+        // Pre-step-3 this test asserted the time fault fired on every
+        // project. That behavior was the "weirdly-worded timestamp
+        // question" the user complained about — the question felt
+        // like a placeholder on projects where time didn't matter.
+        //
+        // New contract: fire only when the design, observation, or
+        // answers actually mention time. The test pins both sides of
+        // that contract so a future edit can't quietly re-universalize.
+
+        // A: minimal obs with nothing time-related → SILENT.
         let obs = minimal_obs();
-        let faults = select_fault_lines(&obs, &[]);
+        let faults = select_fault_lines(&obs, &[], None);
         assert!(
-            faults.iter().any(|f| f.id == "fault.time-representation"),
-            "time fault must fire always"
+            faults.iter().all(|f| f.id != "fault.time-representation"),
+            "time fault must stay silent when no signal supports it; got {:?}",
+            faults.iter().map(|f| f.id.clone()).collect::<Vec<_>>(),
+        );
+
+        // B: design signals flag time → FIRES.
+        let design_md = "## Plan\n\nTick timestamps are stored in UTC.\n";
+        let sig = corpus_engine::design_signals::extract(design_md);
+        let faults_with_doc = select_fault_lines(&obs, &[], Some(&sig));
+        assert!(
+            faults_with_doc
+                .iter()
+                .any(|f| f.id == "fault.time-representation"),
+            "time fault must fire when design mentions time"
+        );
+
+        // C: a time-related dep (chrono) alone → FIRES.
+        let mut obs_chrono = minimal_obs();
+        obs_chrono.deps.push(DetectedDependency {
+            name: "chrono".into(),
+            version: Some("0.4".into()),
+            source_file: "Cargo.toml".into(),
+            kind: DepKind::Direct,
+        });
+        let faults_with_dep = select_fault_lines(&obs_chrono, &[], None);
+        assert!(
+            faults_with_dep
+                .iter()
+                .any(|f| f.id == "fault.time-representation"),
+            "time fault must fire when a time dep is present"
         );
     }
 
     #[test]
     fn persistence_fault_requires_db_dep_or_keyword() {
-        let trivial = select_fault_lines(&minimal_obs(), &[]);
+        let trivial = select_fault_lines(&minimal_obs(), &[], None);
         assert!(
             trivial.iter().all(|f| f.id != "fault.persistence-shape"),
             "no persistence signal → no persistence fault"
         );
 
-        let with_sqlite = select_fault_lines(&obs_with_sql_dep(), &[]);
+        let with_sqlite = select_fault_lines(&obs_with_sql_dep(), &[], None);
         assert!(with_sqlite
             .iter()
             .any(|f| f.id == "fault.persistence-shape"));
@@ -1945,6 +2110,7 @@ mod tests {
         let keyword_only = select_fault_lines(
             &minimal_obs(),
             &stage1_with_answer("we have a schema that survives across deploys"),
+            None,
         );
         assert!(keyword_only
             .iter()
@@ -1954,7 +2120,7 @@ mod tests {
     #[test]
     fn queue_fault_fires_on_kafka_dep() {
         let obs = obs_with_queue_dep();
-        let faults = select_fault_lines(&obs, &[]);
+        let faults = select_fault_lines(&obs, &[], None);
         assert!(
             faults.iter().any(|f| f.id == "fault.delivery-semantics"),
             "kafka dep must surface delivery-semantics"
@@ -1971,7 +2137,7 @@ mod tests {
             text: "this string mentions schema but was skipped".into(),
             skipped: true,
         }];
-        let faults = select_fault_lines(&minimal_obs(), &skipped_answer);
+        let faults = select_fault_lines(&minimal_obs(), &skipped_answer, None);
         assert!(
             faults.iter().all(|f| f.id != "fault.persistence-shape"),
             "skipped answers must not contribute signals"
@@ -2000,7 +2166,7 @@ mod tests {
     #[test]
     fn runner_records_resolved_open_skipped_according_to_outcome() {
         let obs = obs_with_everything();
-        let faults = select_fault_lines(&obs, &[]);
+        let faults = select_fault_lines(&obs, &[], None);
         assert!(faults.len() >= 3, "need enough faults to sample all outcomes, got {}", faults.len());
         let outcomes: Vec<FaultLineOutcome> = (0..faults.len())
             .map(|i| match i % 3 {
@@ -2016,7 +2182,7 @@ mod tests {
             .collect();
         let mut interloc = ScriptedFaultLineInterlocutor::new(outcomes.clone());
         let mut recorder = RecordingFaultLineWriter::default();
-        let summary = run_stage2(&obs, &[], &mut interloc, &mut recorder);
+        let summary = run_stage2(&obs, &[], None, &mut interloc, &mut recorder);
 
         // Every fault presented, in catalog order.
         assert_eq!(

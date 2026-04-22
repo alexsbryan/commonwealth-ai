@@ -152,7 +152,7 @@
     { id: "exhaustive" as const, label: "Exhaustive", desc: "No length constraints. Writes as much as needed.",        tech: "max 16 384 tok" },
   ];
 
-  let activeSlot: "fast" | "reasoning" | "embed" | null = $state(null);
+  let activeSlot: "fast" | "reasoning" | "embed" | "code" | null = $state(null);
 
   function modelFileName(path: string): string {
     return path.split(/[\\/]/).pop() ?? path;
@@ -162,6 +162,7 @@
     if (!config || !activeSlot) return "";
     if (activeSlot === "fast") return config.model_path ?? "";
     if (activeSlot === "reasoning") return config.primary_model_path ?? "";
+    if (activeSlot === "code") return config.code_model_path ?? "";
     return config.embed_model_path ?? "";
   });
 
@@ -169,6 +170,7 @@
     if (!config || !activeSlot) return;
     if (activeSlot === "fast") config.model_path = path;
     else if (activeSlot === "reasoning") config.primary_model_path = path || null;
+    else if (activeSlot === "code") config.code_model_path = path || null;
     else config.embed_model_path = path || null;
     markDirty();
   }
@@ -336,6 +338,26 @@
               </div>
             </div>
 
+            <div class="slot-card" class:slot-card--active={activeSlot === "code"}>
+              <div class="slot-card-head">
+                <span class="slot-card-title">Code specialist</span>
+                <span class="slot-status-badge slot-status-badge--opt">Optional</span>
+              </div>
+              <p class="slot-card-desc">A dedicated coding model (e.g. Qwen-Coder, DeepSeek-Coder). When set, programming questions route here instead of the Main responder. Shares memory with the Main responder — whichever one you need loads on demand.</p>
+              <div class="slot-current">
+                {#if config.code_model_path}
+                  <span class="slot-file">{modelFileName(config.code_model_path)}</span>
+                  <div class="slot-btns">
+                    <button class="slot-btn" onclick={() => activeSlot = "code"}>Change</button>
+                    <button class="slot-btn slot-btn--clear" onclick={() => { config!.code_model_path = null; markDirty(); }}>Clear</button>
+                  </div>
+                {:else}
+                  <span class="slot-empty">No model chosen</span>
+                  <button class="slot-btn slot-btn--add" onclick={() => activeSlot = "code"}>Choose a model</button>
+                {/if}
+              </div>
+            </div>
+
           </div>
 
           {#if !config.embed_model_path}
@@ -353,7 +375,7 @@
             <div class="model-picker-row">
               <div class="picker-head">
                 <span class="picker-label">
-                  {#if activeSlot === "fast"}Quick responder{:else if activeSlot === "reasoning"}Main responder{:else}Knowledge embedder{/if}
+                  {#if activeSlot === "fast"}Quick responder{:else if activeSlot === "reasoning"}Main responder{:else if activeSlot === "code"}Code specialist{:else}Knowledge embedder{/if}
                 </span>
                 <button class="picker-done" onclick={() => activeSlot = null}>Done</button>
               </div>

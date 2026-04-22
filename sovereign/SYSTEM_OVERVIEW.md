@@ -491,6 +491,56 @@ This pass is opt-in per recipe (`[enrichment] enabled = true, domain =
 "philosophy"`). Without an `InferenceFn`, the engine logs a warning and skips
 enrichment without failing ingestion.
 
+#### 3.5.1 Enrichment v2 (in iteration)
+
+A replacement pipeline lives alongside v1 at
+`corpus-engine/src/enrichment/pipeline/`. It splits the monolithic 5-phase
+`FieldModelEngine` into 7 per-phase steps (per-chapter question extraction →
+question clustering → canonical concern naming → chunk clustering → grounded
+position extraction → pairwise tension detection → gap detection) that an
+admin CLI can iterate on one at a time. Prompts are no longer embedded as
+Rust string constants — each phase loads a markdown system preamble via
+`include_str!` and injects top-K relevant exemplars from a per-phase
+`ExemplarBank` JSON file that the developer edits between runs. Dispatch
+happens through `PipelineRegistry` (mirrors `DomainRegistry` per
+ARCH_PRINCIPLES §4). `LiteraryPipeline` is the first implementation; once
+v2 is proven, philosophy / personal / conversational / institutional migrate
+and `FieldModelEngine` + the `Domain` trait are deleted (§12 Roadmap).
+
+Supporting infrastructure added in Landing 1:
+
+- `chunkers::sectioned::SectionedChunker` + `SectionDetector` trait —
+  section-aware chunking with pluggable detectors (default
+  `ChapterRegexDetector` for plaintext books).
+- `pipeline::ChapterManifest` — stable per-corpus manifest at
+  `~/.sovereign/indexes/<corpus>/chapters.json`.
+- `pipeline::PhaseCache` — atomic per-phase JSON cache with mtime-based
+  staleness detection across upstream dependencies.
+- `pipeline::RunOutputWriter` — monotonic per-run output files under
+  `runs/` so the developer can `diff` and `promote` from any prior run.
+
+The CLI admin harness lives in `sovereign-cli/src/enrich_cmd/`.
+Landings 2 + 3 ship all seven phases end-to-end: `init` (scaffold + pin
+config), `extract` (phase 1 subset/full), `cluster-questions`,
+`name-concerns`, `cluster-chunks`, `extract-positions`,
+`detect-tensions`, `detect-gaps`, plus `cascade --from <phase>` to
+rerun a phase + every downstream dependent. `show <target>` renders
+every phase's cached output; `exemplars` reports per-phase bank counts
++ lint; `status` shows fresh/stale/never-run per phase. Pure-vector
+HDBSCAN goes through `pipeline::cluster_vectors` (no CorpusIndex
+dependency — simpler than v1's wrapper since admin corpora stay in
+the low thousands of chunks). Landing 4 adds the validation battery
+and dev-UX helpers: `query` (atlas traversal with LOCATE/TRAVERSE/
+GROUNDING print), `validate` (runs a `QueryBattery` against the atlas
+and prints a score table with pass-rate at a chosen threshold),
+`promote` (lifts a run finding into the per-phase exemplar bank by
+primary key), `diff` (side-by-side compare of two phase-1 run
+outputs: added/removed questions, reveals + carriers changed), and
+`reset` (clear caches + runs to re-iterate — default keeps phase 1 +
+exemplars; `--full` wipes the whole tree including the chapter
+manifest; always prompts unless `--yes`; `--dry-run` previews). The
+CLI harness is now complete for the v2-iteration workflow.
+
 ### 3.6 Safety
 
 Hardcoded, not configurable from recipes:
@@ -849,6 +899,7 @@ Observations are **local to each scheduler** per spec §7 — never advertised b
 
 - `commonwealth-api/routes_oicp.rs::synthesize_default_claim` — one claim per `ModelInfo`. Code hint by name heuristic (`coder|code-llama|deepseek-coder`); affinity derived from the stored v0.2 proficiency profile.
 - `sovereign-mesh/inference_adapter.rs::synthesize_slot_claims` — one claim per Speed slot. Fast slot → `LatencyClass::Fast` + reduced context envelope (8K/1K); Slow slot → `LatencyClass::Normal` + full envelope (32K/4K).
+- `sovereign-mesh/inference_adapter.rs::synthesize_code_slot_claims` — one `code`-hinted claim for the optional Code specialist (PR-E2). Always `LatencyClass::Normal` (reflects hot-swap TTFT, not held-warm TTFT — the code slot shares the primary's lazy chat mutex). Affinity floors at 0.5 for filename-signalled coders so BYOM code GGUFs not in `models.toml` remain discoverable.
 
 **Embed slot — a cross-peer interoperability contract:**
 
@@ -864,19 +915,26 @@ so a mismatch silently corrupts retrieval — the collaborative-
 ingestion planner filters peers on this field up-front and logs
 the rejection rather than letting partitions land in broken state.
 
-Implications for any future refactor (including the deferred PR-E2
-N-model runtime): the embed slot is **not** one role of many. It
-remains explicitly named, explicitly probed at daemon startup
-(`Arc<EmbedSlot>` in `EmbeddedLlamaCpp`), and explicitly advertised
-via `KnowledgeManifest.embed_model`. Any generalisation that
-folds embed into a generic role vector must preserve the
-"one active embed model per node; must match collaborators"
-invariant. The family-driven pooling + normalisation defaults come
-from the bundled manifest via
+Implications for any future refactor: the embed slot is **not**
+one role of many. It remains explicitly named, explicitly probed
+at daemon startup (`Arc<EmbedSlot>` in `EmbeddedLlamaCpp`), and
+explicitly advertised via `KnowledgeManifest.embed_model`. Any
+generalisation that folds embed into a generic role vector must
+preserve the "one active embed model per node; must match
+collaborators" invariant. The family-driven pooling + normalisation
+defaults come from the bundled manifest via
 `ModelsManifest::embed_family_for_file` — adding a new embed model
 requires declaring its `family = "..."` line so both the desktop
 startup path and the CLI daemon advertise the same
 `EmbedModelInfo`.
+
+**PR-E2 honours this split in its design**: the Code specialist
+shares the primary's lazy chat mutex (hot-swap model), while the
+embed slot stays on its own `Arc<EmbedSlot>` with zero shared
+state. The `code` claim in `build_self_manifest` advertises
+`loaded: false` to prevent schedulers from double-counting the
+two chat roles against available compute — at most one of
+{Main responder, Code specialist} is resident at a time.
 
 **Extension governance (v0.3 §4.3):**
 
@@ -918,7 +976,7 @@ is rejected with HTTP 400 by Commonwealth.
 
 | Frontend     | Purpose                                                       |
 |--------------|--------------------------------------------------------------|
-| `sovereign-cli`     | Interactive REPL (default) plus named subcommands: `setup` (first-run wizard), `project` (per-project code intelligence — `init`/`found`/`amend`/`phase`/`audit`/`serve`/`refresh`/`install-hooks`), `atos` (feature-layer orchestration — `provision`/`start-milestone`/`end-milestone`/`spec diff`/`spec accept`/`teardown`/`doctor`/`install-plugin`), `daemon` (long-running service started by launchd/systemd; owns :9741), `doctor` (diagnose setup + daemon health), `mesh` (create/join/rotate/status/members/leave), `corpus` (install/remove/update/list), `code` (index), `mcp` (proxy + `mcp list-tools`), `recipe` (run), `reflect` (review session reflections, retire fixed ones). Flags: `--model`, `--primary-model`, `--data-dir`, `--skills-dir`, `--router`, `--ingest`, `--brave-api-key`, `--tavily-api-key`, `--no-knowledge-view` (disable KnowledgeView landscape digests; see §4.12). `project init` prompts interactively for AI assistant harness selection (Claude Code / opencode / all / skip) and writes `.opencode/config.json` + `AGENTS.md` for opencode; if `.sovereign/sovereign.toml` has a `[commonwealth]` section it also configures a Commonwealth OICP inference provider in the opencode config. `project init` also installs the ATOS opencode plugin at `.opencode/plugins/sovereign-atos.ts` (see §4.13). |
+| `sovereign-cli`     | Interactive REPL (default) plus named subcommands: `setup` (first-run wizard), `project` (per-project code intelligence — `init`/`design`/`plan`/`charter`/`found`/`amend [design|charter]`/`phase`/`audit`/`serve`/`refresh`/`install-hooks`), `atos` (feature-layer orchestration — `provision`/`start-milestone`/`end-milestone`/`spec diff`/`spec accept`/`teardown`/`doctor`/`install-plugin`), `daemon` (long-running service started by launchd/systemd; owns :9741), `doctor` (diagnose setup + daemon health), `mesh` (create/join/rotate/status/members/leave), `corpus` (install/remove/update/list), `code` (index), `mcp` (proxy + `mcp list-tools`), `recipe` (run), `reflect` (review session reflections, retire fixed ones). Flags: `--model`, `--primary-model`, `--data-dir`, `--skills-dir`, `--router`, `--ingest`, `--brave-api-key`, `--tavily-api-key`, `--no-knowledge-view` (disable KnowledgeView landscape digests; see §4.12). `project init` prompts interactively for AI assistant harness selection (Claude Code / opencode / all / skip) and writes `.opencode/config.json` + `AGENTS.md` for opencode; if `.sovereign/sovereign.toml` has a `[commonwealth]` section it also configures a Commonwealth OICP inference provider in the opencode config. `project init` also installs the ATOS opencode plugin at `.opencode/plugins/sovereign-atos.ts` (see §4.13). |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port. Multi-tenant via `tenant.rs`. SSE streaming via `/v1/conversations/{id}/messages/stream`. WS streaming via `/v1/ws/{conversation_id}`. Server-side `ApprovalChannel` stores requests in DB and exposes `/v1/tasks/{id}/approve`. |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. Setup wizard (persona, hardware-driven model selection, knowledge tier, optional web search keys). Chat with streaming + source attribution. Knowledge base management (`KnowledgeStatus`, `CorpusProgressBanner`). Skill manager. Mesh status/settings UI. Deep-link handler for `sovereign://` URLs. System tray. |
 
@@ -1001,9 +1059,12 @@ directory, `.sovereign/`:
 
 | Command                         | Effect                                                         |
 |---------------------------------|----------------------------------------------------------------|
-| `sovereign project init`        | Observe repo (languages, deps, git); write `project.toml`; install ATOS opencode plugin at `.opencode/plugins/sovereign-atos.ts` |
-| `sovereign project found`       | Four-stage founding conversation → `CHARTER.md` + `PHASES.md`, records answers as `decision` notes, sets `charter_hash = SHA-256(CHARTER.md)` |
-| `sovereign project amend`       | Opens `CHARTER.md` in `$EDITOR`; on save, diffs section-by-section and runs adversarial Q&A for each changed section; writes new hash + amendment-log entry |
+| `sovereign project init`        | Observe repo (languages, deps, git); auto-with-confirm `git init` when absent (skippable with `--no-git`); write `project.toml`; install ATOS opencode plugin at `.opencode/plugins/sovereign-atos.ts`. Soft-paths (not hard-bails) empty repos when `DESIGN.md` is present |
+| `sovereign project design`      | Agent-collaborative DESIGN.md session against the Commonwealth daemon. opencode is the blessed path (`--via opencode`, default); `--solo` drives CLI prompts from the `DesignSignals` structural parser and writes `OPEN_QUESTIONS.md`; `--stopgap` is a provisional in-terminal chat placeholder. `--import <path>` copies an existing doc into `<repo>/DESIGN.md` with diff-confirm. Session artifacts land in `.sovereign/.atos/design/<id>/` (`brief.md`, `state.json`, `transcript.jsonl`) |
+| `sovereign project plan`        | Compose `IMPLEMENTATION_PLAN.md` at repo root from `DESIGN.md` + `OPEN_QUESTIONS.md`. Phase 0 is language-specific skeleton; phases 1..N derive from H2 sections (skipping Anchors / Open questions) in document order. Unanswered OQs block the plan unless `--allow-open`; answered OQs surface as `Resolved (for the record)` on the matching phase. Plan items upserted into `.sovereign/plan.db` (`plan_items` table); stale rows from prior DESIGN.md generations are marked `deferred` rather than deleted |
+| `sovereign project charter`     | Create or edit the free-form team `CHARTER.md` (governance, culture, onboarding). Low-ceremony — distinct from `DESIGN.md`. First invocation writes a minimal skeleton at `.sovereign/CHARTER.md` and opens `$EDITOR`; subsequent invocations open the existing file. Re-hashes and indexes post-save |
+| `sovereign project found`       | Four-stage founding conversation → `CHARTER.md` + `PHASES.md`, records answers as `decision` notes, sets `charter_hash = SHA-256(CHARTER.md)`. As of the ATOS onboarding redesign, Stage-1/Stage-2 predicates are signal-gated — questions fire only when the observation, prior answers, OR `DesignSignals` extracted from `DESIGN.md` indicate the question is material (e.g., `fault.time-representation` fires only when the design mentions time). `--orchestrate` switches to the orchestrator path: require `DESIGN.md` + answered `OPEN_QUESTIONS.md` + `IMPLEMENTATION_PLAN.md` + `CHARTER.md` at repo root (all produced by `project design` / `project plan` / `project charter`); skip the questionnaire; elicit only the Phase-1 stop condition; compose `PHASES.md` via the existing `compose_phases`; flip the lifecycle |
+| `sovereign project amend [target]` | `amend charter` (default, for back-compat) opens `CHARTER.md` in `$EDITOR`, diffs section-by-section, runs adversarial Q&A, writes new hash + amendment-log entry. `amend design` opens `DESIGN.md` at repo root, detects edits to the curated sections (`Anchors`, `Data & interfaces`, `Open questions`), asks one adversarial question per changed curated section, appends the Q&A to `DESIGN.md`'s `## Amendment log` (newest on top). `amend design` does NOT bump `charter_version` — DESIGN.md is expected to iterate; provenance is the inline log + git history |
 | `sovereign project phase pass N` | Runs phase N's stop condition from `PHASES.md`; on green, writes `phase-N.md` and bumps `current_phase` |
 | `sovereign project audit`       | One-page reviewer rollup (founding state, phases passed, notes by kind, open questions, deviations, drift status) |
 
@@ -1595,6 +1656,9 @@ is currently happening. Everything above them is stable and covered by tests.
 | Understand index storage on disk      | `corpus-engine/src/index/mod.rs`                     |
 | Understand the embedding injection    | `corpus-engine/src/types.rs` (`EmbedFn`) and `commonwealth/crates/commonwealth-knowledge/src/embed_http.rs` |
 | Understand enrichment domains         | `corpus-engine/src/enrichment/domain.rs` and `enrichment/domains/` |
+| Understand the v2 enrichment pipeline | `corpus-engine/src/enrichment/pipeline/mod.rs` (`Pipeline` trait, `PipelineRegistry`, `ExemplarBank`, `PhaseCache`) |
+| Add a new v2 pipeline                 | `corpus-engine/src/enrichment/pipeline/pipelines/` + `PipelineRegistry::builtin` |
+| Drive v2 enrichment from the CLI      | `sovereign-cli/src/enrich_cmd/` (lands in Landing 2) |
 | Understand the recipe registry        | `corpus-engine/src/registry.rs`                      |
 | Understand delta updates              | `corpus-engine/src/update/delta.rs`                  |
 | Understand KnowledgeView digest assembly | `sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs` (lifecycle), `cross_view.rs` (resonance), `recipes.rs` (three-view + privacy) |
@@ -1677,6 +1741,19 @@ is currently happening. Everything above them is stable and covered by tests.
 
 Future improvement candidates identified through SOLID analysis. These are
 proposals, not active work.
+
+### Enrichment v1 → v2 migration
+
+v1 (`FieldModelEngine` + `Domain` trait + 9 impls) and v2 (`Pipeline` trait +
+`LiteraryPipeline` + admin CLI harness) currently coexist (see §3.5.1). Once
+v2 has been proven on ≥2 text corpora under the `sovereign enrich` admin
+loop, the remaining domains (`philosophy`, `personal`, `conversational`,
+`institutional`; four stubs can stay deleted) migrate onto `Pipeline`, the
+`sovereign enrich` CLI retires or demotes to a diagnostic helper, and
+`enrichment/field_engine.rs` + `domain.rs` + `domains/` are deleted. The
+retirement PR is sequenced after the admin harness ships; migrating
+KnowledgeView's three domains is the largest single subtask (shared code
+paths with `sovereign-tools/src/knowledge_view/`).
 
 ### SRP: Large-file decomposition
 
@@ -1825,9 +1902,6 @@ are now described by role, not by internal slot: **Quick responder**
 (Fast slot — short fast-turnaround replies + routing), **Main
 responder** (Primary slot — substantive work, lazy-loaded),
 **Knowledge embedder** (Embed slot — retrieval vectorization).
-Backend remains on the three-slot `EmbeddedLlamaCpp` structure;
-adding a true fourth "Code specialist" slot with its own Speed
-variant is deferred to PR-E2.
 
 PR-F piggy-backed a locality probe on the existing manifest fetch.
 `sovereign-mesh::peer_inference::get_peer_manifest` now records
@@ -1845,16 +1919,51 @@ fetched peer manifest). Operators can read a snapshot via
 the first/last-seen timestamps + request/advert counts to decide
 which extensions merit promotion per spec §4.3.
 
-Remaining step:
+PR-E2 shipped the **Code specialist** — an optional fourth role
+that threads hint-aware dispatch *inside* `EmbeddedLlamaCpp`
+instead of widening the `Speed` enum (which would have cascaded
+through 33 files and 10+ `InferenceProvider` impls). The user-
+facing surface is a fourth card in Settings → Models + an optional
+prompt in `sovereign setup`. When configured, requests whose OICP
+envelope carries `capability_hint = "code"` (as emitted today by
+`research-analyst` and the `codebase-navigator` skill paths) are
+dispatched to the Code specialist GGUF; everything else continues
+to flow to the Main responder.
 
-1. **PR-E2 (deferred) — N-model runtime.** Lift the chat-slot
-   pair (Quick / Main responder) into a dynamic role-keyed vector
-   so a collective member running Qwen 3B + Mistral Small + Qwen
-   Coder advertises three chat claims instead of two. Touches
-   `InferenceProvider`, `Speed` variants, `models.toml` schema, and
-   the setup wizard's N-model selection UI. **Knowledge embedder
-   stays single-slot and explicitly named** — it carries a cross-
-   peer `EmbedModelInfo` contract that must not be flattened into
-   the chat-roles vector. Not load-bearing for correctness today —
-   current users can already get most of the benefit via the
-   `primary_model_path` picking a code-specialist model.
+Mechanics: the Code specialist **shares the primary's lazy chat
+mutex** — one of {Main responder, Code specialist} is resident at
+a time, with a hot-swap on hint-switch. This trades ~5–30s reload
+latency for a dramatically smaller memory footprint on mid-range
+hardware (the alternative — two held-warm specialists — would
+double VRAM pressure on Mac unified memory). A collective peer
+that wants zero-swap code routing dedicates one node to code and
+lets the mesh scheduler surface that peer via the new third
+`ProviderModel` claim in `build_self_manifest`. The code claim
+advertises `LatencyClass::Normal` (reflecting hot-swap TTFT, not
+held-warm TTFT) so scoring lines up with reality.
+
+**Knowledge embedder stays single-slot and explicitly named** —
+it carries a cross-peer `EmbedModelInfo` contract that must not
+be flattened into the chat-roles vector. The PR-E2 change
+deliberately does not touch the embed plumbing; only the two
+chat slots (Main + Code) share the lazy-load mutex. See §(cross-
+peer interoperability) for why this asymmetry is load-bearing.
+
+Trait surface: `InferenceProvider::code_model_id() -> Option<String>`
+defaults to `None`, so the dozens of test stubs, remote providers,
+and hybrid wrappers continue to compile unmodified. Only
+`EmbeddedLlamaCpp` (and `MeshInferenceProvider` which forwards)
+return `Some(...)`. The dispatch rules themselves live in a free
+function `pick_slot(request, has_primary, has_code) -> SlotTarget`
+so they can be table-tested without loading real GGUF weights
+(`embedded::pick_slot_tests`, six rules locked).
+
+Remaining step (hypothetical PR-E2.1, not scheduled):
+
+1. **N-warm chat slots.** Extend the single lazy chat mutex into a
+   role-keyed vector so a big-box operator with VRAM to spare can
+   hold Main + Code + (future) Math all warm simultaneously. Touches
+   `EmbeddedLlamaCpp` internals only — user-facing vocabulary and
+   OICP claim shape are already in place. Not on the critical
+   path; current users trade a one-time ~20s swap per hint switch
+   for half the RAM pressure.

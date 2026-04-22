@@ -237,6 +237,45 @@ fn catalog() -> &'static [CatalogEntry] {
                 "An open question closing without a concrete reason \
                  invites re-opening when the next person hits the same decision point.",
         },
+        // ─── DESIGN.md section catalog (step 9) ─────────────────────
+        //
+        // Charter amendments bump `charter_version`; design
+        // amendments don't — DESIGN.md is expected to iterate.
+        // These catalog entries fire when the user edits specific
+        // DESIGN.md sections (anchors / data-interfaces / open
+        // questions). The adversarial engine is the same; only the
+        // section ids differ.
+        CatalogEntry {
+            section_id: "design.anchors",
+            question_id: "amend.adv.design.anchors",
+            prompt:
+                "Which downstream assumption in DESIGN.md or IMPLEMENTATION_PLAN.md \
+                 changes if this anchor is reworded?",
+            why:
+                "Anchors are the promises the rest of the doc (and the plan) rests \
+                 on — a quiet rewording silently invalidates them.",
+        },
+        CatalogEntry {
+            section_id: "design.data-interfaces",
+            question_id: "amend.adv.design.data-interfaces",
+            prompt:
+                "What callers already code against this data shape, \
+                 and what's your migration plan?",
+            why:
+                "Data-shape drift is the #1 source of post-founding reversals. \
+                 A new column, a renamed field, a different null semantics — each \
+                 is a commitment, not just a doc edit.",
+        },
+        CatalogEntry {
+            section_id: "design.open-questions",
+            question_id: "amend.adv.design.open-questions",
+            prompt:
+                "Why add this open question now instead of resolving it? \
+                 What evidence is missing?",
+            why:
+                "An open question deferred without rationale will be deferred \
+                 forever. Name the missing evidence so you know when you can close it.",
+        },
     ]
 }
 
@@ -595,6 +634,261 @@ fn shell_escape(path: &Path) -> String {
 /// Convenience for cmd_amend — the stable path to `CHARTER.md`.
 pub fn charter_path(repo_root: &Path) -> PathBuf {
     repo_root.join(".sovereign").join("CHARTER.md")
+}
+
+// ─── DESIGN.md amend flow (step 9) ───────────────────────────────────────────
+//
+// Simpler than charter amend because:
+//   - DESIGN.md is iterative by design; no version bump on each save.
+//   - No lifecycle flag means no drift-vs-hash check (although the
+//     plan.db `design_hash` column will let future work surface
+//     drift between the plan's snapshot and current DESIGN.md).
+//   - Appending an amendment-log entry to DESIGN.md itself
+//     preserves provenance inline. The agent / next reader sees
+//     both the edits AND the argued-against risks.
+//
+// Reuses the shared `catalog()` via `questions_for` with DESIGN-
+// specific section ids. Section-change detection walks the
+// `DesignSignals::sections` snapshot before/after the edit and
+// checks three specific H2 headings: `Anchors`, `Data & interfaces`,
+// `Open questions`. Extra sections added by the user round-trip
+// faithfully but don't trigger catalog entries today (the plan
+// suggests deferring a catalog expansion until real patterns emerge).
+
+/// Map a DESIGN.md H2 heading to the catalog section id. Returns
+/// `None` for headings outside the curated set — we don't invent
+/// adversarial questions for arbitrary sections.
+pub fn design_section_id(heading: &str) -> Option<&'static str> {
+    let h = heading.trim().to_lowercase();
+    match h.as_str() {
+        "anchors" => Some("design.anchors"),
+        "data & interfaces" | "data and interfaces" | "data/interfaces" => {
+            Some("design.data-interfaces")
+        }
+        "open questions" => Some("design.open-questions"),
+        _ => None,
+    }
+}
+
+/// Compute the list of catalog section ids whose DESIGN.md content
+/// changed between two snapshots. Walks H2 sections only; nested
+/// H3 differences bubble up via their parent section's body diff.
+pub fn changed_design_sections(
+    old: &corpus_engine::design_signals::DesignSignals,
+    new: &corpus_engine::design_signals::DesignSignals,
+) -> Vec<&'static str> {
+    use std::collections::BTreeMap;
+    fn h2_map(
+        signals: &corpus_engine::design_signals::DesignSignals,
+    ) -> BTreeMap<String, String> {
+        signals
+            .sections
+            .iter()
+            .filter(|s| s.level == 2)
+            .map(|s| (s.heading.clone(), normalize(&s.body)))
+            .collect()
+    }
+    let old_m = h2_map(old);
+    let new_m = h2_map(new);
+    let mut out: Vec<&'static str> = Vec::new();
+    for (heading, new_body) in &new_m {
+        let Some(id) = design_section_id(heading) else {
+            continue;
+        };
+        let old_body = old_m.get(heading).map(String::as_str).unwrap_or("");
+        if old_body != new_body && !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    // Section deletions: heading present in old, gone in new.
+    for (heading, _) in &old_m {
+        let Some(id) = design_section_id(heading) else {
+            continue;
+        };
+        if !new_m.contains_key(heading) && !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// Convenience: where DESIGN.md lives. Single source of truth —
+/// matches `design_onboarding::design_path`.
+pub fn design_md_path(repo_root: &Path) -> PathBuf {
+    repo_root.join("DESIGN.md")
+}
+
+/// Render an amendment-log entry for DESIGN.md. Appended verbatim
+/// to the `## Amendment log` section (creating it if absent).
+/// Intentionally terse — the Q&A captures the why; the diff lives
+/// in git.
+pub fn render_design_amendment_entry(
+    timestamp_iso: &str,
+    qa: &[(AdversarialQuestion, String)],
+    old_hash: &str,
+    new_hash: &str,
+) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "### {timestamp_iso} · design amend\n\
+         _Old DESIGN.md sha: `{old_hash}` → new: `{new_hash}`_\n\n"
+    ));
+    if qa.is_empty() {
+        out.push_str(
+            "_(No curated catalog questions fired — the changed sections are \
+             outside the adversarial set. Content edit only.)_\n\n",
+        );
+    } else {
+        for (q, a) in qa {
+            out.push_str(&format!("- **{}** — {}\n", q.section, q.prompt));
+            out.push_str(&format!("  _Why asked:_ {}\n", q.why));
+            if a.trim().is_empty() {
+                out.push_str("  _Answer:_ _(skipped)_\n\n");
+            } else {
+                out.push_str(&format!("  _Answer:_ {}\n\n", a.trim()));
+            }
+        }
+    }
+    out
+}
+
+/// Append `entry` to DESIGN.md's `## Amendment log` section,
+/// creating the section at the end of the file if absent.
+pub fn append_design_amendment_log(md: &str, entry: &str) -> String {
+    const HEADING: &str = "## Amendment log";
+    if let Some(idx) = md.find(HEADING) {
+        // Insert entry immediately after the heading line (and the
+        // blank line that typically follows). Find the end of the
+        // heading line and splice in.
+        let after_heading = idx + HEADING.len();
+        // Skip to end of line
+        let rest = &md[after_heading..];
+        let eol = rest.find('\n').map(|n| after_heading + n + 1).unwrap_or(md.len());
+        let mut out = String::with_capacity(md.len() + entry.len() + 2);
+        out.push_str(&md[..eol]);
+        // Ensure a blank line between the heading and the new entry.
+        if !out.ends_with("\n\n") {
+            out.push('\n');
+        }
+        out.push_str(entry);
+        out.push_str(&md[eol..]);
+        out
+    } else {
+        // No amendment-log section yet — append both the heading
+        // and the first entry at the end.
+        let mut out = md.trim_end().to_string();
+        out.push_str("\n\n");
+        out.push_str(HEADING);
+        out.push_str("\n\n");
+        out.push_str(entry);
+        out
+    }
+}
+
+#[cfg(test)]
+mod design_amend_tests {
+    use super::*;
+
+    fn signals(md: &str) -> corpus_engine::design_signals::DesignSignals {
+        corpus_engine::design_signals::extract(md)
+    }
+
+    #[test]
+    fn design_section_id_maps_curated_headings() {
+        assert_eq!(design_section_id("Anchors"), Some("design.anchors"));
+        assert_eq!(
+            design_section_id("Data & interfaces"),
+            Some("design.data-interfaces")
+        );
+        assert_eq!(
+            design_section_id("data and interfaces"),
+            Some("design.data-interfaces")
+        );
+        assert_eq!(
+            design_section_id("Open questions"),
+            Some("design.open-questions")
+        );
+        assert_eq!(design_section_id("What we're building"), None);
+    }
+
+    #[test]
+    fn changed_design_sections_detects_body_edit() {
+        let old = signals("# P\n\n## Anchors\n\n- a\n\n## Data & interfaces\n\nv1\n");
+        let new = signals("# P\n\n## Anchors\n\n- a\n\n## Data & interfaces\n\nv2\n");
+        assert_eq!(changed_design_sections(&old, &new), vec!["design.data-interfaces"]);
+    }
+
+    #[test]
+    fn changed_design_sections_detects_section_removal() {
+        let old = signals(
+            "# P\n\n## Anchors\n\n- a\n\n## Open questions\n\n- tbd\n",
+        );
+        let new = signals("# P\n\n## Anchors\n\n- a\n");
+        assert_eq!(
+            changed_design_sections(&old, &new),
+            vec!["design.open-questions"]
+        );
+    }
+
+    #[test]
+    fn changed_design_sections_ignores_non_curated() {
+        let old = signals("# P\n\n## What we're building\n\nfoo\n");
+        let new = signals("# P\n\n## What we're building\n\nbar\n");
+        assert!(
+            changed_design_sections(&old, &new).is_empty(),
+            "non-curated heading edits shouldn't drive adversarial Q"
+        );
+    }
+
+    #[test]
+    fn render_design_amendment_entry_shapes_well() {
+        let q = AdversarialQuestion {
+            id: "amend.adv.design.anchors".into(),
+            section: "design.anchors".into(),
+            prompt: "Which assumption shifts?".into(),
+            why: "Anchors ripple.".into(),
+        };
+        let entry = render_design_amendment_entry(
+            "2026-04-22",
+            &[(q.clone(), "I migrated the callers.".to_string())],
+            "aaaaaa",
+            "bbbbbb",
+        );
+        assert!(entry.contains("2026-04-22"));
+        assert!(entry.contains("aaaaaa"));
+        assert!(entry.contains("bbbbbb"));
+        assert!(entry.contains("I migrated the callers."));
+        assert!(entry.contains("Anchors ripple."));
+    }
+
+    #[test]
+    fn render_design_amendment_entry_handles_empty_qa() {
+        let entry =
+            render_design_amendment_entry("2026-04-22", &[], "old", "new");
+        assert!(entry.contains("No curated catalog questions fired"));
+    }
+
+    #[test]
+    fn append_to_existing_amendment_log_keeps_order() {
+        let doc = "# P\n\n## Anchors\n\n- a\n\n## Amendment log\n\n### previous\nold entry.\n";
+        let out = append_design_amendment_log(doc, "### new\nnew entry.\n");
+        let log_idx = out.find("## Amendment log").unwrap();
+        let new_idx = out.find("### new").unwrap();
+        let prev_idx = out.find("### previous").unwrap();
+        assert!(log_idx < new_idx, "log heading precedes new entry");
+        assert!(
+            new_idx < prev_idx,
+            "new entry appears BEFORE prior entries (newest-on-top convention)"
+        );
+    }
+
+    #[test]
+    fn append_creates_amendment_log_when_missing() {
+        let doc = "# P\n\n## Anchors\n\n- a\n";
+        let out = append_design_amendment_log(doc, "### new\nnew entry.\n");
+        assert!(out.contains("## Amendment log"));
+        assert!(out.contains("### new"));
+    }
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

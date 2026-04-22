@@ -45,6 +45,8 @@ pub use code::{
     ArchiveFeatureTool, PromoteNoteTool, ProvisionFeatureTool, ReadNoteByIdTool,
     ReadNoteDigestTool, RecordAtosEventTool, WriteRedteamFindingTool,
 };
+#[cfg(feature = "treesitter")]
+pub use code::DesignSignalsExtractTool;
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};

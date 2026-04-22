@@ -977,6 +977,7 @@ async fn mirror_to_setup_config(
                 .embed_model_path
                 .clone()
                 .unwrap_or_else(|| desktop.model_path.clone()),
+            code: desktop.code_model_path.clone(),
         },
         daemon: DaemonSection::default(),
         data: DataSection { dir: desktop.data_dir.clone() },

@@ -39,6 +39,20 @@ pub struct DesktopConfig {
     /// embedding model" error rather than producing garbage vectors.
     #[serde(default)]
     pub embed_model_path: Option<PathBuf>,
+    /// PR-E2: Optional Code specialist GGUF. When set, `code`-
+    /// hinted inference requests route to this slot instead of the
+    /// Main responder (primary). Lazy-loaded on first use; idle-
+    /// unloads after 60s, same as primary. `None` (the common
+    /// case) means the Main responder handles code too — a
+    /// well-rounded general model does this adequately per v0.3
+    /// §4.4 guidance.
+    #[serde(default)]
+    pub code_model_path: Option<PathBuf>,
+    /// Model family of the code slot — drives tokenizer / chat
+    /// template quirks. Typically `Qwen35` for Qwen Coder lineage,
+    /// `Unknown` for BYOM coders.
+    #[serde(default)]
+    pub code_family: ModelFamily,
     #[serde(default = "default_data_dir")]
     pub data_dir: PathBuf,
     #[serde(default = "default_skills_dir")]
@@ -209,6 +223,8 @@ impl Default for DesktopConfig {
             model_path: PathBuf::from("models/fast.gguf"),
             primary_model_path: None,
             embed_model_path: None,
+            code_model_path: None,
+            code_family: ModelFamily::Unknown,
             data_dir: default_data_dir(),
             skills_dir: default_skills_dir(),
             active_skills: Vec::new(),
@@ -487,11 +503,13 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                     &config.model_path,
                     config.primary_model_path.as_deref(),
                     config.embed_model_path.as_deref(),
+                    config.code_model_path.as_deref(),
                     config.context_size,
                     None,
                     ModelFamily::Unknown,               // fast slot
                     ModelFamily::Unknown,               // primary slot (lazy-loaded)
                     config.embed_family.clone(),        // embed slot — drives pooling/instructions
+                    config.code_family.clone(),         // code slot (lazy, hot-swaps with primary)
                 )
                 .map_err(|e| format!("Failed to load model: {e}"))?,
             );

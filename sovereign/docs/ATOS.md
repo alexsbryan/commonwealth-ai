@@ -7,13 +7,16 @@ remembered; a milestone quietly missed its tests and the session
 moved on.
 
 ATOS is scaffolding that makes those failure modes visible. It
-sits inside your repo at `.sovereign/`. It records what you
+sits inside your repo: the human-facing artifacts at root
+(`DESIGN.md`, `OPEN_QUESTIONS.md`, `IMPLEMENTATION_PLAN.md`) and
+tool state under `.sovereign/` (`CHARTER.md`, `project.toml`,
+`notes.db`, `plan.db`, session transcripts). It records what you
 agreed, detects when the spec drifts, logs the arguments against
 every amendment, and hands a reviewer a one-page audit trail
 they can read instead of interviewing you.
 
-You don't configure anything. You write charter markdown. You
-commit it. The agent sees the spec in every turn.
+You don't configure anything. You write `DESIGN.md` — or let the
+agent draft it with you. The agent sees the spec in every turn.
 
 ← [back to README](../README.md)
 
@@ -27,8 +30,9 @@ commit it. The agent sees the spec in every turn.
 - You've reversed a decision and two weeks later couldn't
   remember why. Or worse: someone else reversed it without
   realizing it had been decided.
-- You want an adversarial review when you change the charter —
-  something that asks "have you considered what this breaks?"
+- You want an adversarial review when you change the design
+  or the charter — something that asks "have you considered
+  what this breaks?"
 - You're handing a project off (to yourself in six months, to a
   colleague, to a reviewer) and want the artifacts to carry the
   story.
@@ -37,6 +41,47 @@ If none of those land — you're on a throwaway, your agent is
 disciplined, you don't need an audit trail — you don't need ATOS.
 
 ## Use cases — recognize yourself?
+
+### "I want the agent to work on my design with me"
+
+```
+sovereign project design
+```
+
+Starts an agent-collaborative session against the running
+Commonwealth daemon. opencode is the blessed transport — the
+command launches it primed with a session brief that includes
+your `DESIGN.md`'s current state (anchors, structural gaps, keyword
+buckets) and the tools the agent can call to propose edits.
+Every file write is diff-confirmed before it lands.
+
+Don't have opencode yet? `--stopgap` gives you a provisional
+in-terminal chat (clearly banner-labelled — the push is always
+toward opencode). Daemon down? `--solo` drives a CLI-prompt
+walk through every structural gap the parser saw and writes
+them to `OPEN_QUESTIONS.md`. `--import <path>` copies an
+existing design you already have into `DESIGN.md` at repo root
+(diff-confirms before overwriting).
+
+### "I want the plan derived from the design"
+
+```
+sovereign project plan
+```
+
+Reads `DESIGN.md` + `OPEN_QUESTIONS.md`; composes
+`IMPLEMENTATION_PLAN.md` at repo root. Phase 0 is a
+language-specific skeleton (`cargo test`, `npm run build &&
+npm test`, etc.); phases 1..N come from H2 sections of `DESIGN.md`
+in document order. Answered `OPEN_QUESTIONS.md` entries surface
+as `Resolved (for the record)` on the matching phase; unanswered
+ones block the plan unless you pass `--allow-open`, in which case
+they become `Open risks` attached to the relevant phase.
+
+Plan items are also upserted into `.sovereign/plan.db` (a
+`plan_items` table with phase/state/depends_on/realizes
+columns) so `sovereign read-notes` and future phase-pass flows
+can query them by state.
 
 ### "I want the agent to stay on spec"
 
@@ -47,14 +92,15 @@ If anyone — you or the agent — edits the spec without
 committing, the next turn's preamble gets a drift warning
 pointing at the deviation note.
 
-### "I want an adversarial review when I change the charter"
+### "I want an adversarial review when I change the charter (or the design)"
 
 ```
-sovereign project amend
+sovereign project amend charter   # or: sovereign project amend design
 ```
 
-Opens `CHARTER.md` in `$EDITOR`. On save, ATOS diffs your edit
-section-by-section. Invariants changed? You get:
+`amend charter` (default) opens `.sovereign/CHARTER.md` in
+`$EDITOR`. On save, ATOS diffs your edit section-by-section.
+Invariants changed? You get:
 
 > Which callers / components assume the OLD invariant? Are there
 > tests that LOCK it?
@@ -62,9 +108,38 @@ section-by-section. Invariants changed? You get:
 > What's the replacement invariant, stated as strictly as the
 > old one was?
 
-Answer each, then approve. The amendment log, the Q&A, and the
-new charter hash are recorded. Future sessions see WHY the
-change went through despite the named risks.
+`amend design` opens `DESIGN.md` at repo root. It tracks edits
+to three curated sections — `Anchors`, `Data & interfaces`,
+`Open questions` — and asks a targeted adversarial question for
+each changed section (e.g., "Which downstream assumption in
+`IMPLEMENTATION_PLAN.md` changes if this anchor is reworded?").
+The Q&A is appended to `DESIGN.md`'s own `## Amendment log`
+(newest on top); `charter_version` is not bumped because
+`DESIGN.md` is expected to iterate — git history is the
+provenance.
+
+Answer each, then the amendment log, the Q&A, and the new
+hash are recorded. Future sessions see WHY the change went
+through despite the named risks.
+
+### "I want a free-form team CHARTER.md that isn't a filled-out form"
+
+```
+sovereign project charter
+```
+
+First invocation writes a minimal skeleton at
+`.sovereign/CHARTER.md` (Who we are / How we decide /
+Onboarding pointers / Amendment log) and opens `$EDITOR`.
+Subsequent invocations just open the existing file.
+
+`CHARTER.md` is distinct from `DESIGN.md`. `DESIGN.md` says
+what you're building; `CHARTER.md` says how the team works
+together on it. It is **not** auto-generated from the design —
+the plan's insight was that the culture/governance doc is
+human-authored prose, full stop. Indexed into `project_context`
+so `project_context("how we decide")` surfaces relevant
+sections during agent turns.
 
 ### "I want milestones that actually pass their tests before I declare them done"
 
@@ -132,10 +207,21 @@ doesn't re-ask speculatively.
 ATOS operates at two granularities. You can use one or both.
 
 **Project layer** — before any code. `sovereign project init`
-observes the repo. `sovereign project found` runs a four-stage
-conversation and produces `CHARTER.md` + `PHASES.md`. Amendments
-go through `sovereign project amend` with adversarial review.
-Progression is tracked via `sovereign project phase pass`.
+observes the repo (and offers to `git init` if you haven't
+yet). `sovereign project design` collaborates with the agent
+(or walks you through gaps solo) to produce `DESIGN.md` +
+`OPEN_QUESTIONS.md` at repo root. `sovereign project plan`
+turns those into `IMPLEMENTATION_PLAN.md`. `sovereign project
+charter` writes the free-form team `CHARTER.md` in
+`.sovereign/`. `sovereign project found --orchestrate` verifies
+all four artifacts exist, elicits the Phase-1 stop condition,
+and flips the lifecycle. (Default `project found` — without
+`--orchestrate` — runs the classic Stage 1 + Stage 2
+signal-gated questionnaire instead, auto-composing the
+charter; use it when you want a questionnaire-first flow.)
+Amendments go through `sovereign project amend charter` / `amend
+design` with adversarial review. Progression tracks via
+`sovereign project phase pass`.
 
 **Feature layer** — inside a founded project (or any repo).
 Write `.sovereign/features/<id>/spec.md`; commit it; close
@@ -149,27 +235,41 @@ charter that the feature spec nests under.
 ## Mental model
 
 ```
-charter ──▶ decisions + uncertainties + invariants
-   │                       │
-   ▼                       ▼
-phases ◀────── every agent turn sees the spec
-   │                       │
-   ▼                       ▼
+DESIGN.md ──▶ what we're building (iterative, agent-collaborative)
+   │
+   ▼
+OPEN_QUESTIONS.md ──▶ gaps flagged by the structural parser
+   │                  (antifragile: answers append, never overwrite)
+   ▼
+IMPLEMENTATION_PLAN.md ──▶ phases derived from DESIGN.md sections
+   │                       (plan_items table: state/phase/depends_on)
+   ▼
+CHARTER.md ──▶ free-form team governance (Who we are / How we decide)
+   │
+   ▼
+PHASES.md ──▶ composed by `project found`; drives phase pass/amend
+   │
+   ▼
 artifacts (phase-N.md, milestone-N.md, amendment log, notes.db)
-                           │
-                           ▼
-           audit → reviewer reads one page
+   │
+   ▼
+audit → reviewer reads one page
 ```
 
-Three terms worth knowing:
+Four terms worth knowing:
 
-**Charter** — the spec at whatever layer. `CHARTER.md` for the
-project; `spec.md` for a feature. Committing it is approval.
+**Design** — `DESIGN.md` at repo root. What you're building.
+Iterative; amendments through `project amend design` with an
+inline `## Amendment log`.
+
+**Charter** — `.sovereign/CHARTER.md`. How you work together on
+it. Free-form, human-authored, versioned (`charter_version`
+bumps on each `amend charter`). Not auto-generated from DESIGN.md.
 
 **Drift** — file changed since approval. Detected by hash
 comparison. Drift doesn't block — it surfaces a warning. You
 either revert or re-baseline (`atos spec accept` / `project
-amend`).
+amend charter`).
 
 **Artifacts** — the markdown the work leaves behind. Outlives
 any session. What a reviewer reads.
@@ -226,23 +326,46 @@ the CLI binary and flags drift. Every installed copy carries a
 `// sovereign-atos-version: X.Y.Z` header so old installs are
 self-identifying.
 
-Once those three are wired, everything in the two quickstarts
+Once those three are wired, everything in the quickstarts
 below just works — the agent gets the charter preamble on every
 turn with no further configuration.
 
-## Quickstart — greenfield
+## Quickstart — greenfield (agent-collaborative, recommended)
 
 ```
 cd my-new-repo
-sovereign project init                 # observe
-sovereign project found                # 4-stage conversation → CHARTER.md + PHASES.md
+sovereign project init                   # observe; offers `git init` if absent
+sovereign project design                 # opencode launches with DESIGN.md primed
+# … iterate with the agent; /done when satisfied …
+sovereign project plan                   # derive IMPLEMENTATION_PLAN.md
+sovereign project charter                # free-form team CHARTER.md
+sovereign project found --orchestrate    # verify + flip lifecycle
 # ... write code in opencode ...
-sovereign project phase pass 0         # run stop condition, write phase-0.md
+sovereign project phase pass 0           # run stop condition, write phase-0.md
 ```
 
-From the moment `project found` approves, the agent (via the
-wired-up pipeline above) sees your charter invariants + current
-phase in every turn.
+From the moment `project found` approves, the agent sees your
+charter invariants + current phase in every turn. Most users
+will iterate between `project design` and `project plan` for a
+while before running `project found` — that's the point.
+
+## Quickstart — greenfield (classic questionnaire)
+
+If you'd rather answer signal-gated questions than iterate on a
+DESIGN.md, the original flow still works:
+
+```
+cd my-new-repo
+sovereign project init
+sovereign project found                  # 4-stage signal-gated conversation
+# ... write code ...
+sovereign project phase pass 0
+```
+
+The Stage-1 / Stage-2 predicates no longer fire universal
+questions — `fault.time-representation` now requires the design
+text, observation, or prior answers to mention time, and so on
+for the other fault lines.
 
 ## Quickstart — feature layer on an existing repo
 
@@ -273,13 +396,17 @@ spec is committed.
 ## The commands you'll actually use
 
 ```
-# Project layer
-sovereign project init                      # observe
-sovereign project found [--design <path>]   # once: CHARTER.md + PHASES.md
-sovereign project phase status              # where are we?
-sovereign project phase pass [N]            # verify + advance
-sovereign project amend                     # adversarial charter edit
-sovereign project audit                     # one-page reviewer rollup
+# Project layer — design → plan → charter → found
+sovereign project init                                   # observe + git auto-confirm
+sovereign project design [--import <path>] [--solo]      # agent-collaborative DESIGN.md
+    [--stopgap] [--via opencode|claude-code]
+sovereign project plan [--allow-open]                    # compose IMPLEMENTATION_PLAN.md
+sovereign project charter [--print]                      # free-form team CHARTER.md
+sovereign project found [--orchestrate] [--design <path>]# founding (orchestrator or questionnaire)
+sovereign project phase status                           # where are we?
+sovereign project phase pass [N]                         # verify + advance
+sovereign project amend [charter|design]                 # adversarial edit
+sovereign project audit                                  # one-page reviewer rollup
 
 # Feature layer
 sovereign atos provision <id> --charter <path>
@@ -296,21 +423,36 @@ Full reference: [CLI_REFERENCE.md](CLI_REFERENCE.md).
 
 ## Where the signal lives
 
+**Repo-root artifacts** (human-facing, `git diff`-able, indexed into `project_context`):
+
 | File | Written by | Tells a reviewer... |
 |---|---|---|
-| `CHARTER.md` | `project found` / `amend` | What you agreed; amendment log = history of reversals |
+| `DESIGN.md` | `project design` / `amend design` | What you're building; inline `## Amendment log` records reversals |
+| `OPEN_QUESTIONS.md` | `project design --solo` / agent tool / you inline | Load-bearing gaps; answers are append-only (provenance preserved) |
+| `IMPLEMENTATION_PLAN.md` | `project plan` | Phase skeleton, stop conditions, open/resolved risks per phase |
+
+**`.sovereign/` state** (tool-managed; charter + SQL indexes):
+
+| File | Written by | Tells a reviewer... |
+|---|---|---|
+| `CHARTER.md` | `project charter` / `amend charter` / `project found` | Team governance: who we are, how we decide, onboarding pointers; amendment log = history of reversals |
 | `PHASES.md` | `project found` | How you planned to get there |
 | `phase-N.md` | `project phase pass N` | Which phases actually verified green |
-| `project.toml` | `init` / `found` / `amend` / `phase` | Observations + lifecycle + charter hash |
+| `project.toml` | `init` / `found` / `amend` / `phase` / `charter` | Observations + lifecycle + charter hash + `git_declined_at_init` |
+| `plan.db` | `project plan` / future `phase pass` | `plan_items` table — queryable phase/state/depends_on |
+| `notes.db` | Agent + CLI | Decisions, invariants, attempts, uncertainties, deviations |
+| `.atos/design/<id>/brief.md` | `project design` | Session prompt + state for the agent-collaborative DESIGN flow |
 | `features/<id>/spec.md` | You | Feature contract |
 | `features/<id>/milestone-N.md` | `atos end-milestone` | Which feature milestones actually passed |
 | `features/<id>/red-team.md` | Red-team milestone run | Findings grouped by confidence |
 | `features/<id>/epistemic-report.md` | `atos teardown` | Promoted notes + postmortem |
-| `notes.db` | Agent + CLI | Decisions, invariants, attempts, uncertainties, deviations |
 
-All live under `.sovereign/`. All get indexed into
-`project_context`, so `project_context(query: "why UTC")` pulls
-the relevant decision without you going to find it.
+All markdown files get indexed into `project_context`, so
+`project_context(query: "why UTC")` pulls the relevant decision
+across DESIGN.md / CHARTER.md / IMPLEMENTATION_PLAN.md /
+milestone reports without you going to find it. The agent can
+also call the `design_signals_extract` MCP tool mid-session to
+audit `DESIGN.md` structurally (anchors, gaps, keyword buckets).
 
 ## What ATOS won't do
 
@@ -319,10 +461,10 @@ the relevant decision without you going to find it.
   holds the keyboard.
 - **Replace testing.** Stop conditions run tests and record
   verdicts; the tests are your job.
-- **Police you.** If you don't run `project found`, you never
-  get a charter. If you don't commit `spec.md`, the approval
-  gate never opens. ATOS surfaces when something's off — it
-  doesn't block.
+- **Police you.** If you don't run `project design` / `plan` /
+  `charter` / `found`, those artifacts don't appear. If you
+  don't commit `spec.md`, the approval gate never opens. ATOS
+  surfaces when something's off — it doesn't block.
 
 ## Read next
 

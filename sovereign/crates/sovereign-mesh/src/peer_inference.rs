@@ -707,6 +707,12 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.model_id_for(speed)
     }
 
+    fn code_model_id(&self) -> Option<String> {
+        // Delegate so the mesh-level self-advertisement sees the
+        // same code slot the underlying `EmbeddedLlamaCpp` sees.
+        self.local.code_model_id()
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.local.capabilities()
     }

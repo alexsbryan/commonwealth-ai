@@ -107,6 +107,12 @@ pub struct LifecycleSection {
     /// not yet founded.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub charter_hash: String,
+    /// User explicitly answered "no" to the init-time git prompt.
+    /// Set once, never unset — the next `init` won't re-badger them.
+    /// They can still `git init` manually later; the lack of a repo
+    /// is then their deliberate choice, not an oversight.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub git_declined_at_init: bool,
 }
 
 // ─── Conversion ──────────────────────────────────────────────────────────────

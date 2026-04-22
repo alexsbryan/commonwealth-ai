@@ -60,6 +60,11 @@ export interface DesktopConfig {
   primary_model_path: string | null;
   /** Optional GGUF embedding model. Required for corpus install / RAG. */
   embed_model_path: string | null;
+  /** Optional GGUF Code specialist. When set, `code`-hinted requests
+   *  hot-swap into the lazy chat slot (shared with Main responder)
+   *  instead of dispatching to primary. Null = no code slot; all
+   *  substantive work goes to Main responder (pre-PR-E2 behaviour). */
+  code_model_path: string | null;
   data_dir: string;
   skills_dir: string;
   active_skills: string[];

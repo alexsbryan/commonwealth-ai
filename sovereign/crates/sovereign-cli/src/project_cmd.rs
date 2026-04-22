@@ -53,6 +53,9 @@ pub async fn run_project(args: &[String]) -> i32 {
 
     match args[0].as_str() {
         "init" => cmd_init(&args[1..]).await,
+        "design" => cmd_design(&args[1..]).await,
+        "plan" => cmd_plan(&args[1..]).await,
+        "charter" => cmd_charter(&args[1..]).await,
         "found" => cmd_found(&args[1..]).await,
         "amend" => cmd_amend(&args[1..]).await,
         "phase" => cmd_phase(&args[1..]).await,
@@ -80,6 +83,9 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Usage("sovereign project <subcommand> [flags]"),
         crate::util::help::HelpSection::Subcommands(&[
             ("init",           "Set up code intelligence for the current workspace (also registers with the daemon)"),
+            ("design",         "Agent-collaborative DESIGN.md session (opencode-first). --solo to skip the agent"),
+            ("plan",           "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; indexes plan items in .sovereign/plan.db"),
+            ("charter",        "Write / edit the free-form team CHARTER.md (governance, culture, onboarding); separate from DESIGN.md"),
             ("found",          "Once per project: structured conversation that produces CHARTER.md + PHASES.md"),
             ("amend",          "Edit CHARTER.md with an adversarial review — every amendment logs who, why, and what was argued against"),
             ("phase",          "phase status | phase pass [N] — track PHASES.md progression, run stop conditions, write phase-N.md"),
@@ -124,6 +130,101 @@ const HELP_INIT: crate::util::help::Help = crate::util::help::Help {
         ]),
     ],
 };
+
+const HELP_DESIGN: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project design",
+    summary: "Agent-collaborative DESIGN.md session. opencode is the blessed path; --solo and --stopgap are fallbacks.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign project design [--import <path>] [--via <agent>]\n    \
+             [--solo] [--stopgap] [--port <port>]",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            ("--import <path>",  "Copy <path> into <repo>/DESIGN.md (diff-confirms if one already exists)"),
+            ("--via <agent>",    "Choose the agent: opencode (default) | claude-code | cursor"),
+            ("--solo",           "Skip the agent; walk structural gaps with CLI prompts, write OPEN_QUESTIONS.md"),
+            ("--stopgap",        "Provisional embedded CLI chat (banner-labelled; install opencode for the real experience)"),
+            ("--port <port>",    "Commonwealth daemon port (default: 9741)"),
+        ]),
+        crate::util::help::HelpSection::Examples(&[
+            ("sovereign project design",                         "Launch opencode with the session brief primed"),
+            ("sovereign project design --import ./design.md",    "Import an existing doc, then start the session"),
+            ("sovereign project design --solo",                  "No agent — CLI prompts driven by the structural parser"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Requires the Commonwealth daemon (start it with `commonwealth daemon start`).\n\
+             The session writes DESIGN.md and OPEN_QUESTIONS.md at repo root; artifacts live in\n\
+             .sovereign/.atos/design/<session-id>/.",
+        ),
+    ],
+};
+
+const HELP_PLAN: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project plan",
+    summary: "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; upsert rows into .sovereign/plan.db.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign project plan [--allow-open]",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            ("--allow-open", "Proceed even if OPEN_QUESTIONS.md has unanswered entries (they surface as open risks on the matching phase)"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Phase 0 = Skeleton (language-specific build+test stop).\n\
+             Phases 1..N come from H2 sections in DESIGN.md, in order (skipping Anchors / Open questions).\n\
+             Answered OPEN_QUESTIONS.md entries surface as `Resolved (for the record)` on the matching phase.\n\
+             Unanswered OQs block the plan unless --allow-open is set; they then surface as open risks.\n\
+             Stale plan_items (from an older DESIGN.md) are marked `deferred` rather than deleted, preserving references.",
+        ),
+    ],
+};
+
+const HELP_CHARTER: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign project charter",
+    summary: "Create or edit the team's free-form CHARTER.md (governance, culture, onboarding). Distinct from DESIGN.md.",
+    sections: &[
+        crate::util::help::HelpSection::Usage("sovereign project charter [--print]"),
+        crate::util::help::HelpSection::Flags(&[
+            ("--print", "Print the current CHARTER.md to stdout and exit without opening $EDITOR"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "CHARTER.md is the low-ceremony team governance doc — who we are, how we decide, \
+             onboarding pointers. It is NOT auto-generated from DESIGN.md: DESIGN.md says what \
+             we're building; CHARTER.md says how we work together on it.\n\n\
+             First invocation writes a minimal skeleton and opens $EDITOR. Subsequent invocations \
+             just open the existing file. The file lives at `.sovereign/CHARTER.md` (the path \
+             `sovereign project amend` already uses for drift detection).",
+        ),
+    ],
+};
+
+/// Minimal free-form CHARTER.md skeleton. Data, not program — lives
+/// next to its consumer here rather than in an asset file because
+/// it's a one-off with no anticipated operator-tuning. See
+/// ARCH_PRINCIPLES.md §6 for when to split prose out.
+const CHARTER_SKELETON: &str = r#"# Charter
+
+<!-- Low-ceremony governance + onboarding doc. NOT auto-generated.
+     DESIGN.md says what we're building; CHARTER.md says how we work
+     together on it. Free-form — write honestly, not form-fill. -->
+
+## Who we are
+
+
+## How we decide
+
+
+## Onboarding pointers
+
+<!-- Where should a new teammate start? What should they read first,
+     in what order? Pointers to DESIGN.md, IMPLEMENTATION_PLAN.md,
+     runbooks, dashboards — whatever they'll need. -->
+
+
+## Amendment log
+
+<!-- Appended to by `sovereign project amend`. -->
+"#;
 
 const HELP_SERVE: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign project serve",
@@ -275,6 +376,12 @@ async fn cmd_init(args: &[String]) -> i32 {
     // this path rather than treating the git root as the sole workspace.
     let mut workspace_root_arg: Option<PathBuf> = None;
 
+    // `--yes-git` / `--no-git` let scripted callers bypass the
+    // interactive git prompt. `None` means "prompt if TTY, auto-init
+    // if not." `Some(true)` means "run git init without asking."
+    // `Some(false)` means "do not run git init; skip the prompt."
+    let mut git_override: Option<bool> = None;
+
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -285,6 +392,8 @@ async fn cmd_init(args: &[String]) -> i32 {
             "--no-scip" => no_scip = true,
             "--no-hooks" => no_hooks = true,
             "--no-claude-config" => no_claude_config = true,
+            "--yes-git" => git_override = Some(true),
+            "--no-git" => git_override = Some(false),
             "--port" => {
                 i += 1;
                 if let Some(v) = args.get(i) {
@@ -336,6 +445,28 @@ async fn cmd_init(args: &[String]) -> i32 {
     }
 
     let has_git = repo_root.join(".git").exists();
+    // Read any prior project.toml eagerly so the git flow can honor a
+    // previous `git_declined_at_init` (the user answered "no" last
+    // time — we don't re-badger). This read is intentionally
+    // non-fatal: a missing or unreadable project.toml means "first
+    // init", which is the common case.
+    let prior_project_toml_path = repo_root.join(".sovereign").join("project.toml");
+    let prior_git_declined: bool = crate::project_toml::ProjectTomlFile::read(
+        &prior_project_toml_path,
+    )
+    .map(|t| t.lifecycle.git_declined_at_init)
+    .unwrap_or(false);
+    let design_md_path = repo_root.join("DESIGN.md");
+    let design_exists = design_md_path.exists();
+
+    // Git auto-with-confirm. Runs BEFORE the observation report so the
+    // report has an up-to-date `has_git` to render (either "✓ Git
+    // repository" or the deferred note). The design-doc presence is
+    // passed through because the prompt's kindness wording changes
+    // based on whether the user is about to start drafting a
+    // DESIGN.md (the main value prop for git) or not.
+    let git_outcome = resolve_git(&repo_root, has_git, git_override, design_exists, prior_git_declined);
+    let has_git = matches!(git_outcome, GitOutcome::Present | GitOutcome::InitializedNow);
 
     // Resolve workspace roots for SCIP export and language detection.
     // Single-repo (default): just the git root.
@@ -374,8 +505,19 @@ async fn cmd_init(args: &[String]) -> i32 {
     //   READY      — everything the user doesn't need to act on
     //   ACTIONABLE — install commands, copy-pasteable, unindented
     //   DEFERRED   — things we note now but address in `found`
-    let observation = crate::observation::observe(&repo_root);
-    print_observation_report(&observation);
+    let mut observation = crate::observation::observe(&repo_root);
+    // If we just ran `git init` in this invocation, the observation
+    // (captured before resolve_git) is stale on the `has_git` axis.
+    // Patch it so the report reflects reality.
+    observation.has_git = has_git;
+    let report_ctx = ObservationReportContext {
+        design_exists,
+        git_declined: matches!(
+            git_outcome,
+            GitOutcome::DeclinedByUser | GitOutcome::DeclinedPreviously
+        ),
+    };
+    print_observation_report(&observation, &report_ctx);
 
     // Persist observations BEFORE any indexing/SCIP work so the
     // durable record survives even if downstream init steps fail.
@@ -394,6 +536,13 @@ async fn cmd_init(args: &[String]) -> i32 {
     let mut project_toml = crate::project_toml::ProjectTomlFile::read(&project_toml_path)
         .unwrap_or_else(|_| crate::project_toml::ProjectTomlFile::from_observation(&observation));
     project_toml.update_observation(&observation);
+    // Persist a fresh git declination if the user just said "no" —
+    // but preserve a prior declination (user already said no before).
+    // Never un-set: once they've opted out, that stays opted out
+    // until they run `git init` themselves.
+    if matches!(git_outcome, GitOutcome::DeclinedByUser) {
+        project_toml.lifecycle.git_declined_at_init = true;
+    }
     if let Err(e) = project_toml.write(&project_toml_path) {
         eprintln!("    \u{2717} Cannot write project.toml: {e}");
     }
@@ -415,15 +564,32 @@ async fn cmd_init(args: &[String]) -> i32 {
     };
 
     if langs.is_empty() {
-        // Observation report already flagged "no supported languages"
-        // as an actionable gap. Repeat only the bail path.
-        if !no_scip {
+        // Pre-code soft path (step 2b): when the user has a DESIGN.md
+        // but no source yet, that's a legitimate state — they're
+        // about to iterate on their design with the agent before
+        // writing a single file. Don't bail; skip indexing, still
+        // register with the daemon, and emit a friendly status line.
+        //
+        // Stateless: derived from DESIGN.md presence each run. No
+        // `pre_code` lifecycle flag — see ARCH_PRINCIPLES.md §7 on
+        // structural over stateful.
+        if design_exists {
             println!();
-            println!("    Pass --no-scip to skip indexing and write agent configs anyway.");
+            println!("    \u{2026} Pre-code project — indexing deferred. Re-run `sovereign project init`");
+            println!("      once source lands, or start with `sovereign project design` now.");
+        } else if !no_scip {
+            // True empty directory: observation report already flagged
+            // "no supported languages" as actionable. Repeat only the
+            // bail path, but point at the design-first alternative.
+            println!();
+            println!("    Pass --no-scip to skip indexing and write agent configs anyway,");
+            println!("    or run `sovereign project design --import <path-to-doc>` to start");
+            println!("    from an existing design document.");
             return 1;
+        } else {
+            println!();
+            println!("    Continuing without indexing (--no-scip).");
         }
-        println!();
-        println!("    Continuing without indexing (--no-scip).");
     }
     if workspace_root_arg.is_some() {
         println!();
@@ -1002,6 +1168,529 @@ vector = false
     println!("    sovereign project watch status");
     println!();
 
+    // Design-first nudge (step 2c). The user just got a tool set up;
+    // point them at the next natural step — DESIGN.md-driven agent
+    // collaboration — without making it feel mandatory. Only surface
+    // when there's genuinely no DESIGN.md yet and the project isn't
+    // already founded (no point suggesting `project design` to
+    // someone who's already past that stage).
+    if !design_exists && !project_toml.lifecycle.founded {
+        println!(
+            "  Next: `sovereign project design` — I'll work with the agent on your DESIGN.md."
+        );
+        println!(
+            "        Bring a path to an existing doc with `--import <path>`, or start blank."
+        );
+        println!();
+    }
+
+    0
+}
+
+// ─── Design session ──────────────────────────────────────────
+//
+// Step 4 of the ATOS onboarding redesign. `cmd_design` is the
+// agent-collaborative main event — init scaffolds the project;
+// design is where the user + agent iterate on DESIGN.md together.
+//
+// Most of the work lives in `crate::design_session`; `cmd_design`
+// parses args, resolves the repo root + project id, and hands off.
+async fn cmd_design(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_DESIGN);
+        return 0;
+    }
+    let mut import_path: Option<PathBuf> = None;
+    let mut port: u16 = 9741;
+    let mut transport = crate::design_session::TransportChoice::Default;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--import" => {
+                i += 1;
+                import_path = args.get(i).map(PathBuf::from);
+            }
+            "--via" => {
+                i += 1;
+                transport = match args.get(i).map(String::as_str) {
+                    Some("opencode") => crate::design_session::TransportChoice::Opencode,
+                    Some("claude-code") => crate::design_session::TransportChoice::ClaudeCode,
+                    Some("cursor") => {
+                        eprintln!("warning: --via cursor is not yet implemented; falling back to default.");
+                        crate::design_session::TransportChoice::Default
+                    }
+                    Some(other) => {
+                        eprintln!("error: --via expects opencode | claude-code | cursor; got `{other}`");
+                        return 1;
+                    }
+                    None => {
+                        eprintln!("error: --via requires an agent name");
+                        return 1;
+                    }
+                };
+            }
+            "--solo" => transport = crate::design_session::TransportChoice::Solo,
+            "--stopgap" => transport = crate::design_session::TransportChoice::Stopgap,
+            "--port" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    match v.parse::<u16>() {
+                        Ok(p) => port = p,
+                        Err(_) => {
+                            eprintln!("error: --port must be a number");
+                            return 1;
+                        }
+                    }
+                }
+            }
+            flag if flag.starts_with("--") => {
+                eprintln!("warning: unknown flag '{flag}' — ignored");
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let repo_root = match find_repo_root() {
+        Some(r) => r,
+        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    };
+    let project_id = derive_project_id(&repo_root);
+
+    let req = crate::design_session::SessionRequest {
+        repo_root,
+        transport,
+        import_path,
+        daemon_port: port,
+        project_id,
+    };
+
+    crate::design_session::run(req).await
+}
+
+// ─── Plan ────────────────────────────────────────────────────
+//
+// Step 6 of the ATOS onboarding redesign. `cmd_plan` reads
+// DESIGN.md + OPEN_QUESTIONS.md, composes IMPLEMENTATION_PLAN.md at
+// repo root, and upserts plan_items rows into .sovereign/plan.db.
+// Composition lives in `crate::plan_composer` (pure); this handler
+// does the IO, ordering, and indexing.
+async fn cmd_plan(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_PLAN);
+        return 0;
+    }
+
+    let mut allow_open = false;
+    for arg in args {
+        match arg.as_str() {
+            "--allow-open" => allow_open = true,
+            flag if flag.starts_with("--") => {
+                eprintln!("warning: unknown flag '{flag}' — ignored");
+            }
+            _ => {}
+        }
+    }
+
+    let repo_root = match find_repo_root() {
+        Some(r) => r,
+        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    };
+
+    // Preflight: DESIGN.md must exist. An absent DESIGN.md means the
+    // user hasn't run `project design` yet — point them at it
+    // rather than silently conjuring a plan from thin air.
+    let design_path = repo_root.join("DESIGN.md");
+    let design_md = match std::fs::read_to_string(&design_path) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("  \u{2717} No DESIGN.md at repo root ({}).", design_path.display());
+            eprintln!("    Run `sovereign project design` first to author or import one.");
+            return 2;
+        }
+    };
+    if design_md.trim().is_empty() {
+        eprintln!("  \u{2717} DESIGN.md exists but is empty. Write some content first.");
+        return 2;
+    }
+
+    // Parse OPEN_QUESTIONS.md (absent is fine — treated as "no
+    // outstanding questions"; the plan will contain only
+    // non-attached risks, none).
+    let oq_path = repo_root.join("OPEN_QUESTIONS.md");
+    let oq_text = std::fs::read_to_string(&oq_path).unwrap_or_default();
+    let oqs = crate::plan_composer::parse_open_questions(&oq_text);
+
+    // Unanswered-OQ gate. Default behavior is to block, because a
+    // plan that papers over known load-bearing gaps is a worse
+    // artifact than no plan — the user should see the gaps and
+    // either answer them (best) or explicitly --allow-open (if
+    // they're accepting the risk knowingly).
+    let unanswered: Vec<_> = oqs.iter().filter(|o| !o.is_answered()).collect();
+    if !unanswered.is_empty() && !allow_open {
+        eprintln!();
+        eprintln!("  \u{26a0} {} unanswered question(s) in OPEN_QUESTIONS.md:", unanswered.len());
+        for oq in &unanswered {
+            eprintln!("    · {} ({})", oq.id, oq.anchor);
+        }
+        eprintln!();
+        eprintln!("    Answer them inline, or re-run with --allow-open to surface them");
+        eprintln!("    as `Open risks` on the matching phase.");
+        return 2;
+    }
+
+    // Resolve project id from repo root (same logic `found` uses).
+    let project_id = derive_project_id(&repo_root);
+
+    // Primary language: read from project.toml's observation section
+    // so `plan` agrees with `init`/`found` without re-scanning. If
+    // project.toml isn't present (user ran plan outside an init'd
+    // repo), fall through with None — Phase 0 gets a generic stop.
+    let project_toml_path = repo_root.join(".sovereign").join("project.toml");
+    let primary_language: Option<String> =
+        crate::project_toml::ProjectTomlFile::read(&project_toml_path)
+            .ok()
+            .and_then(|t| t.observation.languages.into_iter().next())
+            .map(|l| l.id);
+
+    // Compose (pure).
+    let signals = corpus_engine::design_signals::extract(&design_md);
+    let today = today_iso();
+    let composed = crate::plan_composer::compose_plan(&crate::plan_composer::ComposeInputs {
+        project_id: &project_id,
+        design_md: &design_md,
+        signals: &signals,
+        open_questions: &oqs,
+        primary_language: primary_language.as_deref(),
+        today: &today,
+    });
+
+    // Persist plan_items rows. Open a plan.db under .sovereign/.
+    // The store tolerates running before .sovereign/ exists (creates
+    // parent dirs) but in practice init has already built the tree.
+    let plan_db = repo_root.join(".sovereign").join("plan.db");
+    let store = match corpus_engine::plan_items::PlanStore::open(&plan_db) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("  \u{2717} could not open plan.db: {e}");
+            return 1;
+        }
+    };
+    let now = unix_now_secs();
+    // Defer stale rows from prior generations (different design_hash)
+    // BEFORE writing fresh ones, so a new plan never collides with
+    // open items from a prior DESIGN.md state.
+    match store.defer_stale(&composed.design_hash, now).await {
+        Ok(n) if n > 0 => {
+            eprintln!("    \u{2026} {n} plan_item(s) from an older DESIGN.md state deferred.");
+        }
+        Ok(_) => {}
+        Err(e) => eprintln!("    \u{26a0} defer_stale warning: {e}"),
+    }
+    for item in &composed.items {
+        let depends_on = Vec::<String>::new();
+        let stored = corpus_engine::plan_items::PlanItem {
+            id: item.id.clone(),
+            phase: item.phase,
+            title: item.title.clone(),
+            body: item.body.clone(),
+            realizes: item.realizes.clone(),
+            depends_on,
+            stop_hint: item.stop_hint.clone(),
+            state: corpus_engine::plan_items::PlanItemState::Open,
+            design_hash: composed.design_hash.clone(),
+            created_at: now,
+            updated_at: now,
+        };
+        if let Err(e) = store.upsert(&stored).await {
+            eprintln!("    \u{26a0} plan_items upsert failed for {}: {e}", item.id);
+        }
+    }
+
+    // Write IMPLEMENTATION_PLAN.md at repo root (discoverable from
+    // the repo listing + GitHub file tree, same convention as
+    // DESIGN.md and OPEN_QUESTIONS.md).
+    let plan_md_path = repo_root.join("IMPLEMENTATION_PLAN.md");
+    if let Err(e) = std::fs::write(&plan_md_path, &composed.markdown) {
+        eprintln!("  \u{2717} could not write IMPLEMENTATION_PLAN.md: {e}");
+        return 1;
+    }
+
+    // Index the plan into ProjectDocsStore so `project_context`
+    // queries surface it. Best-effort — an index failure shouldn't
+    // abort; the markdown is the source of truth, the index is a
+    // query acceleration.
+    let docs_db_path = repo_root.join(".sovereign").join("project_docs.db");
+    match corpus_engine::ProjectDocsStore::open(&docs_db_path) {
+        Ok(docs) => {
+            if let Err(e) = docs.index_file(&plan_md_path, &repo_root).await {
+                eprintln!("    \u{26a0} project_docs index failed: {e}");
+            }
+        }
+        Err(e) => eprintln!("    \u{26a0} could not open project_docs.db: {e}"),
+    }
+
+    // Summary.
+    eprintln!();
+    eprintln!(
+        "  \u{2713} IMPLEMENTATION_PLAN.md written ({} phase(s), DESIGN.md sha=`{}`).",
+        composed.items.len(),
+        composed.design_hash
+    );
+    eprintln!(
+        "    plan.db: {} row(s) upserted at {}",
+        composed.items.len(),
+        plan_db.display()
+    );
+    if !unanswered.is_empty() {
+        eprintln!(
+            "    ({} unanswered OPEN_QUESTIONS entry(s) surfaced as open risks via --allow-open.)",
+            unanswered.len()
+        );
+    }
+    eprintln!();
+    eprintln!("    Next: iterate on DESIGN.md; re-run `sovereign project plan` to regenerate.");
+    0
+}
+
+// ─── Amend routing ─────────────────────────────────────────────
+
+/// Amend DESIGN.md: open in $EDITOR, diff H2 sections against the
+/// curated catalog (`design.anchors` / `design.data-interfaces` /
+/// `design.open-questions`), ask the matching adversarial question
+/// for each changed section, and append the Q&A to
+/// `## Amendment log` inside DESIGN.md itself.
+///
+/// Does NOT bump any lifecycle flags — DESIGN.md is iterative by
+/// design (pun intended). The provenance is the log + git history.
+async fn cmd_amend_design(args: &[String]) -> i32 {
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("sovereign project amend design");
+        println!();
+        println!("Opens <repo>/DESIGN.md in $EDITOR. On save, section-level diff");
+        println!("against the curated DESIGN catalog. For each changed section,");
+        println!("asks one adversarial question. Appends the Q&A to DESIGN.md's");
+        println!("`## Amendment log` section (creating it if absent).");
+        return 0;
+    }
+
+    let repo_root = match find_repo_root() {
+        Some(r) => r,
+        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    };
+    let path = crate::amend::design_md_path(&repo_root);
+    let old_text = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("  \u{2717} No DESIGN.md at repo root ({}).", path.display());
+            eprintln!("    Run `sovereign project design` first.");
+            return 2;
+        }
+    };
+
+    // Snapshot BEFORE opening the editor so we can diff after.
+    let old_signals = corpus_engine::design_signals::extract(&old_text);
+    let old_hash = crate::found::hash_charter(&old_text);
+
+    // Hand off to $EDITOR. `invoke_editor` returns the re-read file
+    // contents on a clean exit, None if the editor failed — in
+    // which case we exit without writing anything.
+    let new_text = match crate::amend::invoke_editor(&path) {
+        Some(s) => s,
+        None => {
+            eprintln!("  \u{2717} editor did not return cleanly — no amendment recorded.");
+            return 1;
+        }
+    };
+    if new_text == old_text {
+        eprintln!("  \u{2026} DESIGN.md unchanged — nothing to amend.");
+        return 0;
+    }
+
+    let new_signals = corpus_engine::design_signals::extract(&new_text);
+    let new_hash = crate::found::hash_charter(&new_text);
+    let changed = crate::amend::changed_design_sections(&old_signals, &new_signals);
+
+    // Build adversarial Q&A — but only for curated sections. Non-
+    // curated edits still get logged (the diff is real) but without
+    // a forced question set. Keeps the catalog precise.
+    let mut interlocutor = crate::amend::StdinAmendmentInterlocutor::new();
+    let questions = crate::amend::questions_for(&changed);
+    let mut qa: Vec<(crate::amend::AdversarialQuestion, String)> =
+        Vec::with_capacity(questions.len());
+    if !questions.is_empty() {
+        eprintln!();
+        eprintln!(
+            "  {} curated section{} changed — adversarial review:",
+            questions.len(),
+            if questions.len() == 1 { "" } else { "s" }
+        );
+        for q in &questions {
+            let answer =
+                crate::amend::AmendmentInterlocutor::ask_adversarial(&mut interlocutor, q);
+            qa.push((q.clone(), answer));
+        }
+    } else {
+        eprintln!();
+        eprintln!(
+            "  \u{2026} DESIGN.md edited but no curated sections changed — logging the \
+             diff without a Q&A (anchors/data-interfaces/open-questions untouched)."
+        );
+    }
+
+    // Render the amendment-log entry and splice it into the
+    // DESIGN.md we're about to persist. Newest entries at the top
+    // of the log — matches the append_design_amendment_log
+    // implementation and the convention in CHARTER.md's log.
+    let today = today_iso();
+    let entry =
+        crate::amend::render_design_amendment_entry(&today, &qa, &old_hash, &new_hash);
+    let final_md = crate::amend::append_design_amendment_log(&new_text, &entry);
+
+    if let Err(e) = std::fs::write(&path, &final_md) {
+        eprintln!("  \u{2717} could not write {}: {e}", path.display());
+        return 1;
+    }
+
+    // Best-effort re-index.
+    let docs_db = repo_root.join(".sovereign").join("project_docs.db");
+    match corpus_engine::ProjectDocsStore::open(&docs_db) {
+        Ok(docs) => {
+            if let Err(e) = docs.index_file(&path, &repo_root).await {
+                eprintln!("    \u{26a0} project_docs index failed: {e}");
+            }
+        }
+        Err(e) => eprintln!("    \u{26a0} could not open project_docs.db: {e}"),
+    }
+
+    eprintln!(
+        "  \u{2713} DESIGN.md amended ({} section{} with Q&A; old sha=`{}` → new sha=`{}`).",
+        qa.len(),
+        if qa.len() == 1 { "" } else { "s" },
+        &old_hash[..old_hash.len().min(12)],
+        &new_hash[..new_hash.len().min(12)],
+    );
+    eprintln!("    Amendment log updated inline at top of the section.");
+    eprintln!("    Next: re-run `sovereign project plan` if DESIGN.md structure changed.");
+    0
+}
+
+// ─── Charter ─────────────────────────────────────────────────
+//
+// Step 7 of the ATOS onboarding redesign. `cmd_charter` is the
+// free-form culture/governance doc — distinct from DESIGN.md, which
+// is the technical design artifact. First invocation writes a
+// minimal skeleton and opens $EDITOR; subsequent runs just open
+// the existing file.
+//
+// The existing canonical path (`.sovereign/CHARTER.md`) is
+// preserved so `sovereign project amend` and its drift detection
+// stay wired up. (The plan's longer-term repo-root-move is a
+// separate migration that affects amend + drift detection and
+// hasn't landed yet.)
+async fn cmd_charter(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_CHARTER);
+        return 0;
+    }
+
+    let mut print_only = false;
+    for arg in args {
+        match arg.as_str() {
+            "--print" => print_only = true,
+            flag if flag.starts_with("--") => {
+                eprintln!("warning: unknown flag '{flag}' — ignored");
+            }
+            _ => {}
+        }
+    }
+
+    let repo_root = match find_repo_root() {
+        Some(r) => r,
+        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    };
+
+    let charter_path = crate::amend::charter_path(&repo_root);
+    let sovereign_dir = match charter_path.parent() {
+        Some(p) => p.to_path_buf(),
+        None => {
+            eprintln!("  \u{2717} could not resolve .sovereign/ parent of {}", charter_path.display());
+            return 1;
+        }
+    };
+
+    // Ensure .sovereign/ exists — init creates it, but cmd_charter
+    // might be invoked in a repo where init was skipped. Safe/cheap.
+    if let Err(e) = std::fs::create_dir_all(&sovereign_dir) {
+        eprintln!("  \u{2717} could not create {}: {e}", sovereign_dir.display());
+        return 1;
+    }
+
+    let created_fresh = !charter_path.exists();
+    if created_fresh {
+        if let Err(e) = std::fs::write(&charter_path, CHARTER_SKELETON) {
+            eprintln!("  \u{2717} could not write {}: {e}", charter_path.display());
+            return 1;
+        }
+        eprintln!(
+            "  \u{2713} CHARTER.md skeleton written at {}.",
+            charter_path.display()
+        );
+    }
+
+    if print_only {
+        let text = std::fs::read_to_string(&charter_path).unwrap_or_default();
+        println!("{text}");
+        return 0;
+    }
+
+    // Open in $EDITOR. `crate::amend::invoke_editor` already owns
+    // the shell-escape + waitpid dance and is exactly what amend
+    // uses when the user edits the charter — one code path, one
+    // set of quirks.
+    let _ = crate::amend::invoke_editor(&charter_path);
+
+    // Post-edit: re-hash the file, index it, and persist the hash
+    // into project.toml so amend's drift detection has a baseline.
+    let charter_text = match std::fs::read_to_string(&charter_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("  \u{2717} could not re-read {}: {e}", charter_path.display());
+            return 1;
+        }
+    };
+    let new_hash = crate::found::hash_charter(&charter_text);
+
+    let project_toml_path = sovereign_dir.join("project.toml");
+    if let Ok(mut tf) = crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
+        tf.lifecycle.charter_hash = new_hash.clone();
+        if let Err(e) = tf.write(&project_toml_path) {
+            eprintln!("    \u{26a0} could not persist charter_hash to project.toml: {e}");
+        }
+    }
+
+    // Index via ProjectDocsStore so `project_context("who we are")`
+    // surfaces charter content. Best-effort — the markdown is the
+    // source of truth; the index is a query accelerator.
+    let docs_db = sovereign_dir.join("project_docs.db");
+    match corpus_engine::ProjectDocsStore::open(&docs_db) {
+        Ok(docs) => {
+            if let Err(e) = docs.index_file(&charter_path, &repo_root).await {
+                eprintln!("    \u{26a0} project_docs index failed: {e}");
+            }
+        }
+        Err(e) => eprintln!("    \u{26a0} could not open project_docs.db: {e}"),
+    }
+
+    eprintln!(
+        "  \u{2713} charter saved ({} bytes, sha=`{}`).",
+        charter_text.len(),
+        &new_hash[..new_hash.len().min(12)]
+    );
+    if created_fresh {
+        eprintln!("    Next: fill in the Onboarding pointers section — new teammates read this first.");
+    }
     0
 }
 
@@ -1948,6 +2637,17 @@ async fn cmd_serve(args: &[String]) -> i32 {
             .with_project_root(repo_root.clone()),
     ));
 
+    // ── DESIGN.md structural signals ────────────────────────────────────
+    //
+    // Project-scoped: bound to this repo's DESIGN.md by default, so the
+    // agent can call `design_signals_extract()` with no args and get the
+    // right file. Absolute paths still work — the tool resolves them
+    // verbatim, bypassing project_root.
+    tools.register(Box::new(
+        sovereign_tools::DesignSignalsExtractTool::new()
+            .with_project_root(repo_root.clone()),
+    ));
+
     // ── Start watcher coordinator ───────────────────────────────
 
     let debounce_ms = sovereign_cfg
@@ -2207,8 +2907,225 @@ async fn scip_graph_reloader(
 // weeks later reading notes by symbol or kind can see "this was
 // asked, answered, and committed to."
 
+// ─── Orchestrator path (step 8, opt-in via `--orchestrate`) ──
+//
+// Replaces the Stage-1 / Stage-2 questionnaire with a sequencing
+// check: DESIGN.md + CHARTER.md + IMPLEMENTATION_PLAN.md must
+// already exist (produced by `project design`, `project charter`,
+// `project plan`). Skipping the questionnaire is the point — the
+// design session already captured everything it could, and the
+// plan composer already derived the phase skeleton from DESIGN.md.
+//
+// This path IS additive — default `project found` behavior is
+// unchanged. The existing byte-exact charter-composition test
+// suite stays green because we don't touch `compose_charter`.
+// A future session can retire the questionnaire path in a
+// dedicated pass.
+async fn cmd_found_orchestrate(design_flag: Option<&Path>) -> i32 {
+    let repo_root = match find_repo_root() {
+        Some(r) => r,
+        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    };
+    let sovereign_dir = repo_root.join(".sovereign");
+    let project_toml_path = sovereign_dir.join("project.toml");
+    if !project_toml_path.exists() {
+        eprintln!();
+        eprintln!(
+            "  sovereign project found --orchestrate: no .sovereign/project.toml found.\n\
+             Run `sovereign project init` first."
+        );
+        return 1;
+    }
+    let mut project_toml = match crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("  orchestrator: cannot read project.toml: {e}");
+            return 1;
+        }
+    };
+    if project_toml.lifecycle.founded {
+        eprintln!();
+        eprintln!(
+            "  \u{2713} already founded (charter_version={}, current_phase={}).",
+            project_toml.lifecycle.charter_version, project_toml.lifecycle.current_phase
+        );
+        eprintln!("    Re-run edits via `sovereign project amend design` / `amend charter`.");
+        return 0;
+    }
+
+    eprintln!();
+    eprintln!("  Sovereign Project Founding — orchestrated mode");
+    eprintln!("  {}", "─".repeat(54));
+
+    // Gate 1: DESIGN.md. If `--design <path>` was passed, import
+    // it through the existing onboarding helper so the diff-confirm
+    // path is consistent.
+    let design_md_path = repo_root.join("DESIGN.md");
+    if let Some(src) = design_flag {
+        match crate::design_onboarding::import_design(&repo_root, src) {
+            crate::design_onboarding::OnboardOutcome::Cancelled => {
+                eprintln!("  \u{2717} --design import cancelled; aborting.");
+                return 1;
+            }
+            _ => {}
+        }
+    }
+    if !design_md_path.exists() {
+        eprintln!();
+        eprintln!("  \u{2717} No DESIGN.md at repo root.");
+        eprintln!(
+            "    Run `sovereign project design` first (agent-collaborative) or\n\
+             `sovereign project design --solo` (CLI prompts)."
+        );
+        return 2;
+    }
+    let design_text = match std::fs::read_to_string(&design_md_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("  \u{2717} cannot read DESIGN.md: {e}");
+            return 1;
+        }
+    };
+    eprintln!(
+        "    \u{2713} DESIGN.md ({} line(s), sha=`{}`)",
+        design_text.lines().count(),
+        {
+            let h = crate::found::hash_charter(&design_text);
+            h[..h.len().min(12)].to_string()
+        }
+    );
+
+    // Gate 2: OPEN_QUESTIONS.md — all blocking questions must be
+    // answered. Orchestrator inherits the same contract as
+    // `project plan`: unanswered gaps are load-bearing, don't
+    // paper over them.
+    let oq_path = repo_root.join("OPEN_QUESTIONS.md");
+    let oq_text = std::fs::read_to_string(&oq_path).unwrap_or_default();
+    let oqs = crate::plan_composer::parse_open_questions(&oq_text);
+    let unanswered: Vec<_> = oqs.iter().filter(|o| !o.is_answered()).collect();
+    if !unanswered.is_empty() {
+        eprintln!();
+        eprintln!(
+            "  \u{26a0} {} unanswered OPEN_QUESTIONS.md entry(s):",
+            unanswered.len()
+        );
+        for oq in &unanswered {
+            eprintln!("    · {} ({})", oq.id, oq.anchor);
+        }
+        eprintln!();
+        eprintln!(
+            "    Founding requires these resolved — edit OPEN_QUESTIONS.md inline,\n\
+             then re-run `sovereign project plan` before founding again."
+        );
+        return 2;
+    }
+    eprintln!(
+        "    \u{2713} OPEN_QUESTIONS.md ({} answered / 0 open)",
+        oqs.len()
+    );
+
+    // Gate 3: IMPLEMENTATION_PLAN.md.
+    let plan_md_path = repo_root.join("IMPLEMENTATION_PLAN.md");
+    if !plan_md_path.exists() {
+        eprintln!();
+        eprintln!("  \u{2717} No IMPLEMENTATION_PLAN.md at repo root.");
+        eprintln!("    Run `sovereign project plan` first.");
+        return 2;
+    }
+    let plan_text = std::fs::read_to_string(&plan_md_path).unwrap_or_default();
+    let plan_hash = crate::found::hash_charter(&plan_text);
+    eprintln!(
+        "    \u{2713} IMPLEMENTATION_PLAN.md (sha=`{}`)",
+        &plan_hash[..plan_hash.len().min(12)]
+    );
+
+    // Gate 4: CHARTER.md. Distinct from the questionnaire path —
+    // CHARTER.md is the user-authored culture doc, NOT auto-composed.
+    let charter_path = crate::amend::charter_path(&repo_root);
+    if !charter_path.exists() {
+        eprintln!();
+        eprintln!("  \u{2717} No CHARTER.md at {}.", charter_path.display());
+        eprintln!("    Run `sovereign project charter` first to author it.");
+        return 2;
+    }
+    let charter_text = match std::fs::read_to_string(&charter_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("  \u{2717} cannot read CHARTER.md: {e}");
+            return 1;
+        }
+    };
+    let charter_hash = crate::found::hash_charter(&charter_text);
+    eprintln!(
+        "    \u{2713} CHARTER.md (sha=`{}`)",
+        &charter_hash[..charter_hash.len().min(12)]
+    );
+
+    // Gate 5: the one question `found` legitimately still needs
+    // from the human — the Phase-1 stop condition. Plan items are
+    // derived from DESIGN.md sections; Phase-1's stop is the
+    // concrete "when is feature-foundation done?" line that only
+    // the human knows.
+    eprintln!();
+    eprintln!("  Phase-1 stop condition — what proves the first real end-to-end path works?");
+    eprintln!("  Examples: `cargo test --test e2e_ingest`, `curl localhost:8080/health returns 200`.");
+    eprint!("    > ");
+    let _ = std::io::Write::flush(&mut std::io::stderr());
+    let phase1_stop = crate::found::stdin_read_line();
+    let phase1_stop = phase1_stop.trim().to_string();
+    if phase1_stop.is_empty() {
+        eprintln!();
+        eprintln!("  \u{2717} A Phase-1 stop condition is required; aborting.");
+        return 2;
+    }
+
+    // Compose PHASES.md. Reuses the existing compose_phases for
+    // back-compat with `project phase pass N` (which parses PHASES.md
+    // today). Phase-0 stop comes from observation; Phase-1 from the
+    // user; Phase-2 degraded condition inferred from observation.
+    let observation = crate::observation::observe(&repo_root);
+    let today = today_iso();
+    let project_id = derive_project_id(&repo_root);
+    let phases_md = crate::found::compose_phases(&crate::found::FoundingInputs {
+        project_id: &project_id,
+        founded_date: &today,
+        design: Some(&design_text),
+        observation: &observation,
+        stage1_answers: &[],
+        stage2_outcomes: &[],
+        phase1_stop_condition: &phase1_stop,
+    });
+
+    let phases_path = sovereign_dir.join("PHASES.md");
+    if let Err(e) = std::fs::write(&phases_path, &phases_md) {
+        eprintln!("  \u{2717} could not write PHASES.md: {e}");
+        return 1;
+    }
+
+    // Flip the lifecycle.
+    project_toml.lifecycle.founded = true;
+    project_toml.lifecycle.charter_version = 1;
+    project_toml.lifecycle.current_phase = 0;
+    project_toml.lifecycle.charter_hash = charter_hash.clone();
+    if let Err(e) = project_toml.write(&project_toml_path) {
+        eprintln!("  \u{2717} could not persist project.toml: {e}");
+        return 1;
+    }
+
+    eprintln!();
+    eprintln!(
+        "  \u{2713} Founded. charter_version=1, current_phase=0, charter_hash=`{}`.",
+        &charter_hash[..charter_hash.len().min(12)]
+    );
+    eprintln!("    Artifacts at repo root: DESIGN.md, OPEN_QUESTIONS.md, IMPLEMENTATION_PLAN.md, CHARTER.md.");
+    eprintln!("    PHASES.md written at {}.", phases_path.display());
+    eprintln!("    Next: `sovereign project phase pass 0` when Phase 0's stop condition is green.");
+    0
+}
+
 async fn cmd_found(args: &[String]) -> i32 {
     let mut design_path: Option<PathBuf> = None;
+    let mut orchestrate = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -2216,12 +3133,22 @@ async fn cmd_found(args: &[String]) -> i32 {
                 i += 1;
                 design_path = args.get(i).map(PathBuf::from);
             }
+            "--orchestrate" => orchestrate = true,
             "--help" | "-h" => {
-                println!("sovereign project found [--design <path>]");
+                println!("sovereign project found [--design <path>] [--orchestrate]");
                 println!();
                 println!("Once per project: the founding conversation that produces");
-                println!("CHARTER.md + PHASES.md. M6.3 ships Stage 1 (Understanding) —");
-                println!("later stages land in follow-up milestones.");
+                println!("CHARTER.md + PHASES.md.");
+                println!();
+                println!("  (default)      Classic Stage 1 + Stage 2 questionnaire; auto-composes");
+                println!("                 CHARTER.md from answers. Stage-1/2 questions are");
+                println!("                 signal-gated against DESIGN.md when present.");
+                println!("  --orchestrate  Orchestrator mode: require DESIGN.md + CHARTER.md +");
+                println!("                 IMPLEMENTATION_PLAN.md at repo root (run the respective");
+                println!("                 subcommands first), then flip the lifecycle and compose");
+                println!("                 PHASES.md from plan_items. Skips the questionnaire — the");
+                println!("                 design session + plan composer already captured what we'd");
+                println!("                 have asked. Elicits only the Phase-1 stop condition.");
                 return 0;
             }
             flag if flag.starts_with("--") => {
@@ -2230,6 +3157,9 @@ async fn cmd_found(args: &[String]) -> i32 {
             _ => {}
         }
         i += 1;
+    }
+    if orchestrate {
+        return cmd_found_orchestrate(design_path.as_deref()).await;
     }
 
     let repo_root = match find_repo_root() {
@@ -2334,9 +3264,19 @@ async fn cmd_found(args: &[String]) -> i32 {
     };
     let mut interlocutor = crate::found::StdinFoundInterlocutor::new();
 
+    // Signals are extracted from the design doc when one is present.
+    // Step-3 wiring: we compute them once and thread them into both
+    // Stage 1 (catalog predicates) and Stage 2 (fault-line
+    // predicates). Step 4's `cmd_design` flow will likely have
+    // already computed these; recomputing here is cheap (O(n) over
+    // the doc) and keeps this code path self-contained.
+    let design_signals: Option<corpus_engine::design_signals::DesignSignals> =
+        design_text.as_deref().map(corpus_engine::design_signals::extract);
+
     let answers = crate::found::run_stage1(
         &observation,
         design_text.as_deref(),
+        design_signals.as_ref(),
         &mut interlocutor,
         &mut recorder,
     );
@@ -2363,7 +3303,8 @@ async fn cmd_found(args: &[String]) -> i32 {
         rt: rt_handle_2,
     };
     let mut fault_interlocutor = crate::found::StdinFaultLineInterlocutor::new();
-    let selected_faults = crate::found::select_fault_lines(&observation, &answers);
+    let selected_faults =
+        crate::found::select_fault_lines(&observation, &answers, design_signals.as_ref());
     let stage2_summary = if selected_faults.is_empty() {
         println!();
         println!("  Sovereign Project Founding — Stage 2: Fault lines");
@@ -2385,6 +3326,7 @@ async fn cmd_found(args: &[String]) -> i32 {
         crate::found::run_stage2(
             &observation,
             &answers,
+            design_signals.as_ref(),
             &mut fault_interlocutor,
             &mut fault_recorder,
         )
@@ -3307,13 +4249,28 @@ fn relative(path: &Path, base: &Path) -> String {
 ///    Q&A so readers six weeks later can find "why".
 async fn cmd_amend(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("sovereign project amend");
+        println!("sovereign project amend [design|charter]");
         println!();
-        println!("Edit CHARTER.md with an adversarial review. Every amendment is");
-        println!("logged — what changed, what arguments the system raised, and");
-        println!("your responses. Requires the project to have been founded");
-        println!("(`sovereign project found`).");
+        println!("Edit with an adversarial review. Every amendment is logged —");
+        println!("what changed, what arguments the system raised, and your");
+        println!("responses.");
+        println!();
+        println!("  amend           (no target) — alias for `amend charter`");
+        println!("  amend charter   — edit .sovereign/CHARTER.md; bumps charter_version");
+        println!("  amend design    — edit DESIGN.md; appends `## Amendment log` entry");
+        println!();
+        println!("`amend charter` requires the project to be founded");
+        println!("(`sovereign project found`); `amend design` works on any repo");
+        println!("with a DESIGN.md at repo root.");
         return 0;
+    }
+
+    // Subcommand routing: `amend design` goes to the DESIGN.md flow;
+    // bare `amend` and `amend charter` fall through to the existing
+    // CHARTER.md flow (preserved verbatim — back-compat). The charter
+    // flow doesn't parse flags further so we don't rebind args here.
+    if matches!(args.first().map(String::as_str), Some("design")) {
+        return cmd_amend_design(&args[1..]).await;
     }
 
     let repo_root = match find_repo_root() {
@@ -3499,6 +4456,126 @@ fn today_iso() -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+// ─── Git auto-with-confirm (step 2a) ────────────────────────────────
+//
+// A fresh user who forgot to `git init` gets prompted once, kindly,
+// with the reasons git unlocks value in the Sovereign workflow. Prior
+// behavior was to silently treat git-absence as a "deferred" note in
+// the observation report — they'd never see it until much later when
+// an ATOS feature needed git to gate something. Making the prompt
+// explicit up-front is the difference between "tool feels
+// suffocating" and "tool is a collaborator."
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GitOutcome {
+    Present,
+    InitializedNow,
+    DeclinedByUser,
+    DeclinedPreviously,
+    NonInteractiveSkipped,
+}
+
+fn resolve_git(
+    repo_root: &Path,
+    has_git: bool,
+    override_flag: Option<bool>,
+    design_exists: bool,
+    git_declined_previously: bool,
+) -> GitOutcome {
+    if has_git {
+        return GitOutcome::Present;
+    }
+
+    match override_flag {
+        Some(true) => {
+            run_git_init(repo_root);
+            return if repo_root.join(".git").exists() {
+                GitOutcome::InitializedNow
+            } else {
+                eprintln!("    \u{2717} --yes-git set but `git init` did not create .git/");
+                GitOutcome::NonInteractiveSkipped
+            };
+        }
+        Some(false) => {
+            println!();
+            println!(
+                "    \u{2026} git skipped (--no-git). ATOS features that need git stay disabled."
+            );
+            return GitOutcome::DeclinedByUser;
+        }
+        None => {}
+    }
+
+    // Respect a previous declination — don't re-badger the user on
+    // every subsequent `init`. They already said no; it sticks.
+    if git_declined_previously {
+        return GitOutcome::DeclinedPreviously;
+    }
+
+    // Non-TTY stdin (piped / CI) without explicit flag: auto-init.
+    // The rationale: scripts running `sovereign project init` in
+    // fresh repos are almost always setting up a dev environment,
+    // and git is what every downstream ATOS command assumes. If the
+    // user truly wants no git, they pass --no-git.
+    if !crate::util::prompts::stdin_is_tty() {
+        println!();
+        println!(
+            "    No git repo; initializing (non-interactive default — pass --no-git to opt out)."
+        );
+        run_git_init(repo_root);
+        return if repo_root.join(".git").exists() {
+            GitOutcome::InitializedNow
+        } else {
+            GitOutcome::NonInteractiveSkipped
+        };
+    }
+
+    // Interactive prompt. Kind, specific, and (when a design doc is
+    // imminent) names the single most concrete win: per-revision
+    // diffs of the DESIGN.md the user is about to author.
+    eprintln!();
+    eprintln!("  No git repo here yet. Sovereign works without one, but git unlocks:");
+    if design_exists {
+        eprintln!("    \u{00b7} per-revision diff of your DESIGN.md as you iterate with the agent");
+    } else {
+        eprintln!("    \u{00b7} per-revision diff of your DESIGN.md + CHARTER.md as they evolve");
+    }
+    eprintln!("    \u{00b7} `atos feature approve` gates");
+    eprintln!("    \u{00b7} amendment history that survives machine changes");
+    eprintln!();
+
+    let accept = crate::util::prompts::confirm("  Run `git init` here now?", true);
+    if accept {
+        run_git_init(repo_root);
+        if repo_root.join(".git").exists() {
+            eprintln!("    \u{2713} Initialized git repo.");
+            GitOutcome::InitializedNow
+        } else {
+            eprintln!("    \u{2717} `git init` did not create .git/ — continuing without git.");
+            GitOutcome::NonInteractiveSkipped
+        }
+    } else {
+        eprintln!("    \u{2026} git skipped. Run `git init` manually later if you change your mind.");
+        GitOutcome::DeclinedByUser
+    }
+}
+
+fn run_git_init(repo_root: &Path) {
+    let status = std::process::Command::new("git")
+        .arg("init")
+        .current_dir(repo_root)
+        .status();
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            eprintln!("    \u{2717} `git init` exited with status {s}");
+        }
+        Err(e) => {
+            eprintln!("    \u{2717} could not spawn `git init`: {e} (is git installed?)");
+        }
+    }
+}
+
 fn derive_project_id(repo_root: &Path) -> String {
     repo_root
         .file_name()
@@ -3521,20 +4598,48 @@ fn unix_now_secs() -> i64 {
 // M6 requirements. Actionable items state the install command on
 // its own line, copy-pasteable, unindented — the user can paste and
 // run without editing.
-fn print_observation_report(obs: &crate::observation::ProjectObservation) {
+/// Contextual flags the report uses to decide whether a missing
+/// toolchain / git is ACTIONABLE (fix it now) or DEFERRED (we know
+/// why it's fine). Keeps `print_observation_report` side-effect free
+/// while letting `cmd_init` pass in what it knows.
+struct ObservationReportContext {
+    /// True when `<repo>/DESIGN.md` exists. A pre-code project with a
+    /// design doc is a legitimate state — "no languages detected"
+    /// becomes "indexing deferred" rather than an actionable error.
+    design_exists: bool,
+    /// User declined git (either this session or previously).
+    /// Suppresses the "no git" deferred-bucket nudge — they already
+    /// made the call.
+    git_declined: bool,
+}
+
+fn print_observation_report(
+    obs: &crate::observation::ProjectObservation,
+    ctx: &ObservationReportContext,
+) {
     use crate::observation::{DepKind, ScipTooling};
 
     let mut ready: Vec<String> = Vec::new();
     let mut actionable: Vec<(String, &'static str)> = Vec::new();
     let mut deferred: Vec<String> = Vec::new();
 
-    // Languages & SCIP tooling.
+    // Languages & SCIP tooling. On a pre-code project with a design
+    // doc present, "no languages" is expected — soft-path the
+    // warning into the deferred bucket instead of treating it as a
+    // gap the user must close right now.
     if obs.languages.is_empty() {
-        actionable.push((
-            "No supported languages detected (Rust, TypeScript, JavaScript, Go, Python, Java)."
-                .into(),
-            "",
-        ));
+        if ctx.design_exists {
+            deferred.push(
+                "Pre-code project (DESIGN.md present, no source yet). Language detection runs on the next init."
+                    .into(),
+            );
+        } else {
+            actionable.push((
+                "No supported languages detected (Rust, TypeScript, JavaScript, Go, Python, Java)."
+                    .into(),
+                "",
+            ));
+        }
     } else {
         for lang in &obs.languages {
             match &lang.scip_tooling {
@@ -3562,10 +4667,13 @@ fn print_observation_report(obs: &crate::observation::ProjectObservation) {
 
     if obs.has_git {
         ready.push("Git repository".into());
-    } else {
+    } else if !ctx.git_declined {
         // Not an actionable gap in the strict sense — git is
         // optional for init — but worth surfacing so the user knows
         // approvals-via-git won't be available.
+        //
+        // When the user explicitly declined git (now or previously),
+        // suppress this note — they've already seen the tradeoff.
         deferred.push("No git repository — `atos feature approve` covers the gap.".into());
     }
 

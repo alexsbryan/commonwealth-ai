@@ -257,6 +257,7 @@ mod tests {
                 primary: PathBuf::from(primary),
                 fast: PathBuf::from("/m/fast.gguf"),
                 embed: PathBuf::from("/m/embed.gguf"),
+                code: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

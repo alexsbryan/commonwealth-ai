@@ -91,6 +91,13 @@ pub mod record_atos_event;
 #[cfg(feature = "treesitter")]
 pub mod write_redteam_finding;
 
+// DESIGN.md structural signals — wraps corpus_engine::design_signals
+// so the agent-collaborative design session (and any MCP client) can
+// audit a DESIGN.md's gaps and keywords without round-tripping through
+// the CLI.
+#[cfg(feature = "treesitter")]
+pub mod design_signals_extract;
+
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
 pub use symbol_lookup::SymbolLookupTool;
@@ -142,6 +149,8 @@ pub use read_note_digest::ReadNoteDigestTool;
 pub use record_atos_event::RecordAtosEventTool;
 #[cfg(feature = "treesitter")]
 pub use write_redteam_finding::WriteRedteamFindingTool;
+#[cfg(feature = "treesitter")]
+pub use design_signals_extract::DesignSignalsExtractTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;

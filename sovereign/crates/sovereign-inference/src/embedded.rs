@@ -1006,18 +1006,88 @@ pub struct EmbeddedLlamaCpp {
     #[allow(dead_code)]
     backend: Arc<LlamaBackend>,
     fast: Arc<ModelSlot>,
+    /// The lazy chat slot. When `code_path` is set, this slot
+    /// hot-swaps between the Main responder and the Code specialist
+    /// based on the incoming request's `capability_hint`. Keeping
+    /// one on-demand slot (instead of two held-warm slots) trades
+    /// a ~5–30s reload on hint-switch for a smaller memory
+    /// footprint on mid-range hardware — a fair default for solo
+    /// users. Peers running a collective can dedicate a separate
+    /// code node; the mesh scheduler will route `code`-hinted
+    /// requests there before the local hot-swap kicks in.
     primary: Arc<Mutex<Option<ModelSlot>>>,
     primary_path: Option<PathBuf>,
     primary_ctx_size: u32,
     gpu_layers: u32,
     primary_backend: Arc<LlamaBackend>,
     last_primary_use: Arc<Mutex<Option<Instant>>>,
+    /// PR-E2: Path whose GGUF currently occupies the lazy slot.
+    /// `None` → slot unloaded. Used to decide whether an incoming
+    /// request requires a hot-swap (different path than the one
+    /// already loaded) vs. can reuse the resident model.
+    primary_loaded_path: Arc<Mutex<Option<PathBuf>>>,
+    /// PR-E2: Optional Code specialist GGUF. When set, a request
+    /// whose OICP envelope carries `capability_hint = "code"` is
+    /// served from this path (loaded into the lazy slot, swapping
+    /// out the Main responder if needed). `None` = no code slot,
+    /// all substantive work goes to the Main responder.
+    code_path: Option<PathBuf>,
+    /// Quirks to apply when the Code specialist is loaded.
+    /// Different from `primary_quirks` because code models can
+    /// have different chat templates / thinking control than
+    /// general models (e.g., DeepSeek Coder vs Qwen3.5).
+    code_quirks: ModelQuirks,
     embed_slot: Option<Arc<EmbedSlot>>,
     hardware: HardwareProfile,
     /// Quirks for the fast slot — controls thinking injection and sampling defaults.
     fast_quirks: ModelQuirks,
     /// Quirks for the primary (thoughtful) slot.
     primary_quirks: ModelQuirks,
+}
+
+/// Which slot to dispatch a request to. Computed from
+/// `(request.preferred_speed, request.oicp.capability_hint,
+/// configured slots)` — see
+/// [`EmbeddedLlamaCpp::select_slot_for_request`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SlotTarget {
+    Fast,
+    Primary,
+    Code,
+}
+
+/// Pure slot-selection policy extracted from
+/// [`EmbeddedLlamaCpp::select_slot_for_request`] so the rules can
+/// be unit-tested without loading real GGUF weights. Inputs are
+/// intentionally scalar: the request + "is the primary configured?"
+/// + "is the code slot configured?" — everything `select_slot_for_request`
+/// itself consults on `self`. The hot-swap logic in
+/// `complete` / `complete_stream` depends on this decision being
+/// deterministic for a fixed (request, slot-configuration) pair.
+fn pick_slot(
+    request: &CompletionRequest,
+    has_primary: bool,
+    has_code: bool,
+) -> SlotTarget {
+    let wants_code = request
+        .oicp
+        .as_ref()
+        .and_then(|o| o.capability_hint.as_ref())
+        .map(|h| h.as_str() == sovereign_core::oicp::CapabilityHint::CODE)
+        .unwrap_or(false);
+    if wants_code && has_code {
+        return SlotTarget::Code;
+    }
+    match request.preferred_speed {
+        Speed::Fast => SlotTarget::Fast,
+        Speed::Medium | Speed::Slow => {
+            if has_primary {
+                SlotTarget::Primary
+            } else {
+                SlotTarget::Fast
+            }
+        }
+    }
 }
 
 impl EmbeddedLlamaCpp {
@@ -1062,32 +1132,45 @@ impl EmbeddedLlamaCpp {
             fast_model_path,
             primary_model_path,
             embed_model_path,
+            None,
             context_size,
             gpu_layers,
+            ModelFamily::Unknown,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
         )
     }
 
-    /// Load with separate fast, primary, and embed models, specifying the model
-    /// family for each slot. The family drives thinking injection, sampling
-    /// defaults, and embedding pooling/instruction behaviour.
+    /// Load with separate fast, primary, embed, and optional code
+    /// models, specifying the model family for each slot. The family
+    /// drives thinking injection, sampling defaults, and
+    /// embedding pooling/instruction behaviour.
+    ///
+    /// The `code` slot is a PR-E2 addition: when configured, code-
+    /// hinted inference requests are routed to the Code specialist
+    /// GGUF (via hot-swap into the shared lazy slot) instead of the
+    /// Main responder. Passing `None` preserves the pre-E2 two-slot
+    /// behaviour — all substantive work goes to the primary.
+    #[allow(clippy::too_many_arguments)]
     pub fn load_full_with_families(
         fast_model_path: &Path,
         primary_model_path: Option<&Path>,
         embed_model_path: Option<&Path>,
+        code_model_path: Option<&Path>,
         context_size: u32,
         gpu_layers: Option<u32>,
         fast_family: ModelFamily,
         primary_family: ModelFamily,
         embed_family: ModelFamily,
+        code_family: ModelFamily,
     ) -> Result<Self> {
         let hardware = HardwareProfile::detect();
         let n_gpu_layers = gpu_layers.unwrap_or(hardware.recommended_gpu_layers);
 
         let fast_quirks = fast_family.default_quirks();
         let primary_quirks = primary_family.default_quirks();
+        let code_quirks = code_family.default_quirks();
         let embed_quirks = embed_family.default_quirks().embed;
 
         let mut backend = LlamaBackend::init()
@@ -1136,6 +1219,15 @@ impl EmbeddedLlamaCpp {
             None => None,
         };
 
+        if let Some(p) = code_model_path {
+            tracing::info!(
+                slot = "code",
+                path = %p.display(),
+                family = ?code_family,
+                "code specialist configured — will load on first code-hinted request"
+            );
+        }
+
         Ok(Self {
             backend: Arc::clone(&backend),
             fast,
@@ -1145,11 +1237,37 @@ impl EmbeddedLlamaCpp {
             gpu_layers: n_gpu_layers,
             primary_backend: backend,
             last_primary_use: Arc::new(Mutex::new(None)),
+            primary_loaded_path: Arc::new(Mutex::new(None)),
+            code_path: code_model_path.map(|p| p.to_path_buf()),
+            code_quirks,
             embed_slot,
             hardware,
             fast_quirks,
             primary_quirks,
         })
+    }
+
+    /// True when a Code specialist GGUF has been configured.
+    /// Exposed on the concrete type (tests + direct constructors);
+    /// trait-level consumers use `InferenceProvider::code_model_id()`.
+    pub fn has_code_slot(&self) -> bool {
+        self.code_path.is_some()
+    }
+
+    /// Pick which slot should serve this request.
+    ///
+    /// Rules:
+    /// - `code` hint + code slot configured → `Code` (hot-swaps
+    ///   the lazy slot to load the code GGUF).
+    /// - `Speed::Fast` → `Fast` (always loaded).
+    /// - Everything else → `Primary` if a primary GGUF is
+    ///   configured, otherwise `Fast` (degraded fallback).
+    fn select_slot_for_request(&self, request: &CompletionRequest) -> SlotTarget {
+        pick_slot(
+            request,
+            self.primary_path.is_some(),
+            self.code_path.is_some(),
+        )
     }
 
     /// Returns true if an embedding model is loaded and ready.
@@ -1175,12 +1293,23 @@ impl EmbeddedLlamaCpp {
                 if should_unload {
                     let mut primary = this.primary.lock().await;
                     if primary.is_some() {
+                        // Report which model was in the slot at unload
+                        // time — "primary" or "code" — so operators can
+                        // correlate idle-unloads with hot-swap activity.
+                        let slot_label = {
+                            let loaded = this.primary_loaded_path.lock().await;
+                            match loaded.as_ref() {
+                                Some(p) if Some(p.as_path()) == this.code_path.as_deref() => "code",
+                                _ => "primary",
+                            }
+                        };
                         tracing::info!(
-                            slot = "primary",
+                            slot = slot_label,
                             idle_secs = timeout_secs,
                             "unloading slot (idle timeout)"
                         );
                         *primary = None;
+                        *this.primary_loaded_path.lock().await = None;
                         *this.last_primary_use.lock().await = None;
                     }
                 }
@@ -1188,21 +1317,17 @@ impl EmbeddedLlamaCpp {
         });
     }
 
-    /// Select the appropriate slot for a request.
-    fn select_slot_for_speed(&self, speed: Speed) -> bool {
-        // Returns true if we should use the primary slot.
-        match speed {
-            Speed::Fast => false,
-            Speed::Medium | Speed::Slow => self.primary_path.is_some(),
-        }
-    }
 }
 
 #[async_trait]
 impl InferenceProvider for EmbeddedLlamaCpp {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
-        let use_primary = self.select_slot_for_speed(request.preferred_speed);
-        let slot_name = if use_primary { "primary" } else { "fast" };
+        let target = self.select_slot_for_request(request);
+        let slot_name = match target {
+            SlotTarget::Fast => "fast",
+            SlotTarget::Primary => "primary",
+            SlotTarget::Code => "code",
+        };
         let prompt_chars = request.prompt.len();
         let system_chars = request.system_message.as_ref().map(|s| s.len()).unwrap_or(0);
 
@@ -1217,27 +1342,61 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             "inference.complete: call"
         );
 
-        if use_primary {
-            // Load primary if needed.
-            let primary_path = self.primary_path.clone().unwrap();
+        // Primary + Code share the lazy slot (hot-swap). Fast uses
+        // the always-resident slot. Pick path + quirks up front so
+        // the blocking task has a single load-or-reuse code path.
+        let lazy_target = match target {
+            SlotTarget::Fast => None,
+            SlotTarget::Primary => Some((
+                self.primary_path.clone().unwrap(),
+                self.primary_quirks.clone(),
+                "primary",
+            )),
+            SlotTarget::Code => Some((
+                self.code_path.clone().unwrap(),
+                self.code_quirks.clone(),
+                "code",
+            )),
+        };
+
+        if let Some((target_path, quirks, slot_label)) = lazy_target {
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;
             let gpu_layers = self.gpu_layers;
             let last_use = Arc::clone(&self.last_primary_use);
+            let loaded_path = Arc::clone(&self.primary_loaded_path);
             let request = request.clone();
-            let quirks = self.primary_quirks.clone();
 
-            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
+            let result: Result<(CompletionResponse, &'static str)> = tokio::task::spawn_blocking(move || {
                 let start = Instant::now();
 
-                // Ensure primary is loaded.
+                // Hot-swap check: if the lazy slot is holding a
+                // different model than we need, unload + reload.
                 let mut primary = primary_lock.blocking_lock();
-                if primary.is_none() {
-                    tracing::info!(slot = "primary", "loading slot (first use)");
-                    let slot = ModelSlot::load(&backend, &primary_path, ctx_size, gpu_layers)?;
-                    *primary = Some(slot);
+                let mut loaded = loaded_path.blocking_lock();
+                let needs_swap = loaded.as_deref() != Some(target_path.as_path());
+                if needs_swap {
+                    if primary.is_some() {
+                        tracing::info!(
+                            slot = slot_label,
+                            from = ?loaded.as_ref().map(|p| p.display().to_string()),
+                            to = %target_path.display(),
+                            "hot-swapping lazy slot"
+                        );
+                    } else {
+                        tracing::info!(
+                            slot = slot_label,
+                            path = %target_path.display(),
+                            "loading lazy slot (first use)"
+                        );
+                    }
+                    *primary = None;
+                    let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers)?;
+                    *primary = Some(s);
+                    *loaded = Some(target_path.clone());
                 }
+                drop(loaded);
 
                 let slot = primary.as_ref().unwrap();
                 let mut ctx_lock = slot.context.blocking_lock();
@@ -1250,11 +1409,11 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let (text, tokens_used) = match result {
                     Ok(Ok(r)) => r,
                     Ok(Err(e)) => {
-                        tracing::warn!(slot = "primary", error = %e, "inference error");
+                        tracing::warn!(slot = slot_label, error = %e, "inference error");
                         return Err(e);
                     }
                     Err(_) => {
-                        tracing::error!(slot = "primary", "inference panicked — likely context overflow");
+                        tracing::error!(slot = slot_label, "inference panicked — likely context overflow");
                         return Err(Error::Inference(
                             "Model inference failed: prompt may exceed the model's context window. \
                              Try a shorter message or reduce conversation history.".to_string(),
@@ -1266,28 +1425,31 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 *last_use.blocking_lock() = Some(Instant::now());
 
-                Ok(CompletionResponse {
+                Ok((CompletionResponse {
                     text,
                     tokens_used,
                     model_id: slot.model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
-                })
+                }, slot_label))
             })
             .await
             .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
 
-            if let Ok(ref resp) = result {
-                tracing::info!(
-                    slot = "primary",
-                    model = %resp.model_id,
-                    latency_ms = resp.latency_ms,
-                    tokens_used = resp.tokens_used,
-                    response_chars = resp.text.len(),
-                    "inference.complete: done"
-                );
+            match result {
+                Ok((resp, slot_label)) => {
+                    tracing::info!(
+                        slot = slot_label,
+                        model = %resp.model_id,
+                        latency_ms = resp.latency_ms,
+                        tokens_used = resp.tokens_used,
+                        response_chars = resp.text.len(),
+                        "inference.complete: done"
+                    );
+                    Ok(resp)
+                }
+                Err(e) => Err(e),
             }
-            result
         } else {
             // Use fast slot.
             let slot = Arc::clone(&self.fast);
@@ -1349,8 +1511,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        let use_primary = self.select_slot_for_speed(request.preferred_speed);
-        let slot_name = if use_primary { "primary" } else { "fast" };
+        let target = self.select_slot_for_request(request);
+        let slot_name = match target {
+            SlotTarget::Fast => "fast",
+            SlotTarget::Primary => "primary",
+            SlotTarget::Code => "code",
+        };
 
         tracing::debug!(
             slot = slot_name,
@@ -1364,40 +1530,83 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let request = request.clone();
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(32);
 
-        if use_primary {
-            let primary_path = self.primary_path.clone().unwrap();
+        // Primary + Code share the lazy slot (hot-swap). Fast uses the
+        // always-resident slot. Resolve path + quirks + slot-label up
+        // front so the blocking task has one code path.
+        let lazy_target: Option<(PathBuf, ModelQuirks, &'static str)> = match target {
+            SlotTarget::Fast => None,
+            SlotTarget::Primary => Some((
+                self.primary_path.clone().unwrap(),
+                self.primary_quirks.clone(),
+                "primary",
+            )),
+            SlotTarget::Code => Some((
+                self.code_path.clone().unwrap(),
+                self.code_quirks.clone(),
+                "code",
+            )),
+        };
+
+        if let Some((target_path, quirks, slot_label)) = lazy_target {
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;
             let gpu_layers = self.gpu_layers;
             let last_use = Arc::clone(&self.last_primary_use);
-            let quirks = self.primary_quirks.clone();
+            let loaded_path = Arc::clone(&self.primary_loaded_path);
 
             tokio::task::spawn_blocking(move || {
                 let start = Instant::now();
+
+                // Hot-swap check: if the lazy slot is holding a different
+                // model than we need, unload + reload. For streaming we
+                // report the swap on the error channel only if the load
+                // actually fails — the swap itself is internal plumbing.
                 let mut primary = primary_lock.blocking_lock();
-                if primary.is_none() {
-                    tracing::info!(slot = "primary", "loading slot (first use, streaming)");
-                    match ModelSlot::load(&backend, &primary_path, ctx_size, gpu_layers) {
-                        Ok(slot) => *primary = Some(slot),
+                let mut loaded = loaded_path.blocking_lock();
+                let needs_swap = loaded.as_deref() != Some(target_path.as_path());
+                if needs_swap {
+                    if primary.is_some() {
+                        tracing::info!(
+                            slot = slot_label,
+                            from = ?loaded.as_ref().map(|p| p.display().to_string()),
+                            to = %target_path.display(),
+                            "hot-swapping lazy slot (streaming)"
+                        );
+                    } else {
+                        tracing::info!(
+                            slot = slot_label,
+                            path = %target_path.display(),
+                            "loading lazy slot (first use, streaming)"
+                        );
+                    }
+                    *primary = None;
+                    *loaded = None;
+                    match ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers) {
+                        Ok(slot) => {
+                            *primary = Some(slot);
+                            *loaded = Some(target_path.clone());
+                        }
                         Err(e) => {
-                            tracing::error!(slot = "primary", error = %e, "slot load failed");
+                            tracing::error!(slot = slot_label, error = %e, "slot load failed");
                             let _ = tx.blocking_send(Err(e));
                             return;
                         }
                     }
                 }
+                drop(loaded);
+
                 let slot = primary.as_ref().unwrap();
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
                 if let Err(e) =
                     ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
                 {
-                    tracing::warn!(slot = "primary", error = %e, "stream error");
+                    tracing::warn!(slot = slot_label, error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
                 } else {
                     tracing::info!(
-                        slot = "primary",
+                        slot = slot_label,
                         latency_ms = start.elapsed().as_millis() as u64,
                         "inference.complete_stream: done"
                     );
@@ -1557,6 +1766,17 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         } else {
             self.fast.model_id.clone()
         }
+    }
+
+    /// PR-E2: filename stem of the configured code GGUF, or `None` if
+    /// the user skipped configuring a Code specialist. Mirrors
+    /// `model_id_for` — derived from the path without locking.
+    fn code_model_id(&self) -> Option<String> {
+        self.code_path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -1995,6 +2215,82 @@ fn prop_type_rule(schema: &serde_json::Value) -> &'static str {
         Some("number") => "number",
         Some("boolean") => "boolean",
         _ => "string", // default to string for unknown types
+    }
+}
+
+#[cfg(test)]
+mod pick_slot_tests {
+    //! PR-E2: the slot dispatch rules ultimately drive the hot-swap
+    //! decision in `complete` / `complete_stream`. Lock them here
+    //! with fast, GPU-free table tests so a regression in routing
+    //! is caught by `cargo test` long before it reaches a live
+    //! llama.cpp load.
+    use super::{pick_slot, SlotTarget};
+    use sovereign_core::oicp::{CapabilityHint, InferenceRequirements};
+    use sovereign_core::types::{CompletionRequest, Speed};
+
+    fn req(speed: Speed, hint: Option<CapabilityHint>) -> CompletionRequest {
+        let mut r = CompletionRequest::new("hi");
+        r.preferred_speed = speed;
+        if let Some(h) = hint {
+            r.oicp = Some(InferenceRequirements::new().with_hint(h));
+        }
+        r
+    }
+
+    #[test]
+    fn fast_speed_without_code_hint_goes_to_fast() {
+        let r = req(Speed::Fast, None);
+        assert_eq!(pick_slot(&r, true, true), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r, false, false), SlotTarget::Fast);
+    }
+
+    #[test]
+    fn slow_speed_without_code_hint_picks_primary_when_available() {
+        let r = req(Speed::Slow, None);
+        assert_eq!(pick_slot(&r, true, false), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r, true, true), SlotTarget::Primary);
+    }
+
+    #[test]
+    fn slow_speed_without_primary_falls_back_to_fast() {
+        // Degraded config: user only configured a fast GGUF. Pre-E2
+        // behaviour that must not regress — a Medium/Slow request
+        // still runs instead of erroring out.
+        let r = req(Speed::Slow, None);
+        assert_eq!(pick_slot(&r, false, false), SlotTarget::Fast);
+    }
+
+    #[test]
+    fn code_hint_with_code_slot_picks_code_even_on_fast_speed() {
+        // Code specialist wins over Speed::Fast dispatch. The hint
+        // semantics are "this work needs code reasoning"; Fast-slot
+        // generals can't do that well.
+        let r = req(Speed::Fast, Some(CapabilityHint::code()));
+        assert_eq!(pick_slot(&r, true, true), SlotTarget::Code);
+    }
+
+    #[test]
+    fn code_hint_without_code_slot_follows_speed_rules() {
+        // Solo-user with no dedicated coder: fall back to whatever
+        // speed-tier would normally serve this request. The peer-
+        // mesh scheduler is responsible for routing the hint to a
+        // better-matched peer; locally we do what we can.
+        let r_fast = req(Speed::Fast, Some(CapabilityHint::code()));
+        assert_eq!(pick_slot(&r_fast, true, false), SlotTarget::Fast);
+
+        let r_slow = req(Speed::Slow, Some(CapabilityHint::code()));
+        assert_eq!(pick_slot(&r_slow, true, false), SlotTarget::Primary);
+    }
+
+    #[test]
+    fn non_code_hint_does_not_pick_code_even_when_configured() {
+        // The extension hint `x:prose` must not accidentally trip
+        // the code dispatch — only the standardized `code` hint
+        // should.
+        let hint = CapabilityHint::extension("prose").unwrap();
+        let r = req(Speed::Slow, Some(hint));
+        assert_eq!(pick_slot(&r, true, true), SlotTarget::Primary);
     }
 }
 

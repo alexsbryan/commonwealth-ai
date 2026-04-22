@@ -114,6 +114,22 @@ pub trait InferenceProvider: Send + Sync {
         "unknown".to_string()
     }
 
+    /// Return the model ID of a configured Code specialist slot, if the
+    /// provider has one separately from its primary slot. Returns `None`
+    /// on providers that collapse all chat work into `model_id_for(Slow)`
+    /// — that's the pre-PR-E2 behaviour and still correct for remote
+    /// providers, stubs, and single-model test harnesses.
+    ///
+    /// The mesh advertiser (`build_self_manifest`) consults this to emit
+    /// a third `ProviderModel` entry with a `CapabilityHint::code` claim
+    /// so peer schedulers can route code-hinted requests at this peer
+    /// without first having to elicit a swap. Overriding providers
+    /// (currently only `EmbeddedLlamaCpp`) return the filename stem of
+    /// the configured code GGUF.
+    fn code_model_id(&self) -> Option<String> {
+        None
+    }
+
     fn capabilities(&self) -> ProviderCapabilities;
 }
 

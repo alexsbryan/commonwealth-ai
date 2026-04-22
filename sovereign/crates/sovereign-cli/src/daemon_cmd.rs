@@ -96,6 +96,11 @@ async fn run_daemon(_args: &[String]) -> i32 {
         &config.models.fast,
         Some(&config.models.primary),
         Some(&config.models.embed),
+        // PR-E2: optional Code specialist. When set, `code`-hinted
+        // requests hot-swap into the lazy slot (shared with primary).
+        // None = pre-E2 two-slot behaviour — all substantive work on
+        // the Main responder.
+        config.models.code.as_deref(),
         // context_size — 16384 is the safe default across all three
         // slots on a 64 GB unified-memory Mac running a 30B+ primary.
         //
@@ -122,6 +127,7 @@ async fn run_daemon(_args: &[String]) -> i32 {
         ModelFamily::Unknown,
         ModelFamily::Unknown,
         ModelFamily::Unknown,
+        ModelFamily::Unknown, // code slot — family detection deferred (see PR-E2)
     ) {
         Ok(p) => {
             let arc = Arc::new(p);
@@ -540,6 +546,14 @@ async fn build_tool_registry(
 
     // Doc-path checker — no state dependency.
     tools.register(Box::new(sovereign_tools::CheckDocPathsTool::new()));
+
+    // DESIGN.md structural signals — no state dependency; the tool
+    // reads the DESIGN.md path argument at call time. No
+    // `with_project_root` in the daemon context because the daemon
+    // doesn't know which project the caller means.
+    tools.register(Box::new(
+        sovereign_tools::DesignSignalsExtractTool::new(),
+    ));
 
     tools
 }
@@ -1013,11 +1027,13 @@ impl ProviderFactory for LlamaCppFactory {
             &cfg.models.fast,
             Some(&cfg.models.primary),
             Some(&cfg.models.embed),
+            cfg.models.code.as_deref(),
             4096,
             None,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
+            ModelFamily::Unknown, // code slot — family detection deferred (see PR-E2)
         )
         .map_err(|e| format!("reload: failed to load models: {e}"))?;
         let arc = Arc::new(provider);

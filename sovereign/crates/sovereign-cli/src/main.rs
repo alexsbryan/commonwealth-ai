@@ -3,6 +3,9 @@ mod atos_cmd;
 mod atos_plugin;
 mod code_cmd;
 mod daemon_cmd;
+mod design_onboarding;
+mod design_session;
+mod enrich_cmd;
 mod doc_fetcher;
 mod doctor_cmd;
 mod found;
@@ -11,6 +14,7 @@ mod mcp_cmd;
 mod mesh_cmd;
 mod observation;
 mod phases;
+mod plan_composer;
 mod project_cmd;
 mod project_toml;
 mod recipe_cmd;
@@ -315,6 +319,10 @@ async fn main() {
             }
             "tools" => {
                 let code = tools_cmd::run_tools(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "enrich" => {
+                let code = enrich_cmd::run_enrich(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "doctor" => {
