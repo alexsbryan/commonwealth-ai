@@ -1,0 +1,27 @@
+{
+  "mcp": {
+    "servers": {
+      "sovereign": {
+        "type": "http",
+        "url": "http://localhost:9741/mcp"
+      }
+    }
+  },
+  "provider": {
+    "commonwealth": {
+      "models": {
+        "Qwen3-Coder-Next-Opus-Distilled-Q4_K_M": {
+          "name": "Qwen3-Coder-Next-Opus-Distilled-Q4_K_M"
+        },
+        "Qwen3.5-9B.Q8_0.1": {
+          "name": "Qwen3.5-9B.Q8_0.1"
+        }
+      },
+      "name": "Commonwealth Mesh",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://localhost:9741/v1"
+      }
+    }
+  }
+}
