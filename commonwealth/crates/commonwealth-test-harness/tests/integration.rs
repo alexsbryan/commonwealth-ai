@@ -543,7 +543,9 @@ async fn oicp_capabilities_returns_registered_models() {
 
     let (status, response) = http_get(client_addr, "/oicp/v1/capabilities").await;
     assert_eq!(status, 200);
-    assert_eq!(response["oicp_version"], "0.2.0");
+    // Server advertises its current OICP version; fixtures elsewhere
+    // still send "0.2.0" on purpose to cover backward compatibility.
+    assert_eq!(response["oicp_version"], OICP_VERSION);
     assert_eq!(response["models"].as_array().unwrap().len(), 1);
     assert_eq!(response["models"][0]["id"], "qwen3-coder-30b");
 }

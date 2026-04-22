@@ -5,10 +5,19 @@
 //! `inference_availability` weight from gossip. A peer with a great model
 //! but currently coding (availability=0.20) scores lower than an idle peer
 //! with a slightly weaker model.
+//!
+//! As of v0.3, the per-peer capability score is derived from claim-based
+//! scoring (`oicp::score_claim_for_request`) when any candidate model
+//! publishes claims. When no claims are present, the scheduler falls back
+//! to the legacy v0.2 capability-profile path (`satisfies_required` +
+//! `score_preferred`). The fallback is dead code once every producer
+//! emits claims and will be removed in PR-C.
 
 use commonwealth_core::capabilities::NodeCapabilities;
 
-use crate::oicp::{self, InferenceRequirements, ProviderManifest};
+use crate::oicp::{
+    self, InferenceRequirements, ProviderManifest, ProviderModel,
+};
 
 /// A candidate backend entry for OICP-based selection.
 pub struct BackendCandidate<'a> {
@@ -19,21 +28,68 @@ pub struct BackendCandidate<'a> {
     pub node_capabilities: Option<&'a NodeCapabilities>,
 }
 
+/// Score the best (model, claim) pair in a manifest against a request,
+/// preferring v0.3 claim-based scoring when any model publishes claims
+/// and falling back to the v0.2 capability-profile path otherwise.
+///
+/// Returns `None` when no model can serve the request.
+fn best_score_for_manifest(
+    manifest: &ProviderManifest,
+    req: &InferenceRequirements,
+) -> Option<f32> {
+    let any_claims = manifest.models.iter().any(|m| !m.claims.is_empty());
+
+    if any_claims {
+        // v0.3 path: iterate (model, claim) pairs, score each.
+        manifest
+            .models
+            .iter()
+            .filter(|m| m.status.available)
+            .flat_map(|m| m.claims.iter())
+            .filter_map(|claim| oicp::score_claim_for_request(claim, req))
+            .fold(None, |acc, s| Some(acc.map_or(s, |a: f32| a.max(s))))
+    } else {
+        // v0.2 fallback. PR-C removes this branch.
+        legacy_v02_score(manifest.models.iter(), req)
+    }
+}
+
+/// Legacy v0.2 capability-profile scoring. Kept for the PR-B
+/// transition period so fixtures that haven't moved to claims yet
+/// still route. Dead code once PR-C lands.
+fn legacy_v02_score<'m, I: Iterator<Item = &'m ProviderModel>>(
+    models: I,
+    req: &InferenceRequirements,
+) -> Option<f32> {
+    let required = req.required();
+    let preferred = req.preferred();
+    let score = models
+        .filter(|m| m.status.available)
+        .filter(|m| oicp::satisfies_required(&m.capabilities, required))
+        .map(|m| oicp::score_preferred(&m.capabilities, preferred))
+        .fold(f32::NEG_INFINITY, f32::max);
+    if score == f32::NEG_INFINITY {
+        None
+    } else {
+        Some(score)
+    }
+}
+
 /// Select the best backend for an OICP inference request.
 ///
-/// Scoring: `capability_score × inference_availability`. The availability
+/// Scoring: `protocol_score × inference_availability`, where
+/// `protocol_score` comes from v0.3 claim-based scoring when any model
+/// publishes claims (see [`oicp::score_claim_for_request`]) and from
+/// the legacy v0.2 capability-profile path otherwise. The availability
 /// weight is clamped to `[0.20, 1.0]` so even the busiest peer is still
 /// reachable for requests that find no better option.
 ///
 /// Returns the index into `candidates` of the selected entry, or `None`
-/// if no candidate satisfies the `requirements`.
+/// if no candidate can serve the `requirements`.
 pub fn pick_slot_for_oicp<'a>(
     candidates: &'a [BackendCandidate<'a>],
     requirements: &InferenceRequirements,
 ) -> Option<usize> {
-    let required = requirements.required();
-    let preferred = requirements.preferred();
-
     candidates
         .iter()
         .enumerate()
@@ -47,18 +103,7 @@ pub fn pick_slot_for_oicp<'a>(
                 .unwrap_or(true)
         })
         .filter_map(|(idx, c)| {
-            let cap_score = c
-                .manifest
-                .models
-                .iter()
-                .filter(|m| m.status.available)
-                .filter(|m| oicp::satisfies_required(&m.capabilities, required))
-                .map(|m| oicp::score_preferred(&m.capabilities, preferred))
-                .fold(f32::NEG_INFINITY, f32::max);
-
-            if cap_score == f32::NEG_INFINITY {
-                return None;
-            }
+            let cap_score = best_score_for_manifest(c.manifest, requirements)?;
 
             let availability = c
                 .node_capabilities
@@ -80,8 +125,9 @@ mod tests {
         AvailableResources, HardwareProfile, NodeCapabilities,
     };
     use crate::oicp::{
-        Capability, CapabilityProfile, CapabilityRequirements, InferenceRequirements,
-        ModelStatus, ProviderModel, ProviderManifest,
+        Capability, CapabilityClaim, CapabilityHint, CapabilityProfile,
+        CapabilityRequirements, InferenceRequirements, LatencyClass,
+        ModelStatus, ProviderManifest, ProviderModel,
     };
 
     fn make_manifest(cap_score: u8) -> ProviderManifest {
@@ -101,6 +147,7 @@ mod tests {
                 estimated_load_time_sec: None,
             },
             size_gb: None,
+            claims: Vec::new(),
         }])
     }
 
@@ -194,6 +241,7 @@ mod tests {
             status: ModelStatus { available: true, loaded: true, estimated_tokens_per_sec: None,
                 estimated_ttft_ms: None, estimated_load_time_sec: None },
             size_gb: None,
+            claims: Vec::new(),
         }])
     }
 
@@ -324,5 +372,216 @@ mod tests {
 
         let selected = pick_slot_for_oicp(&candidates, &reqs_requiring_code(1));
         assert_eq!(selected, Some(0), "capable node with low availability must still be routable");
+    }
+
+    // -----------------------------------------------------------
+    // v0.3 §6 — claim-based selection
+    // -----------------------------------------------------------
+
+    fn manifest_with_claims(claims: Vec<CapabilityClaim>) -> ProviderManifest {
+        ProviderManifest::new(vec![ProviderModel {
+            id: "test".into(),
+            base_model: None,
+            quantization: None,
+            // v0.2 profile left empty — claim-based path takes over
+            // as soon as a model publishes any claim.
+            capabilities: CapabilityProfile::default(),
+            context_tokens: 32_000,
+            status: ModelStatus {
+                available: true,
+                loaded: true,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+            size_gb: None,
+            claims,
+        }])
+    }
+
+    fn v03_req(
+        hint: CapabilityHint,
+        lc: LatencyClass,
+        ctx: u32,
+        out: u32,
+    ) -> InferenceRequirements {
+        InferenceRequirements::new()
+            .with_hint(hint)
+            .with_latency_class(lc)
+            .with_context_tokens(ctx)
+            .with_max_output_tokens(out)
+    }
+
+    #[test]
+    fn coder_collective_routes_code_request_to_code_specialist() {
+        // The spec's §6.2 scenario. A code request should win on the
+        // Qwen Coder node over the 70B general peer, even though the
+        // generalist has slightly lower but still-high affinity on
+        // general work.
+        let qwen_coder = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::code(),
+            LatencyClass::Normal,
+            32_000,
+            4_000,
+            0.95,
+        )]);
+        let llama_70b = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            64_000,
+            4_000,
+            0.85,
+        )]);
+        let idle = make_caps(1.0);
+        let candidates = vec![
+            BackendCandidate { manifest: &llama_70b, node_capabilities: Some(&idle) },
+            BackendCandidate { manifest: &qwen_coder, node_capabilities: Some(&idle) },
+        ];
+        let req = v03_req(
+            CapabilityHint::code(),
+            LatencyClass::Normal,
+            16_000,
+            2_000,
+        );
+        assert_eq!(
+            pick_slot_for_oicp(&candidates, &req),
+            Some(1),
+            "code request must route to the code specialist, not the 70B general peer"
+        );
+    }
+
+    #[test]
+    fn hard_gate_eliminates_node_with_insufficient_context() {
+        // Writer's local 8K model vs peer's 32K model, request needs
+        // 16K context. Local claim is eliminated by the hard gate;
+        // peer wins even if it has lower affinity.
+        let local_small = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Fast,
+            8_000,   // not enough for 16K request
+            1_000,
+            0.9,
+        )]);
+        let peer_large = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            64_000,
+            4_000,
+            0.75,
+        )]);
+        let idle = make_caps(1.0);
+        let candidates = vec![
+            BackendCandidate { manifest: &local_small, node_capabilities: Some(&idle) },
+            BackendCandidate { manifest: &peer_large, node_capabilities: Some(&idle) },
+        ];
+        let req = v03_req(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            16_000,
+            2_000,
+        );
+        assert_eq!(
+            pick_slot_for_oicp(&candidates, &req),
+            Some(1),
+            "hard context gate must eliminate the small local claim"
+        );
+    }
+
+    #[test]
+    fn multi_claim_model_picks_best_claim_per_request() {
+        // A single 9B general model advertising both a fast-latency
+        // short-context claim and a normal-latency full-context
+        // claim. A fast short-context request should match the fast
+        // claim; a normal long-context request should match the
+        // other. The node still wins either way, but via different
+        // claims — this is the unit-of-scheduling contract.
+        let dual = manifest_with_claims(vec![
+            CapabilityClaim::new(
+                CapabilityHint::general(),
+                LatencyClass::Fast,
+                4_000,
+                500,
+                0.85,
+            ),
+            CapabilityClaim::new(
+                CapabilityHint::general(),
+                LatencyClass::Normal,
+                16_000,
+                2_000,
+                0.65,
+            ),
+        ]);
+        let idle = make_caps(1.0);
+        let candidates = vec![
+            BackendCandidate { manifest: &dual, node_capabilities: Some(&idle) },
+        ];
+        let fast_req = v03_req(
+            CapabilityHint::general(),
+            LatencyClass::Fast,
+            2_000,
+            200,
+        );
+        assert_eq!(pick_slot_for_oicp(&candidates, &fast_req), Some(0));
+        let normal_req = v03_req(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            12_000,
+            1_500,
+        );
+        assert_eq!(pick_slot_for_oicp(&candidates, &normal_req), Some(0));
+    }
+
+    #[test]
+    fn hint_mismatch_falls_back_to_general_when_available() {
+        // Request `code`. One peer offers an `x:prose` claim
+        // (specific, wrong) and one peer offers `general` (fallback).
+        // The general-serving peer must win: wrong specialization
+        // scores 0 and is eliminated; general fallback wins at 0.5.
+        let prose_peer = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::extension("prose").unwrap(),
+            LatencyClass::Normal,
+            32_000,
+            4_000,
+            0.9,
+        )]);
+        let general_peer = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            32_000,
+            4_000,
+            0.7,
+        )]);
+        let idle = make_caps(1.0);
+        let candidates = vec![
+            BackendCandidate { manifest: &prose_peer, node_capabilities: Some(&idle) },
+            BackendCandidate { manifest: &general_peer, node_capabilities: Some(&idle) },
+        ];
+        let req = v03_req(
+            CapabilityHint::code(),
+            LatencyClass::Normal,
+            16_000,
+            2_000,
+        );
+        assert_eq!(
+            pick_slot_for_oicp(&candidates, &req),
+            Some(1),
+            "wrong specialization must be eliminated; general fallback wins"
+        );
+    }
+
+    #[test]
+    fn v02_fallback_still_functions_when_no_claims_present() {
+        // Existing v0.2-only test — ensures the PR-B transition
+        // period works. Can be removed when PR-C deletes the v0.2
+        // scoring path.
+        let caps = make_caps(1.0);
+        let manifest = make_manifest(4);
+        let candidates = vec![BackendCandidate {
+            manifest: &manifest,
+            node_capabilities: Some(&caps),
+        }];
+        let selected =
+            pick_slot_for_oicp(&candidates, &reqs_requiring_code(1));
+        assert_eq!(selected, Some(0));
     }
 }

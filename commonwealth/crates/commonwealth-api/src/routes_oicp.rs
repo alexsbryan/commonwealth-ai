@@ -2,11 +2,66 @@ use axum::extract::State;
 use axum::Json;
 
 use commonwealth_inference::oicp::{
-    CorpusDescriptor, FederationManifest, KnowledgeManifest, ModelStatus, OICP_VERSION,
-    PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel, ProviderType,
+    Capability, CapabilityClaim, CapabilityHint, CapabilityProfile,
+    CorpusDescriptor, FederationManifest, KnowledgeManifest, LatencyClass,
+    ModelStatus, PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel,
+    ProviderType, OICP_VERSION,
 };
 
 use crate::state::AppState;
+
+/// Synthesize a v0.3 `CapabilityClaim` for a model from its name and
+/// v0.2 capability profile. Two-step heuristic for PR-B (replaced by
+/// structured model config in PR-E):
+///
+/// 1. **Hint:** code specialization detected by name suffix — models
+///    whose name contains "coder", "code-llama", or "codellama" claim
+///    `code`; everything else claims `general`.
+/// 2. **Affinity:** derived from the v0.2 proficiency level of the
+///    capability most relevant to the hint (Code for `code`, max of
+///    {General, Analysis, Instruction} for `general`), mapped from
+///    `[0, 4]` onto `[0.0, 1.0]`.
+///
+/// `max_context` passes through verbatim; `max_output` gets a fixed
+/// 2048 tokens for `Normal` latency (refined when skills declare
+/// explicit output budgets in PR-D).
+fn synthesize_default_claim(
+    model_name: &str,
+    profile: &CapabilityProfile,
+    max_context: u32,
+) -> CapabilityClaim {
+    let lower = model_name.to_lowercase();
+    let is_code_specialist = lower.contains("coder")
+        || lower.contains("code-llama")
+        || lower.contains("codellama")
+        || lower.contains("deepseek-coder");
+
+    let (hint, relevant_capability) = if is_code_specialist {
+        (CapabilityHint::code(), Capability::Code)
+    } else {
+        // For the general hint, affinity tracks the best of the
+        // general-adjacent capabilities. Models with `General: 4`
+        // advertise strong general affinity; those with only
+        // `Instruction: 2` advertise weaker.
+        let best = [Capability::General, Capability::Analysis, Capability::Instruction]
+            .into_iter()
+            .map(|c| profile.get(&c).copied().unwrap_or(0))
+            .max()
+            .unwrap_or(0);
+        // Return a sentinel; we'll compute affinity from `best`
+        // below rather than re-looking-up.
+        return CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            max_context,
+            2_048,
+            (best as f32 / 4.0).clamp(0.0, 1.0),
+        );
+    };
+    let proficiency = profile.get(&relevant_capability).copied().unwrap_or(0);
+    let affinity = (proficiency as f32 / 4.0).clamp(0.0, 1.0);
+    CapabilityClaim::new(hint, LatencyClass::Normal, max_context, 2_048, affinity)
+}
 
 /// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
 pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifest> {
@@ -46,6 +101,11 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
                 .get_llama_address(model.id)
                 .is_some();
 
+            let claim = synthesize_default_claim(
+                &model.name,
+                &model.oicp_capabilities,
+                32_768,
+            );
             ProviderModel {
                 id: model.name.clone(),
                 base_model: None,
@@ -69,6 +129,7 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
                 // treats unknown sizes as sorted-after any known
                 // size, so this path is safe under mesh routing.
                 size_gb: None,
+                claims: vec![claim],
             }
         })
         .collect();

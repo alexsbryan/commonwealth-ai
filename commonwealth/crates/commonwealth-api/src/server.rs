@@ -214,7 +214,10 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["oicp_version"], "0.2.0");
+        assert_eq!(
+            json["oicp_version"],
+            commonwealth_inference::oicp::OICP_VERSION
+        );
         assert_eq!(json["provider"]["type"], "mesh");
     }
 
