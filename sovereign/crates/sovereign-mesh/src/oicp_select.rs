@@ -18,7 +18,8 @@
 //! Keeping the primitives in one place means the two sides can't
 //! drift out of agreement about what "best" means.
 use sovereign_core::oicp::{
-    self, CapabilityProfile, ProviderManifest,
+    self, CapabilityHint, CapabilityProfile, InferenceRequirements,
+    LatencyClass, ProviderManifest,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
@@ -115,6 +116,53 @@ pub(crate) fn score_manifest(
     best
 }
 
+/// v0.3-aware wrapper around [`score_manifest`]. Prefers claim-based
+/// scoring (every manifest model's `claims` vector) when any model
+/// publishes claims and falls back to the legacy capability-profile
+/// path otherwise.
+///
+/// The result uses [`ModelCandidate`] — so the caller still sees a
+/// single `(model_id, size_gb, score)` pick even though the scoring
+/// unit may have been a `(model, claim)` pair internally. When a
+/// model publishes multiple claims, the highest-scoring claim wins
+/// and its parent model becomes the candidate.
+pub(crate) fn score_manifest_for_request(
+    manifest: &ProviderManifest,
+    req: &InferenceRequirements,
+) -> Option<ModelCandidate> {
+    let any_claims = manifest.models.iter().any(|m| !m.claims.is_empty());
+
+    if any_claims {
+        let mut best: Option<ModelCandidate> = None;
+        for model in &manifest.models {
+            // A model that hasn't published claims is skipped here;
+            // the claim path is authoritative for nodes that opted
+            // in to v0.3. Back-fall of a claim-less model via the
+            // v0.2 path within the same manifest would produce
+            // asymmetric, hard-to-reason-about scoring.
+            for claim in &model.claims {
+                let Some(score) = oicp::score_claim_for_request(claim, req)
+                else {
+                    continue;
+                };
+                let cand = ModelCandidate {
+                    score,
+                    size_gb: model.size_gb,
+                    model_id: model.id.clone(),
+                };
+                best = Some(match best {
+                    None => cand,
+                    Some(cur) => pick_better(cur, cand),
+                });
+            }
+        }
+        return best;
+    }
+
+    // v0.2 fallback. Removed in PR-C.
+    score_manifest(manifest, req.required(), req.preferred())
+}
+
 /// Decide which `Speed` slot on the local provider should serve a
 /// chat request, given its OICP capability envelope.
 ///
@@ -148,6 +196,17 @@ pub(crate) fn pick_slot_for_oicp(
     let Some(oicp) = &request.oicp else {
         return Speed::Slow;
     };
+
+    // v0.3 fast path: when the request carries `capability_hint`
+    // and/or `latency_class`, select the slot whose latency matches
+    // the requested class, provided the slot's model can serve the
+    // hint. This keeps the ground-truth dispatch key (Speed) aligned
+    // with the protocol-level latency class without going through a
+    // synthetic-manifest intermediate step.
+    if oicp.capability_hint.is_some() || oicp.latency_class.is_some() {
+        return pick_slot_v03(provider, oicp);
+    }
+
     let Some(caps) = &oicp.capabilities else {
         return Speed::Slow;
     };
@@ -240,6 +299,79 @@ pub(crate) fn pick_slot_for_oicp(
     }
 }
 
+/// v0.3 slot selection: latency class picks the primary slot; hint
+/// acts as a veto when the primary slot's model cannot serve the
+/// requested specialization. Returns `Speed::Slow` as the conservative
+/// default if neither loaded slot satisfies the hint.
+fn pick_slot_v03(
+    provider: &dyn InferenceProvider,
+    req: &InferenceRequirements,
+) -> Speed {
+    let hint = req.effective_hint();
+    let class = req.effective_latency_class();
+    let manifest = &sovereign_core::models_manifest::DEFAULT_MANIFEST;
+
+    let slot_matches_hint = |speed: Speed| -> Option<(String, CapabilityHint)> {
+        let id = provider.model_id_for(speed);
+        if id.is_empty() || id == "unknown" {
+            return None;
+        }
+        let info = manifest.info_for_file(&id)?;
+        let slot_hint = oicp::infer_hint_from_profile(&info.capabilities);
+        if oicp::hint_match_score(&slot_hint, &hint) > 0.0 {
+            Some((id, slot_hint))
+        } else {
+            None
+        }
+    };
+
+    let fast = slot_matches_hint(Speed::Fast);
+    let slow = slot_matches_hint(Speed::Slow);
+
+    let primary = match class {
+        LatencyClass::Fast => Speed::Fast,
+        LatencyClass::Normal | LatencyClass::Extended => Speed::Slow,
+    };
+    let primary_available =
+        matches!((primary, &fast, &slow), (Speed::Fast, Some(_), _) | (Speed::Slow, _, Some(_)));
+
+    if primary_available {
+        tracing::debug!(
+            hint = %hint,
+            latency_class = ?class,
+            picked = ?primary,
+            "pick_slot_for_oicp (v0.3): latency class guided slot pick"
+        );
+        return primary;
+    }
+
+    // Primary slot doesn't satisfy the hint. Try the other slot.
+    let fallback = match primary {
+        Speed::Fast => Speed::Slow,
+        _ => Speed::Fast,
+    };
+    let fallback_available = matches!(
+        (fallback, &fast, &slow),
+        (Speed::Fast, Some(_), _) | (Speed::Slow, _, Some(_))
+    );
+    if fallback_available {
+        tracing::info!(
+            hint = %hint,
+            latency_class = ?class,
+            picked = ?fallback,
+            "pick_slot_for_oicp (v0.3): primary slot did not match hint — fell back"
+        );
+        return fallback;
+    }
+
+    tracing::warn!(
+        hint = %hint,
+        latency_class = ?class,
+        "pick_slot_for_oicp (v0.3): neither slot matches hint — serving from Slow"
+    );
+    Speed::Slow
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,6 +448,7 @@ mod tests {
                 estimated_load_time_sec: None,
             },
             size_gb,
+            claims: Vec::new(),
         }
     }
 
@@ -548,5 +681,136 @@ mod tests {
         });
         let req = CompletionRequest::new("x").with_oicp(envelope);
         assert_eq!(pick_slot_for_oicp(&provider, &req), Speed::Slow);
+    }
+
+    // -----------------------------------------------------------
+    // v0.3 — latency_class guided slot selection
+    // -----------------------------------------------------------
+
+    #[test]
+    fn pick_slot_v03_latency_fast_picks_fast_slot() {
+        let provider = StubProvider {
+            fast_model: "Qwen3.5-9B.Q8_0.1".into(),
+            slow_model: "Qwen3.5-27B.Q8_0".into(),
+        };
+        let envelope = InferenceRequirements::new()
+            .with_hint(CapabilityHint::general())
+            .with_latency_class(LatencyClass::Fast);
+        let req = CompletionRequest::new("quick").with_oicp(envelope);
+        assert_eq!(pick_slot_for_oicp(&provider, &req), Speed::Fast);
+    }
+
+    #[test]
+    fn pick_slot_v03_latency_normal_picks_slow_slot() {
+        let provider = StubProvider {
+            fast_model: "Qwen3.5-9B.Q8_0.1".into(),
+            slow_model: "Qwen3.5-27B.Q8_0".into(),
+        };
+        let envelope = InferenceRequirements::new()
+            .with_hint(CapabilityHint::general())
+            .with_latency_class(LatencyClass::Normal);
+        let req = CompletionRequest::new("substantive").with_oicp(envelope);
+        assert_eq!(pick_slot_for_oicp(&provider, &req), Speed::Slow);
+    }
+
+    #[test]
+    fn pick_slot_v03_latency_extended_picks_slow_slot() {
+        let provider = StubProvider {
+            fast_model: "Qwen3.5-9B.Q8_0.1".into(),
+            slow_model: "Qwen3.5-27B.Q8_0".into(),
+        };
+        let envelope = InferenceRequirements::new()
+            .with_hint(CapabilityHint::general())
+            .with_latency_class(LatencyClass::Extended);
+        let req = CompletionRequest::new("deep").with_oicp(envelope);
+        assert_eq!(pick_slot_for_oicp(&provider, &req), Speed::Slow);
+    }
+
+    #[test]
+    fn pick_slot_v03_hint_only_defaults_to_slow_for_normal_latency() {
+        // When only a hint is present, effective_latency_class()
+        // returns Normal → Slow slot.
+        let provider = StubProvider {
+            fast_model: "Qwen3.5-9B.Q8_0.1".into(),
+            slow_model: "Qwen3.5-27B.Q8_0".into(),
+        };
+        let envelope = InferenceRequirements::new()
+            .with_hint(CapabilityHint::general());
+        let req = CompletionRequest::new("hint-only").with_oicp(envelope);
+        assert_eq!(pick_slot_for_oicp(&provider, &req), Speed::Slow);
+    }
+
+    // -----------------------------------------------------------
+    // v0.3 — score_manifest_for_request claim path
+    // -----------------------------------------------------------
+
+    fn manifest_with_claim(
+        id: &str,
+        size_gb: Option<f32>,
+        claim: sovereign_core::oicp::CapabilityClaim,
+    ) -> ProviderManifest {
+        ProviderManifest::new(vec![sovereign_core::oicp::ProviderModel {
+            id: id.into(),
+            base_model: None,
+            quantization: None,
+            capabilities: CapabilityProfile::default(),
+            context_tokens: claim.max_context,
+            status: sovereign_core::oicp::ModelStatus {
+                available: true,
+                loaded: true,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+            size_gb,
+            claims: vec![claim],
+        }])
+    }
+
+    #[test]
+    fn score_manifest_for_request_prefers_claim_path_when_claims_present() {
+        use sovereign_core::oicp::CapabilityClaim;
+        let qwen_coder = manifest_with_claim(
+            "qwen-coder-32b",
+            Some(16.1),
+            CapabilityClaim::new(
+                CapabilityHint::code(),
+                LatencyClass::Normal,
+                32_000,
+                4_000,
+                0.95,
+            ),
+        );
+        let req = InferenceRequirements::new()
+            .with_hint(CapabilityHint::code())
+            .with_latency_class(LatencyClass::Normal)
+            .with_context_tokens(16_000)
+            .with_max_output_tokens(2_000);
+        let cand = score_manifest_for_request(&qwen_coder, &req)
+            .expect("v0.3 claim scores non-None");
+        assert_eq!(cand.model_id, "qwen-coder-32b");
+        // Exact hint + latency match → score equals affinity.
+        assert!((cand.score - 0.95).abs() < 1e-4);
+    }
+
+    #[test]
+    fn score_manifest_for_request_falls_back_to_v02_when_no_claims() {
+        // Manifest has only legacy capabilities (no claims). Scoring
+        // must still work via the v0.2 path.
+        let legacy =
+            model("legacy", &[(Capability::Analysis, 3)], Some(5.0));
+        let m = manifest(vec![legacy]);
+        let preferred: CapabilityProfile =
+            [(Capability::Analysis, 3)].into_iter().collect();
+        let req = InferenceRequirements::new().with_capabilities(
+            CapabilityRequirements {
+                required: CapabilityProfile::new(),
+                preferred,
+            },
+        );
+        let cand = score_manifest_for_request(&m, &req)
+            .expect("v0.2 fallback scores");
+        assert_eq!(cand.model_id, "legacy");
+        assert!((cand.score - 1.0).abs() < 1e-4);
     }
 }

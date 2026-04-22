@@ -905,9 +905,16 @@ pub struct StreamHandle {
 /// SimpleAction) where cross-network latency wouldn't be worth
 /// trading for a marginal quality bump.
 fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequirements> {
-    use crate::oicp::{Capability, CapabilityRequirements, InferenceRequirements};
+    use crate::oicp::{
+        Capability, CapabilityHint, CapabilityRequirements,
+        InferenceRequirements, LatencyClass,
+    };
     let mut preferred = std::collections::HashMap::new();
-    match intent {
+    // v0.3 routing properties — hint defaults to `general`, latency
+    // class derived from the intent's work shape. Code hint is left
+    // to skill-level overrides (PR-D) since Intent doesn't carry
+    // code-vs-prose distinction today.
+    let (hint, latency_class) = match intent {
         Intent::DeepQuery => {
             // Reasoning-heavy. The user is asking a question that
             // rewards analytical depth; prefer Analysis ≥ 3 + a
@@ -915,6 +922,9 @@ fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequ
             // well-structured prose.
             preferred.insert(Capability::Analysis, 3);
             preferred.insert(Capability::General, 3);
+            // Deep reasoning belongs to the extended class — big
+            // thinking budgets tolerate higher TTFT.
+            (CapabilityHint::general(), LatencyClass::Extended)
         }
         Intent::ComplexTask => {
             // Multi-step execution. The planner will decompose,
@@ -923,6 +933,9 @@ fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequ
             // stay coherent across steps.
             preferred.insert(Capability::Analysis, 3);
             preferred.insert(Capability::Instruction, 3);
+            // Tool-using plans want solid normal-latency responses;
+            // extended would add round-trip overhead per tool step.
+            (CapabilityHint::general(), LatencyClass::Normal)
         }
         Intent::KnowledgeQuery => {
             // Retrieval-driven synthesis. Analysis matters less
@@ -931,18 +944,24 @@ fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequ
             // coherent prose over the chunks.
             preferred.insert(Capability::Analysis, 2);
             preferred.insert(Capability::General, 2);
+            (CapabilityHint::general(), LatencyClass::Normal)
         }
         Intent::SimpleQuery
         | Intent::SimpleAction { .. }
         | Intent::Continuation { .. } => {
             return None;
         }
-    }
+    };
     let caps = CapabilityRequirements {
         required: Default::default(),
         preferred,
     };
-    Some(InferenceRequirements::new().with_capabilities(caps))
+    Some(
+        InferenceRequirements::new()
+            .with_capabilities(caps)
+            .with_hint(hint)
+            .with_latency_class(latency_class),
+    )
 }
 
 /// Produce a short human-readable banner for `interpretation-proposed`.
@@ -1812,12 +1831,25 @@ impl Runtime {
         // cross-mesh route, so we copy the skill-resolved value
         // through.
         let sharding = from_skills.sharding();
-        Some(
-            crate::oicp::InferenceRequirements::new()
-                .with_capabilities(caps)
-                .with_latency(latency)
-                .with_sharding(sharding),
-        )
+        // v0.3: carry `capability_hint` + `latency_class` through
+        // the merge so downstream schedulers rank on them. Skills
+        // don't declare these in TOML yet (PR-D), so we pick them
+        // up from `default_oicp_for_intent`'s output.
+        let (v03_hint, v03_latency_class) = from_intent
+            .as_ref()
+            .map(|r| (r.capability_hint.clone(), r.latency_class))
+            .unwrap_or((None, None));
+        let mut out = crate::oicp::InferenceRequirements::new()
+            .with_capabilities(caps)
+            .with_latency(latency)
+            .with_sharding(sharding);
+        if let Some(h) = v03_hint {
+            out = out.with_hint(h);
+        }
+        if let Some(lc) = v03_latency_class {
+            out = out.with_latency_class(lc);
+        }
+        Some(out)
     }
 
     /// Spawn a background task that generates an auto-title for the

@@ -801,30 +801,71 @@ distinguish them.
 
 ### 4.8 OICP
 
-Sovereign's `oicp.rs` is the canonical OICP v0.2.0 implementation per
-`commonwealth/docs/oicp-v0.2.md`, with matching types in
-`commonwealth-core::oicp`. The module defines:
+Sovereign's `oicp.rs` is the canonical OICP v0.3.0 implementation per
+`commonwealth/docs/oicp-v0.2.md` (client requirements, provider manifest,
+response metadata, knowledge search) and `commonwealth/docs/oicp-v0.3.md`
+(additive specialization-aware routing). All types live in the
+workspace-root `oicp-types` crate and are re-exported by
+`commonwealth-core::oicp` and `sovereign-core::oicp`.
+
+**v0.2 surface (unchanged):**
 
 - `Capability` — `General, Code, Analysis, Math, Creative, Instruction, Multilingual, Vision, LongContext`, plus `Unknown` for `#[serde(other)]` ignorance-safety per spec §2.4
 - `ProficiencyLevel` — 0–4 scale (`None`, `Basic`, `Moderate`, `Strong`, `Exceptional`)
 - `CapabilityProfile` — type alias for `HashMap<Capability, ProficiencyLevel>`
-- `InferenceRequirements { oicp_version, capabilities, context, performance, privacy, request_id }` — nested per spec §3
+- `InferenceRequirements { oicp_version, capabilities, context, performance, privacy, request_id, … }` — nested per spec §3
 - Nested groups: `CapabilityRequirements { required, preferred }`, `ContextRequirements { min_tokens, preferred_tokens }`, `PerformanceRequirements { latency }`, `PrivacyRequirements { sharding }`
 - `LatencyPreference` — `Interactive, Throughput, Background, BestEffort` (default)
 - `ShardingPrivacy` — `LocalOnly` (default), `MeshAllowed`
 - `ProviderManifest` — what a backend advertises (§4), including the optional `knowledge` and `federation` sections
 - `OicpResponseMeta` — response metadata (§5.2) with `match_quality` and `degraded_capabilities`
 - `KnowledgeSearchRequest`/`KnowledgeSearchResponse`/`KnowledgeResult` — knowledge search API (§6)
-- Builder methods on `InferenceRequirements` (`with_latency`, `with_sharding`, `with_capabilities`, `with_context`, `with_request_id`) and accessor helpers (`latency()`, `sharding()`, `required()`, `preferred()`, `min_tokens()`) so callers don't have to assemble the nested structure by hand.
+
+**v0.3 additions (additive, specialization-aware routing):**
+
+- `CapabilityHint` — validated string tag with standardized constants `general` and `code` and the `x:<tag>` extension form for open-vocabulary specializations. Graceful-degradation parse: any non-empty whitespace-free string is accepted so future-standardized hints don't break older clients
+- `LatencyClass` — `Fast, Normal` (default), `Extended`. Distinct from v0.2 `LatencyPreference`; `latency_class_from_preference` translates between the two
+- `CapabilityClaim { hint, latency_class, max_context, max_output, affinity }` — one claim per kind-of-work a node serves well. The unit of scheduling: a node with N claims contributes N candidate matches
+- `InferenceRequirements` gains optional `capability_hint`, `latency_class`, `context_tokens`, `max_output_tokens` alongside the v0.2 `capabilities`/`context`/`performance` fields. `effective_hint()` defaults to `general`; `effective_latency_class()` defaults to `Normal`
+- `ProviderModel` gains optional `claims: Vec<CapabilityClaim>`, omitted from JSON when empty
+- Translation helpers for v0.2↔v0.3 synthesis: `infer_hint_from_profile` (code proficiency ≥ 3 → `code`), `latency_class_from_preference`
+
+Builder methods on `InferenceRequirements` cover both surfaces (`with_latency`, `with_sharding`, `with_capabilities`, `with_context`, `with_request_id`, plus v0.3 `with_hint`, `with_latency_class`, `with_context_tokens`, `with_max_output_tokens`).
 
 Skills declare their requirements in `[inference]`. The hybrid provider's
-`CapabilityAwareSelector` filters backends by `required` and ranks remaining
-candidates using the shared `oicp::satisfies_required` / `oicp::score_preferred`
-helpers.
+`CapabilityAwareSelector` ranks candidate `(model, claim)` pairs via the
+shared `oicp::score_claim_for_request` helper: exact hint match = 1.0,
+specific request with general fallback = 0.5, hard context/output gate
+eliminates undersized claims, latency class mismatch = 0.8 adjacent /
+0.5 two-class gap, self-reported affinity is the tiebreaker. When a
+manifest publishes zero claims the scheduler falls back to the legacy
+v0.2 `satisfies_required` / `score_preferred` path (dead code once
+PR-C deletes the v0.2 surface).
+
+Advertisers emit claims from loaded slots: `commonwealth-api/routes_oicp.rs`
+synthesises one claim per `ModelInfo` (code hint by name heuristic,
+affinity from v0.2 proficiency); `sovereign-mesh/inference_adapter.rs::
+synthesize_slot_claims` emits one claim per Speed slot with appropriate
+latency class (Fast slot → `LatencyClass::Fast` + reduced context window;
+Slow → `LatencyClass::Normal` + full context). `sovereign-mesh/oicp_select.
+rs::pick_slot_for_oicp` honours the v0.3 latency class by picking the
+matching Speed slot directly, falling back to the other slot when the
+primary cannot serve the requested hint. The runtime's
+`default_oicp_for_intent` attaches `capability_hint` + `latency_class`
+to every OICP-bearing turn (KnowledgeQuery/ComplexTask → Normal,
+DeepQuery → Extended, Fast-slot classifications don't emit OICP).
 
 The spec default for `privacy.sharding` is `LocalOnly`, so any request that
 reaches a mesh provider without an explicit `mesh_allowed` opt-in is rejected
 with HTTP 400 by Commonwealth.
+
+**Backward compatibility:** v0.3 is strictly additive. A v0.2 manifest
+deserializes into v0.3 types with `claims` defaulting to empty (consumers
+fall back to `capabilities`). A v0.2 client without the new property
+fields is treated as `{capability_hint: general, latency_class: Normal}`
+by a v0.3 scheduler. A v0.3 peer interacting with a v0.2 mesh continues
+to work — it simply observes reduced routing precision on the v0.2
+counterparty's side per spec §10.3.
 
 ### 4.9 Frontends
 
@@ -1698,3 +1739,67 @@ remain tracked, none load-bearing for correctness:
    `debug` level is sufficient today. A future structured-export sink
    (CSV/JSON to a log directory) would let users audit routing behavior
    without running `tracing_subscriber` by hand.
+
+### OICP v0.3 — Specialization-aware routing rollout
+
+**PR-A (shipped)** landed the v0.3 type foundation in `oicp-types`:
+`CapabilityHint`, `LatencyClass`, `CapabilityClaim`, the four new
+property fields on `InferenceRequirements`, the optional `claims`
+vector on `ProviderModel`, translation helpers, and
+`OICP_VERSION = "0.3.0"`. Strictly additive.
+
+**PR-B (shipped)** threaded claims through the entire routing path:
+
+- `oicp-types` gained the reference scoring function
+  `score_claim_for_request` (hint × context/output hard gate ×
+  latency × affinity). Hint semantics tightened: a specific-claim
+  against a general-request scores `0.0` (specialization obligation
+  is on the advertiser — each node that wants general work must
+  publish a general claim). `infer_hint_from_profile` tightened to
+  require `Code == Exceptional` **and** `Code > General` so
+  balanced models like Qwen3.5-9B correctly classify as `general`.
+- Three schedulers adopted claim-based ranking with v0.2 fallback:
+  `commonwealth-inference::scheduler::oicp_select`,
+  `sovereign-inference::selector::CapabilityAwareSelector`,
+  `sovereign-mesh::oicp_select`. A new
+  `score_manifest_for_request(&ProviderManifest, &InferenceRequirements)`
+  in sovereign-mesh feeds `peer_inference::select_peer`.
+- Two advertisers emit claims: `commonwealth-api/routes_oicp.rs` and
+  `sovereign-mesh/inference_adapter.rs::synthesize_slot_claims`. The
+  latter emits per-Speed-slot claims (Fast slot → `LatencyClass::Fast`,
+  reduced context; Slow slot → `LatencyClass::Normal`, full context).
+- `runtime::default_oicp_for_intent` attaches `capability_hint` +
+  `latency_class` to every OICP-bearing turn; `build_oicp` carries
+  the fields through the skill-merge path.
+- Acceptance coverage in `commonwealth-inference/tests/oicp_v03_scenarios.rs`
+  exercises the three spec §11 scenarios (newsroom writer, coder
+  collective, solo user).
+- v0.2 scoring path is retained as fallback so the transition is
+  non-breaking; PR-C removes it.
+
+The remaining steps:
+
+1. **PR-C — Delete the v0.2 surface.** Remove `Capability`,
+   `CapabilityProfile`, `CapabilityRequirements`, `satisfies_required`,
+   `score_preferred`, `LatencyPreference`, `min_tokens`, translation
+   helpers, the fallback branches in all three schedulers, and migrate
+   every skill TOML. Purely mechanical diff.
+2. **PR-D — Observation, load, locality.** Per-node tracker (in-flight,
+   p50/p95, recent failures, locality tier from network probes).
+   `effective_affinity(claimed, observed, sample_size)`. Thundering-herd
+   defense via load penalty + equivalence-band tie-break. Cold-start
+   measured-exposure ramp.
+3. **PR-E — Skill-level hint declarations.** `[inference]` in
+   `skill.toml` gains `capability_hint`, `latency_class`, `max_output`.
+   Runtime threads these into `build_oicp` so a coding-oriented skill
+   can actively request `code` claims, a dialogue-heavy skill can
+   request `x:prose`, etc.
+4. **PR-F — Onboarding + settings vocabulary.** Desktop setup wizard
+   drops slot-named pickers in favour of role-named models ("Quick
+   responder / Main responder / Code specialist"). Single config change:
+   one recommendation payload with N models each carrying a declared
+   hint + latency. Runtime generates claims from that config.
+5. **PR-G — Extension governance scaffolding (deferred).** Registry of
+   observed extension hints + usage counts + mesh-cardinality, as input
+   to the promotion process (v0.3 §4.3). No code path uses it yet; it
+   just records.

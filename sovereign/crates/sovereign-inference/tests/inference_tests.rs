@@ -241,6 +241,7 @@ fn make_model(id: &str, caps: &[(Capability, u8)], context: u32) -> ProviderMode
             estimated_load_time_sec: None,
         },
         size_gb: None,
+        claims: Vec::new(),
     }
 }
 

@@ -241,12 +241,35 @@ impl BackendSelector for CapabilityAwareSelector {
     }
 }
 
-/// Score the best matching model in a backend's manifest.
-/// Returns None if no model satisfies the requirements.
+/// Score the best matching (model, claim) pair in a backend's manifest.
+///
+/// As of v0.3, scoring prefers the claim-based path
+/// (`oicp::score_claim_for_request`) whenever any model publishes
+/// claims. When no model publishes claims the function falls back to
+/// the legacy v0.2 capability-profile path. The fallback goes away
+/// in PR-C once every producer emits claims.
+///
+/// Returns `None` when no (model, claim) pair — or, on the v0.2 path,
+/// no model — can serve the request.
 fn score_backend_manifest(
     manifest: &ProviderManifest,
     requirements: &InferenceRequirements,
 ) -> Option<f32> {
+    let any_claims = manifest.models.iter().any(|m| !m.claims.is_empty());
+
+    if any_claims {
+        // v0.3 path. A claim's own max_context is already the hard
+        // gate — we don't need the manifest-level min_tokens filter.
+        return manifest
+            .models
+            .iter()
+            .filter(|m| m.status.available)
+            .flat_map(|m| m.claims.iter())
+            .filter_map(|c| oicp::score_claim_for_request(c, requirements))
+            .fold(None, |acc, s| Some(acc.map_or(s, |a: f32| a.max(s))));
+    }
+
+    // v0.2 fallback. Removed in PR-C.
     let required = requirements.required();
     let preferred = requirements.preferred();
     let min_tokens = requirements.min_tokens();
@@ -274,8 +297,9 @@ mod tests {
     use super::*;
     use crate::health::HealthTracker;
     use sovereign_core::oicp::{
-        Capability, CapabilityProfile, CapabilityRequirements, InferenceRequirements,
-        ModelStatus, ProviderModel, ProviderManifest,
+        Capability, CapabilityClaim, CapabilityHint, CapabilityProfile,
+        CapabilityRequirements, InferenceRequirements, LatencyClass, ModelStatus,
+        ProviderManifest, ProviderModel,
     };
     use sovereign_core::types::CompletionRequest;
 
@@ -296,6 +320,7 @@ mod tests {
                 estimated_load_time_sec: None,
             },
             size_gb: None,
+            claims: Vec::new(),
         }])
     }
 
@@ -405,6 +430,7 @@ mod tests {
                     estimated_tokens_per_sec: None, estimated_ttft_ms: None,
                     estimated_load_time_sec: None },
                 size_gb: None,
+                claims: Vec::new(),
             }])
         };
 
@@ -418,5 +444,159 @@ mod tests {
         let selector = CapabilityAwareSelector { fallback: Box::new(PrioritySelector) };
         let selected = selector.select(&request, &[hot_strong, idle_weak]).await.unwrap();
         assert_eq!(selected, 0, "hot node with 10× better preferred-capability score must beat the idle peer's 5× availability bonus");
+    }
+
+    // -----------------------------------------------------------
+    // v0.3 §6 — claim-based selection in CapabilityAwareSelector
+    // -----------------------------------------------------------
+
+    fn manifest_with_claims(claims: Vec<CapabilityClaim>) -> ProviderManifest {
+        ProviderManifest::new(vec![ProviderModel {
+            id: "v03-model".into(),
+            base_model: None,
+            quantization: None,
+            capabilities: CapabilityProfile::default(),
+            context_tokens: 32_000,
+            status: ModelStatus {
+                available: true,
+                loaded: true,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+            size_gb: None,
+            claims,
+        }])
+    }
+
+    fn v03_request(
+        hint: CapabilityHint,
+        lc: LatencyClass,
+        ctx: u32,
+        out: u32,
+    ) -> CompletionRequest {
+        let reqs = InferenceRequirements::new()
+            .with_sharding(ShardingPrivacy::MeshAllowed)
+            .with_hint(hint)
+            .with_latency_class(lc)
+            .with_context_tokens(ctx)
+            .with_max_output_tokens(out);
+        CompletionRequest::new("test").with_oicp(reqs)
+    }
+
+    #[tokio::test]
+    async fn claim_based_code_request_routes_to_specialist() {
+        // §6.2 coder-collective scenario within the local selector.
+        let qwen_coder = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::code(),
+            LatencyClass::Normal,
+            32_000,
+            4_000,
+            0.95,
+        )]);
+        let llama_70b = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            64_000,
+            4_000,
+            0.85,
+        )]);
+        let general_peer = entry_with_manifest_and_availability(
+            "llama", 1, 1.0, llama_70b,
+        )
+        .await;
+        let coder_peer = entry_with_manifest_and_availability(
+            "qwen-coder", 2, 1.0, qwen_coder,
+        )
+        .await;
+        let request = v03_request(
+            CapabilityHint::code(),
+            LatencyClass::Normal,
+            16_000,
+            2_000,
+        );
+        let selector = CapabilityAwareSelector {
+            fallback: Box::new(PrioritySelector),
+        };
+        let selected = selector
+            .select(&request, &[general_peer, coder_peer])
+            .await
+            .unwrap();
+        assert_eq!(
+            selected, 1,
+            "code request must route to the code specialist via claim-based scoring"
+        );
+    }
+
+    #[tokio::test]
+    async fn claim_based_context_gate_eliminates_undersized_peer() {
+        let local_small = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Fast,
+            8_000,
+            1_000,
+            0.9,
+        )]);
+        let peer_large = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            64_000,
+            4_000,
+            0.75,
+        )]);
+        let small_entry = entry_with_manifest_and_availability(
+            "local", 1, 1.0, local_small,
+        )
+        .await;
+        let large_entry = entry_with_manifest_and_availability(
+            "peer", 2, 1.0, peer_large,
+        )
+        .await;
+        let request = v03_request(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            16_000,
+            2_000,
+        );
+        let selector = CapabilityAwareSelector {
+            fallback: Box::new(PrioritySelector),
+        };
+        let selected = selector
+            .select(&request, &[small_entry, large_entry])
+            .await
+            .unwrap();
+        assert_eq!(
+            selected, 1,
+            "request's 16K context exceeds small claim's 8K gate — must route to large peer"
+        );
+    }
+
+    #[tokio::test]
+    async fn claim_path_wins_when_any_claim_present_even_if_capabilities_empty() {
+        // This confirms the dispatch rule: the moment any model
+        // publishes a claim, the v0.2 path is not consulted.
+        let only_claims = manifest_with_claims(vec![CapabilityClaim::new(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            16_000,
+            2_000,
+            0.7,
+        )]);
+        let entry = entry_with_manifest_and_availability(
+            "claims-only", 1, 1.0, only_claims,
+        )
+        .await;
+        let request = v03_request(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            8_000,
+            1_000,
+        );
+        let selector = CapabilityAwareSelector {
+            fallback: Box::new(PrioritySelector),
+        };
+        let selected =
+            selector.select(&request, &[entry]).await.unwrap();
+        assert_eq!(selected, 0);
     }
 }

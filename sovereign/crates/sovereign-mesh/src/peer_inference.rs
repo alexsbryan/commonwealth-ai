@@ -75,7 +75,8 @@ struct CachedManifest {
 // picking which loaded slot to serve the request from. Importing
 // here keeps the rest of this file unchanged.
 use crate::oicp_select::{
-    candidates_equal, pick_better, score_manifest, ModelCandidate,
+    candidates_equal, pick_better, score_manifest, score_manifest_for_request,
+    ModelCandidate,
 };
 
 /// Narrow trait the wrapper uses to discover routable peers. The
@@ -291,12 +292,17 @@ impl MeshInferenceProvider {
         }
 
         // Local is always a candidate. `None` means no loaded
-        // model satisfies `required` — any peer that CAN satisfy
-        // it then wins automatically. For a typical DeepQuery
-        // (required={}, preferred={Analysis:3,General:3}) local
-        // will produce a real 0..1.0 candidate reflecting its
-        // capability profile.
-        let local_cand = score_manifest(&self.self_manifest, &required, &preferred);
+        // model satisfies the request — any peer that CAN then
+        // wins automatically. v0.3 claim-based scoring is used
+        // when the request carries `capability_hint`/`latency_class`
+        // AND the manifest publishes claims; otherwise the v0.2
+        // capability-profile path still fires. The two behave
+        // identically for v0.2-only payloads.
+        let local_cand = if let Some(req_oicp) = request.oicp.as_ref() {
+            score_manifest_for_request(&self.self_manifest, req_oicp)
+        } else {
+            score_manifest(&self.self_manifest, &required, &preferred)
+        };
         tracing::info!(
             local_models = self.self_manifest.models.len(),
             local_satisfies_required = local_cand.is_some(),
@@ -315,9 +321,16 @@ impl MeshInferenceProvider {
                 Some(m) => m,
                 None => continue,
             };
-            let cand = match score_manifest(&manifest, &required, &preferred) {
-                Some(c) => c,
-                None => continue,
+            let cand = {
+                let scored = if let Some(req_oicp) = request.oicp.as_ref() {
+                    score_manifest_for_request(&manifest, req_oicp)
+                } else {
+                    score_manifest(&manifest, &required, &preferred)
+                };
+                match scored {
+                    Some(c) => c,
+                    None => continue,
+                }
             };
             tracing::info!(
                 peer = %peer.name,

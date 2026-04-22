@@ -25,7 +25,8 @@ use commonwealth_api::openai_types::{
 };
 use commonwealth_api::state::LocalInferenceService;
 use commonwealth_inference::oicp::{
-    Capability, ModelStatus, ProviderInfo, ProviderManifest, ProviderModel, ProviderType,
+    Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, LatencyClass,
+    ModelStatus, ProviderInfo, ProviderManifest, ProviderModel, ProviderType,
     OICP_VERSION,
 };
 use futures::{Stream, StreamExt};
@@ -514,6 +515,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             size_gb = ?size_gb,
             "build_self_manifest: advertised slot"
         );
+        let claims = synthesize_slot_claims(speed, &model_name, &capabilities);
         models.push(ProviderModel {
             id: model_name,
             base_model: None,
@@ -528,6 +530,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 estimated_load_time_sec: None,
             },
             size_gb,
+            claims,
         });
     }
     // Provider name still reflects the primary — that's the name
@@ -555,6 +558,74 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         models,
         knowledge: None,
         federation: None,
+    }
+}
+
+/// Synthesize v0.3 capability claims for a loaded slot.
+///
+/// Two-slot model: Fast carries a `LatencyClass::Fast` claim with a
+/// reduced context window (routing / classification is always short)
+/// and a small output budget; Slow carries a `LatencyClass::Normal`
+/// claim with the full advertised context. The hint tracks the
+/// model's code specialization by name ("coder" / "code-llama"
+/// variants → `code`), falling back to `general`.
+///
+/// Affinity is derived from the v0.2 proficiency for the relevant
+/// capability (Code proficiency for code-hint claims; max of
+/// General/Analysis/Instruction proficiencies for general). This
+/// keeps the two advertising surfaces in agreement until PR-E
+/// replaces the heuristic with structured per-model config.
+fn synthesize_slot_claims(
+    speed: Speed,
+    model_name: &str,
+    profile: &CapabilityProfile,
+) -> Vec<CapabilityClaim> {
+    let lower = model_name.to_lowercase();
+    let is_code_specialist = lower.contains("coder")
+        || lower.contains("code-llama")
+        || lower.contains("codellama")
+        || lower.contains("deepseek-coder");
+
+    let (hint, affinity) = if is_code_specialist {
+        let code = profile.get(&Capability::Code).copied().unwrap_or(0);
+        (
+            CapabilityHint::code(),
+            (code as f32 / 4.0).clamp(0.0, 1.0),
+        )
+    } else {
+        let best = [
+            Capability::General,
+            Capability::Analysis,
+            Capability::Instruction,
+        ]
+        .into_iter()
+        .map(|c| profile.get(&c).copied().unwrap_or(0))
+        .max()
+        .unwrap_or(0);
+        (
+            CapabilityHint::general(),
+            (best as f32 / 4.0).clamp(0.0, 1.0),
+        )
+    };
+
+    // Per-slot context/output envelopes: Fast is tuned for short
+    // requests (routing + classification), Slow carries the full
+    // 32K context advertised at the model level.
+    match speed {
+        Speed::Fast => vec![CapabilityClaim::new(
+            hint,
+            LatencyClass::Fast,
+            8_000,
+            1_000,
+            affinity,
+        )],
+        Speed::Medium | Speed::Slow => vec![CapabilityClaim::new(
+            hint,
+            LatencyClass::Normal,
+            32_768,
+            4_000,
+            affinity,
+        )],
     }
 }
 

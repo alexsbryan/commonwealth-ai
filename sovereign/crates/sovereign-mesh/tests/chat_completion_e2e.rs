@@ -177,6 +177,7 @@ async fn capabilities_handler() -> impl IntoResponse {
                     estimated_load_time_sec: None,
                 },
                 size_gb: Some(5.5),
+                claims: Vec::new(),
             },
             ProviderModel {
                 id: "Qwen3.5-27B.test".into(),
@@ -192,6 +193,7 @@ async fn capabilities_handler() -> impl IntoResponse {
                     estimated_load_time_sec: None,
                 },
                 size_gb: Some(16.5),
+                claims: Vec::new(),
             },
         ],
         knowledge: None,
