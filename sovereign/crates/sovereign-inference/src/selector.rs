@@ -3,7 +3,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use sovereign_core::oicp::{self, InferenceRequirements, ProviderManifest, ShardingPrivacy};
+use sovereign_core::oicp::{
+    self, cold_start_weight, effective_affinity, load_penalty, locality_bonus,
+    InferenceRequirements, NodeLocality, NodeObservations, ProviderManifest,
+    ShardingPrivacy,
+};
 use sovereign_core::types::CompletionRequest;
 use sovereign_core::Result;
 
@@ -23,6 +27,17 @@ pub struct BackendEntry {
     /// gossiped NodeCapabilities.inference_availability. 1.0 = fully idle.
     /// Used by CapabilityAwareSelector to route away from busy peers.
     pub inference_availability: f32,
+    /// Rolling observations this process has recorded for the
+    /// backend. Updated from the outside via
+    /// `HybridProvider::record_*` helpers as requests complete;
+    /// consumed by [`CapabilityAwareSelector`] during the
+    /// observation-adjusted scoring pass.
+    pub observations: Arc<RwLock<NodeObservations>>,
+    /// Where this backend sits relative to us. Local slot → `Local`;
+    /// LAN peer → `Near`; mesh peer over the public internet →
+    /// `Far`. Set once at construction based on how the backend was
+    /// registered; not currently re-evaluated at runtime.
+    pub locality: NodeLocality,
 }
 
 impl BackendEntry {
@@ -35,6 +50,8 @@ impl BackendEntry {
             is_local: true,
             oicp_manifest: Arc::new(RwLock::new(None)),
             inference_availability: 1.0,
+            observations: Arc::new(RwLock::new(NodeObservations::default())),
+            locality: NodeLocality::Local,
         }
     }
 
@@ -52,6 +69,11 @@ impl BackendEntry {
             is_local: false,
             oicp_manifest: Arc::new(RwLock::new(None)),
             inference_availability: 1.0,
+            observations: Arc::new(RwLock::new(NodeObservations::default())),
+            // Remote backends default to `Far`; callers that know
+            // the backend is on the same LAN can reassign to `Near`
+            // after construction.
+            locality: NodeLocality::Far,
         }
     }
 }
@@ -209,7 +231,9 @@ impl BackendSelector for CapabilityAwareSelector {
             return self.fallback.select(request, backends).await;
         }
 
-        // Score each backend that has an OICP manifest.
+        // Score each backend that has an OICP manifest, folding in
+        // observation-adjusted affinity + load penalty + locality
+        // bonus + cold-start weight per v0.3 §7.
         let mut best_idx: Option<usize> = None;
         let mut best_score: f32 = -1.0;
 
@@ -224,13 +248,33 @@ impl BackendSelector for CapabilityAwareSelector {
                 None => continue,
             };
 
-            if let Some(score) = score_backend_manifest(manifest, requirements) {
-                let availability = backend.inference_availability.clamp(0.20, 1.0);
-                let weighted = score * availability;
-                if weighted > best_score {
-                    best_score = weighted;
-                    best_idx = Some(idx);
-                }
+            let Some((claim_score, claim_affinity)) =
+                best_score_for_manifest(manifest, requirements)
+            else {
+                continue;
+            };
+
+            let obs = backend.observations.read().await.clone();
+            let observation_mult = if claim_affinity > 0.0 {
+                effective_affinity(claim_affinity, &obs) / claim_affinity
+            } else {
+                1.0
+            };
+
+            let load = load_penalty(&obs);
+            let locality = locality_bonus(backend.locality);
+            let cold_start = cold_start_weight(obs.samples);
+            let availability = backend.inference_availability.clamp(0.20, 1.0);
+
+            let weighted = claim_score
+                * observation_mult
+                * load
+                * locality
+                * cold_start
+                * availability;
+            if weighted > best_score {
+                best_score = weighted;
+                best_idx = Some(idx);
             }
         }
 
@@ -241,53 +285,29 @@ impl BackendSelector for CapabilityAwareSelector {
     }
 }
 
-/// Score the best matching (model, claim) pair in a backend's manifest.
-///
-/// As of v0.3, scoring prefers the claim-based path
-/// (`oicp::score_claim_for_request`) whenever any model publishes
-/// claims. When no model publishes claims the function falls back to
-/// the legacy v0.2 capability-profile path. The fallback goes away
-/// in PR-C once every producer emits claims.
-///
-/// Returns `None` when no (model, claim) pair — or, on the v0.2 path,
-/// no model — can serve the request.
-fn score_backend_manifest(
+/// Best (claim_score, claim_affinity) pair across all available
+/// (model, claim) pairs in a manifest. `None` when no pair can
+/// serve the request (hard gate failure or wrong specialization).
+fn best_score_for_manifest(
     manifest: &ProviderManifest,
     requirements: &InferenceRequirements,
-) -> Option<f32> {
-    let any_claims = manifest.models.iter().any(|m| !m.claims.is_empty());
-
-    if any_claims {
-        // v0.3 path. A claim's own max_context is already the hard
-        // gate — we don't need the manifest-level min_tokens filter.
-        return manifest
-            .models
-            .iter()
-            .filter(|m| m.status.available)
-            .flat_map(|m| m.claims.iter())
-            .filter_map(|c| oicp::score_claim_for_request(c, requirements))
-            .fold(None, |acc, s| Some(acc.map_or(s, |a: f32| a.max(s))));
+) -> Option<(f32, f32)> {
+    let mut best: Option<(f32, f32)> = None;
+    for model in manifest.models.iter().filter(|m| m.status.available) {
+        for claim in &model.claims {
+            let Some(score) =
+                oicp::score_claim_for_request(claim, requirements)
+            else {
+                continue;
+            };
+            let claim_affinity = claim.effective_affinity();
+            best = Some(match best {
+                Some((best_score, _)) if best_score >= score => best.unwrap(),
+                _ => (score, claim_affinity),
+            });
+        }
     }
-
-    // v0.2 fallback. Removed in PR-C.
-    let required = requirements.required();
-    let preferred = requirements.preferred();
-    let min_tokens = requirements.min_tokens();
-
-    let scores: Vec<f32> = manifest
-        .models
-        .iter()
-        .filter(|m| m.status.available)
-        .filter(|m| oicp::satisfies_required(&m.capabilities, required))
-        .filter(|m| min_tokens.map_or(true, |min| m.context_tokens >= min))
-        .map(|m| oicp::score_preferred(&m.capabilities, preferred))
-        .collect();
-
-    if scores.is_empty() {
-        None
-    } else {
-        Some(scores.into_iter().fold(0.0f32, f32::max))
-    }
+    best
 }
 
 // ─── Tests ────────────────────────────────────────────────────
@@ -297,32 +317,10 @@ mod tests {
     use super::*;
     use crate::health::HealthTracker;
     use sovereign_core::oicp::{
-        Capability, CapabilityClaim, CapabilityHint, CapabilityProfile,
-        CapabilityRequirements, InferenceRequirements, LatencyClass, ModelStatus,
-        ProviderManifest, ProviderModel,
+        CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
+        ModelStatus, ProviderManifest, ProviderModel,
     };
     use sovereign_core::types::CompletionRequest;
-
-    fn make_manifest(code_score: u8) -> ProviderManifest {
-        let mut caps = CapabilityProfile::default();
-        caps.insert(Capability::Code, code_score);
-        ProviderManifest::new(vec![ProviderModel {
-            id: "test-model".into(),
-            base_model: None,
-            quantization: None,
-            capabilities: caps,
-            context_tokens: 4096,
-            status: ModelStatus {
-                available: true,
-                loaded: true,
-                estimated_tokens_per_sec: None,
-                estimated_ttft_ms: None,
-                estimated_load_time_sec: None,
-            },
-            size_gb: None,
-            claims: Vec::new(),
-        }])
-    }
 
     async fn entry_with_manifest_and_availability(
         name: &str,
@@ -334,40 +332,6 @@ mod tests {
         entry.inference_availability = availability;
         *entry.oicp_manifest.write().await = Some(manifest);
         entry
-    }
-
-    fn request_requiring_code(min_level: u8) -> CompletionRequest {
-        let mut required = CapabilityProfile::default();
-        required.insert(Capability::Code, min_level);
-        // Use MeshAllowed so the selector doesn't short-circuit to LocalOnly.
-        let reqs = InferenceRequirements::new()
-            .with_sharding(ShardingPrivacy::MeshAllowed)
-            .with_capabilities(CapabilityRequirements { required, preferred: Default::default() });
-        CompletionRequest::new("test").with_oicp(reqs)
-    }
-
-    #[tokio::test]
-    async fn availability_weighted_prefers_idle_over_hot_when_preferred_scores_equal() {
-        // Both backends have the same manifest (Code=5).
-        // preferred = {Code: 5} → score_preferred = min(5/5, 1.0) = 1.0 for both.
-        // hot:  1.0 × 0.20 = 0.20
-        // idle: 1.0 × 1.00 = 1.00  → idle wins
-        let manifest = make_manifest(5);
-        let hot = entry_with_manifest_and_availability("hot", 1, 0.20, manifest.clone()).await;
-        let idle = entry_with_manifest_and_availability("idle", 2, 1.00, manifest).await;
-
-        let mut required = CapabilityProfile::default();
-        required.insert(Capability::Code, 1);
-        let mut preferred_caps = CapabilityProfile::default();
-        preferred_caps.insert(Capability::Code, 5);
-        let reqs = InferenceRequirements::new()
-            .with_sharding(ShardingPrivacy::MeshAllowed)
-            .with_capabilities(CapabilityRequirements { required, preferred: preferred_caps });
-        let request = CompletionRequest::new("test").with_oicp(reqs);
-
-        let selector = CapabilityAwareSelector { fallback: Box::new(PrioritySelector) };
-        let selected = selector.select(&request, &[hot, idle]).await.unwrap();
-        assert_eq!(selected, 1, "idle backend (1.00 weight) must beat hot backend (0.20 weight) with equal preferred scores");
     }
 
     #[tokio::test]
@@ -383,67 +347,19 @@ mod tests {
 
     #[tokio::test]
     async fn falls_back_to_priority_when_no_backend_has_manifest() {
-        // Neither backend has an OICP manifest — fall through to PrioritySelector.
         let high_prio = BackendEntry::new_local("high", Arc::new(HealthTracker::new()), 1);
         let low_prio = BackendEntry::new_local("low", Arc::new(HealthTracker::new()), 2);
-
         let selector = CapabilityAwareSelector { fallback: Box::new(PrioritySelector) };
+        let reqs = InferenceRequirements::new()
+            .with_sharding(ShardingPrivacy::MeshAllowed)
+            .with_hint(CapabilityHint::general())
+            .with_latency_class(LatencyClass::Normal);
+        let request = CompletionRequest::new("no manifest").with_oicp(reqs);
         let selected = selector
-            .select(&request_requiring_code(1), &[high_prio, low_prio])
+            .select(&request, &[high_prio, low_prio])
             .await
             .unwrap();
         assert_eq!(selected, 0, "when no backend has a manifest, PrioritySelector must win");
-    }
-
-    #[tokio::test]
-    async fn superior_capability_beats_idle_peer_when_gap_is_large_enough() {
-        // score_preferred uses ratio = min(have/want, 1.0) averaged across preferred dims.
-        // preferred = {Code:10, Analysis:10}:
-        //   strong {Code:10, Analysis:10}: score = 1.0 → weighted = 1.0 × 0.20 = 0.20
-        //   weak   {Code: 1, Analysis: 1}: score = 0.1 → weighted = 0.1 × 1.00 = 0.10
-        // → hot strong wins (0.20 > 0.10).
-        let mut pref = CapabilityProfile::default();
-        pref.insert(Capability::Code, 10);
-        pref.insert(Capability::Analysis, 10);
-        let mut req_caps = CapabilityProfile::default();
-        req_caps.insert(Capability::Code, 1);
-        let reqs = InferenceRequirements::new()
-            .with_sharding(ShardingPrivacy::MeshAllowed)
-            .with_capabilities(CapabilityRequirements { required: req_caps, preferred: pref });
-        let request = CompletionRequest::new("test").with_oicp(reqs);
-
-        let mut strong_caps_map = CapabilityProfile::default();
-        strong_caps_map.insert(Capability::Code, 10);
-        strong_caps_map.insert(Capability::Analysis, 10);
-        let mut weak_caps_map = CapabilityProfile::default();
-        weak_caps_map.insert(Capability::Code, 1);
-        weak_caps_map.insert(Capability::Analysis, 1);
-
-        let make_multi_manifest = |caps: CapabilityProfile| {
-            ProviderManifest::new(vec![ProviderModel {
-                id: "m".into(),
-                base_model: None,
-                quantization: None,
-                capabilities: caps,
-                context_tokens: 4096,
-                status: ModelStatus { available: true, loaded: true,
-                    estimated_tokens_per_sec: None, estimated_ttft_ms: None,
-                    estimated_load_time_sec: None },
-                size_gb: None,
-                claims: Vec::new(),
-            }])
-        };
-
-        let hot_strong = entry_with_manifest_and_availability(
-            "hot-strong", 1, 0.20, make_multi_manifest(strong_caps_map)
-        ).await;
-        let idle_weak = entry_with_manifest_and_availability(
-            "idle-weak", 2, 1.00, make_multi_manifest(weak_caps_map)
-        ).await;
-
-        let selector = CapabilityAwareSelector { fallback: Box::new(PrioritySelector) };
-        let selected = selector.select(&request, &[hot_strong, idle_weak]).await.unwrap();
-        assert_eq!(selected, 0, "hot node with 10× better preferred-capability score must beat the idle peer's 5× availability bonus");
     }
 
     // -----------------------------------------------------------
@@ -455,7 +371,6 @@ mod tests {
             id: "v03-model".into(),
             base_model: None,
             quantization: None,
-            capabilities: CapabilityProfile::default(),
             context_tokens: 32_000,
             status: ModelStatus {
                 available: true,

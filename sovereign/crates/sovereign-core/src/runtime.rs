@@ -9,7 +9,6 @@ use crate::context::{build_context, format_history_as_prompt};
 use crate::error::{Error, Result};
 use crate::executor::{Executor, TaskContext};
 use crate::memory;
-use crate::oicp::LatencyPreference;
 use crate::query_session::{SessionStore, SharedSessionStore};
 use crate::registry::ToolRegistry;
 use crate::skills::SkillRegistry;
@@ -889,61 +888,33 @@ pub struct StreamHandle {
     pub stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
 }
 
-/// Intent-implied OICP defaults. The classified intent carries a
-/// capability signal — "DeepQuery" literally means "reasoning-
-/// heavy" — and translating it into `CapabilityRequirements` lets
-/// the mesh routing layer pick an appropriate backend even when no
-/// skill has been activated to declare requirements explicitly.
+/// Intent-implied OICP defaults (v0.3). The classified intent
+/// carries a latency signal — "DeepQuery" wants extended thinking
+/// budget, "ComplexTask" and "KnowledgeQuery" want solid normal
+/// latency — which the scheduler consumes as `latency_class`.
+/// `capability_hint` defaults to `general`; code/prose/etc. are left
+/// to skill-level overrides since the intent vocabulary doesn't
+/// carry a specialization distinction.
 ///
-/// These are `preferred` (not `required`) targets: local models
-/// that don't hit the level get deprioritised against peers that
-/// do, but aren't excluded outright. A Joiner with a 3B can still
-/// answer a DeepQuery locally if no beefier peer is reachable.
-///
-/// Returns `None` for intents that don't imply a capability
-/// profile — small-model defaults (SimpleQuery, Continuation,
+/// Returns `None` for small-model intents (SimpleQuery, Continuation,
 /// SimpleAction) where cross-network latency wouldn't be worth
-/// trading for a marginal quality bump.
+/// trading for a marginal quality bump — no OICP envelope means
+/// the local Fast slot serves without invoking the scheduler.
 fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequirements> {
-    use crate::oicp::{
-        Capability, CapabilityHint, CapabilityRequirements,
-        InferenceRequirements, LatencyClass,
-    };
-    let mut preferred = std::collections::HashMap::new();
-    // v0.3 routing properties — hint defaults to `general`, latency
-    // class derived from the intent's work shape. Code hint is left
-    // to skill-level overrides (PR-D) since Intent doesn't carry
-    // code-vs-prose distinction today.
+    use crate::oicp::{CapabilityHint, InferenceRequirements, LatencyClass};
     let (hint, latency_class) = match intent {
         Intent::DeepQuery => {
-            // Reasoning-heavy. The user is asking a question that
-            // rewards analytical depth; prefer Analysis ≥ 3 + a
-            // general-purpose floor so the backend can compose
-            // well-structured prose.
-            preferred.insert(Capability::Analysis, 3);
-            preferred.insert(Capability::General, 3);
-            // Deep reasoning belongs to the extended class — big
-            // thinking budgets tolerate higher TTFT.
+            // Reasoning-heavy: extended class tolerates higher TTFT
+            // in exchange for deeper thinking budgets.
             (CapabilityHint::general(), LatencyClass::Extended)
         }
         Intent::ComplexTask => {
-            // Multi-step execution. The planner will decompose,
-            // the executor will run tools; both need strong
-            // instruction-following + analytical grounding to
-            // stay coherent across steps.
-            preferred.insert(Capability::Analysis, 3);
-            preferred.insert(Capability::Instruction, 3);
             // Tool-using plans want solid normal-latency responses;
             // extended would add round-trip overhead per tool step.
             (CapabilityHint::general(), LatencyClass::Normal)
         }
         Intent::KnowledgeQuery => {
-            // Retrieval-driven synthesis. Analysis matters less
-            // than the raw quality of citing retrieved chunks —
-            // moderate Analysis is the floor, with General for
-            // coherent prose over the chunks.
-            preferred.insert(Capability::Analysis, 2);
-            preferred.insert(Capability::General, 2);
+            // Retrieval-driven synthesis over a bounded chunk set.
             (CapabilityHint::general(), LatencyClass::Normal)
         }
         Intent::SimpleQuery
@@ -952,13 +923,8 @@ fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequ
             return None;
         }
     };
-    let caps = CapabilityRequirements {
-        required: Default::default(),
-        preferred,
-    };
     Some(
         InferenceRequirements::new()
-            .with_capabilities(caps)
             .with_hint(hint)
             .with_latency_class(latency_class),
     )
@@ -1786,69 +1752,75 @@ impl Runtime {
     /// Returns `None` when neither source produces any requirements
     /// — e.g. SimpleQuery with no skill activation; the caller keeps
     /// the request local.
+    /// Compose a v0.3 [`InferenceRequirements`] for an outbound turn.
+    ///
+    /// Skill declarations are the baseline — they encode domain
+    /// knowledge about what the skill needs (hint, latency class,
+    /// context/output envelopes, privacy). Intent-level defaults fill
+    /// in properties the active skills didn't declare: a
+    /// `DeepQuery` with no active skill still gets a sensible
+    /// `LatencyClass::Extended` hint so peer schedulers pick the
+    /// right kind of node.
+    ///
+    /// Merge rule: skill-declared properties win over intent defaults.
+    /// This mirrors the pre-v0.3 behaviour where skills could never
+    /// be silently downgraded.
+    ///
+    /// Returns `None` when neither an active skill nor the intent
+    /// produces any routing signal — the caller keeps the request
+    /// local with whatever default slot policy the runtime uses.
     fn build_oicp(
         &self,
-        latency: LatencyPreference,
         intent: &Intent,
     ) -> Option<crate::oicp::InferenceRequirements> {
         let from_skills = self.skills.inference_requirements();
         let from_intent = default_oicp_for_intent(intent);
 
-        let skills_empty =
-            from_skills.required().is_empty() && from_skills.preferred().is_empty();
-        let intent_empty = from_intent.is_none();
-        if skills_empty && intent_empty {
+        let skills_empty = from_skills.capability_hint.is_none()
+            && from_skills.latency_class.is_none()
+            && from_skills.context_tokens.is_none()
+            && from_skills.max_output_tokens.is_none();
+        if skills_empty && from_intent.is_none() {
             return None;
         }
 
-        // Merge: max per capability key. Skills are the baseline;
-        // intent defaults fill in capabilities the skills didn't
-        // mention, without ever downgrading a skill-declared level.
-        let mut required = from_skills.required().clone();
-        let mut preferred = from_skills.preferred().clone();
-        if let Some(ref defaults) = from_intent {
-            for (cap, level) in defaults.required().iter() {
-                let entry = required.entry(*cap).or_insert(0);
-                *entry = (*entry).max(*level);
-            }
-            for (cap, level) in defaults.preferred().iter() {
-                let entry = preferred.entry(*cap).or_insert(0);
-                *entry = (*entry).max(*level);
-            }
-        }
-
-        let caps = crate::oicp::CapabilityRequirements {
-            required,
-            preferred,
-        };
-        // Preserve whatever sharding `from_skills` resolved to —
-        // `SkillRegistry::inference_requirements` defaults to
-        // `MeshAllowed` and flips to `LocalOnly` only when an
-        // active skill has declared `privacy = "local_only"`
-        // (e.g. `inner-work`). Rebuilding via
-        // `InferenceRequirements::new()` would silently reset it
-        // to `LocalOnly` (the OICP spec default) and block every
-        // cross-mesh route, so we copy the skill-resolved value
-        // through.
+        // Preserve the sharding value resolved by `SkillRegistry::
+        // inference_requirements` — it defaults to `MeshAllowed` and
+        // flips to `LocalOnly` only when an active skill has declared
+        // it (e.g., `inner-work`). Rebuilding via
+        // `InferenceRequirements::new()` would silently reset to
+        // `LocalOnly` (the spec default) and block every cross-mesh
+        // route, so we copy through explicitly.
         let sharding = from_skills.sharding();
-        // v0.3: carry `capability_hint` + `latency_class` through
-        // the merge so downstream schedulers rank on them. Skills
-        // don't declare these in TOML yet (PR-D), so we pick them
-        // up from `default_oicp_for_intent`'s output.
-        let (v03_hint, v03_latency_class) = from_intent
-            .as_ref()
-            .map(|r| (r.capability_hint.clone(), r.latency_class))
-            .unwrap_or((None, None));
         let mut out = crate::oicp::InferenceRequirements::new()
-            .with_capabilities(caps)
-            .with_latency(latency)
             .with_sharding(sharding);
-        if let Some(h) = v03_hint {
+
+        // Hint: skill-declared wins; intent fills in.
+        let hint = from_skills
+            .capability_hint
+            .clone()
+            .or_else(|| from_intent.as_ref().and_then(|r| r.capability_hint.clone()));
+        if let Some(h) = hint {
             out = out.with_hint(h);
         }
-        if let Some(lc) = v03_latency_class {
+
+        // Latency class: skill-declared wins; intent fills in.
+        let latency_class = from_skills
+            .latency_class
+            .or_else(|| from_intent.as_ref().and_then(|r| r.latency_class));
+        if let Some(lc) = latency_class {
             out = out.with_latency_class(lc);
         }
+
+        // Structural envelopes: skill-declared minimums survive; the
+        // intent never imposes a context/output floor on its own.
+        if let Some(ctx) = from_skills.context_tokens {
+            out = out.with_context_tokens(ctx);
+        }
+        if let Some(mo) = from_skills.max_output_tokens {
+            out = out.with_max_output_tokens(mo);
+        }
+
         Some(out)
     }
 
@@ -2721,7 +2693,7 @@ impl Runtime {
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
         } else {
-            self.build_oicp(LatencyPreference::BestEffort, &intent)
+            self.build_oicp(&intent)
         };
 
         // Model ID is captured from `complete_stream_with_id` once
@@ -3588,7 +3560,7 @@ impl Runtime {
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
         } else {
-            self.build_oicp(LatencyPreference::BestEffort, &intent)
+            self.build_oicp(&intent)
         };
 
         let request = CompletionRequest {
@@ -3813,7 +3785,7 @@ impl Runtime {
                     structured_output: None,
                     top_k: self.inference_config.top_k,
                     top_p: None,
-                    oicp: self.build_oicp(LatencyPreference::BestEffort, &Intent::KnowledgeQuery),
+                    oicp: self.build_oicp(&Intent::KnowledgeQuery),
                     tools: None,
                     tool_choice: None,
                 }
@@ -4405,7 +4377,7 @@ impl Runtime {
                 structured_output: None,
                 top_k: self.inference_config.top_k,
                 top_p: None,
-                oicp: self.build_oicp(LatencyPreference::Throughput, &Intent::ComplexTask),
+                oicp: self.build_oicp(&Intent::ComplexTask),
             tools: None,
             tool_choice: None,
             })

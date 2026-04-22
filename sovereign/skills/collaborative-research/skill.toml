@@ -87,12 +87,11 @@ materially improve the answer, return {"has_gap": false}.
 """
 
 [inference]
-privacy = "mesh_allowed"
+privacy            = "mesh_allowed"
+capability_hint    = "general"
+latency_class      = "extended"
 min_context_tokens = 16384
-
-[inference.preferred_capabilities]
-analysis = 3
-general = 3
+max_output_tokens  = 4000
 
 [memory]
 extract_prompt_addendum = """For collaborative research conversations, extract:

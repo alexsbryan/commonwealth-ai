@@ -162,8 +162,8 @@ const HELP: Help = Help {
             ("daemon",  "(internal) Long-running service managed by launchd/systemd"),
         ]),
         HelpSection::Flags(&[
-            ("--model <path>",         "Fast/default GGUF model (REPL mode only)"),
-            ("--primary-model <path>", "Larger model for deep reasoning (REPL)"),
+            ("--model <path>",         "Quick responder GGUF (REPL mode only)"),
+            ("--primary-model <path>", "Main responder GGUF (REPL, lazy-loaded)"),
             ("--data-dir <path>",      "Database directory (default: data)"),
             ("--skills-dir <path>",    "Skills directory (default: ~/.sovereign/skills)"),
             ("--ingest <path>",        "Ingest documents from directory before REPL"),
@@ -353,9 +353,9 @@ async fn main() {
     };
 
     // Load inference.
-    eprintln!("Loading model: {}", args.model.display());
+    eprintln!("Quick responder: {}", args.model.display());
     if let Some(ref p) = args.primary_model {
-        eprintln!("Primary model: {}", p.display());
+        eprintln!("Main responder:  {}", p.display());
     }
 
     let inference = match EmbeddedLlamaCpp::load_dual(

@@ -520,7 +520,6 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             id: model_name,
             base_model: None,
             quantization: None,
-            capabilities,
             context_tokens: 32_768,
             status: ModelStatus {
                 available: true,

@@ -253,6 +253,118 @@ impl ModelsManifest {
             size_gb: normalise_size(size_gb),
         })
     }
+
+    /// Resolve a loaded embed GGUF to its declared
+    /// [`ModelFamily`] so the caller can drive
+    /// [`ModelFamily::default_quirks`]`().embed` — the only way to
+    /// pick the right pooling + normalisation without actually
+    /// running the model.
+    ///
+    /// **Why this exists as a dedicated method, not a field on
+    /// [`SlotInfo`]:** the embed family drives a cross-peer
+    /// interoperability contract (two nodes with different
+    /// [`PoolingStrategy`] or [`NormalizationStrategy`] produce
+    /// incompatible vectors — collaborative ingestion must reject
+    /// them). Getting it wrong silently excludes the node from
+    /// corpus routing with no user-visible error. Giving the
+    /// lookup its own method keeps the call site obvious in code
+    /// review and forces BYOM paths to acknowledge the
+    /// `None` → `ModelFamily::Unknown` fallback.
+    ///
+    /// Matching uses the same two-tier walk as
+    /// [`info_for_file`](Self::info_for_file) (exact file, then
+    /// longest `base_name` substring). Unlike `info_for_file` this
+    /// considers slots even when their `capabilities` are empty —
+    /// an embed slot's family is independent of whether the
+    /// manifest author filled in a `[profiles.X.embed.capabilities]`
+    /// block.
+    pub fn embed_family_for_file(
+        &self,
+        filename: &str,
+    ) -> Option<crate::model_family::ModelFamily> {
+        let target = strip_gguf(filename).to_ascii_lowercase();
+
+        // Gather candidates. Each carries the family string from
+        // its TOML row; we resolve the string to `ModelFamily` at
+        // the end rather than per-candidate because the walk needs
+        // to compare patterns, not family identities.
+        struct Candidate<'a> {
+            pattern: &'a str,
+            family: &'a str,
+        }
+        let mut candidates: Vec<Candidate<'_>> = Vec::new();
+        for user in &self.user_slots {
+            if user.slot != "embed" {
+                continue;
+            }
+            if !user.base_name.is_empty() {
+                candidates.push(Candidate {
+                    pattern: user.base_name.as_str(),
+                    family: user.family.as_str(),
+                });
+            }
+            candidates.push(Candidate {
+                pattern: user.file.as_str(),
+                family: user.family.as_str(),
+            });
+        }
+        for profile in self.profiles.values() {
+            let Some(slot) = profile.embed.as_ref() else {
+                continue;
+            };
+            if !slot.base_name.is_empty() {
+                candidates.push(Candidate {
+                    pattern: slot.base_name.as_str(),
+                    family: slot.family.as_str(),
+                });
+            }
+            candidates.push(Candidate {
+                pattern: slot.file.as_str(),
+                family: slot.family.as_str(),
+            });
+        }
+
+        // Exact match → return immediately. Otherwise longest
+        // substring match wins.
+        let mut best: Option<(usize, &str)> = None;
+        for c in &candidates {
+            let pattern_lower = c.pattern.to_ascii_lowercase();
+            let pattern_stripped = strip_gguf(&pattern_lower);
+            if pattern_stripped.is_empty() {
+                continue;
+            }
+            if pattern_stripped == target {
+                return Some(parse_family(c.family));
+            }
+            if target.contains(pattern_stripped) {
+                let len = pattern_stripped.len();
+                match best {
+                    Some((best_len, _)) if len <= best_len => {}
+                    _ => best = Some((len, c.family)),
+                }
+            }
+        }
+        best.map(|(_, family)| parse_family(family))
+    }
+}
+
+/// Parse the TOML `family = "..."` string into a [`ModelFamily`]
+/// enum value. Returns `ModelFamily::Unknown` for any unrecognised
+/// string (including empty / missing), matching the default
+/// behaviour of [`ModelFamily::default`].
+fn parse_family(s: &str) -> crate::model_family::ModelFamily {
+    use crate::model_family::ModelFamily;
+    match s {
+        "Qwen3" => ModelFamily::Qwen3,
+        "Qwen35" => ModelFamily::Qwen35,
+        "Qwen3Embedding" => ModelFamily::Qwen3Embedding,
+        "Gemma3" => ModelFamily::Gemma3,
+        "Llama3" => ModelFamily::Llama3,
+        "Phi4" => ModelFamily::Phi4,
+        "Phi4Reasoning" => ModelFamily::Phi4Reasoning,
+        "SmolLM3" => ModelFamily::SmolLM3,
+        _ => ModelFamily::Unknown,
+    }
 }
 
 /// Result of a `models.toml` lookup — capability profile plus the
@@ -457,6 +569,80 @@ analysis = 4
         let twenty_seven = m.info_for_file("Qwen3.5-27B.Q8_0.gguf").unwrap();
         assert_eq!(twenty_seven.size_gb, Some(16.5));
         assert_eq!(twenty_seven.capabilities.get(&Capability::Analysis).copied(), Some(4));
+    }
+
+    #[test]
+    fn embed_family_for_file_resolves_qwen3_embedding_from_profile() {
+        use crate::model_family::{ModelFamily, PoolingStrategy};
+        // Ground truth: the bundled manifest declares Qwen3-Embedding
+        // with `family = "Qwen3Embedding"` in the default profile's
+        // embed slot. The CLI daemon's collaborative-ingestion
+        // advertisement depends on getting this right — `Mean` vs
+        // `Last` pooling produces incompatible vectors across peers.
+        let m = &DEFAULT_MANIFEST;
+        let family = m
+            .embed_family_for_file("Qwen3-Embedding-0.6B-Q8_0.gguf")
+            .expect("bundled manifest must contain a Qwen3-Embedding entry");
+        assert_eq!(family, ModelFamily::Qwen3Embedding);
+        let embed_quirks = family
+            .default_quirks()
+            .embed
+            .expect("Qwen3Embedding must declare EmbedQuirks");
+        // Qwen3-Embedding is Last-pooled + application-normalised;
+        // any drift here means the CLI daemon advertises vectors
+        // that won't match desktop peers doing the same probe.
+        // (This is the bug the new `embed_family_for_file` helper
+        // exists to prevent: the old CLI hardcoded Mean + Application
+        // and silently excluded itself from Qwen3-Embedding meshes.)
+        assert_eq!(embed_quirks.pooling, PoolingStrategy::Last);
+        assert_eq!(
+            embed_quirks.normalize,
+            crate::model_family::NormalizationStrategy::Application
+        );
+    }
+
+    #[test]
+    fn embed_family_for_file_returns_none_for_unknown_gguf() {
+        let m = &DEFAULT_MANIFEST;
+        assert!(m
+            .embed_family_for_file("totally-unknown-embed-model.gguf")
+            .is_none());
+    }
+
+    #[test]
+    fn embed_family_parses_known_strings_and_falls_back_on_unknown() {
+        use crate::model_family::ModelFamily;
+        // `parse_family` is the normalisation layer between manifest
+        // TOML strings and the enum. Drift between manifest
+        // `family = "..."` values and enum variants would silently
+        // map to `Unknown` — guard the canonical strings.
+        let src = r#"
+[profiles.default.embed]
+file = "q3e.gguf"
+family = "Qwen3Embedding"
+
+[profiles.default.fast]
+file = "fast.gguf"
+family = "Qwen3"
+
+[profiles.high.embed]
+file = "misspelled.gguf"
+family = "QwenThreeEmbedding"
+"#;
+        let m = ModelsManifest::from_toml_str(src).unwrap();
+        assert_eq!(
+            m.embed_family_for_file("q3e.gguf"),
+            Some(ModelFamily::Qwen3Embedding)
+        );
+        // Misspelled / unrecognised strings degrade to Unknown
+        // rather than erroring — the manifest is the source of
+        // truth and we don't refuse to load on drift, but the
+        // embed slot will advertise Mean+Application which may
+        // or may not match reality.
+        assert_eq!(
+            m.embed_family_for_file("misspelled.gguf"),
+            Some(ModelFamily::Unknown)
+        );
     }
 
     #[test]

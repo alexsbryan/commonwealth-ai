@@ -36,7 +36,7 @@ use futures::StreamExt;
 use serde::Deserialize;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::oicp::{
-    Capability, CapabilityProfile, CapabilityRequirements, InferenceRequirements,
+    CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
     ModelStatus, ProviderManifest, ProviderModel, OICP_VERSION,
 };
 use sovereign_core::traits::InferenceProvider;
@@ -141,24 +141,14 @@ struct StreamQuery {
 async fn capabilities_handler() -> impl IntoResponse {
     // Two slots, same shape as `build_self_manifest` produces on a
     // real high-profile Founder after the multi-slot change:
-    // Qwen3.5-9B (5.5 GB, score 1.0 on DeepQuery) and Qwen3.5-27B
-    // (16.5 GB, score 1.0 on DeepQuery). The tiebreaker should
-    // pick the 9B.
-    let mut nine_caps = CapabilityProfile::new();
-    nine_caps.insert(Capability::General, 3);
-    nine_caps.insert(Capability::Analysis, 3);
-    nine_caps.insert(Capability::Code, 3);
-    nine_caps.insert(Capability::Instruction, 3);
-    nine_caps.insert(Capability::Math, 2);
-
-    let mut twenty_seven_caps = CapabilityProfile::new();
-    twenty_seven_caps.insert(Capability::General, 3);
-    twenty_seven_caps.insert(Capability::Analysis, 4);
-    twenty_seven_caps.insert(Capability::Code, 3);
-    twenty_seven_caps.insert(Capability::Instruction, 4);
-    twenty_seven_caps.insert(Capability::Math, 3);
-    twenty_seven_caps.insert(Capability::Creative, 3);
-
+    // Qwen3.5-9B (5.5 GB, score ~0.75 on DeepQuery) and
+    // Qwen3.5-27B (16.5 GB, score ~0.85 on DeepQuery). Since both
+    // are general-hint at Normal latency, the request's Extended
+    // latency hits both at the adjacent-class bonus and the 27B's
+    // higher affinity wins — unless the pick_better tie-break
+    // (smaller size_gb) promotes the 9B. The v0.3 wire tests below
+    // use a different scoring assumption; the key assertion is that
+    // routing reaches the peer at all, not which slot it lands on.
     let manifest = ProviderManifest {
         oicp_version: OICP_VERSION.into(),
         provider: None,
@@ -167,7 +157,6 @@ async fn capabilities_handler() -> impl IntoResponse {
                 id: "Qwen3.5-9B.test".into(),
                 base_model: None,
                 quantization: None,
-                capabilities: nine_caps,
                 context_tokens: 32_768,
                 status: ModelStatus {
                     available: true,
@@ -177,13 +166,18 @@ async fn capabilities_handler() -> impl IntoResponse {
                     estimated_load_time_sec: None,
                 },
                 size_gb: Some(5.5),
-                claims: Vec::new(),
+                claims: vec![CapabilityClaim::new(
+                    CapabilityHint::general(),
+                    LatencyClass::Normal,
+                    32_768,
+                    4_000,
+                    0.80,
+                )],
             },
             ProviderModel {
                 id: "Qwen3.5-27B.test".into(),
                 base_model: None,
                 quantization: None,
-                capabilities: twenty_seven_caps,
                 context_tokens: 32_768,
                 status: ModelStatus {
                     available: true,
@@ -193,7 +187,18 @@ async fn capabilities_handler() -> impl IntoResponse {
                     estimated_load_time_sec: None,
                 },
                 size_gb: Some(16.5),
-                claims: Vec::new(),
+                // Equal affinity to the 9B so the score_manifest_for_request
+                // pick_better tiebreaker falls to the smaller size_gb
+                // (5.5 < 16.5 → Qwen3.5-9B wins). Mirrors the original
+                // v0.2 assumption that DeepQuery scores 1.0 on both
+                // slots.
+                claims: vec![CapabilityClaim::new(
+                    CapabilityHint::general(),
+                    LatencyClass::Normal,
+                    32_768,
+                    4_000,
+                    0.80,
+                )],
             },
         ],
         knowledge: None,
@@ -283,20 +288,14 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
 
     // 5. Build a DeepQuery-shaped request — this is what
     //    `runtime::build_oicp` emits for Intent::DeepQuery.
-    let preferred: CapabilityProfile =
-        [(Capability::Analysis, 3), (Capability::General, 3)]
-            .into_iter()
-            .collect();
     // Spec default for `ShardingPrivacy` is `LocalOnly`, so the
     // envelope must explicitly opt into mesh routing. In production
     // `runtime::build_oicp` does this automatically via skill
     // configuration; the test reproduces the DeepQuery defaults
     // that `sovereign-core` emits at runtime.
     let envelope = InferenceRequirements::new()
-        .with_capabilities(CapabilityRequirements {
-            required: CapabilityProfile::new(),
-            preferred,
-        })
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Extended)
         .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
     let request = CompletionRequest::new("Is free will compatible with determinism?")
         .with_speed(Speed::Slow) // Only Speed::Slow ever routes to peers.
@@ -356,15 +355,9 @@ async fn local_only_sharding_never_routes_to_peer() {
     });
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
-    let preferred: CapabilityProfile =
-        [(Capability::Analysis, 3), (Capability::General, 3)]
-            .into_iter()
-            .collect();
     let envelope = InferenceRequirements::new()
-        .with_capabilities(CapabilityRequirements {
-            required: CapabilityProfile::new(),
-            preferred,
-        })
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Extended)
         .with_sharding(sovereign_core::oicp::ShardingPrivacy::LocalOnly);
 
     let request = CompletionRequest::new("sensitive prompt")

@@ -4,8 +4,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::oicp::{
-    Capability, CapabilityProfile, CapabilityRequirements, ContextRequirements,
-    InferenceRequirements, ProficiencyLevel, ShardingPrivacy,
+    Capability, CapabilityHint, InferenceRequirements, LatencyClass,
+    ProficiencyLevel, ShardingPrivacy,
 };
 use crate::types::{Intent, TrustLevel, compute_trust_level};
 
@@ -37,17 +37,47 @@ pub struct Skill {
     pub trust_level: TrustLevel,
 }
 
-/// OICP inference configuration declared in a skill manifest.
+/// OICP v0.3 inference configuration declared in a skill manifest.
+///
+/// Skills declare the **shape** of inference work they do in
+/// v0.3-native terms: a capability hint (`general` / `code` /
+/// `x:<extension>`), a latency class, and structural envelopes
+/// (context / output tokens). Legacy `preferred_capabilities` and
+/// `required_capabilities` maps are retained as optional hints so
+/// existing skill files don't break while migration is in flight —
+/// they're no longer threaded through the scheduler but may still be
+/// surfaced in docs or used by advertisers to derive claim affinity
+/// heuristics.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SkillInferenceConfig {
-    #[serde(default)]
-    pub preferred_capabilities: HashMap<Capability, ProficiencyLevel>,
-    #[serde(default)]
-    pub required_capabilities: HashMap<Capability, ProficiencyLevel>,
+    /// v0.3 capability hint (e.g., `"general"`, `"code"`,
+    /// `"x:prose"`). Parsed via [`CapabilityHint::parse`] at merge
+    /// time; invalid hints log a warning and are ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_hint: Option<String>,
+    /// v0.3 latency class this skill's work needs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_class: Option<LatencyClass>,
+    /// Minimum context length the skill's work may need. Translated
+    /// to `InferenceRequirements.context_tokens` so scheduler hard
+    /// gates can eliminate undersized claims.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_context_tokens: Option<usize>,
+    /// Maximum output length the skill's work may produce.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<usize>,
+    /// Whether the skill tolerates cross-node routing.
     #[serde(default)]
     pub privacy: ShardingPrivacy,
+    /// Legacy: capability proficiencies the skill prefers. Preserved
+    /// for skills that haven't migrated to `capability_hint`; not
+    /// threaded through the scheduler.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub preferred_capabilities: HashMap<Capability, ProficiencyLevel>,
+    /// Legacy: capability proficiencies the skill requires. Same
+    /// rationale as `preferred_capabilities`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub required_capabilities: HashMap<Capability, ProficiencyLevel>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -194,12 +224,22 @@ struct MemoryToml {
 #[derive(Debug, Default, Deserialize)]
 struct InferenceToml {
     #[serde(default)]
+    capability_hint: Option<String>,
+    #[serde(default)]
+    latency_class: Option<LatencyClass>,
+    #[serde(default)]
+    min_context_tokens: Option<usize>,
+    #[serde(default)]
+    max_output_tokens: Option<usize>,
+    #[serde(default)]
+    privacy: ShardingPrivacy,
+    // Legacy fields — skills that haven't migrated still deserialize
+    // cleanly. Merged into InferenceRequirements only as diagnostics;
+    // the scheduler no longer consumes them.
+    #[serde(default)]
     preferred_capabilities: HashMap<Capability, ProficiencyLevel>,
     #[serde(default)]
     required_capabilities: HashMap<Capability, ProficiencyLevel>,
-    min_context_tokens: Option<usize>,
-    #[serde(default)]
-    privacy: ShardingPrivacy,
 }
 
 impl SkillToml {
@@ -255,10 +295,13 @@ impl SkillToml {
             },
             evaluation_prompts: self.evaluation.prompts,
             inference: SkillInferenceConfig {
+                capability_hint: self.inference.capability_hint,
+                latency_class: self.inference.latency_class,
+                min_context_tokens: self.inference.min_context_tokens,
+                max_output_tokens: self.inference.max_output_tokens,
+                privacy: self.inference.privacy,
                 preferred_capabilities: self.inference.preferred_capabilities,
                 required_capabilities: self.inference.required_capabilities,
-                min_context_tokens: self.inference.min_context_tokens,
-                privacy: self.inference.privacy,
             },
             trust_level: compute_trust_level(&self.skill.signature, &self.skill.signed_by),
             signature: self.skill.signature,
@@ -482,27 +525,58 @@ impl SkillRegistry {
     /// - Preferred: takes the maximum level across skills.
     /// - Privacy: LocalOnly wins (most restrictive).
     /// - Context: takes the maximum across skills.
+    /// Merge active skills' inference declarations into a single
+    /// [`InferenceRequirements`].
+    ///
+    /// Merge rules:
+    /// - Privacy: `LocalOnly` wins (most restrictive).
+    /// - `capability_hint`: the first active skill that declares a
+    ///   valid hint wins. Skills with no declared hint contribute
+    ///   nothing — they accept whatever routing the intent-level
+    ///   default provides.
+    /// - `latency_class`: first-declared wins, same rationale.
+    /// - `min_context_tokens` / `max_output_tokens`: take the
+    ///   maximum across skills. The scheduler uses these as hard
+    ///   feasibility gates, so the most demanding skill sets the
+    ///   floor.
     pub fn inference_requirements(&self) -> InferenceRequirements {
-        let mut required: CapabilityProfile = HashMap::new();
-        let mut preferred: CapabilityProfile = HashMap::new();
-        let mut min_context: Option<usize> = None;
+        let mut hint: Option<CapabilityHint> = None;
+        let mut latency_class: Option<LatencyClass> = None;
+        let mut min_context: Option<u32> = None;
+        let mut max_output: Option<u32> = None;
         let mut privacy = ShardingPrivacy::MeshAllowed;
 
         for skill in self.active_skills() {
             let inf = &skill.inference;
 
-            for (cap, &level) in &inf.required_capabilities {
-                let entry = required.entry(*cap).or_insert(0);
-                *entry = (*entry).max(level);
+            if hint.is_none() {
+                if let Some(raw) = inf.capability_hint.as_deref() {
+                    match CapabilityHint::parse(raw) {
+                        Ok(h) => hint = Some(h),
+                        Err(e) => tracing::warn!(
+                            skill = %skill.id,
+                            capability_hint = %raw,
+                            error = %e,
+                            "skill declared invalid capability_hint — ignoring"
+                        ),
+                    }
+                }
             }
 
-            for (cap, &level) in &inf.preferred_capabilities {
-                let entry = preferred.entry(*cap).or_insert(0);
-                *entry = (*entry).max(level);
+            if latency_class.is_none() {
+                if let Some(lc) = inf.latency_class {
+                    latency_class = Some(lc);
+                }
             }
 
             if let Some(tokens) = inf.min_context_tokens {
-                min_context = Some(min_context.map_or(tokens, |t: usize| t.max(tokens)));
+                let tokens = tokens as u32;
+                min_context = Some(min_context.map_or(tokens, |t| t.max(tokens)));
+            }
+
+            if let Some(tokens) = inf.max_output_tokens {
+                let tokens = tokens as u32;
+                max_output = Some(max_output.map_or(tokens, |t| t.max(tokens)));
             }
 
             if matches!(inf.privacy, ShardingPrivacy::LocalOnly) {
@@ -511,21 +585,18 @@ impl SkillRegistry {
         }
 
         let mut req = InferenceRequirements::new().with_sharding(privacy);
-
-        if !required.is_empty() || !preferred.is_empty() {
-            req = req.with_capabilities(CapabilityRequirements {
-                required,
-                preferred,
-            });
+        if let Some(h) = hint {
+            req = req.with_hint(h);
         }
-
+        if let Some(lc) = latency_class {
+            req = req.with_latency_class(lc);
+        }
         if let Some(tokens) = min_context {
-            req = req.with_context(ContextRequirements {
-                min_tokens: Some(tokens as u32),
-                preferred_tokens: None,
-            });
+            req = req.with_context_tokens(tokens);
         }
-
+        if let Some(tokens) = max_output {
+            req = req.with_max_output_tokens(tokens);
+        }
         req
     }
 

@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 
 use crate::error::{Error, Result};
-use crate::oicp::LatencyPreference;
+use crate::oicp::LatencyClass;
 use crate::registry::ToolRegistry;
 use crate::skills::SkillRegistry;
 use crate::traits::{ApprovalChannel, InferenceProvider, StateStore};
@@ -363,18 +363,31 @@ impl Executor {
                     base_system.to_string()
                 };
 
-                // Attach OICP requirements from active skills.
+                // Attach OICP requirements from active skills. If
+                // skills haven't declared a latency class, derive one
+                // from the step's Speed so the scheduler ranks fast
+                // steps against fast claims and deep steps against
+                // extended claims.
                 let oicp_req = self.skills.inference_requirements();
-                let latency = match speed {
-                    Speed::Fast => LatencyPreference::Interactive,
-                    Speed::Medium => LatencyPreference::BestEffort,
-                    Speed::Slow => LatencyPreference::Throughput,
+                let default_class = match speed {
+                    Speed::Fast => LatencyClass::Fast,
+                    Speed::Medium => LatencyClass::Normal,
+                    Speed::Slow => LatencyClass::Extended,
                 };
-                let oicp = if oicp_req.required().is_empty() && oicp_req.preferred().is_empty()
+                let oicp = if oicp_req.capability_hint.is_none()
+                    && oicp_req.latency_class.is_none()
+                    && oicp_req.context_tokens.is_none()
+                    && oicp_req.max_output_tokens.is_none()
                 {
                     None
                 } else {
-                    Some(oicp_req.with_latency(latency))
+                    // Only override latency_class if the skill didn't
+                    // declare one itself — skills know best.
+                    let mut req = oicp_req;
+                    if req.latency_class.is_none() {
+                        req = req.with_latency_class(default_class);
+                    }
+                    Some(req)
                 };
 
                 // Adaptive compute: estimate difficulty and adjust budget.

@@ -282,15 +282,36 @@ async fn run_daemon(_args: &[String]) -> i32 {
                 .and_then(|s| s.to_str())
                 .unwrap_or("embed")
                 .to_string();
-            // ModelFamily::Unknown — the CLI doesn't persist
-            // `embed_family` in SetupConfig today. Defaults to
-            // Mean pooling + Application normalization, which
-            // matches qwen-embedding-0.6b and the typical
-            // mean-pool BERT family. Qwen3-embedding-* users on
-            // the CLI path would need embed_family surfaced in
-            // SetupConfig (separate work — note to future self).
-            let pooling = PoolingStrategy::Mean;
-            let normalization = NormalizationStrategy::Application;
+            // Resolve the embed family from the bundled manifest so
+            // pooling + normalisation match whatever the desktop
+            // path would advertise for the same GGUF. Without this,
+            // CLI daemons serving Qwen3-Embedding would have
+            // silently mismatched peers running the desktop build
+            // (Qwen3-Embedding is Last + Server, not Mean +
+            // Application) — collaborative ingestion would never
+            // plan across them.
+            //
+            // BYOM paths that don't match any manifest row fall
+            // through to `ModelFamily::Unknown` → Mean + Application
+            // (safe default for generic mean-pool BERT embedders).
+            let embed_filename = config
+                .models
+                .embed
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            let embed_family = sovereign_core::models_manifest::DEFAULT_MANIFEST
+                .embed_family_for_file(embed_filename)
+                .unwrap_or(ModelFamily::Unknown);
+            let embed_quirks = embed_family.default_quirks().embed;
+            let pooling = embed_quirks
+                .as_ref()
+                .map(|q| q.pooling)
+                .unwrap_or(PoolingStrategy::Mean);
+            let normalization = embed_quirks
+                .as_ref()
+                .map(|q| q.normalize)
+                .unwrap_or(NormalizationStrategy::Application);
             let embed_info = EmbedModelInfo {
                 model_id: model_id.clone(),
                 dimensions: probe_vec.len(),
@@ -300,7 +321,9 @@ async fn run_daemon(_args: &[String]) -> i32 {
             tracing::info!(
                 model_id = %embed_info.model_id,
                 dims = embed_info.dimensions,
+                family = ?embed_family,
                 pooling = ?pooling,
+                normalization = ?normalization,
                 "embed model info: advertising to mesh peers"
             );
             daemon.set_embed_model_info(embed_info).await;

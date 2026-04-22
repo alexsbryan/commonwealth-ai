@@ -106,15 +106,11 @@ guess destroys it.
 """
 
 [inference]
-privacy = "local_only"
+privacy            = "local_only"
+capability_hint    = "code"
+latency_class      = "normal"
 min_context_tokens = 8192
-
-[inference.preferred_capabilities]
-code = 3
-instruction = 3
-
-[inference.required_capabilities]
-code = 2
+max_output_tokens  = 4000
 
 [memory]
 extract_prompt_addendum = """

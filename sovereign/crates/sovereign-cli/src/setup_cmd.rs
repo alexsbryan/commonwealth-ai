@@ -172,17 +172,17 @@ pub async fn run_setup(args: &[String]) -> i32 {
     let (primary_res, fast_res, embed_res) = tokio::join!(primary_fut, fast_fut, embed_fut);
 
     if let Err(e) = primary_res {
-        eprintln!("  \u{2717} Primary: {e}");
+        eprintln!("  \u{2717} Main responder: {e}");
         return 1;
     }
     if let Err(e) = fast_res {
-        eprintln!("  \u{2717} Fast: {e}");
+        eprintln!("  \u{2717} Quick responder: {e}");
         return 1;
     } else {
         println!("    \u{2713} {}", fast_slot.file);
     }
     if let Err(e) = embed_res {
-        eprintln!("  \u{2717} Embed: {e}");
+        eprintln!("  \u{2717} Knowledge embedder: {e}");
         return 1;
     } else {
         println!("    \u{2713} {}", embed_slot.file);
@@ -370,7 +370,7 @@ fn resolve_slot(profile: &ProfileName, kind: SlotKind) -> Option<SlotConfig> {
 /// Render the numbered picker, handle the `[b]` BYOM branch, and return
 /// the chosen slot. In `--yes` mode, auto-picks the recommended row.
 fn pick_primary(catalog: &[PrimaryOption], yes: bool) -> Pick {
-    println!("  Pick your primary model:");
+    println!("  Pick your main responder:");
     println!();
     println!("    #   Model                          Size     Notes");
     for (i, opt) in catalog.iter().enumerate() {
@@ -449,21 +449,21 @@ fn prompt_byom_paths(opts: &Opts) -> Result<ModelPaths, String> {
         return Err("--yes cannot be combined with BYOM; choose a numbered option instead".into());
     }
     println!();
-    println!("  Bring your own GGUF files. Provide a path for each slot.");
+    println!("  Bring your own GGUF files. Provide a path for each role.");
     println!("  Leave any line blank to cancel.");
     println!();
 
     let primary = require_path(
-        "  Primary (thoughtful) GGUF path: ",
-        "primary path is required for BYOM",
+        "  Main responder GGUF path: ",
+        "main-responder path is required for BYOM",
     )?;
     let fast = require_path(
-        "  Fast GGUF path: ",
-        "fast path is required for BYOM",
+        "  Quick responder GGUF path: ",
+        "quick-responder path is required for BYOM",
     )?;
     let embed = require_path(
-        "  Embed GGUF path: ",
-        "embed path is required for BYOM",
+        "  Knowledge embedder GGUF path: ",
+        "knowledge-embedder path is required for BYOM",
     )?;
     Ok(ModelPaths { primary, fast, embed })
 }

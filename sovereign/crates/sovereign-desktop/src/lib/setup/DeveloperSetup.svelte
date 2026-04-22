@@ -55,15 +55,17 @@
     <h3>Advanced</h3>
 
     <label>
-      <span>Deep reasoning model (optional)</span>
+      <span>Main responder (optional)</span>
       <input
         type="text"
         bind:value={primaryModelPath}
-        placeholder="models/primary.gguf"
+        placeholder="models/main.gguf"
       />
       <small style="font-size: 0.75rem; color: var(--text-muted);">
-        Larger model loaded on demand for complex tasks. Unloads after 60s idle.
-        The model above is the fast slot — used for routing and most queries.
+        Your primary model for substantive work — research, writing, analysis.
+        Loads when you ask something substantive and unloads after ~60 s idle.
+        The model above it is the <strong>quick responder</strong>, used for
+        routing and short fast-turnaround replies.
       </small>
     </label>
 

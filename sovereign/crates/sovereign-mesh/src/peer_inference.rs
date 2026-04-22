@@ -41,7 +41,8 @@ use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{
-    CapabilityProfile, ProviderManifest, ShardingPrivacy,
+    ExtensionRegistry, ExtensionStats, NodeLocality, NodeObservations,
+    ProviderManifest, ShardingPrivacy,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
@@ -67,6 +68,12 @@ const MANIFEST_FETCH_TIMEOUT: Duration = Duration::from_millis(800);
 struct CachedManifest {
     manifest: ProviderManifest,
     fetched_at: Instant,
+    /// Round-trip time (in ms) observed for the manifest fetch —
+    /// the single HTTP request we were going to make anyway
+    /// doubles as a locality probe. Piggy-backing avoids a second
+    /// round-trip per peer. Refreshed on every manifest re-fetch
+    /// (same `MANIFEST_TTL`).
+    rtt_ms: u32,
 }
 
 // OICP selection primitives live in `crate::oicp_select` so the
@@ -75,8 +82,8 @@ struct CachedManifest {
 // picking which loaded slot to serve the request from. Importing
 // here keeps the rest of this file unchanged.
 use crate::oicp_select::{
-    candidates_equal, pick_better, score_manifest, score_manifest_for_request,
-    ModelCandidate,
+    adjust_for_observations, candidates_equal, classify_rtt_ms, pick_better,
+    score_manifest_for_request, ModelCandidate,
 };
 
 /// Narrow trait the wrapper uses to discover routable peers. The
@@ -115,6 +122,23 @@ pub struct MeshInferenceProvider {
     /// the per-request `RemoteApiProvider` clients so manifest
     /// polling doesn't inherit inference-length timeouts.
     http: reqwest::Client,
+    /// Per-peer observation tracker. Keyed by peer name (same
+    /// identity `peer_cache` uses). Updated from the outside via
+    /// `record_peer_*` helpers; consumed during `select_peer`
+    /// ranking so repeatedly-failing peers fall out of rotation.
+    peer_observations:
+        Arc<RwLock<std::collections::HashMap<String, NodeObservations>>>,
+    /// Our own (local) observations. Currently only load (in_flight)
+    /// is interesting for the local side; samples start at a high
+    /// constant so the cold-start ramp never applies to `self` —
+    /// we always know ourselves.
+    local_observations: Arc<RwLock<NodeObservations>>,
+    /// v0.3 §4.3 governance registry: records every `x:*` hint we
+    /// see on outgoing requests or in peer advertisements. Not
+    /// consulted for routing — this is purely an input for the
+    /// separate promotion process that decides which extensions
+    /// merit standardization.
+    extension_registry: Arc<RwLock<ExtensionRegistry>>,
 }
 
 impl MeshInferenceProvider {
@@ -146,44 +170,152 @@ impl MeshInferenceProvider {
                 tracing::warn!(error = %e, "mesh-inference: reqwest client build failed — using default");
                 reqwest::Client::new()
             });
+        // Seed local observations above the cold-start threshold so
+        // the `self` side never gets depressed by "new node" weight.
+        let local_obs = NodeObservations {
+            samples: sovereign_core::oicp::COLD_START_SAMPLES * 2,
+            ..Default::default()
+        };
         Self {
             local,
             mesh,
             self_manifest,
             peer_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
             http,
+            peer_observations: Arc::new(RwLock::new(
+                std::collections::HashMap::new(),
+            )),
+            local_observations: Arc::new(RwLock::new(local_obs)),
+            extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
         }
     }
 
-    /// Pull required + preferred profiles out of the request's
-    /// OICP envelope. Returns `None` when either the envelope is
-    /// missing or the capability section is empty — both signal
-    /// "no contract, stay local".
-    fn extract_caps(
-        request: &CompletionRequest,
-    ) -> Option<(CapabilityProfile, CapabilityProfile)> {
-        let oicp = request.oicp.as_ref()?;
-        let caps = oicp.capabilities.as_ref()?;
-        if caps.required.is_empty() && caps.preferred.is_empty() {
-            return None;
+    /// Snapshot the current extension-hint usage for governance
+    /// or operator diagnostics. Returns one entry per distinct
+    /// `x:*` hint this scheduler has seen. Ordering is undefined;
+    /// callers that want a stable display sort on fields they
+    /// care about.
+    pub async fn extension_stats(&self) -> Vec<ExtensionStats> {
+        self.extension_registry
+            .read()
+            .await
+            .stats()
+            .cloned()
+            .collect()
+    }
+
+    /// Current wall-clock in unix seconds. Extracted so tests can
+    /// mock and so the handful of registry-record sites all use
+    /// the same clock source.
+    fn now_unix_secs() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+
+    /// Record that a request was dispatched to this peer (or local,
+    /// if `peer_name` is `None`). Increments in-flight + samples.
+    pub async fn record_dispatch(&self, peer_name: Option<&str>) {
+        match peer_name {
+            None => {
+                let mut obs = self.local_observations.write().await;
+                obs.in_flight = obs.in_flight.saturating_add(1);
+                obs.samples = obs.samples.saturating_add(1);
+            }
+            Some(name) => {
+                let mut obs = self.peer_observations.write().await;
+                let entry =
+                    obs.entry(name.to_string()).or_default();
+                entry.in_flight = entry.in_flight.saturating_add(1);
+                entry.samples = entry.samples.saturating_add(1);
+            }
         }
-        Some((caps.required.clone(), caps.preferred.clone()))
+    }
+
+    /// Record that a dispatched request completed successfully.
+    /// Decrements in-flight; leaves failure counters untouched so
+    /// the rolling rate drifts toward zero.
+    pub async fn record_success(&self, peer_name: Option<&str>) {
+        let mut obs_ref = match peer_name {
+            None => self.local_observations.write().await,
+            Some(name) => {
+                let mut map = self.peer_observations.write().await;
+                let entry = map
+                    .entry(name.to_string())
+                    .or_insert_with(NodeObservations::default);
+                entry.in_flight = entry.in_flight.saturating_sub(1);
+                // Drift failure rate toward zero on every success.
+                entry.recent_failure_rate =
+                    (entry.recent_failure_rate * 0.9).max(0.0);
+                return;
+            }
+        };
+        obs_ref.in_flight = obs_ref.in_flight.saturating_sub(1);
+        obs_ref.recent_failure_rate =
+            (obs_ref.recent_failure_rate * 0.9).max(0.0);
+    }
+
+    /// Record that a dispatched request failed. Decrements in-flight
+    /// and bumps the rolling failure rate toward 1.0.
+    pub async fn record_failure(&self, peer_name: Option<&str>) {
+        let mut obs_ref = match peer_name {
+            None => self.local_observations.write().await,
+            Some(name) => {
+                let mut map = self.peer_observations.write().await;
+                let entry = map
+                    .entry(name.to_string())
+                    .or_insert_with(NodeObservations::default);
+                entry.in_flight = entry.in_flight.saturating_sub(1);
+                // Rolling-window failure rate: EMA toward 1.0 with
+                // alpha 0.1 — 10 consecutive failures settle near 0.65.
+                entry.recent_failure_rate =
+                    (entry.recent_failure_rate * 0.9 + 0.1).min(1.0);
+                return;
+            }
+        };
+        obs_ref.in_flight = obs_ref.in_flight.saturating_sub(1);
+        obs_ref.recent_failure_rate =
+            (obs_ref.recent_failure_rate * 0.9 + 0.1).min(1.0);
+    }
+
+    /// Returns `true` when the request carries any v0.3 routing
+    /// signal (capability hint, latency class, or structural
+    /// envelope). A request without any of these stays local —
+    /// there's nothing to match against the peer manifests.
+    fn has_routing_signal(request: &CompletionRequest) -> bool {
+        let Some(oicp) = request.oicp.as_ref() else {
+            return false;
+        };
+        oicp.capability_hint.is_some()
+            || oicp.latency_class.is_some()
+            || oicp.context_tokens.is_some()
+            || oicp.max_output_tokens.is_some()
     }
 
     /// Fetch a peer's OICP manifest, honouring the 60s cache. On
     /// fetch failure, returns `None` — caller treats the peer as
     /// not a candidate this turn (next request retries).
+    ///
+    /// Returns both the manifest and the measured RTT in ms. The
+    /// RTT is the single HTTP round-trip the fetch was going to
+    /// make anyway, repurposed as a locality probe — sub-5ms is
+    /// same-host, sub-25ms is LAN, else WAN (see
+    /// [`classify_rtt_ms`]). Caller folds this into
+    /// [`adjust_for_observations`] so LAN peers pick up their
+    /// locality bonus in real deployments instead of defaulting
+    /// to `Far`.
     async fn get_peer_manifest(
         &self,
         peer: &PeerInferenceEndpoint,
-    ) -> Option<ProviderManifest> {
+    ) -> Option<(ProviderManifest, u32)> {
         let key = peer.node_id.to_string();
         // Cache hit.
         {
             let cache = self.peer_cache.read().await;
             if let Some(entry) = cache.get(&key) {
                 if entry.fetched_at.elapsed() < MANIFEST_TTL {
-                    return Some(entry.manifest.clone());
+                    return Some((entry.manifest.clone(), entry.rtt_ms));
                 }
             }
         }
@@ -206,32 +338,50 @@ impl MeshInferenceProvider {
                 .trim_end_matches("/v1")
                 .trim_end_matches('/');
             let url = format!("{root}/oicp/v1/capabilities");
+            let started = Instant::now();
             match self.http.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
+                    // Lock the RTT in before the JSON parse — we
+                    // want the network round-trip, not the parse
+                    // time, to classify the peer's locality.
+                    let rtt_ms = started.elapsed().as_millis().min(u128::from(u32::MAX))
+                        as u32;
                     match resp.json::<ProviderManifest>().await {
                         Ok(m) => {
-                            // Info-level so the happy path is
-                            // visible in the default log filter
-                            // alongside the selection decision.
-                            // (Went through a 188s-local incident
-                            // because a silent manifest fetch
-                            // failure looked identical to "no
-                            // peer available.")
                             tracing::info!(
                                 peer = %peer.name,
                                 url = %url,
                                 models = m.models.len(),
+                                rtt_ms,
+                                locality = ?classify_rtt_ms(rtt_ms),
                                 "mesh-inference: fetched peer manifest"
                             );
+                            // v0.3 §4.3 governance tap: every `x:*`
+                            // hint the peer advertises counts as an
+                            // observed advertisement.
+                            {
+                                let now = Self::now_unix_secs();
+                                let mut registry =
+                                    self.extension_registry.write().await;
+                                for model in &m.models {
+                                    for claim in &model.claims {
+                                        registry.observe_advertisement(
+                                            &claim.hint,
+                                            now,
+                                        );
+                                    }
+                                }
+                            }
                             let mut cache = self.peer_cache.write().await;
                             cache.insert(
                                 key,
                                 CachedManifest {
                                     manifest: m.clone(),
                                     fetched_at: Instant::now(),
+                                    rtt_ms,
                                 },
                             );
-                            return Some(m);
+                            return Some((m, rtt_ms));
                         }
                         Err(e) => {
                             tracing::info!(
@@ -277,7 +427,9 @@ impl MeshInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Option<(PeerInferenceEndpoint, ModelCandidate)> {
-        let (required, preferred) = Self::extract_caps(request)?;
+        if !Self::has_routing_signal(request) {
+            return None;
+        }
         if let Some(oicp) = &request.oicp {
             if oicp.sharding() == ShardingPrivacy::LocalOnly {
                 return None;
@@ -292,46 +444,58 @@ impl MeshInferenceProvider {
         }
 
         // Local is always a candidate. `None` means no loaded
-        // model satisfies the request — any peer that CAN then
-        // wins automatically. v0.3 claim-based scoring is used
-        // when the request carries `capability_hint`/`latency_class`
-        // AND the manifest publishes claims; otherwise the v0.2
-        // capability-profile path still fires. The two behave
-        // identically for v0.2-only payloads.
-        let local_cand = if let Some(req_oicp) = request.oicp.as_ref() {
-            score_manifest_for_request(&self.self_manifest, req_oicp)
-        } else {
-            score_manifest(&self.self_manifest, &required, &preferred)
-        };
+        // model's claims can serve the request — any peer that CAN
+        // then wins automatically. After claim-scoring, fold in
+        // v0.3 §7 operational adjustments so a hot local slot can
+        // lose to an idle peer on load, and a reliable peer can
+        // beat a failure-prone local.
+        let req_oicp = request.oicp.as_ref()?;
+        // v0.3 §4.3 governance tap: record the requested hint if
+        // it's an `x:*` extension. Standardized hints are skipped
+        // inside the registry itself. No routing impact — this is
+        // purely a passive observer.
+        if let Some(hint) = req_oicp.capability_hint.as_ref() {
+            self.extension_registry
+                .write()
+                .await
+                .observe_request(hint, Self::now_unix_secs());
+        }
+        let local_obs = self.local_observations.read().await.clone();
+        let local_cand = score_manifest_for_request(&self.self_manifest, req_oicp)
+            .map(|c| adjust_for_observations(c, &local_obs, NodeLocality::Local));
         tracing::info!(
             local_models = self.self_manifest.models.len(),
-            local_satisfies_required = local_cand.is_some(),
+            local_scores = local_cand.is_some(),
             local_score = local_cand.as_ref().map(|c| c.score).unwrap_or(f32::NEG_INFINITY),
             local_pick = local_cand.as_ref().map(|c| c.model_id.as_str()).unwrap_or("<none>"),
             local_size_gb = ?local_cand.as_ref().and_then(|c| c.size_gb),
-            required_keys = required.len(),
-            preferred_keys = preferred.len(),
+            req_hint = %req_oicp.effective_hint(),
+            req_latency = ?req_oicp.effective_latency_class(),
             "mesh-inference: scoring local"
         );
 
         let peers = self.mesh.peer_inference_endpoints().await;
+        let peer_obs_snapshot = self.peer_observations.read().await.clone();
         let mut best_peer: Option<(PeerInferenceEndpoint, ModelCandidate)> = None;
         for peer in peers {
-            let manifest = match self.get_peer_manifest(&peer).await {
+            let (manifest, rtt_ms) = match self.get_peer_manifest(&peer).await {
                 Some(m) => m,
                 None => continue,
             };
-            let cand = {
-                let scored = if let Some(req_oicp) = request.oicp.as_ref() {
-                    score_manifest_for_request(&manifest, req_oicp)
-                } else {
-                    score_manifest(&manifest, &required, &preferred)
-                };
-                match scored {
-                    Some(c) => c,
-                    None => continue,
-                }
+            let raw = match score_manifest_for_request(&manifest, req_oicp) {
+                Some(c) => c,
+                None => continue,
             };
+            // Apply operational adjustments. Locality is derived
+            // from the manifest-fetch RTT (see PR-F) — same round
+            // trip, no extra probe — so LAN deployments actually
+            // see their locality bonus instead of every peer
+            // defaulting to `Far`.
+            let obs = peer_obs_snapshot
+                .get(&peer.name)
+                .cloned()
+                .unwrap_or_default();
+            let cand = adjust_for_observations(raw, &obs, classify_rtt_ms(rtt_ms));
             tracing::info!(
                 peer = %peer.name,
                 peer_pick = %cand.model_id,
@@ -375,6 +539,7 @@ impl MeshInferenceProvider {
                     score: f32::NEG_INFINITY,
                     size_gb: None,
                     model_id: "<local-insufficient>".into(),
+                    claim_affinity: 0.0,
                 });
                 let winner = pick_better(local_for_cmp.clone(), peer_cand.clone());
                 // "Peer strictly wins" iff pick_better returned the

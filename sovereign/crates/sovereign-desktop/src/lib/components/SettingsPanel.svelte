@@ -269,15 +269,19 @@
             </div>
           {/if}
 
-          <!-- ── Three-column slot grid ── -->
+          <!-- ── Role-based model grid ──────────────────────
+               Copy frames each model by what it does for the user,
+               not by its internal slot name. "Quick" / "Main" /
+               "Knowledge" map 1:1 to the Fast / Primary / Embed
+               slots but the user never sees the slot vocabulary. -->
           <div class="model-slots-grid">
 
             <div class="slot-card" class:slot-card--active={activeSlot === "fast"}>
               <div class="slot-card-head">
-                <span class="slot-card-title">Fast</span>
-                <span class="slot-status-badge">Always loaded</span>
+                <span class="slot-card-title">Quick responder</span>
+                <span class="slot-status-badge">Always on</span>
               </div>
-              <p class="slot-card-desc">Handles most queries and routing. Stays in memory continuously.</p>
+              <p class="slot-card-desc">For short, fast responses — classifications, routing, quick drafts. Stays in memory so it's there the moment you hit send.</p>
               <div class="slot-current">
                 {#if config.model_path}
                   <span class="slot-file">{modelFileName(config.model_path)}</span>
@@ -286,18 +290,18 @@
                     <button class="slot-btn slot-btn--clear" onclick={() => { config!.model_path = ""; markDirty(); }}>Clear</button>
                   </div>
                 {:else}
-                  <span class="slot-empty">No model assigned</span>
-                  <button class="slot-btn slot-btn--add" onclick={() => activeSlot = "fast"}>Add model</button>
+                  <span class="slot-empty">No model chosen</span>
+                  <button class="slot-btn slot-btn--add" onclick={() => activeSlot = "fast"}>Choose a model</button>
                 {/if}
               </div>
             </div>
 
             <div class="slot-card" class:slot-card--active={activeSlot === "reasoning"}>
               <div class="slot-card-head">
-                <span class="slot-card-title">Reasoning</span>
-                <span class="slot-status-badge slot-status-badge--opt">Optional</span>
+                <span class="slot-card-title">Main responder</span>
+                <span class="slot-status-badge slot-status-badge--opt">Loads on demand</span>
               </div>
-              <p class="slot-card-desc">Loads for complex tasks. Unloads after 60 s of idle time.</p>
+              <p class="slot-card-desc">Your primary model for substantive work — research, writing, analysis. Loads when you ask something substantive and unloads after ~60 s idle so it's not taking up memory all day.</p>
               <div class="slot-current">
                 {#if config.primary_model_path}
                   <span class="slot-file">{modelFileName(config.primary_model_path)}</span>
@@ -306,18 +310,18 @@
                     <button class="slot-btn slot-btn--clear" onclick={() => { config!.primary_model_path = null; markDirty(); }}>Clear</button>
                   </div>
                 {:else}
-                  <span class="slot-empty">No model assigned</span>
-                  <button class="slot-btn slot-btn--add" onclick={() => activeSlot = "reasoning"}>Add model</button>
+                  <span class="slot-empty">No model chosen</span>
+                  <button class="slot-btn slot-btn--add" onclick={() => activeSlot = "reasoning"}>Choose a model</button>
                 {/if}
               </div>
             </div>
 
             <div class="slot-card" class:slot-card--active={activeSlot === "embed"}>
               <div class="slot-card-head">
-                <span class="slot-card-title">Embedding</span>
-                <span class="slot-status-badge slot-status-badge--req">For knowledge</span>
+                <span class="slot-card-title">Knowledge embedder</span>
+                <span class="slot-status-badge slot-status-badge--req">For your library</span>
               </div>
-              <p class="slot-card-desc">Converts text to vectors for local knowledge search.</p>
+              <p class="slot-card-desc">Converts text into vectors so your knowledge base and notes become searchable. Runs in the background whenever you ingest documents.</p>
               <div class="slot-current">
                 {#if config.embed_model_path}
                   <span class="slot-file">{modelFileName(config.embed_model_path)}</span>
@@ -326,8 +330,8 @@
                     <button class="slot-btn slot-btn--clear" onclick={() => { config!.embed_model_path = null; markDirty(); }}>Clear</button>
                   </div>
                 {:else}
-                  <span class="slot-empty">No model assigned</span>
-                  <button class="slot-btn slot-btn--add" onclick={() => activeSlot = "embed"}>Add model</button>
+                  <span class="slot-empty">No model chosen</span>
+                  <button class="slot-btn slot-btn--add" onclick={() => activeSlot = "embed"}>Choose a model</button>
                 {/if}
               </div>
             </div>
@@ -340,7 +344,7 @@
                 <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.2"/>
                 <path d="M6.5 4v3.5M6.5 9.5v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
               </svg>
-              No embedding model set. Knowledge base installs will be unavailable until you add one.
+              No knowledge embedder chosen. Your library can't be searched until one is set.
             </div>
           {/if}
 
@@ -349,7 +353,7 @@
             <div class="model-picker-row">
               <div class="picker-head">
                 <span class="picker-label">
-                  {#if activeSlot === "fast"}Fast model{:else if activeSlot === "reasoning"}Reasoning model{:else}Embedding model{/if}
+                  {#if activeSlot === "fast"}Quick responder{:else if activeSlot === "reasoning"}Main responder{:else}Knowledge embedder{/if}
                 </span>
                 <button class="picker-done" onclick={() => activeSlot = null}>Done</button>
               </div>

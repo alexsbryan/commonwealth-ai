@@ -23,14 +23,10 @@ optional = ["file_write"]
 
 [inference]
 privacy            = "local_only"
+capability_hint    = "general"
+latency_class      = "normal"
 min_context_tokens = 8000
-
-[inference.preferred_capabilities]
-instruction = 3
-analysis    = 3
-
-[inference.required_capabilities]
-instruction = 2
+max_output_tokens  = 2000
 
 # ─── Planner templates ────────────────────────────────────────
 

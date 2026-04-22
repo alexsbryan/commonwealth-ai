@@ -107,16 +107,11 @@ If any of these fail, explain which one and why.
 """
 
 [inference]
-privacy = "mesh_allowed"
+privacy            = "mesh_allowed"
+capability_hint    = "general"
+latency_class      = "extended"
 min_context_tokens = 16384
-
-[inference.preferred_capabilities]
-analysis = 3
-general = 3
-
-[inference.required_capabilities]
-analysis = 2
-general = 2
+max_output_tokens  = 4000
 
 [memory]
 extract_prompt_addendum = """

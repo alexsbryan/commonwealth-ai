@@ -225,13 +225,34 @@ fn make_manifest(models: Vec<ProviderModel>) -> ProviderManifest {
     ProviderManifest::new(models)
 }
 
+/// v0.3 model fixture: synthesizes a single claim from the v0.2
+/// capability profile. `caps` stays in the signature so existing
+/// call sites keep working until the test bodies migrate.
 fn make_model(id: &str, caps: &[(Capability, u8)], context: u32) -> ProviderModel {
-    let capabilities: CapabilityProfile = caps.iter().copied().collect();
+    let profile: CapabilityProfile = caps.iter().copied().collect();
+    let hint = sovereign_core::oicp::infer_hint_from_profile(&profile);
+    let best = [
+        Capability::Code,
+        Capability::General,
+        Capability::Analysis,
+        Capability::Instruction,
+    ]
+    .into_iter()
+    .map(|c| sovereign_core::oicp::proficiency(&profile, c))
+    .max()
+    .unwrap_or(0);
+    let affinity = (best as f32 / 4.0).clamp(0.0, 1.0);
+    let claim = CapabilityClaim::new(
+        hint,
+        LatencyClass::Normal,
+        context,
+        context / 4,
+        affinity,
+    );
     ProviderModel {
         id: id.to_string(),
         base_model: None,
         quantization: None,
-        capabilities,
         context_tokens: context,
         status: ModelStatus {
             available: true,
@@ -241,7 +262,7 @@ fn make_model(id: &str, caps: &[(Capability, u8)], context: u32) -> ProviderMode
             estimated_load_time_sec: None,
         },
         size_gb: None,
-        claims: Vec::new(),
+        claims: vec![claim],
     }
 }
 
@@ -308,17 +329,14 @@ async fn capability_selector_picks_best_match() {
         make_oicp_backend("general-backend", 1, Some(make_manifest(vec![general_model])), false).await,
     ];
 
-    // Request prefers analysis — should pick general-backend.
+    // Request asks for general work → general-backend's claim
+    // matches exactly (affinity 0.75), code-backend's code-specific
+    // claim scores 0 on a general request and is eliminated.
     let mut req = dummy_request();
-    let mut preferred = HashMap::new();
-    preferred.insert(Capability::Analysis, 3);
-    preferred.insert(Capability::General, 3);
     req.oicp = Some(
         InferenceRequirements::new()
-            .with_capabilities(CapabilityRequirements {
-                required: CapabilityProfile::new(),
-                preferred,
-            })
+            .with_hint(CapabilityHint::general())
+            .with_latency_class(LatencyClass::Normal)
             .with_sharding(ShardingPrivacy::MeshAllowed),
     );
 
@@ -340,16 +358,18 @@ async fn capability_selector_filters_by_required() {
         make_oicp_backend("strong-be", 2, Some(make_manifest(vec![strong_model])), false).await,
     ];
 
-    // Require code >= 2 → weak-be filtered out.
+    // Request asks for code hint. weak_model has Code:1 (below the
+    // v0.3 code specialist threshold), so its synthesized hint is
+    // general — general-vs-code scores 0.5 (fallback). strong_model
+    // has Code:3 (still not the Code==4 threshold for code
+    // specialist), so its hint is also general. They both get the
+    // same 0.5 fallback — the one with the higher affinity wins on
+    // tiebreak.
     let mut req = dummy_request();
-    let mut required = HashMap::new();
-    required.insert(Capability::Code, 2);
     req.oicp = Some(
         InferenceRequirements::new()
-            .with_capabilities(CapabilityRequirements {
-                required,
-                preferred: CapabilityProfile::new(),
-            })
+            .with_hint(CapabilityHint::code())
+            .with_latency_class(LatencyClass::Normal)
             .with_sharding(ShardingPrivacy::MeshAllowed),
     );
 

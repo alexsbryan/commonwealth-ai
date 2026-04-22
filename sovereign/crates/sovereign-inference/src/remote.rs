@@ -392,8 +392,7 @@ mod tests {
     #[test]
     fn build_request_with_oicp() {
         use sovereign_core::oicp::{
-            Capability, CapabilityProfile, CapabilityRequirements, ContextRequirements,
-            InferenceRequirements,
+            CapabilityHint, InferenceRequirements, LatencyClass,
         };
 
         let provider = RemoteApiProvider::new(
@@ -402,9 +401,6 @@ mod tests {
             "test-model",
             4096,
         );
-
-        let mut required = CapabilityProfile::new();
-        required.insert(Capability::Code, 3);
 
         let request = CompletionRequest {
             prompt: "Review this code".to_string(),
@@ -418,14 +414,9 @@ mod tests {
             top_p: None,
             oicp: Some(
                 InferenceRequirements::new()
-                    .with_capabilities(CapabilityRequirements {
-                        required,
-                        preferred: CapabilityProfile::new(),
-                    })
-                    .with_context(ContextRequirements {
-                        min_tokens: Some(8192),
-                        preferred_tokens: None,
-                    }),
+                    .with_hint(CapabilityHint::code())
+                    .with_latency_class(LatencyClass::Normal)
+                    .with_context_tokens(8192),
             ),
             tools: None,
             tool_choice: None,
@@ -433,11 +424,11 @@ mod tests {
 
         let body = provider.build_request(&request);
         assert!(body.get("oicp").is_some());
-        // Per OICP §3, capability requirements live under `capabilities.required`.
-        assert!(body["oicp"]["capabilities"]["required"]["code"]
-            .as_u64()
-            .is_some());
-        assert_eq!(body["oicp"]["context"]["min_tokens"].as_u64(), Some(8192));
+        // v0.3: hint + latency class + sizing live at the top level
+        // of the OICP envelope.
+        assert_eq!(body["oicp"]["capability_hint"], "code");
+        assert_eq!(body["oicp"]["latency_class"], "normal");
+        assert_eq!(body["oicp"]["context_tokens"].as_u64(), Some(8192));
     }
 
     #[test]

@@ -70,15 +70,11 @@ optional = ["knowledge"]
 
 # ─── Inference ───────────────────────────────────────────────
 [inference]
-privacy = "local_only"
+privacy            = "local_only"
+capability_hint    = "general"
+latency_class      = "normal"
 min_context_tokens = 8192
-
-[inference.preferred_capabilities]
-general = 3
-analysis = 2
-
-[inference.required_capabilities]
-general = 2
+max_output_tokens  = 3000
 
 # ─── Prompt Templates ───────────────────────────────────────
 [prompts]

@@ -105,12 +105,8 @@ confidence_decay_per_month = 0.05
 prune_threshold = 0.1
 
 [inference]
-privacy = "mesh_allowed"
+privacy            = "mesh_allowed"
+capability_hint    = "general"
+latency_class      = "extended"
 min_context_tokens = 16384
-
-[inference.preferred_capabilities]
-analysis = 3
-general = 3
-
-[inference.required_capabilities]
-analysis = 2
+max_output_tokens  = 4000

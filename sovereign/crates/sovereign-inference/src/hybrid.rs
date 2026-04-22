@@ -138,6 +138,8 @@ impl InferenceProvider for HybridProvider {
                     is_local: e.is_local,
                     oicp_manifest: Arc::clone(&e.oicp_manifest),
                     inference_availability: e.inference_availability,
+                    observations: Arc::clone(&e.observations),
+                    locality: e.locality,
                 })
                 .collect();
 
