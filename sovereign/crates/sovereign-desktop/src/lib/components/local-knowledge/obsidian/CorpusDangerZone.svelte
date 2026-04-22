@@ -6,8 +6,6 @@
 
   interface Props {
     corpusId: string;
-    /// Called after rollback or clean completes so the parent can
-    /// refresh whatever cached preview state it was holding.
     onReset?: () => void;
   }
 
@@ -35,23 +33,21 @@
   }
 
   function formatRelative(ts: string): string {
-    // Very simple humanisation — no date-fns dep, no timezone gymnastics.
-    const d = new Date(ts);
-    return d.toLocaleString();
+    return new Date(ts).toLocaleString();
   }
 
   async function confirmRollback(snap: SnapshotMeta) {
     const ok = window.confirm(
       `Restore your vault to the state from ${formatRelative(snap.taken_at)}? ` +
-        `This will remove all Sovereign tags written in that run and restore ` +
-        `${snap.file_count} notes' frontmatter exactly as it was before.`,
+        `This removes all Sovereign tags written in that run and restores ` +
+        `${snap.file_count} notes to their previous state.`,
     );
     if (!ok) return;
     try {
       const r = await lcRollback(corpusId, snap.snapshot_path);
-      statusMessage = `Restored ${r.files_restored} notes; deleted ${r.index_notes_deleted} index notes.`;
+      statusMessage = `Restored ${r.files_restored} notes, deleted ${r.index_notes_deleted} index notes.`;
       if (r.files_skipped.length > 0) {
-        statusMessage += ` ${r.files_skipped.length} files were skipped.`;
+        statusMessage += ` ${r.files_skipped.length} skipped.`;
       }
       onReset?.();
       await reload();
@@ -63,12 +59,12 @@
   async function confirmClean() {
     const ok = window.confirm(
       "Remove all Sovereign tags and generated index notes from your vault? " +
-        "Your own notes and tags will not be affected.",
+        "Your own notes and tags are not affected.",
     );
     if (!ok) return;
     try {
       const r = await lcClean(corpusId);
-      statusMessage = `Removed Sovereign tags from ${r.tags_removed_from} notes; deleted ${r.index_notes_deleted} index notes.`;
+      statusMessage = `Removed Sovereign tags from ${r.tags_removed_from} notes, deleted ${r.index_notes_deleted} index notes.`;
       onReset?.();
     } catch (e) {
       error = `Clean failed: ${e}`;
@@ -76,149 +72,168 @@
   }
 </script>
 
-<div class="danger-zone">
+<div class="danger">
   {#if error}
-    <p class="error">{error}</p>
+    <p class="notice is-error">{error}</p>
   {/if}
   {#if statusMessage}
-    <p class="status">{statusMessage}</p>
+    <p class="notice is-ok">{statusMessage}</p>
   {/if}
 
   {#if loading}
-    <p class="loading">Loading snapshots…</p>
-  {:else if snapshots.length > 0}
-    <div class="restore-section">
-      <h4>Restore previous state</h4>
-      <p class="desc">
-        Sovereign saved a restore point before each write. Restoring removes
-        all tags written in that run and restores your notes' previous
-        frontmatter exactly.
-      </p>
-      <div class="snapshot-list">
-        {#each snapshots as snap (snap.snapshot_path)}
-          <div class="snapshot-row">
-            <div class="snapshot-info">
-              <span class="date">{formatRelative(snap.taken_at)}</span>
-              <span class="detail">
-                {snap.file_count} notes · version {snap.sovereign_version}
-                {#if snap.git_commit}
-                  · git <code>{snap.git_commit.slice(0, 7)}</code>
-                {/if}
-              </span>
-            </div>
-            <button class="btn-restore" onclick={() => confirmRollback(snap)}>
-              Restore
-            </button>
-          </div>
-        {/each}
+    <p class="loading">Loading restore points…</p>
+  {:else}
+    {#if snapshots.length > 0}
+      <section class="section">
+        <header class="section-head">
+          <h4 class="section-title">Restore to an earlier state</h4>
+          <p class="section-desc">
+            Before every write, Sovereign saves a snapshot of your notes'
+            frontmatter. Restoring rolls back all tags from that run and
+            restores the previous state exactly.
+          </p>
+        </header>
+        <ol class="snapshots">
+          {#each snapshots as snap (snap.snapshot_path)}
+            <li class="snapshot">
+              <div class="snap-info">
+                <span class="snap-date">{formatRelative(snap.taken_at)}</span>
+                <span class="snap-meta lk-folio">
+                  {snap.file_count} notes · version {snap.sovereign_version}
+                  {#if snap.git_commit}
+                    · git <code>{snap.git_commit.slice(0, 7)}</code>
+                  {/if}
+                </span>
+              </div>
+              <button
+                class="lk-btn lk-btn--quiet"
+                onclick={() => confirmRollback(snap)}
+              >
+                Restore
+              </button>
+            </li>
+          {/each}
+        </ol>
+      </section>
+
+      <hr class="lk-rule-h section-rule" />
+    {/if}
+
+    <section class="section clean-section">
+      <div class="clean-text">
+        <h4 class="section-title">Remove Sovereign tags</h4>
+        <p class="section-desc">
+          Strips every <code>sovereign/*</code> tag and deletes the generated
+          index notes. Your own notes and tags are untouched.
+        </p>
       </div>
-    </div>
-
-    <div class="divider"></div>
+      <button class="lk-btn lk-btn--quiet danger-btn" onclick={confirmClean}>
+        Remove tags
+      </button>
+    </section>
   {/if}
-
-  <div class="clean-section">
-    <h4>Remove Sovereign's content</h4>
-    <p class="desc">
-      Remove all <code>sovereign/*</code> tags and delete all generated
-      index notes. Your own notes and tags are not affected.
-    </p>
-    <button class="btn-danger-outline" onclick={confirmClean}>
-      Remove Sovereign tags
-    </button>
-  </div>
 </div>
 
 <style>
-  .danger-zone {
-    padding: 16px 0;
+  .danger {
+    padding: 4px 0 10px;
   }
-  h4 {
-    font-size: 14px;
+  .notice {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    font-size: var(--lk-size-meta);
+    border-left: 3px solid;
+    border-radius: var(--radius);
+  }
+  .notice.is-error {
+    border-color: var(--lk-err);
+    background: var(--lk-err-wash);
+    color: var(--lk-ink);
+  }
+  .notice.is-ok {
+    border-color: var(--lk-crown);
+    background: var(--lk-crown-wash);
+    color: var(--lk-ink);
+  }
+  .loading {
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
+  }
+
+  .section { margin-bottom: 16px; }
+  .section-rule { margin: 16px 0; }
+  .section-head { margin-bottom: 10px; }
+  .section-title {
+    margin: 0 0 4px;
+    font-size: var(--lk-size-body);
     font-weight: 500;
-    margin: 0 0 6px;
+    color: var(--lk-ink);
   }
-  .desc {
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-    margin: 0 0 12px;
-    line-height: 1.4;
+  .section-desc {
+    margin: 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    line-height: 1.5;
+    max-width: 60ch;
   }
-  .snapshot-list {
+
+  .snapshots {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
-  .snapshot-row {
+  .snapshot {
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
+    gap: 12px;
     padding: 8px 12px;
-    border: 1px solid var(--color-border, #d4d4d4);
-    border-radius: 4px;
-    font-size: 13px;
+    border: 1px solid var(--lk-rule);
+    background: var(--lk-paper);
+    border-radius: var(--radius);
   }
-  .snapshot-info {
+  .snap-info {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
-  .date {
-    font-weight: 500;
+  .snap-date {
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink);
   }
-  .detail {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
+  .snap-meta {
+    color: var(--lk-ink-faded);
   }
-  .detail code {
-    background: var(--color-surface-subtle, #f4f4f4);
-    padding: 1px 5px;
-    border-radius: 3px;
-  }
-  .btn-restore,
-  .btn-danger-outline {
-    padding: 6px 12px;
-    font-size: 13px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .btn-restore {
-    border: 1px solid var(--color-accent, #3a5fc9);
+  .snap-meta code {
+    font-family: var(--lk-font-mono);
+    padding: 0 2px;
+    color: var(--lk-stamp-ink);
     background: transparent;
-    color: var(--color-accent, #3a5fc9);
   }
-  .btn-restore:hover {
-    background: color-mix(in srgb, var(--color-accent, #3a5fc9) 10%, transparent);
+
+  .clean-section {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: center;
   }
-  .btn-danger-outline {
-    border: 1px solid var(--color-error, #c92a2a);
+  .clean-section .section-head { margin-bottom: 0; }
+  .danger-btn {
+    border-color: var(--lk-err);
+    color: var(--lk-err);
+  }
+  .danger-btn:hover:not(:disabled) {
+    background: var(--lk-err-wash);
+    border-color: var(--lk-err);
+    color: var(--lk-err);
+  }
+
+  code {
+    font-family: var(--lk-font-mono);
     background: transparent;
-    color: var(--color-error, #c92a2a);
-  }
-  .btn-danger-outline:hover {
-    background: color-mix(in srgb, var(--color-error, #c92a2a) 10%, transparent);
-  }
-  .divider {
-    height: 1px;
-    background: var(--color-border, #d4d4d4);
-    margin: 20px 0;
-  }
-  .loading {
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-  }
-  .error {
-    padding: 8px 12px;
-    background: color-mix(in srgb, var(--color-error, #c92a2a) 10%, transparent);
-    border-radius: 4px;
-    color: var(--color-error, #c92a2a);
-    font-size: 13px;
-  }
-  .status {
-    padding: 8px 12px;
-    background: color-mix(in srgb, var(--color-accent, #3a5fc9) 10%, transparent);
-    border-radius: 4px;
-    color: var(--color-accent, #3a5fc9);
-    font-size: 13px;
   }
 </style>

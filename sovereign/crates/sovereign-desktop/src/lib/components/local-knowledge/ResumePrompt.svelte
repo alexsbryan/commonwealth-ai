@@ -11,83 +11,93 @@
 </script>
 
 {#if jobs.length > 0}
-  <div class="resume-prompt">
-    <p class="title">You have indexing jobs that didn't finish.</p>
+  <aside class="resume" aria-label="Unfinished indexing">
+    <p class="resume-text">
+      <span class="lk-label resume-label">Unfinished</span>
+      Indexing was interrupted. Resume or discard.
+    </p>
 
-    {#each jobs as job (job.corpus_id)}
-      <div class="job-row">
-        <div class="job-info">
-          <span class="job-name">{job.display_name}</span>
-          <span class="job-progress">
-            {job.files_done} / {job.files_total} files
-          </span>
-        </div>
-        <div class="job-actions">
-          <button class="btn-primary" onclick={() => onResume(job.corpus_id)}>
-            Continue
-          </button>
-          <button class="btn-ghost" onclick={() => onDiscard(job.corpus_id)}>
-            Discard
-          </button>
-        </div>
-      </div>
-    {/each}
-  </div>
+    <ul class="jobs">
+      {#each jobs as job (job.corpus_id)}
+        <li class="job">
+          <div class="job-info">
+            <span class="job-name">{job.display_name}</span>
+            <span class="job-meter lk-folio">
+              {job.files_done} / {job.files_total} files
+            </span>
+          </div>
+          <div class="job-actions">
+            <button
+              class="lk-btn lk-btn--mark"
+              onclick={() => onResume(job.corpus_id)}
+            >
+              Resume
+            </button>
+            <button
+              class="lk-btn lk-btn--ghost"
+              onclick={() => onDiscard(job.corpus_id)}
+            >
+              Discard
+            </button>
+          </div>
+        </li>
+      {/each}
+    </ul>
+  </aside>
 {/if}
 
 <style>
-  .resume-prompt {
-    padding: 12px 14px;
-    margin-bottom: 16px;
-    background: color-mix(in srgb, var(--color-accent, #3a5fc9) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-accent, #3a5fc9) 40%, transparent);
-    border-radius: 6px;
+  .resume {
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    border: 1px solid var(--lk-stamp);
+    background: var(--lk-stamp-wash);
+    border-radius: var(--radius);
+    animation: lk-fade-in 220ms ease-out both;
   }
-  .title {
+  .resume-text {
     margin: 0 0 10px;
-    font-size: 14px;
-    font-weight: 500;
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink);
   }
-  .job-row {
+  .resume-label {
+    color: var(--lk-stamp-ink);
+    margin-right: 10px;
+  }
+  .jobs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .job {
+    display: flex;
     justify-content: space-between;
-    padding: 6px 0;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 10px;
+    background: var(--lk-paper);
+    border: 1px solid var(--lk-rule);
+    border-radius: var(--radius);
   }
   .job-info {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
   .job-name {
-    font-size: 13px;
+    font-size: var(--lk-size-body);
     font-weight: 500;
+    color: var(--lk-ink);
   }
-  .job-progress {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
+  .job-meter {
+    color: var(--lk-ink-faded);
   }
   .job-actions {
     display: flex;
-    gap: 8px;
-  }
-  .btn-primary,
-  .btn-ghost {
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 13px;
-    cursor: pointer;
-    border: none;
-  }
-  .btn-primary {
-    background: var(--color-accent, #3a5fc9);
-    color: #fff;
-  }
-  .btn-ghost {
-    background: transparent;
-    color: var(--color-text-muted, #6b6b6b);
-  }
-  .btn-ghost:hover {
-    color: var(--color-text, #1a1a1a);
+    gap: 6px;
   }
 </style>

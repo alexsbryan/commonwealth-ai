@@ -1,0 +1,186 @@
+/* ─── Local Knowledge theme ──────────────────────────────────────────
+ *
+ * Scoped `--lk-*` tokens mapped to Sovereign's existing "Lavender
+ * Court" palette (see /src/app.css). The LK section inherits the
+ * court's fonts (Outfit + Syne Mono) and plum/gold/lavender colours
+ * rather than introducing its own.
+ *
+ * Semantic slots:
+ *   stamp  = sovereign gold — primary mark / CTA
+ *   crown  = lavender       — high-trust, restorative, success
+ *   warn   = coral          — low-confidence / stressed state
+ *   err    = rose-plum      — genuine errors only
+ */
+
+.lk {
+  /* Grounds */
+  --lk-paper:         var(--bg-surface);
+  --lk-paper-subtle:  var(--bg-primary);
+  --lk-paper-deep:    var(--bg-elevated);
+
+  /* Ink */
+  --lk-ink:           var(--text-primary);
+  --lk-ink-soft:      var(--text-secondary);
+  --lk-ink-faded:     var(--text-muted);
+
+  /* Rules */
+  --lk-rule:          var(--border-mid);
+  --lk-rule-soft:     var(--border);
+  --lk-rule-bright:   var(--border-bright);
+
+  /* Stamp (gold) */
+  --lk-stamp:         var(--accent);
+  --lk-stamp-ink:     var(--accent-light);
+  --lk-stamp-wash:    var(--accent-dim);
+  --lk-stamp-glow:    var(--accent-glow);
+
+  /* Crown (lavender) */
+  --lk-crown:         var(--lavender);
+  --lk-crown-light:   var(--lavender-light);
+  --lk-crown-wash:    var(--lavender-dim);
+
+  /* Confidence bands */
+  --lk-gold:          var(--accent);
+  --lk-warn:          var(--coral);
+  --lk-warn-wash:     var(--coral-dim);
+
+  /* Errors */
+  --lk-err:           var(--error);
+  --lk-err-wash:      rgba(201, 95, 120, 0.12);
+
+  /* Typography — use the app's own stacks */
+  --lk-font-display: var(--font-sans);
+  --lk-font-body:    var(--font-sans);
+  --lk-font-mono:    var(--font-mono);
+
+  /* Type scale */
+  --lk-size-hero:    2.25rem;   /* 36px */
+  --lk-size-display: 1.625rem;  /* 26px */
+  --lk-size-lead:    1.125rem;  /* 18px */
+  --lk-size-body:    0.9375rem; /* 15px */
+  --lk-size-meta:    0.8125rem; /* 13px */
+  --lk-size-label:   0.6875rem; /* 11px */
+
+  --lk-rule-weight: 1px;
+  --lk-heavy-rule-weight: 2px;
+  --lk-card-gutter: 16px;
+  --lk-line-leading: 1.55;
+
+  font-family: var(--lk-font-body);
+  font-size: var(--lk-size-body);
+  color: var(--lk-ink);
+  line-height: var(--lk-line-leading);
+}
+
+/* ── Small utilities ── */
+
+.lk-label {
+  font-family: var(--lk-font-body);
+  font-size: var(--lk-size-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--lk-ink-faded);
+}
+
+.lk-folio {
+  font-family: var(--lk-font-mono);
+  font-size: var(--lk-size-meta);
+  color: var(--lk-ink-faded);
+  font-variant-numeric: tabular-nums;
+}
+
+.lk-rule-h {
+  border: 0;
+  border-top: var(--lk-rule-weight) solid var(--lk-rule);
+  margin: 0;
+}
+.lk-rule-h--heavy {
+  border-top-width: var(--lk-heavy-rule-weight);
+  border-top-color: var(--lk-rule-bright);
+}
+
+.lk-num {
+  font-family: var(--lk-font-body);
+  font-feature-settings: "lnum", "tnum";
+  font-weight: 600;
+  line-height: 1;
+  color: var(--lk-ink);
+}
+
+/* ── Buttons ── */
+
+.lk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-family: var(--lk-font-body);
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--lk-rule-bright);
+  background: transparent;
+  color: var(--lk-ink);
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+.lk-btn:hover:not(:disabled) {
+  border-color: var(--lk-crown);
+  color: var(--lk-crown-light);
+}
+.lk-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.lk-btn:focus-visible {
+  outline: 2px solid var(--lk-crown);
+  outline-offset: 2px;
+}
+
+.lk-btn--mark {
+  background: var(--lk-stamp);
+  border-color: var(--lk-stamp);
+  color: var(--text-on-accent);
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+.lk-btn--mark:hover:not(:disabled) {
+  background: var(--lk-stamp-ink);
+  border-color: var(--lk-stamp-ink);
+  color: var(--text-on-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 10px var(--lk-stamp-glow);
+}
+
+.lk-btn--quiet {
+  border-color: var(--lk-rule-bright);
+  color: var(--lk-ink-soft);
+}
+.lk-btn--quiet:hover:not(:disabled) {
+  border-color: var(--lk-crown);
+  color: var(--lk-crown-light);
+}
+
+.lk-btn--ghost {
+  border-color: transparent;
+  color: var(--lk-ink-faded);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.lk-btn--ghost:hover:not(:disabled) {
+  color: var(--lk-crown-light);
+}
+
+/* ── Keyframes ── */
+
+@keyframes lk-fade-in {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}

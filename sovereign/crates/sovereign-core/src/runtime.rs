@@ -42,35 +42,73 @@ is never acceptable, even if it would make the response sound more complete.";
 
 /// System prompt for KnowledgeQuery synthesis — three-tier confidence framework.
 ///
-/// Tier 1 (Retrieved): Claims grounded in passages, cited with [Source: title].
-/// Tier 2 (Parametric): Well-established general knowledge, presented naturally.
+/// Tier 1 (Retrieved): Claims drawn from passages, cited with [Source: title].
+/// Tier 2 (Parametric): General knowledge — NO source tag, even when a related source exists.
 /// Tier 3 (Inference): Reasoning beyond firm ground, hedged explicitly.
+///
+/// The attribution rules are calibrated against two opposing failure modes:
+///
+/// 1. Loose citation: attaching `[Source: X]` to a fact the model pulled from
+///    training. Destroys the signal that citations are supposed to carry.
+/// 2. Empty citation: emitting no citations at all. Breaks the UI's clickable-
+///    citation renderer and makes the retrieval effort invisible to the user.
+///
+/// Target: cite RETRIEVED claims frequently (every retrieved claim gets a
+/// tag), cite PARAMETRIC claims never, never fabricate-and-cite.
 const KNOWLEDGE_SYNTHESIS_SYSTEM: &str = "\
 You have been given retrieved passages from an installed knowledge base. \
 Use them together with your general knowledge to answer the question.\n\
 \n\
-Use three tiers of knowledge, each presented differently:\n\
+Three tiers of knowledge, each presented differently:\n\
 \n\
-RETRIEVED — facts directly from the passages below.\n\
-  Cite with [Source: title]. These are your strongest claims.\n\
+RETRIEVED — claims drawn from the passages below.\n\
+  Attach [Source: title] immediately after each retrieved claim. Cite \
+  LIBERALLY: if the claim came from the passages, tag it. Under-citing \
+  retrieved content is a bug — it makes the retrieved evidence invisible \
+  to the reader. Tag the claim, not every sentence in a paragraph; one \
+  citation per paragraph is fine when all the claims trace to the same \
+  source.\n\
 \n\
-PARAMETRIC — your general knowledge that is well-established and consistent \
-  with or extends the retrieved content. Present naturally in prose. \
-  No special label needed for claims that are widely accepted.\n\
+PARAMETRIC — your general knowledge about the topic. Present naturally \
+  in prose. DO NOT attach [Source: ...] tags to parametric claims, EVEN \
+  WHEN a related source appears in the passages. A [Source: X] tag on \
+  parametric content falsely signals \"verified against the corpus\" — \
+  reserve it for retrieved claims only.\n\
 \n\
-INFERENCE — reasoning that goes beyond what sources or general knowledge \
-  can firmly establish. Introduce with hedged language: \
-  \"Drawing from this framework...\", \"This suggests...\", \
-  \"The likely position would be...\"\n\
+INFERENCE — reasoning beyond what sources or general knowledge firmly \
+  establish. Introduce with hedged language: \"Drawing from this \
+  framework...\", \"This suggests...\", \"The likely position would be...\"\n\
 \n\
-Guidelines:\n\
+Example — follow this citation pattern:\n\
+  The Cambridge Capital Controversy exposed flaws in neoclassical \
+  production functions [Source: Joan Robinson]. Robinson was \
+  \"technically vindicated\" but the profession continued using the \
+  flawed models anyway [Source: Joan Robinson]. She also taught at \
+  Girton College from 1937 — a fact from general knowledge, carrying \
+  no source tag because the passages don't state it.\n\
+\n\
+Notice how every claim drawn from the passages earns a [Source: X] \
+tag, while the parametric claim (Girton) carries none. That's the \
+target pattern — apply it to your answer.\n\
+\n\
+Anti-fabrication guardrails:\n\
+- NEVER invent an authorship, date, quotation, book title, statistic, or \
+  roster and attach a citation to it. If you are unsure whether someone \
+  wrote a particular book, say \"I believe\" or \"is often associated \
+  with\" rather than asserting authorship.\n\
+- Chunks may be cut mid-sentence by the retrieval layer. If a chunk \
+  appears to attribute a book or fact in a way that contradicts or \
+  surprises your training knowledge, TRUST YOUR TRAINING on the \
+  factual attribution and do not assert the chunk's reading. Example: \
+  a chunk that reads \"Author X\\n\\nBook Y\" is not necessarily \
+  claiming X wrote Y — it may be a title heading followed by a \
+  continuing sentence.\n\
 - Do not refuse to engage because retrieval was incomplete.\n\
 - Do not use [unverified] tags.\n\
-- If retrieval found nothing relevant, say so in one sentence, then answer \
-  from your general knowledge.\n\
-- Cite retrieved content with [Source: title]. Present confident general \
-  knowledge naturally. Hedge genuine uncertainty.\n\
-- NEVER invent or complete a list, roster, or statistic you do not fully know.";
+- If retrieval found nothing relevant, say so in one sentence, then \
+  answer from your general knowledge (with no source tags).\n\
+- NEVER invent or complete a list, roster, or statistic you do not fully \
+  know.";
 
 /// Thinking directive — orients `<think>` toward substantive reasoning.
 ///
@@ -98,10 +136,26 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
-/// Truncate a chunk's content to `MAX_CHUNK_CHARS`, breaking at a word boundary.
-fn truncate_chunk_content(content: &str) -> String {
-    if content.len() > MAX_CHUNK_CHARS {
-        let truncated = &content[..MAX_CHUNK_CHARS];
+/// Truncate `content` to at most `max_bytes`, breaking on a word
+/// boundary when possible and appending `"..."`.
+///
+/// Byte index `max_bytes` may land inside a multi-byte UTF-8 scalar
+/// (em-dash `—` is 3 bytes, smart quotes 3 bytes, emoji 4). A naive
+/// `&content[..max_bytes]` panics `"byte index N is not a char
+/// boundary"`. When that panic fires inside the spawned streaming
+/// task the mpsc channel drops with zero tokens emitted and the
+/// desktop UI sits inert — exactly the failure mode observed on the
+/// Joan Robinson turn after source-expansion started pulling chunks
+/// containing em-dashes. Walk backward to the nearest char boundary
+/// before slicing; if we also find a word boundary within the
+/// remaining content, prefer that for readability.
+fn truncate_with_ellipsis(content: &str, max_bytes: usize) -> String {
+    if content.len() > max_bytes {
+        let mut cut = max_bytes;
+        while cut > 0 && !content.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        let truncated = &content[..cut];
         match truncated.rfind(' ') {
             Some(pos) => format!("{}...", &truncated[..pos]),
             None => format!("{truncated}..."),
@@ -109,6 +163,11 @@ fn truncate_chunk_content(content: &str) -> String {
     } else {
         content.to_string()
     }
+}
+
+/// Shorthand for the prompt-context truncation budget.
+fn truncate_chunk_content(content: &str) -> String {
+    truncate_with_ellipsis(content, MAX_CHUNK_CHARS)
 }
 
 /// Rescale each chunk's `score` by the max score observed in its
@@ -165,6 +224,302 @@ pub(crate) fn normalise_scores_per_corpus(chunks: &mut [corpus_engine::ScoredChu
     );
 }
 
+// ─── Evidence-shape routing (KnowledgeQuery) ─────────────────────────
+//
+// After retrieval, we compute a handful of cheap numeric signals over the
+// top-k chunks and use them to decide between the Fast slot (tight
+// summarise-from-one-source) and the Primary slot (thinking + full budget
+// for genuine cross-source synthesis). The decision is logged transparently
+// so thresholds can be tuned against real traffic without guessing.
+
+/// Minimum token length for a query word to count toward title-match.
+/// Short tokens like "the", "and", "can", "you" are ignored regardless.
+const EVIDENCE_TITLE_MIN_TOKEN_LEN: usize = 4;
+
+/// `top1_score / median(top_k_scores)` above this ratio marks the
+/// retrieval as *concentrated* — the top hit stands clearly above the
+/// middle of the distribution. Median (not top-3) because a single
+/// high-scoring but irrelevant neighbor (e.g. a conversation-history
+/// chunk that vector-matches the query phrasing) can drag top-3 up
+/// and kill the signal. Median is robust to one noisy neighbor.
+const EVIDENCE_MEDIAN_RATIO_THRESHOLD: f32 = 1.5;
+
+/// Minimum chunk count in the top-k sharing the same `(corpus_id, title)`
+/// as the top chunk, for "single source owns this" to fire. 2+ hits to the
+/// same document is a strong single-source signal even without title_match.
+const EVIDENCE_MIN_TOP_SOURCE_REPEAT: usize = 2;
+
+/// Decisive threshold: this many repeats of the top source in top-k routes
+/// Fast regardless of other signals — the retrieval has clearly landed on
+/// one document multiple times. Cheaper than re-deriving median_ratio on
+/// edge cases.
+const EVIDENCE_DECISIVE_TOP_SOURCE_REPEAT: usize = 3;
+
+/// Fast-path output budget. Enough for a focused summary with citations,
+/// not enough to invite the model to ramble. Pairs with `think_budget = 0`.
+const FAST_KNOWLEDGE_MAX_TOKENS: u32 = 600;
+
+/// When evidence-shape routes FastFocused and a single source dominates,
+/// pull up to this many chunks from that source by title (cohesion, not
+/// query similarity). Calibrated for an Obsidian note or Wikipedia article
+/// — typical long-form sources have 8–15 chunks so 12 captures most
+/// without forcing us to truncate narratively.
+const EXPANSION_MAX_FROM_TOP_SOURCE: usize = 12;
+
+/// Non-dominant chunks to keep alongside expanded dominant-source chunks,
+/// so the model has grounding breadth (e.g. a contradicting viewpoint, a
+/// corroborating passage from a different corpus). 2 is enough to signal
+/// "other sources exist" without diluting the dominant narrative.
+const EXPANSION_GROUNDING_CHUNKS: usize = 2;
+
+/// Context budget when source-expansion has fired. Raw `MAX_KNOWLEDGE_CHARS`
+/// (4000) fits ~8 chunks; expansion needs room for ~12 dominant + 2
+/// grounding, each ~500 chars after truncation. 8000 chars ≈ 2k prompt
+/// tokens, which adds ~2.7s of prompt_eval on Metal — a worthwhile trade
+/// for answers built from the whole source note instead of fragments.
+const EXPANDED_KNOWLEDGE_CHARS: usize = 8000;
+
+/// Numeric signals computed from the retrieved chunks. Emitted as one
+/// structured `tracing::info!` line per turn so operators can see how
+/// the router chose its path.
+///
+/// Calibration notes (raw RRF scores from hybrid-search):
+/// - Rank-1 with both vector+FTS hits ≈ 0.033 (1/60 + 1/60).
+/// - Rank-1 with only vector OR only FTS ≈ 0.0167 (1/60).
+/// - Single-doc lookups typically see top_source_repeat ≥ 2 and
+///   median_ratio ≥ 1.8.
+/// - Multi-source synthesis typically sees top_source_repeat = 1 and
+///   median_ratio ≤ 1.2.
+#[derive(Debug, Clone)]
+struct EvidenceShape {
+    count: usize,
+    top1_score: f32,
+    median_score: f32,
+    /// `top1_score / median_score`. ∞ when median is zero.
+    median_ratio: f32,
+    /// Count of chunks in top-k with the same `(corpus_id, title)` as
+    /// the top chunk. ≥ 2 means the same document shows up multiple
+    /// times, which is the strongest single-source signal we have.
+    top_source_repeat_count: usize,
+    distinct_sources: usize,
+    title_match: bool,
+    /// `(corpus_id, title)` of the top-scoring chunk — the identity
+    /// the source-expansion path uses to pull more chunks from the
+    /// dominant document. Empty when chunks is empty.
+    top_source_key: (String, String),
+    /// Human-readable `corpus_id::title` for logging only.
+    top_source_label: String,
+}
+
+/// Which synthesis path to take given the evidence shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SynthesisRoute {
+    /// Fast slot (9B/1.7B), small max_tokens, no thinking. For concentrated
+    /// entity-lookup / single-source summarise cases.
+    FastFocused,
+    /// Primary slot (large model), full thinking budget. For genuine
+    /// cross-source synthesis or weak retrieval where careful reasoning
+    /// about what's NOT known actually helps.
+    PrimarySynthesis,
+}
+
+/// Identity used for source-dominance: corpus_id + document title, since a
+/// single corpus can host many unrelated documents.
+fn chunk_source_key(c: &corpus_engine::ScoredChunk) -> (String, String) {
+    (
+        c.corpus_id.clone(),
+        c.title.clone().unwrap_or_default(),
+    )
+}
+
+/// Whether a non-dominant chunk qualifies as a "grounding" signal
+/// alongside the expanded dominant source.
+///
+/// Excludes:
+/// 1. `conversation-history` corpus chunks — previous user/assistant
+///    turns aren't topical sources for a knowledge query. Including
+///    them invites the model to acknowledge them as citable material
+///    and burn output tokens (observed: a Schrödinger-PDF user message
+///    made the Joan Robinson answer truncate mid-sentence trying to
+///    address it).
+/// 2. Untitled chunks — real knowledge sources have titles. Untitled
+///    rows are almost always raw messages or extraction artifacts.
+fn is_grounding_candidate(chunk: &corpus_engine::ScoredChunk) -> bool {
+    if chunk.corpus_id == "conversation-history" {
+        return false;
+    }
+    let title = chunk.title.as_deref().unwrap_or("");
+    !title.trim().is_empty()
+}
+
+/// Extract ≥N-char tokens from `text`, lowercased, stopwords removed.
+fn extract_tokens(text: &str, min_len: usize) -> Vec<String> {
+    const STOPWORDS: &[&str] = &[
+        "about", "above", "after", "again", "also", "been", "being",
+        "both", "could", "does", "doing", "down", "each", "from", "have",
+        "having", "here", "just", "like", "make", "many", "more", "most",
+        "much", "need", "only", "other", "over", "should", "some", "such",
+        "tell", "than", "that", "their", "them", "then", "there", "these",
+        "they", "this", "those", "upon", "very", "want", "were", "what",
+        "when", "where", "which", "while", "will", "with", "would", "your",
+    ];
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|s| s.len() >= min_len)
+        .map(|s| s.to_lowercase())
+        .filter(|s| !STOPWORDS.contains(&s.as_str()))
+        .collect()
+}
+
+/// Median of `values`. Assumes non-empty; callers must guard.
+fn median_f32(values: &[f32]) -> f32 {
+    let mut sorted: Vec<f32> = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = sorted.len();
+    if n % 2 == 1 {
+        sorted[n / 2]
+    } else {
+        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+    }
+}
+
+/// Compute retrieval-shape signals over the top-k chunks. `query` is the
+/// raw user message — used only for the title-match signal.
+fn compute_evidence_shape(chunks: &[corpus_engine::ScoredChunk], query: &str) -> EvidenceShape {
+    if chunks.is_empty() {
+        return EvidenceShape {
+            count: 0,
+            top1_score: 0.0,
+            median_score: 0.0,
+            median_ratio: 0.0,
+            top_source_repeat_count: 0,
+            distinct_sources: 0,
+            title_match: false,
+            top_source_key: (String::new(), String::new()),
+            top_source_label: String::new(),
+        };
+    }
+
+    let top1_score = chunks[0].score;
+    let scores: Vec<f32> = chunks.iter().map(|c| c.score).collect();
+    let median_score = median_f32(&scores);
+    let median_ratio = if median_score > 0.0 {
+        top1_score / median_score
+    } else {
+        f32::INFINITY
+    };
+
+    let top_key = chunk_source_key(&chunks[0]);
+    let top_source_repeat_count = chunks
+        .iter()
+        .filter(|c| chunk_source_key(c) == top_key)
+        .count();
+
+    let distinct_sources = {
+        let mut keys: Vec<_> = chunks.iter().map(chunk_source_key).collect();
+        keys.sort();
+        keys.dedup();
+        keys.len()
+    };
+
+    let title_match = {
+        let title = chunks[0].title.as_deref().unwrap_or("");
+        if title.is_empty() {
+            false
+        } else {
+            let title_tokens = extract_tokens(title, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+            let query_tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+            query_tokens.iter().any(|q| title_tokens.iter().any(|t| t == q))
+        }
+    };
+
+    let top_source_label = format!("{}::{}", top_key.0, top_key.1);
+
+    EvidenceShape {
+        count: chunks.len(),
+        top1_score,
+        median_score,
+        median_ratio,
+        top_source_repeat_count,
+        distinct_sources,
+        title_match,
+        top_source_key: top_key,
+        top_source_label,
+    }
+}
+
+/// Apply the routing heuristic. Returns `FastFocused` when the retrieval
+/// looks like a single-source lookup; otherwise `PrimarySynthesis`.
+///
+/// Three independent Fast-path triggers, listed in descending strength:
+///   1. **Decisive repeat**: ≥ 3 chunks in top-k share the same
+///      `(corpus_id, title)`. One document clearly owns the answer.
+///   2. **Concentrated repeat**: ≥ 2 repeats AND median_ratio ≥ threshold.
+///      The top document dominates both by count and by score steepness.
+///   3. **Entity match**: top chunk's title contains a non-stopword query
+///      token AND median_ratio ≥ threshold. For single-chunk strong hits.
+///
+/// Everything else (including weak retrieval with flat scores) routes to
+/// Primary — thinking actually earns its keep when the model has to reason
+/// carefully about what it does and doesn't know.
+fn route_from_evidence(shape: &EvidenceShape) -> SynthesisRoute {
+    if shape.count == 0 {
+        // Caller handles empty retrieval on its own parametric path;
+        // we return Fast only as a default, but in practice it isn't used.
+        return SynthesisRoute::FastFocused;
+    }
+
+    if shape.top_source_repeat_count >= EVIDENCE_DECISIVE_TOP_SOURCE_REPEAT {
+        return SynthesisRoute::FastFocused;
+    }
+
+    let concentrated = shape.median_ratio >= EVIDENCE_MEDIAN_RATIO_THRESHOLD;
+
+    if concentrated && shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT {
+        return SynthesisRoute::FastFocused;
+    }
+
+    if concentrated && shape.title_match {
+        return SynthesisRoute::FastFocused;
+    }
+
+    SynthesisRoute::PrimarySynthesis
+}
+
+/// Heading-aware chunkers (and many extractors) prepend the document
+/// title to each chunk body so the stored row is self-describing. When
+/// the prompt formatter also emits a `[Source: title]` label line
+/// immediately above, the title ends up duplicated — the model reads
+///
+///   [Source: Joan Robinson]
+///   Joan Robinson
+///
+///   Theory of Employment, Interest and Money...
+///
+/// as author-book attribution and cheerfully misattributes *The
+/// General Theory* to Robinson. This strips the duplicate when the
+/// body starts with exactly the title followed by a newline.
+///
+/// Match is conservative: the title must be the *first line* of the
+/// body (so it doesn't accidentally eat a sentence that happens to
+/// begin with the title).
+fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&str>) -> &'a str {
+    let title = match title {
+        Some(t) if !t.is_empty() => t,
+        _ => return body,
+    };
+    // Body must start with the title followed by a newline (perhaps
+    // preceded only by trailing whitespace on the title line).
+    let after = match body.strip_prefix(title) {
+        Some(rest) => rest,
+        None => return body,
+    };
+    let after = after.trim_start_matches([' ', '\t']);
+    match after.strip_prefix('\n') {
+        Some(rest) => rest.trim_start_matches(['\n', ' ', '\t']),
+        None => body,
+    }
+}
+
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// grouped by provenance tier (corpus vs web) and staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
@@ -173,7 +528,8 @@ fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize)
     let mut total = 0;
 
     for c in chunks {
-        let content = truncate_chunk_content(&c.content);
+        let body = strip_leading_title_duplicate(&c.content, c.title.as_deref());
+        let content = truncate_chunk_content(body);
         let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
 
         let (label, bucket) = if c.url.is_some() {
@@ -398,6 +754,32 @@ struct KnowledgeContext {
     retrieved_chunks: Vec<serde_json::Value>,
 }
 
+/// Everything `handle_knowledge_query` and the streaming KQ branch need
+/// to issue a synthesis request. Produced by
+/// [`Runtime::prepare_knowledge_query_plan`] so the two paths cannot
+/// diverge in retrieval, expansion, or routing behaviour.
+///
+/// On the empty-retrieval path, `chunks` / `doc_context` /
+/// `retrieved_chunks` / `source_map` are all empty and `result_quality`
+/// is `"empty"`. The `request` is a parametric-knowledge prompt rather
+/// than a retrieval-grounded one.
+struct KnowledgeQueryPlan {
+    request: CompletionRequest,
+    chunks: Vec<corpus_engine::ScoredChunk>,
+    /// Formatted chunk text used as evidence for the gap check.
+    /// Empty string on the parametric path.
+    doc_context: String,
+    shape: EvidenceShape,
+    route: SynthesisRoute,
+    gap_check_enabled: bool,
+    search_ms: u64,
+    retrieved_chunks: Vec<serde_json::Value>,
+    source_map: HashMap<String, usize>,
+    /// `"empty"` | `"focused"` | `"synthesis"` | `"routed"` —
+    /// surfaced in message metadata for the UI to label the turn.
+    result_quality: &'static str,
+}
+
 /// Streaming handle returned by [`Runtime::handle_message_stream`].
 ///
 /// Holds the assistant message id (assigned up-front so callers can correlate
@@ -588,7 +970,45 @@ impl Runtime {
         } else {
             tracing::info!(count = indexes.len(), "{label}: found corpus indexes");
         }
-        for info in &indexes {
+
+        // Pre-filter indexes by embedding dimension so a corpus built
+        // with a different embedding model doesn't waste a round-trip
+        // on a guaranteed-to-fail hybrid-search call. When the query
+        // embedding is empty (FTS-only path), we skip the filter and
+        // let every index serve its BM25 results.
+        let query_dims = embedding.len();
+        let total_indexes = indexes.len();
+        let eligible: Vec<_> = if query_dims == 0 {
+            indexes
+        } else {
+            indexes
+                .into_iter()
+                .filter(|info| {
+                    if info.embedding_dimensions == query_dims {
+                        true
+                    } else {
+                        tracing::debug!(
+                            corpus = %info.corpus_id,
+                            stored_dims = info.embedding_dimensions,
+                            query_dims,
+                            embedding_model = %info.embedding_model,
+                            "{label}: skipping corpus — embedding-dimension mismatch"
+                        );
+                        false
+                    }
+                })
+                .collect()
+        };
+        if eligible.len() < total_indexes {
+            tracing::info!(
+                eligible = eligible.len(),
+                skipped = total_indexes - eligible.len(),
+                query_dims,
+                "{label}: dim-filtered index set"
+            );
+        }
+
+        for info in &eligible {
             tracing::info!(
                 corpus = %info.corpus_id,
                 path = %info.path.display(),
@@ -619,6 +1039,190 @@ impl Runtime {
             }
         }
         chunks
+    }
+
+    /// Source-cohesion expansion.
+    ///
+    /// When the initial retrieval has clearly landed on a single
+    /// dominant document, the best next move is to read THAT DOCUMENT,
+    /// not to scatter across marginal matches from other corpora. This
+    /// fetches up to `EXPANSION_MAX_FROM_TOP_SOURCE` chunks from the
+    /// dominant source by exact title, merges them with the initial
+    /// retrieval, dedupes by content, and keeps
+    /// `EXPANSION_GROUNDING_CHUNKS` top-scoring non-dominant chunks
+    /// for breadth.
+    ///
+    /// Returns the expanded chunk set (ready to feed to synthesis) and
+    /// a structured event-shape tuple `(from_source, grounding,
+    /// dropped_noise)` for glass-box logging.
+    ///
+    /// Preconditions: caller has computed an `EvidenceShape` and
+    /// decided this case warrants expansion (FastFocused route +
+    /// `top_source_repeat_count >= 2`). This function does not re-check
+    /// those conditions — it just expands.
+    async fn expand_from_dominant_source(
+        &self,
+        initial: Vec<corpus_engine::ScoredChunk>,
+        shape: &EvidenceShape,
+    ) -> (Vec<corpus_engine::ScoredChunk>, usize, usize, usize) {
+        use std::collections::HashSet;
+
+        let (top_corpus_id, top_title) = &shape.top_source_key;
+        if top_corpus_id.is_empty() || top_title.is_empty() {
+            // Nothing to expand — return initial unchanged.
+            return (initial, 0, 0, 0);
+        }
+
+        let engine = match &self.corpus_engine {
+            Some(e) => e,
+            None => return (initial, 0, 0, 0),
+        };
+
+        // Find the corpus's index path.
+        let indexes = match engine.installed_indexes().await {
+            Ok(ix) => ix,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "KnowledgeQuery: source expansion skipped — installed_indexes() failed"
+                );
+                return (initial, 0, 0, 0);
+            }
+        };
+        let info = match indexes.iter().find(|i| &i.corpus_id == top_corpus_id) {
+            Some(i) => i.clone(),
+            None => {
+                tracing::warn!(
+                    top_corpus_id,
+                    "KnowledgeQuery: source expansion skipped — corpus not found"
+                );
+                return (initial, 0, 0, 0);
+            }
+        };
+        let idx = match engine.open_index(&info.path).await {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::warn!(
+                    top_corpus_id,
+                    error = %e,
+                    "KnowledgeQuery: source expansion skipped — open_index failed"
+                );
+                return (initial, 0, 0, 0);
+            }
+        };
+
+        // Fetch by title. The score on returned chunks is uniform 1.0
+        // (cohesion pull, not query-similarity) — don't confuse these
+        // with RRF-scored search results.
+        let t_fetch = std::time::Instant::now();
+        let fetched = match idx
+            .fetch_chunks_by_title(top_title, EXPANSION_MAX_FROM_TOP_SOURCE)
+            .await
+        {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!(
+                    top_corpus_id,
+                    top_title,
+                    error = %e,
+                    "KnowledgeQuery: source expansion skipped — fetch_chunks_by_title failed"
+                );
+                return (initial, 0, 0, 0);
+            }
+        };
+        let fetch_ms = t_fetch.elapsed().as_millis() as u64;
+
+        // Dedupe: track contents we've already seen. The initial
+        // retrieval's dominant-source chunks will collide with some of
+        // the fetched ones — keep the fetched copy (which is in natural
+        // document order) and drop the duplicates.
+        let mut seen_contents: HashSet<String> = HashSet::new();
+        let mut expanded_dominant: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        for c in fetched {
+            if seen_contents.insert(c.content.clone()) {
+                expanded_dominant.push(c);
+            }
+        }
+
+        // From the initial retrieval, keep up to
+        // EXPANSION_GROUNDING_CHUNKS chunks that are NOT from the
+        // dominant source, in descending score order. These are the
+        // "grounding" signals — "other sources discuss this too."
+        //
+        // Two classes of non-dominant chunks are skipped even when
+        // they'd fit the budget:
+        //
+        // 1. `conversation-history` corpus chunks. These are previous
+        //    user/assistant turns — a user message that happens to
+        //    vector-match "Can you tell me about X" phrasing is not a
+        //    corroborating source for a knowledge query, it's phrase
+        //    noise. Including it invites the model to acknowledge it
+        //    as a topical source and waste output tokens (observed on
+        //    the Joan Robinson turn: a Schrödinger-PDF user message
+        //    made the model append "Note: The question about
+        //    summarizing Erwin Schrödinger's *..." and truncate
+        //    against the 600-token cap).
+        //
+        // 2. Untitled chunks (empty `title`). Real knowledge sources
+        //    have titles. Untitled rows are almost always raw
+        //    messages, system fragments, or extraction artifacts —
+        //    not sources worth citing.
+        let dominant_key = shape.top_source_key.clone();
+        let mut grounding: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        let mut dropped_noise = 0usize;
+        let mut dropped_conversation_history = 0usize;
+        let mut dropped_untitled = 0usize;
+        for c in &initial {
+            let key = (
+                c.corpus_id.clone(),
+                c.title.clone().unwrap_or_default(),
+            );
+            if key == dominant_key {
+                continue; // already expanded
+            }
+            // Source-quality filter. See `is_grounding_candidate`.
+            if c.corpus_id == "conversation-history" {
+                dropped_conversation_history += 1;
+                continue;
+            }
+            if !is_grounding_candidate(c) {
+                dropped_untitled += 1;
+                continue;
+            }
+            if grounding.len() < EXPANSION_GROUNDING_CHUNKS
+                && seen_contents.insert(c.content.clone())
+            {
+                grounding.push(c.clone());
+            } else {
+                dropped_noise += 1;
+            }
+        }
+
+        // Final ordering: dominant source FIRST (natural document
+        // order, which maximises narrative coherence), grounding
+        // second. The synthesis prompt template doesn't care about
+        // ordering semantically but putting the dominant content up
+        // top keeps it inside the truncate budget on small context
+        // windows.
+        let from_source = expanded_dominant.len();
+        let grounding_kept = grounding.len();
+        let mut merged = expanded_dominant;
+        merged.extend(grounding);
+
+        tracing::info!(
+            top_source = %shape.top_source_label,
+            initial_from_source = shape.top_source_repeat_count,
+            additional_fetched = from_source.saturating_sub(shape.top_source_repeat_count),
+            total_from_source = from_source,
+            grounding_kept,
+            dropped_noise,
+            dropped_conversation_history,
+            dropped_untitled,
+            fetch_ms,
+            "KnowledgeQuery: source expansion"
+        );
+
+        (merged, from_source, grounding_kept, dropped_noise)
     }
 
     /// Search all knowledge sources, build the prompt with retrieved context,
@@ -896,15 +1500,7 @@ impl Runtime {
         let retrieved_chunks: Vec<serde_json::Value> = all_chunks
             .iter()
             .map(|c| {
-                let snippet = if c.content.len() > 200 {
-                    let truncated = &c.content[..200];
-                    match truncated.rfind(' ') {
-                        Some(pos) => format!("{}...", &truncated[..pos]),
-                        None => format!("{truncated}..."),
-                    }
-                } else {
-                    c.content.clone()
-                };
+                let snippet = truncate_with_ellipsis(&c.content, 200);
                 serde_json::json!({
                     "title": c.title.as_deref().unwrap_or(""),
                     "corpus_id": c.corpus_id,
@@ -1294,8 +1890,13 @@ impl Runtime {
         );
 
         // Document attached or ComplexTask → fall back to non-streaming.
+        // (KnowledgeQuery used to live here too, but that triggered a desktop
+        // fallback that re-ran build_context + compress_working_memory +
+        // update_topic_context + classify — ~17 seconds of pure duplicated
+        // work. Instead we now run KnowledgeQuery inline below and emit the
+        // response as a single stream chunk.)
         if message.starts_with("[Document attached: ")
-            || matches!(intent, Intent::ComplexTask | Intent::KnowledgeQuery)
+            || matches!(intent, Intent::ComplexTask)
         {
             tracing::info!(
                 intent = ?intent,
@@ -1313,6 +1914,12 @@ impl Runtime {
         // `context.knowledge_view_digests` so prompt assembly can
         // surface "here's the person's terrain" before synthesis.
         //
+        // IMPORTANT: this MUST run before any intent-specific dispatch
+        // (including the inline KnowledgeQuery path below). The final
+        // prompt-assembly site asserts `knowledge_view_digests.is_some()`
+        // as an invariant — running handle_knowledge_query without
+        // splicing panics in types.rs.
+        //
         // Pass the resolved primary active skill so the provider can
         // suppress cross-skill context when the active skill is
         // `privacy = "local_only"` (e.g. `inner-work` should not see
@@ -1322,6 +1929,199 @@ impl Runtime {
             provider
                 .splice_landscape_digests(&mut context, active_skill.as_deref())
                 .await;
+        } else {
+            // No provider installed — mark the invariant satisfied with
+            // an empty digest set so the assert at the prompt-assembly
+            // site doesn't fire. Matches the non-streaming path which
+            // also runs through a provider or explicit empty default.
+            context.set_landscape_digests(Vec::new());
+        }
+
+        // KnowledgeQuery: real streaming path. Prepare the synthesis
+        // plan synchronously (retrieval + evidence-shape routing +
+        // source expansion + request build + retrieved_chunks
+        // summaries), then spawn a tokio task that drives
+        // `complete_stream_with_id` and forwards each token to the
+        // caller as it arrives. This replaces the old one-shot wrapper
+        // which made the desktop chat window sit inert for ~35s while
+        // the full response was assembled server-side.
+        if matches!(intent, Intent::KnowledgeQuery) {
+            tracing::info!(
+                intent = ?intent,
+                "runtime: stream path — KnowledgeQuery with token streaming"
+            );
+            let plan = self.prepare_knowledge_query_plan(message, &context).await;
+
+            let message_id = uuid::Uuid::new_v4().to_string();
+            let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
+
+            // Everything the spawned task needs — no borrows of `self`.
+            let inference = Arc::clone(&self.inference);
+            let store = Arc::clone(&self.store);
+            let approval = Arc::clone(&self.approval);
+            let inference_config = self.inference_config.clone();
+            let conversation_id_owned = conversation_id.to_string();
+            let message_id_owned = message_id.clone();
+            let question = message.to_string();
+
+            let KnowledgeQueryPlan {
+                request,
+                chunks,
+                doc_context,
+                shape,
+                route,
+                gap_check_enabled,
+                search_ms,
+                retrieved_chunks,
+                source_map,
+                result_quality,
+            } = plan;
+            let documents_found = chunks.len();
+            let top_source_label = shape.top_source_label.clone();
+            let coarse_intent_for_prov = coarse_intent.clone();
+            let self_assessment_for_prov = self_assessment.clone();
+            let route_for_log = route;
+
+            tokio::spawn(async move {
+                let started = std::time::Instant::now();
+
+                let (mut s, model_id) = match inference
+                    .complete_stream_with_id(&request)
+                    .await
+                {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        return;
+                    }
+                };
+
+                let mut full_text = String::new();
+                while let Some(item) = s.next().await {
+                    match item {
+                        Ok(chunk) => {
+                            full_text.push_str(&chunk);
+                            if tx.send(Ok(chunk)).await.is_err() {
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(Err(e)).await;
+                            return;
+                        }
+                    }
+                }
+
+                // Persist final assistant message with full KQ metadata
+                // so the UI citation expander and provenance header
+                // have everything they had on the non-streaming path.
+                let provenance = ResponseProvenance {
+                    intent: "KnowledgeQuery".to_string(),
+                    search_method: Some("CorpusEngine".to_string()),
+                    sources: source_map
+                        .into_iter()
+                        .map(|(origin, count)| SourceSummary {
+                            origin,
+                            count,
+                            from_peer: None,
+                        })
+                        .collect(),
+                    inference_backend: model_id,
+                    oicp_match: None,
+                    total_latency_ms: started.elapsed().as_millis() as u64,
+                    tokens_used: 0,
+                    coarse_intent: coarse_intent_for_prov,
+                    self_assessment: self_assessment_for_prov,
+                };
+                let metadata_json = serde_json::json!({
+                    "streamed": true,
+                    "intent": "knowledge_query",
+                    "documents_found": documents_found,
+                    "search_ms": search_ms,
+                    "result_quality": result_quality,
+                    "provenance": provenance,
+                    "retrieved_chunks": retrieved_chunks,
+                });
+                let assistant_msg = Message {
+                    id: message_id_owned.clone(),
+                    conversation_id: conversation_id_owned.clone(),
+                    role: Role::Assistant,
+                    content: full_text.clone(),
+                    created_at: now(),
+                    metadata: Some(metadata_json.clone()),
+                    version: now(),
+                };
+                if let Err(e) = store.save_message(&assistant_msg).await {
+                    tracing::warn!(
+                        conversation_id = %conversation_id_owned,
+                        error = %e,
+                        "KnowledgeQuery stream: failed to save assistant message"
+                    );
+                }
+
+                if gap_check_enabled {
+                    tracing::debug!(
+                        route = ?route_for_log,
+                        "KnowledgeQuery stream: scheduling post-stream gap check"
+                    );
+                    let collab_inference = Arc::clone(&inference);
+                    let collab_store = Arc::clone(&store);
+                    let collab_approval = Arc::clone(&approval);
+                    let collab_config = inference_config.clone();
+                    let collab_cid = conversation_id_owned.clone();
+                    let collab_mid = message_id_owned.clone();
+                    let collab_question = question.clone();
+                    let collab_original = full_text.clone();
+                    let collab_evidence = doc_context.clone();
+                    let collab_metadata = metadata_json;
+                    tokio::spawn(async move {
+                        run_post_stream_refinement(
+                            collab_inference.as_ref(),
+                            collab_approval.as_ref(),
+                            collab_store.as_ref(),
+                            &collab_config,
+                            &collab_cid,
+                            &collab_mid,
+                            &collab_question,
+                            &collab_original,
+                            &collab_evidence,
+                            Some(collab_metadata),
+                        )
+                        .await;
+                    });
+                } else {
+                    tracing::info!(
+                        route = ?route_for_log,
+                        top_source = %top_source_label,
+                        "KnowledgeQuery stream: skipping gap check (concentrated single-source)"
+                    );
+                }
+
+                // Auto-title after first exchange — same post-stream
+                // hook the non-KQ streaming path uses. Non-blocking.
+                let title_inference = Arc::clone(&inference);
+                let title_store = Arc::clone(&store);
+                let title_cid = conversation_id_owned.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = crate::title::try_auto_title(
+                        title_inference.as_ref(),
+                        title_store.as_ref(),
+                        &title_cid,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            conversation_id = %title_cid,
+                            error = %e,
+                            "auto-title: generation failed (KQ stream path)"
+                        );
+                    }
+                });
+            });
+
+            let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
+                Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+            return Ok(StreamHandle { message_id, stream });
         }
 
         // 4. Search knowledge + build prompt (shared with handle_simple).
@@ -1777,21 +2577,26 @@ impl Runtime {
         })
     }
 
-    /// Handle KnowledgeQuery: search corpus-engine LanceDB indexes → inject into prompt → synthesize.
-    async fn handle_knowledge_query(
+    /// Build the complete synthesis plan for a KnowledgeQuery turn:
+    /// retrieval + evidence-shape routing + source-cohesion expansion +
+    /// request construction + metadata for the UI (retrieved_chunks
+    /// summaries, source_map, result_quality).
+    ///
+    /// Shared between [`Self::handle_knowledge_query`] (non-streaming)
+    /// and the streaming KQ branch in
+    /// [`Self::handle_message_stream`] so both paths cannot diverge
+    /// in how they search, expand, or build the request.
+    async fn prepare_knowledge_query_plan(
         &self,
         message: &str,
-        conversation_id: &str,
         context: &ConversationContext,
-        coarse_intent: Option<String>,
-        self_assessment: Option<String>,
-    ) -> Result<Response> {
+    ) -> KnowledgeQueryPlan {
         use std::cmp::Ordering;
 
         tracing::info!(message_chars = message.len(), "handle_knowledge_query: begin");
 
-        // 1. Embed the query using the query-side function (applies instruction prefix
-        //    for asymmetric models like Qwen3-Embedding).
+        // 1. Embed the query using the query-side function (applies
+        //    instruction prefix for asymmetric models like Qwen3-Embedding).
         let t_search = std::time::Instant::now();
         let embedding = self.inference.embed_query(message).await.unwrap_or_default();
 
@@ -1804,9 +2609,10 @@ impl Runtime {
         chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
         chunks.truncate(8);
 
+        let search_ms = t_search.elapsed().as_millis() as u64;
         tracing::info!(
             chunks_found = chunks.len(),
-            search_ms = t_search.elapsed().as_millis() as u64,
+            search_ms,
             "handle_knowledge_query: corpus search done"
         );
 
@@ -1839,40 +2645,53 @@ impl Runtime {
                 tools: None,
                 tool_choice: None,
             };
-            let completion = self.inference.complete(&request).await?;
-
-            // Auto-collaboration hook: corpus was empty so the evidence
-            // string is empty too — this is the strongest case for asking
-            // the user to supply something.
-            let final_content = self
-                .maybe_collaborate(conversation_id, message, &completion.text, "")
-                .await;
-
-            let assistant_msg = Message {
-                id: uuid::Uuid::new_v4().to_string(),
-                conversation_id: conversation_id.to_string(),
-                role: Role::Assistant,
-                content: final_content,
-                created_at: now(),
-                metadata: Some(serde_json::json!({
-                    "model": completion.model_id,
-                    "tokens": completion.tokens_used,
-                    "latency_ms": completion.latency_ms,
-                    "intent": "knowledge_query",
-                    "documents_found": 0,
-                    "result_quality": "empty",
-                })),
-                version: now(),
+            return KnowledgeQueryPlan {
+                request,
+                chunks: Vec::new(),
+                doc_context: String::new(),
+                shape: compute_evidence_shape(&[], message),
+                route: SynthesisRoute::FastFocused,
+                // Empty retrieval is the strongest case for asking the
+                // user to supply something — keep the gap check on.
+                gap_check_enabled: true,
+                search_ms,
+                retrieved_chunks: Vec::new(),
+                source_map: HashMap::new(),
+                result_quality: "empty",
             };
-            self.store.save_message(&assistant_msg).await?;
-            self.spawn_auto_title(conversation_id);
-            return Ok(Response { message: assistant_msg, task: None });
         }
 
-        // 4b. Build prompt — retrieved content FIRST, question LAST.
-        // Putting retrieved passages before the question prevents the model from
-        // reasoning from training weights during its <think> phase.
-        let doc_context = format_scored_chunks(&chunks, MAX_KNOWLEDGE_CHARS);
+        // 4b. Evidence-shape routing.
+        let shape = compute_evidence_shape(&chunks, message);
+        let route = route_from_evidence(&shape);
+        tracing::info!(
+            count = shape.count,
+            top1 = shape.top1_score,
+            median = shape.median_score,
+            median_ratio = shape.median_ratio,
+            top_source_repeat = shape.top_source_repeat_count,
+            distinct_sources = shape.distinct_sources,
+            title_match = shape.title_match,
+            top_source = %shape.top_source_label,
+            route = ?route,
+            "KnowledgeQuery: evidence-shape routing decision"
+        );
+
+        // 4c. Source-cohesion expansion (FastFocused + >=2 repeats).
+        let expansion_fired = matches!(route, SynthesisRoute::FastFocused)
+            && shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT;
+        let (chunks, knowledge_char_budget) = if expansion_fired {
+            let (expanded, _from_source, _grounding, _dropped) =
+                self.expand_from_dominant_source(chunks, &shape).await;
+            (expanded, EXPANDED_KNOWLEDGE_CHARS)
+        } else {
+            (chunks, MAX_KNOWLEDGE_CHARS)
+        };
+
+        // 4d. Build prompt. Retrieved content first, question last —
+        // keeps the model from reasoning purely from training weights
+        // during its <think> phase (when Primary path is taken).
+        let doc_context = format_scored_chunks(&chunks, knowledge_char_budget);
         let corpus_display = context.installed_corpora_display();
         let prompt = format!(
             "RETRIEVED FROM {corpus_display}:\n\n{doc_context}\n\n\
@@ -1880,45 +2699,140 @@ impl Runtime {
              Question: {message}"
         );
 
-        let system = self.build_primary_system_message(
-            &format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}"),
-            context,
-        );
-
-        let request = CompletionRequest {
-            prompt,
-            system_message: Some(system),
-            preferred_speed: Speed::Slow,
-            max_tokens: Some(self.inference_config.max_tokens),
-            temperature: Some(self.inference_config.temperature),
-            think_budget: Some(self.inference_config.think_budget),
-            structured_output: None,
-            top_k: self.inference_config.top_k,
-            top_p: None,
-            oicp: self.build_oicp(LatencyPreference::BestEffort, &Intent::KnowledgeQuery),
-            tools: None,
-            tool_choice: None,
+        // 4e. Request shape varies by route.
+        let request = match route {
+            SynthesisRoute::FastFocused => {
+                let system = self.build_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
+                CompletionRequest {
+                    prompt,
+                    system_message: Some(system),
+                    preferred_speed: Speed::Fast,
+                    max_tokens: Some(FAST_KNOWLEDGE_MAX_TOKENS as usize),
+                    temperature: Some(self.inference_config.temperature),
+                    think_budget: Some(0),
+                    structured_output: None,
+                    top_k: self.inference_config.top_k,
+                    top_p: None,
+                    oicp: None,
+                    tools: None,
+                    tool_choice: None,
+                }
+            }
+            SynthesisRoute::PrimarySynthesis => {
+                let system = self.build_primary_system_message(
+                    &format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}"),
+                    context,
+                );
+                CompletionRequest {
+                    prompt,
+                    system_message: Some(system),
+                    preferred_speed: Speed::Slow,
+                    max_tokens: Some(self.inference_config.max_tokens),
+                    temperature: Some(self.inference_config.temperature),
+                    think_budget: Some(self.inference_config.think_budget),
+                    structured_output: None,
+                    top_k: self.inference_config.top_k,
+                    top_p: None,
+                    oicp: self.build_oicp(LatencyPreference::BestEffort, &Intent::KnowledgeQuery),
+                    tools: None,
+                    tool_choice: None,
+                }
+            }
         };
 
-        let completion = self.inference.complete(&request).await?;
-
-        // Auto-collaboration hook: re-use the same formatted-chunks text
-        // that was fed to synthesis as the evidence for the gap check.
-        let final_content = self
-            .maybe_collaborate(conversation_id, message, &completion.text, &doc_context)
-            .await;
+        // 4f. Build retrieved_chunks summaries for the UI citation
+        // expander. Same shape `prepare_knowledge_context` produces so
+        // the frontend renders both paths identically.
+        let retrieved_chunks: Vec<serde_json::Value> = chunks
+            .iter()
+            .map(|c| {
+                let snippet = truncate_with_ellipsis(&c.content, 200);
+                serde_json::json!({
+                    "title": c.title.as_deref().unwrap_or(""),
+                    "corpus_id": c.corpus_id,
+                    "url": c.url,
+                    "snippet": snippet,
+                    "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
+                })
+            })
+            .collect();
 
         let mut source_map: HashMap<String, usize> = HashMap::new();
         for c in &chunks {
             *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
         }
+
+        // Gap check gating: only on multi-source / weak-evidence
+        // synthesis, where the Fast path's "skip gap check" would hide
+        // a genuine hole in the answer.
+        let gap_check_enabled = matches!(route, SynthesisRoute::PrimarySynthesis);
+
+        let result_quality = if expansion_fired {
+            "focused"
+        } else if matches!(route, SynthesisRoute::PrimarySynthesis) {
+            "synthesis"
+        } else {
+            "routed"
+        };
+
+        let _ = expansion_fired; // logged by expand_from_dominant_source already
+
+        KnowledgeQueryPlan {
+            request,
+            chunks,
+            doc_context,
+            shape,
+            route,
+            gap_check_enabled,
+            search_ms,
+            retrieved_chunks,
+            source_map,
+            result_quality,
+        }
+    }
+
+    /// Handle KnowledgeQuery: search corpus-engine LanceDB indexes → inject into prompt → synthesize.
+    async fn handle_knowledge_query(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: &ConversationContext,
+        coarse_intent: Option<String>,
+        self_assessment: Option<String>,
+    ) -> Result<Response> {
+        let plan = self.prepare_knowledge_query_plan(message, context).await;
+
+        let completion = self.inference.complete(&plan.request).await?;
+
+        let final_content = if plan.gap_check_enabled {
+            tracing::debug!(
+                route = ?plan.route,
+                "KnowledgeQuery: running gap check (multi-source or weak evidence)"
+            );
+            self.maybe_collaborate(
+                conversation_id,
+                message,
+                &completion.text,
+                &plan.doc_context,
+            )
+            .await
+        } else {
+            tracing::info!(
+                route = ?plan.route,
+                top_source = %plan.shape.top_source_label,
+                "KnowledgeQuery: skipping gap check (concentrated single-source)"
+            );
+            completion.text.clone()
+        };
+
         let provenance = ResponseProvenance {
             intent: "KnowledgeQuery".to_string(),
             search_method: Some("CorpusEngine".to_string()),
-            sources: source_map
-                .into_iter()
-                .map(|(origin, count)| SourceSummary {
-                    origin,
+            sources: plan
+                .source_map
+                .iter()
+                .map(|(origin, &count)| SourceSummary {
+                    origin: origin.clone(),
                     count,
                     from_peer: None,
                 })
@@ -1946,9 +2860,11 @@ impl Runtime {
                 "tokens": completion.tokens_used,
                 "latency_ms": completion.latency_ms,
                 "intent": "knowledge_query",
-                "documents_found": chunks.len(),
-                "search_ms": t_search.elapsed().as_millis() as u64,
+                "documents_found": plan.chunks.len(),
+                "search_ms": plan.search_ms,
+                "result_quality": plan.result_quality,
                 "provenance": provenance,
+                "retrieved_chunks": plan.retrieved_chunks,
             })),
             version: now(),
         };
@@ -2584,5 +3500,371 @@ mod score_normalisation_tests {
         normalise_scores_per_corpus(&mut chunks);
         assert_eq!(chunks[0].score, 0.0);
         assert_eq!(chunks[1].score, 0.0);
+    }
+}
+
+#[cfg(test)]
+mod grounding_filter_tests {
+    use super::is_grounding_candidate;
+    use corpus_engine::ScoredChunk;
+    use std::collections::HashMap;
+
+    fn chunk(corpus_id: &str, title: Option<&str>) -> ScoredChunk {
+        ScoredChunk {
+            content: "body".into(),
+            title: title.map(|t| t.into()),
+            url: None,
+            corpus_id: corpus_id.into(),
+            score: 0.03,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Named chunks from knowledge corpora are valid grounding.
+    #[test]
+    fn titled_knowledge_corpus_chunk_is_candidate() {
+        assert!(is_grounding_candidate(&chunk(
+            "sep",
+            Some("cambridge-capital-controversy")
+        )));
+    }
+
+    /// Conversation-history is never a grounding candidate regardless
+    /// of title. Reason: previous user/assistant turns are not topical
+    /// sources.
+    #[test]
+    fn conversation_history_never_grounds() {
+        assert!(!is_grounding_candidate(&chunk(
+            "conversation-history",
+            Some("anything"),
+        )));
+        assert!(!is_grounding_candidate(&chunk(
+            "conversation-history",
+            Some(""),
+        )));
+        assert!(!is_grounding_candidate(&chunk("conversation-history", None)));
+    }
+
+    /// Untitled chunks (empty or whitespace-only title, or None) are
+    /// filtered — real sources have real titles.
+    #[test]
+    fn untitled_chunks_are_filtered() {
+        assert!(!is_grounding_candidate(&chunk("folder-xyz", Some(""))));
+        assert!(!is_grounding_candidate(&chunk("folder-xyz", Some("   "))));
+        assert!(!is_grounding_candidate(&chunk("folder-xyz", None)));
+    }
+}
+
+#[cfg(test)]
+mod truncate_chunk_tests {
+    use super::{truncate_chunk_content, MAX_CHUNK_CHARS};
+
+    /// Em-dash (U+2014, 3 bytes as UTF-8) placed so its first byte
+    /// lands inside the truncation window and the char straddles the
+    /// `MAX_CHUNK_CHARS` boundary. Naive `&content[..MAX_CHUNK_CHARS]`
+    /// panics with "byte index N is not a char boundary"; the fixed
+    /// helper must walk back to the last char boundary.
+    #[test]
+    fn truncate_does_not_panic_inside_multibyte_char() {
+        let a_block = "a".repeat(MAX_CHUNK_CHARS - 1); // byte 0..=598
+        // Inject em-dash at byte 598..601 so byte 600 lands inside it.
+        let content = format!("{a_block}—tail");
+        let out = truncate_chunk_content(&content);
+        assert!(out.ends_with("..."), "should have truncation marker");
+        // The slice must have stopped at or before byte 598 (start of
+        // the em-dash), so the em-dash itself is excluded.
+        assert!(
+            !out.contains('—'),
+            "em-dash straddling boundary must be dropped, not split"
+        );
+    }
+
+    /// Smart double-quote (U+201C/U+201D, 3 bytes) at the boundary:
+    /// same class of failure as em-dash. Belt-and-suspenders test.
+    #[test]
+    fn truncate_handles_smart_quote_at_boundary() {
+        let a_block = "a".repeat(MAX_CHUNK_CHARS - 2);
+        let content = format!("{a_block}“word”tail");
+        let out = truncate_chunk_content(&content);
+        assert!(out.ends_with("..."));
+    }
+
+    /// Content shorter than the limit: returned verbatim, no marker.
+    #[test]
+    fn truncate_passthrough_when_short() {
+        let content = "Joan Robinson was an economist.";
+        assert_eq!(truncate_chunk_content(content), content);
+    }
+
+    /// ASCII-only content at the exact boundary length: no truncation.
+    #[test]
+    fn truncate_at_exact_boundary_no_marker() {
+        let content = "a".repeat(MAX_CHUNK_CHARS);
+        let out = truncate_chunk_content(&content);
+        assert_eq!(out.len(), MAX_CHUNK_CHARS);
+        assert!(!out.ends_with("..."));
+    }
+}
+
+#[cfg(test)]
+mod strip_title_tests {
+    use super::strip_leading_title_duplicate;
+
+    /// The exact Joan Robinson case: obsidian chunker prepended the note
+    /// title followed by a blank line, which combined with the prompt's
+    /// [Source: X] label produced an author-book attribution pattern.
+    /// Stripping the duplicate must leave just the content body.
+    #[test]
+    fn strips_joan_robinson_pattern() {
+        let body = "Joan Robinson\n\nTheory of Employment, Interest and Money_—the book that would reshape how governments understood their role in the economy.";
+        let stripped = strip_leading_title_duplicate(body, Some("Joan Robinson"));
+        assert_eq!(
+            stripped,
+            "Theory of Employment, Interest and Money_—the book that would reshape how governments understood their role in the economy."
+        );
+    }
+
+    /// Single newline (no blank line) should also strip.
+    #[test]
+    fn strips_single_newline_separator() {
+        let body = "Joan Robinson\nContent continues here.";
+        assert_eq!(
+            strip_leading_title_duplicate(body, Some("Joan Robinson")),
+            "Content continues here."
+        );
+    }
+
+    /// Trailing whitespace on the title line must not defeat the match.
+    #[test]
+    fn strips_title_with_trailing_whitespace() {
+        let body = "Joan Robinson  \n\nContent.";
+        assert_eq!(
+            strip_leading_title_duplicate(body, Some("Joan Robinson")),
+            "Content."
+        );
+    }
+
+    /// A chunk whose body starts with the title as part of a sentence
+    /// (not followed by a newline) must NOT be stripped — the title is
+    /// genuinely part of the prose and removing it would break meaning.
+    #[test]
+    fn leaves_title_in_sentence_alone() {
+        let body = "Joan Robinson was a British economist who challenged mainstream theory.";
+        assert_eq!(
+            strip_leading_title_duplicate(body, Some("Joan Robinson")),
+            "Joan Robinson was a British economist who challenged mainstream theory."
+        );
+    }
+
+    /// No title (None) or empty title: passthrough.
+    #[test]
+    fn noop_on_empty_title() {
+        let body = "Some content.";
+        assert_eq!(strip_leading_title_duplicate(body, None), body);
+        assert_eq!(strip_leading_title_duplicate(body, Some("")), body);
+    }
+
+    /// Body that doesn't start with the title: passthrough.
+    #[test]
+    fn noop_when_title_absent() {
+        let body = "Some other opening.";
+        assert_eq!(
+            strip_leading_title_duplicate(body, Some("Joan Robinson")),
+            body
+        );
+    }
+
+    /// Partial match (title is a prefix of the first word) must not strip.
+    #[test]
+    fn does_not_strip_title_as_word_prefix() {
+        let body = "Joanne Rowling authored Harry Potter.";
+        assert_eq!(
+            strip_leading_title_duplicate(body, Some("Joan")),
+            body
+        );
+    }
+}
+
+#[cfg(test)]
+mod evidence_shape_tests {
+    use super::{
+        compute_evidence_shape, route_from_evidence, SynthesisRoute,
+    };
+    use corpus_engine::ScoredChunk;
+    use std::collections::HashMap;
+
+    fn chunk(corpus: &str, title: &str, score: f32) -> ScoredChunk {
+        ScoredChunk {
+            content: format!("{title} body"),
+            title: Some(title.into()),
+            url: None,
+            corpus_id: corpus.into(),
+            score,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// The Joan Robinson case replicated from production logs:
+    /// obsidian owns the answer (3 hits across top-8: ranks 1, 2, 4)
+    /// but a conversation-history chunk at rank 3 (0.0320) happens to
+    /// vector-match the query phrasing "can you tell me about X".
+    /// That interloper was enough to kill a top1/top3 concentration
+    /// signal in v1; median-ratio + top_source_repeat must still route
+    /// FastFocused despite the noisy neighbor.
+    #[test]
+    fn joan_robinson_routes_fast() {
+        let chunks = vec![
+            chunk("obsidian", "Joan Robinson", 0.0325),
+            chunk("obsidian", "Joan Robinson", 0.0323),
+            chunk("conversation-history", "", 0.0320), // noisy neighbor
+            chunk("obsidian", "Joan Robinson", 0.0167), // 3rd hit to same note
+            chunk("sep", "emily-elizabeth-jones", 0.0167),
+            chunk("folder", "From Dictatorship to Democracy", 0.0167),
+            chunk("folder", "ThePrince", 0.0167),
+            chunk("obsidian", "Benchmark", 0.0161),
+        ];
+        let shape = compute_evidence_shape(&chunks, "Can you tell me about Joan Robinson?");
+        assert_eq!(shape.count, 8);
+        assert!(shape.title_match, "'robinson' must match the top chunk's title");
+        assert_eq!(
+            shape.top_source_repeat_count, 3,
+            "3 hits to obsidian/Joan Robinson"
+        );
+        // median_ratio = top1 / median(scores) = 0.0325 / ~0.0167 ≈ 1.95
+        assert!(
+            shape.median_ratio >= 1.5,
+            "median_ratio = {}",
+            shape.median_ratio
+        );
+        let route = route_from_evidence(&shape);
+        assert_eq!(
+            route,
+            SynthesisRoute::FastFocused,
+            "shape = {shape:?}"
+        );
+    }
+
+    /// Multi-source synthesis: ~5 sources at near-equal scores,
+    /// top chunk does not repeat, no title match. Must route Primary.
+    #[test]
+    fn multi_source_synthesis_routes_primary() {
+        let chunks = vec![
+            chunk("obsidian", "Cambridge Controversy", 0.033),
+            chunk("sep", "capital", 0.030),
+            chunk("wiki", "Joan Robinson", 0.029),
+            chunk("folder", "Samuelson Note", 0.028),
+            chunk("conversation-history", "", 0.027),
+            chunk("obsidian", "Reswitching", 0.026),
+        ];
+        let shape = compute_evidence_shape(
+            &chunks,
+            "How did different economic schools respond to the Cambridge Capital Controversies?",
+        );
+        assert_eq!(shape.top_source_repeat_count, 1);
+        assert!(
+            shape.median_ratio < 1.5,
+            "median_ratio = {}",
+            shape.median_ratio
+        );
+        assert!(shape.distinct_sources > 2);
+        let route = route_from_evidence(&shape);
+        assert_eq!(route, SynthesisRoute::PrimarySynthesis);
+    }
+
+    /// One source dominates the top-k but the user's query doesn't
+    /// name-match the title. ≥ 3 repeats alone must trigger Fast via
+    /// the decisive path.
+    #[test]
+    fn single_source_no_title_match_routes_fast_on_repeat() {
+        let chunks = vec![
+            chunk("obsidian", "Productivity Paradox", 0.040),
+            chunk("obsidian", "Productivity Paradox", 0.038),
+            chunk("obsidian", "Productivity Paradox", 0.025),
+            chunk("obsidian", "Productivity Paradox", 0.024),
+            chunk("sep", "economics", 0.016),
+        ];
+        let shape = compute_evidence_shape(&chunks, "what slowed down the economy in the 1970s");
+        assert!(
+            shape.top_source_repeat_count >= 3,
+            "repeat = {}",
+            shape.top_source_repeat_count
+        );
+        let route = route_from_evidence(&shape);
+        assert_eq!(route, SynthesisRoute::FastFocused);
+    }
+
+    /// Weak retrieval: everything scores low and flat. No repeats, no
+    /// concentration. Must route Primary so thinking can help.
+    #[test]
+    fn weak_retrieval_routes_primary() {
+        let chunks = vec![
+            chunk("obsidian", "Stray Thought", 0.017),
+            chunk("sep", "peripheral-entry", 0.016),
+            chunk("folder", "Other", 0.016),
+            chunk("wiki", "Unrelated", 0.016),
+        ];
+        let shape = compute_evidence_shape(&chunks, "tell me about quantum field theory");
+        assert_eq!(shape.top_source_repeat_count, 1);
+        assert!(
+            shape.median_ratio < 1.2,
+            "median_ratio = {}",
+            shape.median_ratio
+        );
+        let route = route_from_evidence(&shape);
+        assert_eq!(route, SynthesisRoute::PrimarySynthesis);
+    }
+
+    /// Regression: one obsidian hit + conv-history + strong vector
+    /// neighbors at similar scores. Only 1 repeat of the top source —
+    /// must route Primary even when median_ratio is modest. Guards
+    /// against "false positive Fast" on weak-but-noisy retrieval.
+    #[test]
+    fn weak_single_hit_with_noisy_neighbors_routes_primary() {
+        let chunks = vec![
+            chunk("obsidian", "Joan Robinson", 0.0325),
+            chunk("conversation-history", "", 0.0320),
+            chunk("sep", "random-entry", 0.0315),
+            chunk("folder", "random-file", 0.0310),
+            chunk("wiki", "random", 0.0300),
+        ];
+        let shape = compute_evidence_shape(&chunks, "Can you tell me about Joan Robinson?");
+        assert_eq!(shape.top_source_repeat_count, 1);
+        assert!(shape.title_match);
+        // median_ratio is only ~1.03 here — concentration fails.
+        assert!(shape.median_ratio < 1.2);
+        let route = route_from_evidence(&shape);
+        assert_eq!(
+            route,
+            SynthesisRoute::PrimarySynthesis,
+            "single strong hit with diverse clustered neighbors must not force Fast"
+        );
+    }
+
+    /// Stopwords in the query must not trigger title_match. The
+    /// only non-stopword overlap available here is "tell" (stopword)
+    /// and "this" (stopword) — a title whose only query-overlap is
+    /// stopwords must NOT match.
+    #[test]
+    fn stopwords_do_not_title_match() {
+        let chunks = vec![
+            chunk("obsidian", "This Tell Which When Where", 0.030),
+            chunk("sep", "other", 0.016),
+            chunk("folder", "other-b", 0.016),
+        ];
+        let shape = compute_evidence_shape(&chunks, "tell me about this when where which");
+        assert!(!shape.title_match, "only overlap is stopwords — should not count");
+    }
+
+    /// Empty retrieval must not panic. Returns Fast as a default
+    /// but callers take the parametric-knowledge branch before
+    /// the route ever looks at a chunk.
+    #[test]
+    fn empty_retrieval_is_safe() {
+        let chunks: Vec<ScoredChunk> = Vec::new();
+        let shape = compute_evidence_shape(&chunks, "anything");
+        assert_eq!(shape.count, 0);
+        assert_eq!(shape.distinct_sources, 0);
+        let route = route_from_evidence(&shape);
+        assert_eq!(route, SynthesisRoute::FastFocused);
     }
 }

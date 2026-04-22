@@ -158,14 +158,18 @@
 
 <div class="organizer">
   {#if step.kind === "idle"}
-    <div class="idle-card">
-      <h4>Organize {config.display_name}</h4>
-      <p class="desc">
-        Sovereign will cluster your notes and propose a hierarchy of tags.
-        Nothing is written to your vault; you see the proposal first.
-      </p>
-      <button class="btn-primary" onclick={runOrganize}>Organize</button>
-    </div>
+    <section class="prompt">
+      <div class="prompt-text">
+        <h2 class="prompt-title">Organize {config.display_name}</h2>
+        <p class="prompt-desc">
+          Sovereign clusters your notes by topic and proposes a tag for each
+          cluster. Nothing is written to your vault until you confirm.
+        </p>
+      </div>
+      <div class="prompt-actions">
+        <button class="lk-btn lk-btn--mark" onclick={runOrganize}>Cluster</button>
+      </div>
+    </section>
   {:else if step.kind === "clustering"}
     <IngestProgressPanel progress={step.progress} />
   {:else if step.kind === "loading_preview"}
@@ -186,35 +190,43 @@
       onConfirm={runWrite}
     />
   {:else if step.kind === "writing"}
-    <p class="loading">Writing tags to your vault…</p>
+    <p class="loading">Writing tags…</p>
   {:else if step.kind === "write_complete"}
-    <div class="write-complete">
-      <h4>Done</h4>
-      <p>
-        Tagged <strong>{step.result.files_tagged}</strong> notes and created
-        <strong>{step.result.index_notes_created}</strong> index notes.
-        {#if step.result.files_skipped.length > 0}
-          {step.result.files_skipped.length} files were skipped.
-        {/if}
+    <section class="completion">
+      <h3 class="completion-title">
+        Tagged <span class="lk-num">{step.result.files_tagged}</span> notes,
+        created <span class="lk-num">{step.result.index_notes_created}</span>
+        index notes.
+      </h3>
+      {#if step.result.files_skipped.length > 0}
+        <p class="completion-skipped">
+          {step.result.files_skipped.length}
+          {step.result.files_skipped.length === 1 ? "file" : "files"} skipped.
+        </p>
+      {/if}
+      <p class="completion-hint">
+        A restore point was saved. Roll back from the Restore section below
+        if anything looks wrong.
       </p>
-      <p class="hint">
-        A restore point was saved. You can roll back below if anything
-        looks wrong in your vault.
-      </p>
-      <button class="btn-secondary" onclick={closeReview}>Close</button>
-    </div>
+      <button class="lk-btn lk-btn--quiet" onclick={closeReview}>Close</button>
+    </section>
   {:else if step.kind === "error"}
-    <div class="error-panel">
-      <p class="error-title">Clustering failed</p>
-      <p>{step.message}</p>
-      <button class="btn-secondary" onclick={() => (step = { kind: "idle" })}>
+    <section class="error-panel">
+      <p class="lk-label error-label">Failed</p>
+      <p class="error-body">{step.message}</p>
+      <button
+        class="lk-btn lk-btn--quiet"
+        onclick={() => (step = { kind: "idle" })}
+      >
         Try again
       </button>
-    </div>
+    </section>
   {/if}
 
   {#key dangerZoneReloadKey}
-    <div class="danger-zone-wrap">
+    <div class="register-wrap">
+      <hr class="lk-rule-h lk-rule-h--heavy register-rule" />
+      <p class="lk-label register-label">Restore</p>
       <CorpusDangerZone corpusId={config.id} onReset={() => (dangerZoneReloadKey += 1)} />
     </div>
   {/key}
@@ -222,83 +234,85 @@
 
 <style>
   .organizer {
-    padding: 16px 0;
+    padding: 16px 0 8px;
   }
-  .idle-card {
-    padding: 16px;
-    border: 1px solid var(--color-border, #d4d4d4);
-    border-radius: 6px;
+
+  .prompt {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 20px;
+    padding: 18px 20px;
+    align-items: center;
+    border: 1px solid var(--lk-rule);
+    background: var(--lk-paper-subtle);
+    border-radius: var(--radius);
   }
-  h4 {
-    margin: 0 0 8px;
-    font-size: 15px;
+  .prompt-title {
+    margin: 0 0 4px;
+    font-size: var(--lk-size-display);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--lk-ink);
+    letter-spacing: -0.01em;
+  }
+  .prompt-desc {
+    margin: 0;
+    max-width: 58ch;
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink-soft);
+    line-height: 1.5;
+  }
+
+  .loading {
+    padding: 24px 0;
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink-soft);
+  }
+
+  .completion {
+    padding: 16px 20px;
+    border: 1px solid var(--lk-crown);
+    background: var(--lk-crown-wash);
+    border-left: 3px solid var(--lk-crown);
+    border-radius: var(--radius);
+  }
+  .completion-title {
+    margin: 0 0 10px;
+    font-size: var(--lk-size-lead);
     font-weight: 500;
-  }
-  .desc {
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-    margin: 0 0 12px;
+    color: var(--lk-ink);
     line-height: 1.4;
   }
-  .loading {
-    padding: 16px;
-    color: var(--color-text-muted, #6b6b6b);
-    font-size: 13px;
+  .completion-title .lk-num {
+    color: var(--lk-stamp-ink);
+    font-size: 1.125em;
+    margin: 0 2px;
   }
-  .error-panel {
-    padding: 16px;
-    border: 1px solid var(--color-error, #c92a2a);
-    border-radius: 6px;
-  }
-  .error-title {
-    font-weight: 500;
-    color: var(--color-error, #c92a2a);
-    margin: 0 0 8px;
-  }
-  .btn-primary {
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
-    background: var(--color-accent, #3a5fc9);
-    color: #fff;
-  }
-  .btn-primary:hover {
-    background: var(--color-accent-hover, #2f4fb3);
-  }
-  .btn-secondary {
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    border: 1px solid var(--color-border, #d4d4d4);
-    background: transparent;
-    color: var(--color-text, #1a1a1a);
-    margin-top: 12px;
-  }
-  .write-complete {
-    padding: 16px;
-    border: 1px solid var(--color-accent, #3a5fc9);
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--color-accent, #3a5fc9) 5%, transparent);
-  }
-  .write-complete h4 {
-    margin: 0 0 8px;
-    font-size: 15px;
-    font-weight: 500;
-  }
-  .write-complete p {
+  .completion-skipped,
+  .completion-hint {
     margin: 0 0 10px;
-    font-size: 13px;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    max-width: 58ch;
   }
-  .write-complete .hint {
-    color: var(--color-text-muted, #6b6b6b);
-    font-style: italic;
+
+  .error-panel {
+    padding: 16px 20px;
+    border: 1px solid var(--lk-err);
+    background: var(--lk-err-wash);
+    border-radius: var(--radius);
   }
-  .danger-zone-wrap {
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid var(--color-border, #d4d4d4);
+  .error-label { color: var(--lk-err); }
+  .error-body {
+    margin: 8px 0 14px;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink);
+    line-height: 1.5;
   }
+
+  .register-wrap {
+    margin-top: 28px;
+  }
+  .register-rule { margin-bottom: 8px; }
+  .register-label { margin: 0 0 12px; }
 </style>

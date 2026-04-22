@@ -13,34 +13,45 @@
   let hidden = $derived(Math.max(0, files.length - showUpTo));
 </script>
 
-<div class="named-file-list">
+<ul class="list">
   {#each visible as f (f.path)}
-    <div class="file-row">{f.display_name}</div>
+    <li class="row">{f.display_name}</li>
   {/each}
   {#if !expanded && hidden > 0}
-    <button class="show-all" onclick={() => (expanded = true)}>
-      Show {hidden} more
-    </button>
+    <li>
+      <button class="show-all" onclick={() => (expanded = true)}>
+        Show {hidden} more
+      </button>
+    </li>
   {/if}
-</div>
+</ul>
 
 <style>
-  .file-row {
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-    font-family: var(--font-mono, ui-monospace, monospace);
-    padding: 2px 0;
+  .list {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .row {
+    font-family: var(--lk-font-mono);
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    padding: 1px 0;
   }
   .show-all {
     background: transparent;
-    border: none;
-    color: var(--color-accent, #3a5fc9);
-    font-size: 13px;
-    cursor: pointer;
+    border: 0;
     padding: 4px 0;
-    text-align: left;
+    font-family: var(--lk-font-body);
+    font-size: 12px;
+    color: var(--lk-crown-light);
+    cursor: pointer;
   }
   .show-all:hover {
     text-decoration: underline;
+    text-underline-offset: 2px;
   }
 </style>

@@ -7,16 +7,8 @@
   interface Props {
     preview: VaultPreview;
     onCancel: () => void;
-    /// Optional: when provided, a "Write tags to vault" action appears
-    /// in the footer and invokes this callback. When absent, the
-    /// panel is strictly read-only (M4 default).
     onWrite?: () => void;
-    /// Current value of `min_confidence` reflected in the slider.
-    /// When `onMinConfidenceChange` is wired the slider is enabled;
-    /// otherwise it is hidden.
     minConfidence?: number;
-    /// Called with the new threshold when the user moves the slider.
-    /// The parent is expected to debounce + refetch the preview.
     onMinConfidenceChange?: (value: number) => void;
   }
 
@@ -41,9 +33,6 @@
     preview.clusters.find((c) => c.cluster.id === selectedId) ?? null,
   );
 
-  // Keep the selected cluster pointed at something valid even when
-  // the preview changes (e.g. user dropped the threshold and a new
-  // cluster now has the most notes).
   $effect(() => {
     if (selectedId === null && preview.clusters.length > 0) {
       selectedId = preview.clusters[0].cluster.id;
@@ -55,54 +44,64 @@
         preview.clusters.length > 0 ? preview.clusters[0].cluster.id : null;
     }
   });
+
+  function fmtPct(n: number): string {
+    return `${Math.round(n * 100)}`;
+  }
 </script>
 
-<div class="review">
-  <div class="review-header">
-    <h3>Proposed organization</h3>
-    <p class="framing">
-      Sovereign found <strong>{preview.clusters.length} clusters</strong>
-      across {preview.tagged_notes} notes.
-      {#if preview.outlier_count > 0}
-        <strong>{preview.outlier_count} notes</strong> didn't fit confidently
-        into any cluster — shown separately below.
+<section class="review">
+  <header class="head">
+    <h2 class="title">Proposed tags</h2>
+    <p class="lede">
+      {#if preview.clusters.length > 0}
+        {preview.clusters.length} clusters across {preview.tagged_notes} notes.
+        {#if preview.outlier_count > 0}
+          {preview.outlier_count} outliers.
+        {/if}
+      {:else}
+        Nothing cleared the threshold. Try a lower one.
       {/if}
-      Review before anything is written.
+      Nothing is written until you confirm.
     </p>
+  </header>
 
-    {#if onMinConfidenceChange}
-      <div class="confidence-slider">
-        <label class="slider-label" for="min-confidence-slider">
-          <span class="slider-title">Confidence threshold</span>
-          <span class="slider-value">{Math.round(minConfidence * 100)}%</span>
+  {#if onMinConfidenceChange}
+    <div class="threshold">
+      <div class="threshold-head">
+        <label for="min-confidence-slider" class="lk-label">
+          Confidence threshold
         </label>
-        <input
-          id="min-confidence-slider"
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={minConfidence}
-          oninput={handleSlider}
-        />
-        <p class="slider-hint">
-          Notes below this confidence land in the outlier panel rather than
-          getting tagged. Drag left to include borderline notes; drag right
-          to keep only the clearest matches.
-        </p>
+        <span class="threshold-value">
+          <span class="lk-num">{fmtPct(minConfidence)}</span>%
+        </span>
       </div>
-    {/if}
-  </div>
+      <input
+        id="min-confidence-slider"
+        class="slider"
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        value={minConfidence}
+        oninput={handleSlider}
+        style="--v: {minConfidence * 100}%"
+        aria-label="Minimum confidence for tagging"
+      />
+      <p class="threshold-hint">
+        Notes below this aren't tagged. Drag left to include more, right
+        for stricter.
+      </p>
+    </div>
+  {/if}
 
   {#if preview.clusters.length === 0}
-    <p class="empty-note">
-      No clusters emerged from this vault. That usually means the vault is
-      too small or its notes are too varied to group usefully. Try again
-      once you have more notes.
-    </p>
+    <div class="empty">
+      <p>No cluster cleared the threshold. Drop it, or re-cluster with a smaller minimum cluster size.</p>
+    </div>
   {:else}
-    <div class="review-body">
-      <div class="cluster-list">
+    <div class="body">
+      <nav class="cluster-list" aria-label="Clusters">
         {#each preview.clusters as summary (summary.cluster.id)}
           <ClusterCard
             {summary}
@@ -110,7 +109,7 @@
             onclick={() => (selectedId = summary.cluster.id)}
           />
         {/each}
-      </div>
+      </nav>
 
       <div class="cluster-detail">
         {#if selected}
@@ -123,160 +122,202 @@
   <OutlierPanel outliers={preview.outliers} />
 
   {#if preview.open_questions.length > 0}
-    <div class="open-questions">
-      <h5>Gaps Sovereign noticed</h5>
-      {#each preview.open_questions as q, i}
-        <blockquote>{q.gap_description}</blockquote>
-      {/each}
-    </div>
+    <section class="gaps">
+      <p class="lk-label gaps-label">Gaps Sovereign noticed</p>
+      <ul class="gap-list">
+        {#each preview.open_questions as q}
+          <li>{q.gap_description}</li>
+        {/each}
+      </ul>
+    </section>
   {/if}
 
-  <div class="review-footer">
-    <p class="footer-summary">
-      {preview.tagged_notes} notes would be tagged · {preview.outlier_count}
-      would not be touched.
+  <footer class="footer">
+    <p class="summary">
+      <span class="lk-num">{preview.tagged_notes}</span> will be tagged ·
+      <span class="lk-num">{preview.outlier_count}</span> won't be touched
     </p>
-    <div class="footer-actions">
-      <button class="btn-secondary" onclick={onCancel}>Cancel</button>
+    <div class="actions">
+      <button class="lk-btn lk-btn--quiet" onclick={onCancel}>Cancel</button>
       {#if onWrite && preview.tagged_notes > 0}
-        <button class="btn-primary" onclick={onWrite}>
-          Write tags to vault
+        <button class="lk-btn lk-btn--mark" onclick={onWrite}>
+          Write tags
         </button>
       {/if}
     </div>
-  </div>
-</div>
+  </footer>
+</section>
 
 <style>
   .review {
-    padding: 16px 0;
+    padding: 4px 0 0;
+    animation: lk-fade-in 300ms ease-out both;
   }
-  .review-header {
-    margin-bottom: 16px;
+
+  .head {
+    margin-bottom: 20px;
   }
-  h3 {
-    font-size: 16px;
-    font-weight: 500;
+  .title {
     margin: 0 0 6px;
+    font-size: var(--lk-size-hero);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--lk-ink);
   }
-  .framing {
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-    margin: 0 0 12px;
-    line-height: 1.45;
+  .lede {
+    margin: 0;
+    max-width: 64ch;
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink-soft);
+    line-height: 1.5;
   }
-  .confidence-slider {
-    padding: 12px 14px;
-    background: var(--color-surface-subtle, #f4f4f4);
-    border-radius: 6px;
-    margin-top: 8px;
+
+  .threshold {
+    padding: 14px 16px;
+    border: 1px solid var(--lk-rule);
+    border-radius: var(--radius);
+    background: var(--lk-paper-subtle);
+    margin-bottom: 24px;
   }
-  .slider-label {
+  .threshold-head {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
-  .slider-title {
-    font-size: 13px;
-    font-weight: 500;
-  }
-  .slider-value {
-    font-size: 13px;
+  .threshold-value {
+    font-size: 1.25rem;
+    color: var(--lk-stamp-ink);
     font-variant-numeric: tabular-nums;
-    color: var(--color-accent, #3a5fc9);
-    font-weight: 500;
   }
-  .confidence-slider input[type="range"] {
+  .threshold-value .lk-num {
+    color: inherit;
+    font-weight: 600;
+  }
+  .slider {
     width: 100%;
-    accent-color: var(--color-accent, #3a5fc9);
+    appearance: none;
+    -webkit-appearance: none;
+    height: 4px;
+    background:
+      linear-gradient(
+        to right,
+        var(--lk-stamp) 0 var(--v),
+        var(--lk-paper-deep) var(--v) 100%
+      );
+    border: 0;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    margin: 4px 0;
   }
-  .slider-hint {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
-    margin: 6px 0 0;
-    line-height: 1.4;
+  .slider::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--lk-stamp-ink);
+    border: 2px solid var(--bg-root);
+    cursor: grab;
+    margin-top: -5px;
+    box-shadow: 0 0 0 1px var(--lk-stamp);
   }
-  .empty-note {
-    padding: 16px;
-    background: var(--color-surface-subtle, #f4f4f4);
-    border-radius: 6px;
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
+  .slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--lk-stamp-ink);
+    border: 2px solid var(--bg-root);
+    cursor: grab;
+    box-shadow: 0 0 0 1px var(--lk-stamp);
   }
-  .review-body {
+  .slider:active::-webkit-slider-thumb { cursor: grabbing; }
+  .threshold-hint {
+    margin: 8px 0 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
+  }
+
+  .empty {
+    padding: 24px 16px;
+    border: 1px dashed var(--lk-rule);
+    border-radius: var(--radius);
+    background: var(--lk-paper-subtle);
+    color: var(--lk-ink-soft);
+  }
+  .empty p { margin: 0; }
+
+  .body {
     display: grid;
-    grid-template-columns: 260px 1fr;
-    gap: 20px;
-    margin-bottom: 16px;
+    grid-template-columns: minmax(240px, 300px) 1fr;
+    gap: 24px;
+    margin-bottom: 8px;
+    align-items: start;
   }
   .cluster-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    max-height: 500px;
+    max-height: 540px;
     overflow-y: auto;
+    border: 1px solid var(--lk-rule);
+    border-radius: var(--radius);
   }
   .cluster-detail {
     min-width: 0;
-    max-height: 500px;
+    max-height: 540px;
     overflow-y: auto;
+    padding: 0 4px;
   }
-  .open-questions {
-    margin-top: 20px;
-    padding: 16px;
-    border: 1px solid var(--color-border, #d4d4d4);
-    border-radius: 6px;
+
+  .gaps {
+    margin: 24px 0 8px;
+    padding: 14px 16px;
+    border-left: 2px solid var(--lk-crown);
+    background: var(--lk-crown-wash);
+    border-radius: var(--radius);
   }
-  .open-questions h5 {
-    font-size: 14px;
-    font-weight: 500;
-    margin: 0 0 10px;
-  }
-  blockquote {
+  .gaps-label {
+    color: var(--lk-crown-light);
     margin: 0 0 8px;
-    padding-left: 12px;
-    border-left: 3px solid var(--color-accent, #3a5fc9);
-    font-size: 13px;
-    color: var(--color-text, #1a1a1a);
-    font-style: italic;
   }
-  .review-footer {
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid var(--color-border, #d4d4d4);
-  }
-  .footer-summary {
-    font-size: 13px;
-    margin: 0 0 4px;
-    font-weight: 500;
-  }
-  .footer-actions {
+  .gap-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
-    gap: 12px;
-    margin-top: 12px;
+    flex-direction: column;
+    gap: 6px;
   }
-  .btn-primary,
-  .btn-secondary {
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
+  .gap-list li {
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink);
+    line-height: 1.45;
   }
-  .btn-primary {
-    background: var(--color-accent, #3a5fc9);
-    color: #fff;
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--lk-rule);
+    flex-wrap: wrap;
   }
-  .btn-primary:hover {
-    background: var(--color-accent-hover, #2f4fb3);
+  .summary {
+    margin: 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
   }
-  .btn-secondary {
-    background: transparent;
-    color: var(--color-text, #1a1a1a);
-    border: 1px solid var(--color-border, #d4d4d4);
+  .summary .lk-num {
+    color: var(--lk-ink);
+    font-size: 1.125rem;
+    margin: 0 2px;
   }
-  .btn-secondary:hover {
-    background: var(--color-surface-subtle, #f4f4f4);
+  .actions {
+    display: flex;
+    gap: 8px;
   }
 </style>

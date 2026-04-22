@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ClusterSummary, FileAssignment } from "../../../types";
+  import type { ClusterSummary } from "../../../types";
 
   interface Props {
     summary: ClusterSummary;
@@ -7,127 +7,166 @@
 
   let { summary }: Props = $props();
 
-  function pct(c: number): string {
-    return `${Math.round(c * 100)}%`;
+  function pct(c: number): number {
+    return Math.round(c * 100);
   }
 
-  function confidenceClass(c: number): string {
+  function band(c: number): "high" | "mid" | "low" {
     if (c > 0.8) return "high";
     if (c > 0.6) return "mid";
     return "low";
   }
 </script>
 
-<div class="detail">
-  <div class="header">
-    <h4>{summary.cluster.display_name}</h4>
-    <div class="tag-line">
-      <code>sovereign/{summary.cluster.tag_path}</code>
-    </div>
+<article class="detail">
+  <header class="header">
+    <h3 class="title">{summary.cluster.display_name}</h3>
+    <code class="tag">{summary.cluster.tag_path}</code>
+    {#if summary.cluster.description}
+      <p class="description">{summary.cluster.description}</p>
+    {/if}
+  </header>
+
+  <div class="ledger-head">
+    <span class="lk-label col-name">Note</span>
+    <span class="lk-label col-confidence">Confidence</span>
   </div>
 
-  {#if summary.cluster.description}
-    <p class="description">{summary.cluster.description}</p>
-  {/if}
-
-  <div class="assignments">
+  <ol class="ledger">
     {#each summary.assignments as a (a.chunk_id)}
-      <div class="row" class:low-confidence={a.confidence <= 0.6}>
-        <div class="note-info">
-          <span class="note-title">{a.note_title}</span>
-        </div>
-        <div class="confidence-display">
-          <div class="meter">
-            <div
-              class="fill {confidenceClass(a.confidence)}"
-              style="width: {Math.min(100, Math.round(a.confidence * 100))}%"
-            ></div>
-          </div>
-          <span class="value">{pct(a.confidence)}</span>
-        </div>
-      </div>
+      <li class="row" class:is-low={a.confidence <= 0.6}>
+        <span class="note-title">{a.note_title}</span>
+        <span class="confidence">
+          <span class="meter" aria-hidden="true">
+            <span
+              class="meter-fill"
+              data-band={band(a.confidence)}
+              style="width: {Math.round(a.confidence * 100)}%"
+            ></span>
+          </span>
+          <span class="pct lk-num" data-band={band(a.confidence)}>
+            {pct(a.confidence)}%
+          </span>
+        </span>
+      </li>
     {/each}
-  </div>
-</div>
+  </ol>
+
+  {#if summary.assignments.length === 0}
+    <p class="empty">No notes pass the current threshold for this cluster.</p>
+  {/if}
+</article>
 
 <style>
   .detail {
-    padding: 0 4px;
+    padding: 4px 12px 8px;
   }
   .header {
-    margin-bottom: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--lk-rule);
   }
-  h4 {
+  .title {
     margin: 0 0 4px;
-    font-size: 15px;
-    font-weight: 500;
+    font-size: var(--lk-size-display);
+    font-weight: 600;
+    color: var(--lk-ink);
+    line-height: 1.2;
+    letter-spacing: -0.01em;
   }
-  .tag-line code {
+  .tag {
+    font-family: var(--lk-font-mono);
     font-size: 12px;
-    color: var(--color-accent, #3a5fc9);
-    background: color-mix(in srgb, var(--color-accent, #3a5fc9) 8%, transparent);
-    padding: 2px 6px;
-    border-radius: 3px;
+    color: var(--lk-stamp-ink);
+    background: transparent;
+    padding: 0;
   }
   .description {
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-    margin: 0 0 16px;
-    line-height: 1.4;
+    margin: 8px 0 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    line-height: 1.5;
+    max-width: 62ch;
   }
-  .assignments {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+
+  .ledger-head {
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    gap: 16px;
+    padding: 6px 0 8px;
+    border-bottom: 1px solid var(--lk-rule);
+  }
+  .col-confidence {
+    text-align: right;
+  }
+
+  .ledger {
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
   .row {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    gap: 16px;
+    padding: 10px 0;
     align-items: center;
-    gap: 12px;
-    padding: 8px 10px;
-    border-radius: 4px;
-    background: var(--color-surface-subtle, #f4f4f4);
+    border-bottom: 1px solid var(--lk-rule-soft);
+    transition: background 120ms ease;
   }
-  .row.low-confidence {
-    border: 1px dashed var(--color-border, #d4d4d4);
-    background: transparent;
+  .row:hover {
+    background: var(--lk-paper-deep);
+  }
+  .row.is-low .note-title {
+    color: var(--lk-ink-soft);
   }
   .note-title {
-    font-size: 13px;
-    font-weight: 500;
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
-  .confidence-display {
-    display: flex;
+
+  .confidence {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
     align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
+    justify-self: end;
+    width: 100%;
   }
   .meter {
-    width: 80px;
+    position: relative;
     height: 4px;
-    background: var(--color-border, #d4d4d4);
+    background: var(--lk-paper-deep);
     border-radius: 2px;
     overflow: hidden;
   }
-  .fill {
+  .meter-fill {
+    display: block;
     height: 100%;
-    transition: width 200ms ease-out;
+    border-radius: 2px;
   }
-  .fill.high {
-    background: #4ca15c;
-  }
-  .fill.mid {
-    background: #c9a53a;
-  }
-  .fill.low {
-    background: #c96a3a;
-  }
-  .value {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
-    font-variant-numeric: tabular-nums;
-    min-width: 34px;
+  .meter-fill[data-band="high"] { background: var(--lk-crown-light); }
+  .meter-fill[data-band="mid"]  { background: var(--lk-gold); }
+  .meter-fill[data-band="low"]  { background: var(--lk-warn); }
+
+  .pct {
+    font-size: 13px;
+    min-width: 42px;
     text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--lk-ink);
+  }
+  .pct[data-band="high"] { color: var(--lk-crown-light); }
+  .pct[data-band="mid"]  { color: var(--lk-gold); }
+  .pct[data-band="low"]  { color: var(--lk-warn); }
+
+  .empty {
+    padding: 16px 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
   }
 </style>

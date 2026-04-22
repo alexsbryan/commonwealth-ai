@@ -12,8 +12,7 @@
   let expandedId: string | null = $state(null);
 
   function sourceLabel(c: LocalCorpusConfig): string {
-    if (c.source_type === "DocumentFolder") return "Folder";
-    return "Obsidian vault";
+    return c.source_type === "DocumentFolder" ? "Folder" : "Obsidian vault";
   }
 
   function isVault(c: LocalCorpusConfig): boolean {
@@ -26,134 +25,117 @@
 </script>
 
 {#if corpora.length === 0}
-  <p class="empty-state">
-    No local knowledge connected yet. Add a folder or vault below.
+  <p class="empty">
+    Nothing connected yet. Drop a folder or vault below to begin.
   </p>
 {:else}
-  <div class="list">
+  <ul class="sources">
     {#each corpora as c (c.id)}
-      <div class="row-wrap">
+      <li class="source" class:source--expanded={expandedId === c.id}>
         <div class="row">
           <div class="info">
-            <div class="name">{c.display_name}</div>
-            <div class="meta">
-              <span class="source">{sourceLabel(c)}</span>
+            <h3 class="name">{c.display_name}</h3>
+            <p class="meta">
+              <span class="kind">{sourceLabel(c)}</span>
               <span class="sep">·</span>
-              <span class="path" title={c.root_path}>{c.root_path}</span>
-            </div>
+              <span class="path lk-folio" title={c.root_path}>{c.root_path}</span>
+            </p>
           </div>
           <div class="actions">
             {#if isVault(c)}
               <button
-                class="action-btn"
+                class="lk-btn lk-btn--mark"
                 onclick={() => toggleExpand(c.id)}
                 aria-expanded={expandedId === c.id}
               >
-                {expandedId === c.id ? "Hide" : "Organize"}
+                {expandedId === c.id ? "Close" : "Organize"}
               </button>
             {/if}
-            <button class="remove-btn" onclick={() => onRemove(c.id)}>
+            <button class="lk-btn lk-btn--quiet" onclick={() => onRemove(c.id)}>
               Remove
             </button>
           </div>
         </div>
+
         {#if expandedId === c.id && isVault(c)}
           <div class="expanded">
             <OrganizerPanel config={c} />
           </div>
         {/if}
-      </div>
+      </li>
     {/each}
-  </div>
+  </ul>
 {/if}
 
 <style>
-  .empty-state {
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-    font-style: italic;
-    padding: 8px 0 0;
+  .empty {
+    margin: 0;
+    padding: 16px 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
   }
-  .list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+
+  .sources {
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
+  .source {
+    border-bottom: 1px solid var(--lk-rule);
+  }
+  .source:last-child {
+    border-bottom: 0;
+  }
+  .source--expanded {
+    background: var(--lk-paper-subtle);
+  }
+
   .row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    padding: 14px 4px;
     align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    border: 1px solid var(--color-border, #d4d4d4);
-    border-radius: 6px;
-    background: var(--color-surface, #fff);
   }
   .info {
     min-width: 0;
-    flex: 1;
   }
   .name {
-    font-size: 14px;
+    margin: 0 0 2px;
+    font-size: var(--lk-size-lead);
     font-weight: 500;
-    margin-bottom: 2px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: var(--lk-ink);
+    line-height: 1.25;
   }
   .meta {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
+    margin: 0;
     display: flex;
-    gap: 6px;
+    align-items: baseline;
+    gap: 8px;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
     min-width: 0;
   }
+  .kind {
+    color: var(--lk-ink-soft);
+  }
+  .sep {
+    color: var(--lk-ink-faded);
+  }
   .path {
-    font-family: var(--font-mono, ui-monospace, monospace);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
-    flex: 1;
   }
-  .sep {
-    color: var(--color-text-muted, #6b6b6b);
-  }
-  .row-wrap {
-    display: flex;
-    flex-direction: column;
-  }
+
   .actions {
     display: flex;
     gap: 8px;
   }
-  .action-btn {
-    padding: 6px 12px;
-    font-size: 13px;
-    border: 1px solid var(--color-accent, #3a5fc9);
-    background: transparent;
-    color: var(--color-accent, #3a5fc9);
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .action-btn:hover {
-    background: color-mix(in srgb, var(--color-accent, #3a5fc9) 10%, transparent);
-  }
+
   .expanded {
-    padding: 12px 14px 0;
-    border-top: 1px solid var(--color-border, #e4e4e4);
-    margin-top: -1px;
-  }
-  .remove-btn {
-    padding: 6px 12px;
-    font-size: 13px;
-    border: 1px solid var(--color-border, #d4d4d4);
-    background: transparent;
-    border-radius: 4px;
-    cursor: pointer;
-    color: var(--color-text-muted, #6b6b6b);
-  }
-  .remove-btn:hover {
-    border-color: var(--color-error, #c92a2a);
-    color: var(--color-error, #c92a2a);
+    padding: 0 4px 20px;
+    animation: lk-fade-in 250ms ease-out both;
   }
 </style>

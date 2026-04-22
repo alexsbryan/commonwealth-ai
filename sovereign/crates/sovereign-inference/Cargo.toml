@@ -26,3 +26,6 @@ name = "complete"
 
 [[example]]
 name = "bench_embed"
+
+[[example]]
+name = "bench_decode"

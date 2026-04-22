@@ -176,7 +176,9 @@
       onCancel={onExit}
     />
   {:else if step.kind === "scanning"}
-    <p class="scanning-note">Scanning {step.path}…</p>
+    <p class="scanning-note">
+      Scanning <span class="scanning-path lk-folio">{step.path}</span>
+    </p>
   {:else if step.kind === "confirm"}
     <PreScanPanel
       result={step.result}
@@ -197,50 +199,47 @@
   {:else if step.kind === "complete"}
     <FolderCompletePanel stats={step.stats} onDone={onExit} />
   {:else if step.kind === "error"}
-    <div class="error-panel">
-      <p class="error-title">Something went wrong</p>
+    <section class="error-panel">
+      <p class="lk-label error-label">Failed</p>
       <p class="error-body">{step.message}</p>
-      <button class="btn-secondary" onclick={handleChooseAgain}>Try again</button>
-    </div>
+      <button class="lk-btn lk-btn--quiet" onclick={handleChooseAgain}>
+        Try again
+      </button>
+    </section>
   {/if}
 </div>
 
 <style>
-  .folder-drop-flow {
-    padding: 0;
-  }
+  .folder-drop-flow { padding: 0; }
   .scanning-note {
-    padding: 20px 0;
-    font-size: 14px;
-    color: var(--color-text-muted, #6b6b6b);
+    padding: 24px 0;
+    font-size: var(--lk-size-lead);
+    color: var(--lk-ink-soft);
+  }
+  .scanning-path {
+    color: var(--lk-ink-faded);
+    font-size: 0.85em;
+    display: inline-block;
+    margin-left: 6px;
+    max-width: 50ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
   }
   .error-panel {
-    padding: 20px 0;
+    padding: 16px 20px;
+    border: 1px solid var(--lk-err);
+    background: var(--lk-err-wash);
+    border-radius: var(--radius);
   }
-  .error-title {
-    font-weight: 500;
-    color: var(--color-error, #c92a2a);
-    margin: 0 0 8px;
+  .error-label {
+    color: var(--lk-err);
   }
   .error-body {
-    font-size: 13px;
-    margin: 0 0 16px;
-  }
-  .btn-secondary {
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    border: 1px solid var(--color-border, #d4d4d4);
-    background: transparent;
-    color: var(--color-text, #1a1a1a);
-  }
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--color-surface-subtle, #f4f4f4);
-  }
-  .btn-secondary:disabled {
-    opacity: 0.6;
-    cursor: wait;
+    margin: 8px 0 14px;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink);
+    line-height: 1.5;
   }
   .ingest-actions {
     margin-top: 12px;

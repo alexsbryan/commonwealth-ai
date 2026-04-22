@@ -5,62 +5,110 @@
     summary: ClusterSummary;
     selected: boolean;
     onclick: () => void;
+    index?: number;
   }
 
   let { summary, selected, onclick }: Props = $props();
 </script>
 
-<button class="cluster-card" class:selected {onclick}>
-  <div class="cluster-header">
-    <span class="tag-path">{summary.cluster.tag_path}</span>
-    <span class="count">{summary.cluster.note_count}</span>
+<button
+  class="card"
+  class:selected
+  {onclick}
+  aria-current={selected ? "true" : "false"}
+>
+  <div class="head">
+    <code class="tag">{summary.cluster.tag_path}</code>
+    <span class="count">
+      <span class="count-num lk-num">{summary.cluster.note_count}</span>
+      <span class="count-label">notes</span>
+    </span>
   </div>
-  <div class="display-name">{summary.cluster.display_name}</div>
+  <h3 class="title">{summary.cluster.display_name}</h3>
   {#if summary.cluster.description}
-    <div class="description">{summary.cluster.description}</div>
+    <p class="description">{summary.cluster.description}</p>
   {/if}
 </button>
 
 <style>
-  .cluster-card {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+  .card {
+    position: relative;
+    display: block;
+    width: 100%;
     padding: 12px 14px;
-    border: 1px solid var(--color-border, #d4d4d4);
-    border-radius: 6px;
-    background: var(--color-surface, #fff);
+    border: 0;
+    border-bottom: 1px solid var(--lk-rule);
+    background: transparent;
+    color: var(--lk-ink);
     text-align: left;
     cursor: pointer;
-    color: var(--color-text, #1a1a1a);
-    transition: border-color 120ms, background 120ms;
+    transition: background 140ms ease;
   }
-  .cluster-card:hover {
-    background: var(--color-surface-subtle, #f4f4f4);
+  .card:last-child { border-bottom: 0; }
+  .card:hover { background: var(--lk-paper-subtle); }
+  .card:focus-visible {
+    outline: 2px solid var(--lk-crown);
+    outline-offset: -2px;
   }
-  .cluster-card.selected {
-    border-color: var(--color-accent, #3a5fc9);
-    background: color-mix(in srgb, var(--color-accent, #3a5fc9) 6%, transparent);
+
+  /* Left-edge selection mark — subtle, gold when active. */
+  .card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+    background: transparent;
+    transition: background 160ms ease;
   }
-  .cluster-header {
+  .card.selected::before {
+    background: var(--lk-stamp);
+  }
+  .card.selected {
+    background: var(--lk-paper-subtle);
+  }
+
+  .head {
     display: flex;
     justify-content: space-between;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
-    font-family: var(--font-mono, ui-monospace, monospace);
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .tag {
+    font-family: var(--lk-font-mono);
+    font-size: 11.5px;
+    color: var(--lk-stamp-ink);
+    background: transparent;
+    padding: 0;
+    letter-spacing: 0;
   }
   .count {
-    font-weight: 500;
-    color: var(--color-text, #1a1a1a);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
   }
-  .display-name {
-    font-size: 14px;
+  .count-num {
+    font-size: 1rem;
+    color: var(--lk-ink);
+  }
+  .count-label {
+    font-size: 11px;
+    color: var(--lk-ink-faded);
+  }
+
+  .title {
+    margin: 0;
+    font-size: var(--lk-size-body);
     font-weight: 500;
+    color: var(--lk-ink);
+    line-height: 1.25;
   }
   .description {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
+    margin: 4px 0 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
     line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;

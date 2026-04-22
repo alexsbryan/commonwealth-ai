@@ -7,78 +7,110 @@
 
   let { outliers }: Props = $props();
 
-  function pct(n: number): string {
-    return `${Math.round(n * 100)}%`;
+  function pct(n: number): number {
+    return Math.round(n * 100);
+  }
+
+  function reasonCopy(o: OutlierNote): string {
+    switch (o.reason.type) {
+      case "low_confidence":
+        return `${pct(o.best_cluster_confidence)}% — below ${pct(o.reason.threshold)}% threshold`;
+      case "ambiguous_cluster":
+        return "spans multiple clusters";
+      case "too_short":
+        return `too short — ${o.reason.char_count} characters`;
+      case "singleton_cluster":
+        return "only note in its cluster — needs at least 2 to be tagged";
+    }
   }
 </script>
 
 {#if outliers.length > 0}
-  <div class="outlier-panel">
-    <div class="outlier-header">
-      <h5>Notes that didn't fit a cluster</h5>
-      <p class="outlier-explanation">
-        These {outliers.length} notes are likely the most distinctive in your
-        vault. Sovereign won't tag them. You can review them or ignore them —
-        no action required.
-      </p>
-    </div>
+  <section class="outliers" aria-label="Outliers">
+    <header class="head">
+      <h4 class="title">Outliers</h4>
+      <span class="count lk-folio">{outliers.length}</span>
+    </header>
+    <p class="hint">
+      These notes don't fit a cluster. Sovereign won't tag them.
+      Drop the threshold above to include more.
+    </p>
 
-    <div class="outlier-list">
+    <ol class="list">
       {#each outliers as o (o.chunk_id)}
-        <div class="outlier-row">
-          <span class="outlier-title">{o.note_title}</span>
-          <span class="outlier-reason">
-            {#if o.reason.type === "low_confidence"}
-              Best match: {pct(o.best_cluster_confidence)} — below {pct(o.reason.threshold)} threshold
-            {:else if o.reason.type === "ambiguous_cluster"}
-              Spans multiple clusters
-            {:else if o.reason.type === "too_short"}
-              Too brief to cluster ({o.reason.char_count} chars)
-            {:else if o.reason.type === "singleton_cluster"}
-              Only note in its cluster — needs at least 2 to be tagged
-            {/if}
+        <li class="row">
+          <span class="note-title">{o.note_title}</span>
+          <span class="reason" data-reason={o.reason.type}>
+            {reasonCopy(o)}
           </span>
-        </div>
+        </li>
       {/each}
-    </div>
-  </div>
+    </ol>
+  </section>
 {/if}
 
 <style>
-  .outlier-panel {
-    margin-top: 20px;
-    padding: 16px;
-    border: 1px dashed var(--color-border, #d4d4d4);
-    border-radius: 6px;
-    background: var(--color-surface-subtle, #f4f4f4);
+  .outliers {
+    margin-top: 24px;
+    padding: 16px 18px 14px;
+    background: var(--lk-paper-deep);
+    border: 1px solid var(--lk-rule);
+    border-radius: var(--radius);
   }
-  h5 {
-    margin: 0 0 4px;
-    font-size: 14px;
-    font-weight: 500;
-  }
-  .outlier-explanation {
-    margin: 0 0 12px;
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-  }
-  .outlier-row {
+  .head {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    padding: 6px 0;
-    border-bottom: 1px dotted var(--color-border, #e4e4e4);
+    align-items: baseline;
+    margin-bottom: 4px;
   }
-  .outlier-row:last-child {
-    border-bottom: none;
-  }
-  .outlier-title {
-    font-size: 13px;
+  .title {
+    margin: 0;
+    font-size: var(--lk-size-lead);
     font-weight: 500;
+    color: var(--lk-ink);
   }
-  .outlier-reason {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
+  .count {
+    color: var(--lk-ink-faded);
+    font-variant-numeric: tabular-nums;
+  }
+  .hint {
+    margin: 0 0 12px;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    max-width: 62ch;
+    line-height: 1.45;
+  }
+
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--lk-rule-soft);
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--lk-rule-soft);
+    align-items: baseline;
+  }
+  .row:last-child { border-bottom: 0; }
+  .note-title {
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .reason {
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
     text-align: right;
+    white-space: nowrap;
   }
+  .reason[data-reason="singleton_cluster"] { color: var(--lk-crown-light); }
+  .reason[data-reason="too_short"] { color: var(--lk-warn); }
+  .reason[data-reason="ambiguous_cluster"] { color: var(--lk-stamp-ink); }
 </style>

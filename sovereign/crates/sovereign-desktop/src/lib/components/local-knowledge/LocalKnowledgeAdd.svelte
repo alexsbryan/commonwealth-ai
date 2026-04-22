@@ -7,80 +7,97 @@
   let { onPickFolder, onPickObsidian }: Props = $props();
 </script>
 
-<div class="add-source">
-  <h3>Add local documents</h3>
-
-  <div class="source-options">
-    <button class="source-option" onclick={onPickFolder}>
-      <span class="option-icon" aria-hidden="true">📁</span>
-      <span class="option-label">Drop or browse a folder</span>
-      <span class="option-sub">PDFs and text files</span>
+<div class="add">
+  <div class="choices">
+    <button class="choice" onclick={onPickFolder}>
+      <div class="choice-body">
+        <span class="choice-title">Folder</span>
+        <span class="choice-sub">PDFs and text files. Indexed for search.</span>
+      </div>
+      <span class="choice-arrow" aria-hidden="true">→</span>
     </button>
 
-    <button class="source-option" onclick={onPickObsidian}>
-      <span class="option-icon" aria-hidden="true">◈</span>
-      <span class="option-label">Connect Obsidian vault</span>
-      <span class="option-sub">Markdown notes</span>
+    <button class="choice" onclick={onPickObsidian}>
+      <div class="choice-body">
+        <span class="choice-title">Obsidian vault</span>
+        <span class="choice-sub">
+          Markdown notes. Clustered and tagged, with write-back.
+        </span>
+      </div>
+      <span class="choice-arrow" aria-hidden="true">→</span>
     </button>
   </div>
 
-  <p class="add-note">
-    You can also drag any folder directly onto Sovereign.
-  </p>
+  <p class="aside">Or drag a folder onto this window.</p>
 </div>
 
 <style>
-  .add-source {
-    padding: 12px 0 20px;
-  }
-  h3 {
-    font-size: 14px;
-    font-weight: 500;
-    margin: 0 0 12px;
-    color: var(--color-text, #1a1a1a);
-  }
-  .source-options {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    max-width: 600px;
-  }
-  .source-option {
+  .add {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 16px;
-    border: 1px solid var(--color-border, #d4d4d4);
-    border-radius: 8px;
-    background: var(--color-surface, #fff);
-    cursor: pointer;
+    gap: 14px;
+  }
+  .choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  .choice {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    background: var(--lk-paper-deep);
+    border: 1px solid var(--lk-rule);
+    border-radius: var(--radius);
     text-align: left;
-    color: var(--color-text, #1a1a1a);
-    transition: background 120ms, border-color 120ms;
+    cursor: pointer;
+    color: var(--lk-ink);
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      transform 160ms ease;
   }
-  .source-option:hover:not(:disabled) {
-    background: var(--color-surface-subtle, #f4f4f4);
-    border-color: var(--color-accent, #3a5fc9);
+  .choice:hover {
+    border-color: var(--lk-crown);
+    background: var(--lk-crown-wash);
+    transform: translateY(-1px);
   }
-  .source-option:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
+  .choice:focus-visible {
+    outline: 2px solid var(--lk-crown);
+    outline-offset: 2px;
   }
-  .option-icon {
-    font-size: 22px;
+
+  .choice-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
   }
-  .option-label {
-    font-size: 14px;
+  .choice-title {
+    font-size: var(--lk-size-lead);
     font-weight: 500;
+    color: var(--lk-ink);
   }
-  .option-sub {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
+  .choice-sub {
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    line-height: 1.4;
   }
-  .add-note {
-    margin-top: 14px;
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
-    font-style: italic;
+  .choice-arrow {
+    font-size: 1.125rem;
+    color: var(--lk-ink-faded);
+    transition: transform 160ms ease, color 160ms ease;
+  }
+  .choice:hover .choice-arrow {
+    color: var(--lk-crown-light);
+    transform: translateX(3px);
+  }
+
+  .aside {
+    margin: 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
   }
 </style>

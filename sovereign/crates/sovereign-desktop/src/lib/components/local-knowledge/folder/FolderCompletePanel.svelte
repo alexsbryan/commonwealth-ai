@@ -9,122 +9,162 @@
   let { stats, onDone }: Props = $props();
 </script>
 
-<div class="complete-panel">
-  <h2>Your research library is ready.</h2>
-  <p class="count">{stats.files_indexed} documents indexed.</p>
+<section class="complete">
+  <header class="head">
+    <h1 class="title">Indexed.</h1>
+    <p class="count">
+      <span class="lk-num">{stats.files_indexed}</span> documents,
+      <span class="lk-num">{stats.chunks_written.toLocaleString()}</span> passages,
+      ready to search.
+    </p>
+  </header>
 
   {#if stats.excerpt_chunks.length > 0}
-    <div class="excerpts">
-      <p class="excerpts-label">Here's a sample of what I've read:</p>
-      {#each stats.excerpt_chunks as chunk}
-        <div class="excerpt">
-          <blockquote>"{chunk.text}"</blockquote>
-          <cite>
-            — {chunk.source_name}
-            {#if chunk.page_ref}, {chunk.page_ref}{/if}
-          </cite>
-        </div>
-      {/each}
-    </div>
+    <section class="excerpts">
+      <p class="lk-label excerpts-label">A sample of what was indexed</p>
+      <ol class="excerpt-list">
+        {#each stats.excerpt_chunks as chunk}
+          <li class="excerpt">
+            <p class="excerpt-body">{chunk.text}</p>
+            <p class="excerpt-source">
+              — {chunk.source_name}{#if chunk.page_ref}, {chunk.page_ref}{/if}
+            </p>
+          </li>
+        {/each}
+      </ol>
+    </section>
   {/if}
 
   {#if stats.runtime_failures.length > 0}
-    <div class="runtime-failures">
-      <p>
-        {stats.runtime_failures.length} files couldn't be fully read during indexing:
-      </p>
-      {#each stats.runtime_failures as f}
-        <div class="failure-row">— {f.file.display_name}</div>
-      {/each}
-      <p class="failure-note">These are excluded from your library.</p>
-    </div>
+    <section class="failures">
+      <p class="lk-label failures-label">Skipped</p>
+      <ul class="failures-list">
+        {#each stats.runtime_failures as f}
+          <li>{f.file.display_name}</li>
+        {/each}
+      </ul>
+      <p class="failures-note">Not in your index.</p>
+    </section>
   {/if}
 
-  <!-- Spec §8.6: static text, same visual weight as the doc count,
-       not dismissable. Do not turn this into a toast. -->
-  <p class="privacy-statement">
-    These documents are on your computer.
-    Nothing was uploaded anywhere.
-  </p>
+  <aside class="privacy">
+    Your documents stayed on your machine.
+    <strong>Nothing was uploaded.</strong>
+  </aside>
 
-  <button class="btn-primary" onclick={onDone}>Done</button>
-</div>
+  <div class="actions">
+    <button class="lk-btn lk-btn--mark" onclick={onDone}>Done</button>
+  </div>
+</section>
 
 <style>
-  .complete-panel {
-    padding: 16px 0;
-    max-width: 640px;
+  .complete {
+    padding: 8px 0;
+    max-width: 720px;
+    animation: lk-fade-in 320ms ease-out both;
   }
-  h2 {
-    font-size: 18px;
-    font-weight: 500;
+
+  .head { margin-bottom: 22px; }
+  .title {
     margin: 0 0 6px;
+    font-size: 2.625rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: var(--lk-ink);
   }
   .count {
-    font-size: 15px;
-    color: var(--color-text, #1a1a1a);
-    margin: 0 0 20px;
+    margin: 0;
+    font-size: var(--lk-size-lead);
+    color: var(--lk-ink-soft);
   }
+  .count .lk-num {
+    color: var(--lk-ink);
+    font-size: 1.25em;
+    margin: 0 2px;
+  }
+
   .excerpts {
-    margin: 20px 0;
+    margin: 24px 0;
+    padding-top: 20px;
+    border-top: 1px solid var(--lk-rule);
   }
-  .excerpts-label {
-    font-size: 13px;
-    color: var(--color-text-muted, #6b6b6b);
-    margin-bottom: 10px;
+  .excerpts-label { margin-bottom: 14px; }
+  .excerpt-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
   .excerpt {
-    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--lk-rule-soft);
   }
-  blockquote {
-    margin: 0 0 4px;
-    padding: 10px 14px;
-    background: var(--color-surface-subtle, #f4f4f4);
-    border-left: 3px solid var(--color-accent, #3a5fc9);
-    border-radius: 4px;
-    font-size: 14px;
-    color: var(--color-text, #1a1a1a);
-    font-style: italic;
+  .excerpt:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
   }
-  cite {
-    display: block;
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
-    font-style: normal;
-    padding-left: 14px;
+  .excerpt-body {
+    margin: 0;
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink);
+    line-height: 1.55;
   }
-  .runtime-failures {
-    margin: 16px 0;
-    padding: 12px;
-    background: var(--color-surface-subtle, #f4f4f4);
-    border-radius: 6px;
-    font-size: 13px;
+  .excerpt-source {
+    margin: 4px 0 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
   }
-  .failure-row {
-    font-family: var(--font-mono, ui-monospace, monospace);
-    padding: 2px 0;
+
+  .failures {
+    margin: 20px 0;
+    padding: 14px 16px;
+    background: var(--lk-paper-deep);
+    border-left: 2px solid var(--lk-ink-faded);
+    border-radius: var(--radius);
   }
-  .failure-note {
-    font-size: 12px;
-    color: var(--color-text-muted, #6b6b6b);
-    margin: 6px 0 0;
+  .failures-label { margin-bottom: 8px; }
+  .failures-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
   }
-  .privacy-statement {
-    margin: 24px 0;
-    font-size: 15px;
-    color: var(--color-text, #1a1a1a);
-    line-height: 1.4;
+  .failures-list li {
+    font-family: var(--lk-font-mono);
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
   }
-  .btn-primary {
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
-    background: var(--color-accent, #3a5fc9);
-    color: #fff;
+  .failures-note {
+    margin: 8px 0 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-faded);
   }
-  .btn-primary:hover {
-    background: var(--color-accent-hover, #2f4fb3);
+
+  /* The privacy statement. Spec §8.6: same visual weight as the
+     document count, non-dismissable, static. Plain copy, slight
+     emphasis on the guarantee via gold. */
+  .privacy {
+    margin: 28px 0;
+    padding: 16px 0;
+    border-top: 1px solid var(--lk-rule);
+    border-bottom: 1px solid var(--lk-rule);
+    font-size: var(--lk-size-lead);
+    color: var(--lk-ink);
+    line-height: 1.5;
+  }
+  .privacy strong {
+    font-weight: 600;
+    color: var(--lk-stamp-ink);
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
   }
 </style>

@@ -10,6 +10,8 @@
   import LocalKnowledgeList from "./LocalKnowledgeList.svelte";
   import ResumePrompt from "./ResumePrompt.svelte";
 
+  import "./_theme.css";
+
   type Mode =
     | { kind: "idle" }
     | {
@@ -105,22 +107,25 @@
   }
 </script>
 
-<div class="section">
+<div class="lk lk-section">
+  {#if mode.kind === "idle"}
+    <header class="head">
+      <h1 class="title">Local knowledge</h1>
+      <p class="lede">
+        Folders and vaults on this machine. Indexed here, searched here,
+        never uploaded.
+      </p>
+    </header>
+  {/if}
+
   {#if loadError}
-    <p class="load-error">
-      Could not load local knowledge: {loadError}
-    </p>
+    <p class="load-error">{loadError}</p>
   {/if}
 
   {#if mode.kind === "idle"}
     <ResumePrompt
       jobs={incomplete}
       onResume={(id) => {
-        // Resume by re-invoking ingest. The engine's source-file
-        // manifest causes the new run to pick up from the last
-        // completed shard — no separate "resume" API needed. We
-        // route the user through `FolderDropFlow` in resume mode so
-        // they see progress instead of a silent background run.
         const job = incomplete.find((j) => j.corpus_id === id);
         const sourceTypeGuess =
           corpora.find((c) => c.id === id)?.source_type ===
@@ -138,13 +143,23 @@
       onDiscard={handleDiscardIncomplete}
     />
 
-    <p class="section-label">Your local knowledge</p>
-    <LocalKnowledgeList {corpora} onRemove={handleRemove} />
+    <section class="plate">
+      <div class="plate-head">
+        <p class="lk-label">Sources</p>
+        <span class="plate-count lk-folio">{corpora.length}</span>
+      </div>
+      <LocalKnowledgeList {corpora} onRemove={handleRemove} />
+    </section>
 
-    <LocalKnowledgeAdd
-      onPickFolder={enterFolderFlow}
-      onPickObsidian={enterObsidianFlow}
-    />
+    <section class="plate">
+      <div class="plate-head">
+        <p class="lk-label">Add</p>
+      </div>
+      <LocalKnowledgeAdd
+        onPickFolder={enterFolderFlow}
+        onPickObsidian={enterObsidianFlow}
+      />
+    </section>
   {:else if mode.kind === "folder-flow"}
     <FolderDropFlow
       initialPath={mode.initialPath}
@@ -157,22 +172,56 @@
 </div>
 
 <style>
-  .section {
-    padding: 8px 0;
+  .lk-section {
+    padding: 28px 32px 44px;
+    position: relative;
   }
-  .section-label {
-    font-size: 13px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    color: var(--color-text-muted, #6b6b6b);
-    margin: 0 0 10px;
+
+  .head {
+    margin-bottom: 28px;
+    animation: lk-fade-in 300ms ease-out both;
   }
+  .title {
+    margin: 0 0 6px;
+    font-family: var(--lk-font-display);
+    font-size: var(--lk-size-hero);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--lk-ink);
+  }
+  .lede {
+    margin: 0;
+    max-width: 64ch;
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink-soft);
+    line-height: 1.5;
+  }
+
+  .plate {
+    margin-top: 28px;
+    animation: lk-fade-in 400ms ease-out both;
+    animation-delay: 80ms;
+  }
+  .plate + .plate { animation-delay: 140ms; }
+  .plate-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--lk-rule);
+  }
+  .plate-count {
+    color: var(--lk-ink-faded);
+  }
+
   .load-error {
-    padding: 8px 12px;
-    background: color-mix(in srgb, var(--color-error, #c92a2a) 10%, transparent);
-    border-radius: 4px;
-    font-size: 13px;
-    color: var(--color-error, #c92a2a);
+    margin: 0 0 20px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--lk-err);
+    background: var(--lk-err-wash);
+    color: var(--lk-ink);
+    font-size: var(--lk-size-meta);
   }
 </style>

@@ -61,34 +61,86 @@ impl ModelSlot {
         let model = Arc::new(model);
 
         let n_threads = llama_threads_for_host();
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(NonZeroU32::new(context_size))
-            // n_batch = context_size so the full context window is available
-            // for prompt processing. llama.cpp automatically splits the batch
-            // into n_ubatch=512 micro-batches for GPU/CPU kernel calls, so
-            // memory pressure is unchanged — only the Rust-side assertion limit
-            // is relaxed.
-            .with_n_batch(context_size)
-            .with_n_ubatch(512)
-            // llama-cpp-2 defaults both thread counts to 4, which
-            // caps matmul at four cores regardless of machine
-            // size. Embedding prefill and chat prompt processing
-            // are both dominated by `n_threads_batch`; `n_threads`
-            // governs single-token decode. Set both to the
-            // platform's parallelism so the CPU backend actually
-            // uses all the cores (BLAS on macOS, plain ggml
-            // elsewhere). The default-of-4 behaviour was the
-            // reason a 600M embed model ran at 2 seq/s while only
-            // 400% of the CPU was busy.
-            .with_n_threads(n_threads as i32)
-            .with_n_threads_batch(n_threads as i32);
 
-        let ctx = unsafe {
-            let model_ref: &'static LlamaModel =
-                &*(Arc::as_ptr(&model) as *const LlamaModel);
-            model_ref
-                .new_context(backend, ctx_params)
-                .map_err(|e| Error::Inference(format!("Failed to create context: {e}")))?
+        // Metal offload for chat slots on macOS — mirrors the EmbedSlot
+        // decision. `with_n_gpu_layers(999)` alone puts the model weights
+        // on the GPU but leaves the KV cache in CPU memory and may route
+        // some compute ops back to CPU. Setting `offload_kqv(true)` +
+        // `op_offload(true)` pins the whole forward pass on Metal.
+        //
+        // Measured impact (parallel to the EmbedSlot note, M2 Max,
+        // Qwen3.5-9B.Q8_0): decode tok/sec ~49 without these flags,
+        // ~70-80 with them — the last 5s of the Joan Robinson fix.
+        //
+        // Try-Metal-then-CPU-fallback identical to EmbedSlot: a future
+        // llama.cpp upgrade could reintroduce a Metal crash on some
+        // quant/platform, and silent fallback to CPU is what made the
+        // original embed regression invisible. Always log the actual
+        // backend so operators can spot a silent fallback.
+        let wants_metal = cfg!(target_os = "macos") && n_gpu_layers > 0;
+        let build_ctx_params = |metal: bool| {
+            LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(context_size))
+                // n_batch = context_size so the full context window is available
+                // for prompt processing. llama.cpp automatically splits the batch
+                // into n_ubatch=512 micro-batches for GPU/CPU kernel calls, so
+                // memory pressure is unchanged — only the Rust-side assertion limit
+                // is relaxed.
+                .with_n_batch(context_size)
+                .with_n_ubatch(512)
+                // llama-cpp-2 defaults both thread counts to 4, which
+                // caps matmul at four cores regardless of machine
+                // size. Embedding prefill and chat prompt processing
+                // are both dominated by `n_threads_batch`; `n_threads`
+                // governs single-token decode. Set both to the
+                // platform's parallelism so the CPU backend actually
+                // uses all the cores (BLAS on macOS, plain ggml
+                // elsewhere). The default-of-4 behaviour was the
+                // reason a 600M embed model ran at 2 seq/s while only
+                // 400% of the CPU was busy.
+                .with_n_threads(n_threads as i32)
+                .with_n_threads_batch(n_threads as i32)
+                .with_offload_kqv(metal)
+                .with_op_offload(metal)
+        };
+
+        let (ctx, used_metal) = match if wants_metal {
+            unsafe {
+                let model_ref: &'static LlamaModel =
+                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                model_ref
+                    .new_context(backend, build_ctx_params(true))
+                    .map(|c| (c, true))
+            }
+        } else {
+            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+        } {
+            Ok(pair) => pair,
+            Err(e) => {
+                if wants_metal {
+                    tracing::warn!(
+                        error = ?e,
+                        model_id = %model_id,
+                        "Metal chat-slot context failed, falling back to CPU"
+                    );
+                }
+                let ctx = unsafe {
+                    let model_ref: &'static LlamaModel =
+                        &*(Arc::as_ptr(&model) as *const LlamaModel);
+                    model_ref
+                        .new_context(backend, build_ctx_params(false))
+                        .map_err(|e| {
+                            Error::Inference(format!("Failed to create context: {e}"))
+                        })?
+                };
+                (ctx, false)
+            }
+        };
+
+        let compute_backend = if used_metal {
+            "gpu+metal"
+        } else {
+            embed_compute_backend_label()
         };
 
         tracing::info!(
@@ -96,6 +148,8 @@ impl ModelSlot {
             params = model.n_params(),
             layers = model.n_layer(),
             size_mb = model.size() / (1024 * 1024),
+            n_threads,
+            compute_backend,
             "ModelSlot::load — slot ready"
         );
 
