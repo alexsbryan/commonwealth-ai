@@ -781,4 +781,159 @@ mod tests {
         let result = CorpusIndex::open(&dir.path().join("nope")).await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn fetch_chunks_by_title_returns_only_matching_title() {
+        // Canonical source-expansion use-case: a corpus with several
+        // documents, one of which ("Rust Language") has multiple
+        // chunks. Fetching by that title must return exactly those
+        // chunks, regardless of query-similarity scoring.
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        let chunks = vec![
+            (
+                InsertChunk {
+                    content: "Rust intro section".into(),
+                    title: Some("Rust Language".into()),
+                    url: None,
+                    metadata: None,
+                    content_hash: None,
+                    source_doc_id: Some("rust-doc".into()),
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[1.0, 0.0, 0.0, 0.0]),
+            ),
+            (
+                InsertChunk {
+                    content: "Rust ownership section".into(),
+                    title: Some("Rust Language".into()),
+                    url: None,
+                    metadata: None,
+                    content_hash: None,
+                    source_doc_id: Some("rust-doc".into()),
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[0.9, 0.1, 0.0, 0.0]),
+            ),
+            (
+                InsertChunk {
+                    content: "Python basics".into(),
+                    title: Some("Python ML".into()),
+                    url: None,
+                    metadata: None,
+                    content_hash: None,
+                    source_doc_id: Some("python-doc".into()),
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[0.0, 1.0, 0.0, 0.0]),
+            ),
+        ];
+        idx.insert_batch(&chunks).await.unwrap();
+
+        let results = idx
+            .fetch_chunks_by_title("Rust Language", 10)
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 2, "two chunks share the Rust Language title");
+        for r in &results {
+            assert_eq!(r.title.as_deref(), Some("Rust Language"));
+            assert_eq!(r.corpus_id, "test-corpus");
+            assert!((r.score - 1.0).abs() < 1e-6, "cohesion pull → score=1.0");
+        }
+    }
+
+    #[tokio::test]
+    async fn fetch_chunks_by_title_respects_limit() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        // Ingest 5 chunks all with the same title.
+        let mut chunks = Vec::new();
+        for i in 0..5 {
+            chunks.push((
+                InsertChunk {
+                    content: format!("section {i}"),
+                    title: Some("Big Doc".into()),
+                    url: None,
+                    metadata: None,
+                    content_hash: None,
+                    source_doc_id: Some("big".into()),
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[1.0, 0.0, 0.0, 0.0]),
+            ));
+        }
+        idx.insert_batch(&chunks).await.unwrap();
+
+        let results = idx.fetch_chunks_by_title("Big Doc", 3).await.unwrap();
+        assert_eq!(results.len(), 3, "limit must cap the fetch");
+    }
+
+    #[tokio::test]
+    async fn fetch_chunks_by_title_escapes_sql_quote() {
+        // Defense against injection when a title contains a single
+        // quote. Same concern as delete_chunks_by_source_doc.
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        let chunks = vec![(
+            InsertChunk {
+                content: "content".into(),
+                title: Some("Joan's Note".into()),
+                url: None,
+                metadata: None,
+                content_hash: None,
+                source_doc_id: Some("j".into()),
+                source_file: None,
+                code: InsertCodeMeta::default(),
+                unit_id: None,
+            },
+            make_embedding(&[1.0, 0.0, 0.0, 0.0]),
+        )];
+        idx.insert_batch(&chunks).await.unwrap();
+
+        let results = idx
+            .fetch_chunks_by_title("Joan's Note", 10)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title.as_deref(), Some("Joan's Note"));
+    }
+
+    #[tokio::test]
+    async fn fetch_chunks_by_title_empty_inputs_are_noops() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+
+        assert!(idx.fetch_chunks_by_title("", 10).await.unwrap().is_empty());
+        assert!(idx
+            .fetch_chunks_by_title("Rust Language", 0)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn fetch_chunks_by_title_unknown_title_returns_empty() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+
+        let results = idx
+            .fetch_chunks_by_title("No Such Doc", 10)
+            .await
+            .unwrap();
+        assert!(results.is_empty());
+    }
 }

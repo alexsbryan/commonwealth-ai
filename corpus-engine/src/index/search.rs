@@ -265,4 +265,115 @@ impl CorpusIndex {
         );
         Ok(scored)
     }
+
+    /// Fetch every chunk whose `title` matches `title` exactly, up to
+    /// `limit`. Unlike `search`, this is a cohesion-based pull — the
+    /// caller has already decided this source is relevant and wants
+    /// the whole document, not query-ranked hits.
+    ///
+    /// Returned `ScoredChunk`s carry `score = 1.0` uniformly. They are
+    /// NOT query-similarity scores; callers mixing these with search
+    /// results must either keep them separate or re-rank.
+    ///
+    /// Use-case: the "gold-mine source" expansion path in
+    /// `handle_knowledge_query`. A hybrid search on "Can you tell me
+    /// about X?" returns maybe 3 chunks of an X-titled note at the
+    /// score ceiling and leaves the other ~10 chunks of that same note
+    /// at the RRF noise floor because they don't vector-match the
+    /// question phrasing. Once evidence-shape routing has identified
+    /// the note as the dominant source, pulling the whole thing by
+    /// title is strictly better than taking two noise chunks from each
+    /// of four other corpora.
+    pub async fn fetch_chunks_by_title(
+        &self,
+        title: &str,
+        limit: usize,
+    ) -> Result<Vec<ScoredChunk>> {
+        if title.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        // Escape single quotes — LanceDB's only_if takes a SQL-ish
+        // predicate string. Same defense as delete_chunks_by_source_doc.
+        let safe = title.replace('\'', "''");
+        let filter = format!("title = '{safe}'");
+        let t_start = std::time::Instant::now();
+        let batches: Vec<_> = self
+            .table
+            .query()
+            .only_if(filter)
+            .limit(limit)
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("fetch_chunks_by_title: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("fetch_chunks_by_title collect: {e}")))?;
+
+        let mut out = Vec::new();
+        for batch in &batches {
+            let contents = batch
+                .column_by_name("content")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let titles = batch
+                .column_by_name("title")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let urls = batch
+                .column_by_name("url")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let metadata_col = batch
+                .column_by_name("metadata")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+            for i in 0..batch.num_rows() {
+                let content = contents
+                    .map(|c| c.value(i).to_string())
+                    .unwrap_or_default();
+                let chunk_title = titles.and_then(|t| {
+                    if t.is_null(i) {
+                        None
+                    } else {
+                        Some(t.value(i).to_string())
+                    }
+                });
+                let url = urls.and_then(|u| {
+                    if u.is_null(i) {
+                        None
+                    } else {
+                        Some(u.value(i).to_string())
+                    }
+                });
+                let metadata: HashMap<String, String> = metadata_col
+                    .and_then(|m| {
+                        if m.is_null(i) {
+                            None
+                        } else {
+                            serde_json::from_str(m.value(i)).ok()
+                        }
+                    })
+                    .unwrap_or_default();
+
+                out.push(ScoredChunk {
+                    content,
+                    title: chunk_title,
+                    url,
+                    corpus_id: self.corpus_id.clone(),
+                    // Uniform 1.0 — this is a cohesion pull, not a
+                    // similarity score. Callers must not mix with
+                    // search-scored chunks in a single rank.
+                    score: 1.0,
+                    metadata,
+                });
+            }
+        }
+
+        tracing::debug!(
+            corpus = %self.corpus_id,
+            title,
+            limit,
+            results = out.len(),
+            elapsed_ms = t_start.elapsed().as_millis() as u64,
+            "CorpusIndex::fetch_chunks_by_title complete"
+        );
+        Ok(out)
+    }
 }
