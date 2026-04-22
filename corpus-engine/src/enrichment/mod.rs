@@ -14,6 +14,7 @@ pub mod fault_lines;
 pub mod field_engine;
 pub mod filter;
 pub mod open_questions;
+pub mod pipeline;
 pub mod skeleton;
 pub(crate) mod skeleton_parse;
 
@@ -22,3 +23,7 @@ pub use field_engine::{FieldModelEngine, reprocess_skeleton_failures};
 pub use clustering::{EnrichmentProgress, FieldModelStats};
 pub use domain::Domain;
 pub use skeleton::FieldSkeleton;
+
+// v2 enrichment pipeline (coexists with v1 during iteration; see
+// `pipeline::mod` for the migration plan).
+pub use pipeline::{Pipeline, PipelineRegistry};

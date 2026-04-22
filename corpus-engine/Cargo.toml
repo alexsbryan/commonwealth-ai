@@ -94,6 +94,11 @@ notify                 = { version = "8",    optional = true }
 rusqlite               = { version = "0.35", features = ["bundled"], optional = true }
 prost                  = { version = "0.13", optional = true }
 which                  = { version = "7",    optional = true }
+# Markdown AST for DESIGN.md structural parsing (design_signals.rs).
+# Same version as sovereign-atos uses for charter parsing — one version
+# per workspace, per ARCH_PRINCIPLES.md §8.1. sha2 is already a
+# non-optional corpus-engine dep above; design_signals uses it too.
+pulldown-cmark         = { version = "0.12", default-features = false, features = ["simd"], optional = true }
 # Cross-process file locking for the SCIP rebuild guard. Cheaper than a
 # lockfile + PID dance; kernel releases the lock automatically on process
 # death so we can't leak a stale lock from a crashed writer.
@@ -116,6 +121,7 @@ treesitter = [
     "dep:prost",
     "dep:which",
     "dep:fs4",
+    "dep:pulldown-cmark",
 ]
 
 [dev-dependencies]

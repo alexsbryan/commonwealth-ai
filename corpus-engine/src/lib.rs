@@ -49,6 +49,17 @@ pub mod project_docs;
 // ATOS feature + milestone store.
 #[cfg(feature = "treesitter")]
 pub mod features;
+// ATOS IMPLEMENTATION_PLAN.md index — see `plan_items.rs` for why
+// this is separate from `notes.rs` (different query shape,
+// different regeneration semantics).
+#[cfg(feature = "treesitter")]
+pub mod plan_items;
+// DESIGN.md structural parser — used by the agent (via the
+// `design_signals_extract` MCP tool in sovereign-tools), by
+// sovereign-cli's `project found`/`project plan` for signal-gated
+// question selection, and by solo-mode CLI prompts.
+#[cfg(feature = "treesitter")]
+pub mod design_signals;
 
 // ─── Public API Re-exports ──────────────────────────────
 
