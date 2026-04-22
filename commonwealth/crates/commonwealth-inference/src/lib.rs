@@ -21,9 +21,10 @@ pub use ledger::{ContributionUnit, FairnessPolicy, LedgerEntry, LedgerEntryKind}
 pub use model::{ModelArchitecture, ModelAvailability, ModelInfo};
 pub use model_aliases::{AliasResolution, ModelAliasConfig, ModelAliasTable};
 pub use oicp::{
-    Capability, CapabilityProfile, CapabilityRequirements, InferenceRequirements,
-    KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse, LatencyPreference,
-    MatchQuality, OicpResponseMeta, ProviderManifest, ProviderModel, ShardingPrivacy, OICP_VERSION,
+    Capability, CapabilityClaim, CapabilityHint, CapabilityProfile,
+    InferenceRequirements, KnowledgeResult, KnowledgeSearchRequest,
+    KnowledgeSearchResponse, LatencyClass, MatchQuality, OicpResponseMeta,
+    ProviderManifest, ProviderModel, ShardingPrivacy, OICP_VERSION,
 };
 pub use plan::{
     LoadPolicy, MeshPlan, NodeRole, PlanTrigger, RequestRouter, RoutingCondition,

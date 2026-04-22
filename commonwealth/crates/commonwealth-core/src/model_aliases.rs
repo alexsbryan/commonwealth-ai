@@ -3,20 +3,30 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::glob::glob_match;
-use crate::oicp::{Capability, CapabilityProfile, CapabilityRequirements, LatencyPreference};
+use crate::oicp::{
+    infer_hint_from_profile, Capability, CapabilityHint, CapabilityProfile,
+    LatencyClass,
+};
 
 /// The built-in default aliases, embedded at compile time.
 const DEFAULT_ALIASES_TOML: &str = include_str!("default_aliases.toml");
 
-/// A single model alias: maps glob patterns to inferred OICP requirements.
+/// A single model alias: maps glob patterns to inferred v0.3 routing
+/// properties (hint + latency class). The TOML source format still
+/// uses v0.2 capability-profile vocabulary for author convenience —
+/// those are collapsed to a single hint via
+/// [`infer_hint_from_profile`] at parse time.
 #[derive(Debug, Clone)]
 pub struct ModelAlias {
     pub patterns: Vec<String>,
-    /// Hard floor — model must meet these. Empty for soft matching.
-    pub inferred_required: CapabilityProfile,
-    /// Scoring preferences — used for ranking among satisfying models.
+    /// v0.3 capability hint synthesized from the TOML's
+    /// `inferred_preferred` profile.
+    pub hint: CapabilityHint,
+    /// v0.3 latency class synthesized from the TOML's `latency`
+    /// string.
+    pub latency_class: LatencyClass,
+    /// Preserved for diagnostics + PR-D affinity derivation.
     pub inferred_preferred: CapabilityProfile,
-    pub latency: LatencyPreference,
 }
 
 /// Table of model aliases. Checked in order — first match wins.
@@ -25,11 +35,12 @@ pub struct ModelAliasTable {
     aliases: Vec<ModelAlias>,
 }
 
-/// Resolved alias result with synthesized OICP requirements.
+/// Resolved alias result with synthesized v0.3 routing properties.
 #[derive(Debug, Clone)]
 pub struct AliasResolution {
-    pub requirements: CapabilityRequirements,
-    pub latency: LatencyPreference,
+    pub hint: CapabilityHint,
+    pub latency_class: LatencyClass,
+    pub inferred_preferred: CapabilityProfile,
 }
 
 impl ModelAliasTable {
@@ -38,18 +49,15 @@ impl ModelAliasTable {
     }
 
     /// Resolve a model name against the alias table.
-    /// Returns synthesized OICP requirements if a pattern matches.
     /// First match wins — order matters.
     pub fn resolve(&self, model_name: &str) -> Option<AliasResolution> {
         for alias in &self.aliases {
             for pattern in &alias.patterns {
                 if glob_match(pattern, model_name) {
                     return Some(AliasResolution {
-                        requirements: CapabilityRequirements {
-                            required: alias.inferred_required.clone(),
-                            preferred: alias.inferred_preferred.clone(),
-                        },
-                        latency: alias.latency,
+                        hint: alias.hint.clone(),
+                        latency_class: alias.latency_class,
+                        inferred_preferred: alias.inferred_preferred.clone(),
                     });
                 }
             }
@@ -83,13 +91,6 @@ impl ModelAliasTable {
         let aliases = entries
             .iter()
             .map(|entry| {
-                let mut required = CapabilityProfile::new();
-                for (cap_str, &level) in &entry.inferred_required {
-                    if let Some(cap) = parse_capability(cap_str) {
-                        required.insert(cap, level);
-                    }
-                }
-
                 let mut preferred = CapabilityProfile::new();
                 for (cap_str, &level) in &entry.inferred_preferred {
                     if let Some(cap) = parse_capability(cap_str) {
@@ -97,18 +98,46 @@ impl ModelAliasTable {
                     }
                 }
 
-                let latency = match entry.latency.as_deref() {
-                    Some("interactive") => LatencyPreference::Interactive,
-                    Some("throughput") => LatencyPreference::Throughput,
-                    Some("background") => LatencyPreference::Background,
-                    _ => LatencyPreference::BestEffort,
+                // Map the TOML's legacy latency vocabulary into v0.3
+                // classes. Interactive → Fast (UI-speed);
+                // throughput / background → Extended (user accepts
+                // higher TTFT); best_effort / unset → Normal.
+                let latency_class = match entry.latency.as_deref() {
+                    Some("interactive") => LatencyClass::Fast,
+                    Some("throughput") | Some("background") => {
+                        LatencyClass::Extended
+                    }
+                    _ => LatencyClass::Normal,
+                };
+
+                // Aliases are routing hints, not model profiles —
+                // an alias named `codex` saying "code=3" is
+                // communicating "this is a coding alias" regardless
+                // of the numeric proficiency. Use a more permissive
+                // rule than `infer_hint_from_profile`: if `code` is
+                // the highest-proficiency entry in the preferred
+                // profile (and non-zero), route as code; otherwise
+                // general.
+                let code_level = preferred
+                    .get(&Capability::Code)
+                    .copied()
+                    .unwrap_or(0);
+                let max_level = preferred
+                    .values()
+                    .copied()
+                    .max()
+                    .unwrap_or(0);
+                let hint = if code_level > 0 && code_level >= max_level {
+                    CapabilityHint::code()
+                } else {
+                    infer_hint_from_profile(&preferred)
                 };
 
                 ModelAlias {
                     patterns: entry.patterns.clone(),
-                    inferred_required: required,
+                    hint,
+                    latency_class,
                     inferred_preferred: preferred,
-                    latency,
                 }
             })
             .collect();
@@ -138,7 +167,11 @@ struct AliasFile {
     aliases: Vec<ModelAliasConfig>,
 }
 
-/// A single alias entry as it appears in TOML config.
+/// A single alias entry as it appears in TOML config. The legacy
+/// `inferred_required` field is still deserialized so existing TOML
+/// files don't error, but it's no longer used in v0.3 routing —
+/// the scheduler ranks on claim hard gates, not alias-declared
+/// proficiency floors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelAliasConfig {
     pub patterns: Vec<String>,
@@ -181,20 +214,22 @@ mod tests {
     }
 
     #[test]
-    fn omo_codex_resolves_to_coding() {
+    fn omo_codex_resolves_to_code_hint() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.3-codex").unwrap();
-        assert!(oicp::proficiency(&result.requirements.preferred, Capability::Code) >= 3);
-        assert_eq!(result.latency, LatencyPreference::Throughput);
+        assert!(
+            oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3
+        );
+        // The alias's "throughput" latency maps to Extended in v0.3.
+        assert_eq!(result.latency_class, LatencyClass::Extended);
     }
 
     #[test]
     fn omo_opus_resolves_to_general() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("claude-opus-4-6").unwrap();
-        assert!(oicp::proficiency(&result.requirements.preferred, Capability::General) >= 3);
-        assert!(oicp::proficiency(&result.requirements.preferred, Capability::Analysis) >= 3);
-        assert_eq!(result.latency, LatencyPreference::Interactive);
+        assert_eq!(result.hint, CapabilityHint::general());
+        assert_eq!(result.latency_class, LatencyClass::Fast);
     }
 
     #[test]
@@ -202,17 +237,19 @@ mod tests {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.4-nano").unwrap();
         assert_eq!(
-            oicp::proficiency(&result.requirements.preferred, Capability::General),
+            oicp::proficiency(&result.inferred_preferred, Capability::General),
             1
         );
-        assert_eq!(result.latency, LatencyPreference::Interactive);
+        assert_eq!(result.latency_class, LatencyClass::Fast);
     }
 
     #[test]
     fn generic_coder_pattern() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("deepseek-coder-v3").unwrap();
-        assert!(oicp::proficiency(&result.requirements.preferred, Capability::Code) >= 3);
+        assert!(
+            oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3
+        );
     }
 
     #[test]
@@ -227,17 +264,8 @@ mod tests {
         let result = table.resolve("gpt-5.3-codex").unwrap();
         // The first match (OmO Hephaestus) has instruction: 3.
         assert!(
-            oicp::proficiency(&result.requirements.preferred, Capability::Instruction) >= 3
-        );
-    }
-
-    #[test]
-    fn soft_matching_no_required() {
-        let table = ModelAliasTable::default_table();
-        let result = table.resolve("gpt-5.3-codex").unwrap();
-        assert!(
-            result.requirements.required.is_empty(),
-            "default aliases should use soft matching (no required)"
+            oicp::proficiency(&result.inferred_preferred, Capability::Instruction)
+                >= 3
         );
     }
 
@@ -254,37 +282,15 @@ math = 3
         let table = ModelAliasTable::parse_toml(toml).unwrap();
         let result = table.resolve("my-custom-model-v2").unwrap();
         assert_eq!(
-            oicp::proficiency(&result.requirements.preferred, Capability::Code),
+            oicp::proficiency(&result.inferred_preferred, Capability::Code),
             4
         );
         assert_eq!(
-            oicp::proficiency(&result.requirements.preferred, Capability::Math),
+            oicp::proficiency(&result.inferred_preferred, Capability::Math),
             3
         );
-    }
-
-    #[test]
-    fn custom_toml_with_required() {
-        let toml = r#"
-[[aliases]]
-patterns = ["strict-coder*"]
-latency = "throughput"
-[aliases.inferred_required]
-code = 3
-[aliases.inferred_preferred]
-code = 4
-instruction = 3
-"#;
-        let table = ModelAliasTable::parse_toml(toml).unwrap();
-        let result = table.resolve("strict-coder-v1").unwrap();
-        assert_eq!(
-            oicp::proficiency(&result.requirements.required, Capability::Code),
-            3
-        );
-        assert_eq!(
-            oicp::proficiency(&result.requirements.preferred, Capability::Code),
-            4
-        );
+        // code:4 with no general → code hint per infer_hint_from_profile.
+        assert_eq!(result.hint, CapabilityHint::code());
     }
 
     #[test]
@@ -301,7 +307,6 @@ creative = 4
         base.extend(&extra);
         assert_eq!(base.len(), base_len + 1);
         assert!(base.resolve("my-special-model").is_some());
-        // Original aliases still work.
         assert!(base.resolve("gpt-5.3-codex").is_some());
     }
 
@@ -309,13 +314,15 @@ creative = 4
     fn kimi_resolves() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("kimi-k2-latest").unwrap();
-        assert!(oicp::proficiency(&result.requirements.preferred, Capability::Code) >= 3);
+        assert!(
+            oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3
+        );
     }
 
     #[test]
-    fn gemini_flash_resolves_to_fast() {
+    fn gemini_flash_resolves_to_fast_latency() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gemini-2.5-flash").unwrap();
-        assert_eq!(result.latency, LatencyPreference::Interactive);
+        assert_eq!(result.latency_class, LatencyClass::Fast);
     }
 }

@@ -14,8 +14,8 @@ use commonwealth_core::capabilities::{
     AvailableResources, HardwareProfile, NodeCapabilities,
 };
 use commonwealth_inference::oicp::{
-    CapabilityClaim, CapabilityHint, CapabilityProfile, InferenceRequirements,
-    LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
+    CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
+    ModelStatus, ProviderManifest, ProviderModel,
 };
 use commonwealth_inference::scheduler::oicp_select::{
     pick_slot_for_oicp, BackendCandidate,
@@ -47,7 +47,6 @@ fn manifest_with_claims(claims: Vec<CapabilityClaim>) -> ProviderManifest {
         id: "test".into(),
         base_model: None,
         quantization: None,
-        capabilities: CapabilityProfile::default(),
         context_tokens: claims.iter().map(|c| c.max_context).max().unwrap_or(0),
         status: ModelStatus {
             available: true,
@@ -101,14 +100,8 @@ fn newsroom_writer_short_fast_request_stays_local() {
     )]);
     let idle = node_caps(1.0);
     let candidates = vec![
-        BackendCandidate {
-            manifest: &local,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &peer,
-            node_capabilities: Some(&idle),
-        },
+        BackendCandidate::new(&local).with_node_capabilities(&idle),
+        BackendCandidate::new(&peer).with_node_capabilities(&idle),
     ];
     // Fast drafting / reword / classification: fast latency, short
     // input, small output.
@@ -140,14 +133,8 @@ fn newsroom_writer_long_normal_request_routes_to_peer() {
     )]);
     let idle = node_caps(1.0);
     let candidates = vec![
-        BackendCandidate {
-            manifest: &local,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &peer,
-            node_capabilities: Some(&idle),
-        },
+        BackendCandidate::new(&local).with_node_capabilities(&idle),
+        BackendCandidate::new(&peer).with_node_capabilities(&idle),
     ];
     // Substantive research synthesis: normal latency, 16K context,
     // 2K output. Hard context gate eliminates the 8K local claim.
@@ -227,22 +214,10 @@ fn coder_collective_code_request_routes_to_specialist() {
     let (a, b, c, d) = build_coder_collective();
     let idle = node_caps(1.0);
     let candidates = vec![
-        BackendCandidate {
-            manifest: &a,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &b,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &c,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &d,
-            node_capabilities: Some(&idle),
-        },
+        BackendCandidate::new(&a).with_node_capabilities(&idle),
+        BackendCandidate::new(&b).with_node_capabilities(&idle),
+        BackendCandidate::new(&c).with_node_capabilities(&idle),
+        BackendCandidate::new(&d).with_node_capabilities(&idle),
     ];
     // Coding request: code hint, normal latency, medium context.
     // Node A is the only claim that exact-matches the hint.
@@ -259,22 +234,10 @@ fn coder_collective_architecture_planning_routes_to_reasoning_node() {
     let (a, b, c, d) = build_coder_collective();
     let idle = node_caps(1.0);
     let candidates = vec![
-        BackendCandidate {
-            manifest: &a,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &b,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &c,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &d,
-            node_capabilities: Some(&idle),
-        },
+        BackendCandidate::new(&a).with_node_capabilities(&idle),
+        BackendCandidate::new(&b).with_node_capabilities(&idle),
+        BackendCandidate::new(&c).with_node_capabilities(&idle),
+        BackendCandidate::new(&d).with_node_capabilities(&idle),
     ];
     // Architecture planning: general hint, extended latency, large
     // context. Node B is the only Extended-latency general claim.
@@ -296,22 +259,10 @@ fn coder_collective_design_doc_routes_to_large_general_node() {
     let (a, b, c, d) = build_coder_collective();
     let idle = node_caps(1.0);
     let candidates = vec![
-        BackendCandidate {
-            manifest: &a,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &b,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &c,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &d,
-            node_capabilities: Some(&idle),
-        },
+        BackendCandidate::new(&a).with_node_capabilities(&idle),
+        BackendCandidate::new(&b).with_node_capabilities(&idle),
+        BackendCandidate::new(&c).with_node_capabilities(&idle),
+        BackendCandidate::new(&d).with_node_capabilities(&idle),
     ];
     // Design doc: general hint, normal latency, medium context.
     // Node A's code claim scores high (1.0 × 1.0 × 0.95 = 0.95)
@@ -344,22 +295,10 @@ fn coder_collective_fast_classification_stays_on_laptop() {
     let (a, b, c, d) = build_coder_collective();
     let idle = node_caps(1.0);
     let candidates = vec![
-        BackendCandidate {
-            manifest: &a,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &b,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &c,
-            node_capabilities: Some(&idle),
-        },
-        BackendCandidate {
-            manifest: &d,
-            node_capabilities: Some(&idle),
-        },
+        BackendCandidate::new(&a).with_node_capabilities(&idle),
+        BackendCandidate::new(&b).with_node_capabilities(&idle),
+        BackendCandidate::new(&c).with_node_capabilities(&idle),
+        BackendCandidate::new(&d).with_node_capabilities(&idle),
     ];
     // Fast classification: general hint, fast latency, tiny.
     // Only Node D exact-matches Fast latency.
@@ -398,10 +337,7 @@ fn solo_user_all_requests_route_to_sole_candidate() {
         ),
     ]);
     let idle = node_caps(1.0);
-    let candidates = vec![BackendCandidate {
-        manifest: &local,
-        node_capabilities: Some(&idle),
-    }];
+    let candidates = vec![BackendCandidate::new(&local).with_node_capabilities(&idle)];
 
     // Fast, small.
     let fast_req = req(
@@ -443,10 +379,7 @@ fn solo_user_oversized_request_returns_none() {
         0.7,
     )]);
     let idle = node_caps(1.0);
-    let candidates = vec![BackendCandidate {
-        manifest: &local,
-        node_capabilities: Some(&idle),
-    }];
+    let candidates = vec![BackendCandidate::new(&local).with_node_capabilities(&idle)];
     let oversized = req(
         CapabilityHint::general(),
         LatencyClass::Normal,

@@ -2,7 +2,8 @@ pub mod adaptive;
 pub mod knowledge_assignment;
 pub mod layer_assignment;
 pub mod leader;
-pub mod oicp_cache;
+// `oicp_cache` was a v0.2 artefact (CapabilityRequirements → ModelId
+// memoization). Removed in PR-C alongside the v0.2 routing surface.
 pub mod oicp_select;
 pub mod plan_builder;
 pub mod portfolio;

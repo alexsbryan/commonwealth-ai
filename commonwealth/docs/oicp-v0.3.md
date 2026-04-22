@@ -1,22 +1,26 @@
-# Open Inference Capabilities Protocol (OICP) — v0.3 Routing Extensions
+# Open Inference Capabilities Protocol (OICP) — v0.3
 
 **Version:** 0.3.0
-**Status:** Draft (additive over v0.2)
+**Status:** Draft (replaces v0.2 routing vocabulary)
 **License:** CC0 (public domain dedication)
 
 ---
 
 ## Abstract
 
-This document specifies v0.3 of OICP — a strictly additive extension to
-v0.2 that introduces specialization-aware routing. It adds four
-per-request property fields, a per-model claims vector, two new
-enums/types (`CapabilityHint`, `LatencyClass`, `CapabilityClaim`), and
-translation helpers for v0.2 compatibility.
+v0.3 is the current canonical OICP protocol. It introduces
+specialization-aware routing via per-request property fields
+(`capability_hint`, `latency_class`, `context_tokens`,
+`max_output_tokens`) and per-model claim advertisements. The v0.2
+capability-profile routing vocabulary (`CapabilityRequirements`,
+`satisfies_required`, `score_preferred`, `LatencyPreference`) has
+been removed; only the knowledge-search API, response metadata, and
+provider-manifest shape survive from v0.2 unchanged.
 
-v0.2 (`oicp-v0.2.md`) defines the client requirements schema, provider
-manifest, response metadata, and knowledge search API. v0.3 does **not**
-redefine any of those — it layers routing properties on top.
+The internal model-metadata vocabulary (the `Capability` enum,
+proficiency levels, capability profiles) is retained inside the
+reference implementation (`oicp-types`) as a local type used to
+synthesize claims at advertisement time — it is **not** on the wire.
 
 ---
 

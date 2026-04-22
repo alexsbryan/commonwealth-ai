@@ -114,7 +114,6 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
                 } else {
                     Some(model.quantization.clone())
                 },
-                capabilities: model.oicp_capabilities.clone(),
                 context_tokens: 32_768,
                 status: ModelStatus {
                     available: true,

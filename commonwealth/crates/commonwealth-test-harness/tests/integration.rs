@@ -19,7 +19,7 @@ use commonwealth_inference::orchestrator::fault::{
 
 use commonwealth_inference::scheduler::knowledge_assignment::{self, CorpusInfo, NodeWithCapacity};
 use commonwealth_inference::scheduler::leader;
-use commonwealth_inference::scheduler::oicp_cache::OicpModelCache;
+// OicpModelCache was removed in PR-C; v0.3 has no equivalent.
 use commonwealth_inference::scheduler::plan_builder;
 use commonwealth_inference::scheduler::portfolio::ModelPortfolio;
 
@@ -827,16 +827,13 @@ async fn oicp_routing_selects_correct_model() {
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // Request with code requirements → should route to coder model.
-    // Mesh-bound requests must explicitly opt out of LocalOnly per OICP §3.1.
+    // v0.3 code request → should route to coder model via claim hint match.
     let code_request = serde_json::json!({
         "messages": [{"role": "user", "content": "Write Rust code"}],
         "oicp": {
-            "oicp_version": "0.2.0",
-            "capabilities": {
-                "required": {"code": 3},
-                "preferred": {"code": 4, "instruction": 3}
-            },
+            "oicp_version": "0.3.0",
+            "capability_hint": "code",
+            "latency_class": "normal",
             "privacy": {"sharding": "mesh_allowed"}
         }
     });
@@ -849,15 +846,15 @@ async fn oicp_routing_selects_correct_model() {
     );
     assert_eq!(mock_general.request_count(), 0, "general should not get it");
 
-    // Request with analysis requirements → should route to general model.
+    // v0.3 general request → routes to the general model. A `general`
+    // hint explicitly matches only `general`-hinted claims, so the
+    // coder model's `code`-hinted synthesized claim is eliminated.
     let analysis_request = serde_json::json!({
         "messages": [{"role": "user", "content": "Analyze this paper"}],
         "oicp": {
-            "oicp_version": "0.2.0",
-            "capabilities": {
-                "required": {"analysis": 2},
-                "preferred": {"analysis": 3, "general": 3}
-            },
+            "oicp_version": "0.3.0",
+            "capability_hint": "general",
+            "latency_class": "normal",
             "privacy": {"sharding": "mesh_allowed"}
         }
     });
@@ -943,45 +940,10 @@ fn portfolio_multi_model_and_transition() {
     assert_eq!(portfolio.model_count(), 2); // Coder + new model.
 }
 
-// ============================================================================
-// Scenario: OICP Cache + Portfolio Integration (Phase 9+10)
-// Cache invalidates when portfolio version changes.
-// ============================================================================
-
-#[test]
-fn oicp_cache_invalidates_on_portfolio_change() {
-    let coder = coding_model(1);
-    let general = general_model(2);
-    let models: Vec<&_> = vec![&coder, &general];
-
-    let mut cache = OicpModelCache::new(1);
-
-    // Resolve a coding request.
-    let mut req_profile = CapabilityProfile::new();
-    req_profile.insert(Capability::Code, 3);
-    let mut pref_profile = CapabilityProfile::new();
-    pref_profile.insert(Capability::Code, 4);
-    let reqs = CapabilityRequirements {
-        required: req_profile,
-        preferred: pref_profile,
-    };
-
-    let result = cache.resolve_or_compute(&reqs, &models);
-    assert!(result.is_some());
-    assert_eq!(result.unwrap().0, ModelId::from_u128(1)); // Coder wins.
-
-    // Portfolio changes (version bumps).
-    assert!(!cache.is_stale(1));
-    assert!(cache.is_stale(2)); // New version → stale.
-
-    cache.invalidate();
-    assert!(cache.resolve(&reqs).is_none()); // Cache cleared.
-
-    // Re-resolve after invalidation.
-    cache.set_version(2);
-    let result = cache.resolve_or_compute(&reqs, &models);
-    assert_eq!(result.unwrap().0, ModelId::from_u128(1)); // Still coder.
-}
+// The oicp_cache test was deleted in PR-C alongside the
+// OicpModelCache module itself — it cached v0.2 CapabilityRequirements
+// resolutions that no longer exist. The v0.3 scheduler ranks
+// (node, claim) pairs per-request and has no analogous cache today.
 
 // ============================================================================
 // Scenario: Knowledge Shard Assignment (Phase 11)

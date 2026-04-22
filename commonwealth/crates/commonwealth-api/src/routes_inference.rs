@@ -7,7 +7,10 @@ use futures::StreamExt;
 use tracing::{debug, info, warn};
 
 use commonwealth_core::ids::ModelId;
-use commonwealth_inference::oicp::{self, CapabilityRequirements, ShardingPrivacy};
+use commonwealth_inference::oicp::{
+    self, CapabilityClaim, CapabilityHint, InferenceRequirements,
+    LatencyClass, ShardingPrivacy,
+};
 
 use crate::middleware::{
     MiddlewareError, MiddlewareSession, Pipeline, PipelineContext, ResponseView,
@@ -106,9 +109,17 @@ pub async fn chat_completions(
     }
 
     // --- Priority 1: Explicit OICP capability requirements ---
+    //
+    // The client has opinions about capability hint, latency class,
+    // or sizing. Rank every loaded model's synthesized claim against
+    // the request and serve the best.
     if let Some(ref oicp_req) = request.oicp {
-        if let Some(ref caps) = oicp_req.capabilities {
-            let model_id = match route_with_oicp(&state, caps) {
+        let has_v03_routing = oicp_req.capability_hint.is_some()
+            || oicp_req.latency_class.is_some()
+            || oicp_req.context_tokens.is_some()
+            || oicp_req.max_output_tokens.is_some();
+        if has_v03_routing {
+            let model_id = match route_with_oicp(&state, oicp_req) {
                 Some(id) => id,
                 None => {
                     return (
@@ -142,9 +153,14 @@ pub async fn chat_completions(
         if let Some(resolution) = state.inner.model_aliases.resolve(requested_model) {
             debug!(
                 model_name = requested_model,
+                alias_hint = %resolution.hint,
+                alias_latency = ?resolution.latency_class,
                 "model name matched alias, synthesizing OICP requirements"
             );
-            if let Some(model_id) = route_with_oicp(&state, &resolution.requirements) {
+            let synthesized = InferenceRequirements::new()
+                .with_hint(resolution.hint.clone())
+                .with_latency_class(resolution.latency_class);
+            if let Some(model_id) = route_with_oicp(&state, &synthesized) {
                 return forward_to_model(&state, model_id, &request).await;
             }
         }
@@ -167,27 +183,72 @@ pub async fn chat_completions(
     }
 }
 
-fn route_with_oicp(state: &AppState, requirements: &CapabilityRequirements) -> Option<ModelId> {
+/// Rank every loaded model's synthesized v0.3 claim against the
+/// request and return the `ModelId` with the highest score. Returns
+/// `None` when no claim passes the hard gate.
+fn route_with_oicp(
+    state: &AppState,
+    req: &InferenceRequirements,
+) -> Option<ModelId> {
     let models = state.inner.inference_store.list_models();
     let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
     let mut best_model = None;
-    let mut best_score = -1.0f32;
+    let mut best_score = f32::NEG_INFINITY;
 
     for shard_plan in &plan.model_plans {
-        if let Some(model_info) = models.get(&shard_plan.model) {
-            if oicp::satisfies_required(&model_info.oicp_capabilities, &requirements.required) {
-                let score =
-                    oicp::score_preferred(&model_info.oicp_capabilities, &requirements.preferred);
-                if score > best_score {
-                    best_score = score;
-                    best_model = Some(shard_plan.model);
-                }
+        let Some(model_info) = models.get(&shard_plan.model) else {
+            continue;
+        };
+        let claim = synthesize_claim_for_model_info(model_info);
+        if let Some(score) = oicp::score_claim_for_request(&claim, req) {
+            if score > best_score {
+                best_score = score;
+                best_model = Some(shard_plan.model);
             }
         }
     }
 
     best_model
+}
+
+/// Synthesize a v0.3 [`CapabilityClaim`] for a loaded `ModelInfo`.
+/// Mirrors the synthesis in `routes_oicp::synthesize_default_claim`
+/// — name heuristic for code specialists + profile-derived affinity
+/// — so the scheduler and advertiser agree on each model's claim
+/// shape.
+fn synthesize_claim_for_model_info(
+    model_info: &commonwealth_inference::ModelInfo,
+) -> CapabilityClaim {
+    let name_lower = model_info.name.to_lowercase();
+    let is_code_specialist = name_lower.contains("coder")
+        || name_lower.contains("code-llama")
+        || name_lower.contains("codellama")
+        || name_lower.contains("deepseek-coder");
+
+    let (hint, affinity) = if is_code_specialist {
+        let code = oicp::proficiency(&model_info.oicp_capabilities, oicp::Capability::Code);
+        (
+            CapabilityHint::code(),
+            (code as f32 / 4.0).clamp(0.0, 1.0),
+        )
+    } else {
+        let best = [
+            oicp::Capability::General,
+            oicp::Capability::Analysis,
+            oicp::Capability::Instruction,
+        ]
+        .into_iter()
+        .map(|c| oicp::proficiency(&model_info.oicp_capabilities, c))
+        .max()
+        .unwrap_or(0);
+        (
+            CapabilityHint::general(),
+            (best as f32 / 4.0).clamp(0.0, 1.0),
+        )
+    };
+
+    CapabilityClaim::new(hint, LatencyClass::Normal, 32_768, 2_048, affinity)
 }
 
 fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
