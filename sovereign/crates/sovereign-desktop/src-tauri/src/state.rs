@@ -323,6 +323,11 @@ impl DesktopConfig {
 pub struct AppState {
     pub runtime: RwLock<Option<Arc<Runtime>>>,
     pub approval: Arc<TauriApprovalChannel>,
+    /// PR2 — sink for interpretation-proposed, clarification-request,
+    /// and turn-narration events. Constructed at app setup alongside
+    /// `approval` (both wrap the same Tauri AppHandle) and handed to
+    /// Runtime::with_routing_events during bootstrap.
+    pub routing_events: Arc<crate::routing_events::TauriRoutingEventSink>,
     pub config: RwLock<DesktopConfig>,
     /// Reusable across Runtime rebuilds (model stays loaded).
     pub inference: RwLock<Option<Arc<dyn InferenceProvider>>>,
@@ -370,6 +375,9 @@ impl AppState {
     /// behaviour). Prefer `new_with_mode` so the Attach path is
     /// exercised when a CLI-started daemon is already up.
     pub fn new(approval: Arc<TauriApprovalChannel>) -> Self {
+        // Legacy constructor path — mint a placeholder routing sink
+        // from the approval channel's handle. Real callers should
+        // prefer `new_with_mode` which accepts an explicit sink.
         Self::new_with_mode(approval, crate::bootstrap::BootstrapMode::Local {
             source: crate::bootstrap::ConfigSource::Fresh,
         })
@@ -402,9 +410,18 @@ impl AppState {
             }
         };
 
+        // Mint a routing event sink from the same AppHandle the
+        // approval channel uses. Constructing it here (rather than
+        // plumbing a second AppHandle through the constructor) keeps
+        // the call sites tight and reuses the handle clone.
+        let routing_events = Arc::new(
+            crate::routing_events::TauriRoutingEventSink::new(approval.app_handle()),
+        );
+
         Self {
             runtime: RwLock::new(None),
             approval,
+            routing_events,
             config: RwLock::new(config),
             inference: RwLock::new(None),
             store: RwLock::new(None),
@@ -1194,6 +1211,13 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
     }
+    // PR2 — install the Tauri routing-events sink so the runtime can
+    // fire interpretation-proposed / clarification-request /
+    // turn-narration back to the desktop UI.
+    runtime = runtime.with_routing_events(
+        Arc::clone(&state.routing_events)
+            as Arc<dyn sovereign_core::traits::RoutingEventSink>,
+    );
 
     *state.runtime.write().await = Some(Arc::new(runtime));
 

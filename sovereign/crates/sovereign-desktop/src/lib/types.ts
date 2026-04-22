@@ -168,6 +168,94 @@ export interface MessageRefinedPayload {
   new_content: string;
 }
 
+// ─── Antifragile-routing size limits ─────────────────────────
+
+/** Mirror of `sovereign_core::runtime::MAX_TURN_MESSAGE_CHARS`.
+ *  Messages larger than this get rejected by the runtime before
+ *  any Fast-slot work runs. Kept in sync manually; the backend is
+ *  the source of truth, this is a UX affordance so the send button
+ *  can warn the user before the request fires.
+ *
+ *  ~16k chars ≈ 4k tokens. Document-sized content should go
+ *  through the attached-file flow, which is designed for long
+ *  inputs and routes through a map-reduce pipeline. */
+export const MAX_TURN_MESSAGE_CHARS = 16_000;
+
+/** Canned hint shown alongside the disabled send button. Matches
+ *  the hint the runtime returns so the two surfaces read the same. */
+export const OVERSIZE_MESSAGE_HINT =
+  "Over 16,000 characters. For document-sized content, attach a file instead — it routes through a map-reduce pipeline designed for long inputs.";
+
+// ─── Antifragile-routing event payloads ──────────────────────
+// Mirror of sovereign-core/src/types.rs: InterpretationProposed,
+// ClarificationRequest, TurnNarration, NarrationEvent. Wire format
+// is JSON via Tauri events.
+
+export type NarrationPhase =
+  | "routing_committed"
+  | "retrieval_complete"
+  | "primary_synthesis_start"
+  | "gap_check_fired";
+
+export interface NarrationEvent {
+  phase: NarrationPhase;
+  text: string;
+  elapsed_ms: number;
+}
+
+/** Wire payload for `interpretation-proposed`. Emitted before the
+ *  first token on moderate-confidence turns. The UI renders an
+ *  inline banner with `interpretation` + `alternatives` chips. */
+export interface InterpretationProposedPayload {
+  session_id: string;
+  conversation_id: string;
+  interpretation: string;
+  alternatives: ProposedAlternative[];
+  confidence: number;
+}
+
+export interface ProposedAlternative {
+  label: string;
+  intent_hint: string;
+}
+
+/** Wire payload for `clarification-request`. Emitted on low-confidence
+ *  turns; the runtime suppresses synthesis until the user picks an
+ *  option or types freeform input. */
+export interface ClarificationRequestPayload {
+  session_id: string;
+  conversation_id: string;
+  question: string;
+  options: ClarificationOption[];
+}
+
+export interface ClarificationOption {
+  label: string;
+  follow_up: string;
+  intent_hint: string;
+}
+
+/** Wire payload for `turn-narration`. Appended to the routing store's
+ *  narrationLog. Capped at 3 per turn by the runtime. */
+export interface TurnNarrationPayload {
+  session_id: string;
+  conversation_id: string;
+  event: NarrationEvent;
+}
+
+/** PR3 — one grounded follow-up offer rendered as a clickable chip
+ *  below a completed assistant message. Emitted inside
+ *  `metadata.next_steps` on KnowledgeQuery turns. Clicking reuses
+ *  the parent session via `resume_session` when `session_ref` is
+ *  still live (<30s); otherwise the UI falls back to a fresh turn. */
+export interface NextStepOffer {
+  label: string;
+  description?: string | null;
+  follow_up_query: string;
+  session_ref?: string | null;
+  intent_hint?: string | null;
+}
+
 export interface ErrorPayload {
   message: string;
 }

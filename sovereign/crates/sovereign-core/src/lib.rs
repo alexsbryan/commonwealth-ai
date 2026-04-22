@@ -10,6 +10,7 @@ pub mod models_manifest;
 pub mod observer;
 pub use oicp_types as oicp;
 pub mod planner;
+pub mod query_session;
 pub mod registry;
 pub mod router;
 pub mod runtime;

@@ -10,9 +10,13 @@ use crate::error::{Error, Result};
 use crate::executor::{Executor, TaskContext};
 use crate::memory;
 use crate::oicp::LatencyPreference;
+use crate::query_session::{SessionStore, SharedSessionStore};
 use crate::registry::ToolRegistry;
 use crate::skills::SkillRegistry;
-use crate::traits::{ApprovalChannel, InferenceProvider, Planner, Router, StateStore};
+use crate::traits::{
+    ApprovalChannel, InferenceProvider, NoOpRoutingEventSink, Planner, Router,
+    RoutingEventSink, StateStore,
+};
 use crate::types::*;
 
 /// Maximum characters of knowledge context to inject into prompts.
@@ -21,6 +25,31 @@ const MAX_KNOWLEDGE_CHARS: usize = 4000;
 
 /// Truncate per-chunk content to produce a budget for the total knowledge context.
 const MAX_CHUNK_CHARS: usize = 600;
+
+/// Hard ceiling on the size of a single user turn's message.
+///
+/// ~16k chars ≈ 4k tokens. Keeps every downstream Fast-slot call
+/// (working-memory compression, topic-context extraction, router
+/// classification, query embedding) safely under typical 8k-token
+/// context even when combined with conversation history + system
+/// prompts. A 20-page document pasted as a message body is
+/// ~40k tokens — it used to hang the pipeline for minutes before
+/// this guard; now it errors cleanly and the user sees a hint to
+/// use the document-attach flow instead.
+///
+/// Document-sized inputs belong in the `[Document attached: ...]`
+/// prefix path, which routes through map-reduce and scales to
+/// arbitrary length.
+pub const MAX_TURN_MESSAGE_CHARS: usize = 16_000;
+
+/// Error text shown when a message exceeds `MAX_TURN_MESSAGE_CHARS`.
+/// Surfaced unchanged to the user via the Tauri command layer, so it
+/// needs to be action-guidance, not a stack trace.
+pub(crate) const OVERSIZE_MESSAGE_HINT: &str =
+    "This message is too long for the chat pipeline (over 16,000 characters). \
+     For document-sized content, attach it as a file instead — Sovereign \
+     routes attachments through a map-reduce pipeline designed for long \
+     inputs. Or summarise your question into a paragraph or two.";
 
 /// Prepended to all Primary-slot (Speed::Slow) completions.
 /// Sets the epistemic contract for fact-based and synthesis responses.
@@ -108,7 +137,16 @@ Anti-fabrication guardrails:\n\
 - If retrieval found nothing relevant, say so in one sentence, then \
   answer from your general knowledge (with no source tags).\n\
 - NEVER invent or complete a list, roster, or statistic you do not fully \
-  know.";
+  know.\n\
+- CRITICAL — if neither the retrieved passages nor your confident \
+  general knowledge cover the specific thing the user asked about, say \
+  \"I don't have reliable information on this\" and stop. Do NOT \
+  invent a plausible-sounding origin, lineage, author, date, \
+  organisation, or framework. A confident-sounding fabrication is \
+  worse than an honest 'I don't know' — it poisons the user's mental \
+  model of what's real. If the phrase the user used (e.g. a specific \
+  project name, person, API) is not something you can speak to with \
+  concrete factual confidence, say so plainly.";
 
 /// Thinking directive — orients `<think>` toward substantive reasoning.
 ///
@@ -291,7 +329,7 @@ const EXPANDED_KNOWLEDGE_CHARS: usize = 8000;
 /// - Multi-source synthesis typically sees top_source_repeat = 1 and
 ///   median_ratio ≤ 1.2.
 #[derive(Debug, Clone)]
-struct EvidenceShape {
+pub struct EvidenceShape {
     count: usize,
     top1_score: f32,
     median_score: f32,
@@ -309,6 +347,67 @@ struct EvidenceShape {
     top_source_key: (String, String),
     /// Human-readable `corpus_id::title` for logging only.
     top_source_label: String,
+}
+
+/// Test-only constructor for `EvidenceShape`. Builds a synthetic
+/// shape with the named dimensions plus sensible scoring defaults —
+/// integration tests drive retrieval-miss pathways without needing
+/// a real corpus engine. Not intended for production call sites;
+/// the real path goes through `compute_evidence_shape`.
+pub fn build_test_evidence_shape(
+    count: usize,
+    distinct_sources: usize,
+    title_match: bool,
+    top_source_repeat_count: usize,
+) -> EvidenceShape {
+    EvidenceShape {
+        count,
+        top1_score: 0.02,
+        median_score: 0.017,
+        median_ratio: 1.1,
+        top_source_repeat_count,
+        distinct_sources,
+        title_match,
+        top_source_key: ("test-corpus".to_string(), "Test Note".to_string()),
+        top_source_label: "test-corpus::Test Note".to_string(),
+    }
+}
+
+impl EvidenceShape {
+    /// PR5 — retrieval-miss signal.
+    ///
+    /// Returns `true` when retrieval happened but the results are
+    /// clearly dispersed noise — chunks spread across many corpora,
+    /// no source concentration, no title match. The classic
+    /// "the corpora didn't have what the user asked about, but the
+    /// hybrid scorer returned something anyway" shape.
+    ///
+    /// Triggered in practice when:
+    ///   - User asks about a specific niche topic (e.g. a project
+    ///     name) the installed corpora don't cover.
+    ///   - The query's embeddings vaguely correlate with chunks in
+    ///     unrelated corpora (Machiavelli, political theory, code)
+    ///     and every corpus ships 2 chunks that nominally scored.
+    ///
+    /// On `true`, the runtime diverts to an Ask-tier clarification
+    /// card rather than committing to synthesis against off-target
+    /// evidence (which is the shape that produces confident
+    /// fabrication).
+    ///
+    /// Deliberately conservative — all three conditions must hold:
+    ///   - retrieval returned at least one chunk (empty is not a
+    ///     "miss", it's a "no data" case handled upstream),
+    ///   - no title of a retrieved chunk matches the query
+    ///     (`title_match == false`),
+    ///   - no source concentration
+    ///     (`top_source_repeat_count < EVIDENCE_MIN_TOP_SOURCE_REPEAT`),
+    ///   - results are fanned out across ≥ 3 distinct corpora.
+    fn is_off_target(&self) -> bool {
+        self.count > 0
+            && !self.title_match
+            && self.top_source_repeat_count < EVIDENCE_MIN_TOP_SOURCE_REPEAT
+            && self.distinct_sources >= 3
+    }
 }
 
 /// Which synthesis path to take given the evidence shape.
@@ -846,6 +945,104 @@ fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequ
     Some(InferenceRequirements::new().with_capabilities(caps))
 }
 
+/// Produce a short human-readable banner for `interpretation-proposed`.
+/// Runs without a model call — we'd like the banner to appear before
+/// the first token, so an extra Fast-slot turn for phrasing would
+/// defeat the "under 2s immediate engagement" requirement.
+fn format_interpretation(
+    _message: &str,
+    primary: &Intent,
+    rationale: Option<&str>,
+) -> String {
+    let intent_phrase = match primary {
+        Intent::SimpleQuery => "a quick factual answer",
+        Intent::DeepQuery => "a deeper explanation",
+        Intent::KnowledgeQuery => "a look in your installed knowledge",
+        Intent::SimpleAction { .. } => "a tool call",
+        Intent::ComplexTask => "a multi-step task",
+        Intent::Continuation { .. } => "a follow-up to earlier work",
+    };
+    if let Some(r) = rationale {
+        format!("I'm reading this as {intent_phrase} ({r}). If that's off, redirect below.")
+    } else {
+        format!("I'm reading this as {intent_phrase}. If that's off, redirect below.")
+    }
+}
+
+/// Human label for a redirect chip on the banner.
+fn label_for_intent(intent: &Intent) -> String {
+    match intent {
+        Intent::SimpleQuery => "Give me a quick answer".into(),
+        Intent::DeepQuery => "Walk me through it in depth".into(),
+        Intent::KnowledgeQuery => "Check my knowledge base".into(),
+        Intent::SimpleAction { tool } => format!("Use the {tool} tool"),
+        Intent::ComplexTask => "Plan a multi-step task".into(),
+        Intent::Continuation { .. } => "Continue prior task".into(),
+    }
+}
+
+/// Wire-form `Intent` hint used by the desktop → runtime redirect
+/// payload. Converting at this boundary keeps
+/// [`InterpretationProposed`] and [`ClarificationOption`] trivially
+/// serializable — the full `Intent` enum carries a `ToolId` for
+/// `SimpleAction`, which is ergonomic in Rust but awkward in JSON.
+fn intent_hint(intent: &Intent) -> String {
+    match intent {
+        Intent::SimpleQuery => "simple_query".into(),
+        Intent::DeepQuery => "deep_query".into(),
+        Intent::KnowledgeQuery => "knowledge_query".into(),
+        Intent::SimpleAction { tool } => format!("simple_action:{tool}"),
+        Intent::ComplexTask => "complex_task".into(),
+        Intent::Continuation { task_id } => format!("continuation:{task_id}"),
+    }
+}
+
+/// Inverse of [`intent_hint`] — decode a wire-form hint back into
+/// an `Intent`. Unknown variants fall back to `SimpleQuery` so the
+/// continuation path never hard-fails; the caller logs the case.
+fn parse_intent_hint(hint: &str) -> Intent {
+    match hint {
+        "simple_query" => Intent::SimpleQuery,
+        "deep_query" => Intent::DeepQuery,
+        "knowledge_query" => Intent::KnowledgeQuery,
+        "complex_task" => Intent::ComplexTask,
+        _ if hint.starts_with("simple_action:") => {
+            let tool = hint.trim_start_matches("simple_action:").to_string();
+            Intent::SimpleAction {
+                tool: ToolId::from(tool),
+            }
+        }
+        _ if hint.starts_with("continuation:") => {
+            let task_id = hint.trim_start_matches("continuation:").to_string();
+            Intent::Continuation {
+                task_id: TaskId::from(task_id),
+            }
+        }
+        _ => {
+            tracing::warn!(hint, "parse_intent_hint: unknown hint, falling back to SimpleQuery");
+            Intent::SimpleQuery
+        }
+    }
+}
+
+/// Build a one-sentence clarifying question for the `Ask` move.
+/// Kept short and neutral — the alternatives themselves do most of
+/// the disambiguation work; the question just frames the choice.
+fn build_clarification_question(_message: &str, primary: &Intent) -> String {
+    let read_as = match primary {
+        Intent::SimpleQuery => "a quick factual answer",
+        Intent::DeepQuery => "a deeper explanation",
+        Intent::KnowledgeQuery => "a corpus lookup",
+        Intent::SimpleAction { .. } => "an action",
+        Intent::ComplexTask => "a multi-step task",
+        Intent::Continuation { .. } => "a continuation",
+    };
+    format!(
+        "I could approach this a few ways — my best read is {read_as}, \
+         but could you pick what you'd like most?"
+    )
+}
+
 pub struct Runtime {
     pub inference: Arc<dyn InferenceProvider>,
     pub router: Box<dyn Router>,
@@ -872,6 +1069,21 @@ pub struct Runtime {
     /// digests stay `None` and the context carries only memories and
     /// corpus chunks.
     pub landscape_digests: Option<Arc<dyn crate::traits::LandscapeDigestProvider>>,
+    /// In-memory per-turn scratch store for antifragile routing. Holds
+    /// the `RouterClassification` + `RoutingPolicy` + cancellation
+    /// token for the in-flight turn; PR2 will also cache retrieval
+    /// and partial response so redirects can reuse work. Populated on
+    /// every `classify` return; GC'd on next turn or after 30s.
+    pub sessions: SharedSessionStore,
+    /// Active confidence thresholds. Defaults (0.80 / 0.55) ship with
+    /// every Runtime unless overridden by the host. PR4 will mutate
+    /// this from structural-signal calibration; PR1 reads it verbatim.
+    pub confidence_thresholds: ConfidenceThresholds,
+    /// Sink for the three antifragile-routing UI events
+    /// (interpretation-proposed, clarification-request, turn-narration).
+    /// Desktop bootstrap injects a `TauriRoutingEventSink`; headless
+    /// test/CLI harnesses get the default `NoOpRoutingEventSink`.
+    pub routing_events: Arc<dyn RoutingEventSink>,
 }
 
 impl Runtime {
@@ -897,7 +1109,22 @@ impl Runtime {
             corpus_engine: None,
             mesh_knowledge: None,
             landscape_digests: None,
+            sessions: Arc::new(SessionStore::new()),
+            confidence_thresholds: ConfidenceThresholds::default(),
+            routing_events: Arc::new(NoOpRoutingEventSink),
         }
+    }
+
+    /// Install a `RoutingEventSink` to receive interpretation,
+    /// clarification, and narration events. The desktop bootstrap
+    /// calls this with a `TauriRoutingEventSink`; headless harnesses
+    /// inherit the `NoOpRoutingEventSink` default from `new`.
+    pub fn with_routing_events(
+        mut self,
+        sink: Arc<dyn RoutingEventSink>,
+    ) -> Self {
+        self.routing_events = sink;
+        self
     }
 
     pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
@@ -1807,12 +2034,160 @@ impl Runtime {
         skip(self, message),
         fields(conversation_id = %conversation_id, message_chars = message.len())
     )]
+    /// PR2 session-continuation entry point. Called when the user
+    /// clicks a ClarificationCard option or a NextStepOffer. Takes
+    /// the `ResumeSession` hint, synthesises a fresh
+    /// `RouterClassification` from it (primary = hinted intent,
+    /// confidence = 1.0, MoveKind::Commit by construction), and
+    /// dispatches through the regular `handle_message_stream` body —
+    /// just with classification pre-decided so no router call is
+    /// made. PR2c will additionally reuse the retrieval cache keyed
+    /// by `resume.session_id`.
+    pub async fn resume_session_stream(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        resume: ResumeSession,
+    ) -> Result<StreamHandle> {
+        tracing::info!(
+            session_id = %resume.session_id,
+            intent_hint = %resume.intent_hint,
+            "runtime: resume session (continuation)"
+        );
+        let hinted = parse_intent_hint(&resume.intent_hint);
+        let synthetic = RouterClassification {
+            primary: IntentCandidate {
+                intent: hinted,
+                confidence: 1.0,
+            },
+            alternatives: Vec::new(),
+            rationale: Some(format!(
+                "session continuation from {}",
+                &resume.session_id
+            )),
+            coarse_intent: Some("CONTINUATION".to_string()),
+            self_assessment: None,
+        };
+        self.handle_message_stream_with_classification(
+            message,
+            conversation_id,
+            Some(synthetic),
+        )
+        .await
+    }
+
+    /// PR2c redirect handler — cancel an in-flight Propose-mode
+    /// sampler AND restart synthesis against the alternative intent
+    /// the user picked. Reads `session.input` + `session.conversation_id`
+    /// from the earlier `SessionStore.begin(...)` call, so the caller
+    /// only needs to pass the session id + intent hint. The old
+    /// assistant message stays in history (cancelled, possibly
+    /// partial) — the new one appears below as a fresh stream.
+    ///
+    /// PR2c scope: cancel + new stream, no retrieval reuse yet (the
+    /// new stream re-runs `prepare_knowledge_query_plan`). Caching is
+    /// PR2d — noted in the plan file.
+    pub async fn redirect_turn_stream(
+        &self,
+        session_id: &str,
+        intent_hint: &str,
+    ) -> Result<StreamHandle> {
+        let session = self
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| Error::NotImplemented(format!("session {session_id} not found")))?;
+        tracing::info!(
+            session_id,
+            intent_hint,
+            from_intent = ?session.classification.primary.intent,
+            "routing:redirected — cancelling current sampler and re-dispatching"
+        );
+        // PR4 — structural-signal capture. Update the `routing_log`
+        // row for this session's message with
+        // `was_redirected = true` + `redirect_to = <intent_hint>`.
+        // The hash must match the one `Router::classify` wrote via
+        // `log_routing` — both sides use `router::message_hash`.
+        // Best-effort; a db failure here doesn't block the redirect.
+        let signal_hash = crate::router::message_hash(&session.input);
+        let signal_hint = intent_hint.to_string();
+        let signal_store = Arc::clone(&self.store);
+        tokio::spawn(async move {
+            if let Err(e) = signal_store
+                .mark_routing_redirected(&signal_hash, &signal_hint)
+                .await
+            {
+                tracing::warn!(error = %e, "routing:redirect_signal write failed");
+            } else {
+                tracing::info!(
+                    hash = %signal_hash,
+                    redirect_to = %signal_hint,
+                    "routing:redirect_signal captured"
+                );
+            }
+        });
+        // Cancel the in-flight sampler so it drains and releases the
+        // slot lock before we spawn the replacement stream. Receiver
+        // drop (existing semantics) would also work, but the explicit
+        // token cancel is observable in `inference:cancelled` logs.
+        session.cancel.cancel();
+        // Hand off to the same continuation path the Clarification
+        // card uses. Same synthetic-classification shape, just
+        // tagged so the trace differentiates the two kinds of
+        // continuations.
+        let hinted = parse_intent_hint(intent_hint);
+        let synthetic = RouterClassification {
+            primary: IntentCandidate {
+                intent: hinted,
+                confidence: 1.0,
+            },
+            alternatives: Vec::new(),
+            rationale: Some(format!("redirect from session {session_id}")),
+            coarse_intent: Some("REDIRECT".to_string()),
+            self_assessment: None,
+        };
+        let message = session.input.clone();
+        let conversation_id = session.conversation_id.clone();
+        drop(session);
+        self.handle_message_stream_with_classification(
+            &message,
+            &conversation_id,
+            Some(synthetic),
+        )
+        .await
+    }
+
     pub async fn handle_message_stream(
         &self,
         message: &str,
         conversation_id: &str,
     ) -> Result<StreamHandle> {
+        self.handle_message_stream_with_classification(message, conversation_id, None)
+            .await
+    }
+
+    /// Private inner entry point for [`handle_message_stream`] and
+    /// [`resume_session_stream`]. When `preset` is `Some`, the
+    /// classifier call is skipped; when `None`, classification runs
+    /// as normal.
+    async fn handle_message_stream_with_classification(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        preset: Option<RouterClassification>,
+    ) -> Result<StreamHandle> {
         tracing::info!("runtime: stream turn begin");
+        // PR2e — reject oversized turn messages before any Fast-slot
+        // work runs. Document-sized inputs belong in the attached-
+        // file path; dropping 20 pages into the chat body used to
+        // hang `compress_working_memory` for minutes.
+        if message.len() > MAX_TURN_MESSAGE_CHARS {
+            tracing::warn!(
+                message_chars = message.len(),
+                limit = MAX_TURN_MESSAGE_CHARS,
+                "runtime:oversize_message rejected"
+            );
+            return Err(Error::InvalidInput(OVERSIZE_MESSAGE_HINT.to_string()));
+        }
         // 1. Build context.
         let mut context = build_context(self.store.as_ref(), conversation_id, message).await?;
         tracing::debug!(
@@ -1875,19 +2250,121 @@ impl Runtime {
             }
         }
 
-        // 3. Route.
+        // 3. Route (or honour a preset classification from a
+        // session-continuation call). When `preset` is `Some`, the
+        // classifier call is skipped — the UI has already picked the
+        // intent via `ClarificationCard` or `NextStepButtons`, and
+        // re-classifying the same message would waste a Fast-slot
+        // call and risk drifting from the user's explicit choice.
         let tool_descriptors = self.tools.descriptors();
-        let RoutingOutcome { intent, coarse_intent, self_assessment } = self
-            .router
-            .classify(message, &context, &tool_descriptors)
-            .await?;
+        let classification = if let Some(preset) = preset {
+            preset
+        } else {
+            self.router
+                .classify(message, &context, &tool_descriptors)
+                .await?
+        };
+
+        // Apply routing policy. PR1 only reaches MoveKind::Commit in
+        // the dispatcher; Propose/Ask are scaffolded by `decide_policy`
+        // but the Runtime treats anything non-Commit as Commit until
+        // PR2 wires the UI. We still log the policy so glassbox
+        // observers (ARCH §0.1, §9.1) see which tier we'd be in.
+        let policy = decide_policy(&classification, &self.confidence_thresholds);
+        tracing::debug!(
+            tier = ?policy.tier,
+            move_kind = ?policy.move_kind,
+            primary_intent = ?classification.primary.intent,
+            confidence = classification.primary.confidence,
+            thresholds_high = policy.thresholds_used.high,
+            thresholds_moderate = policy.thresholds_used.moderate,
+            "router:policy_applied"
+        );
+
+        // Begin an in-memory QuerySession covering this turn. Holds
+        // the classification + policy + cancellation token. PR2 will
+        // also cache retrieval and partial response here so a
+        // `redirect_turn` can reuse work without re-searching.
+        self.sessions.sweep_expired();
+        let skill_id = self.skills.primary_skill_id_for_conversation();
+        let (_session_id, _cancel_token) = self.sessions.begin(
+            conversation_id.to_string(),
+            skill_id,
+            message.to_string(),
+            classification.clone(),
+            policy.clone(),
+        );
+
+        // Destructure the classification fields we still thread as
+        // diagnostics into downstream handlers. Preserving these
+        // names keeps the handle_knowledge_query / handle_simple call
+        // sites untouched so PR1 stays behaviour-preserving.
+        let intent = classification.primary.intent.clone();
+        let coarse_intent = classification.coarse_intent.clone();
+        let self_assessment = classification.self_assessment.clone();
 
         tracing::info!(
             intent = ?intent,
             coarse = ?coarse_intent,
             self_assessment = ?self_assessment,
+            tier = ?policy.tier,
             "runtime: stream routed"
         );
+
+        // PR2 — Ask move. Suppress synthesis entirely, emit a
+        // `clarification-request` event, save a placeholder assistant
+        // message with the clarification metadata so the UI's
+        // existing message-metadata listener can render the
+        // ClarificationCard (same delivery path as retrieved_chunks).
+        // Return an already-closed stream so the desktop relay exits
+        // its token loop and promptly fires `message-complete`.
+        if matches!(policy.move_kind, MoveKind::Ask) {
+            return self
+                .handle_ask_move_stream(
+                    message,
+                    conversation_id,
+                    &_session_id,
+                    &classification,
+                )
+                .await;
+        }
+
+        // PR2 — Propose move. Emit an `interpretation-proposed` event
+        // BEFORE any tokens flow, then fall through to the Commit
+        // path so the Fast slot begins streaming immediately. The UI
+        // renders the banner on the in-flight message; a subsequent
+        // `redirect_turn` cancels the sampler via
+        // `session.cancel.cancel()` and re-dispatches with an
+        // alternative intent.
+        if matches!(policy.move_kind, MoveKind::Propose) {
+            let interpretation = format_interpretation(
+                message,
+                &classification.primary.intent,
+                classification.rationale.as_deref(),
+            );
+            let alternatives = classification
+                .alternatives
+                .iter()
+                .map(|a| ProposedAlternative {
+                    label: label_for_intent(&a.intent),
+                    intent_hint: intent_hint(&a.intent),
+                })
+                .collect();
+            self.routing_events
+                .emit_interpretation_proposed(InterpretationProposed {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    interpretation,
+                    alternatives,
+                    confidence: classification.primary.confidence,
+                })
+                .await;
+            tracing::info!(
+                session_id = %_session_id,
+                "routing:propose — banner emitted, continuing to Commit path"
+            );
+            // Fall through to Commit path — streaming begins below.
+        }
 
         // Document attached or ComplexTask → fall back to non-streaming.
         // (KnowledgeQuery used to live here too, but that triggered a desktop
@@ -1952,6 +2429,55 @@ impl Runtime {
             );
             let plan = self.prepare_knowledge_query_plan(message, &context).await;
 
+            // PR5 — post-retrieval retrieval-miss diversion. Off-
+            // target evidence shape (dispersed across ≥3 sources,
+            // no source concentration, no title match) was
+            // historically the exact input that produced confident
+            // parametric fabrication. Suppress synthesis and emit a
+            // clarification card instead.
+            if plan.shape.is_off_target() {
+                tracing::info!(
+                    session_id = %_session_id,
+                    distinct_sources = plan.shape.distinct_sources,
+                    retrieval_count = plan.shape.count,
+                    "routing:retrieval_miss — diverting to Ask clarification"
+                );
+                return self
+                    .handle_retrieval_miss_stream(
+                        message,
+                        conversation_id,
+                        &_session_id,
+                        &plan.shape,
+                        &tool_descriptors,
+                    )
+                    .await;
+            }
+
+            // PR2 narration: report retrieval shape on long turns.
+            // Suppressed internally when total elapsed < 5s or cap
+            // hit. The session store guards both; this call is safe
+            // on short turns — it just returns `None`.
+            if plan.shape.top_source_repeat_count >= 2 {
+                let txt = format!(
+                    "Found {} chunks — {} from one source, so I'll keep the answer focused.",
+                    plan.chunks.len(),
+                    plan.shape.top_source_repeat_count,
+                );
+                if let Some(event) = self.sessions.try_emit_narration(
+                    &_session_id,
+                    NarrationPhase::RetrievalComplete,
+                    txt,
+                ) {
+                    self.routing_events
+                        .emit_turn_narration(TurnNarration {
+                            session_id: _session_id.clone(),
+                            conversation_id: conversation_id.to_string(),
+                            event,
+                        })
+                        .await;
+                }
+            }
+
             let message_id = uuid::Uuid::new_v4().to_string();
             let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
 
@@ -1980,6 +2506,32 @@ impl Runtime {
             let top_source_label = shape.top_source_label.clone();
             let coarse_intent_for_prov = coarse_intent.clone();
             let self_assessment_for_prov = self_assessment.clone();
+
+            // PR3: compute next-step offers against the same
+            // retrieval the answer was built from. We do this on the
+            // main task (not the spawn) so we can capture the
+            // user's message by reference without cloning into the
+            // async move. The result is serialised into message
+            // metadata inside the spawn.
+            let had_dominant_source = shape.top_source_repeat_count >= 2;
+            let retrieval_missed = shape.is_off_target();
+            let top_source_title_owned = if shape.top_source_key.1.is_empty() {
+                None
+            } else {
+                Some(shape.top_source_key.1.clone())
+            };
+            let offers = build_next_step_offers(&OfferContext {
+                user_message: message,
+                top_source_title: top_source_title_owned.as_deref(),
+                had_dominant_source,
+                retrieved_chunks: &retrieved_chunks,
+                session_id: &_session_id,
+                retrieval_missed,
+            });
+            let offers_json = serde_json::to_value(&offers).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "next_steps: serialize failed");
+                serde_json::Value::Array(Vec::new())
+            });
             let route_for_log = route;
 
             tokio::spawn(async move {
@@ -2041,6 +2593,11 @@ impl Runtime {
                     "result_quality": result_quality,
                     "provenance": provenance,
                     "retrieved_chunks": retrieved_chunks,
+                    // PR3 — grounded follow-ups rendered as clickable
+                    // NextStepButtons under the bubble. Empty array
+                    // when retrieval produced nothing to ground an
+                    // offer against; the UI hides the row.
+                    "next_steps": offers_json,
                 });
                 let assistant_msg = Message {
                     id: message_id_owned.clone(),
@@ -2364,6 +2921,19 @@ impl Runtime {
         let has_doc_prefix = message.starts_with("[Document attached: ");
         tracing::info!(has_doc_prefix, "runtime: turn begin");
 
+        // PR2e — same oversize guard the streaming path applies.
+        // The `[Document attached: ...]` prefix path is exempt — that
+        // one is designed for long inputs and runs through the
+        // map-reduce pipeline, not the Fast-slot turn chain.
+        if !has_doc_prefix && message.len() > MAX_TURN_MESSAGE_CHARS {
+            tracing::warn!(
+                message_chars = message.len(),
+                limit = MAX_TURN_MESSAGE_CHARS,
+                "runtime:oversize_message rejected (non-streaming)"
+            );
+            return Err(Error::InvalidInput(OVERSIZE_MESSAGE_HINT.to_string()));
+        }
+
         // 1. Build context from store (use message text for memory retrieval).
         //    The user message is already persisted so it shows up here.
         let mut context = build_context(self.store.as_ref(), conversation_id, message).await?;
@@ -2401,17 +2971,85 @@ impl Runtime {
 
         // 2. Route.
         let tool_descriptors = self.tools.descriptors();
-        let RoutingOutcome { intent, coarse_intent, self_assessment } = self
+        let classification = self
             .router
             .classify(message, &context, &tool_descriptors)
             .await?;
+
+        // Same policy-apply + QuerySession hookup as the streaming
+        // path. See handle_message_stream for context. PR1 dispatcher
+        // only reaches MoveKind::Commit; PR2 will branch.
+        let policy = decide_policy(&classification, &self.confidence_thresholds);
+        tracing::debug!(
+            tier = ?policy.tier,
+            move_kind = ?policy.move_kind,
+            primary_intent = ?classification.primary.intent,
+            confidence = classification.primary.confidence,
+            thresholds_high = policy.thresholds_used.high,
+            thresholds_moderate = policy.thresholds_used.moderate,
+            "router:policy_applied"
+        );
+
+        self.sessions.sweep_expired();
+        let skill_id = self.skills.primary_skill_id_for_conversation();
+        let (_session_id, _cancel_token) = self.sessions.begin(
+            conversation_id.to_string(),
+            skill_id,
+            message.to_string(),
+            classification.clone(),
+            policy.clone(),
+        );
+
+        let intent = classification.primary.intent.clone();
+        let coarse_intent = classification.coarse_intent.clone();
+        let self_assessment = classification.self_assessment.clone();
 
         tracing::info!(
             intent = ?intent,
             coarse = ?coarse_intent,
             self_assessment = ?self_assessment,
+            tier = ?policy.tier,
             "runtime: routed"
         );
+
+        // PR2 — Ask on the non-streaming path. Same semantics as
+        // `handle_ask_move_stream`: save a placeholder assistant
+        // message with clarification metadata, emit the event, return
+        // a Response without running synthesis.
+        if matches!(policy.move_kind, MoveKind::Ask) {
+            return self
+                .handle_ask_move_turn(message, conversation_id, &_session_id, &classification)
+                .await;
+        }
+        // PR2 — Propose on the non-streaming path. Emit the banner
+        // event before falling through to synthesis. Redirect from
+        // the non-streaming path is a PR2c concern (the desktop runs
+        // on the streaming path; CLI users who want to redirect can
+        // send a new turn).
+        if matches!(policy.move_kind, MoveKind::Propose) {
+            let interpretation = format_interpretation(
+                message,
+                &classification.primary.intent,
+                classification.rationale.as_deref(),
+            );
+            let alternatives = classification
+                .alternatives
+                .iter()
+                .map(|a| ProposedAlternative {
+                    label: label_for_intent(&a.intent),
+                    intent_hint: intent_hint(&a.intent),
+                })
+                .collect();
+            self.routing_events
+                .emit_interpretation_proposed(InterpretationProposed {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    interpretation,
+                    alternatives,
+                    confidence: classification.primary.confidence,
+                })
+                .await;
+        }
 
         // 2b. Splice KnowledgeView landscape digests (same hook as
         // handle_message_stream). No-op when
@@ -2487,6 +3125,416 @@ impl Runtime {
             "runtime: turn end"
         );
         result
+    }
+
+    /// PR2 — non-streaming `MoveKind::Ask` handler. Same shape as
+    /// `handle_ask_move_stream` but returns a `Response` instead of
+    /// a `StreamHandle`. CLI / server callers receive the placeholder
+    /// assistant message with clarification metadata; the `Ask` event
+    /// is emitted on the routing sink (no-op in headless builds).
+    async fn handle_ask_move_turn(
+        &self,
+        original_message: &str,
+        conversation_id: &str,
+        session_id: &str,
+        classification: &RouterClassification,
+    ) -> Result<Response> {
+        let message_id = uuid::Uuid::new_v4().to_string();
+        let question = build_clarification_question(
+            original_message,
+            &classification.primary.intent,
+        );
+        let options: Vec<ClarificationOption> = classification
+            .alternatives
+            .iter()
+            .map(|c| ClarificationOption {
+                label: label_for_intent(&c.intent),
+                follow_up: original_message.to_string(),
+                intent_hint: intent_hint(&c.intent),
+            })
+            .collect();
+
+        let clarification_payload = ClarificationRequest {
+            session_id: session_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            question: question.clone(),
+            options: options.clone(),
+        };
+
+        let placeholder_body =
+            "I want to make sure I give you the right shape of answer.".to_string();
+        let metadata = serde_json::json!({
+            "move_kind": "ask",
+            "confidence": classification.primary.confidence,
+            "clarification": {
+                "session_id": session_id,
+                "question": question,
+                "options": options,
+            },
+            "coarse_intent": classification.coarse_intent,
+        });
+        let assistant_msg = Message {
+            id: message_id,
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: placeholder_body,
+            created_at: now(),
+            metadata: Some(metadata),
+            version: 0,
+        };
+        self.store.save_message(&assistant_msg).await?;
+        let response_msg = assistant_msg.clone();
+
+        self.routing_events
+            .emit_clarification_request(clarification_payload)
+            .await;
+
+        tracing::info!(
+            session_id,
+            conversation_id,
+            options = classification.alternatives.len(),
+            "routing:ask — clarification requested (non-streaming path)"
+        );
+
+        Ok(Response {
+            message: response_msg,
+            task: None,
+        })
+    }
+
+    /// PR2 — streaming `MoveKind::Ask` handler. Suppress synthesis,
+    /// persist a placeholder assistant message whose metadata carries
+    /// the clarification payload (so the UI's existing
+    /// message-metadata plumbing can render the `ClarificationCard`
+    /// without a second event channel), emit
+    /// `clarification-request`, and return an already-closed stream
+    /// so the desktop relay promptly fires `message-complete`.
+    ///
+    /// No Fast-slot synthesis runs. No retrieval runs. The only cost
+    /// is saving one message + emitting one event — the whole point
+    /// of the Ask move is cheap engagement when confidence is low.
+    async fn handle_ask_move_stream(
+        &self,
+        original_message: &str,
+        conversation_id: &str,
+        session_id: &str,
+        classification: &RouterClassification,
+    ) -> Result<StreamHandle> {
+        let message_id = uuid::Uuid::new_v4().to_string();
+
+        // Build clarification payload from the classifier's
+        // alternatives. If the heuristic surfaced fewer than two, pad
+        // with a free-text prompt so the user always has a way forward.
+        let question = build_clarification_question(
+            original_message,
+            &classification.primary.intent,
+        );
+        let options: Vec<ClarificationOption> = classification
+            .alternatives
+            .iter()
+            .map(|c| ClarificationOption {
+                label: label_for_intent(&c.intent),
+                follow_up: original_message.to_string(),
+                intent_hint: intent_hint(&c.intent),
+            })
+            .collect();
+
+        let clarification_payload = ClarificationRequest {
+            session_id: session_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            question: question.clone(),
+            options: options.clone(),
+        };
+
+        // Persist a placeholder assistant message so the turn shows
+        // up in history. Body is intentionally terse — the
+        // ClarificationCard above the message is the actual UX.
+        let placeholder_body =
+            "I want to make sure I give you the right shape of answer.".to_string();
+        let metadata = serde_json::json!({
+            "move_kind": "ask",
+            "confidence": classification.primary.confidence,
+            "clarification": {
+                "session_id": session_id,
+                "question": question,
+                "options": options,
+            },
+            "coarse_intent": classification.coarse_intent,
+        });
+        let assistant_msg = Message {
+            id: message_id.clone(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: placeholder_body.clone(),
+            created_at: now(),
+            metadata: Some(metadata),
+            version: 0,
+        };
+        self.store.save_message(&assistant_msg).await?;
+
+        // Emit the clarification event (no-op for NoOpRoutingEventSink,
+        // Tauri emit in desktop builds).
+        self.routing_events
+            .emit_clarification_request(clarification_payload)
+            .await;
+
+        tracing::info!(
+            session_id,
+            conversation_id,
+            options = classification.alternatives.len(),
+            "routing:ask — clarification requested, synthesis suppressed"
+        );
+
+        // Return an already-closed stream. The desktop relay reads
+        // until the stream ends, then fetches metadata and fires
+        // `message-complete` as normal.
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(1);
+        // Send the placeholder text as one chunk so the bubble
+        // renders immediately and the UI can read metadata. Drop `tx`
+        // right after so the relay sees EOF on the next poll.
+        let _ = tx.send(Ok(placeholder_body)).await;
+        drop(tx);
+
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        Ok(StreamHandle {
+            message_id,
+            stream: Box::pin(stream),
+        })
+    }
+
+    /// PR5 — post-retrieval Ask diversion. Fires when retrieval ran
+    /// successfully but produced dispersed noise (see
+    /// `EvidenceShape::is_off_target`). Classification was high
+    /// enough to commit, but synthesis against off-target evidence
+    /// is exactly the shape that produces confident fabrication —
+    /// so we suppress synthesis and show the user their options
+    /// instead: answer from general knowledge (explicit opt-in),
+    /// search the web (if tool available), or rephrase.
+    ///
+    /// Returns a closed stream with a placeholder message carrying
+    /// a `clarification` metadata field — same shape the regular
+    /// Ask path uses, so the existing `ClarificationCard` renders
+    /// it without any UI-layer changes.
+    async fn handle_retrieval_miss_stream(
+        &self,
+        original_message: &str,
+        conversation_id: &str,
+        session_id: &str,
+        shape: &EvidenceShape,
+        tool_descriptors: &[ToolDescriptor],
+    ) -> Result<StreamHandle> {
+        let message_id = uuid::Uuid::new_v4().to_string();
+
+        // Build options aimed at the miss: let the user opt in to
+        // parametric synthesis, web-search if available, or
+        // rephrase. Three options max — the ClarificationCard also
+        // offers a free-text fallback, so adding more options would
+        // just be clutter.
+        let mut options: Vec<ClarificationOption> = Vec::new();
+        options.push(ClarificationOption {
+            label: "Answer from general knowledge (may be inaccurate)".to_string(),
+            follow_up: original_message.to_string(),
+            intent_hint: "simple_query".to_string(),
+        });
+        if let Some(web_tool) = tool_descriptors
+            .iter()
+            .find(|t| t.name.contains("web_search") || t.name == "search")
+        {
+            options.push(ClarificationOption {
+                label: "Search the web".to_string(),
+                follow_up: original_message.to_string(),
+                intent_hint: format!("simple_action:{}", web_tool.id),
+            });
+        }
+        options.push(ClarificationOption {
+            label: "Rephrase — I'll try again".to_string(),
+            // Empty follow_up signals "wait for user input" — the UI
+            // surfaces the clarification card's free-text box.
+            follow_up: original_message.to_string(),
+            intent_hint: "deep_query".to_string(),
+        });
+
+        let question = format!(
+            "I searched {} sources but nothing looked relevant to \"{}\". \
+             How would you like me to proceed?",
+            shape.distinct_sources,
+            truncate_with_ellipsis(original_message, 80),
+        );
+
+        let clarification_payload = ClarificationRequest {
+            session_id: session_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            question: question.clone(),
+            options: options.clone(),
+        };
+
+        let placeholder_body = format!(
+            "I didn't find anything relevant in your installed knowledge bases \
+             for that question. Rather than guess, I'd like to check how you'd \
+             like me to proceed."
+        );
+        let metadata = serde_json::json!({
+            "move_kind": "ask",
+            "retrieval_missed": true,
+            "documents_found": shape.count,
+            "distinct_sources": shape.distinct_sources,
+            "clarification": {
+                "session_id": session_id,
+                "question": question,
+                "options": options,
+            },
+        });
+        let assistant_msg = Message {
+            id: message_id.clone(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: placeholder_body.clone(),
+            created_at: now(),
+            metadata: Some(metadata),
+            version: 0,
+        };
+        self.store.save_message(&assistant_msg).await?;
+
+        self.routing_events
+            .emit_clarification_request(clarification_payload)
+            .await;
+
+        tracing::info!(
+            session_id,
+            conversation_id,
+            distinct_sources = shape.distinct_sources,
+            retrieval_count = shape.count,
+            "routing:retrieval_miss — synthesis suppressed, clarification requested"
+        );
+
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(1);
+        let _ = tx.send(Ok(placeholder_body)).await;
+        drop(tx);
+
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        Ok(StreamHandle {
+            message_id,
+            stream: Box::pin(stream),
+        })
+    }
+
+    /// Test-only entry point that directly invokes
+    /// `handle_retrieval_miss_stream`. Integration tests can't
+    /// easily drive the full KnowledgeQuery pipeline (no corpora in
+    /// the harness), so this exposes the diversion method for
+    /// isolated verification.
+    pub async fn invoke_retrieval_miss_stream_for_test(
+        &self,
+        original_message: &str,
+        conversation_id: &str,
+        session_id: &str,
+        shape: &EvidenceShape,
+        tool_descriptors: &[ToolDescriptor],
+    ) -> Result<StreamHandle> {
+        self.handle_retrieval_miss_stream(
+            original_message,
+            conversation_id,
+            session_id,
+            shape,
+            tool_descriptors,
+        )
+        .await
+    }
+
+    /// PR5 — non-streaming sibling of `handle_retrieval_miss_stream`.
+    /// Same suppression + clarification semantics; returns a
+    /// Response carrying the placeholder body + metadata so CLI /
+    /// server callers get a consistent behavior.
+    async fn handle_retrieval_miss_response(
+        &self,
+        original_message: &str,
+        conversation_id: &str,
+        session_id: &str,
+        shape: &EvidenceShape,
+        tool_descriptors: &[ToolDescriptor],
+    ) -> Result<Response> {
+        let message_id = uuid::Uuid::new_v4().to_string();
+
+        let mut options: Vec<ClarificationOption> = Vec::new();
+        options.push(ClarificationOption {
+            label: "Answer from general knowledge (may be inaccurate)".to_string(),
+            follow_up: original_message.to_string(),
+            intent_hint: "simple_query".to_string(),
+        });
+        if let Some(web_tool) = tool_descriptors
+            .iter()
+            .find(|t| t.name.contains("web_search") || t.name == "search")
+        {
+            options.push(ClarificationOption {
+                label: "Search the web".to_string(),
+                follow_up: original_message.to_string(),
+                intent_hint: format!("simple_action:{}", web_tool.id),
+            });
+        }
+        options.push(ClarificationOption {
+            label: "Rephrase — I'll try again".to_string(),
+            follow_up: original_message.to_string(),
+            intent_hint: "deep_query".to_string(),
+        });
+
+        let question = format!(
+            "I searched {} sources but nothing looked relevant to \"{}\". \
+             How would you like me to proceed?",
+            shape.distinct_sources,
+            truncate_with_ellipsis(original_message, 80),
+        );
+
+        let clarification_payload = ClarificationRequest {
+            session_id: session_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            question: question.clone(),
+            options: options.clone(),
+        };
+
+        let placeholder_body =
+            "I didn't find anything relevant in your installed knowledge bases \
+             for that question. Rather than guess, I'd like to check how you'd \
+             like me to proceed."
+                .to_string();
+        let metadata = serde_json::json!({
+            "move_kind": "ask",
+            "retrieval_missed": true,
+            "documents_found": shape.count,
+            "distinct_sources": shape.distinct_sources,
+            "clarification": {
+                "session_id": session_id,
+                "question": question,
+                "options": options,
+            },
+        });
+        let assistant_msg = Message {
+            id: message_id,
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: placeholder_body,
+            created_at: now(),
+            metadata: Some(metadata),
+            version: 0,
+        };
+        self.store.save_message(&assistant_msg).await?;
+        let response_msg = assistant_msg.clone();
+
+        self.routing_events
+            .emit_clarification_request(clarification_payload)
+            .await;
+
+        tracing::info!(
+            session_id,
+            conversation_id,
+            distinct_sources = shape.distinct_sources,
+            retrieval_count = shape.count,
+            "routing:retrieval_miss — synthesis suppressed (non-streaming)"
+        );
+
+        Ok(Response {
+            message: response_msg,
+            task: None,
+        })
     }
 
     /// Handle SimpleQuery, DeepQuery, and other non-plan intents.
@@ -2802,6 +3850,32 @@ impl Runtime {
     ) -> Result<Response> {
         let plan = self.prepare_knowledge_query_plan(message, context).await;
 
+        // PR5 — non-streaming retrieval-miss diversion. Mirrors the
+        // streaming path: dispersed noise → suppress synthesis +
+        // surface clarification instead of confabulating.
+        if plan.shape.is_off_target() {
+            let session_id = self
+                .sessions
+                .latest_for_conversation(conversation_id)
+                .map(|s| s.id)
+                .unwrap_or_default();
+            let tool_descriptors = self.tools.descriptors();
+            tracing::info!(
+                distinct_sources = plan.shape.distinct_sources,
+                retrieval_count = plan.shape.count,
+                "routing:retrieval_miss — non-streaming diversion"
+            );
+            return self
+                .handle_retrieval_miss_response(
+                    message,
+                    conversation_id,
+                    &session_id,
+                    &plan.shape,
+                    &tool_descriptors,
+                )
+                .await;
+        }
+
         let completion = self.inference.complete(&plan.request).await?;
 
         let final_content = if plan.gap_check_enabled {
@@ -2849,6 +3923,33 @@ impl Runtime {
             self_assessment,
         };
 
+        // PR3 — grounded next-step offers. Look up the most recent
+        // session for this conversation (handle_turn created one
+        // right before dispatching here); fall back to a synthetic
+        // id when the session isn't present (e.g. legacy test
+        // harnesses that don't wire the session store).
+        let session_id = self
+            .sessions
+            .latest_for_conversation(conversation_id)
+            .map(|s| s.id)
+            .unwrap_or_default();
+        let had_dominant_source = plan.shape.top_source_repeat_count >= 2;
+        let retrieval_missed = plan.shape.is_off_target();
+        let top_source_title = if plan.shape.top_source_key.1.is_empty() {
+            None
+        } else {
+            Some(plan.shape.top_source_key.1.clone())
+        };
+        let offers = build_next_step_offers(&OfferContext {
+            user_message: message,
+            top_source_title: top_source_title.as_deref(),
+            had_dominant_source,
+            retrieved_chunks: &plan.retrieved_chunks,
+            session_id: &session_id,
+            retrieval_missed,
+        });
+        let offers_json = serde_json::to_value(&offers).unwrap_or_default();
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -2865,6 +3966,7 @@ impl Runtime {
                 "result_quality": plan.result_quality,
                 "provenance": provenance,
                 "retrieved_chunks": plan.retrieved_chunks,
+                "next_steps": offers_json,
             })),
             version: now(),
         };
@@ -3866,5 +4968,108 @@ mod evidence_shape_tests {
         assert_eq!(shape.distinct_sources, 0);
         let route = route_from_evidence(&shape);
         assert_eq!(route, SynthesisRoute::FastFocused);
+    }
+
+    // ── PR5 is_off_target coverage ────────────────────────────────
+
+    /// The "Commonwealth scheduler" failure mode from real logs:
+    /// 8 chunks, 2 each across 4 unrelated corpora, no title match,
+    /// no source repeat. `is_off_target()` must fire so the runtime
+    /// diverts to clarification instead of synthesizing a
+    /// fabrication against dispersed noise.
+    #[test]
+    fn commonwealth_scheduler_shape_is_off_target() {
+        // Every chunk has a unique (corpus_id, title) so nothing
+        // concentrates — maximum dispersion, the classic
+        // retrieval-miss shape captured from the production log.
+        let chunks = vec![
+            chunk("folder", "The Prince", 0.0170),
+            chunk("folder", "political-theory", 0.0167),
+            chunk("obsidian", "Cartoon Reel", 0.0167),
+            chunk("obsidian", "Other Note", 0.0167),
+            chunk("sep", "utilitarianism", 0.0167),
+            chunk("sep", "consequentialism", 0.0167),
+            chunk("wiki", "capitalism", 0.0161),
+            chunk("wiki", "republic", 0.0160),
+        ];
+        let shape =
+            compute_evidence_shape(&chunks, "Tell me about the Commonwealth scheduler");
+        assert!(shape.distinct_sources >= 3);
+        assert!(!shape.title_match);
+        assert_eq!(
+            shape.top_source_repeat_count, 1,
+            "no concentration — every (corpus, title) is unique"
+        );
+        assert!(
+            shape.is_off_target(),
+            "dispersed noise must read as off-target: {shape:?}"
+        );
+    }
+
+    /// Positive control: the concentrated Joan Robinson shape is
+    /// decidedly NOT a miss. Guards against a regression where
+    /// is_off_target eats into legitimate single-source retrieval.
+    #[test]
+    fn joan_robinson_shape_is_not_off_target() {
+        let chunks = vec![
+            chunk("obsidian", "Joan Robinson", 0.0325),
+            chunk("obsidian", "Joan Robinson", 0.0323),
+            chunk("conversation-history", "", 0.0320),
+            chunk("obsidian", "Joan Robinson", 0.0167),
+            chunk("sep", "emily-elizabeth-jones", 0.0167),
+            chunk("folder", "From Dictatorship to Democracy", 0.0167),
+            chunk("folder", "ThePrince", 0.0167),
+            chunk("obsidian", "Benchmark", 0.0161),
+        ];
+        let shape =
+            compute_evidence_shape(&chunks, "Can you tell me about Joan Robinson?");
+        assert!(shape.title_match);
+        assert!(
+            !shape.is_off_target(),
+            "title match + 3 repeats must clear off-target: {shape:?}"
+        );
+    }
+
+    /// Empty retrieval is handled by the parametric-knowledge branch
+    /// upstream, not by is_off_target. Count==0 must read as NOT
+    /// off-target so the diversion logic doesn't fire on a no-hits
+    /// case it can't improve.
+    #[test]
+    fn empty_retrieval_is_not_off_target() {
+        let chunks: Vec<ScoredChunk> = Vec::new();
+        let shape = compute_evidence_shape(&chunks, "anything");
+        assert!(!shape.is_off_target());
+    }
+
+    /// Two-source dispersion is not enough. Must have ≥ 3 distinct
+    /// sources to read as genuinely dispersed.
+    #[test]
+    fn two_source_split_is_not_off_target() {
+        let chunks = vec![
+            chunk("obsidian", "Note A", 0.020),
+            chunk("sep", "entry-a", 0.018),
+        ];
+        let shape = compute_evidence_shape(&chunks, "some question");
+        assert_eq!(shape.distinct_sources, 2);
+        assert!(
+            !shape.is_off_target(),
+            "2 sources is below the dispersion threshold"
+        );
+    }
+
+    /// A title match rescues a dispersed shape from off-target.
+    /// The query clearly intersected a document's title — that's
+    /// enough grounding to synthesize against.
+    #[test]
+    fn title_match_overrides_dispersion() {
+        let chunks = vec![
+            chunk("obsidian", "Scheduler Design Doc", 0.020),
+            chunk("sep", "utilitarianism", 0.017),
+            chunk("folder", "unrelated", 0.017),
+            chunk("wiki", "other", 0.017),
+        ];
+        let shape = compute_evidence_shape(&chunks, "tell me about the scheduler design");
+        assert!(shape.title_match);
+        assert!(!shape.is_off_target());
     }
 }

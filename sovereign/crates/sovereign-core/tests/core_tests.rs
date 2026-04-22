@@ -573,7 +573,7 @@ async fn passthrough_router_always_simple_query() {
     };
 
     let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
-    assert!(matches!(outcome.intent, Intent::SimpleQuery));
+    assert!(matches!(outcome.primary.intent, Intent::SimpleQuery));
 }
 
 #[tokio::test]
@@ -1060,9 +1060,14 @@ impl Router for ComplexTaskRouter {
         _message: &str,
         _context: &ConversationContext,
         _available_tools: &[ToolDescriptor],
-    ) -> Result<RoutingOutcome> {
-        Ok(RoutingOutcome {
-            intent: Intent::ComplexTask,
+    ) -> Result<RouterClassification> {
+        Ok(RouterClassification {
+            primary: IntentCandidate {
+                intent: Intent::ComplexTask,
+                confidence: 1.0,
+            },
+            alternatives: Vec::new(),
+            rationale: None,
             coarse_intent: None,
             self_assessment: None,
         })

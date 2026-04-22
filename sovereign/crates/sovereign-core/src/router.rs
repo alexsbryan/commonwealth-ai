@@ -17,13 +17,19 @@ pub struct ClassificationResult {
     pub confidence: f64,
 }
 
-/// Structured output from Pass 1.
+/// Structured output from Pass 1. `rationale` is optional — small
+/// fast models don't always emit it cleanly, and a missing field
+/// defaults to `None` rather than failing the whole parse. Missing
+/// rationale is fine; broken JSON loses us classification entirely,
+/// so `serde(default)` tolerance matters more than rationale fidelity.
 #[derive(Debug, Default, serde::Deserialize)]
 struct CoarseClassification {
     #[serde(default)]
     intent: String,
     #[serde(default)]
     confidence: f32,
+    #[serde(default)]
+    rationale: Option<String>,
 }
 
 /// Outcome of the SimpleQuery self-assessment gate.
@@ -69,6 +75,115 @@ WEB         — The question requires current information (today's news,
               could have.
 
 Answer:"#;
+
+/// Compute the `routing_log.message_hash` for a given user input.
+/// Stable across router + runtime so PR4 redirect-signal updates
+/// can correlate to the row written by `log_routing`. Public so
+/// integration tests can reproduce the hash without reaching into
+/// implementation internals.
+pub fn message_hash(message: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    message.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+/// Emit up to three candidate alternative intents for the Ask move,
+/// in ranked order. Pure function — no model call, no I/O. Target
+/// cost under 15ms.
+///
+/// Rationale: small Fast-slot models fumble multi-option JSON output
+/// (top-2 interpretations). A keyword heuristic is cheaper, more
+/// reliable, and empirically good enough for the antifragile-routing
+/// clarification UX — the user sees 2-3 clickable alternatives and
+/// picks one, which is often enough to disambiguate "how does X
+/// work" into "walk me through X" vs "show me X in the corpus" vs
+/// "search the web for X".
+///
+/// Always excludes the primary intent so the UI doesn't show a
+/// redundant "you meant this" chip. Availability-aware: never
+/// suggests `SimpleAction { tool: "web_search" }` when the web
+/// search tool isn't installed.
+pub(crate) fn suggest_alternatives(
+    message: &str,
+    primary: &Intent,
+    available_tools: &[ToolDescriptor],
+) -> Vec<IntentCandidate> {
+    let lower = message.to_lowercase();
+    let mut out: Vec<IntentCandidate> = Vec::new();
+    let has_web = available_tools
+        .iter()
+        .any(|t| t.name.contains("web_search") || t.name == "search");
+
+    // Temporal / recency signal → offer web search.
+    let wants_current = [
+        "latest", "today", "current", "recent", "this week", "this month",
+        "right now", "news", "price", "score", "weather",
+    ]
+    .iter()
+    .any(|k| lower.contains(k));
+    if wants_current && has_web {
+        if let Some(t) = available_tools
+            .iter()
+            .find(|t| t.name.contains("web_search") || t.name == "search")
+        {
+            out.push(IntentCandidate {
+                intent: Intent::SimpleAction {
+                    tool: t.id.clone(),
+                },
+                confidence: 0.6,
+            });
+        }
+    }
+
+    // Deep-reasoning signal → DeepQuery.
+    let wants_deep = [
+        "how does", "explain", "walk me through", "compare", "contrast",
+        "why does", "analyze", "analyse", "relationship between", "difference between",
+    ]
+    .iter()
+    .any(|k| lower.contains(k));
+    if wants_deep {
+        out.push(IntentCandidate {
+            intent: Intent::DeepQuery,
+            confidence: 0.55,
+        });
+    }
+
+    // Corpus-lookup-y signal → KnowledgeQuery.
+    let wants_lookup = [
+        "according to", "in the", "from the", "the document", "chapter",
+        "paper", "book", "find", "lookup", "look up",
+    ]
+    .iter()
+    .any(|k| lower.contains(k));
+    if wants_lookup {
+        out.push(IntentCandidate {
+            intent: Intent::KnowledgeQuery,
+            confidence: 0.5,
+        });
+    }
+
+    // Definitional / short-factual → SimpleQuery.
+    let wants_simple = lower.starts_with("what is ")
+        || lower.starts_with("what does ")
+        || lower.starts_with("define ")
+        || lower.starts_with("meaning of ");
+    if wants_simple {
+        out.push(IntentCandidate {
+            intent: Intent::SimpleQuery,
+            confidence: 0.5,
+        });
+    }
+
+    // Drop alternatives that match the primary (same discriminant) —
+    // the redirect chip would be redundant otherwise.
+    out.retain(|c| std::mem::discriminant(&c.intent) != std::mem::discriminant(primary));
+
+    // Cap at 3 entries — more is UI noise. Order is preserved (most
+    // confident signal first based on the above ordering).
+    out.truncate(3);
+    out
+}
 
 /// Returns true when the message contains surface signals that the answer
 /// involves specific enumerable facts — names, rosters, lists, statistics —
@@ -241,7 +356,7 @@ Conversation context: {context_str}
 User message: "{message}"{corrections_note}{skill_hints}
 
 Respond with JSON only:
-{{"intent": "SIMPLE|LOOKUP|REASONING|ACTION", "confidence": 0.0}}"#,
+{{"intent": "SIMPLE|LOOKUP|REASONING|ACTION", "confidence": 0.0, "rationale": "one short clause"}}"#,
         )
     }
 
@@ -749,7 +864,7 @@ impl Router for LlmRouter {
         message: &str,
         context: &ConversationContext,
         available_tools: &[ToolDescriptor],
-    ) -> Result<RoutingOutcome> {
+    ) -> Result<RouterClassification> {
         let start = Instant::now();
 
         // Fetch recent routing corrections for few-shot self-correction.
@@ -767,9 +882,7 @@ impl Router for LlmRouter {
         // knowledge follow-up that should bypass corpus retrieval.
         if let Some(override_intent) = Self::check_topic_continuity(message, context) {
             let latency_ms = start.elapsed().as_millis() as i64;
-            let mut hasher = DefaultHasher::new();
-            message.hash(&mut hasher);
-            let hash = format!("{:x}", hasher.finish());
+            let hash = message_hash(message);
             let intent_str = format!("{override_intent:?}");
             let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
             let _ = self.store.log_routing_meta(&hash, "TOPIC_CONTINUITY", None).await;
@@ -780,8 +893,19 @@ impl Router for LlmRouter {
                 override_intent,
             );
 
-            return Ok(RoutingOutcome {
-                intent: override_intent,
+            // Topic-continuity override is a deterministic heuristic:
+            // treat it as maximum confidence so `decide_policy` commits
+            // without prompting the user.
+            return Ok(RouterClassification {
+                primary: IntentCandidate {
+                    intent: override_intent,
+                    confidence: 1.0,
+                },
+                alternatives: Vec::new(),
+                rationale: Some(
+                    "topic continuity: general-knowledge follow-up in an established conversation"
+                        .to_string(),
+                ),
                 coarse_intent: Some("TOPIC_CONTINUITY".to_string()),
                 self_assessment: None,
             });
@@ -808,11 +932,23 @@ impl Router for LlmRouter {
 
         // Pass 1: Coarse classification (skipped for pre-checked cases).
         let coarse = if force_action {
-            CoarseClassification { intent: "ACTION".to_string(), confidence: 1.0 }
+            CoarseClassification {
+                intent: "ACTION".to_string(),
+                confidence: 1.0,
+                rationale: Some("current/time-sensitive signal → external tool".to_string()),
+            }
         } else if force_content_reasoning {
-            CoarseClassification { intent: "REASONING".to_string(), confidence: 1.0 }
+            CoarseClassification {
+                intent: "REASONING".to_string(),
+                confidence: 1.0,
+                rationale: Some("content-processing verb on in-prompt material".to_string()),
+            }
         } else if force_deep {
-            CoarseClassification { intent: "REASONING".to_string(), confidence: 1.0 }
+            CoarseClassification {
+                intent: "REASONING".to_string(),
+                confidence: 1.0,
+                rationale: Some("analytical/compatibility signal → deep reasoning".to_string()),
+            }
         } else {
             let pass1_prompt = Self::build_pass1_prompt(
                 message,
@@ -821,7 +957,8 @@ impl Router for LlmRouter {
                 &corrections,
                 &routing_hints,
             );
-            let pass1_response = self.classify_call_json(pass1_prompt, 40).await?;
+            // 60-token budget: JSON + confidence + short rationale clause.
+            let pass1_response = self.classify_call_json(pass1_prompt, 60).await?;
             Self::parse_coarse(&pass1_response)
         };
 
@@ -845,9 +982,7 @@ impl Router for LlmRouter {
         let latency_ms = start.elapsed().as_millis() as i64;
 
         // Log routing decision.
-        let mut hasher = DefaultHasher::new();
-        message.hash(&mut hasher);
-        let hash = format!("{:x}", hasher.finish());
+        let hash = message_hash(message);
         let intent_str = format!("{intent:?}");
         let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
         let _ = self.store.log_routing_meta(
@@ -864,8 +999,35 @@ impl Router for LlmRouter {
             coarse.confidence,
         );
 
-        Ok(RoutingOutcome {
-            intent,
+        // Confidence source: pre-check heuristics (force_action,
+        // force_content_reasoning, force_deep) pin `coarse.confidence`
+        // to 1.0 at the match-arm above where they're constructed;
+        // otherwise the LLM Pass 1 asserted confidence flows through.
+        // Parse failures collapse to `intent == ""` with confidence
+        // 0.0, which would map to `MoveKind::Ask` — but we've already
+        // defaulted to `Intent::KnowledgeQuery` in that branch, so
+        // override confidence to 1.0 to keep the safe-fallback
+        // committing (never silently confabulate via the Ask move).
+        let primary_confidence = if coarse.intent.is_empty() {
+            1.0
+        } else {
+            coarse.confidence
+        };
+
+        // PR2: populate alternatives for every classification. The
+        // runtime surfaces them only on the Ask move (low-confidence
+        // clarification card); on Commit/Propose they're carried
+        // along for telemetry + potential next-step use.
+        let primary_intent_ref = &intent;
+        let alternatives = suggest_alternatives(message, primary_intent_ref, available_tools);
+
+        Ok(RouterClassification {
+            primary: IntentCandidate {
+                intent,
+                confidence: primary_confidence,
+            },
+            alternatives,
+            rationale: coarse.rationale.clone(),
             coarse_intent: Some(coarse.intent),
             self_assessment: self_assessment_outcome,
         })
@@ -1164,5 +1326,95 @@ mod tests {
         // Safe fallback — prefer local search over confabulation.
         assert!(matches!(parse_self_assessment("???"), SelfAssessment::Uncertain));
         assert!(matches!(parse_self_assessment(""), SelfAssessment::Uncertain));
+    }
+
+    // ── suggest_alternatives (Ask-move heuristic) ───────────────
+
+    fn web_search_tool() -> ToolDescriptor {
+        ToolDescriptor {
+            id: "web_search".to_string(),
+            name: "web_search".to_string(),
+            description: "Search the web".to_string(),
+            parameters: serde_json::json!({}),
+            examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::External,
+            output_schema: None,
+        }
+    }
+
+    #[test]
+    fn alternatives_temporal_suggests_web_search_when_tool_available() {
+        let alts = suggest_alternatives(
+            "what's the latest on the election?",
+            &Intent::DeepQuery,
+            &[web_search_tool()],
+        );
+        let has_web = alts.iter().any(|c| matches!(&c.intent, Intent::SimpleAction { tool } if tool == "web_search"));
+        assert!(has_web, "temporal + web tool should surface SimpleAction: {alts:?}");
+    }
+
+    #[test]
+    fn alternatives_temporal_without_tool_skips_web() {
+        let alts = suggest_alternatives(
+            "what's the latest on the election?",
+            &Intent::DeepQuery,
+            &[],
+        );
+        let has_web = alts.iter().any(|c| matches!(&c.intent, Intent::SimpleAction { .. }));
+        assert!(!has_web, "no web tool → no SimpleAction alternative");
+    }
+
+    #[test]
+    fn alternatives_how_does_suggests_deep() {
+        let alts = suggest_alternatives(
+            "how does the scheduler work?",
+            &Intent::SimpleQuery,
+            &[],
+        );
+        assert!(alts.iter().any(|c| matches!(c.intent, Intent::DeepQuery)));
+    }
+
+    #[test]
+    fn alternatives_excludes_primary() {
+        // Primary is DeepQuery; even though the message carries a
+        // "how does" signal, the DeepQuery alternative must be
+        // omitted because it equals the primary.
+        let alts = suggest_alternatives(
+            "how does the scheduler work?",
+            &Intent::DeepQuery,
+            &[],
+        );
+        assert!(!alts.iter().any(|c| matches!(c.intent, Intent::DeepQuery)));
+    }
+
+    #[test]
+    fn alternatives_definitional_suggests_simple() {
+        let alts = suggest_alternatives("what is a mesh?", &Intent::DeepQuery, &[]);
+        assert!(alts.iter().any(|c| matches!(c.intent, Intent::SimpleQuery)));
+    }
+
+    #[test]
+    fn alternatives_capped_at_three() {
+        // Message hits all signals at once.
+        let alts = suggest_alternatives(
+            "what is the latest on how does the scheduler work — look up the paper",
+            &Intent::SimpleQuery,
+            &[web_search_tool()],
+        );
+        assert!(alts.len() <= 3, "alternatives must be capped: {alts:?}");
+    }
+
+    #[test]
+    fn alternatives_empty_on_vague_message() {
+        // No trigger keywords at all.
+        let alts = suggest_alternatives(
+            "hmm interesting point",
+            &Intent::SimpleQuery,
+            &[web_search_tool()],
+        );
+        assert!(alts.is_empty(), "nothing matched → no alternatives: {alts:?}");
     }
 }

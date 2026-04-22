@@ -68,6 +68,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
         migrations::run_knowledge_view_migrations(&conn)
             .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
+        migrations::run_antifragile_routing_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -79,6 +81,29 @@ impl SqliteStateStore {
     /// Used by `SqliteInsightStore` to share the same database connection.
     pub fn connection(&self) -> Arc<Mutex<Connection>> {
         Arc::clone(&self.conn)
+    }
+
+    /// Read the (was_redirected, redirect_to) fields for the most
+    /// recent `routing_log` row matching `message_hash`. Returns
+    /// `None` if no row is found. Exposed for PR4 integration
+    /// tests + future calibration job introspection — the schema
+    /// columns are otherwise private to the SQLite impl.
+    pub async fn read_redirect_signal(
+        &self,
+        message_hash: &str,
+    ) -> Option<(bool, Option<String>)> {
+        let conn = self.conn.lock().await;
+        conn.query_row(
+            "SELECT was_redirected, redirect_to FROM routing_log \
+             WHERE message_hash = ?1 ORDER BY created_at DESC LIMIT 1",
+            rusqlite::params![message_hash],
+            |row| {
+                let was_redirected: i64 = row.get(0)?;
+                let redirect_to: Option<String> = row.get(1)?;
+                Ok((was_redirected != 0, redirect_to))
+            },
+        )
+        .ok()
     }
 
     /// Builder-style observer install. Equivalent to
@@ -180,6 +205,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
         migrations::run_knowledge_view_migrations(&conn)
             .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
+        migrations::run_antifragile_routing_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -745,6 +772,21 @@ impl RoutingStore for SqliteStateStore {
         conn.execute(
             "UPDATE routing_log SET was_correct = ?2 WHERE message_hash = ?1",
             rusqlite::params![message_hash, was_correct],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn mark_routing_redirected(
+        &self,
+        message_hash: &str,
+        redirect_to: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE routing_log SET was_redirected = 1, redirect_to = ?2 \
+             WHERE message_hash = ?1",
+            rusqlite::params![message_hash, redirect_to],
         )
         .map_err(map_db)?;
         Ok(())

@@ -5,6 +5,7 @@ mod friendly_names;
 mod insight_commands;
 mod local_corpus_commands;
 mod mesh_commands;
+mod routing_events;
 mod state;
 mod tray;
 
@@ -145,6 +146,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::send_message,
             commands::send_message_stream,
+            commands::redirect_turn,
+            commands::resume_session,
+            commands::cancel_stream,
             commands::create_conversation,
             commands::list_conversations,
             commands::get_conversation,

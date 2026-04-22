@@ -291,6 +291,7 @@ impl ModelSlot {
         request: &CompletionRequest,
         tx: &tokio::sync::mpsc::Sender<Result<String>>,
         quirks: &ModelQuirks,
+        cancel: Option<&tokio_util::sync::CancellationToken>,
     ) -> Result<()> {
         // Pre-clear for the same reason as generate_sync: a prior failed decode
         // leaves the cache dirty, causing M-RoPE position errors on the next call.
@@ -330,6 +331,21 @@ impl ModelSlot {
         let mut think_budget_fired = false;
 
         while n_generated < max_tokens {
+            // Antifragile-routing cancel check: redirect-induced
+            // cancellation on the session-level CancellationToken stops
+            // the sampler without waiting for the receiver to drop.
+            // Receiver-drop (below) remains the de-facto cancel path when
+            // no token is threaded; both converge on `break`.
+            if let Some(t) = cancel {
+                if t.is_cancelled() {
+                    tracing::warn!(
+                        tokens_emitted = n_generated,
+                        "inference:cancelled via CancellationToken"
+                    );
+                    break;
+                }
+            }
+
             let token = sampler.sample(ctx, -1);
             sampler.accept(token);
 
@@ -358,6 +374,10 @@ impl ModelSlot {
                 }
 
                 if tx.blocking_send(Ok(piece)).is_err() {
+                    tracing::warn!(
+                        tokens_emitted = n_generated,
+                        "inference:cancelled via receiver-drop"
+                    );
                     break;
                 }
             }
@@ -1371,7 +1391,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks)
+                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
                 {
                     tracing::warn!(slot = "primary", error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
@@ -1390,7 +1410,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks)
+                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
                 {
                     tracing::warn!(slot = "fast", error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));

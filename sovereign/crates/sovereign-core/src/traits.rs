@@ -126,7 +126,44 @@ pub trait Router: Send + Sync {
         message: &str,
         context: &ConversationContext,
         available_tools: &[ToolDescriptor],
-    ) -> Result<RoutingOutcome>;
+    ) -> Result<RouterClassification>;
+}
+
+/// Emit-only channel for antifragile-routing user-facing events that
+/// are *not* request/response.
+///
+/// - Interpretation-proposed: moderate-confidence classifications
+///   stream normally but surface an inline banner so the user can
+///   cheaply redirect.
+/// - Clarification-request: low-confidence classifications suppress
+///   synthesis and ask the user to pick an alternative or type
+///   freeform input.
+/// - Turn-narration: model-voice narration at phase boundaries for
+///   long turns (suppressed under 5s, capped at 3 per turn).
+///
+/// Desktop implements this to emit Tauri events; CLI/server can
+/// implement as loggers or no-ops. The default — an `Arc` around
+/// [`NoOpRoutingEventSink`] — drops every event silently so
+/// headless test harnesses and the CLI preserve exactly today's
+/// surface.
+#[async_trait]
+pub trait RoutingEventSink: Send + Sync {
+    async fn emit_interpretation_proposed(&self, payload: InterpretationProposed);
+    async fn emit_clarification_request(&self, payload: ClarificationRequest);
+    async fn emit_turn_narration(&self, payload: TurnNarration);
+}
+
+/// No-op implementation. Returned by `Arc::new(NoOpRoutingEventSink)`
+/// for Runtime builders that don't install a desktop sink. Keeps the
+/// runtime's dispatcher branches branchless (no `if let Some(...)`
+/// wrapping every emit site).
+pub struct NoOpRoutingEventSink;
+
+#[async_trait]
+impl RoutingEventSink for NoOpRoutingEventSink {
+    async fn emit_interpretation_proposed(&self, _payload: InterpretationProposed) {}
+    async fn emit_clarification_request(&self, _payload: ClarificationRequest) {}
+    async fn emit_turn_narration(&self, _payload: TurnNarration) {}
 }
 
 // ─── 3. Planning ───────────────────────────────────────────────
@@ -263,6 +300,20 @@ pub trait RoutingStore: Send + Sync {
     }
     async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>>;
     async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()>;
+    /// PR4 — record an explicit user redirect away from a
+    /// Propose-tier commit. Sets `routing_log.was_redirected = 1`
+    /// and `routing_log.redirect_to = <intent_hint>` for the row
+    /// previously written by `log_routing`. A future calibration
+    /// job tunes confidence thresholds from the aggregate of these
+    /// signals. Default no-op so legacy implementations compile.
+    async fn mark_routing_redirected(
+        &self,
+        message_hash: &str,
+        redirect_to: &str,
+    ) -> Result<()> {
+        let _ = (message_hash, redirect_to);
+        Ok(())
+    }
 }
 
 #[async_trait]

@@ -49,6 +49,48 @@ export async function sendMessageStream(
   });
 }
 
+// ─── Antifragile-routing commands ────────────────────────────
+
+/** PR6 — cancel the current in-flight stream for a conversation.
+ *  The sampler breaks the decode loop on its next check, the
+ *  stream closes, and the existing `message-complete` listener
+ *  transitions chat.machine back to idle automatically. */
+export async function cancelStream(conversationId: string): Promise<void> {
+  return invoke("cancel_stream", { conversationId });
+}
+
+/** PR2c — cancel the in-flight sampler AND start a new stream
+ *  against the chosen alternative intent. Returns a
+ *  `StreamStartedResponse` just like `sendMessageStream`; the caller
+ *  listens for `message-chunk` / `message-complete` events keyed on
+ *  the new `message_id`. The original user message + conversation
+ *  are pulled from the SessionStore by the runtime — the frontend
+ *  only passes the session id + intent hint. */
+export async function redirectTurn(
+  sessionId: string,
+  intentHint: string,
+): Promise<StreamStartedResponse> {
+  return invoke("redirect_turn", { sessionId, intentHint });
+}
+
+/** Resume a prior session with an explicit intent. Skips router
+ *  classification and streams the follow-up through the hinted intent.
+ *  Used by ClarificationCard option clicks and (PR3) NextStepOffer
+ *  buttons. */
+export async function resumeSession(
+  message: string,
+  conversationId: string,
+  sessionId: string,
+  intentHint: string,
+): Promise<StreamStartedResponse> {
+  return invoke("resume_session", {
+    message,
+    conversationId,
+    sessionId,
+    intentHint,
+  });
+}
+
 export async function createConversation(): Promise<CreateConversationResponse> {
   return invoke("create_conversation");
 }

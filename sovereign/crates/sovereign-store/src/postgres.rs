@@ -189,6 +189,13 @@ impl PostgresStateStore {
             -- remain valid; populated on new writes.
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_conversation_id TEXT;
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS skill_id TEXT;
+
+            -- Antifragile-routing signal columns (PR4). Mirror of
+            -- migrations::run_antifragile_routing_migrations on the
+            -- SQLite side. Captured when the user redirects away
+            -- from a Propose-tier commit.
+            ALTER TABLE routing_log ADD COLUMN IF NOT EXISTS was_redirected BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE routing_log ADD COLUMN IF NOT EXISTS redirect_to TEXT;
             "#,
             )
             .await
@@ -568,6 +575,23 @@ impl RoutingStore for PostgresStateStore {
             .execute(
                 "UPDATE routing_log SET was_correct = $1 WHERE message_hash = $2",
                 &[&was_correct, &message_hash],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn mark_routing_redirected(
+        &self,
+        message_hash: &str,
+        redirect_to: &str,
+    ) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "UPDATE routing_log SET was_redirected = TRUE, redirect_to = $1 \
+                 WHERE message_hash = $2",
+                &[&redirect_to, &message_hash],
             )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;

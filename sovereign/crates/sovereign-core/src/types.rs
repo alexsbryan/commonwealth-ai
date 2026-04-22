@@ -1021,20 +1021,412 @@ pub struct Response {
     pub task: Option<Task>,
 }
 
-// ─── Response Provenance ──────────────────────────────────────
+// ─── Routing Decision ────────────────────────────────────────
+//
+// Two-layer model per the antifragile-routing design:
+//
+//   Router::classify → RouterClassification   (what the model/heuristics said)
+//   decide_policy(classification, thresholds) → RoutingPolicy   (what the runtime does about it)
+//
+// The split keeps classification pure (a witness of the model's opinion)
+// and policy tunable without touching the router. Threshold calibration
+// (future PR4) mutates policy, not the Router trait.
 
-/// Returned by `Router::classify()`. Carries the final intent alongside
-/// the diagnostic routing detail that was previously only written to
-/// `routing_log` and invisible in the UI.
+/// A single (intent, confidence) candidate. The classifier emits one
+/// primary plus up to a few alternatives.
 #[derive(Debug, Clone)]
-pub struct RoutingOutcome {
+pub struct IntentCandidate {
     pub intent: Intent,
-    /// Raw coarse-classification label: "SIMPLE", "LOOKUP", "REASONING", "ACTION".
+    /// Confidence in [0.0, 1.0]. A pre-checked heuristic (topic
+    /// continuity, content processing, temporal signal) pins this to
+    /// 1.0; an LLM Pass 1 returns whatever the model asserts.
+    pub confidence: f32,
+}
+
+/// Returned by `Router::classify()`. Carries the primary intent, any
+/// alternatives the classifier surfaced, and the diagnostic fields
+/// that were previously squirreled away in `routing_log` and
+/// invisible in the UI.
+///
+/// `alternatives` is empty in PR1 — the field is reserved for PR2 when
+/// the `Ask` move uses a cheap keyword heuristic to suggest clickable
+/// disambiguations. Keeping the field here (instead of building it in
+/// the runtime) lets future classifiers populate it without a second
+/// trait change.
+#[derive(Debug, Clone)]
+pub struct RouterClassification {
+    pub primary: IntentCandidate,
+    pub alternatives: Vec<IntentCandidate>,
+    /// One-clause justification from the classifier, when available.
+    /// Surfaced in the UI for glassbox integrity (ARCH §0.1). `None`
+    /// when the classifier is a pre-check or a stub.
+    pub rationale: Option<String>,
+    /// Raw coarse-classification label: "SIMPLE", "LOOKUP",
+    /// "REASONING", "ACTION", or "TOPIC_CONTINUITY" for the override.
     pub coarse_intent: Option<String>,
-    /// Self-assessment result — populated only on SIMPLE paths that went
-    /// through the gate: "Confident", "Uncertain", "NeedsWebSearch".
+    /// Self-assessment result — populated only on SIMPLE paths that
+    /// went through the gate: "Confident", "Uncertain",
+    /// "NeedsWebSearch".
     pub self_assessment: Option<String>,
 }
+
+/// Which of the three antifragile moves the runtime should take.
+///
+/// - `Commit`: proceed directly. No banner, no prompt. Default.
+/// - `Propose`: stream a response AND show the interpretation banner
+///   so the user can cheaply redirect. PR2 wires the UI; PR1 never
+///   returns this variant.
+/// - `Ask`: suppress synthesis and surface a clarification card. PR2
+///   wires the UI; PR1 never returns this variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoveKind {
+    Commit,
+    Propose,
+    Ask,
+}
+
+/// Bucketed confidence tier. Derived from `primary.confidence` and
+/// the active `ConfidenceThresholds`. Kept as an enum (ARCH §2.1) so
+/// downstream glassbox rendering is stringly-typed only at the
+/// serialization boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfidenceTier {
+    High,
+    Moderate,
+    Low,
+}
+
+/// Thresholds consulted by `decide_policy`. Defaults err toward
+/// committing so first-time users see a responsive system; the
+/// "Propose" move activates in the moderate band where the
+/// interpretation banner adds value.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ConfidenceThresholds {
+    /// confidence ≥ high  → `ConfidenceTier::High`  / `MoveKind::Commit`
+    pub high: f32,
+    /// high > confidence ≥ moderate → `ConfidenceTier::Moderate` / `MoveKind::Propose`
+    /// moderate > confidence        → `ConfidenceTier::Low`      / `MoveKind::Ask`
+    pub moderate: f32,
+}
+
+impl Default for ConfidenceThresholds {
+    fn default() -> Self {
+        Self {
+            high: 0.80,
+            moderate: 0.55,
+        }
+    }
+}
+
+/// Runtime-side policy: what we're actually going to do with the
+/// classifier's opinion. Pure function of `RouterClassification` +
+/// `ConfidenceThresholds`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutingPolicy {
+    pub move_kind: MoveKind,
+    pub tier: ConfidenceTier,
+    /// Snapshot of the thresholds used to produce this decision.
+    /// Surfaced in glassbox metadata so users and the operator log
+    /// can see why the router picked what it picked (ARCH §0.1).
+    pub thresholds_used: ConfidenceThresholds,
+}
+
+/// Which substantive phase a narration entry marks. Serialized to
+/// the UI so narration chips can carry an icon per phase (retrieval,
+/// routing, synthesis, etc.). Extend additively; the UI should
+/// fallback gracefully for unknown variants (via `#[serde(other)]`
+/// on the consuming side).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NarrationPhase {
+    /// Routing committed, substantive work about to begin.
+    RoutingCommitted,
+    /// Corpus/mesh retrieval finished; narration reports the shape.
+    RetrievalComplete,
+    /// Primary-slot synthesis beginning (Slow path).
+    PrimarySynthesisStart,
+    /// Gap-check fired and found a missing piece.
+    GapCheckFired,
+}
+
+/// One narration entry emitted in the model's voice during a long
+/// turn. Accumulated in `QuerySession.narration` and streamed to the
+/// UI as `turn-narration` Tauri events. PR2 emits these at
+/// phase-boundary points; suppression < 5s total elapsed and a
+/// 3-event cap keep the channel from polluting short turns.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NarrationEvent {
+    pub phase: NarrationPhase,
+    pub text: String,
+    /// Milliseconds since turn start. Drives UI timeline rendering.
+    pub elapsed_ms: u64,
+}
+
+// ─── Antifragile-routing UI event payloads ───────────────────
+
+/// Emitted by the runtime when `decide_policy` picks `MoveKind::Propose`.
+/// The UI renders an inline banner above the streaming message with
+/// the `interpretation` text plus `alternatives` as redirect chips.
+/// The banner persists through the turn; redirect stays cheap while
+/// tokens are flowing (sampler cancels) and remains valid afterward
+/// (full session retained for 30s).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InterpretationProposed {
+    pub session_id: String,
+    pub conversation_id: String,
+    /// One-sentence statement of how the router read the input, e.g.
+    /// "I'm reading this as a quick overview of the scheduler."
+    pub interpretation: String,
+    /// Ranked candidate interpretations the user can click to
+    /// redirect. Drawn from `RouterClassification.alternatives`.
+    pub alternatives: Vec<ProposedAlternative>,
+    /// Confidence number for glassbox rendering (ARCH §0.1).
+    pub confidence: f32,
+}
+
+/// One redirect option on an `InterpretationProposed` banner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProposedAlternative {
+    /// UI-facing label, e.g. "Walk me through the scoring function".
+    pub label: String,
+    /// Serialized `Intent` variant ("deep_query", "knowledge_query",
+    /// etc.) the runtime will route to on redirect. Using a string
+    /// rather than the full `Intent` enum here keeps the desktop
+    /// payload simple; the runtime re-resolves on `redirect_turn`.
+    pub intent_hint: String,
+}
+
+/// Emitted by the runtime when `decide_policy` picks `MoveKind::Ask`.
+/// The UI renders a ClarificationCard with `options` as clickable
+/// chips plus a free-text fallback. Synthesis is suppressed —
+/// nothing streams until the user responds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClarificationRequest {
+    pub session_id: String,
+    pub conversation_id: String,
+    /// The question to show above the options, e.g. "I can approach
+    /// this a few ways — are you trying to understand how it works,
+    /// design changes to it, or debug it?"
+    pub question: String,
+    pub options: Vec<ClarificationOption>,
+}
+
+/// One clickable disambiguation on a `ClarificationRequest` card.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClarificationOption {
+    pub label: String,
+    /// The follow-up message that will be sent back as if the user
+    /// had typed it. The runtime correlates to the session via a
+    /// session_ref and skips routing.
+    pub follow_up: String,
+    pub intent_hint: String,
+}
+
+/// Emitted by the runtime at phase-boundary points on long turns.
+/// Rendered as inline model-voice chips in the UI (see
+/// `NarrationChip.svelte`). Capped at 3 per turn; suppressed when
+/// turn elapsed < 5s.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TurnNarration {
+    pub session_id: String,
+    pub conversation_id: String,
+    pub event: NarrationEvent,
+}
+
+/// Wire parameters carrying a "continue this earlier turn" request
+/// from the UI back into the runtime. Produced when the user clicks
+/// a ClarificationCard option or a NextStepOffer button.
+///
+/// The runtime uses this to:
+///   - skip router classification (the intent was already picked),
+///   - correlate with the prior `QuerySession` (PR2c will also reuse
+///     the cached retrieval from that session).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResumeSession {
+    pub session_id: String,
+    /// Wire-form `Intent` hint produced by `intent_hint()` in the
+    /// runtime. Parsed back via `parse_intent_hint`. Unknown or
+    /// malformed hints fall back to `Intent::SimpleQuery` so the
+    /// session-continuation path never hard-fails from a typo.
+    pub intent_hint: String,
+}
+
+// ─── Next-step offers (PR3) ──────────────────────────────────
+//
+// After a substantive KnowledgeQuery turn finishes, the runtime
+// surfaces up to two grounded follow-up actions the user can click.
+// Offers are:
+//
+//   1. *grounded* — derived from what retrieval actually found (not
+//      a generic "anything else?" prompt), and
+//   2. *cheap* — when `session_ref` is live (<30s from completion),
+//      clicking reuses the session via `resume_session_stream` and
+//      skips router classification.
+//
+// SimpleQuery / DeepQuery don't emit offers today — they have no
+// retrieval grounding to draw on. Extend here if future intents
+// produce meaningful follow-ups.
+
+/// One clickable next-step chip on a completed assistant message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NextStepOffer {
+    /// UI button text. Short, action-shaped: "Tell me about X",
+    /// "Compare other perspectives", "Go deeper on Y".
+    pub label: String,
+    /// Optional subtle hint rendered as a tooltip or below-label
+    /// caption. Good place for "from <source_title>".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The query that actually gets submitted if clicked. Usually
+    /// a rephrased version of the offer, ready for synthesis.
+    pub follow_up_query: String,
+    /// Live `QuerySession.id` the runtime should resume against. The
+    /// session's 30s retention window means a click more than 30s
+    /// after render silently falls back to a fresh turn (runtime
+    /// will return `session not found` → the UI must gracefully
+    /// degrade to `send_message_stream`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_ref: Option<String>,
+    /// Wire-form `Intent` hint for the resume path (see
+    /// `ResumeSession.intent_hint`). When `None`, the follow-up is
+    /// treated as a fresh message that re-runs classification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_hint: Option<String>,
+}
+
+/// Input to the offer generator. Decouples the pure function from
+/// the specifics of the streaming pipeline's internal types so the
+/// generator is trivially unit-testable.
+#[derive(Debug, Clone)]
+pub struct OfferContext<'a> {
+    /// The user's original message — used to phrase a drill-down
+    /// follow-up ("Tell me more about X in the context of this
+    /// question").
+    pub user_message: &'a str,
+    /// Title of the source chunk that most shaped the answer. Used
+    /// to offer "Compare other perspectives" when this source
+    /// dominated retrieval.
+    pub top_source_title: Option<&'a str>,
+    /// Did the answer concentrate on one source? (Shape's
+    /// `top_source_repeat_count >= 2`.) Governs whether the
+    /// "compare perspectives" offer is worth surfacing.
+    pub had_dominant_source: bool,
+    /// Retrieved chunks in score order. The generator picks the
+    /// highest-scoring one whose title differs from
+    /// `top_source_title` as a drill-down target.
+    pub retrieved_chunks: &'a [serde_json::Value],
+    /// Live session id the UI should pass on click to take the
+    /// cheap resume-session path.
+    pub session_id: &'a str,
+    /// PR5 — was the underlying retrieval off-target (dispersed
+    /// noise, no title match, no source concentration)? When true,
+    /// the generator returns zero offers: drilling down into
+    /// irrelevant retrieval doubles down on the miss. Source of
+    /// truth is `EvidenceShape::is_off_target()` in the runtime.
+    pub retrieval_missed: bool,
+}
+
+/// Produce up to two grounded next-step offers from a completed
+/// KnowledgeQuery turn. Pure — no I/O.
+///
+/// Offer priority:
+///   1. Drill-down into the highest-scoring non-dominant source
+///      (when one exists).
+///   2. "Compare other perspectives" (when the answer concentrated
+///      on a single dominant source).
+pub fn build_next_step_offers(ctx: &OfferContext<'_>) -> Vec<NextStepOffer> {
+    // PR5 — suppress offers entirely when retrieval was off-target.
+    // Drilling into "Cartoon Reel" after asking about "Commonwealth
+    // scheduler" doubles down on noise; better to surface nothing
+    // than to surface misdirecting chips.
+    if ctx.retrieval_missed {
+        return Vec::new();
+    }
+
+    let mut offers = Vec::new();
+
+    // Drill-down: find the first retrieved chunk whose title is
+    // meaningfully different from the dominant one. Skip entries
+    // without titles (conversation-history chunks, etc.).
+    if let Some(secondary_title) = ctx.retrieved_chunks.iter().find_map(|c| {
+        let title = c.get("title")?.as_str()?;
+        if title.is_empty() {
+            return None;
+        }
+        if let Some(dominant) = ctx.top_source_title {
+            if title.eq_ignore_ascii_case(dominant) {
+                return None;
+            }
+        }
+        Some(title.to_string())
+    }) {
+        offers.push(NextStepOffer {
+            label: format!("Tell me about \"{secondary_title}\""),
+            description: Some("Drawn from your retrieval".to_string()),
+            follow_up_query: format!(
+                "Tell me what \"{secondary_title}\" says about this."
+            ),
+            session_ref: Some(ctx.session_id.to_string()),
+            intent_hint: Some("knowledge_query".to_string()),
+        });
+    }
+
+    // Dominant-source → offer a comparative read.
+    if ctx.had_dominant_source {
+        if let Some(dominant) = ctx.top_source_title {
+            let dominant_trunc = if dominant.len() > 40 {
+                format!("{}…", &dominant[..40])
+            } else {
+                dominant.to_string()
+            };
+            offers.push(NextStepOffer {
+                label: "Compare other perspectives".to_string(),
+                description: Some(format!(
+                    "Your answer leaned on \"{dominant_trunc}\" — pull in more sources."
+                )),
+                follow_up_query: format!(
+                    "{} — what do other sources in my knowledge base say, besides \"{dominant}\"?",
+                    ctx.user_message.trim()
+                ),
+                session_ref: Some(ctx.session_id.to_string()),
+                intent_hint: Some("knowledge_query".to_string()),
+            });
+        }
+    }
+
+    // Cap at 2. If a future trigger produces a third, we want a
+    // hard limit — three buttons under every answer is clutter.
+    offers.truncate(2);
+    offers
+}
+
+/// Map classification confidence to a concrete (tier, move_kind)
+/// decision. Pure — no I/O, no awaits, no model calls. PR1 only
+/// ever reaches the `Commit` branch in the runtime dispatcher; the
+/// other branches are precomputed here so PR2 can wire them without
+/// a second types-layer change.
+pub fn decide_policy(
+    classification: &RouterClassification,
+    thresholds: &ConfidenceThresholds,
+) -> RoutingPolicy {
+    let c = classification.primary.confidence;
+    let (tier, move_kind) = if c >= thresholds.high {
+        (ConfidenceTier::High, MoveKind::Commit)
+    } else if c >= thresholds.moderate {
+        (ConfidenceTier::Moderate, MoveKind::Propose)
+    } else {
+        (ConfidenceTier::Low, MoveKind::Ask)
+    };
+    RoutingPolicy {
+        move_kind,
+        tier,
+        thresholds_used: *thresholds,
+    }
+}
+
+// ─── Response Provenance ──────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseProvenance {
@@ -1565,5 +1957,260 @@ mod knowledge_view_digest_tests {
         let ctx: ConversationContext = serde_json::from_value(legacy).unwrap();
         assert!(ctx.knowledge_view_digests.is_none());
         assert!(ctx.topic_context.is_none());
+    }
+}
+
+#[cfg(test)]
+mod routing_policy_tests {
+    use super::*;
+
+    fn classification(confidence: f32) -> RouterClassification {
+        RouterClassification {
+            primary: IntentCandidate {
+                intent: Intent::SimpleQuery,
+                confidence,
+            },
+            alternatives: Vec::new(),
+            rationale: None,
+            coarse_intent: Some("SIMPLE".into()),
+            self_assessment: None,
+        }
+    }
+
+    #[test]
+    fn high_confidence_commits() {
+        let policy = decide_policy(
+            &classification(0.95),
+            &ConfidenceThresholds::default(),
+        );
+        assert_eq!(policy.tier, ConfidenceTier::High);
+        assert_eq!(policy.move_kind, MoveKind::Commit);
+    }
+
+    #[test]
+    fn boundary_exactly_at_high_commits() {
+        // 0.80 is inclusive of the High tier.
+        let policy = decide_policy(
+            &classification(0.80),
+            &ConfidenceThresholds::default(),
+        );
+        assert_eq!(policy.tier, ConfidenceTier::High);
+    }
+
+    #[test]
+    fn moderate_confidence_proposes() {
+        let policy = decide_policy(
+            &classification(0.65),
+            &ConfidenceThresholds::default(),
+        );
+        assert_eq!(policy.tier, ConfidenceTier::Moderate);
+        assert_eq!(policy.move_kind, MoveKind::Propose);
+    }
+
+    #[test]
+    fn boundary_exactly_at_moderate_proposes() {
+        // 0.55 is inclusive of the Moderate tier.
+        let policy = decide_policy(
+            &classification(0.55),
+            &ConfidenceThresholds::default(),
+        );
+        assert_eq!(policy.tier, ConfidenceTier::Moderate);
+    }
+
+    #[test]
+    fn low_confidence_asks() {
+        let policy = decide_policy(
+            &classification(0.30),
+            &ConfidenceThresholds::default(),
+        );
+        assert_eq!(policy.tier, ConfidenceTier::Low);
+        assert_eq!(policy.move_kind, MoveKind::Ask);
+    }
+
+    #[test]
+    fn just_under_moderate_asks() {
+        let policy = decide_policy(
+            &classification(0.549),
+            &ConfidenceThresholds::default(),
+        );
+        assert_eq!(policy.tier, ConfidenceTier::Low);
+    }
+
+    #[test]
+    fn thresholds_are_snapshotted_into_policy() {
+        let thresholds = ConfidenceThresholds {
+            high: 0.90,
+            moderate: 0.70,
+        };
+        let policy = decide_policy(&classification(0.75), &thresholds);
+        // With custom thresholds, 0.75 falls between 0.70 and 0.90 → Moderate.
+        assert_eq!(policy.tier, ConfidenceTier::Moderate);
+        // Glassbox: the thresholds used are visible on the returned
+        // policy so the UI and operator log can see why this decision
+        // was made, not just what the decision was.
+        assert_eq!(policy.thresholds_used.high, 0.90);
+        assert_eq!(policy.thresholds_used.moderate, 0.70);
+    }
+
+    #[test]
+    fn policy_is_serde_roundtrippable() {
+        // Glassbox metadata is written into message.metadata as JSON.
+        // If the policy struct isn't round-trippable, the UI can't
+        // render the tier badge / rationale.
+        let policy = decide_policy(
+            &classification(0.82),
+            &ConfidenceThresholds::default(),
+        );
+        let json = serde_json::to_string(&policy).unwrap();
+        let back: RoutingPolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.tier, policy.tier);
+        assert_eq!(back.move_kind, policy.move_kind);
+    }
+}
+
+#[cfg(test)]
+mod next_step_offer_tests {
+    use super::*;
+
+    fn chunk(title: &str) -> serde_json::Value {
+        serde_json::json!({
+            "title": title,
+            "corpus_id": "c",
+            "snippet": "…",
+            "provenance_tier": "corpus",
+        })
+    }
+
+    #[test]
+    fn empty_retrieval_emits_no_offers() {
+        let ctx = OfferContext {
+            user_message: "what is X",
+            top_source_title: None,
+            had_dominant_source: false,
+            retrieved_chunks: &[],
+            session_id: "sess-1",
+            retrieval_missed: false,
+        };
+        let offers = build_next_step_offers(&ctx);
+        assert!(offers.is_empty());
+    }
+
+    #[test]
+    fn drill_down_offer_points_at_secondary_source() {
+        let chunks = vec![
+            chunk("Main Source"),
+            chunk("Secondary Source"),
+            chunk("Tertiary Source"),
+        ];
+        let ctx = OfferContext {
+            user_message: "how does X work",
+            top_source_title: Some("Main Source"),
+            had_dominant_source: false,
+            retrieved_chunks: &chunks,
+            session_id: "sess-1",
+            retrieval_missed: false,
+        };
+        let offers = build_next_step_offers(&ctx);
+        assert_eq!(offers.len(), 1);
+        assert!(offers[0].label.contains("Secondary Source"));
+        assert_eq!(offers[0].session_ref.as_deref(), Some("sess-1"));
+        assert_eq!(offers[0].intent_hint.as_deref(), Some("knowledge_query"));
+    }
+
+    #[test]
+    fn dominant_source_adds_compare_offer() {
+        let chunks = vec![chunk("Dominant"), chunk("Other")];
+        let ctx = OfferContext {
+            user_message: "explain X",
+            top_source_title: Some("Dominant"),
+            had_dominant_source: true,
+            retrieved_chunks: &chunks,
+            session_id: "sess-2",
+            retrieval_missed: false,
+        };
+        let offers = build_next_step_offers(&ctx);
+        assert_eq!(offers.len(), 2);
+        assert!(offers[0].label.contains("Other"));
+        assert!(offers[1].label.starts_with("Compare"));
+        // The compare offer excludes the dominant source in its
+        // follow-up query so the resumed synthesis reaches for
+        // fresh perspectives instead of re-quoting the same doc.
+        assert!(offers[1].follow_up_query.contains("besides"));
+    }
+
+    #[test]
+    fn offers_capped_at_two() {
+        // Even with a dominant source + a clean secondary, we
+        // never emit more than two buttons.
+        let chunks = vec![
+            chunk("A"),
+            chunk("B"),
+            chunk("C"),
+            chunk("D"),
+        ];
+        let ctx = OfferContext {
+            user_message: "explain",
+            top_source_title: Some("A"),
+            had_dominant_source: true,
+            retrieved_chunks: &chunks,
+            session_id: "s",
+            retrieval_missed: false,
+        };
+        let offers = build_next_step_offers(&ctx);
+        assert!(offers.len() <= 2);
+    }
+
+    #[test]
+    fn untitled_chunks_are_skipped() {
+        let chunks = vec![
+            serde_json::json!({ "title": "", "corpus_id": "c" }),
+            chunk("Real Title"),
+        ];
+        let ctx = OfferContext {
+            user_message: "q",
+            top_source_title: Some("Main"),
+            had_dominant_source: false,
+            retrieved_chunks: &chunks,
+            session_id: "s",
+            retrieval_missed: false,
+        };
+        let offers = build_next_step_offers(&ctx);
+        assert_eq!(offers.len(), 1);
+        assert!(offers[0].label.contains("Real Title"));
+    }
+
+    #[test]
+    fn retrieval_miss_suppresses_all_offers() {
+        // PR5 — even with a dominant source + clean secondary,
+        // `retrieval_missed = true` means the retrieval was
+        // off-target; no offer should leak through. Otherwise a
+        // "Commonwealth scheduler" miss would still surface a
+        // "Tell me about Cartoon Reel" chip.
+        let chunks = vec![chunk("Dominant"), chunk("Secondary")];
+        let ctx = OfferContext {
+            user_message: "anything",
+            top_source_title: Some("Dominant"),
+            had_dominant_source: true,
+            retrieved_chunks: &chunks,
+            session_id: "s",
+            retrieval_missed: true,
+        };
+        let offers = build_next_step_offers(&ctx);
+        assert!(offers.is_empty(), "miss must suppress all offers: {offers:?}");
+    }
+
+    #[test]
+    fn offers_are_serde_roundtrippable() {
+        let offer = NextStepOffer {
+            label: "Tell me about X".into(),
+            description: Some("Drawn from retrieval".into()),
+            follow_up_query: "what is x".into(),
+            session_ref: Some("s".into()),
+            intent_hint: Some("knowledge_query".into()),
+        };
+        let json = serde_json::to_string(&offer).unwrap();
+        let back: NextStepOffer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.label, offer.label);
+        assert_eq!(back.session_ref, offer.session_ref);
     }
 }

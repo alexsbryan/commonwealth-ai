@@ -86,6 +86,11 @@ export type ChatEvent =
       messageId: string;
       newContent: string;
     }
+  /** Antifragile routing — emitted by ChatView after a
+   *  `REDIRECT_SUBMIT` resolves. Marks the in-flight bubble as
+   *  redirected-away and installs a new placeholder for the
+   *  replacement stream. */
+  | { type: "REDIRECT_STARTED"; newAssistantMessageId: string }
 
   // ─── Non-streaming assistant responses ──────────────────────
   /** `askDocument` / `searchWeb` return fully-formed assistant
@@ -134,6 +139,14 @@ export const chatMachine = setup({
   // either region is in. Without this, we'd have to duplicate the
   // handler in `idle` and `streaming`.
   on: {
+    // HYDRATE + RESET must also re-target the compound regions to
+    // their idle substates — root-level actions only touch context,
+    // so if we hydrate while `turn` is in `streaming` (e.g. the user
+    // switches conversations mid-stream), every subsequent
+    // conversation inherits the loading spinner. The bare actions
+    // below remain as a safety net for any stray emit outside a
+    // known substate; the per-substate overrides below handle the
+    // common cases with an explicit `target`.
     HYDRATE: {
       actions: assign({
         conversationId: ({ event }) => event.conversationId,
@@ -254,6 +267,64 @@ export const chatMachine = setup({
                 streamingMessageId: () => null,
               }),
             },
+            REDIRECT_STARTED: {
+              // Stay in `streaming` — the new stream continues the
+              // turn; we just pivot to a different assistant bubble.
+              actions: assign(({ context, event }) => {
+                const oldId = context.streamingMessageId;
+                const nextMessages = oldId
+                  ? updateMessageById(context.messages, oldId, (m) => {
+                      // Tag the cancelled bubble so the renderer can
+                      // de-emphasise it. Preserve any metadata the
+                      // server already wrote.
+                      m.metadata = {
+                        ...(m.metadata ?? {}),
+                        redirected_away: true,
+                      };
+                    })
+                  : context.messages;
+                // Push the replacement placeholder immediately so
+                // the first MESSAGE_CHUNK with `newAssistantMessageId`
+                // passes the guard.
+                const withPlaceholder = produce(nextMessages, (draft) => {
+                  draft.push({
+                    id: event.newAssistantMessageId,
+                    role: "assistant",
+                    content: "",
+                    created_at: Math.floor(Date.now() / 1000),
+                  });
+                });
+                return {
+                  messages: withPlaceholder,
+                  streamingMessageId: event.newAssistantMessageId,
+                };
+              }),
+            },
+            // PR6 — switching conversations or resetting app state
+            // while a stream is mid-flight must re-target `idle`.
+            // The root-level HYDRATE/RESET handlers only touch
+            // context; a compound-state transition needs to live in
+            // the child. Without this, the old conversation's
+            // spinner leaks into every subsequent conversation and
+            // the user has no way to clear it short of a restart.
+            HYDRATE: {
+              target: "idle",
+              actions: assign({
+                conversationId: ({ event }) => event.conversationId,
+                messages: ({ event }) => event.messages,
+                streamingMessageId: () => null,
+                pendingInfoRequest: () => null,
+              }),
+            },
+            RESET: {
+              target: "idle",
+              actions: assign({
+                conversationId: () => null,
+                messages: () => [],
+                streamingMessageId: () => null,
+                pendingInfoRequest: () => null,
+              }),
+            },
           },
         },
       },
@@ -286,6 +357,25 @@ export const chatMachine = setup({
             INFO_REQUEST_ARRIVED: {
               actions: assign({
                 pendingInfoRequest: ({ event }) => event.payload,
+              }),
+            },
+            // PR6 — same cross-conversation leak guard as `turn`.
+            HYDRATE: {
+              target: "idle",
+              actions: assign({
+                conversationId: ({ event }) => event.conversationId,
+                messages: ({ event }) => event.messages,
+                streamingMessageId: () => null,
+                pendingInfoRequest: () => null,
+              }),
+            },
+            RESET: {
+              target: "idle",
+              actions: assign({
+                conversationId: () => null,
+                messages: () => [],
+                streamingMessageId: () => null,
+                pendingInfoRequest: () => null,
               }),
             },
           },

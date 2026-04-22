@@ -4,7 +4,11 @@ use crate::error::{Error, Result};
 use crate::traits::{Planner, Router};
 use crate::types::*;
 
-/// Router that always returns SimpleQuery. Used for testing and Phase 2.
+/// Router that always returns SimpleQuery with maximum confidence.
+/// Used for tests and as the Phase-2 default when no LLM router is
+/// wired. Confidence of 1.0 guarantees `decide_policy` picks
+/// `MoveKind::Commit` — the stub must never inadvertently trigger a
+/// clarification card in a test harness.
 pub struct PassthroughRouter;
 
 #[async_trait]
@@ -14,9 +18,14 @@ impl Router for PassthroughRouter {
         _message: &str,
         _context: &ConversationContext,
         _available_tools: &[ToolDescriptor],
-    ) -> Result<RoutingOutcome> {
-        Ok(RoutingOutcome {
-            intent: Intent::SimpleQuery,
+    ) -> Result<RouterClassification> {
+        Ok(RouterClassification {
+            primary: IntentCandidate {
+                intent: Intent::SimpleQuery,
+                confidence: 1.0,
+            },
+            alternatives: Vec::new(),
+            rationale: None,
             coarse_intent: None,
             self_assessment: None,
         })

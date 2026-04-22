@@ -218,6 +218,30 @@ pub fn run_metacognition_log_migrations(conn: &Connection) -> rusqlite::Result<(
     Ok(())
 }
 
+/// Add antifragile-routing signal columns to `routing_log`.
+///
+/// Captured when the user clicks the redirect chip on a
+/// `MoveKind::Propose` banner — the most diagnostically useful
+/// signal the UI produces. `was_redirected = 1` tells a future
+/// calibration job "at the confidence tier we picked, the initial
+/// commit was a miss"; `redirect_to` names the intent_hint the user
+/// actually wanted.
+///
+/// PR4 captures the signal from day 1; no calibration job yet.
+/// Deferred work (calibration, implicit-acceptance signal from
+/// 30s-no-redirect, clarification-answer signal) is tracked in
+/// `SYSTEM_OVERVIEW.md §12 Architecture Roadmap`.
+pub fn run_antifragile_routing_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    // was_redirected: 0 (not redirected, default) | 1 (user redirected away
+    // from the initially-routed intent)
+    let _ = conn
+        .execute_batch("ALTER TABLE routing_log ADD COLUMN was_redirected INTEGER NOT NULL DEFAULT 0");
+    // redirect_to: wire-form intent hint the user chose via the
+    // InterpretationBanner redirect chip. NULL when was_redirected = 0.
+    let _ = conn.execute_batch("ALTER TABLE routing_log ADD COLUMN redirect_to TEXT");
+    Ok(())
+}
+
 /// Create insight_nodes table and FTS5 virtual table for insight capture.
 pub fn run_insight_migrations(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(

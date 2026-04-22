@@ -24,6 +24,11 @@ struct RoutingLogEntry {
     classified_as: String,
     was_correct: Option<bool>,
     created_at: i64,
+    /// PR4 antifragile-routing signal. `true` when the user
+    /// clicked the redirect chip on a Propose banner for this
+    /// message; `redirect_to` names the intent_hint they chose.
+    was_redirected: bool,
+    redirect_to: Option<String>,
 }
 
 pub struct InMemoryStateStore {
@@ -229,6 +234,8 @@ impl RoutingStore for InMemoryStateStore {
             classified_as: classified_as.to_string(),
             was_correct: None,
             created_at: now(),
+            was_redirected: false,
+            redirect_to: None,
         });
         Ok(())
     }
@@ -255,6 +262,22 @@ impl RoutingStore for InMemoryStateStore {
         for entry in log.iter_mut().rev() {
             if entry.message_hash == message_hash {
                 entry.was_correct = Some(was_correct);
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    async fn mark_routing_redirected(
+        &self,
+        message_hash: &str,
+        redirect_to: &str,
+    ) -> Result<()> {
+        let mut log = self.routing_log.write().await;
+        for entry in log.iter_mut().rev() {
+            if entry.message_hash == message_hash {
+                entry.was_redirected = true;
+                entry.redirect_to = Some(redirect_to.to_string());
                 break;
             }
         }

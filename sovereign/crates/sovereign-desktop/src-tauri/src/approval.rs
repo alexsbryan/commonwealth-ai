@@ -93,6 +93,14 @@ impl TauriApprovalChannel {
         *self.task_id.write().await = task_id.to_string();
     }
 
+    /// Accessor for the underlying `AppHandle`. Used by
+    /// `AppState::new_with_mode` to construct sibling event emitters
+    /// (e.g. `TauriRoutingEventSink`) without plumbing the handle
+    /// through every call site.
+    pub fn app_handle(&self) -> tauri::AppHandle {
+        self.app_handle.clone()
+    }
+
     pub async fn submit_approval(&self, key: &str, approved: bool) -> bool {
         if let Some(sender) = self.pending_approvals.write().await.remove(key) {
             let _ = sender.send(approved);

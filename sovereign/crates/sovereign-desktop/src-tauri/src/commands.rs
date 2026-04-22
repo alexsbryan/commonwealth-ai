@@ -447,6 +447,251 @@ pub async fn send_message(
     })
 }
 
+// ─── Antifragile-routing commands ────────────────────────────
+
+/// PR6 — cancel the current in-flight stream for a conversation.
+/// Finds the most-recent live QuerySession for that conversation
+/// and cancels its token. The sampler's per-iteration check
+/// notices, breaks the decode loop, and closes the stream — the
+/// frontend's existing `message-complete` listener transitions
+/// chat.machine back to idle. Returns Ok even if no session was
+/// live; the UI may have raced the stream closing naturally, and
+/// the user's intent ("I want to stop") is still satisfied.
+#[tauri::command]
+pub async fn cancel_stream(
+    state: State<'_, Arc<AppState>>,
+    conversation_id: String,
+) -> Result<(), String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap();
+    if let Some(session) = runtime.sessions.latest_for_conversation(&conversation_id) {
+        tracing::info!(
+            session_id = %session.id,
+            conversation_id,
+            "cancel_stream: user requested abort"
+        );
+        session.cancel.cancel();
+    } else {
+        tracing::debug!(
+            conversation_id,
+            "cancel_stream: no live session (stream may have already finished)"
+        );
+    }
+    Ok(())
+}
+
+/// PR2c — cancel the in-flight Propose-mode sampler AND start a new
+/// stream against the chosen alternative intent. The original user
+/// message + conversation id are pulled from the SessionStore (saved
+/// at classify time) so the frontend only passes the session id +
+/// intent hint.
+///
+/// Returns a `StreamStartedResponse` just like `send_message_stream`
+/// — the frontend listens for `message-chunk` / `message-complete`
+/// events keyed on the new `message_id`. The old assistant message
+/// is marked `redirected_away=true` in its metadata (added by
+/// `handle_message_stream_with_classification` when it detects a
+/// pre-existing cancelled stream on this conversation).
+#[tauri::command]
+pub async fn redirect_turn(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    intent_hint: String,
+) -> Result<StreamStartedResponse, String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap().clone();
+    drop(guard);
+
+    let store_for_metadata = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone)
+    };
+
+    let handle = runtime
+        .redirect_turn_stream(&session_id, &intent_hint)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let message_id = handle.message_id.clone();
+    let message_id_for_return = handle.message_id.clone();
+    let conversation_id_owned = {
+        // Pull conversation_id from the session so we know where
+        // chunks should be routed. The session lookup above already
+        // confirmed it exists.
+        runtime
+            .sessions
+            .get(&session_id)
+            .map(|s| s.conversation_id.clone())
+            .unwrap_or_default()
+    };
+    let app = app_handle.clone();
+    let mut stream = handle.stream;
+    let store_ref = store_for_metadata.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let mut full_text = String::new();
+        while let Some(item) = stream.next().await {
+            match item {
+                Ok(chunk) => {
+                    full_text.push_str(&chunk);
+                    let _ = app.emit(
+                        "message-chunk",
+                        MessageChunkPayload {
+                            conversation_id: conversation_id_owned.clone(),
+                            message_id: message_id.clone(),
+                            chunk,
+                        },
+                    );
+                }
+                Err(e) => {
+                    let _ = app.emit(
+                        "message-error",
+                        crate::approval::ErrorPayload {
+                            message: e.to_string(),
+                        },
+                    );
+                    return;
+                }
+            }
+        }
+
+        let metadata = if let Some(ref store) = store_ref {
+            store
+                .get_conversation(&conversation_id_owned)
+                .await
+                .ok()
+                .and_then(|c| {
+                    c.messages
+                        .iter()
+                        .find(|m| m.id == message_id)
+                        .and_then(|m| m.metadata.clone())
+                })
+        } else {
+            None
+        };
+
+        let _ = app.emit(
+            "message-complete",
+            MessageCompletePayload {
+                conversation_id: conversation_id_owned,
+                message_id,
+                full_text,
+                metadata,
+            },
+        );
+        let _ = app.emit("conversations:changed", ());
+    });
+
+    Ok(StreamStartedResponse {
+        message_id: message_id_for_return,
+        streaming: true,
+    })
+}
+
+/// PR2 — resume a prior session with an explicit intent (from
+/// ClarificationCard option click or NextStepOffer button). Skips
+/// router classification and dispatches the `message` through the
+/// hinted intent. Returns a `StreamStartedResponse` just like
+/// `send_message_stream` so the desktop listener machinery is
+/// identical; the frontend receives `message-chunk` +
+/// `message-complete` events as usual.
+#[tauri::command]
+pub async fn resume_session(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    message: String,
+    conversation_id: String,
+    session_id: String,
+    intent_hint: String,
+) -> Result<StreamStartedResponse, String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap().clone();
+    drop(guard);
+
+    state.approval.set_task_id(&conversation_id).await;
+
+    let store_for_metadata = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone)
+    };
+
+    let resume = sovereign_core::types::ResumeSession {
+        session_id,
+        intent_hint,
+    };
+    let handle = runtime
+        .resume_session_stream(&message, &conversation_id, resume)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let message_id = handle.message_id.clone();
+    let message_id_for_return = handle.message_id.clone();
+    let conversation_id_owned = conversation_id.clone();
+    let app = app_handle.clone();
+    let mut stream = handle.stream;
+    let store_ref = store_for_metadata.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let mut full_text = String::new();
+        while let Some(item) = stream.next().await {
+            match item {
+                Ok(chunk) => {
+                    full_text.push_str(&chunk);
+                    let _ = app.emit(
+                        "message-chunk",
+                        MessageChunkPayload {
+                            conversation_id: conversation_id_owned.clone(),
+                            message_id: message_id.clone(),
+                            chunk,
+                        },
+                    );
+                }
+                Err(e) => {
+                    let _ = app.emit(
+                        "message-error",
+                        crate::approval::ErrorPayload {
+                            message: e.to_string(),
+                        },
+                    );
+                    return;
+                }
+            }
+        }
+
+        let metadata = if let Some(ref store) = store_ref {
+            store
+                .get_conversation(&conversation_id_owned)
+                .await
+                .ok()
+                .and_then(|c| {
+                    c.messages
+                        .iter()
+                        .find(|m| m.id == message_id)
+                        .and_then(|m| m.metadata.clone())
+                })
+        } else {
+            None
+        };
+
+        let _ = app.emit(
+            "message-complete",
+            MessageCompletePayload {
+                conversation_id: conversation_id_owned,
+                message_id,
+                full_text,
+                metadata,
+            },
+        );
+        let _ = app.emit("conversations:changed", ());
+    });
+
+    Ok(StreamStartedResponse {
+        message_id: message_id_for_return,
+        streaming: true,
+    })
+}
+
 #[tauri::command]
 pub async fn create_conversation() -> Result<CreateConversationResponse, String> {
     Ok(CreateConversationResponse {

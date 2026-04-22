@@ -239,6 +239,21 @@ async fn test_routing_log(store: &dyn StateStore) {
     let corrections = store.get_routing_corrections(10).await.unwrap();
     assert_eq!(corrections.len(), 1);
     assert_eq!(corrections[0].classified_as, "SimpleQuery");
+
+    // PR4 — mark_routing_redirected is a best-effort write. No
+    // public read path on the trait, so we rely on it not erroring
+    // (sqlite UPDATE affects 0 rows on a missing hash — still Ok).
+    // The full read-through-sqlite path is exercised by
+    // routing_moves.rs in sovereign-core.
+    store
+        .mark_routing_redirected("hash1", "deep_query")
+        .await
+        .unwrap();
+    // Unknown hash also shouldn't error (0 rows updated is fine).
+    store
+        .mark_routing_redirected("nonexistent", "knowledge_query")
+        .await
+        .unwrap();
 }
 
 async fn test_documents_stub(store: &dyn StateStore) {

@@ -3,11 +3,12 @@
   import { renderMarkdown } from "../utils/markdown";
   import { insightStore } from "../stores/insights.svelte";
   import { clipInsight } from "../api";
-  import type { InsightSource } from "../types";
+  import type { InsightSource, NextStepOffer } from "../types";
   import ThinkBlock from "./ThinkBlock.svelte";
   import RoutingMeta from "./RoutingMeta.svelte";
   import SourceAttribution from "./SourceAttribution.svelte";
   import SourcePopover from "./SourcePopover.svelte";
+  import NextStepButtons from "./NextStepButtons.svelte";
 
   interface Props {
     content: string;
@@ -15,10 +16,17 @@
     conversationId: string;
     metadata?: Record<string, unknown>;
     isStreaming?: boolean;
+    onNextStep?: (offer: NextStepOffer) => void;
   }
 
-  let { content, messageId, conversationId, metadata, isStreaming }: Props =
-    $props();
+  let {
+    content,
+    messageId,
+    conversationId,
+    metadata,
+    isStreaming,
+    onNextStep,
+  }: Props = $props();
 
   let blocks = $derived(parseAssistantContent(content));
 
@@ -57,6 +65,24 @@
       url?: string;
       snippet: string;
     }>,
+  );
+
+  // Set by chat.machine when the user redirected away from this
+  // message's Propose banner. The bubble stays in history (so the
+  // redirect decision is legible later) but renders de-emphasised.
+  let redirectedAway = $derived(metadata?.redirected_away === true);
+
+  // PR3 — grounded next-step offers. Hide on streaming bubbles
+  // (answer not done yet) and redirected-away bubbles (the user
+  // already moved past this answer).
+  let nextStepOffers = $derived(
+    (metadata?.next_steps ?? []) as NextStepOffer[],
+  );
+  let showNextSteps = $derived(
+    !isStreaming &&
+      !redirectedAway &&
+      nextStepOffers.length > 0 &&
+      !!onNextStep,
   );
 
   // ── Citation popover state ─────────────────────────────────
@@ -134,8 +160,13 @@
   }
 </script>
 
-<div class="sv-ai-msg">
-  <div class="role-label">&#x25C8; SOVEREIGN</div>
+<div class="sv-ai-msg" class:redirected={redirectedAway}>
+  <div class="role-label">
+    &#x25C8; SOVEREIGN
+    {#if redirectedAway}
+      <span class="redirected-note">• redirected to a different approach</span>
+    {/if}
+  </div>
 
   <RoutingMeta {provenance} {retrievedChunks} />
 
@@ -151,6 +182,13 @@
   {/if}
 
   <SourceAttribution {content} />
+
+  {#if showNextSteps}
+    <NextStepButtons
+      offers={nextStepOffers}
+      onselect={(offer) => onNextStep?.(offer)}
+    />
+  {/if}
 </div>
 
 {#if popoverChunk}
@@ -168,6 +206,19 @@
     border-left: 2px solid color-mix(in srgb, var(--lavender) 35%, transparent);
     max-width: 82%;
     margin-bottom: 18px;
+  }
+
+  .sv-ai-msg.redirected {
+    opacity: 0.55;
+    border-left-style: dashed;
+  }
+
+  .redirected-note {
+    margin-left: 8px;
+    font-weight: 400;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: none;
   }
 
   .role-label {

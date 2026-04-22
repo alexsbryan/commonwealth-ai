@@ -548,7 +548,7 @@ implementations.
 | Trait                  | Surface                                                        |
 |------------------------|----------------------------------------------------------------|
 | `InferenceProvider`    | `complete`, `complete_stream`, `complete_stream_with_id`, `embed`, `embed_query`, `capabilities` |
-| `Router`               | `classify(message) → Intent`                                   |
+| `Router`               | `classify(message, ctx, tools) → RouterClassification` — primary intent + confidence + (PR2) alternatives + rationale + legacy coarse/self-assessment diagnostics |
 | `Planner`              | `plan(goal, context, tools) → Plan`, `replan(...)`             |
 | `Tool`                 | `descriptor`, `execute`, `validate`, `retry_config`, `required_permissions` |
 | `LandscapeDigestProvider` | `splice_landscape_digests(ctx, active_skill)` — KnowledgeView hook (§4.12) |
@@ -567,7 +567,14 @@ need; implementors still get a single aggregate trait to plug in.
 
 ```
 User message
-  → Router.classify   (Fast slot, two-pass coarse-then-refine)
+  → Router.classify                    (Fast slot, two-pass coarse-then-refine)
+       → RouterClassification { primary: {intent, confidence}, alternatives, rationale, ... }
+  → decide_policy(classification, ConfidenceThresholds)   (pure fn, sovereign-core/types.rs)
+       → RoutingPolicy { tier: High|Moderate|Low, move_kind: Commit|Propose|Ask, thresholds_used }
+  → SessionStore.begin(...)            (in-memory scratch; ARCH §4.5 — not StateStore-worthy)
+       → QuerySession { id, conv, skill, input, classification, policy, cancel_token, ... }
+       → sweep_expired()               (drops sessions > 30s old)
+  → Dispatch by Intent (PR1: MoveKind::Commit only; Propose/Ask land in PR2):
        → SimpleQuery / DeepQuery / KnowledgeQuery → search → synthesize
        → ComplexTask  → Planner.plan (Primary slot)
                       → Executor (topological batches)
@@ -576,9 +583,20 @@ User message
                           ├─ Evaluation passes (eval prompt → retry on fail)
                           └─ Tool steps with permission checks + approval
                       → synthesize from step outputs
-  → Provenance recorded into Message.metadata
+  → Provenance recorded into Message.metadata (includes routing policy tier)
   → Memory extraction on conversation end
 ```
+
+**Antifragile-routing split (PR1 foundation, PR2 UX).** The router emits
+*facts* (`RouterClassification`); the runtime applies *policy* (`decide_policy`).
+The split keeps classification pure and testable without a model, and lets
+future threshold calibration mutate policy without touching the `Router` trait.
+Each turn registers a `QuerySession` in an in-memory `Arc<DashMap>` carrying the
+classification, the policy decision, and a `tokio_util::sync::CancellationToken`
+that PR2's `redirect_turn` command will fire to cancel an in-flight sampler.
+PR1 only reaches `MoveKind::Commit` in the dispatcher — Propose (interpretation
+banner + cheap redirect) and Ask (clarification card) land in PR2 once the
+desktop XState machines and Tauri events are wired.
 
 `Plan` is a flat JSON DAG: `steps` (each with `kind`, `inputs`, optional
 `sampling`, optional `evaluation`) plus `edges` for the dependency graph.
@@ -1649,3 +1667,34 @@ detection line-level diffs, and red-team auto-spawn are all currently opaque
 to the operator. Proposed: low-cost `tracing::debug!`/`tracing::info!` events
 at decision points that let the operator answer "why did X happen?" from log
 output without a debugger.
+
+### Antifragile-routing — deferred follow-ups
+
+PR1–PR4 shipped the full Commit / Propose / Ask dispatcher, desktop UX
+(InterpretationBanner, ClarificationCard, NarrationChip, NextStepButtons),
+real redirect-with-re-dispatch, and structural-signal capture into
+`routing_log.was_redirected` + `routing_log.redirect_to`. Four follow-ups
+remain tracked, none load-bearing for correctness:
+
+1. **Retrieval caching across redirect.** `prepare_knowledge_query_plan`
+   bundles retrieval + prompt-building. Splitting it into a cache-able
+   retrieve half + an intent-specific build-request half would save ~200ms
+   per redirect by reusing chunks instead of re-searching the corpus.
+   Revisit when redirect-rate telemetry shows users redirect often enough
+   for the delay to matter.
+2. **Confidence-threshold calibration.** The `was_redirected` + `redirect_to`
+   columns now accumulate from day one. A periodic job keyed on
+   (coarse_intent, confidence_bucket) → redirect_rate can tune
+   `ConfidenceThresholds` per-user when the signal volume warrants it.
+   Signal capture lives in `Runtime::redirect_turn_stream`; the calibration
+   job itself is future work.
+3. **Clarification + implicit-acceptance signals.** Today only explicit
+   redirects from the Propose banner produce a signal. Extending capture to
+   cover (a) Ask-move resolutions via ClarificationCard clicks and (b)
+   30s-no-redirect implicit acceptance on Propose turns would fill in the
+   positive-signal side of the calibration input.
+4. **Client-started structural telemetry.** Long-form trace of every
+   `router:policy_applied` / `routing:redirected` / `routing:ask` event at
+   `debug` level is sufficient today. A future structured-export sink
+   (CSV/JSON to a log directory) would let users audit routing behavior
+   without running `tracing_subscriber` by hand.

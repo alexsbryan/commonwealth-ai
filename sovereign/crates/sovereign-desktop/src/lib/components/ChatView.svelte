@@ -5,6 +5,8 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import {
     sendMessageStream,
+    resumeSession,
+    cancelStream,
     searchWeb,
     getConversation,
     createConversation,
@@ -28,14 +30,20 @@
     DocumentOperationPayload,
     InformationRequestPayload,
     MessageRefinedPayload,
+    NextStepOffer,
   } from "../types";
+  import { MAX_TURN_MESSAGE_CHARS, OVERSIZE_MESSAGE_HINT } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { chatMachine } from "../machines/chat.machine";
   import { insightStore } from "../stores/insights.svelte";
+  import { routingStore } from "../stores/routing.svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import TaskProgress from "./TaskProgress.svelte";
   import ApprovalCard from "./ApprovalCard.svelte";
   import InformationRequestCard from "./InformationRequestCard.svelte";
+  import InterpretationBanner from "./InterpretationBanner.svelte";
+  import ClarificationCard from "./ClarificationCard.svelte";
+  import NarrationChip from "./NarrationChip.svelte";
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
   import AttachmentBanner from "./AttachmentBanner.svelte";
   import DocumentPicker from "./DocumentPicker.svelte";
@@ -112,6 +120,62 @@
   let pendingInfoRequest = $derived($snapshot.context.pendingInfoRequest);
   let activeConversationId = $derived($snapshot.context.conversationId);
 
+  // PR2e — size ceiling for chat-pipeline messages. When the user
+  // pastes a document-sized block into the main input, disable send
+  // and hint at the attached-file flow instead. Backend applies the
+  // same cap; this is the UX affordance so the request never fires.
+  // Attached-document flows ARE long-input-safe (map-reduce path),
+  // so the check is skipped whenever an asset/attachment is present.
+  let inputIsOversized = $derived(
+    !attachedAsset &&
+      !attachment &&
+      inputText.length > MAX_TURN_MESSAGE_CHARS,
+  );
+
+  // PR6b — routing state is stored in a singleton (routingStore)
+  // so it persists across conversation switches by default, which
+  // means a clarification card / proposed banner / narration log
+  // from conversation A leaks into B's view. Fix: when the chat
+  // machine's conversationId changes, clear the three transient
+  // regions. Firing on initial mount is safe — the dispatches are
+  // idle-state no-ops when nothing is pending.
+  $effect(() => {
+    // Track activeConversationId so the effect re-runs on change.
+    const _track = activeConversationId;
+    void _track;
+    routingStore.send({ type: "DISMISS_PROPOSED" });
+    routingStore.send({ type: "DISMISS_CLARIFICATION" });
+    routingStore.send({ type: "CLEAR_NARRATION" });
+  });
+
+  // Antifragile-routing redirect bridge. When the routing FSM
+  // completes a `REDIRECT_SUBMIT`, it exposes the new assistant
+  // message_id on `routingStore.lastRedirectedMessageId`. Wire that
+  // into chat.machine so the chat FSM creates a placeholder bubble
+  // before chunks stream in. Acknowledge-and-clear so we only fire
+  // once per redirect.
+  $effect(() => {
+    const newId = routingStore.lastRedirectedMessageId;
+    if (!newId) return;
+    send({ type: "REDIRECT_STARTED", newAssistantMessageId: newId });
+    routingStore.send({ type: "ACKNOWLEDGE_REDIRECT" });
+  });
+
+  // PR6 — same bridge for ClarificationCard submissions. Without
+  // this, a successful Tauri `resume_session` returns a new
+  // message_id, the backend emits message-chunk events against it,
+  // and chat.machine drops every chunk because no placeholder
+  // exists. User sees zero response even though the backend is
+  // busy. REDIRECT_STARTED is semantically identical — install the
+  // new placeholder, mark the prior bubble (if any) redirected —
+  // so we reuse the same event.
+  $effect(() => {
+    const newId = routingStore.lastClarifiedMessageId;
+    if (!newId) return;
+    send({ type: "REDIRECT_STARTED", newAssistantMessageId: newId });
+    routingStore.send({ type: "ACKNOWLEDGE_CLARIFIED" });
+  });
+
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenComplete: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
@@ -161,6 +225,18 @@
         });
         docProgressText = null;
         scrollToBottom();
+        // Antifragile-routing: a proposed-interpretation banner
+        // persists through the turn so the user can still cheaply
+        // redirect while reading. After 30s of silence we GC it
+        // (matches `SESSION_RETENTION` in query_session.rs). The
+        // setTimeout captures the routingStore closure, not the
+        // current `proposed` — if a fresh Propose arrives in the
+        // meantime, the DISMISS_PROPOSED only fires in the idle
+        // state (the FSM ignores it in `pending` after a new
+        // payload overwrote the slot). Safe as a late no-op.
+        setTimeout(() => {
+          routingStore.send({ type: "DISMISS_PROPOSED" });
+        }, 30_000);
       },
     );
 
@@ -431,6 +507,20 @@
     onClearTask();
 
     try {
+      // Antifragile-routing: flush the prior turn's narration log
+      // so the new turn starts clean. Any proposed-interpretation
+      // banner from a prior turn stays until its own 30s GC fires
+      // or the user redirects — those states are per-session and
+      // shouldn't be conflated with narration, which is per-turn.
+      routingStore.send({ type: "CLEAR_NARRATION" });
+      // PR6 — if a clarification card is still open when the user
+      // types a fresh message in the main input, dismiss it. Without
+      // this, the card lingers over an unrelated new turn and the
+      // user gets a confusing "which query am I answering?" state.
+      if (routingStore.clarification) {
+        routingStore.send({ type: "DISMISS_CLARIFICATION" });
+      }
+
       const started = await sendMessageStream(text, convoId);
       wordBuffer.reset();
       send({
@@ -452,6 +542,91 @@
           content: text,
           created_at: Math.floor(Date.now() / 1000),
         },
+      });
+      send({
+        type: "ASSISTANT_MESSAGE_RECEIVED",
+        message: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Error: ${e}`,
+          created_at: Math.floor(Date.now() / 1000),
+        },
+      });
+      scrollToBottom();
+    }
+  }
+
+  /** PR6 — abort the in-flight stream. Calls the Tauri command
+   *  which cancels the session's cancel-token; the sampler breaks,
+   *  the stream closes, message-complete fires naturally, and
+   *  chat.machine transitions back to idle. No explicit
+   *  chat.machine event — the existing complete-path handles it. */
+  async function handleStop() {
+    const convoId = activeConversationId;
+    if (!convoId) return;
+    try {
+      await cancelStream(convoId);
+    } catch (e) {
+      console.warn("cancelStream failed:", e);
+      // Belt-and-braces: tell chat.machine to bail to idle so the
+      // UI recovers even if the Tauri call errored.
+      send({ type: "MESSAGE_ERROR", error: "cancelled" });
+    }
+  }
+
+  /** PR3 — next-step offer click. Mirrors `handleSend`'s streaming
+   *  path but uses `resumeSession` when the offer carries a live
+   *  session_ref (so the runtime skips reclassification and reuses
+   *  the parent session's context). Falls back to
+   *  `sendMessageStream` if the session is gone (expired / unknown)
+   *  so the click never silently fails. */
+  async function handleNextStep(offer: NextStepOffer) {
+    if (isLoading) return;
+    const text = offer.follow_up_query;
+    if (!text) return;
+    const convoId = await ensureConversation();
+
+    const userMsg: MessageEntry = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text,
+      created_at: Math.floor(Date.now() / 1000),
+    };
+    onClearTask();
+
+    try {
+      routingStore.send({ type: "CLEAR_NARRATION" });
+
+      const tryResume =
+        offer.session_ref && offer.intent_hint
+          ? await resumeSession(
+              text,
+              convoId,
+              offer.session_ref,
+              offer.intent_hint,
+            ).catch((err: unknown) => {
+              // 30s session GC already fired (or server restarted)
+              // — fall back to a fresh turn. Log for glassbox but
+              // don't surface a hard error; the user's click still
+              // succeeds, it just re-classifies.
+              console.info("resumeSession failed, falling back", err);
+              return null;
+            })
+          : null;
+      const started =
+        tryResume ?? (await sendMessageStream(text, convoId));
+
+      wordBuffer.reset();
+      send({
+        type: "SEND_START",
+        userMessage: userMsg,
+        assistantMessageId: started.message_id,
+      });
+      scrollToBottom();
+    } catch (e) {
+      send({
+        type: "ASSISTANT_MESSAGE_RECEIVED",
+        message: userMsg,
       });
       send({
         type: "ASSISTANT_MESSAGE_RECEIVED",
@@ -560,6 +735,7 @@
           messageId={msg.id}
           conversationId={activeConversationId ?? ""}
           isStreaming={msg.id === streamingMessageId}
+          onNextStep={handleNextStep}
         />
       {/each}
 
@@ -571,6 +747,13 @@
         request={pendingInfoRequest}
         onHandled={() => send({ type: "CLEAR_INFO" })}
       />
+
+      <!-- Antifragile-routing UI. All three read from `routingStore`
+           and render only when the FSM context has a live payload;
+           when empty they render nothing. -->
+      <InterpretationBanner />
+      <ClarificationCard />
+      <NarrationChip />
 
       {#if isLoading}
         {#if docProgressText}
@@ -646,14 +829,43 @@
         {/if}
       </button>
     {/if}
-    <button
-      class="send-btn"
-      onclick={handleSend}
-      disabled={isLoading || !inputText.trim()}
-    >
-      Send
-    </button>
+    {#if isLoading}
+      <!-- PR6 — Stop button replaces Send while a stream is in
+           flight. Gives the user a visible way to bail on a turn
+           that's taking forever (e.g., a Primary synthesis that
+           pulled in too much context). -->
+      <button
+        class="stop-btn"
+        type="button"
+        onclick={handleStop}
+        title="Stop this turn"
+      >
+        Stop
+      </button>
+    {:else}
+      <button
+        class="send-btn"
+        onclick={handleSend}
+        disabled={!inputText.trim() || inputIsOversized}
+        title={inputIsOversized ? OVERSIZE_MESSAGE_HINT : ""}
+      >
+        Send
+      </button>
+    {/if}
     </div>
+    {#if inputIsOversized}
+      <div class="oversize-hint" role="status">
+        <span class="oversize-mark">!</span>
+        <span>{OVERSIZE_MESSAGE_HINT}</span>
+        <button
+          class="oversize-attach-btn"
+          onclick={handleAttach}
+          disabled={isIngesting}
+        >
+          Attach file instead
+        </button>
+      </div>
+    {/if}
   </div>
 
   {#if showDocPicker}
@@ -913,6 +1125,74 @@
 
   .send-btn:disabled {
     opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ── Stop button (PR6) ── */
+  .stop-btn {
+    padding: 9px 20px;
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--text-primary);
+    border-radius: var(--radius);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    align-self: flex-end;
+    transition: background 0.15s, color 0.15s;
+  }
+  .stop-btn:hover {
+    background: var(--text-primary);
+    color: var(--bg-primary);
+  }
+
+  /* ── Oversize input warning (PR2e) ── */
+  .oversize-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-mid);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+  }
+  .oversize-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--bg-primary);
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+  .oversize-attach-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .oversize-attach-btn:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--bg-primary);
+  }
+  .oversize-attach-btn:disabled {
+    opacity: 0.5;
     cursor: not-allowed;
   }
 
