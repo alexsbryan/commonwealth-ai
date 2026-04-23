@@ -194,6 +194,13 @@ pub struct ExtractedQuestion {
     /// `ChapterManifest` post-run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thematic_carriers: Vec<String>,
+    /// Terse phrase locating the chapter in place/time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setting: Option<String>,
+    /// One sentence naming what physically happens in the chapter —
+    /// the event the thematic question is carried by.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot: Option<String>,
 }
 
 /// Parsed result of one phase-1 call. The runner stamps `chapter_id`
@@ -206,6 +213,26 @@ pub struct Phase1ChapterResult {
     pub reveals: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thematic_carriers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setting: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot: Option<String>,
+}
+
+/// Chapter-level failure record. Carried through `Phase1RunResult` for
+/// live reporting and serialized into `Phase1Output.failures` so the
+/// run file preserves a truncated head of whatever the model actually
+/// said. Without this the only signal on a parse failure is the
+/// exception text, which makes prompt debugging a guessing game.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Phase1Failure {
+    pub chapter_id: String,
+    pub reason: String,
+    /// First ~1 KiB of the raw model response, UTF-8 safe, with a
+    /// `… [+N chars]` marker when truncated. `None` only when the
+    /// failure happened before any response arrived (e.g. chat error).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_response_head: Option<String>,
 }
 
 /// Parsed result of one phase-3 call. Runner stamps `id` + `cluster_id`.
@@ -253,12 +280,87 @@ pub struct Phase1Output {
     pub schema_version: u32,
     pub pipeline_id: String,
     pub questions_by_chapter: Vec<ExtractedQuestion>,
+    /// Chapters whose chat or parse failed during this run. Persisted
+    /// alongside the successes so a run file is self-contained for
+    /// post-mortem prompt debugging.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<Phase1Failure>,
     /// ISO-8601 UTC timestamp of when the cache was written.
     pub written_at: String,
 }
 
 impl Phase1Output {
     pub const SCHEMA_VERSION: u32 = 1;
+}
+
+/// True when a string is indistinguishable from a schema-template
+/// placeholder a model would copy verbatim — `"..."`, `"…"`, any
+/// combination of those dots and whitespace, or the literal token
+/// `TODO`. Trim-tolerant; callers don't need to pre-trim.
+///
+/// Used wherever we'd otherwise silently persist a placeholder echo
+/// (phase-1 parser, `characters_present` merge, manifest hydration).
+pub fn is_placeholder_literal(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if t == "..." || t == "…" || t.eq_ignore_ascii_case("todo") {
+        return true;
+    }
+    t.chars().all(|c| c == '.' || c == '…' || c.is_whitespace())
+}
+
+/// Remove any `<think>...</think>` spans from `response`, returning a
+/// copy with the reasoning blocks deleted. Thinking-capable models
+/// (Qwen3, DeepSeek R1, o1-family) emit chain-of-thought between
+/// these tags before their actual answer. The answer we care about
+/// follows the closing tag; parsers that only read the head of the
+/// response would otherwise miss the JSON entirely.
+///
+/// Non-destructive: if no `<think>` tag is present, the returned
+/// string is byte-identical to the input. If an opening tag has no
+/// matching close (the response was truncated mid-think), the entire
+/// tail from `<think>` onward is dropped — callers should detect
+/// this separately and surface a clear error, since a truncated
+/// response has no JSON to parse anyway.
+pub fn strip_reasoning_tags(response: &str) -> String {
+    let mut out = String::with_capacity(response.len());
+    let mut remaining = response;
+    while let Some(open_idx) = remaining.find("<think>") {
+        out.push_str(&remaining[..open_idx]);
+        let after_open = &remaining[open_idx + "<think>".len()..];
+        match after_open.find("</think>") {
+            Some(close_idx) => {
+                remaining = &after_open[close_idx + "</think>".len()..];
+            }
+            None => {
+                // Unclosed <think> — drop the rest.
+                remaining = "";
+                break;
+            }
+        }
+    }
+    out.push_str(remaining);
+    out
+}
+
+/// True when `response` opens a `<think>` block but never closes it
+/// (and never emits a JSON object outside the block). This is the
+/// thinking-model truncation signature: the model spent its whole
+/// output budget reasoning and never produced the requested answer.
+/// Callers use this to emit a specific, actionable error.
+pub fn is_truncated_thinking_response(response: &str) -> bool {
+    let Some(open_idx) = response.find("<think>") else {
+        return false;
+    };
+    let after_open = &response[open_idx + "<think>".len()..];
+    if after_open.contains("</think>") {
+        return false;
+    }
+    // No close tag. If there's also no `{` anywhere in the response,
+    // the model never produced JSON.
+    !response.contains('{')
 }
 
 /// Extract the first JSON object from a model response, tolerating
@@ -666,6 +768,41 @@ mod tests {
     }
 
     #[test]
+    fn strip_reasoning_tags_removes_complete_think_block() {
+        let raw = "<think>considering the options</think>\n{\"questions\":[\"q1\"]}";
+        let out = strip_reasoning_tags(raw);
+        assert!(!out.contains("<think>"));
+        assert!(out.contains("\"questions\""));
+    }
+
+    #[test]
+    fn strip_reasoning_tags_drops_unclosed_think_tail() {
+        // Truncated mid-thought: everything after `<think>` is dropped.
+        let raw = "preamble <think>the model ran out of tokens before closing";
+        let out = strip_reasoning_tags(raw);
+        assert_eq!(out, "preamble ");
+    }
+
+    #[test]
+    fn strip_reasoning_tags_passthrough_when_no_tag() {
+        let raw = "{\"questions\":[\"q1\"]}";
+        let out = strip_reasoning_tags(raw);
+        assert_eq!(out, raw);
+    }
+
+    #[test]
+    fn is_truncated_thinking_response_fires_only_when_open_without_close_and_no_json() {
+        assert!(is_truncated_thinking_response("<think>long reasoning without closure"));
+        // Closed thinking tag + JSON → not truncated.
+        assert!(!is_truncated_thinking_response("<think>done</think>{\"q\":1}"));
+        // No think tag at all → not truncated.
+        assert!(!is_truncated_thinking_response("{\"q\":1}"));
+        // Open tag with no close but a `{` present somewhere → model
+        // produced output anyway, let the parser try.
+        assert!(!is_truncated_thinking_response("<think>oops {stray brace"));
+    }
+
+    #[test]
     fn extract_json_block_none_when_absent() {
         assert!(extract_json_block("no json at all").is_none());
     }
@@ -680,6 +817,13 @@ mod tests {
                 questions: vec!["What is the question?".into()],
                 reveals: Some("A framing line.".into()),
                 thematic_carriers: vec!["Anna".into()],
+                setting: Some("Moscow drawing-room, 1870s".into()),
+                plot: Some("A letter arrives and is read aloud.".into()),
+            }],
+            failures: vec![Phase1Failure {
+                chapter_id: "ch_0007".into(),
+                reason: "parse error: missing questions".into(),
+                raw_response_head: Some("I cannot help with that.".into()),
             }],
             written_at: "2026-04-22T00:00:00Z".into(),
         };
@@ -687,5 +831,22 @@ mod tests {
         let parsed: Phase1Output = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.questions_by_chapter.len(), 1);
         assert_eq!(parsed.pipeline_id, "literary");
+        assert_eq!(parsed.questions_by_chapter[0].setting.as_deref(), Some("Moscow drawing-room, 1870s"));
+        assert_eq!(parsed.questions_by_chapter[0].plot.as_deref(), Some("A letter arrives and is read aloud."));
+        assert_eq!(parsed.failures.len(), 1);
+        assert_eq!(parsed.failures[0].raw_response_head.as_deref(), Some("I cannot help with that."));
+    }
+
+    #[test]
+    fn phase1_output_roundtrip_omits_empty_failures() {
+        let out = Phase1Output {
+            schema_version: Phase1Output::SCHEMA_VERSION,
+            pipeline_id: "literary".into(),
+            questions_by_chapter: vec![],
+            failures: vec![],
+            written_at: "2026-04-22T00:00:00Z".into(),
+        };
+        let json = serde_json::to_string(&out).unwrap();
+        assert!(!json.contains("failures"), "empty failures should be skipped; got {json}");
     }
 }

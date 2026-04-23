@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::chunkers::sectioned::DetectedSection;
+use crate::enrichment::pipeline::types::is_placeholder_literal;
 use crate::error::{Error, Result};
 
 /// Stable on-disk manifest of chapters (or the domain-equivalent unit
@@ -161,7 +162,11 @@ impl ChapterManifest {
     }
 
     /// Merge a batch of `characters_present` into one chapter, preserving
-    /// existing entries and deduplicating case-insensitively by default.
+    /// existing entries and deduplicating case-insensitively. Silently
+    /// drops placeholder literals (`"..."`, `"…"`, `TODO`) — letting
+    /// one slip through once permanently contaminates the manifest for
+    /// this corpus, and future runs have no way to tell a real
+    /// character named `"..."` from a schema echo.
     pub fn merge_characters_present(
         &mut self,
         chapter_id: &str,
@@ -170,18 +175,28 @@ impl ChapterManifest {
         let entry = self.get_mut(chapter_id).ok_or_else(|| {
             Error::InvalidInput(format!("chapter not found: {chapter_id}"))
         })?;
+        // First, scrub any placeholder entries that a prior (pre-fix)
+        // run may have persisted. This turns every merge call into an
+        // opportunity to self-heal.
+        entry
+            .characters_present
+            .retain(|name| !is_placeholder_literal(name));
         let mut seen: BTreeSet<String> = entry
             .characters_present
             .iter()
             .map(|s| s.to_lowercase())
             .collect();
         for name in new {
-            let key = name.trim().to_lowercase();
-            if key.is_empty() || seen.contains(&key) {
+            let trimmed = name.trim();
+            if trimmed.is_empty() || is_placeholder_literal(trimmed) {
+                continue;
+            }
+            let key = trimmed.to_lowercase();
+            if seen.contains(&key) {
                 continue;
             }
             seen.insert(key);
-            entry.characters_present.push(name.trim().to_string());
+            entry.characters_present.push(trimmed.to_string());
         }
         Ok(())
     }
@@ -336,6 +351,52 @@ mod tests {
         assert_eq!(chars.len(), 2);
         assert!(chars.iter().any(|c| c == "Anna"));
         assert!(chars.iter().any(|c| c == "Vronsky"));
+    }
+
+    #[test]
+    fn merge_characters_present_rejects_placeholder_literals() {
+        let mut m = ChapterManifest::new("t");
+        m.chapters.push(ChapterEntry {
+            id: "c1".into(),
+            title: "t".into(),
+            part: None,
+            chapter: None,
+            first_line: String::new(),
+            word_count: 0,
+            chunk_ids: Vec::new(),
+            characters_present: Vec::new(),
+            metadata: Default::default(),
+        });
+        m.merge_characters_present(
+            "c1",
+            &["...".into(), "…".into(), "TODO".into(), "Alyosha".into()],
+        )
+        .unwrap();
+        let chars = &m.get("c1").unwrap().characters_present;
+        assert_eq!(chars, &vec!["Alyosha".to_string()]);
+    }
+
+    #[test]
+    fn merge_characters_present_self_heals_prior_placeholders() {
+        // A pre-fix run persisted "..." into the manifest. The next
+        // merge call should scrub it even when no new names overlap.
+        let mut m = ChapterManifest::new("t");
+        m.chapters.push(ChapterEntry {
+            id: "c1".into(),
+            title: "t".into(),
+            part: None,
+            chapter: None,
+            first_line: String::new(),
+            word_count: 0,
+            chunk_ids: Vec::new(),
+            characters_present: vec!["...".into(), "Alyosha".into()],
+            metadata: Default::default(),
+        });
+        m.merge_characters_present("c1", &["Dmitri".into()]).unwrap();
+        let chars = &m.get("c1").unwrap().characters_present;
+        assert!(!chars.iter().any(|c| c == "..."), "scrub should have dropped '...': {chars:?}");
+        assert!(chars.iter().any(|c| c == "Alyosha"));
+        assert!(chars.iter().any(|c| c == "Dmitri"));
     }
 
     #[test]

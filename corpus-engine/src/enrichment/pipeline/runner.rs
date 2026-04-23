@@ -78,10 +78,59 @@ pub struct Phase1RunResult {
     pub failures: Vec<Phase1Failure>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Phase1Failure {
-    pub chapter_id: String,
-    pub reason: String,
+/// Cap on how much of a failing model response we carry forward. A
+/// pathological response is rarely longer than this; a well-behaved
+/// response that fails parsing for some other reason (shape drift)
+/// still fits its first meaningful object inside the cap.
+const FAILURE_HEAD_CHAR_CAP: usize = 1024;
+
+/// Below this word count, a chapter is almost certainly a `Part`
+/// heading or other front-matter section the regex picked up but
+/// that has no body for the model to think about. Sending such a
+/// chapter to chat produces either a refusal or a schema-template
+/// echo — both wasted roundtrips. A real chapter, even a terse one,
+/// comfortably clears this bar.
+const MIN_PHASE1_CHAPTER_WORDS: usize = 40;
+
+/// Count whitespace-separated tokens. Good-enough proxy for "words";
+/// the threshold only needs to be in the right order of magnitude.
+fn approx_word_count(text: &str) -> usize {
+    text.split_whitespace().count()
+}
+
+/// Truncate `text` to at most `FAILURE_HEAD_CHAR_CAP` characters
+/// (NOT bytes — must not split a UTF-8 codepoint), appending a marker
+/// that records how many characters were dropped. Returns `None` if
+/// the input is entirely whitespace, since an empty head is less
+/// useful than the explicit `None` serde encodes as omitted.
+fn truncate_response_head(text: &str) -> Option<String> {
+    if text.trim().is_empty() {
+        return None;
+    }
+    let total = text.chars().count();
+    if total <= FAILURE_HEAD_CHAR_CAP {
+        return Some(text.to_string());
+    }
+    let head: String = text.chars().take(FAILURE_HEAD_CHAR_CAP).collect();
+    let dropped = total - FAILURE_HEAD_CHAR_CAP;
+    Some(format!("{head}… [+{dropped} chars]"))
+}
+
+/// Flatten whitespace and cap at ~200 chars so a parse-failure line in
+/// the CLI's progress stream stays on one terminal row. The full head
+/// is still persisted to the run file.
+fn one_line_excerpt(text: &str) -> String {
+    const EXCERPT_CHAR_CAP: usize = 200;
+    let flat: String = text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if flat.chars().count() <= EXCERPT_CHAR_CAP {
+        flat
+    } else {
+        let head: String = flat.chars().take(EXCERPT_CHAR_CAP).collect();
+        format!("{head}…")
+    }
 }
 
 /// Executor for one admin-harness pipeline run.
@@ -197,6 +246,33 @@ impl PhaseRunner {
                 chapter_id: &chapter.chapter_id,
             });
 
+            // Skip sections with essentially no body. The chapter-regex
+            // detector treats `Part I` headings as their own section
+            // even though the body between them and the first real
+            // chapter is just front-matter (e.g. "Book I. The History
+            // Of A Family\n\n"). Sending that to chat produces a
+            // schema-template echo — not a real analysis. Register the
+            // skip as a failure so the run file surfaces it rather
+            // than silently caching `"..."`.
+            let words = approx_word_count(&chapter.text);
+            if words < MIN_PHASE1_CHAPTER_WORDS {
+                let reason = format!(
+                    "skipped: chapter body is too short to analyze ({words} words < \
+                     {MIN_PHASE1_CHAPTER_WORDS} word minimum) — likely a Part-level \
+                     heading or front-matter section"
+                );
+                progress(Phase1Progress::ChapterFailed {
+                    chapter_id: &chapter.chapter_id,
+                    reason: &reason,
+                });
+                failures.push(Phase1Failure {
+                    chapter_id: chapter.chapter_id.clone(),
+                    reason,
+                    raw_response_head: None,
+                });
+                continue;
+            }
+
             // Build the query-side embedding used to score exemplars
             // against this chapter.
             let query_text = phase1_query_text(chapter);
@@ -220,6 +296,8 @@ impl PhaseRunner {
                     failures.push(Phase1Failure {
                         chapter_id: chapter.chapter_id.clone(),
                         reason,
+                        // No response body ever arrived — nothing to capture.
+                        raw_response_head: None,
                     });
                     continue;
                 }
@@ -228,7 +306,17 @@ impl PhaseRunner {
             let parsed = match self.pipeline.parse_phase1(&response) {
                 Ok(p) => p,
                 Err(e) => {
-                    let reason = format!("parse error: {e}");
+                    let head = truncate_response_head(&response);
+                    // Keep a one-line excerpt in `reason` so the CLI's
+                    // streaming progress printer shows something useful
+                    // without having to open the run file. The full head
+                    // still goes to `raw_response_head` for the file.
+                    let excerpt = head
+                        .as_deref()
+                        .map(one_line_excerpt)
+                        .unwrap_or_else(|| "<empty response>".into());
+                    let reason =
+                        format!("parse error: {e} | response[head]: {excerpt}");
                     progress(Phase1Progress::ChapterFailed {
                         chapter_id: &chapter.chapter_id,
                         reason: &reason,
@@ -236,6 +324,7 @@ impl PhaseRunner {
                     failures.push(Phase1Failure {
                         chapter_id: chapter.chapter_id.clone(),
                         reason,
+                        raw_response_head: head,
                     });
                     continue;
                 }
@@ -251,14 +340,18 @@ impl PhaseRunner {
                 questions: parsed.questions,
                 reveals: parsed.reveals,
                 thematic_carriers: parsed.thematic_carriers,
+                setting: parsed.setting,
+                plot: parsed.plot,
             });
         }
 
-        // Assemble the Phase1Output.
+        // Assemble the Phase1Output. Failures land in the output so
+        // the run file is self-contained for post-mortem debugging.
         let output = Phase1Output {
             schema_version: Phase1Output::SCHEMA_VERSION,
             pipeline_id: self.pipeline.id().to_string(),
             questions_by_chapter: extracted.clone(),
+            failures: failures.clone(),
             written_at: now_rfc3339(),
         };
 
@@ -1035,12 +1128,23 @@ mod tests {
     use tempfile::tempdir;
 
     fn chapter(id: &str, title: &str, body: &str) -> ChapterInput {
+        // Pad every test body past MIN_PHASE1_CHAPTER_WORDS so the
+        // short-chapter skip doesn't fire on fixtures that are meant
+        // to exercise the chat-and-parse path. The original `body`
+        // stays at the start so `canned_chat`'s substring matches
+        // ("FAIL", "Two", etc.) still dispatch correctly.
+        let padding_word = " filler";
+        // 60 copies of "filler" = 60 words, comfortably above the
+        // 40-word MIN_PHASE1_CHAPTER_WORDS threshold regardless of the
+        // caller's seed body length.
+        let text = format!("{body}{}", padding_word.repeat(60));
+        let approx_tokens = text.len() / 4;
         ChapterInput {
             chapter_id: id.into(),
             title: title.into(),
-            text: body.into(),
+            text,
             metadata: HashMap::new(),
-            approx_tokens: body.len() / 4,
+            approx_tokens,
         }
     }
 
@@ -1183,6 +1287,37 @@ mod tests {
         assert_eq!(res.failures.len(), 1);
         assert_eq!(res.failures[0].chapter_id, "ch_02");
         assert!(res.failures[0].reason.contains("parse error"));
+    }
+
+    #[tokio::test]
+    async fn phase_1_skips_chapters_with_empty_bodies() {
+        // A short "Part I"-style section has no substantive body.
+        // The runner should register a skip without burning a chat
+        // call, and the failure reason should name the root cause.
+        let dir = tempdir().unwrap();
+        let runner = runner_under_test(dir.path());
+        let short = ChapterInput {
+            chapter_id: "sec_0001".into(),
+            title: "Part I".into(),
+            text: "Book I. The History Of A Family".into(),
+            metadata: std::collections::HashMap::new(),
+            approx_tokens: 10,
+        };
+        let real = chapter("sec_0002", "Chapter 1", &"body word ".repeat(60));
+        let res = runner
+            .phase_1_extract_questions(&[short, real], &ChapterSelection::Full, |_| {})
+            .await
+            .unwrap();
+        assert_eq!(res.output.questions_by_chapter.len(), 1);
+        assert_eq!(res.failures.len(), 1);
+        assert_eq!(res.failures[0].chapter_id, "sec_0001");
+        assert!(
+            res.failures[0].reason.contains("too short"),
+            "expected short-body reason, got: {}",
+            res.failures[0].reason
+        );
+        // The skip must not fabricate a raw response.
+        assert!(res.failures[0].raw_response_head.is_none());
     }
 
     #[tokio::test]

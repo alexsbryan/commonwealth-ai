@@ -123,10 +123,29 @@ impl Pipeline for LiteraryPipeline {
     }
 
     fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {
-        let block = extract_json_block(response).ok_or_else(|| {
-            Error::Serialization(
-                "phase 1 response contained no recognisable JSON object".into(),
-            )
+        // Thinking-capable models (Qwen3, DeepSeek R1, etc.) emit
+        // `<think>…</think>` chain-of-thought before the answer. Strip
+        // it so the balanced-brace scan doesn't get fooled by braces
+        // inside the reasoning trace.
+        let cleaned = strip_reasoning_tags(response);
+        let block = extract_json_block(&cleaned).ok_or_else(|| {
+            // When the model spent its whole budget thinking and
+            // never produced JSON, the generic "no recognisable JSON"
+            // error hides the root cause. Call it out explicitly so
+            // operators know to raise `max_output_tokens` or disable
+            // thinking mode rather than chase a parser bug.
+            if is_truncated_thinking_response(response) {
+                Error::Serialization(
+                    "phase 1 response is a truncated reasoning trace — the model emitted \
+                     a <think> block but ran out of output budget before producing JSON. \
+                     Raise max_output_tokens in config.json or disable thinking mode."
+                        .into(),
+                )
+            } else {
+                Error::Serialization(
+                    "phase 1 response contained no recognisable JSON object".into(),
+                )
+            }
         })?;
 
         #[derive(serde::Deserialize)]
@@ -137,6 +156,10 @@ impl Pipeline for LiteraryPipeline {
             reveals: Option<String>,
             #[serde(default)]
             thematic_carriers: Vec<String>,
+            #[serde(default)]
+            setting: Option<String>,
+            #[serde(default)]
+            plot: Option<String>,
         }
 
         let raw: Raw = serde_json::from_str(block).map_err(|e| {
@@ -150,23 +173,35 @@ impl Pipeline for LiteraryPipeline {
                     .into(),
             ));
         }
-        // Validate that each question is not empty / not whitespace.
         for (i, q) in raw.questions.iter().enumerate() {
-            if q.trim().is_empty() {
+            let t = q.trim();
+            if t.is_empty() {
                 return Err(Error::Serialization(format!(
                     "phase 1 response question[{i}] is empty"
+                )));
+            }
+            if is_placeholder_literal(t) {
+                // Some quantized local models regurgitate the schema
+                // example verbatim ("questions":["..."]). Treat that as
+                // a failure so the caller re-runs / re-prompts rather
+                // than silently caching garbage.
+                return Err(Error::Serialization(format!(
+                    "phase 1 response question[{i}] is a placeholder literal ({t:?}) — \
+                     the model echoed the schema template instead of answering"
                 )));
             }
         }
 
         Ok(Phase1ChapterResult {
             questions: raw.questions,
-            reveals: raw.reveals.filter(|s| !s.trim().is_empty()),
+            reveals: sanitize_optional_string(raw.reveals),
             thematic_carriers: raw
                 .thematic_carriers
                 .into_iter()
-                .filter(|s| !s.trim().is_empty())
+                .filter(|s| !s.trim().is_empty() && !is_placeholder_literal(s.trim()))
                 .collect(),
+            setting: sanitize_optional_string(raw.setting),
+            plot: sanitize_optional_string(raw.plot),
         })
     }
 
@@ -539,6 +574,14 @@ impl Pipeline for LiteraryPipeline {
     }
 }
 
+/// Drop an `Option<String>` that's empty, whitespace-only, or a
+/// placeholder literal. Used for phase-1 optional fields where a
+/// `"..."` echo should be treated the same as no answer.
+fn sanitize_optional_string(opt: Option<String>) -> Option<String> {
+    opt.map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && !is_placeholder_literal(s))
+}
+
 fn render_generic_exemplar(buf: &mut String, n: usize, e: &Exemplar) {
     buf.push_str(&format!("## Exemplar {n} ({:?})\n\n", e.kind));
     buf.push_str("**Input:**\n```json\n");
@@ -731,6 +774,47 @@ mod tests {
             .unwrap_err();
         let msg = format!("{err:?}");
         assert!(msg.contains("empty"), "{msg}");
+    }
+
+    #[test]
+    fn parse_phase1_rejects_placeholder_literal_questions() {
+        // Quantized local models commonly echo the schema example
+        // verbatim ({"questions": ["..."]}). parse_phase1 must reject
+        // this as a failure, not quietly cache "..." as the answer.
+        let p = LiteraryPipeline::new();
+        let raw = r#"{"questions":["..."],"reveals":"...","thematic_carriers":["..."]}"#;
+        let err = p.parse_phase1(raw).unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(msg.contains("placeholder"), "{msg}");
+    }
+
+    #[test]
+    fn parse_phase1_strips_placeholder_optionals() {
+        // A model may give a real question but echo placeholders for
+        // the optional fields. Strip the placeholders rather than
+        // rejecting the whole response.
+        let p = LiteraryPipeline::new();
+        let raw = r#"{"questions":["Real question?"],"reveals":"...","setting":"…","plot":"   ","thematic_carriers":["..."]}"#;
+        let got = p.parse_phase1(raw).unwrap();
+        assert_eq!(got.questions, vec!["Real question?"]);
+        assert!(got.reveals.is_none());
+        assert!(got.setting.is_none());
+        assert!(got.plot.is_none());
+        assert!(got.thematic_carriers.is_empty());
+    }
+
+    #[test]
+    fn parse_phase1_accepts_setting_and_plot() {
+        let p = LiteraryPipeline::new();
+        let raw = r#"{
+            "questions": ["What does marriage-for-advantage cost?"],
+            "thematic_carriers": ["Mrs. Bennet"],
+            "setting": "English country drawing-room, circa 1810",
+            "plot": "Parents argue over courting a wealthy newcomer."
+        }"#;
+        let got = p.parse_phase1(raw).unwrap();
+        assert_eq!(got.setting.as_deref(), Some("English country drawing-room, circa 1810"));
+        assert_eq!(got.plot.as_deref(), Some("Parents argue over courting a wealthy newcomer."));
     }
 
     #[test]

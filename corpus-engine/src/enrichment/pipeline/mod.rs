@@ -42,7 +42,7 @@ pub use phase_cache::{PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
 pub use registry::PipelineRegistry;
 pub use run_output::RunOutputWriter;
 pub use runner::{
-    CascadeResult, CascadeStep, ChapterSelection, Phase1Failure, Phase1Progress,
+    CascadeResult, CascadeStep, ChapterSelection, Phase1Progress,
     Phase1RunResult, Phase2RunResult, Phase3RunResult, Phase4RunResult, Phase5RunResult,
     Phase6RunResult, Phase7RunResult, PhaseFailure, PhaseRunResult, PhaseRunner,
 };
@@ -55,8 +55,9 @@ pub use vector_clustering::{cluster_vectors, VectorClusterResult};
 pub use types::{
     Atlas, CanonicalConcern, ChapterInput, ChatCompletionFn, ChatPrompt, ChunkCluster,
     ChunkRecord, CorpusContext, ExtractedQuestion, Gap, Grounding, Phase1ChapterResult,
-    Phase1Output, Phase2Output, Phase3Output, Phase3ParseResult, Phase4Output, Phase5Output,
-    Phase5ParseResult, Phase6Output, Phase6ParseResult, Phase7Output, Phase7ParseItem,
-    PipelinePhase, Position, QuestionCluster, QuestionRef, Tension, Vocabulary,
-    extract_json_block,
+    Phase1Failure, Phase1Output, Phase2Output, Phase3Output, Phase3ParseResult, Phase4Output,
+    Phase5Output, Phase5ParseResult, Phase6Output, Phase6ParseResult, Phase7Output,
+    Phase7ParseItem, PipelinePhase, Position, QuestionCluster, QuestionRef, Tension,
+    Vocabulary, extract_json_block, is_placeholder_literal,
+    is_truncated_thinking_response, strip_reasoning_tags,
 };
