@@ -393,10 +393,18 @@ pub struct PhaseRunResult<T> {
     pub failures: Vec<PhaseFailure>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PhaseFailure {
+    /// Free-form identifier for whatever the phase was processing
+    /// (cluster id, concern id, position-pair, etc.). Paired with
+    /// `reason` to surface which unit failed and why.
     pub context: String,
     pub reason: String,
+    /// First ~1 KiB of the raw model response when the failure came
+    /// from parsing. `None` for chat-level errors (connection loss,
+    /// HTTP 5xx) — no response body ever arrived.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_response_head: Option<String>,
 }
 
 pub type Phase2RunResult = PhaseRunResult<Phase2Output>;
@@ -557,6 +565,7 @@ impl PhaseRunner {
                     failures.push(PhaseFailure {
                         context: cluster.id.clone(),
                         reason: format!("chat: {e}"),
+                        raw_response_head: None,
                     });
                     continue;
                 }
@@ -564,9 +573,15 @@ impl PhaseRunner {
             let parsed = match self.pipeline.parse_phase3(&response) {
                 Ok(p) => p,
                 Err(e) => {
+                    let head = truncate_response_head(&response);
+                    let excerpt = head
+                        .as_deref()
+                        .map(one_line_excerpt)
+                        .unwrap_or_else(|| "<empty response>".into());
                     failures.push(PhaseFailure {
                         context: cluster.id.clone(),
-                        reason: format!("parse: {e}"),
+                        reason: format!("parse: {e} | response[head]: {excerpt}"),
+                        raw_response_head: head,
                     });
                     continue;
                 }
@@ -754,6 +769,7 @@ impl PhaseRunner {
                         failures.push(PhaseFailure {
                             context: format!("{}:{}", concern.id, cluster.id),
                             reason: format!("chat: {e}"),
+                            raw_response_head: None,
                         });
                         continue;
                     }
@@ -761,9 +777,15 @@ impl PhaseRunner {
                 let parsed = match self.pipeline.parse_phase5(&response) {
                     Ok(p) => p,
                     Err(e) => {
+                        let head = truncate_response_head(&response);
+                        let excerpt = head
+                            .as_deref()
+                            .map(one_line_excerpt)
+                            .unwrap_or_else(|| "<empty response>".into());
                         failures.push(PhaseFailure {
                             context: format!("{}:{}", concern.id, cluster.id),
-                            reason: format!("parse: {e}"),
+                            reason: format!("parse: {e} | response[head]: {excerpt}"),
+                            raw_response_head: head,
                         });
                         continue;
                     }
@@ -867,6 +889,7 @@ impl PhaseRunner {
                             failures.push(PhaseFailure {
                                 context: format!("{}×{}", a.id, b.id),
                                 reason: format!("chat: {e}"),
+                                raw_response_head: None,
                             });
                             continue;
                         }
@@ -874,9 +897,15 @@ impl PhaseRunner {
                     let parsed = match self.pipeline.parse_phase6(&response) {
                         Ok(p) => p,
                         Err(e) => {
+                            let head = truncate_response_head(&response);
+                            let excerpt = head
+                                .as_deref()
+                                .map(one_line_excerpt)
+                                .unwrap_or_else(|| "<empty response>".into());
                             failures.push(PhaseFailure {
                                 context: format!("{}×{}", a.id, b.id),
-                                reason: format!("parse: {e}"),
+                                reason: format!("parse: {e} | response[head]: {excerpt}"),
+                                raw_response_head: head,
                             });
                             continue;
                         }

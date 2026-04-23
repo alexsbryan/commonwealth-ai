@@ -123,38 +123,16 @@ impl Pipeline for LiteraryPipeline {
     }
 
     fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {
-        // Thinking-capable models (Qwen3, DeepSeek R1, etc.) emit
-        // `<think>…</think>` chain-of-thought before the answer. Strip
-        // it so the balanced-brace scan doesn't get fooled by braces
-        // inside the reasoning trace.
-        let cleaned = strip_reasoning_tags(response);
-        let block = extract_json_block(&cleaned).ok_or_else(|| {
-            // When the model spent its whole budget thinking and
-            // never produced JSON, the generic "no recognisable JSON"
-            // error hides the root cause. Call it out explicitly so
-            // operators know to raise `max_output_tokens` or disable
-            // thinking mode rather than chase a parser bug.
-            if is_truncated_thinking_response(response) {
-                Error::Serialization(
-                    "phase 1 response is a truncated reasoning trace — the model emitted \
-                     a <think> block but ran out of output budget before producing JSON. \
-                     Raise max_output_tokens in config.json or disable thinking mode."
-                        .into(),
-                )
-            } else {
-                Error::Serialization(
-                    "phase 1 response contained no recognisable JSON object".into(),
-                )
-            }
-        })?;
+        let cleaned = prepare_phase_json(response, "phase 1")?;
+        let block = cleaned.as_str();
 
         #[derive(serde::Deserialize)]
         struct Raw {
-            #[serde(default)]
+            #[serde(default, deserialize_with = "deserialize_vec_string_filter_null")]
             questions: Vec<String>,
             #[serde(default)]
             reveals: Option<String>,
-            #[serde(default)]
+            #[serde(default, deserialize_with = "deserialize_vec_string_filter_null")]
             thematic_carriers: Vec<String>,
             #[serde(default)]
             setting: Option<String>,
@@ -252,16 +230,15 @@ impl Pipeline for LiteraryPipeline {
     }
 
     fn parse_phase3(&self, response: &str) -> Result<Phase3ParseResult> {
-        let block = extract_json_block(response).ok_or_else(|| {
-            Error::Serialization("phase 3 response contained no JSON object".into())
-        })?;
+        let cleaned = prepare_phase_json(response, "phase 3")?;
+        let block = cleaned.as_str();
 
         #[derive(serde::Deserialize)]
         struct Raw {
             concern_text: Option<String>,
             #[serde(default)]
             scope: Option<String>,
-            #[serde(default)]
+            #[serde(default, deserialize_with = "deserialize_vec_string_filter_null")]
             primary_arcs: Vec<String>,
         }
         let raw: Raw = serde_json::from_str(block)
@@ -322,9 +299,8 @@ impl Pipeline for LiteraryPipeline {
     }
 
     fn parse_phase5(&self, response: &str) -> Result<Phase5ParseResult> {
-        let block = extract_json_block(response).ok_or_else(|| {
-            Error::Serialization("phase 5 response contained no JSON object".into())
-        })?;
+        let cleaned = prepare_phase_json(response, "phase 5")?;
+        let block = cleaned.as_str();
 
         #[derive(serde::Deserialize)]
         struct RawGrounding {
@@ -339,7 +315,10 @@ impl Pipeline for LiteraryPipeline {
             position_text: Option<String>,
             #[serde(default)]
             grounding: Vec<RawGrounding>,
-            #[serde(default)]
+            #[serde(
+                default,
+                deserialize_with = "deserialize_map_string_string_filter_null"
+            )]
             extensions: std::collections::HashMap<String, String>,
         }
         let raw: Raw = serde_json::from_str(block)
@@ -426,9 +405,8 @@ impl Pipeline for LiteraryPipeline {
     }
 
     fn parse_phase6(&self, response: &str) -> Result<Option<Phase6ParseResult>> {
-        let block = extract_json_block(response).ok_or_else(|| {
-            Error::Serialization("phase 6 response contained no JSON object".into())
-        })?;
+        let cleaned = prepare_phase_json(response, "phase 6")?;
+        let block = cleaned.as_str();
 
         #[derive(serde::Deserialize)]
         struct Raw {
@@ -509,9 +487,8 @@ impl Pipeline for LiteraryPipeline {
     }
 
     fn parse_phase7(&self, response: &str) -> Result<Vec<Phase7ParseItem>> {
-        let block = extract_json_block(response).ok_or_else(|| {
-            Error::Serialization("phase 7 response contained no JSON object".into())
-        })?;
+        let cleaned = prepare_phase_json(response, "phase 7")?;
+        let block = cleaned.as_str();
 
         #[derive(serde::Deserialize)]
         struct RawGap {
@@ -580,6 +557,64 @@ impl Pipeline for LiteraryPipeline {
 fn sanitize_optional_string(opt: Option<String>) -> Option<String> {
     opt.map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty() && !is_placeholder_literal(s))
+}
+
+/// Deserialize a `Vec<String>` while silently dropping `null`
+/// entries. Thinking-capable models occasionally emit
+/// `["Alice", null, "Bob"]` when they're unsure about a position in
+/// an array; treating that as a hard parse failure wastes the whole
+/// response when the meaningful entries are right there.
+fn deserialize_vec_string_filter_null<'de, D>(d: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let v: Vec<Option<String>> = Vec::deserialize(d)?;
+    Ok(v.into_iter().flatten().collect())
+}
+
+/// Deserialize a `HashMap<String, String>` while silently dropping
+/// entries whose value is `null`. Models sometimes fill in optional
+/// extension slots with an explicit null instead of omitting them —
+/// that's equivalent to "no value" and shouldn't fail the whole
+/// parse.
+fn deserialize_map_string_string_filter_null<'de, D>(
+    d: D,
+) -> std::result::Result<std::collections::HashMap<String, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let m: std::collections::HashMap<String, Option<String>> =
+        std::collections::HashMap::deserialize(d)?;
+    Ok(m.into_iter().filter_map(|(k, v)| v.map(|s| (k, s))).collect())
+}
+
+/// Strip `<think>…</think>` reasoning tags, extract the first JSON
+/// object, and return it as an owned string ready for
+/// `serde_json::from_str`.
+///
+/// Shared by every phase parser so thinking-capable models (Qwen3,
+/// DeepSeek R1, o1-family) behave identically whatever phase is
+/// running. When the model opened a `<think>` block but never closed
+/// it, the returned error names the root cause — "truncated
+/// reasoning trace" — instead of the generic "no JSON object."
+fn prepare_phase_json(response: &str, phase_label: &str) -> Result<String> {
+    let cleaned = strip_reasoning_tags(response);
+    let block = extract_json_block(&cleaned).ok_or_else(|| {
+        if is_truncated_thinking_response(response) {
+            Error::Serialization(format!(
+                "{phase_label} response is a truncated reasoning trace — the model emitted \
+                 a <think> block but ran out of output budget before producing JSON. \
+                 Raise max_output_tokens in config.json or disable thinking mode."
+            ))
+        } else {
+            Error::Serialization(format!(
+                "{phase_label} response contained no recognisable JSON object"
+            ))
+        }
+    })?;
+    Ok(block.to_string())
 }
 
 fn render_generic_exemplar(buf: &mut String, n: usize, e: &Exemplar) {
@@ -853,6 +888,108 @@ mod tests {
         let p = LiteraryPipeline::new();
         assert!(p.parse_phase3(r#"{"concern_text":""}"#).is_err());
         assert!(p.parse_phase3(r#"{}"#).is_err());
+    }
+
+    #[test]
+    fn parse_phase3_strips_thinking_preamble() {
+        // Thinking-capable models emit <think>…</think> before the
+        // answer. Braces inside the reasoning trace would otherwise
+        // confuse the balanced-brace JSON scanner.
+        let p = LiteraryPipeline::new();
+        let raw = "<think>I should consider that { is valid JSON start. But the answer is below.</think>\n{\"concern_text\":\"Can x survive y?\"}";
+        let got = p.parse_phase3(raw).unwrap();
+        assert_eq!(got.concern_text, "Can x survive y?");
+    }
+
+    #[test]
+    fn parse_phase3_reports_truncated_thinking_trace() {
+        // Model opened <think> and never closed it. The error must
+        // name the root cause so the operator raises max_output_tokens
+        // rather than chasing a parser bug.
+        let p = LiteraryPipeline::new();
+        let raw = "<think>ran out of budget while reasoning without ever producing an answer";
+        let err = p.parse_phase3(raw).unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(msg.contains("truncated reasoning trace"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_phase5_strips_thinking_preamble() {
+        let p = LiteraryPipeline::new();
+        let raw = "<think>Here is my plan: { something }</think>\n{\"position_text\":\"X\",\"grounding\":[{\"chunk_id\":1,\"section_id\":\"sec_0001\",\"summary\":\"s\"}]}";
+        let got = p.parse_phase5(raw).unwrap();
+        assert_eq!(got.position_text, "X");
+        assert_eq!(got.grounding.len(), 1);
+    }
+
+    #[test]
+    fn parse_phase6_strips_thinking_preamble() {
+        let p = LiteraryPipeline::new();
+        let raw = "<think>consider {a,b}</think>\n{\"tension\":false}";
+        assert!(p.parse_phase6(raw).unwrap().is_none());
+    }
+
+    #[test]
+    fn parse_phase7_strips_thinking_preamble() {
+        let p = LiteraryPipeline::new();
+        let raw = "<think>pretend braces { here</think>\n{\"gaps\":[]}";
+        let got = p.parse_phase7(raw).unwrap();
+        assert!(got.is_empty());
+    }
+
+    #[test]
+    fn parse_phase5_tolerates_null_in_extensions_map() {
+        // Models sometimes fill optional extension slots with an
+        // explicit `null` instead of omitting the key. A null value
+        // is semantically "no value" and must not hard-fail the
+        // whole response.
+        let p = LiteraryPipeline::new();
+        let raw = r#"{
+            "position_text": "X",
+            "grounding": [{"chunk_id": 1, "section_id": "sec_0001", "summary": "s"}],
+            "extensions": {"stance": "affirmative", "confidence": null}
+        }"#;
+        let got = p.parse_phase5(raw).unwrap();
+        assert_eq!(got.position_text, "X");
+        assert_eq!(got.extensions.get("stance").map(String::as_str), Some("affirmative"));
+        assert!(
+            !got.extensions.contains_key("confidence"),
+            "null value must be filtered, not stored as empty string"
+        );
+    }
+
+    #[test]
+    fn parse_phase1_tolerates_null_entries_in_arrays() {
+        // `["Alice", null, "Bob"]` must drop the null and keep the
+        // strings — the meaningful entries are still usable.
+        let p = LiteraryPipeline::new();
+        let raw = r#"{
+            "questions": ["Can x survive y?", null, "Second question?"],
+            "thematic_carriers": [null, "Alyosha"]
+        }"#;
+        let got = p.parse_phase1(raw).unwrap();
+        assert_eq!(got.questions, vec!["Can x survive y?", "Second question?"]);
+        assert_eq!(got.thematic_carriers, vec!["Alyosha"]);
+    }
+
+    #[test]
+    fn parse_phase3_tolerates_null_entries_in_primary_arcs() {
+        let p = LiteraryPipeline::new();
+        let raw = r#"{"concern_text":"X","primary_arcs":["a",null,"b"]}"#;
+        let got = p.parse_phase3(raw).unwrap();
+        assert_eq!(got.primary_arcs, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn parse_phase5_reports_truncated_thinking_even_with_brace_in_trace() {
+        // A { inside the reasoning trace used to fool the truncation
+        // detector. The new logic keys on <think> open + </think>
+        // absent regardless of stray braces.
+        let p = LiteraryPipeline::new();
+        let raw = "<think>drafting {position_text: ...} but ran out of tokens before closing";
+        let err = p.parse_phase5(raw).unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(msg.contains("truncated reasoning trace"), "got: {msg}");
     }
 
     #[test]

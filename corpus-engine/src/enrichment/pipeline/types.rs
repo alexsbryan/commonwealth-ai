@@ -345,22 +345,19 @@ pub fn strip_reasoning_tags(response: &str) -> String {
     out
 }
 
-/// True when `response` opens a `<think>` block but never closes it
-/// (and never emits a JSON object outside the block). This is the
-/// thinking-model truncation signature: the model spent its whole
-/// output budget reasoning and never produced the requested answer.
-/// Callers use this to emit a specific, actionable error.
+/// True when `response` opens a `<think>` block but never closes it.
+/// This is the thinking-model truncation signature: the model spent
+/// its whole output budget reasoning and never produced the requested
+/// answer. A stray `{` inside the reasoning trace (e.g. the model
+/// drafting sample JSON while it thinks) does NOT invalidate the
+/// detection — the answer we care about sits after `</think>`, and
+/// without that close tag we cannot have reached it.
 pub fn is_truncated_thinking_response(response: &str) -> bool {
     let Some(open_idx) = response.find("<think>") else {
         return false;
     };
     let after_open = &response[open_idx + "<think>".len()..];
-    if after_open.contains("</think>") {
-        return false;
-    }
-    // No close tag. If there's also no `{` anywhere in the response,
-    // the model never produced JSON.
-    !response.contains('{')
+    !after_open.contains("</think>")
 }
 
 /// Extract the first JSON object from a model response, tolerating
@@ -791,15 +788,17 @@ mod tests {
     }
 
     #[test]
-    fn is_truncated_thinking_response_fires_only_when_open_without_close_and_no_json() {
+    fn is_truncated_thinking_response_fires_whenever_think_is_unclosed() {
         assert!(is_truncated_thinking_response("<think>long reasoning without closure"));
+        // A `{` inside the reasoning trace is a red herring; the
+        // answer we care about is after </think>, which is missing.
+        assert!(is_truncated_thinking_response(
+            "<think>drafting {\"position_text\": …} but never closing"
+        ));
         // Closed thinking tag + JSON → not truncated.
         assert!(!is_truncated_thinking_response("<think>done</think>{\"q\":1}"));
         // No think tag at all → not truncated.
         assert!(!is_truncated_thinking_response("{\"q\":1}"));
-        // Open tag with no close but a `{` present somewhere → model
-        // produced output anyway, let the parser try.
-        assert!(!is_truncated_thinking_response("<think>oops {stray brace"));
     }
 
     #[test]
