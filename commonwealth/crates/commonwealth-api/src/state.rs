@@ -57,6 +57,12 @@ pub trait LocalInferenceService: Send + Sync {
     /// backend. Returning `None` falls through to the scheduler-
     /// based manifest path.
     fn provider_manifest(&self) -> Option<ProviderManifest>;
+
+    /// Produce an embedding vector for `input`. Called by the HTTP
+    /// `/v1/embeddings` handler. Returns the raw vector the provider
+    /// emitted — the handler is responsible for wrapping it in the
+    /// OpenAI response envelope.
+    async fn embed(&self, input: &str) -> Result<Vec<f32>, String>;
 }
 
 /// Callback the route handlers fire whenever they mutate `Mesh` —

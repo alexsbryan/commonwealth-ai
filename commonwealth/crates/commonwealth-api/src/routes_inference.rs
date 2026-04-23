@@ -360,6 +360,100 @@ async fn forward_to_llama_server(
     }
 }
 
+/// POST /v1/embeddings — OpenAI-compatible embeddings endpoint.
+///
+/// Delegates to `local_inference.embed(input)`. The request's `model`
+/// field is accepted and echoed back in the response envelope but
+/// does not drive routing today — the embedding slot wired into the
+/// local-inference service is whatever model the daemon has loaded
+/// for embeddings. When a future release supports multiple embed
+/// models, this handler will grow model-name dispatch the way
+/// chat_completions does.
+pub async fn embeddings(
+    State(state): State<AppState>,
+    Json(request): Json<EmbeddingRequest>,
+) -> Response {
+    let Some(service) = state.inner.local_inference.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(
+                serde_json::to_value(ErrorResponse::new(
+                    "this daemon has no local embedding backend — start it with \
+                     sovereign-mesh so an EmbedSlot is attached, or route to a peer \
+                     that advertises embeddings",
+                    "no_local_embedding_backend",
+                ))
+                .unwrap(),
+            ),
+        )
+            .into_response();
+    };
+
+    // Fan out over single-or-batch input. Each call is independent;
+    // a future pass can add `embed_batch` for backends that batch
+    // more efficiently than one-at-a-time.
+    let inputs: Vec<String> = match request.input {
+        EmbeddingInput::Single(s) => vec![s],
+        EmbeddingInput::Batch(v) => v,
+    };
+    if inputs.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                serde_json::to_value(ErrorResponse::new(
+                    "embeddings request: `input` must be a non-empty string or array",
+                    "invalid_request_error",
+                ))
+                .unwrap(),
+            ),
+        )
+            .into_response();
+    }
+
+    let mut data: Vec<EmbeddingData> = Vec::with_capacity(inputs.len());
+    let mut total_chars: usize = 0;
+    for (i, text) in inputs.into_iter().enumerate() {
+        total_chars += text.len();
+        match service.embed(&text).await {
+            Ok(vec) => data.push(EmbeddingData {
+                object: "embedding".into(),
+                embedding: vec,
+                index: i,
+            }),
+            Err(e) => {
+                warn!(error = %e, index = i, "embeddings: local embed failed");
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(
+                        serde_json::to_value(ErrorResponse::new(
+                            format!("embedding[{i}] failed: {e}"),
+                            "backend_error",
+                        ))
+                        .unwrap(),
+                    ),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    // The OpenAI spec counts token usage; we only have char count, so
+    // we produce a conservative ~4 chars/token estimate rather than
+    // leaving the field out (some clients require it to be present).
+    let approx_tokens = ((total_chars + 3) / 4) as u32;
+    let resp = EmbeddingResponse {
+        object: "list".into(),
+        data,
+        model: request.model,
+        usage: Usage {
+            prompt_tokens: approx_tokens,
+            completion_tokens: 0,
+            total_tokens: approx_tokens,
+        },
+    };
+    (StatusCode::OK, Json(resp)).into_response()
+}
+
 /// GET /v1/models — list available models.
 pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     let models = state.inner.inference_store.list_models();

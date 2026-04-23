@@ -22,6 +22,7 @@ pub fn client_router(state: AppState) -> Router {
             "/v1/chat/completions",
             post(routes_inference::chat_completions),
         )
+        .route("/v1/embeddings", post(routes_inference::embeddings))
         .route("/v1/models", get(routes_inference::list_models))
         // Knowledge search endpoint.
         .route(

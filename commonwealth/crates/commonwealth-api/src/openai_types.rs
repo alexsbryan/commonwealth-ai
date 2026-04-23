@@ -127,6 +127,42 @@ pub struct Usage {
     pub total_tokens: u32,
 }
 
+/// OpenAI-compatible `/v1/embeddings` request. `input` may be a single
+/// string or a list of strings; the handler fans out over the list
+/// and returns one `EmbeddingData` per item with a stable `index`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingRequest {
+    pub model: String,
+    pub input: EmbeddingInput,
+    /// OpenAI reserves this for `float` / `base64` output encoding.
+    /// We emit `float` unconditionally; the field is accepted but
+    /// ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoding_format: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EmbeddingInput {
+    Single(String),
+    Batch(Vec<String>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingResponse {
+    pub object: String,
+    pub data: Vec<EmbeddingData>,
+    pub model: String,
+    pub usage: Usage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingData {
+    pub object: String,
+    pub embedding: Vec<f32>,
+    pub index: usize,
+}
+
 /// OpenAI-compatible model list response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelListResponse {
