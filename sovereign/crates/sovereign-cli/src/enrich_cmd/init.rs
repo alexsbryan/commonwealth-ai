@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use corpus_engine::chunkers::sectioned::{ChapterRegexDetector, SectionedChunker};
 use corpus_engine::enrichment::pipeline::ChapterManifest;
 
-use super::config::{EnrichConfig, CONFIG_SCHEMA_VERSION};
+use super::config::{EnrichConfig, TocMarkers, CONFIG_SCHEMA_VERSION};
 use super::inference_client::{probe_daemon, resolve_default_models};
 use super::paths;
 use crate::util::help::{self, Help, HelpSection};
@@ -26,7 +26,7 @@ const HELP: Help = Help {
     summary: "Scaffold an enrichment-admin tree for a corpus: chapters.json + config.json + dirs.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich init <corpus-id> --source <path> \\\n  [--chapter-regex <pat>] [--pipeline <id>] [--chat-model <id>] [--embed-model <id>] \\\n  [--dry-run] [--force]",
+            "sovereign enrich init <corpus-id> --source <path> \\\n  [--chapter-regex <pat> | --toc [--toc-start <m>] [--toc-end <m>]] \\\n  [--min-section-body-words <n>] [--pipeline <id>] [--chat-model <id>] [--embed-model <id>] \\\n  [--dry-run] [--force]",
         ),
         HelpSection::Flags(&[
             ("--source <path>", "Absolute path to the plaintext source file. Required."),
@@ -34,6 +34,26 @@ const HELP: Help = Help {
             ("--pipeline <id>", "Pipeline id from the registry. Default: literary."),
             ("--chat-model <id>", "Pin a chat model id. Default: auto-resolve from /v1/models."),
             ("--embed-model <id>", "Pin an embed model id. Default: auto-resolve from /v1/models."),
+            (
+                "--min-section-body-words <n>",
+                "Drop sections whose body has fewer than <n> words. Guards against a regex \
+                 that matches both a list-of-headings index and the real bodies. Default 40; \
+                 set to 0 to disable.",
+            ),
+            (
+                "--toc",
+                "Drive section detection from an author-declared Table of Contents between \
+                 [[CONTENTS]] and [[/CONTENTS]] markers instead of the regex. The titles \
+                 inside become section anchors when they reappear at line starts below.",
+            ),
+            (
+                "--toc-start <marker>",
+                "Override the default ToC start marker ([[CONTENTS]]). Implies --toc.",
+            ),
+            (
+                "--toc-end <marker>",
+                "Override the default ToC end marker ([[/CONTENTS]]). Implies --toc.",
+            ),
             ("--dry-run", "Print detected sections and exit without writing anything."),
             ("--force", "Overwrite an existing config.json."),
         ]),
@@ -79,13 +99,10 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         );
         return 1;
     }
-    let source = match fs::read_to_string(&parsed.source_path) {
+    let source = match super::source_loader::load_plaintext(&parsed.source_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!(
-                "error: reading source file {}: {e}",
-                parsed.source_path.display()
-            );
+            eprintln!("error: {e}");
             return 1;
         }
     };
@@ -102,20 +119,61 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         .chapter_regex
         .clone()
         .unwrap_or_else(|| ChapterRegexDetector::DEFAULT_PATTERN.to_string());
-    let detector = match ChapterRegexDetector::with_pattern(&regex_pattern) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("error: invalid --chapter-regex: {e}");
-            return 1;
-        }
+    let min_body_words = parsed.min_section_body_words;
+    let toc_markers = parsed.toc_markers.clone();
+    let report = if let Some(ref tm) = toc_markers {
+        let detector =
+            corpus_engine::chunkers::sectioned::TocAnchoredDetector::with_markers(&tm.start, &tm.end);
+        let chunker = SectionedChunker::with_detector(detector);
+        chunker.dry_run(&source)
+    } else {
+        let detector = match ChapterRegexDetector::with_pattern(&regex_pattern) {
+            Ok(d) => d.with_min_body_words(min_body_words),
+            Err(e) => {
+                eprintln!("error: invalid --chapter-regex: {e}");
+                return 1;
+            }
+        };
+        let chunker = SectionedChunker::with_detector(detector);
+        chunker.dry_run(&source)
     };
-    let chunker = SectionedChunker::with_detector(detector);
-    let report = chunker.dry_run(&source);
     println!("{}", report.format_summary(&source));
     if report.total == 0 {
+        match &toc_markers {
+            Some(tm) => eprintln!(
+                "error: no sections detected — either the start/end markers {start:?}/{end:?} \
+                 were not found, or the block between them was empty, or none of its titles \
+                 appeared at a line start in the body of {path}.",
+                start = tm.start,
+                end = tm.end,
+                path = parsed.source_path.display(),
+            ),
+            None => eprintln!(
+                "error: regex {regex_pattern:?} matched zero sections in {}.",
+                parsed.source_path.display()
+            ),
+        }
+        eprintln!();
         eprintln!(
-            "error: regex matched zero sections. Re-run with --chapter-regex to widen the pattern."
+            "The first non-empty lines of the loaded text are:"
         );
+        eprintln!();
+        for (i, line) in preview_nonempty_lines(&source, 25).iter().enumerate() {
+            eprintln!("  {:>3}. {}", i + 1, line);
+        }
+        eprintln!();
+        if toc_markers.is_some() {
+            eprintln!(
+                "Verify the Table-of-Contents block is bounded by the configured markers \
+                 and that every title inside it appears on its own line in the manuscript body."
+            );
+        } else {
+            eprintln!(
+                "Re-run with --chapter-regex '<pattern>' tailored to this corpus \
+                 (pattern must use `(?m)` + `^` so `^` anchors per-line), \
+                 or with --toc to drive detection from an author-declared Table of Contents."
+            );
+        }
         return 1;
     }
     if parsed.dry_run {
@@ -199,6 +257,9 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         chat_model: chat.clone(),
         embed_model: embed.clone(),
         base_url,
+        min_section_body_words: min_body_words,
+        toc_markers,
+        max_output_tokens: parsed.max_output_tokens,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {
@@ -211,7 +272,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     println!("  ✓ embed_model   = {embed}");
     println!();
     println!(
-        "  Next: sovereign enrich {} extract --chapters {}",
+        "  Next: sovereign enrich extract {} --chapters {}",
         parsed.corpus_id,
         manifest
             .chapter_ids()
@@ -233,6 +294,9 @@ struct ParsedInit {
     pipeline_id: String,
     chat_model: Option<String>,
     embed_model: Option<String>,
+    min_section_body_words: usize,
+    toc_markers: Option<TocMarkers>,
+    max_output_tokens: u32,
     dry_run: bool,
     force: bool,
 }
@@ -244,6 +308,11 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     let mut pipeline_id = "literary".to_string();
     let mut chat_model: Option<String> = None;
     let mut embed_model: Option<String> = None;
+    let mut min_section_body_words: usize = 40;
+    let mut toc: bool = false;
+    let mut toc_start: Option<String> = None;
+    let mut toc_end: Option<String> = None;
+    let mut max_output_tokens: u32 = 4096;
     let mut dry_run = false;
     let mut force = false;
 
@@ -289,6 +358,49 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                 );
                 i += 2;
             }
+            "--min-section-body-words" => {
+                let raw = args
+                    .get(i + 1)
+                    .ok_or("--min-section-body-words requires a value".to_string())?;
+                min_section_body_words = raw.parse::<usize>().map_err(|e| {
+                    format!("--min-section-body-words must be a non-negative integer: {e}")
+                })?;
+                i += 2;
+            }
+            "--toc" => {
+                toc = true;
+                i += 1;
+            }
+            "--toc-start" => {
+                toc_start = Some(
+                    args.get(i + 1)
+                        .ok_or("--toc-start requires a value".to_string())?
+                        .clone(),
+                );
+                toc = true;
+                i += 2;
+            }
+            "--toc-end" => {
+                toc_end = Some(
+                    args.get(i + 1)
+                        .ok_or("--toc-end requires a value".to_string())?
+                        .clone(),
+                );
+                toc = true;
+                i += 2;
+            }
+            "--max-output-tokens" => {
+                let raw = args
+                    .get(i + 1)
+                    .ok_or("--max-output-tokens requires a value".to_string())?;
+                max_output_tokens = raw.parse::<u32>().map_err(|e| {
+                    format!("--max-output-tokens must be a positive integer: {e}")
+                })?;
+                if max_output_tokens == 0 {
+                    return Err("--max-output-tokens must be > 0".into());
+                }
+                i += 2;
+            }
             "--dry-run" => {
                 dry_run = true;
                 i += 1;
@@ -313,6 +425,23 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
 
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
     let source_path = source.ok_or_else(|| "missing --source <path>".to_string())?;
+    let toc_markers = if toc {
+        Some(TocMarkers {
+            start: toc_start.unwrap_or_else(|| {
+                corpus_engine::chunkers::sectioned::TocAnchoredDetector::DEFAULT_START.to_string()
+            }),
+            end: toc_end.unwrap_or_else(|| {
+                corpus_engine::chunkers::sectioned::TocAnchoredDetector::DEFAULT_END.to_string()
+            }),
+        })
+    } else if toc_start.is_some() || toc_end.is_some() {
+        // Reached only if future parsing admits one without --toc.
+        // The current parser forces `toc=true` on either override,
+        // so this branch is unreachable; belt-and-braces.
+        return Err("--toc-start/--toc-end require --toc".to_string());
+    } else {
+        None
+    };
     Ok(ParsedInit {
         corpus_id,
         source_path: absolutise(source_path),
@@ -320,9 +449,31 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
         pipeline_id,
         chat_model,
         embed_model,
+        min_section_body_words,
+        toc_markers,
+        max_output_tokens,
         dry_run,
         force,
     })
+}
+
+/// First `n` non-empty lines of `text`, each trimmed and truncated
+/// to 100 chars. Used by the 0-sections diagnostic so operators can
+/// see what shape their source has without opening the file.
+fn preview_nonempty_lines(text: &str, n: usize) -> Vec<String> {
+    text.lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .take(n)
+        .map(|l| {
+            if l.chars().count() > 100 {
+                let head: String = l.chars().take(97).collect();
+                format!("{head}…")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect()
 }
 
 fn absolutise(p: PathBuf) -> PathBuf {
@@ -359,8 +510,41 @@ mod tests {
         assert_eq!(p.corpus_id, "ak");
         assert_eq!(p.source_path, PathBuf::from("/tmp/ak.txt"));
         assert_eq!(p.pipeline_id, "literary");
+        assert_eq!(p.min_section_body_words, 40, "default should match config default");
         assert!(!p.dry_run);
         assert!(!p.force);
+    }
+
+    #[test]
+    fn parse_args_accepts_min_section_body_words_override() {
+        let args: Vec<String> = [
+            "ak",
+            "--source",
+            "/tmp/ak.txt",
+            "--min-section-body-words",
+            "0",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let p = parse_args(&args).unwrap();
+        assert_eq!(p.min_section_body_words, 0);
+    }
+
+    #[test]
+    fn parse_args_rejects_non_numeric_min_section_body_words() {
+        let args: Vec<String> = [
+            "ak",
+            "--source",
+            "/tmp/ak.txt",
+            "--min-section-body-words",
+            "lots",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let err = parse_args(&args).unwrap_err();
+        assert!(err.contains("non-negative integer"), "unexpected err: {err}");
     }
 
     #[test]

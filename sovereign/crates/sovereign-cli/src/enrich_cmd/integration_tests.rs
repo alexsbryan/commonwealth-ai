@@ -27,13 +27,22 @@ use super::test_env::{scoped_home, HomeGuard};
 fn synthetic_book() -> String {
     let mut s = String::new();
     s.push_str("Preamble text, not inside a chapter.\n\n");
+    // Each chapter body clears the short-chapter skip threshold
+    // (40 words) so the phase-1 runner actually dispatches to the
+    // mock chat function instead of skipping as front-matter.
     for i in 1..=5 {
         s.push_str(&format!("Chapter {i}\n\n"));
         s.push_str(&format!(
-            "The body of chapter {i}. It reads like prose and carries a theme.\n\n"
+            "The body of chapter {i}. It reads like prose and carries a theme \
+             through scenes that unfold across a handful of paragraphs, with \
+             characters whose choices press against each other in ways that \
+             make the central tension legible without ever stating it outright.\n\n"
         ));
         s.push_str(&format!(
-            "A second paragraph in chapter {i}, continuing the scene.\n\n"
+            "A second paragraph in chapter {i}, continuing the scene with \
+             additional dialogue, small gestures, and the kind of passing \
+             observations that let a reader feel the weight of what is at stake \
+             in this corner of the story before the chapter's turn arrives.\n\n"
         ));
     }
     s
@@ -86,6 +95,11 @@ fn scaffold_corpus(corpus_id: &str, source_path: &std::path::Path) -> EnrichConf
         chat_model: "test-chat".into(),
         embed_model: "test-embed".into(),
         base_url: "http://localhost:9741".into(),
+        // Synthetic fixture bodies are short; keep the filter off so
+        // the test exercises the full phase-1 path end-to-end.
+        min_section_body_words: 0,
+        toc_markers: None,
+        max_output_tokens: 4096,
         created_at: "2026-04-22T00:00:00Z".into(),
     };
     // Create dirs

@@ -29,7 +29,39 @@ pub struct EnrichConfig {
     pub embed_model: String,
     #[serde(default = "default_base_url")]
     pub base_url: String,
+    /// Minimum whitespace-separated token count a section's body must
+    /// have for the detector to keep it. A section regex can match
+    /// once in a list-of-headings index and again at the real body;
+    /// this threshold is the structural guard. The right value
+    /// depends on what the corpus is — prose books comfortably use
+    /// ~40, a poetry anthology might want ~10, a code-module index
+    /// might want ~200. `0` disables the filter entirely. Operators
+    /// tune per corpus in `config.json`.
+    #[serde(default = "default_min_section_body_words")]
+    pub min_section_body_words: usize,
+    /// Optional author-declared Table-of-Contents markers. When
+    /// present, section detection reads the titles between these
+    /// markers and anchors each section to the matching heading in
+    /// the body — superseding `chapter_regex`. When absent, the
+    /// regex detector runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toc_markers: Option<TocMarkers>,
+    /// Cap on tokens the chat model may emit per request. Thinking
+    /// models (Qwen3, DeepSeek R1) regularly spend 2-3k tokens on
+    /// chain-of-thought before their JSON answer — a too-small cap
+    /// truncates mid-think and the parser sees no JSON. Raise this
+    /// for verbose models; lower it to force succinct outputs.
+    #[serde(default = "default_max_output_tokens")]
+    pub max_output_tokens: u32,
     pub created_at: String,
+}
+
+/// Paired start/end delimiters for an author-declared Table of
+/// Contents. See `TocAnchoredDetector`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TocMarkers {
+    pub start: String,
+    pub end: String,
 }
 
 fn default_base_url() -> String {
@@ -37,6 +69,22 @@ fn default_base_url() -> String {
         "http://localhost:{}",
         crate::util::urls::DEFAULT_CLIENT_PORT
     )
+}
+
+/// Default section-body floor. Chosen to comfortably clear
+/// list-of-headings index entries (typically 5–10 words) without
+/// ruling out genuinely short sections; operators who need a
+/// different floor override per-corpus in config.json.
+fn default_min_section_body_words() -> usize {
+    40
+}
+
+/// Default per-request output cap. 4096 is enough for a full
+/// thinking trace plus a phase-1 JSON answer on all thinking
+/// models we've tested; operators with verbose models or small
+/// contexts tune in config.json.
+fn default_max_output_tokens() -> u32 {
+    4096
 }
 
 impl EnrichConfig {
@@ -109,6 +157,9 @@ mod tests {
             chat_model: "chat-m".into(),
             embed_model: "embed-m".into(),
             base_url: "http://localhost:9741".into(),
+            min_section_body_words: default_min_section_body_words(),
+            toc_markers: None,
+            max_output_tokens: default_max_output_tokens(),
             created_at: "2026-04-22T00:00:00Z".into(),
         }
     }
@@ -137,5 +188,25 @@ mod tests {
         }"#;
         let cfg: EnrichConfig = serde_json::from_str(json).unwrap();
         assert!(cfg.base_url.contains("localhost"));
+    }
+
+    #[test]
+    fn old_config_without_min_section_body_words_gets_default() {
+        // Config files written before the field existed must
+        // continue to load — the default is picked up via
+        // `#[serde(default)]` so operators aren't forced to
+        // re-init every corpus.
+        let json = r#"{
+            "schema_version": 1,
+            "corpus_id": "x",
+            "pipeline_id": "literary",
+            "source_path": "/tmp/x.txt",
+            "chapter_regex": "^Chapter",
+            "chat_model": "c",
+            "embed_model": "e",
+            "created_at": "t"
+        }"#;
+        let cfg: EnrichConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.min_section_body_words, default_min_section_body_words());
     }
 }

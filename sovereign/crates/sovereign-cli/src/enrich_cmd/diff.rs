@@ -226,8 +226,11 @@ mod tests {
                     questions: qs.iter().map(|q| (*q).to_string()).collect(),
                     reveals: reveals.map(|s| s.to_string()),
                     thematic_carriers: Vec::new(),
+                    setting: None,
+                    plot: None,
                 })
                 .collect(),
+            failures: Vec::new(),
             written_at: "t".into(),
         }
     }

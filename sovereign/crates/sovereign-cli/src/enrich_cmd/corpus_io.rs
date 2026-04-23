@@ -7,16 +7,31 @@
 //! manifest. When LanceDB-backed ingest lands for phase 4 this helper
 //! will also populate chunk IDs from the index.
 
-use std::fs;
-
-use corpus_engine::chunkers::sectioned::{ChapterRegexDetector, SectionedChunker};
+use corpus_engine::chunkers::sectioned::{
+    ChapterRegexDetector, SectionDetector, SectionedChunker, TocAnchoredDetector,
+};
 use corpus_engine::enrichment::pipeline::{
-    ChapterInput, ChapterManifest, ChunkRecord, CorpusContext,
+    is_placeholder_literal, ChapterInput, ChapterManifest, ChunkRecord, CorpusContext,
 };
 use corpus_engine::error::{Error, Result};
 
 use super::config::EnrichConfig;
 use super::paths;
+use super::source_loader::load_plaintext;
+
+/// Build the section detector the config selects. Returns a boxed
+/// trait object so both callers (`rebuild_corpus_state` and
+/// `build_corpus`) share one dispatch site.
+fn detector_for(cfg: &EnrichConfig) -> Result<Box<dyn SectionDetector>> {
+    if let Some(tm) = &cfg.toc_markers {
+        Ok(Box::new(TocAnchoredDetector::with_markers(&tm.start, &tm.end)))
+    } else {
+        let det = ChapterRegexDetector::with_pattern(&cfg.chapter_regex)
+            .map_err(|e| Error::InvalidInput(format!("invalid chapter_regex: {e}")))?
+            .with_min_body_words(cfg.min_section_body_words);
+        Ok(Box::new(det))
+    }
+}
 
 /// Load the source file, detect sections, build the `ChapterInput`s
 /// + a fresh `ChapterManifest`. Preserves `characters_present` and
@@ -24,27 +39,15 @@ use super::paths;
 pub fn rebuild_corpus_state(
     cfg: &EnrichConfig,
 ) -> Result<(Vec<ChapterInput>, ChapterManifest)> {
-    let source = fs::read_to_string(&cfg.source_path).map_err(|e| {
-        Error::Io(std::io::Error::new(
-            e.kind(),
-            format!(
-                "reading source file {}: {}",
-                cfg.source_path.display(),
-                e
-            ),
-        ))
-    })?;
+    let source = load_plaintext(&cfg.source_path)?;
 
-    let detector = ChapterRegexDetector::with_pattern(&cfg.chapter_regex)
-        .map_err(|e| Error::InvalidInput(format!("invalid chapter_regex: {e}")))?;
-    let chunker = SectionedChunker::with_detector(detector);
+    let chunker = SectionedChunker::with_detector(detector_for(cfg)?);
     let sections = chunker.dry_run(&source).sections;
 
     if sections.is_empty() {
         return Err(Error::InvalidInput(format!(
-            "no sections detected in {} — widen chapter_regex in the config or re-run \
-             `sovereign enrich init {} --source <path> --chapter-regex <pat> --dry-run` \
-             to verify",
+            "no sections detected in {} — re-run `sovereign enrich init {} --source <path> \
+             --dry-run` to see the loaded text and adjust --chapter-regex or --toc markers.",
             cfg.source_path.display(),
             cfg.corpus_id
         )));
@@ -74,7 +77,16 @@ pub fn rebuild_corpus_state(
     if let Some(prior) = ChapterManifest::load(&manifest_path)? {
         for entry in &mut fresh.chapters {
             if let Some(prior_entry) = prior.get(&entry.id) {
-                entry.characters_present = prior_entry.characters_present.clone();
+                // Prior runs (before the placeholder-rejection landed)
+                // may have persisted literal `"..."` into
+                // characters_present. Drop those on hydrate so they
+                // don't propagate into downstream phases.
+                entry.characters_present = prior_entry
+                    .characters_present
+                    .iter()
+                    .filter(|name| !is_placeholder_literal(name))
+                    .cloned()
+                    .collect();
                 entry.chunk_ids = prior_entry.chunk_ids.clone();
             }
         }
@@ -92,10 +104,8 @@ pub fn rebuild_corpus_state(
 /// `chapter_regex` do not change.
 pub fn build_corpus(cfg: &EnrichConfig) -> Result<(CorpusContext, ChapterManifest)> {
     let (chapters, manifest) = rebuild_corpus_state(cfg)?;
-    let source = std::fs::read_to_string(&cfg.source_path)?;
-    let detector = ChapterRegexDetector::with_pattern(&cfg.chapter_regex)
-        .map_err(|e| Error::InvalidInput(format!("invalid chapter_regex: {e}")))?;
-    let chunker = SectionedChunker::with_detector(detector);
+    let source = load_plaintext(&cfg.source_path)?;
+    let chunker = SectionedChunker::with_detector(detector_for(cfg)?);
     let sectioned = chunker.chunk(&source);
     let chunks: Vec<ChunkRecord> = sectioned
         .into_iter()

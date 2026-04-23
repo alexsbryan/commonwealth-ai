@@ -367,6 +367,9 @@ mod tests {
             chat_model: "c".into(),
             embed_model: "e".into(),
             base_url: "http://localhost:9741".into(),
+            min_section_body_words: 0,
+            toc_markers: None,
+            max_output_tokens: 4096,
             created_at: "t".into(),
         };
         cfg.save().unwrap();

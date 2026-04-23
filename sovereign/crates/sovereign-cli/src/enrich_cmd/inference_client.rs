@@ -30,6 +30,12 @@ pub struct DaemonInferenceClient {
     base_url: String,
     chat_model: String,
     embed_model: String,
+    /// Per-request output token cap. `None` means "let the daemon
+    /// decide" — which on some llama.cpp builds means 256, too small
+    /// for thinking models. Callers that load `EnrichConfig` should
+    /// thread its `max_output_tokens` through via
+    /// `with_max_output_tokens`.
+    max_output_tokens: Option<u32>,
 }
 
 impl DaemonInferenceClient {
@@ -46,7 +52,15 @@ impl DaemonInferenceClient {
             base_url: base_url.into(),
             chat_model: chat_model.into(),
             embed_model: embed_model.into(),
+            max_output_tokens: None,
         })
+    }
+
+    /// Set the per-request output cap. Applies to future `complete`
+    /// calls; embed calls are unaffected.
+    pub fn with_max_output_tokens(mut self, tokens: u32) -> Self {
+        self.max_output_tokens = Some(tokens);
+        self
     }
 
     pub fn with_localhost(chat_model: impl Into<String>, embed_model: impl Into<String>) -> Result<Self> {
@@ -72,7 +86,7 @@ impl DaemonInferenceClient {
     /// Call `/v1/chat/completions` with a single system + user message.
     pub async fn complete(&self, prompt: &ChatPrompt) -> Result<String> {
         let url = format!("{}/v1/chat/completions", self.base_url);
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": self.chat_model,
             "messages": [
                 {"role": "system", "content": prompt.system},
@@ -81,6 +95,11 @@ impl DaemonInferenceClient {
             "temperature": 0.2,
             "stream": false,
         });
+        if let Some(n) = self.max_output_tokens {
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("max_tokens".into(), serde_json::json!(n));
+            }
+        }
         let resp = self.client.post(&url).json(&body).send().await?;
         let status = resp.status();
         let text = resp

@@ -130,6 +130,12 @@ fn print_phase1(out: &Phase1Output, filter: Option<&str>) {
         if !entry.thematic_carriers.is_empty() {
             println!("    carriers: {}", entry.thematic_carriers.join(", "));
         }
+        if let Some(s) = &entry.setting {
+            println!("    setting: {s}");
+        }
+        if let Some(p) = &entry.plot {
+            println!("    plot: {p}");
+        }
         println!();
     }
     if shown == 0 {
@@ -140,6 +146,13 @@ fn print_phase1(out: &Phase1Output, filter: Option<&str>) {
         }
     } else {
         println!("  total: {shown} chapter(s)");
+    }
+    if !out.failures.is_empty() && filter.is_none() {
+        println!();
+        println!("  failures: {}", out.failures.len());
+        for f in &out.failures {
+            println!("    · {} — {}", f.chapter_id, f.reason);
+        }
     }
 }
 

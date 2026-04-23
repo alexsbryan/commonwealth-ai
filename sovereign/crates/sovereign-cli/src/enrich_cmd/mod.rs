@@ -32,6 +32,7 @@ pub mod promote;
 pub mod query;
 pub mod reset;
 pub mod show;
+pub mod source_loader;
 pub mod status;
 pub mod validate;
 

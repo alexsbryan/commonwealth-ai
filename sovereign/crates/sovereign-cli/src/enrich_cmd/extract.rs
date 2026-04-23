@@ -5,11 +5,13 @@
 //! `phase_1_extract_questions`, merges `characters_present` back into
 //! the chapter manifest, and prints a one-line summary.
 
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    ChapterManifest, ChapterSelection, Phase1Progress, PhaseCache, PhaseRunner, PipelineRegistry,
-    RunOutputWriter,
+    ChapterManifest, ChapterSelection, Phase1Output, Phase1Progress, PhaseCache, PhaseRunner,
+    PipelineRegistry, RunOutputWriter,
 };
 
 use super::config::EnrichConfig;
@@ -23,11 +25,16 @@ const HELP: Help = Help {
     summary: "Run phase 1 (per-chapter question extraction) on a subset or the full corpus.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich extract <corpus-id> [--chapters <id1,id2,...> | --full]",
+            "sovereign enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed]",
         ),
         HelpSection::Flags(&[
             ("--chapters <ids>", "Comma-separated chapter ids (e.g. sec_0001,sec_0003). Subset runs do NOT update the cache."),
             ("--full", "Run on every chapter in the manifest. Updates cache/questions.json."),
+            (
+                "--retry-failed",
+                "Re-run only the chapters that failed in the most recent run. Treated as a \
+                 subset run (does NOT update the cache). Errors if no prior run file exists.",
+            ),
         ]),
         HelpSection::Examples(&[
             (
@@ -37,6 +44,10 @@ const HELP: Help = Help {
             (
                 "sovereign enrich extract ak --full",
                 "Full-corpus run. Updates cache/questions.json — consumed by phases 2+.",
+            ),
+            (
+                "sovereign enrich extract ak --retry-failed",
+                "Reprocess the chapters that failed in the last run (parse errors, transient chat failures).",
             ),
         ]),
         HelpSection::Notes(
@@ -98,7 +109,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         cfg.chat_model.clone(),
         cfg.embed_model.clone(),
     ) {
-        Ok(c) => c,
+        Ok(c) => c.with_max_output_tokens(cfg.max_output_tokens),
         Err(e) => {
             eprintln!("error: building daemon client: {e}");
             return 1;
@@ -149,6 +160,60 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             ChapterSelection::Subset(ids)
         }
         SelectionArg::Full => ChapterSelection::Full,
+        SelectionArg::RetryFailed => {
+            let runs_dir = paths::runs_dir(&cfg.corpus_id);
+            match read_latest_failures(&runs_dir) {
+                Ok(Some((path, ids))) if ids.is_empty() => {
+                    println!(
+                        "  · no failures in the most recent run ({}) — nothing to retry.",
+                        path.display()
+                    );
+                    return 0;
+                }
+                Ok(Some((path, ids))) => {
+                    println!(
+                        "  · retrying {} failed chapter(s) from {}",
+                        ids.len(),
+                        path.display()
+                    );
+                    // Filter to ids actually present in the manifest
+                    // (a manifest edit could have renumbered them).
+                    let known: std::collections::HashSet<_> = inputs
+                        .iter()
+                        .map(|c| c.chapter_id.as_str())
+                        .collect();
+                    let (present, missing): (Vec<_>, Vec<_>) = ids
+                        .into_iter()
+                        .partition(|id| known.contains(id.as_str()));
+                    if !missing.is_empty() {
+                        eprintln!(
+                            "    · skipping {} id(s) no longer in manifest: {}",
+                            missing.len(),
+                            missing.join(", ")
+                        );
+                    }
+                    if present.is_empty() {
+                        eprintln!(
+                            "error: every failed id from the last run is missing from the current manifest"
+                        );
+                        return 1;
+                    }
+                    ChapterSelection::Subset(present)
+                }
+                Ok(None) => {
+                    eprintln!(
+                        "error: no prior run files under {} — run `sovereign enrich extract {} --full` first",
+                        runs_dir.display(),
+                        cfg.corpus_id
+                    );
+                    return 1;
+                }
+                Err(msg) => {
+                    eprintln!("error: {msg}");
+                    return 1;
+                }
+            }
+        }
     };
 
     println!(
@@ -219,11 +284,35 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         println!("  · subset run — cache NOT updated (re-run with --full to promote)");
     }
     if !result.failures.is_empty() {
+        // Glassbox: name the failed ids and the exact retry command
+        // so the operator can act without opening the run file. The
+        // run file still has the raw response heads for deeper
+        // debugging.
+        eprintln!();
         eprintln!(
-            "  ! {} chapter(s) failed — see run output at {}",
+            "  ! {} chapter(s) failed — run file: {}",
             result.failures.len(),
             result.run_path.display()
         );
+        for f in &result.failures {
+            // reason is already a one-line string (runner trims the
+            // raw-response excerpt to 200 chars).
+            eprintln!("      · {:<12} {}", f.chapter_id, f.reason);
+        }
+        let ids: Vec<&str> = result
+            .failures
+            .iter()
+            .map(|f| f.chapter_id.as_str())
+            .collect();
+        eprintln!();
+        eprintln!("    Retry just these chapters:");
+        eprintln!(
+            "      sovereign enrich extract {} --chapters {}",
+            cfg.corpus_id,
+            ids.join(",")
+        );
+        eprintln!("    Or, from the latest run file:");
+        eprintln!("      sovereign enrich extract {} --retry-failed", cfg.corpus_id);
         return 1;
     }
     0
@@ -233,6 +322,9 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
 enum SelectionArg {
     Subset(Vec<String>),
     Full,
+    /// Resolved later (needs the corpus runs/ directory) into a
+    /// `Subset` over the chapter ids that failed in the latest run.
+    RetryFailed,
 }
 
 #[derive(Debug)]
@@ -245,6 +337,7 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     let mut corpus_id: Option<String> = None;
     let mut chapters_csv: Option<String> = None;
     let mut full = false;
+    let mut retry_failed = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -262,6 +355,10 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
                 full = true;
                 i += 1;
             }
+            "--retry-failed" => {
+                retry_failed = true;
+                i += 1;
+            }
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
             }
@@ -277,27 +374,71 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     }
 
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
-    let selection = match (chapters_csv, full) {
-        (Some(_), true) => {
-            return Err("cannot combine --chapters and --full".into());
+    let selection_count = chapters_csv.is_some() as u8 + full as u8 + retry_failed as u8;
+    if selection_count > 1 {
+        return Err("--chapters, --full, and --retry-failed are mutually exclusive".into());
+    }
+    let selection = if retry_failed {
+        SelectionArg::RetryFailed
+    } else if full {
+        SelectionArg::Full
+    } else if let Some(csv) = chapters_csv {
+        let ids: Vec<String> = csv
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if ids.is_empty() {
+            return Err("--chapters must list at least one id".into());
         }
-        (Some(csv), false) => {
-            let ids: Vec<String> = csv
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            if ids.is_empty() {
-                return Err("--chapters must list at least one id".into());
-            }
-            SelectionArg::Subset(ids)
-        }
-        (None, true) => SelectionArg::Full,
-        (None, false) => {
-            return Err("must provide either --chapters <ids> or --full".into());
-        }
+        SelectionArg::Subset(ids)
+    } else {
+        return Err(
+            "must provide one of --chapters <ids>, --full, or --retry-failed".into(),
+        );
     };
     Ok(ParsedExtract { corpus_id, selection })
+}
+
+/// Locate the most recent `questions-*.json` run file under the
+/// given `runs_dir`, read it, and return the chapter ids that failed.
+/// Returns `Ok(None)` when there's nothing to retry; `Err` on I/O or
+/// deserialization problems (which signal a broken run-output file).
+fn read_latest_failures(runs_dir: &std::path::Path) -> Result<Option<(PathBuf, Vec<String>)>, String> {
+    if !runs_dir.exists() {
+        return Ok(None);
+    }
+    let mut candidates: Vec<(u64, PathBuf)> = Vec::new();
+    for entry in fs::read_dir(runs_dir).map_err(|e| format!("reading {}: {e}", runs_dir.display()))? {
+        let entry = entry.map_err(|e| format!("iterating {}: {e}", runs_dir.display()))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with("questions-") || !name.ends_with(".json") {
+            continue;
+        }
+        let mtime = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        candidates.push((mtime, entry.path()));
+    }
+    candidates.sort_by(|a, b| b.0.cmp(&a.0));
+    let Some((_, latest)) = candidates.first() else {
+        return Ok(None);
+    };
+    let raw = fs::read_to_string(latest)
+        .map_err(|e| format!("reading {}: {e}", latest.display()))?;
+    let parsed: Phase1Output = serde_json::from_str(&raw).map_err(|e| {
+        format!("parsing {}: {e} (file may predate the failures field)", latest.display())
+    })?;
+    let ids: Vec<String> = parsed
+        .failures
+        .into_iter()
+        .map(|f| f.chapter_id)
+        .collect();
+    Ok(Some((latest.clone(), ids)))
 }
 
 /// Public entry point used by the integration test so it can exercise
@@ -370,7 +511,49 @@ mod tests {
             &["ak".into(), "--chapters".into(), "a".into(), "--full".into()],
         )
         .unwrap_err();
-        assert!(err.contains("cannot combine"));
+        assert!(err.contains("mutually exclusive"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_args_accepts_retry_failed() {
+        let p = parse_args(&["ak".into(), "--retry-failed".into()]).unwrap();
+        assert!(matches!(p.selection, SelectionArg::RetryFailed));
+    }
+
+    #[test]
+    fn parse_args_rejects_retry_failed_with_chapters() {
+        let err = parse_args(&[
+            "ak".into(),
+            "--retry-failed".into(),
+            "--chapters".into(),
+            "sec_0001".into(),
+        ])
+        .unwrap_err();
+        assert!(err.contains("mutually exclusive"), "got: {err}");
+    }
+
+    #[test]
+    fn read_latest_failures_returns_none_when_runs_dir_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let got = read_latest_failures(&dir.path().join("runs")).unwrap();
+        assert!(got.is_none());
+    }
+
+    #[test]
+    fn read_latest_failures_picks_newest_run_and_extracts_ids() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let runs = dir.path().join("runs");
+        fs::create_dir_all(&runs).unwrap();
+        let old = r#"{"schema_version":1,"pipeline_id":"literary","questions_by_chapter":[],"failures":[{"chapter_id":"sec_0001","reason":"old"}],"written_at":"t"}"#;
+        let new = r#"{"schema_version":1,"pipeline_id":"literary","questions_by_chapter":[],"failures":[{"chapter_id":"sec_0005","reason":"r"},{"chapter_id":"sec_0018","reason":"r"}],"written_at":"t"}"#;
+        fs::write(runs.join("questions-full-001.json"), old).unwrap();
+        // Ensure the "new" file has a strictly later mtime.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        fs::write(runs.join("questions-full-002.json"), new).unwrap();
+        let (path, ids) = read_latest_failures(&runs).unwrap().unwrap();
+        assert!(path.ends_with("questions-full-002.json"), "got: {}", path.display());
+        assert_eq!(ids, vec!["sec_0005".to_string(), "sec_0018".to_string()]);
     }
 
     #[test]
