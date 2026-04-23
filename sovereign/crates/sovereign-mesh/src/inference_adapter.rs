@@ -421,6 +421,16 @@ impl LocalInferenceService for SovereignInferenceAdapter {
     fn provider_manifest(&self) -> Option<ProviderManifest> {
         Some(build_self_manifest(self.provider.as_ref()))
     }
+
+    async fn embed(&self, input: &str) -> Result<Vec<f32>, String> {
+        // Delegate to the underlying provider's EmbedSlot. The
+        // commonwealth-api handler wraps the returned vector in an
+        // OpenAI-shape `EmbeddingResponse`.
+        self.provider
+            .embed(input)
+            .await
+            .map_err(|e| format!("{e}"))
+    }
 }
 
 /// Resolve a single human-readable model name from a provider,

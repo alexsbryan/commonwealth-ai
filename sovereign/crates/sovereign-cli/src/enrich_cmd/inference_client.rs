@@ -144,8 +144,16 @@ impl DaemonInferenceClient {
             .await
             .map_err(|e| Error::Embed(format!("embed read: {e}")))?;
         if !status.is_success() {
+            let hint = if status.as_u16() == 404 {
+                " (the daemon does not expose an embeddings route — upgrade the daemon \
+                 binary or verify it was built with sovereign-mesh's HTTP surface)"
+            } else {
+                ""
+            };
             return Err(Error::Embed(format!(
-                "daemon embed error {status}: {payload}"
+                "daemon embed error {status} at {url}: {}{}",
+                if payload.is_empty() { "<empty body>" } else { payload.as_str() },
+                hint
             )));
         }
         let v: serde_json::Value = serde_json::from_str(&payload)
