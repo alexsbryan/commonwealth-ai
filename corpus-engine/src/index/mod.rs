@@ -425,6 +425,17 @@ impl CorpusIndex {
         // single boolean they can trust — the Option/fallback logic
         // lives in one place.
         let query_sharing = meta.query_sharing.unwrap_or(meta.mesh_sharing);
+        // `source_path` is only set by the code-ingest pipeline
+        // (`CorpusIndex::set_source_path`, called from `sovereign
+        // code index`) — every other ingest path leaves it `None`.
+        // That makes it the authoritative signal for "is this a
+        // code corpus?" without needing a schema migration on
+        // already-written `_corpus_meta.json` files.
+        let kind = if meta.source_path.is_some() {
+            crate::types::CorpusKind::Code
+        } else {
+            crate::types::CorpusKind::Knowledge
+        };
         Ok(IndexInfo {
             corpus_id: meta.corpus_id,
             corpus_name: meta.corpus_name,
@@ -445,6 +456,7 @@ impl CorpusIndex {
             enriched_chunks: meta.enriched_chunks,
             source_version: meta.source_version,
             update_manifest_url: meta.update_manifest_url,
+            kind,
         })
     }
 

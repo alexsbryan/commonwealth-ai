@@ -86,6 +86,32 @@ pub struct ShardInfo {
     pub size_bytes: u64,
 }
 
+// ─── Corpus Kind ────────────────────────────────────────
+
+/// First-class classification of what kind of content an index
+/// holds. The default is `Knowledge` — regular documents, books,
+/// encyclopedia articles, the stuff that should ground a chat
+/// answer. `Code` indexes are produced by `sovereign code index`
+/// and serve the code-intelligence MCP tools (symbol_lookup,
+/// code_search, etc.); they should be excluded from general chat
+/// retrieval so BM25 keyword overlap on common tokens (`main`,
+/// `argument`, `democracy`) doesn't drown out the actual knowledge
+/// corpora. Surfaces in `IndexInfo` so every consumer (retrieval,
+/// UI, health checks) can branch on it without re-deriving.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CorpusKind {
+    /// General documents — books, articles, scraped pages, the
+    /// conversation-history corpus, etc. Default.
+    #[default]
+    Knowledge,
+    /// A source-code repository indexed via `sovereign code index`.
+    /// Has a `source_path` in its `IndexMeta`, and its chunks are
+    /// typed for symbol-lookup and SCIP-style traversal rather than
+    /// prose retrieval.
+    Code,
+}
+
 // ─── Index Info ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,6 +155,14 @@ pub struct IndexInfo {
     /// URL used to check for newer versions of this corpus.
     #[serde(default)]
     pub update_manifest_url: Option<String>,
+    /// Kind of corpus. Derived from `IndexMeta.source_path` at listing
+    /// time: present → `Code`, absent → `Knowledge`. Consumers that
+    /// retrieve for chat should filter out `Code`; consumers that
+    /// serve the code-intelligence MCP tools should filter out
+    /// `Knowledge`. Default preserves backward compatibility with
+    /// any external caller that constructs `IndexInfo` by hand.
+    #[serde(default)]
+    pub kind: CorpusKind,
 }
 
 // ─── Scored Chunk (search result) ───────────────────────

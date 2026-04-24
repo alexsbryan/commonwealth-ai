@@ -49,6 +49,33 @@ impl CorpusEngine {
         // per-corpus index dir can be created underneath.
         std::fs::create_dir_all(&self.index_dir)?;
 
+        // ── Pre-flight: require an explicit embed model name ──────
+        //
+        // `_corpus_meta.json.embedding_model` is what downstream
+        // consumers (shard consistency checks, dim-filter at
+        // retrieval time, follow-up reindex decisions) read to
+        // decide compatibility. Getting it wrong silently is worse
+        // than not ingesting at all — a retrieval layer that trusts
+        // a bogus label will serve the wrong corpus or skip a
+        // compatible one.
+        //
+        // The engine has no way to introspect an `EmbedFn` — it's an
+        // opaque closure. The caller (which built the EmbedFn) knows
+        // the model it wired in; it must hand that name to us via
+        // `.with_embedding_model(stem)` before calling `ingest`.
+        if self.expected_embedding_model.is_empty() {
+            return Err(Error::Embed(
+                "embedding model name not configured. Call \
+                 `CorpusEngine::with_embedding_model(stem)` before \
+                 `ingest()`. The stem should match the filename of \
+                 the embedding GGUF (e.g. `qwen-embedding-0.6b` for \
+                 `qwen-embedding-0.6b.gguf`) so the label written to \
+                 `_corpus_meta.json` matches the model that actually \
+                 produced the vectors."
+                    .to_string(),
+            ));
+        }
+
         // ── Pre-flight: validate the embed function works ─────────
         //
         // We do this before creating the index directory so a missing

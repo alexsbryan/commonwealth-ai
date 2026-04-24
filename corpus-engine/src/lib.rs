@@ -87,8 +87,8 @@ pub use testing::{
 };
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use types::{
-    BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusSpec, EmbedFn, IndexInfo, IndexStats,
-    InferenceFn, IngestResult, ScoredChunk, ShardInfo,
+    BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, EmbedFn, IndexInfo,
+    IndexStats, InferenceFn, IngestResult, ScoredChunk, ShardInfo,
 };
 
 #[cfg(feature = "treesitter")]

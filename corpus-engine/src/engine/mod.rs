@@ -231,7 +231,15 @@ impl CorpusEngine {
             batch_embed: None,
             inference: None,
             fast_inference: None,
-            expected_embedding_model: "qwen3-embedding-0.6b".to_string(),
+            // No default: the model is the source of truth for
+            // its own name. Empty-string here is the "unset"
+            // sentinel; `ingest()` refuses to run when it's still
+            // empty so a caller that forgot `.with_embedding_model`
+            // fails loudly instead of writing a misleading label
+            // (e.g. `"qwen3-embedding-0.6b"` — which was the old
+            // default and drifted from the real file stem
+            // `"qwen-embedding-0.6b"` on every fresh install).
+            expected_embedding_model: String::new(),
             self_node_id: DEFAULT_LOCAL_NODE_SUFFIX.to_string(),
             cancel_registry: CancellationRegistry::new(),
             custom_acquirers: Arc::new(RwLock::new(HashMap::new())),
@@ -306,6 +314,17 @@ impl CorpusEngine {
             .join(format!("{corpus_id}-partition-{}", self.self_node_id))
     }
 
+    /// Declare the name of the embedding model backing the
+    /// configured `EmbedFn`. Required before `ingest()` — the
+    /// engine writes this string to `_corpus_meta.json.embedding_model`
+    /// and uses it for shard-consistency checks, so it must match
+    /// what actually produced the vectors.
+    ///
+    /// Recommended convention: the filename stem of the GGUF
+    /// (`qwen-embedding-0.6b` for `qwen-embedding-0.6b.gguf`),
+    /// which is also what the daemon advertises on `/v1/models`.
+    /// Callers that lose track of the stem can derive it from
+    /// `SetupConfig.models.embed.file_stem()`.
     pub fn with_embedding_model(mut self, model: &str) -> Self {
         self.expected_embedding_model = model.to_string();
         self
