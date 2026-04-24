@@ -497,55 +497,66 @@ This pass is opt-in per recipe (`[enrichment] enabled = true, domain =
 "philosophy"`). Without an `InferenceFn`, the engine logs a warning and skips
 enrichment without failing ingestion.
 
-#### 3.5.1 Enrichment v2 (in iteration)
+#### 3.5.1 Enrichment v2.1 — atlas (production)
 
-A replacement pipeline lives alongside v1 at
-`corpus-engine/src/enrichment/pipeline/`. It splits the monolithic 5-phase
-`FieldModelEngine` into 7 per-phase steps (per-chapter question extraction →
-question clustering → canonical concern naming → chunk clustering → grounded
-position extraction → pairwise tension detection → gap detection) that an
-admin CLI can iterate on one at a time. Prompts are no longer embedded as
-Rust string constants — each phase loads a markdown system preamble via
-`include_str!` and injects top-K relevant exemplars from a per-phase
-`ExemplarBank` JSON file that the developer edits between runs. Dispatch
-happens through `PipelineRegistry` (mirrors `DomainRegistry` per
-ARCH_PRINCIPLES §4). `LiteraryPipeline` is the first implementation; once
-v2 is proven, philosophy / personal / conversational / institutional migrate
-and `FieldModelEngine` + the `Domain` trait are deleted (§12 Roadmap).
+The v2.1 pipeline lives at `corpus-engine/src/enrichment/pipeline/` +
+`corpus-engine/src/enrichment/atlas/`. It produces a typed atom graph
+(7 atom types × 7 edge types) per spec §2: Entity, Event, State, Relation,
+Claim, Question, Configuration as atoms; Involves, Grounds, Transition,
+Raises, Addresses, Framing, Provenance as edges. Each phase loads its
+own markdown system preamble via `include_str!` and injects top-K
+exemplars from a per-phase `ExemplarBank`. Dispatch goes through
+`PipelineRegistry`. Atom confidence is `Option<f32>` — `None` on
+deterministic-resolver atoms so the schema-validation histogram
+reflects LLM-reported values only.
 
-Supporting infrastructure added in Landing 1:
+Pipelines shipped (`enrichment::pipeline::pipelines::`):
 
-- `chunkers::sectioned::SectionedChunker` + `SectionDetector` trait —
-  section-aware chunking with pluggable detectors (default
-  `ChapterRegexDetector` for plaintext books).
-- `pipeline::ChapterManifest` — stable per-corpus manifest at
-  `~/.sovereign/indexes/<corpus>/chapters.json`.
-- `pipeline::PhaseCache` — atomic per-phase JSON cache with mtime-based
-  staleness detection across upstream dependencies.
-- `pipeline::RunOutputWriter` — monotonic per-run output files under
-  `runs/` so the developer can `diff` and `promote` from any prior run.
+- **`literary`** — v1 argumentative grammar (questions / concerns / positions). Retained for legacy corpora.
+- **`literary_atlas`** — v2.1 atlas for narrative works. Validated on *The Brothers Karamazov* (96-chapter, 76-section Dopesick Jesus).
+- **`philosophy_atlas`** — v2.1 atlas for argumentative prose. Wraps `literary_atlas` as `inner` and overrides only the markdown prompt assets. Validated on *Process Philosophy* and *Compatibilism* SEP articles.
 
-The CLI admin harness lives in `sovereign-cli/src/enrich_cmd/`.
-Landings 2 + 3 ship all seven phases end-to-end: `init` (scaffold + pin
-config), `extract` (phase 1 subset/full), `cluster-questions`,
-`name-concerns`, `cluster-chunks`, `extract-positions`,
-`detect-tensions`, `detect-gaps`, plus `cascade --from <phase>` to
-rerun a phase + every downstream dependent. `show <target>` renders
-every phase's cached output; `exemplars` reports per-phase bank counts
-+ lint; `status` shows fresh/stale/never-run per phase. Pure-vector
-HDBSCAN goes through `pipeline::cluster_vectors` (no CorpusIndex
-dependency — simpler than v1's wrapper since admin corpora stay in
-the low thousands of chunks). Landing 4 adds the validation battery
-and dev-UX helpers: `query` (atlas traversal with LOCATE/TRAVERSE/
-GROUNDING print), `validate` (runs a `QueryBattery` against the atlas
-and prints a score table with pass-rate at a chosen threshold),
-`promote` (lifts a run finding into the per-phase exemplar bank by
-primary key), `diff` (side-by-side compare of two phase-1 run
-outputs: added/removed questions, reveals + carriers changed), and
-`reset` (clear caches + runs to re-iterate — default keeps phase 1 +
-exemplars; `--full` wipes the whole tree including the chapter
-manifest; always prompts unless `--yes`; `--dry-run` previews). The
-CLI harness is now complete for the v2-iteration workflow.
+Every phase's output carries a `failures: Vec<PhaseFailure>` field
+(unified shape: `phase` + `subject` + `kind` + `reason` +
+`raw_response_head?`). `PhaseFailureKind` enumerates both LLM-driven
+failures (ThinkTruncated, ParseDrift, ChatError, EmptyExtraction,
+Skipped) and deterministic-resolution drops (UnresolvedEntityName,
+UnresolvedRelationParticipant, UnresolvedClaimAttribution,
+EntityMergeAmbiguous, NoClusterableItems, ClusterNamingFailed). Each
+kind has a `remediation_hint()` one-liner; `sovereign enrich errors
+<corpus>` aggregates across every cached phase + `atlas/resolution_failures.json`,
+groups by `(phase, kind)`, and prints the remediation + exact retry
+command per group — the glassbox surface for operator debugging.
+
+**CLI admin harness** (`sovereign-cli/src/enrich_cmd/`):
+
+- Primary flow: `init` / `build` (orchestrates every phase) / `query`
+  (atlas traversal) / `report` (schema validation §12) / `review`
+  (cross-corpus gap detection) / `bridge` (Grounding edges between
+  atlases).
+- Ingest helpers: `sep-ingest <slug>` scaffolds one SEP article from
+  the cached parquet → atlas corpus named `sep-<slug>`.
+- Individual phases: `seed`, `extract`, `cluster-atlas`, `name-atlas-clusters`,
+  `atlas-resolve`, `tensions`, `gaps`, `configure`.
+- Utilities: `status` (per-phase freshness), `show`, `errors`
+  (the aggregator above), `exemplars`, `reset`.
+
+On-disk layout per corpus:
+
+- `~/.sovereign/enrichment/<corpus>/` — config, per-phase `cache/`, per-run `runs/`, exemplar banks.
+- `~/.sovereign/indexes/<corpus>/atlas/` — `atoms.json` + `edges.json` + `trajectories.json` + `gaps.json` + `configurations.json` + `tension_candidates.json` + `schema_validation.json` + `resolution_failures.json`.
+
+**Stanford Encyclopedia of Philosophy (Landing 3.B)**: one article →
+one atlas corpus. `sovereign enrich sep-ingest <category-slug>` reads
+the cached SEP parquet at `~/.sovereign/indexes/_downloads/sep.parquet`
+(1,770 articles, 182 k paragraphs), filters to one category, groups
+paragraphs into `## Section NNN`-marked sections (default 5 paragraphs
+per section), and scaffolds `sep-<slug>` with
+`pipeline = philosophy_atlas`. `enrich build sep-<slug>` then runs the
+full atlas pipeline. The v1 `field_model` flow is retained at
+`[enrichment.field_model]` in the SEP recipe for the full-corpus
+chunk-embedding flow used by the epistemic-research skill — atlas
+and field-model enrichment coexist on the same source parquet.
 
 ### 3.6 Safety
 

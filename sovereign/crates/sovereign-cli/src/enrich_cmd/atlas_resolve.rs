@@ -187,6 +187,14 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     let atlas_dir = atlas_dir_for(&cfg.corpus_id);
     let want_3b = matches!(parsed.phase, ResolvePhase::P3b | ResolvePhase::All);
 
+    // Collect structured drops across both resolution phases so the
+    // aggregator (`sovereign enrich errors`) can surface them grouped
+    // by kind. Empty in the clean-run case.
+    let mut resolution_failures: Vec<
+        corpus_engine::enrichment::pipeline::PhaseFailure,
+    > = Vec::new();
+    resolution_failures.extend(step_3a.failures.iter().cloned());
+
     let written = if want_3b {
         let step_3b = match resolve_step_3b(&sections, &step_3a.entities, &step_3a.events) {
             Ok(r) => r,
@@ -195,6 +203,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
                 return 1;
             }
         };
+        resolution_failures.extend(step_3b.failures.iter().cloned());
 
         // Merge 3a + 3b edges — they use distinct id ranges so no
         // collision, but the order matters for stable diffing
@@ -264,6 +273,31 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
             "  ✓ wrote {} (empty — --phase 3b or all populates it)",
             written.trajectories_path.display()
         );
+    }
+
+    // Always persist resolution failures, even empty — that way the
+    // aggregator knows "ran cleanly" vs. "hasn't run yet" by whether
+    // the file exists. The schema-versioned file is atomic-safe so
+    // a mid-run interrupt leaves the prior state intact.
+    match corpus_engine::enrichment::atlas::write_atlas_failures(
+        &atlas_dir,
+        &resolution_failures,
+    ) {
+        Ok(path) => {
+            if resolution_failures.is_empty() {
+                println!("  ✓ {} (no resolution drops)", path.display());
+            } else {
+                println!(
+                    "  ! {} drop(s) — see {} (run `sovereign enrich errors {}` for remediation)",
+                    resolution_failures.len(),
+                    path.display(),
+                    cfg.corpus_id
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("warning: writing resolution_failures.json: {e}");
+        }
     }
 
     0

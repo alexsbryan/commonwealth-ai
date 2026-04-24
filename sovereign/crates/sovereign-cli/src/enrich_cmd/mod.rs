@@ -24,6 +24,7 @@ pub mod cascade;
 pub mod config;
 pub mod corpus_io;
 pub mod diff;
+pub mod errors;
 pub mod exemplars;
 pub mod extract;
 pub mod inference_client;
@@ -35,6 +36,7 @@ pub mod query;
 pub mod reset;
 pub mod schema_review;
 pub mod seed_cmd;
+pub mod sep_ingest;
 pub mod show;
 pub mod source_loader;
 pub mod status;
@@ -61,6 +63,20 @@ const HELP: Help = Help {
             ],
         ),
 
+        // Corpus-specific ingest helpers — scaffold a new
+        // enrichment corpus from a domain-specific source (SEP
+        // parquet today; add one of these per structured source
+        // you want to wire end-to-end).
+        HelpSection::SubcommandsTitled(
+            "Ingest helpers",
+            &[
+                (
+                    "sep-ingest",
+                    "Scaffold `sep-<slug>` from one SEP article in the cached parquet.",
+                ),
+            ],
+        ),
+
         // Individual phases — for debugging, partial re-runs, and
         // iterating on a single prompt.
         HelpSection::SubcommandsTitled(
@@ -83,6 +99,11 @@ const HELP: Help = Help {
             &[
                 ("status", "Per-phase cache freshness table."),
                 ("show", "Formatted view of a cached phase output."),
+                (
+                    "errors",
+                    "Aggregate structured failures across every phase. Groups by kind, \
+                     prints remediation + retry command per group.",
+                ),
                 ("exemplars", "Report per-phase exemplar-bank counts + lint findings."),
                 ("reset", "Clear phase caches + runs (full or from a phase onward)."),
             ],
@@ -116,6 +137,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         // ── Primary flow ──────────────────────────────────────
         "init" => init::cmd_init(rest).await,
         "build" => build::cmd_build(rest).await,
+        "sep-ingest" => sep_ingest::cmd_sep_ingest(rest).await,
         "query" | "atlas-query" => atlas_query::cmd_atlas_query(rest).await,
         "report" | "schema-report" => schema_review::cmd_schema_report(rest).await,
         "review" | "schema-review" => schema_review::cmd_schema_review(rest).await,
@@ -140,6 +162,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         // ── Utilities ─────────────────────────────────────────
         "status" => status::cmd_status(rest).await,
         "show" => show::cmd_show(rest).await,
+        "errors" => errors::cmd_errors(rest).await,
         "exemplars" => exemplars::cmd_exemplars(rest).await,
         "reset" => reset::cmd_reset(rest).await,
 

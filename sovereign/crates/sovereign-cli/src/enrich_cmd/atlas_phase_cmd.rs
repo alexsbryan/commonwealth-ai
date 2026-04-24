@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
     atlas::SectionExtraction, AtlasCluster, ExemplarBank, Facet, NamedCluster, Phase1Output,
-    Phase2AtlasOutput, Phase3AtlasOutput, PhaseCache, PhaseRunner, PipelinePhase,
-    PipelineRegistry, RunOutputWriter, SketchExcerpt,
+    Phase2AtlasOutput, Phase3AtlasOutput, PhaseCache, PhaseFailure, PhaseFailureKind,
+    PhaseRunner, PipelinePhase, PipelineRegistry, RunOutputWriter, SketchExcerpt,
 };
 
 use super::config::EnrichConfig;
@@ -231,6 +231,12 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
 
     let pipeline = runner.pipeline().clone();
     let mut named: Vec<NamedCluster> = Vec::with_capacity(phase2.clusters.len());
+    // Per-cluster failures land here rather than either returning
+    // early (stop the world on one bad cluster) or swallowing via
+    // `continue` (what the pre-Landing-3.A code did, which lost the
+    // signal entirely). Each record carries enough context for the
+    // aggregator to route the operator to the exact remediation.
+    let mut failures: Vec<PhaseFailure> = Vec::new();
     let total = phase2.clusters.len();
 
     for (i, cluster) in phase2.clusters.iter().enumerate() {
@@ -267,10 +273,18 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
             );
             return 1;
         };
+        let subject = format!("cluster:{}:{}", cluster.facet.as_str(), cluster.id);
         let response = match (chat)(&prompt).await {
             Ok(r) => r,
             Err(e) => {
                 println!("FAILED: chat error: {e}");
+                failures.push(PhaseFailure {
+                    phase: PipelinePhase::AtlasNamedClusters,
+                    subject: subject.clone(),
+                    kind: PhaseFailureKind::ChatError,
+                    reason: format!("chat error naming cluster {}: {e}", cluster.id),
+                    raw_response_head: None,
+                });
                 continue;
             }
         };
@@ -278,9 +292,40 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
             Ok(p) => p,
             Err(e) => {
                 println!("FAILED: parse error: {e}");
+                // Keep the first ~1 KiB of the response so the
+                // operator can see what the model actually produced
+                // — classifier improvements land in a follow-up;
+                // for now ParseDrift is the correct default since
+                // the terse-retry path hasn't been wired for Phase 3.
+                let head = truncate_chars(&response, 1024);
+                failures.push(PhaseFailure {
+                    phase: PipelinePhase::AtlasNamedClusters,
+                    subject: subject.clone(),
+                    kind: PhaseFailureKind::ParseDrift,
+                    reason: format!("parse error naming cluster {}: {e}", cluster.id),
+                    raw_response_head: Some(head),
+                });
                 continue;
             }
         };
+        if parsed.label.trim().is_empty() {
+            // Well-formed envelope, empty label — the cluster keeps
+            // its id but loses a human-readable name. Surface it
+            // separately so the aggregator's remediation points at
+            // the prompt rather than at a plain retry.
+            println!("FAILED: empty label");
+            failures.push(PhaseFailure {
+                phase: PipelinePhase::AtlasNamedClusters,
+                subject: subject.clone(),
+                kind: PhaseFailureKind::ClusterNamingFailed,
+                reason: format!(
+                    "cluster {} parsed cleanly but produced an empty label",
+                    cluster.id
+                ),
+                raw_response_head: Some(truncate_chars(&response, 1024)),
+            });
+            continue;
+        }
         println!("{}", one_line(&parsed.label));
         named.push(NamedCluster {
             id: format!("ncl_{:04}", named.len() + 1),
@@ -295,6 +340,7 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
         schema_version: Phase3AtlasOutput::SCHEMA_VERSION,
         pipeline_id: cfg.pipeline_id.clone(),
         named_clusters: named,
+        failures,
         written_at: chrono::Utc::now().to_rfc3339(),
     };
     let run_path = match runner
@@ -437,6 +483,18 @@ fn one_line(s: &str) -> String {
     } else {
         flat.chars().take(77).collect::<String>() + "…"
     }
+}
+
+/// UTF-8 safe char-cap that appends a `… [+N chars]` marker when
+/// truncating. Mirrors the Phase-1 response-head policy so the
+/// aggregator sees consistent shape across phases.
+fn truncate_chars(s: &str, cap: usize) -> String {
+    let total = s.chars().count();
+    if total <= cap {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(cap).collect();
+    format!("{head}… [+{} chars]", total - cap)
 }
 
 // Silence unused imports if the sketch types aren't referenced in
