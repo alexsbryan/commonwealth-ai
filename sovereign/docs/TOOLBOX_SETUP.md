@@ -14,12 +14,14 @@ daemon auto-loading your GGUF models onto the Strix Halo iGPU via
 ROCm or Vulkan, and the `sovereign enrich ...` flow running against
 corpora in `~/.sovereign/enrichment/`.
 
-This is a first-pass walkthrough. The two follow-up items it
-flags (a `cfg(target_os = "linux")` feature swap in
-`sovereign-inference/Cargo.toml`, and a validated `sovereign daemon
-install` on Linux) stay hand-operated until the walkthrough is
-confirmed end-to-end on real hardware; they then move into the
-project's install defaults.
+The target path is: pick a toolbox image (§1–2), run
+`./scripts/bootstrap-linux.sh` (§3), `cargo build --release` (§5),
+go. The per-section walkthroughs below explain what the script does
+and how to recover when it doesn't.
+
+The one confirmed follow-up still open: `sovereign daemon install`
+on Linux has a systemd path but hasn't been exercised on hardware
+end-to-end. §7 marks that path with a warning.
 
 ---
 
@@ -180,31 +182,110 @@ If these fail, leave the toolbox, double-check `/dev/kfd` +
 
 ## 3. Install build deps inside the toolbox
 
-The kyuz0 images ship llama.cpp + ROCm, not a Rust toolchain. Inside
-the toolbox:
+The kyuz0 images ship the llama.cpp **runtime** (libamdhip64,
+libhipblas, librocblas) and `rocminfo` for sanity-checking the GPU,
+but not a Rust toolchain, not `libclang` for bindgen, and — perhaps
+surprisingly — not the **HIP compiler / dev headers** needed to
+build llama.cpp from source. There's a one-shot script that installs
+everything + wires up the runtime:
+
+```bash
+cd ~/dev/commonwealth-ai/sovereign
+./scripts/bootstrap-linux.sh
+```
+
+It detects Fedora vs Ubuntu/Debian and handles:
+
+- Rust + cargo (if not already installed),
+- clang + `libclang.so` (for bindgen),
+- cmake, gcc, protobuf-compiler + **devel**, OpenSSL dev,
+- `rocm-hip-sdk7.2.1` (the version-matched HIP SDK — hipcc, HIP
+  headers, rocBLAS/hipBLAS dev, ROCm LLVM, rocm-device-libs),
+- Tauri 2's GTK/WebKit build deps (webkit2gtk4.1, gtk3, libsoup3,
+  librsvg2) and runtime shim `libayatana-appindicator-gtk3`,
+- `/etc/ld.so.conf.d/sovereign-rocm.conf` so libamdhip64 resolves
+  at runtime without `LD_LIBRARY_PATH`,
+- `/etc/profile.d/sovereign-rocm.sh` so new shells have
+  `ROCM_PATH` / `HIP_PATH` / `PATH` / `CMAKE_PREFIX_PATH` pre-set.
+
+If you want to do it by hand — or see exactly what goes wrong when
+a given dep is missing — the rest of this section still holds. The
+Fedora install boils down to:
 
 ```bash
 sudo dnf install -y rust cargo protobuf-compiler protobuf-devel \
-    cmake gcc gcc-c++ pkg-config openssl-devel
+    cmake gcc gcc-c++ pkg-config openssl-devel \
+    clang clang-devel \
+    rocm-hip-sdk7.2.1 \
+    webkit2gtk4.1-devel gtk3-devel libsoup3-devel librsvg2-devel \
+    libayatana-appindicator-gtk3
 ```
 
-(On the Ubuntu-based distrobox: `sudo apt install -y cargo rustc
-protobuf-compiler libprotobuf-dev cmake build-essential pkg-config
-libssl-dev`.)
+(Ubuntu: `sudo apt install -y cargo rustc protobuf-compiler
+libprotobuf-dev cmake build-essential pkg-config libssl-dev
+libclang-dev rocm-hip-sdk libwebkit2gtk-4.1-dev libgtk-3-dev
+libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-1` — the
+rocm-hip-sdk meta-package name comes from the AMD apt repo, which
+the kyuz0 Ubuntu image already configures.)
 
-**`protobuf-devel` / `libprotobuf-dev` is load-bearing, not
-optional.** `lance-encoding`'s build script pulls in
-`google/protobuf/empty.proto` from the well-known proto set, which
-ships with the `-devel` / `-dev` package, not the bare compiler. If
-you skip it you get this mid-build:
+The GTK/WebKit deps are only needed for `sovereign-desktop` (the
+Tauri 2 frontend). If you're CLI-only, build with `cargo build
+--release -p sovereign-cli -p sovereign-server` and you can drop
+them.
 
-```
-Error: protoc failed: google/protobuf/empty.proto: File not found.
-encodings_v2_0.proto:8:1: Import "google/protobuf/empty.proto" was
-not found or had errors.
-```
+Three of those dependencies are load-bearing in non-obvious ways:
 
-Install the `-devel` / `-dev` variant and `cargo build` again.
+- **`protobuf-devel` / `libprotobuf-dev`.** `lance-encoding`'s build
+  script pulls in `google/protobuf/empty.proto` from the well-known
+  proto set, which ships with the `-devel` / `-dev` package, not the
+  bare compiler. Skip it and you get:
+
+  ```
+  Error: protoc failed: google/protobuf/empty.proto: File not found.
+  ```
+
+- **`clang-devel` / `libclang-dev`.** `llama-cpp-sys-2`'s `bindgen`
+  step needs `libclang.so` to parse llama.cpp's headers. Skip it and
+  you get:
+
+  ```
+  thread 'main' panicked at bindgen-0.72.1/lib.rs: Unable to find
+  libclang: "couldn't find any valid shared libraries matching:
+  ['libclang.so', ...]"
+  ```
+
+- **`rocm-hip-sdk7.2.1`.** The kyuz0 ROCm 7.2.1 image only ships the
+  runtime side; building llama.cpp's HIP backend from source needs
+  `hipcc`, the HIP headers, rocBLAS/hipBLAS dev headers, ROCm LLVM,
+  and `rocm-device-libs`. The version-pinned `rocm-hip-sdk7.2.1` is
+  the meta-package that pulls all of those at exactly the version
+  the runtime ships (`rocm-hip-sdk` without the suffix may pull a
+  Fedora-packaged 6.x ROCm and conflict). Skip it and you get:
+
+  ```
+  CMake Error at /usr/share/cmake/Modules/CMakeDetermineHIPCompiler.cmake:174 (message):
+    Failed to find ROCm root directory.
+  ```
+
+- **GTK / WebKit dev packages.** `sovereign-desktop` is a Tauri 2
+  app; its Linux deps are `webkit2gtk4.1` (note the .1 — Tauri 2
+  uses libsoup3, the older 4.0 won't work), `gtk3`, `libsoup3`, and
+  `librsvg2`. The `pango-sys` / `atk-sys` / `gdk-pixbuf-sys` system
+  libs are pulled in transitively, so installing the four above is
+  enough to build. Skip them and you get a cascade of `pkg-config
+  exited with status code 1` errors mid-build.
+
+  At **runtime**, the `tray-icon` feature dlopens libappindicator —
+  so install `libayatana-appindicator-gtk3` as well (runtime-only,
+  no rebuild needed):
+
+  ```bash
+  sudo dnf install -y libayatana-appindicator-gtk3
+  ```
+
+  Without it, `cargo tauri dev` compiles fine and then panics on
+  startup with `Failed to load ayatana-appindicator3 or
+  appindicator3 dynamic library`.
 
 Prefer `rustup` if you want a newer toolchain than Fedora's
 package repo ships:
@@ -223,58 +304,93 @@ inside the toolbox to keep builds separate.
 
 ---
 
-## 4. Swap the llama.cpp feature flag
+## 4. Pick a non-ROCm backend (optional)
 
-The Metal feature in `sovereign-inference/Cargo.toml` is macOS-only.
-Until that file carries a `cfg`-gated feature selection, make the
-swap by hand for the Linux build:
+The Linux default in `sovereign-inference/Cargo.toml` is ROCm, gated
+on `cfg(target_os = "linux")`. If you picked a Vulkan toolbox variant
+in §1, edit the linux block to `features = ["vulkan"]`:
 
 ```diff
- # sovereign/crates/sovereign-inference/Cargo.toml
--llama-cpp-2 = { version = "0.1.145", features = ["metal"] }
-+llama-cpp-2 = { version = "0.1.145", features = ["rocm"] }
+ [target.'cfg(target_os = "linux")'.dependencies]
+-llama-cpp-2 = { version = "0.1.145", features = ["rocm"] }
++llama-cpp-2 = { version = "0.1.145", features = ["vulkan"] }
 ```
 
-Use `features = ["vulkan"]` if you picked a Vulkan toolbox variant
-in §1. Both features pull `llama-cpp-sys-2`'s vendored llama.cpp
-source and compile it against the chosen backend, so the first
-`cargo build` takes 3–8 minutes.
-
-Do not check this change in. The eventual fix is in
-`sovereign-inference/Cargo.toml`:
-
-```toml
-[target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-2 = { version = "0.1.145", features = ["metal"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-llama-cpp-2 = { version = "0.1.145", features = ["rocm"] }
-```
-
-…which lands as follow-up work once this walkthrough is confirmed
-on hardware.
+Don't check that swap in — the repo's default should stay ROCm
+since that's what this doc targets.
 
 ---
 
-## 5. Build sovereign-cli
-
-From the project root inside the toolbox:
+## 5. Build the workspace
 
 ```bash
-cd ~/dev/commonwealth-ai/sovereign  # or wherever your clone lives
-cargo build -p sovereign-cli --release
+cd ~/dev/commonwealth-ai/sovereign
+cargo build --release
 ```
 
-The first build compiles the vendored llama.cpp against ROCm — this
-is the 3–8 minute step. Subsequent builds reuse the cache.
+First build compiles the vendored llama.cpp against the GPU backend —
+this is the 3–8 minute step. Subsequent builds reuse the cache.
+
+Everything else (the cfg-gated llama-cpp-2 feature, the HIP `-fPIC`
+cmake flag, the runtime library path, the shell env) is handled by
+`scripts/bootstrap-linux.sh` + the workspace `.cargo/config.toml`.
+The walkthroughs below exist so you know what to look at if something
+doesn't work, not as required manual steps.
+
+### If you skipped bootstrap-linux.sh
+
+You'll need these exports in scope before `cargo build`:
+
+```bash
+export ROCM_PATH=/opt/rocm
+export PATH="$ROCM_PATH/bin:$PATH"
+export HIP_PATH=$ROCM_PATH
+export CMAKE_PREFIX_PATH=$ROCM_PATH
+```
+
+`CMAKE_HIP_FLAGS=-fPIC` and `HIPFLAGS=-fPIC` come from
+`.cargo/config.toml` at the workspace root, so you get them for
+free. Without them you'd hit this at the end of a 5+ minute build:
+
+```
+/usr/bin/ld: ggml-cuda.cu.o: relocation R_X86_64_32 against
+'.rodata.str1.1' can not be used when making a PIE object;
+recompile with -fPIE
+```
+
+CMake's HIP language doesn't inherit the `-fPIC` that C / C++ flags
+set; pushing the flag via env vars is how we get it through.
+
+If you previously failed mid-build and are retrying, wipe the
+cached llama-cpp-sys cmake dir so cmake re-configures from scratch
+with the new env:
+
+```bash
+rm -rf target/release/build/llama-cpp-sys-2-*
+```
 
 Verify the binary is linked against the expected GPU library:
 
 ```bash
-ldd target/release/sovereign-cli | grep -E "rocm|hip|vulkan|amdgpu"
-# ROCm variant → you should see libhipblas / libamdhip64
+LD_LIBRARY_PATH=$ROCM_PATH/lib ldd target/release/sovereign-cli \
+    | grep -E "rocm|hip|vulkan|amdgpu"
+# ROCm variant → you should see libhipblas / libamdhip64 / librocblas
 # Vulkan variant → you should see libvulkan
 ```
+
+Bare `ldd` reports `libamdhip64.so.7 => not found` because Fedora's
+default linker doesn't include `/opt/rocm-7.2.1/lib` in its search
+path. Either prefix every invocation with
+`LD_LIBRARY_PATH=$ROCM_PATH/lib`, or make it permanent:
+
+```bash
+# permanent, system-wide (toolbox-only — won't leak to host)
+echo "$ROCM_PATH/lib" | sudo tee /etc/ld.so.conf.d/rocm-7.2.1.conf
+sudo ldconfig
+```
+
+Either works; `ldconfig` is the cleaner option once you've verified
+the build does what you expect.
 
 Run the built-in tests to make sure nothing regressed in the port:
 
@@ -420,22 +536,40 @@ non-kyuz0 image you'd need `export HSA_OVERRIDE_GFX_VERSION=11.5.0`
 - **Protobuf compile errors on `lancedb`.** If `cargo build` fails
   in `lance-table` with a missing-protoc error, install `protobuf-compiler`
   (Ubuntu) or `protobuf-devel` (Fedora) and retry.
+- **`Unable to find libclang` from bindgen.** `clang` alone is not
+  enough — install `clang-devel` (Fedora) or `libclang-dev` (Ubuntu)
+  for the shared library bindgen actually dlopens.
+- **Build artefact mixing across hosts.** §9's first warning is about
+  building on macOS *and* a Linux toolbox against the same `target/`.
+  When the host *is* Fedora (same arch as the toolbox), the
+  artefacts are interchangeable and you can ignore the warning;
+  the issue is mac dylibs vs. Linux .so files cohabiting, not Linux
+  vs. Linux.
+- **PIE link error after a long HIP compile.** Symptom is the
+  `R_X86_64_32 against '.rodata.str1.1' can not be used when making
+  a PIE object` line at the very end of a 5+ minute build. Fix with
+  the `CMAKE_HIP_FLAGS=-fPIC HIPFLAGS=-fPIC` exports from §5; if
+  the error persists, the cmake configure was cached without those
+  flags — `rm -rf target/release/build/llama-cpp-sys-2-*` and
+  rebuild.
+- **`Failed to find ROCm root directory`.** CMake can't find hipcc.
+  Either you're missing `rocm-hip-sdk7.2.1` (kyuz0 image only ships
+  the runtime), or `ROCM_PATH` / `PATH` weren't exported into the
+  shell that ran `cargo build`.
 
 ---
 
-## What changes upstream once this is confirmed
+## Still open
 
-When a Linux user works through this doc end-to-end successfully,
-two changes land in the repo so the next user doesn't need the
-workaround:
-
-1. `sovereign-inference/Cargo.toml` gains the `cfg`-gated feature
-   selection from §4, so `cargo build` picks the right backend
-   automatically.
-2. `daemon install` on Linux gets a confirmed-working path +
-   whatever smoothing this walkthrough uncovered (env exports,
-   device permissions, extra systemd directives).
+- **`sovereign daemon install` on Linux.** The systemd path exists
+  in `service_install.rs` and the unit template is at
+  `contrib/systemd/sovereign.service`, but it hasn't been exercised
+  end-to-end on hardware. File a note when you run it.
+- **A project-owned toolbox image** (kyuz0 ROCm 7.2.1 base + our
+  dep layer pre-baked) would cut §3 out entirely. Worth doing once
+  there are multiple Linux contributors; skip it while the kyuz0
+  image + bootstrap script are enough for one or two.
 
 File a note or edit this doc directly when you hit a rough edge —
 the goal is that by the second or third pass through, the
-walkthrough is 5 commands instead of 9 sections.
+walkthrough is 3 commands instead of 9 sections.

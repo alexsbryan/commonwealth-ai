@@ -12,12 +12,20 @@ thiserror = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-llama-cpp-2 = { version = "0.1.145", features = ["metal"] }
 sysinfo = "0.34"
 encoding_rs = "0.8"
 tracing = { workspace = true }
 tokio-stream = "0.1"
 reqwest = { workspace = true, features = ["stream"] }
+
+# llama.cpp's GPU backend is picked per-OS. If you're on a Vulkan-based
+# toolbox on Linux, swap "rocm" → "vulkan" below (one-line edit; no
+# code changes).
+[target.'cfg(target_os = "macos")'.dependencies]
+llama-cpp-2 = { version = "0.1.145", features = ["metal"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+llama-cpp-2 = { version = "0.1.145", features = ["rocm"] }
 
 [dev-dependencies]
 tempfile = "3"

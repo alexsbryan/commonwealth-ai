@@ -109,7 +109,7 @@ sudo apt install cmake build-essential
 ### Clone and build
 
 ```sh
-git clone https://github.com/anthropics/sovereign.git
+git clone https://github.com/alexsbryan/sovereign.git
 cd sovereign
 cargo build --release -p sovereign-cli
 ```
