@@ -188,7 +188,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     let want_3b = matches!(parsed.phase, ResolvePhase::P3b | ResolvePhase::All);
 
     let written = if want_3b {
-        let step_3b = match resolve_step_3b(&sections, &step_3a.entities) {
+        let step_3b = match resolve_step_3b(&sections, &step_3a.entities, &step_3a.events) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: atlas resolution (3b) failed: {e}");

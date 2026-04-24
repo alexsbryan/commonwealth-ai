@@ -409,6 +409,18 @@ fn print_human_report(r: &SchemaValidationReport) {
         r.orphans.total_atoms,
         r.orphans.orphan_fraction * 100.0
     );
+    for b in &r.orphans.by_type {
+        if b.total_count == 0 {
+            continue;
+        }
+        println!(
+            "        · {:<12} {:>3}/{:<3}  ({:>4.0}%)",
+            b.atom_type,
+            b.orphan_count,
+            b.total_count,
+            b.orphan_fraction * 100.0
+        );
+    }
     println!();
 
     println!("  [6] Discourse-act distribution (Claim atoms)");

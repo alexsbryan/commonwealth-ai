@@ -32,15 +32,18 @@ const HELP: Help = Help {
             ("--full", "Run on every chapter in the manifest. Updates cache/questions.json."),
             (
                 "--retry-failed",
-                "Re-run only the chapters that failed in the most recent run. Treated as a \
-                 subset run (does NOT update the cache). Errors if no prior run file exists.",
+                "Re-run only the chapters that failed in the most recent run. Successful \
+                 recoveries are merged into cache/questions.json (matching chapters \
+                 overwritten; those failures dropped from the cached failures list). \
+                 Errors if no prior run file exists.",
             ),
             (
                 "--terse",
                 "Use the terse Phase 1 prompt variant and double the configured \
                  max_output_tokens. Combinable with --chapters or --retry-failed. When paired \
-                 with --retry-failed, auto-filters to failures classified as think-truncation. \
-                 Successful retries merge into cache/questions.json.",
+                 with --retry-failed, auto-filters to failures the terse variant can recover \
+                 (think-truncation and parse-drift — both benefit from the bumped output \
+                 budget). Successful retries merge into cache/questions.json.",
             ),
         ]),
         HelpSection::Examples(&[
@@ -184,17 +187,25 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                 }
                 Ok(Some((path, ids))) => {
                     // When `--terse` is combined with `--retry-failed`
-                    // without an explicit chapter list, target only
-                    // the failures the terse variant is designed to
-                    // recover: think-truncations. Transport failures
-                    // (ChatError) and schema drift (ParseDrift) need
-                    // different fixes — a plain retry for chat, a
-                    // prompt tweak for drift — so filtering to the
-                    // terse-recoverable kind avoids burning budget
-                    // on chapters the variant can't help.
+                    // without an explicit chapter list, target the
+                    // failures the terse variant is designed to
+                    // recover: think-truncations AND parse-drifts.
+                    // Both manifest as truncated output (the
+                    // reasoning trace overflows the cap, leaving
+                    // incomplete JSON), and terse addresses both via
+                    // the bumped `max_output_tokens`. Transport
+                    // failures (ChatError), empty extractions, and
+                    // "other" shapes need different fixes — a plain
+                    // retry for chat, inspection for empties — so
+                    // filtering to the terse-recoverable kinds
+                    // avoids burning budget on chapters the variant
+                    // can't help.
                     let (targeted, filtered_out): (Vec<_>, Vec<_>) = if parsed.terse {
                         ids.into_iter().partition(|(_, kind)| {
-                            matches!(kind, PhaseFailureKind::ThinkTruncated)
+                            matches!(
+                                kind,
+                                PhaseFailureKind::ThinkTruncated | PhaseFailureKind::ParseDrift
+                            )
                         })
                     } else {
                         (ids, Vec::new())
@@ -202,8 +213,8 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                     if parsed.terse && !filtered_out.is_empty() {
                         println!(
                             "  · --terse filter: skipping {} failure(s) not classified as \
-                             think-truncation (use --retry-failed without --terse to \
-                             target them)",
+                             think-truncation or parse-drift (use --retry-failed without \
+                             --terse to target them)",
                             filtered_out.len()
                         );
                     }
@@ -242,7 +253,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                         );
                         return 1;
                     }
-                    ChapterSelection::Subset(present)
+                    ChapterSelection::RetryFailed(present)
                 }
                 Ok(None) => {
                     eprintln!(
@@ -277,7 +288,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         selection.mode_label(),
         match &selection {
             ChapterSelection::Full => inputs.len(),
-            ChapterSelection::Subset(ids) => ids.len(),
+            ChapterSelection::Subset(ids) | ChapterSelection::RetryFailed(ids) => ids.len(),
         }
     );
 
@@ -337,7 +348,18 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     if result.cache_updated {
         println!("  ✓ cache updated (cache/questions.json)");
     } else {
-        println!("  · subset run — cache NOT updated (re-run with --full to promote)");
+        match &selection {
+            ChapterSelection::RetryFailed(_) => {
+                println!(
+                    "  · retry produced no new successes — cache/questions.json unchanged"
+                );
+            }
+            _ => {
+                println!(
+                    "  · subset run — cache NOT updated (re-run with --full to promote)"
+                );
+            }
+        }
     }
     if !result.failures.is_empty() {
         // Glassbox: name the failed ids and the exact retry command
@@ -680,8 +702,8 @@ mod tests {
     fn read_latest_failures_returns_failure_kinds_for_terse_filtering() {
         // When the run file carries `failure_kind` per entry, the
         // caller should be able to partition failures by kind —
-        // that's what `--terse --retry-failed` does to target only
-        // `ThinkTruncated` chapters.
+        // that's what `--terse --retry-failed` does to target the
+        // kinds the terse variant can recover.
         use std::fs;
         let dir = tempfile::tempdir().unwrap();
         let runs = dir.path().join("runs");
@@ -706,6 +728,34 @@ mod tests {
             .map(|(id, _)| id)
             .collect();
         assert_eq!(think_truncs, vec!["sec_0001"]);
+    }
+
+    #[test]
+    fn terse_filter_targets_both_think_truncation_and_parse_drift() {
+        // Both kinds result from the same underlying failure mode —
+        // the reasoning trace crowds the output cap and the JSON body
+        // truncates mid-emit. Terse variant's bumped budget helps
+        // both. ChatError + other kinds need different fixes; the
+        // filter must drop them so we don't burn budget on chapters
+        // terse can't help.
+        let ids = vec![
+            ("sec_0001".to_string(), PhaseFailureKind::ThinkTruncated),
+            ("sec_0002".to_string(), PhaseFailureKind::ChatError),
+            ("sec_0003".to_string(), PhaseFailureKind::ParseDrift),
+            ("sec_0004".to_string(), PhaseFailureKind::EmptyExtraction),
+        ];
+        let (targeted, filtered_out): (Vec<_>, Vec<_>) = ids.into_iter().partition(|(_, kind)| {
+            matches!(
+                kind,
+                PhaseFailureKind::ThinkTruncated | PhaseFailureKind::ParseDrift
+            )
+        });
+        let targeted_ids: Vec<&str> =
+            targeted.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(targeted_ids, vec!["sec_0001", "sec_0003"]);
+        let filtered_ids: Vec<&str> =
+            filtered_out.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(filtered_ids, vec!["sec_0002", "sec_0004"]);
     }
 
     #[test]
