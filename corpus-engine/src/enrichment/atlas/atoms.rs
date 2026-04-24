@@ -173,7 +173,18 @@ pub struct State {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<ChunkRef>,
     pub section_range: SectionRange,
-    pub confidence: f32,
+    /// Extraction confidence, LLM-reported.
+    ///
+    /// `None` when the state was emitted by the deterministic
+    /// resolver (Phase 3b) with no LLM scoring. A previous version
+    /// of this field stamped `Some(1.0)` on every deterministic
+    /// atom, which collapsed the confidence histogram into a
+    /// meaningless bimodal distribution. Schema-validation §3 skips
+    /// `None`-valued atoms so the histogram reflects only
+    /// LLM-reported values. Phase 5 (deferred atom interpretation)
+    /// will replace `None` with a real score when it ships.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
     pub enrichment_depth: EnrichmentDepth,
 }
 
@@ -213,7 +224,12 @@ pub struct Claim {
     /// Extraction confidence — how clearly the system identified this
     /// claim. Distinct from `epistemic_status` which is the claim's
     /// certainty within the text.
-    pub confidence: f32,
+    ///
+    /// `None` when the claim was emitted by the deterministic
+    /// resolver with no LLM scoring. See `State.confidence` for the
+    /// rationale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
     pub enrichment_depth: EnrichmentDepth,
 }
 
@@ -441,7 +457,7 @@ mod tests {
             state_type: StateType::Psychological,
             evidence: vec![ChunkRef::new("ch015", None), ChunkRef::new("ch017", None)],
             section_range: SectionRange { start: "ch014".into(), end: "ch018".into() },
-            confidence: 0.82,
+            confidence: Some(0.82),
             enrichment_depth: EnrichmentDepth::Extracted,
         };
         let env = AtomEnvelope::State(state.clone());
@@ -452,7 +468,7 @@ mod tests {
         match back {
             AtomEnvelope::State(s) => {
                 assert_eq!(s.entity_id, state.entity_id);
-                assert_eq!(s.confidence, 0.82);
+                assert_eq!(s.confidence, Some(0.82));
             }
             _ => panic!("expected State variant"),
         }
@@ -496,7 +512,7 @@ mod tests {
             scope: ClaimScope::Universal,
             evidence: vec![ChunkRef::new("ch_5_p3", Some("love in dreams is greedy".into()))],
             attributed_to: Some(AtomId::entity(7)),
-            confidence: 0.91,
+            confidence: Some(0.91),
             enrichment_depth: EnrichmentDepth::Extracted,
         };
         let json = serde_json::to_string(&AtomEnvelope::Claim(claim.clone())).unwrap();

@@ -741,9 +741,16 @@ type = "paragraph"
             .expect("SEP must have an enrichment block");
 
         assert!(enrichment.enabled, "SEP enrichment must be enabled");
+        // Landing 3.B flipped SEP from the v1 field_model to the v2
+        // per-article atlas flow (`sovereign enrich sep-ingest`).
+        // The type tag changes together with `[enrichment.chunking]`
+        // appearing in the recipe — both surface as "atlas is the
+        // primary surface". The legacy field_model config nests
+        // under `[enrichment.field_model]` for the full-parquet
+        // build path.
         assert_eq!(
-            enrichment.enrichment_type, "field_model",
-            "SEP enrichment type must be field_model"
+            enrichment.enrichment_type, "atlas",
+            "SEP enrichment type must be `atlas` (flipped in Landing 3.B)"
         );
         assert_eq!(
             enrichment.domain.as_deref(),

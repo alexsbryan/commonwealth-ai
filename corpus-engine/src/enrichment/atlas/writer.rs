@@ -159,6 +159,58 @@ pub struct AtlasWritten {
     pub trajectories_path: PathBuf,
 }
 
+/// Write the resolution-failure file to
+/// `atlas/resolution_failures.json`. Phase 3a/3b drops (unresolved
+/// entity names, unresolved relation participants, unresolved claim
+/// attributions) land here so the `sovereign enrich errors`
+/// aggregator can include them alongside the per-phase cache
+/// failures. Pre-Landing-3.A these drops were `debug!`-only and
+/// invisible to the operator.
+pub fn write_atlas_failures(
+    atlas_dir: &Path,
+    failures: &[crate::enrichment::pipeline::types::PhaseFailure],
+) -> io::Result<PathBuf> {
+    fs::create_dir_all(atlas_dir)?;
+    let path = atlas_dir.join("resolution_failures.json");
+    let wrapper = ResolutionFailuresFile {
+        schema_version: RESOLUTION_FAILURES_SCHEMA_VERSION.to_string(),
+        failures: failures.to_vec(),
+    };
+    write_atomic(&path, &wrapper)?;
+    Ok(path)
+}
+
+const RESOLUTION_FAILURES_SCHEMA_VERSION: &str = "1.0";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolutionFailuresFile {
+    pub schema_version: String,
+    #[serde(default)]
+    pub failures: Vec<crate::enrichment::pipeline::types::PhaseFailure>,
+}
+
+impl ResolutionFailuresFile {
+    /// Read the failure file from `atlas_dir`. Returns `Ok(None)`
+    /// when the file is absent (the clean case for a corpus that
+    /// resolved without drops), or when the atlas directory itself
+    /// doesn't exist yet. Parse errors propagate so a corrupt file
+    /// surfaces loudly.
+    pub fn load(atlas_dir: &Path) -> io::Result<Option<Self>> {
+        let path = atlas_dir.join("resolution_failures.json");
+        if !path.exists() {
+            return Ok(None);
+        }
+        let raw = fs::read_to_string(&path)?;
+        let parsed: Self = serde_json::from_str(&raw).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("parsing {}: {e}", path.display()),
+            )
+        })?;
+        Ok(Some(parsed))
+    }
+}
+
 /// Write a deterministic gaps file (Phase 7) to
 /// `atlas/gaps.json`. Atomic sibling-tmp + rename, same contract as
 /// the other atlas writers.

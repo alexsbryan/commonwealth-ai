@@ -138,6 +138,7 @@ pub async fn resolve_entities_and_events(
         entities: entity_result.entities,
         events: event_result.events,
         edges: event_result.involves_edges,
+        failures: event_result.failures,
     })
 }
 
@@ -147,6 +148,13 @@ pub struct ResolutionOutput {
     pub entities: Vec<Entity>,
     pub events: Vec<Event>,
     pub edges: Vec<Edge>,
+    /// Structured drops — event participants whose name didn't
+    /// resolve to any Entity atom. Previously logged at `debug!` and
+    /// lost; now surfaced so `sovereign enrich errors` can group
+    /// these and hint at the remediation (usually: the entity name
+    /// missed Phase 1 extraction or the seed list diverged). Empty
+    /// for a clean run.
+    pub failures: Vec<crate::enrichment::pipeline::types::PhaseFailure>,
 }
 
 /// Bundle returned by [`resolve_step_3b`].
@@ -164,6 +172,13 @@ pub struct Step3bOutput {
     /// Per-entity and per-relation state sequences, keyed by the
     /// entity/relation AtomId. Written to `atlas/trajectories.json`.
     pub trajectories: std::collections::BTreeMap<String, Trajectory>,
+    /// Structured drops from the deterministic resolver: entity-state
+    /// sketches whose entity name didn't resolve, relation sketches
+    /// with < 2 resolvable participants, claims whose `attributed_to`
+    /// didn't match. These used to be silent `debug!` logs; now the
+    /// aggregator surfaces them grouped by kind with a remediation
+    /// hint per group.
+    pub failures: Vec<crate::enrichment::pipeline::types::PhaseFailure>,
 }
 
 /// A single per-entity (or per-relation) state sequence. Mirrors the
@@ -523,6 +538,7 @@ fn dedup_aliases(aliases: &[String], canonical: &str) -> Vec<String> {
 struct EventResolution {
     events: Vec<Event>,
     involves_edges: Vec<Edge>,
+    failures: Vec<crate::enrichment::pipeline::types::PhaseFailure>,
 }
 
 async fn resolve_events(
@@ -531,20 +547,46 @@ async fn resolve_events(
     name_index: &HashMap<String, AtomId>,
     token_index: &HashMap<String, Vec<AtomId>>,
 ) -> Result<EventResolution> {
+    use crate::enrichment::pipeline::types::{
+        PhaseFailure, PhaseFailureKind, PipelinePhase,
+    };
+
     let mut events: Vec<Event> = Vec::new();
     let mut descriptions: Vec<Vec<f32>> = Vec::new();
     let mut section_ordinal_of_event: Vec<usize> = Vec::new();
     let mut involves_edges: Vec<Edge> = Vec::new();
+    let mut failures: Vec<PhaseFailure> = Vec::new();
 
     for (section_ordinal, section) in sections.iter().enumerate() {
-        for sketch in &section.events {
+        for (sketch_index, sketch) in section.events.iter().enumerate() {
             let candidate_emb = if sketch.description.trim().is_empty() {
                 Vec::new()
             } else {
                 (embed_fn)(&sketch.description).await?
             };
-            let participant_ids =
+            let (participant_ids, unresolved) =
                 resolve_participant_ids(&sketch.participants, name_index, token_index);
+            // Surface dropped participants as structured failures so
+            // the aggregator can show the operator which entity names
+            // Phase 1 missed. Each unresolved participant is its own
+            // record — grouping happens in the aggregator, not here.
+            for name in &unresolved {
+                failures.push(PhaseFailure {
+                    phase: PipelinePhase::Questions, // Phase 3a rides on the Questions cache
+                    subject: format!(
+                        "sketch:event:{}#{}",
+                        section.section_id, sketch_index
+                    ),
+                    kind: PhaseFailureKind::UnresolvedEntityName,
+                    reason: format!(
+                        "event participant `{}` did not resolve to any Entity atom \
+                         (event description: `{}`)",
+                        name,
+                        sketch.description.trim()
+                    ),
+                    raw_response_head: None,
+                });
+            }
 
             let merge_target = find_event_merge_target(
                 sketch,
@@ -635,31 +677,36 @@ async fn resolve_events(
         }
     }
 
-    Ok(EventResolution { events, involves_edges })
+    Ok(EventResolution { events, involves_edges, failures })
 }
 
+/// Resolve a list of participant names to Entity atom ids.
+///
+/// Returns `(resolved, unresolved)` — the unresolved names are
+/// returned rather than silently dropped so the caller can decide
+/// how to surface them (previously these all went to `debug!` logs
+/// that no one read at runtime; the aggregator now turns them into
+/// structured failures).
 fn resolve_participant_ids(
     names: &[String],
     name_index: &HashMap<String, AtomId>,
     token_index: &HashMap<String, Vec<AtomId>>,
-) -> Vec<AtomId> {
-    let mut out = Vec::with_capacity(names.len());
+) -> (Vec<AtomId>, Vec<String>) {
+    let mut resolved = Vec::with_capacity(names.len());
+    let mut unresolved = Vec::new();
     for name in names {
         match resolve_entity_id_fuzzy(name, name_index, token_index) {
             Some(id) => {
-                if !out.contains(&id) {
-                    out.push(id);
+                if !resolved.contains(&id) {
+                    resolved.push(id);
                 }
             }
             None => {
-                debug!(
-                    participant = %name,
-                    "atlas/resolution: event participant did not resolve to a known entity; dropping"
-                );
+                unresolved.push(name.clone());
             }
         }
     }
-    out
+    (resolved, unresolved)
 }
 
 fn find_event_merge_target(
@@ -716,15 +763,25 @@ fn find_event_merge_target(
 pub fn resolve_step_3b(
     sections: &[SectionExtraction],
     entities: &[super::atoms::Entity],
+    events: &[super::atoms::Event],
 ) -> Result<Step3bOutput> {
+    use crate::enrichment::pipeline::types::{
+        PhaseFailure, PhaseFailureKind, PipelinePhase,
+    };
+
     let name_index = build_name_index(entities);
     let token_index = build_token_index(entities);
     let mut edges: Vec<Edge> = Vec::new();
+    // Phase 3b drop buffer — every silent `debug!` path below now
+    // also pushes a structured PhaseFailure so the aggregator can
+    // show an operator how much evidence the deterministic resolver
+    // lost on this corpus, grouped by kind.
+    let mut failures: Vec<PhaseFailure> = Vec::new();
 
     // 1. Entity states (one State per EntityStateSketch)
     let mut states: Vec<super::atoms::State> = Vec::new();
     for (section_ordinal, section) in sections.iter().enumerate() {
-        for sketch in &section.entities_developed {
+        for (sketch_index, sketch) in section.entities_developed.iter().enumerate() {
             if sketch.entity_name.trim().is_empty() || sketch.label.trim().is_empty() {
                 continue;
             }
@@ -733,11 +790,26 @@ pub fn resolve_step_3b(
                 &name_index,
                 &token_index,
             ) else {
+                let reason = format!(
+                    "entity-state sketch references unknown entity `{}` (state label: `{}`)",
+                    sketch.entity_name.trim(),
+                    sketch.label.trim()
+                );
                 debug!(
                     entity_name = %sketch.entity_name,
                     section = %section.section_id,
                     "atlas/resolution 3b: entity-state sketch references unknown entity; dropping"
                 );
+                failures.push(PhaseFailure {
+                    phase: PipelinePhase::Questions,
+                    subject: format!(
+                        "sketch:entity_state:{}#{}",
+                        section.section_id, sketch_index
+                    ),
+                    kind: PhaseFailureKind::UnresolvedEntityName,
+                    reason,
+                    raw_response_head: None,
+                });
                 continue;
             };
             let state_id = super::atoms::AtomId::state(states.len() + 1);
@@ -754,10 +826,15 @@ pub fn resolve_step_3b(
                 ),
                 evidence: evidence.clone(),
                 section_range: super::atoms::SectionRange::point(section.section_id.clone()),
-                // Structural confidence — no LLM scoring here. The
-                // atom exists because a sketch exists. Phase 5
-                // reassigns with evidence depth.
-                confidence: 1.0,
+                // Deterministic derivation — no LLM scoring here. The
+                // atom exists because a sketch exists. Phase 5 (atom
+                // interpretation) will replace this with a real
+                // score with evidence depth. Leaving `None` keeps
+                // the schema-validation histogram honest: it
+                // tallies LLM-reported confidence only, so derived
+                // atoms don't pile up in the [0.9-1.0) bucket and
+                // mask the real calibration signal.
+                confidence: None,
                 enrichment_depth: section.enrichment_depth,
             };
             // Emit Involves (state → entity) and Grounds (state → evidence).
@@ -803,9 +880,25 @@ pub fn resolve_step_3b(
     let mut relations: Vec<super::atoms::Relation> = Vec::new();
     let mut relation_key_to_id: HashMap<String, super::atoms::AtomId> = HashMap::new();
     for section in sections {
-        for sketch in &section.relations_introduced {
-            let participant_ids =
+        for (sketch_index, sketch) in section.relations_introduced.iter().enumerate() {
+            let (participant_ids, unresolved) =
                 resolve_entity_ids(&sketch.participants, entities, &name_index, &token_index);
+            for name in &unresolved {
+                failures.push(PhaseFailure {
+                    phase: PipelinePhase::Questions,
+                    subject: format!(
+                        "sketch:relation_introduced:{}#{}",
+                        section.section_id, sketch_index
+                    ),
+                    kind: PhaseFailureKind::UnresolvedRelationParticipant,
+                    reason: format!(
+                        "relation participant `{}` did not resolve (relation label: `{}`)",
+                        name,
+                        sketch.label.trim()
+                    ),
+                    raw_response_head: None,
+                });
+            }
             if participant_ids.len() < 2 {
                 debug!(
                     participants = ?sketch.participants,
@@ -851,9 +944,25 @@ pub fn resolve_step_3b(
     //    If the relation wasn't introduced, synthesise one lazily so
     //    the state has somewhere to attach.
     for section in sections {
-        for sketch in &section.relations_developed {
-            let participant_ids =
+        for (sketch_index, sketch) in section.relations_developed.iter().enumerate() {
+            let (participant_ids, unresolved) =
                 resolve_entity_ids(&sketch.participants, entities, &name_index, &token_index);
+            for name in &unresolved {
+                failures.push(PhaseFailure {
+                    phase: PipelinePhase::Questions,
+                    subject: format!(
+                        "sketch:relation_developed:{}#{}",
+                        section.section_id, sketch_index
+                    ),
+                    kind: PhaseFailureKind::UnresolvedRelationParticipant,
+                    reason: format!(
+                        "relation-state participant `{}` did not resolve (state label: `{}`)",
+                        name,
+                        sketch.label.trim()
+                    ),
+                    raw_response_head: None,
+                });
+            }
             if participant_ids.len() < 2 {
                 debug!(
                     participants = ?sketch.participants,
@@ -895,7 +1004,8 @@ pub fn resolve_step_3b(
                 ),
                 evidence: evidence.clone(),
                 section_range: super::atoms::SectionRange::point(section.section_id.clone()),
-                confidence: 1.0,
+                // Derived — see the note at the entity-state call site.
+                confidence: None,
                 enrichment_depth: section.enrichment_depth,
             });
             edges.push(Edge {
@@ -929,10 +1039,32 @@ pub fn resolve_step_3b(
     //    resolved to an Entity id when possible.
     let mut claims: Vec<super::atoms::Claim> = Vec::new();
     for section in sections {
-        for sketch in &section.claims {
+        for (sketch_index, sketch) in section.claims.iter().enumerate() {
             let claim_id = super::atoms::AtomId::claim(claims.len() + 1);
             let attributed_to = sketch.attributed_to.as_ref().and_then(|name| {
-                resolve_entity_id_with_salience(name, entities, &name_index, &token_index)
+                let resolved =
+                    resolve_entity_id_with_salience(name, entities, &name_index, &token_index);
+                if resolved.is_none() {
+                    // Claim keeps its content; only attribution drops.
+                    // Recorded so the aggregator can group these by
+                    // kind and the operator sees how many claims lost
+                    // attribution without having to diff the content.
+                    failures.push(PhaseFailure {
+                        phase: PipelinePhase::Questions,
+                        subject: format!(
+                            "sketch:claim:{}#{}",
+                            section.section_id, sketch_index
+                        ),
+                        kind: PhaseFailureKind::UnresolvedClaimAttribution,
+                        reason: format!(
+                            "claim attributed_to `{}` did not resolve (claim content: `{}`)",
+                            name,
+                            sketch.content.trim()
+                        ),
+                        raw_response_head: None,
+                    });
+                }
+                resolved
             });
             let evidence = sketch_anchor_evidence(&section.section_id, &sketch.anchor);
             claims.push(super::atoms::Claim {
@@ -945,7 +1077,8 @@ pub fn resolve_step_3b(
                 scope: crate::enrichment::pipeline::atlas::ClaimScope::Fictional,
                 evidence: evidence.clone(),
                 attributed_to: attributed_to.clone(),
-                confidence: 1.0,
+                // Derived — Phase 5 will replace with LLM score.
+                confidence: None,
                 enrichment_depth: section.enrichment_depth,
             });
             if let Some(entity_id) = attributed_to {
@@ -999,7 +1132,18 @@ pub fn resolve_step_3b(
 
     // 6. Trajectory index + Transition edges. Group states by their
     //    entity_id (or relation_id — same field), sort by section
-    //    start, then emit one Transition per consecutive pair.
+    //    start, then emit one Transition per consecutive pair. Each
+    //    transition gets a best-effort deterministic `trigger_event`
+    //    when the evidence is unambiguous: an Event that lives in
+    //    the section window between `from` and `to` AND has the
+    //    owning entity as a participant. Ambiguous cases leave
+    //    `trigger_event = None` — we'd rather say "I don't know"
+    //    than attach a plausible-but-wrong event. Relation-owned
+    //    trajectories currently leave triggers None (Events don't
+    //    reference Relation ids in `participants`; a full match
+    //    would require participant-set intersection, and Phase 5
+    //    will handle relation-state triggers with evidence depth).
+    let section_ordinal = build_section_ordinal_map(sections);
     let mut trajectories: std::collections::BTreeMap<String, Trajectory> =
         std::collections::BTreeMap::new();
     let states_by_owner = group_states_by_owner(&states);
@@ -1017,13 +1161,14 @@ pub fn resolve_step_3b(
         }
         for pair in owner_states.windows(2) {
             let (from, to) = (&pair[0], &pair[1]);
+            let trigger = find_trigger_event(&owner_id, from, to, events, &section_ordinal);
             edges.push(Edge {
                 id: EdgeId::new(edges.len() + 1),
                 edge_type: EdgeType::Transition,
                 source: from.id.clone(),
                 target: to.id.clone(),
                 evidence: Vec::new(),
-                trigger_event: None,
+                trigger_event: trigger.clone(),
                 sub_question: None,
                 confidence: 1.0,
                 provenance: EdgeProvenance::Derived,
@@ -1031,7 +1176,7 @@ pub fn resolve_step_3b(
             traj_transitions.push(TrajectoryTransition {
                 from: from.id.as_str().to_string(),
                 to: to.id.as_str().to_string(),
-                trigger_event: None,
+                trigger_event: trigger.map(|id| id.as_str().to_string()),
             });
         }
         trajectories.insert(
@@ -1052,6 +1197,7 @@ pub fn resolve_step_3b(
         questions,
         edges,
         trajectories,
+        failures,
     })
 }
 
@@ -1295,13 +1441,18 @@ pub(super) fn resolve_entity_id_with_salience(
 /// patronymic) stays silent. 2 is the knob.
 const FUZZY_TOKEN_LEVENSHTEIN_MAX: usize = 2;
 
+/// Resolve a list of participant names via the salience-aware
+/// fuzzy path. Returns `(resolved, unresolved)` — the unresolved
+/// names are returned rather than silently dropped (see
+/// `resolve_participant_ids` for the rationale).
 fn resolve_entity_ids(
     names: &[String],
     entities: &[super::atoms::Entity],
     name_index: &HashMap<String, super::atoms::AtomId>,
     token_index: &HashMap<String, Vec<super::atoms::AtomId>>,
-) -> Vec<super::atoms::AtomId> {
-    let mut out = Vec::with_capacity(names.len());
+) -> (Vec<super::atoms::AtomId>, Vec<String>) {
+    let mut resolved = Vec::with_capacity(names.len());
+    let mut unresolved = Vec::new();
     for n in names {
         // Relation/event participant resolution goes through the
         // salience-aware path so a dominant-salience entity snaps
@@ -1310,12 +1461,14 @@ fn resolve_entity_ids(
         // before we get here; the salience fallback is the safety
         // net for the cases that slipped through.
         if let Some(id) = resolve_entity_id_with_salience(n, entities, name_index, token_index) {
-            if !out.contains(&id) {
-                out.push(id);
+            if !resolved.contains(&id) {
+                resolved.push(id);
             }
+        } else {
+            unresolved.push(n.clone());
         }
     }
-    out
+    (resolved, unresolved)
 }
 
 fn relation_key(participant_ids: &[super::atoms::AtomId]) -> String {
@@ -1359,6 +1512,69 @@ fn group_states_by_owner(
         .collect();
     entries.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
     entries
+}
+
+/// Map `section_id` → ordinal position in the corpus. Used by the
+/// Transition-trigger matcher to decide which section ids fall
+/// between a `from` state and a `to` state. Building this from the
+/// order `sections` arrive in is deterministic across runs.
+fn build_section_ordinal_map(
+    sections: &[SectionExtraction],
+) -> HashMap<String, usize> {
+    sections
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.section_id.clone(), i))
+        .collect()
+}
+
+/// Best-effort trigger-event match for one (from, to) transition.
+///
+/// Returns `Some(event_id)` only when the match is unambiguous:
+///
+///   1. Owner is an Entity (Relation-owned trajectories leave
+///      triggers None until Phase 5 — see the comment at the call
+///      site).
+///   2. Exactly one Event in the corpus has `section_position` in
+///      the ordinal window `(from.section, to.section]` AND lists
+///      the owner as a participant.
+///
+/// Two+ matches, zero matches, or an unknown section id all return
+/// `None`. The conservative stance is deliberate: a wrong trigger
+/// pollutes the trajectory interpretation more than a missing one
+/// (downstream code already handles `trigger_event = None`).
+fn find_trigger_event(
+    owner_id: &super::atoms::AtomId,
+    from: &super::atoms::State,
+    to: &super::atoms::State,
+    events: &[super::atoms::Event],
+    section_ordinal: &HashMap<String, usize>,
+) -> Option<super::atoms::AtomId> {
+    if !owner_id.as_str().starts_with("entity-") {
+        return None;
+    }
+    let from_ord = section_ordinal.get(&from.section_range.end)?;
+    let to_ord = section_ordinal.get(&to.section_range.start)?;
+    if to_ord <= from_ord {
+        return None;
+    }
+    let mut matches: Vec<&super::atoms::Event> = events
+        .iter()
+        .filter(|e| {
+            let Some(ord) = section_ordinal.get(&e.section_position.section_id) else {
+                return false;
+            };
+            // Half-open window (from_ord, to_ord] — the trigger sits
+            // strictly after `from` and at or before `to`.
+            *ord > *from_ord
+                && *ord <= *to_ord
+                && e.participants.iter().any(|p| p == owner_id)
+        })
+        .collect();
+    if matches.len() == 1 {
+        return Some(matches.remove(0).id.clone());
+    }
+    None
 }
 
 fn owner_display(
@@ -2420,7 +2636,7 @@ mod tests {
             },
         ];
 
-        let out = resolve_step_3b(&sections, &entities).unwrap();
+        let out = resolve_step_3b(&sections, &entities, &[]).unwrap();
 
         // 2 states from entities_developed (Alyosha × 2) + 1 state
         // from relations_developed (Alyosha↔Zossima) = 3 states.
@@ -2507,7 +2723,7 @@ mod tests {
             ..Default::default()
         }];
 
-        let out = resolve_step_3b(&sections, &entities).unwrap();
+        let out = resolve_step_3b(&sections, &entities, &[]).unwrap();
         // Only the resolvable state lands; the orphan drops.
         assert_eq!(out.states.len(), 1);
         assert_eq!(out.states[0].label, "real state");
@@ -3091,7 +3307,7 @@ mod tests {
             },
         ];
 
-        let out = resolve_step_3b(&sections, &entities).unwrap();
+        let out = resolve_step_3b(&sections, &entities, &[]).unwrap();
         // Contract: one Relation atom, first label wins. Changing
         // this policy requires updating this test AND deciding the
         // merge strategy explicitly (e.g. keep both, concatenate
@@ -3103,5 +3319,354 @@ mod tests {
              under the current dedup policy"
         );
         assert_eq!(out.relations[0].label, "Novice-elder bond");
+    }
+
+    // ── Transition trigger matching ─────────────────────────
+
+    fn single_entity(idx: usize, name: &str) -> super::super::atoms::Entity {
+        use super::super::atoms::{AtomId, ChunkRef};
+        use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+        super::super::atoms::Entity {
+            id: AtomId::entity(idx),
+            canonical_name: name.into(),
+            aliases: Vec::new(),
+            entity_type: EntityType::Person,
+            first_appearance: ChunkRef::new("sec_0001", None),
+            description: "x".into(),
+            salience: 1.0,
+            enrichment_depth: EnrichmentDepth::Extracted,
+        }
+    }
+
+    fn entity_event(
+        idx: usize,
+        section_id: &str,
+        participants: Vec<super::super::atoms::AtomId>,
+    ) -> super::super::atoms::Event {
+        use super::super::atoms::{AtomId, SectionPosition};
+        use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EventType};
+        super::super::atoms::Event {
+            id: AtomId::event(idx),
+            description: format!("event {idx}"),
+            event_type: EventType::Other("x".into()),
+            participants,
+            evidence: Vec::new(),
+            section_position: SectionPosition::section(section_id),
+            causal_antecedents: Vec::new(),
+            enrichment_depth: EnrichmentDepth::Extracted,
+        }
+    }
+
+    #[test]
+    fn transition_trigger_attaches_unique_event_in_window_with_owner_participant() {
+        // Alyosha's state moves from sec_0001 ("at the monastery") to
+        // sec_0003 ("leaving"). A single event in sec_0002 has
+        // Alyosha as participant — that's the unambiguous trigger.
+        use crate::enrichment::pipeline::atlas::{
+            EnrichmentDepth, EntityStateSketch,
+        };
+
+        let entities = vec![single_entity(1, "Alyosha")];
+        let events = vec![entity_event(
+            1,
+            "sec_0002",
+            vec![super::super::atoms::AtomId::entity(1)],
+        )];
+        let sections = vec![
+            SectionExtraction {
+                section_id: "sec_0001".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                entities_developed: vec![EntityStateSketch {
+                    entity_name: "Alyosha".into(),
+                    label: "At the monastery".into(),
+                    anchor: String::new(),
+                }],
+                ..Default::default()
+            },
+            SectionExtraction {
+                section_id: "sec_0002".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                ..Default::default()
+            },
+            SectionExtraction {
+                section_id: "sec_0003".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                entities_developed: vec![EntityStateSketch {
+                    entity_name: "Alyosha".into(),
+                    label: "Leaving".into(),
+                    anchor: String::new(),
+                }],
+                ..Default::default()
+            },
+        ];
+        let out = resolve_step_3b(&sections, &entities, &events).unwrap();
+        let transitions: Vec<_> = out
+            .edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Transition)
+            .collect();
+        assert_eq!(transitions.len(), 1);
+        assert_eq!(
+            transitions[0].trigger_event.as_ref().map(|id| id.as_str()),
+            Some("event-0001")
+        );
+        // Trajectory should mirror the edge's trigger.
+        let traj = out
+            .trajectories
+            .get(super::super::atoms::AtomId::entity(1).as_str())
+            .unwrap();
+        assert_eq!(traj.transitions[0].trigger_event.as_deref(), Some("event-0001"));
+    }
+
+    #[test]
+    fn transition_trigger_stays_none_on_ambiguous_match() {
+        // Two events in the window, both with Alyosha as participant
+        // → we can't prove which is the trigger, so leave None rather
+        // than pick one arbitrarily.
+        use crate::enrichment::pipeline::atlas::{
+            EnrichmentDepth, EntityStateSketch,
+        };
+
+        let entities = vec![single_entity(1, "Alyosha")];
+        let events = vec![
+            entity_event(1, "sec_0002", vec![super::super::atoms::AtomId::entity(1)]),
+            entity_event(2, "sec_0002", vec![super::super::atoms::AtomId::entity(1)]),
+        ];
+        let sections = vec![
+            SectionExtraction {
+                section_id: "sec_0001".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                entities_developed: vec![EntityStateSketch {
+                    entity_name: "Alyosha".into(),
+                    label: "Before".into(),
+                    anchor: String::new(),
+                }],
+                ..Default::default()
+            },
+            SectionExtraction {
+                section_id: "sec_0002".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                ..Default::default()
+            },
+            SectionExtraction {
+                section_id: "sec_0003".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                entities_developed: vec![EntityStateSketch {
+                    entity_name: "Alyosha".into(),
+                    label: "After".into(),
+                    anchor: String::new(),
+                }],
+                ..Default::default()
+            },
+        ];
+        let out = resolve_step_3b(&sections, &entities, &events).unwrap();
+        let transitions: Vec<_> = out
+            .edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Transition)
+            .collect();
+        assert_eq!(transitions.len(), 1);
+        assert!(transitions[0].trigger_event.is_none());
+    }
+
+    #[test]
+    fn resolver_surfaces_structured_failures_for_silent_drops() {
+        // Dirty input exercises every Phase-3b silent-drop path:
+        // (1) entity-state sketch names an unknown entity,
+        // (2) relation-introduced sketch has only one resolvable
+        //     participant,
+        // (3) relation-developed sketch has zero resolvable
+        //     participants,
+        // (4) claim attributed_to names an unknown entity.
+        //
+        // Before Landing 3.A all four went to `debug!` and were
+        // lost. Now they land in `Step3bOutput.failures` as typed
+        // records the `enrich errors` aggregator can group.
+        use crate::enrichment::pipeline::atlas::{
+            ClaimSketch, DiscourseAct, EnrichmentDepth, EntityStateSketch, EpistemicStatus,
+            RelationSketch, RelationStateSketch,
+        };
+        use crate::enrichment::pipeline::types::PhaseFailureKind;
+
+        let entities = vec![single_entity(1, "Alyosha")];
+        let sections = vec![SectionExtraction {
+            section_id: "sec_0001".into(),
+            enrichment_depth: EnrichmentDepth::Extracted,
+            entities_developed: vec![EntityStateSketch {
+                entity_name: "Mystery Person".into(), // (1) unknown
+                label: "distressed".into(),
+                anchor: String::new(),
+            }],
+            relations_introduced: vec![RelationSketch {
+                participants: vec!["Alyosha".into(), "Unknown Person".into()], // (2) one unresolved
+                label: "doomed partnership".into(),
+                anchor: String::new(),
+            }],
+            relations_developed: vec![RelationStateSketch {
+                participants: vec!["Ghost A".into(), "Ghost B".into()], // (3) both unresolved
+                label: "phantom bond".into(),
+                anchor: String::new(),
+            }],
+            claims: vec![ClaimSketch {
+                content: "Faith is hard-won.".into(),
+                discourse_act: DiscourseAct::Assert,
+                epistemic_status: EpistemicStatus::Confident,
+                attributed_to: Some("Someone Else".into()), // (4) unknown attribution
+                anchor: String::new(),
+            }],
+            ..Default::default()
+        }];
+
+        let out = resolve_step_3b(&sections, &entities, &[]).unwrap();
+
+        let kinds: Vec<PhaseFailureKind> =
+            out.failures.iter().map(|f| f.kind).collect();
+        assert!(
+            kinds.contains(&PhaseFailureKind::UnresolvedEntityName),
+            "expected UnresolvedEntityName from case (1), got kinds: {:?}",
+            kinds
+        );
+        assert!(
+            kinds.contains(&PhaseFailureKind::UnresolvedRelationParticipant),
+            "expected UnresolvedRelationParticipant from case (2)/(3), got kinds: {:?}",
+            kinds
+        );
+        assert!(
+            kinds.contains(&PhaseFailureKind::UnresolvedClaimAttribution),
+            "expected UnresolvedClaimAttribution from case (4), got kinds: {:?}",
+            kinds
+        );
+        // The relation-developed case should contribute two
+        // UnresolvedRelationParticipant records (one per unresolved
+        // participant name) — this is what lets the aggregator count
+        // drops at name-granularity rather than sketch-granularity.
+        let relation_drops: Vec<_> = out
+            .failures
+            .iter()
+            .filter(|f| f.kind == PhaseFailureKind::UnresolvedRelationParticipant)
+            .collect();
+        assert!(
+            relation_drops.len() >= 3,
+            "expected ≥ 3 relation-participant drops (1 from sketch (2), 2 from sketch (3)), got {}",
+            relation_drops.len()
+        );
+        // Subjects carry the sketch-scoped prefix so the aggregator
+        // can trace a group back to its exact origin.
+        assert!(out.failures.iter().any(|f| {
+            f.subject.starts_with("sketch:entity_state:sec_0001#")
+        }));
+        assert!(out.failures.iter().any(|f| {
+            f.subject.starts_with("sketch:relation_introduced:sec_0001#")
+        }));
+        assert!(out.failures.iter().any(|f| {
+            f.subject.starts_with("sketch:relation_developed:sec_0001#")
+        }));
+        assert!(out.failures.iter().any(|f| {
+            f.subject.starts_with("sketch:claim:sec_0001#")
+        }));
+        // Claim content is still emitted — only attribution is lost.
+        assert_eq!(out.claims.len(), 1);
+        assert_eq!(out.claims[0].attributed_to, None);
+    }
+
+    #[test]
+    fn resolver_emits_none_confidence_on_derived_states_and_claims() {
+        // Glassbox invariant behind the confidence-histogram fix:
+        // the deterministic Phase 3b resolver must never stamp a
+        // fake `Some(1.0)` on atoms it derives. Phase 5 (atom
+        // interpretation) will replace `None` with a real score.
+        // Until then, honest `None` keeps the schema-validation
+        // histogram reflecting only LLM-reported confidence.
+        use crate::enrichment::pipeline::atlas::{
+            ClaimSketch, DiscourseAct, EnrichmentDepth, EntityStateSketch, EpistemicStatus,
+        };
+
+        let entities = vec![single_entity(1, "Alyosha")];
+        let sections = vec![SectionExtraction {
+            section_id: "sec_0001".into(),
+            enrichment_depth: EnrichmentDepth::Extracted,
+            entities_developed: vec![EntityStateSketch {
+                entity_name: "Alyosha".into(),
+                label: "resolute".into(),
+                anchor: String::new(),
+            }],
+            claims: vec![ClaimSketch {
+                content: "Active love is harder than dreamt love.".into(),
+                discourse_act: DiscourseAct::Argue,
+                epistemic_status: EpistemicStatus::Confident,
+                attributed_to: Some("Alyosha".into()),
+                anchor: String::new(),
+            }],
+            ..Default::default()
+        }];
+        let out = resolve_step_3b(&sections, &entities, &[]).unwrap();
+        assert_eq!(out.states.len(), 1);
+        assert!(
+            out.states[0].confidence.is_none(),
+            "derived state must not stamp a fake LLM confidence"
+        );
+        assert_eq!(out.claims.len(), 1);
+        assert!(
+            out.claims[0].confidence.is_none(),
+            "derived claim must not stamp a fake LLM confidence"
+        );
+    }
+
+    #[test]
+    fn transition_trigger_stays_none_when_no_event_in_window_names_owner() {
+        // The only event in the window is about a different entity
+        // (Ivan), not Alyosha. The owner-participant filter drops it,
+        // so there's no match → None.
+        use crate::enrichment::pipeline::atlas::{
+            EnrichmentDepth, EntityStateSketch,
+        };
+
+        let entities = vec![
+            single_entity(1, "Alyosha"),
+            single_entity(2, "Ivan"),
+        ];
+        let events = vec![entity_event(
+            1,
+            "sec_0002",
+            vec![super::super::atoms::AtomId::entity(2)],
+        )];
+        let sections = vec![
+            SectionExtraction {
+                section_id: "sec_0001".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                entities_developed: vec![EntityStateSketch {
+                    entity_name: "Alyosha".into(),
+                    label: "Before".into(),
+                    anchor: String::new(),
+                }],
+                ..Default::default()
+            },
+            SectionExtraction {
+                section_id: "sec_0002".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                ..Default::default()
+            },
+            SectionExtraction {
+                section_id: "sec_0003".into(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+                entities_developed: vec![EntityStateSketch {
+                    entity_name: "Alyosha".into(),
+                    label: "After".into(),
+                    anchor: String::new(),
+                }],
+                ..Default::default()
+            },
+        ];
+        let out = resolve_step_3b(&sections, &entities, &events).unwrap();
+        let alyosha_transitions: Vec<_> = out
+            .edges
+            .iter()
+            .filter(|e| {
+                e.edge_type == EdgeType::Transition
+                    && e.source.as_str().starts_with("state-")
+            })
+            .collect();
+        assert_eq!(alyosha_transitions.len(), 1);
+        assert!(alyosha_transitions[0].trigger_event.is_none());
     }
 }

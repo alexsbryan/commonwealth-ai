@@ -39,15 +39,24 @@ vector = true
 # embedding_model and embedding_dimensions are auto-detected from the
 # loaded model at ingest time. Only specify these if you need to override.
 
-# Field model enrichment: clusters chunk embeddings via HDBSCAN, extracts a
-# field skeleton from overview passages, aligns clusters to named positions,
-# detects fault lines and open questions. Powers the epistemic-research skill.
+# ── Atlas enrichment (v2, per-article) ───────────────────────────────
+#
+# See sovereign-recipes/sep/recipe.toml for the full narrative. The
+# short version: each SEP article becomes its own enrichment corpus
+# (`sep-<slug>`) scaffolded by `sovereign enrich sep-ingest <slug>`,
+# then enriched by `sovereign enrich build sep-<slug>` via the
+# `philosophy_atlas` pipeline.
 [enrichment]
 enabled = true
-type = "field_model"
+type = "atlas"
+pipeline = "philosophy_atlas"
 domain = "philosophy"
-prompt_version = "1.0.0"
+prompt_version = "2.1.0"
+paragraphs_per_section = 5
 
+# HDBSCAN / alignment / fault-line params retained for the legacy
+# full-corpus field-model flow. Atlas (per-article) + field-model
+# (full-corpus) coexist on the same source parquet.
 [enrichment.clustering]
 min_cluster_size = 50
 epsilon = 0.10

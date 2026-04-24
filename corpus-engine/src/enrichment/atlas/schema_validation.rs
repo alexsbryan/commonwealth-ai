@@ -199,15 +199,42 @@ pub struct OrphanAnalysis {
     pub orphan_atoms: usize,
     pub total_atoms: usize,
     pub orphan_fraction: f32,
+    /// Per-type breakdown of orphans and totals. Lets the reader see
+    /// whether a headline orphan fraction is dominated by atom types
+    /// where orphan-ness is expected (Question — until addressed_by
+    /// fills, many sit with no inbound edges) vs. atom types where
+    /// it's a red flag (Entity — should be pulled in by Involves;
+    /// Claim — should be pulled in by Grounds). The resolver's job is
+    /// to minimise orphans on the red-flag types, not the expected
+    /// ones, so a single aggregate number hid that distinction.
+    pub by_type: Vec<OrphanByType>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrphanByType {
+    pub atom_type: String,
+    pub orphan_count: usize,
+    pub total_count: usize,
+    pub orphan_fraction: f32,
 }
 
 impl OrphanAnalysis {
     fn gap_signatures(&self) -> Vec<String> {
+        let mut out = Vec::new();
         if self.orphan_fraction >= 0.30 {
-            vec!["orphans:fraction_over_30pct".to_string()]
-        } else {
-            Vec::new()
+            out.push("orphans:fraction_over_30pct".to_string());
         }
+        // Per-type dominance signals: an atom type where ≥ 80% of
+        // instances are orphaned points at a specific resolver gap.
+        // Emit one signature per offending type so cross-corpus
+        // comparison can tell a Claim-grounding regression from an
+        // Entity-wiring regression.
+        for b in &self.by_type {
+            if b.total_count >= 10 && b.orphan_fraction >= 0.80 {
+                out.push(format!("orphans:type_over_80pct:{}", b.atom_type));
+            }
+        }
+        out
     }
 }
 
@@ -565,13 +592,22 @@ fn build_confidence_distribution(
         buckets[bucket_of(e.salience)] += 1;
         total += 1;
     }
+    // States and Claims carry `Option<f32>` since the deterministic
+    // Phase 3b resolver emits atoms without an LLM-reported score
+    // (see `State.confidence` docs). We count only `Some` values so
+    // the histogram reflects LLM calibration and isn't inflated by
+    // derived atoms.
     for s in states {
-        buckets[bucket_of(s.confidence)] += 1;
-        total += 1;
+        if let Some(c) = s.confidence {
+            buckets[bucket_of(c)] += 1;
+            total += 1;
+        }
     }
     for c in claims {
-        buckets[bucket_of(c.confidence)] += 1;
-        total += 1;
+        if let Some(v) = c.confidence {
+            buckets[bucket_of(v)] += 1;
+            total += 1;
+        }
     }
     let low: usize = buckets[..5].iter().sum();
     let low_fraction = if total == 0 {
@@ -618,24 +654,38 @@ fn build_orphan_analysis(atoms: &[AtomEnvelope], edges: &[Edge]) -> OrphanAnalys
         referenced.insert(e.source.as_str());
         referenced.insert(e.target.as_str());
     }
+    // Per-type tallies in spec §2 atom order. We track a fixed
+    // array (not a HashMap) so atom types appear in a stable order
+    // in the output — operators reading the JSON or console table
+    // shouldn't have to re-sort to find Claim vs. Entity.
+    let mut by_type: [(&'static str, usize, usize); 6] = [
+        ("Entity", 0, 0),
+        ("Event", 0, 0),
+        ("State", 0, 0),
+        ("Relation", 0, 0),
+        ("Claim", 0, 0),
+        ("Question", 0, 0),
+    ];
     let mut orphan_atoms = 0usize;
     let mut total_atoms = 0usize;
     for a in atoms {
-        let (id, skip) = match a {
-            AtomEnvelope::Entity(e) => (e.id.as_str(), false),
-            AtomEnvelope::Event(e) => (e.id.as_str(), false),
-            AtomEnvelope::State(s) => (s.id.as_str(), false),
-            AtomEnvelope::Relation(r) => (r.id.as_str(), false),
-            AtomEnvelope::Claim(c) => (c.id.as_str(), false),
-            AtomEnvelope::Question(q) => (q.id.as_str(), false),
-            AtomEnvelope::Configuration(_) => ("", true),
+        let (id, bucket_idx) = match a {
+            AtomEnvelope::Entity(e) => (e.id.as_str(), Some(0)),
+            AtomEnvelope::Event(e) => (e.id.as_str(), Some(1)),
+            AtomEnvelope::State(s) => (s.id.as_str(), Some(2)),
+            AtomEnvelope::Relation(r) => (r.id.as_str(), Some(3)),
+            AtomEnvelope::Claim(c) => (c.id.as_str(), Some(4)),
+            AtomEnvelope::Question(q) => (q.id.as_str(), Some(5)),
+            AtomEnvelope::Configuration(_) => ("", None),
         };
-        if skip {
+        let Some(idx) = bucket_idx else {
             continue;
-        }
+        };
         total_atoms += 1;
+        by_type[idx].2 += 1;
         if !referenced.contains(id) {
             orphan_atoms += 1;
+            by_type[idx].1 += 1;
         }
     }
     let orphan_fraction = if total_atoms == 0 {
@@ -643,10 +693,24 @@ fn build_orphan_analysis(atoms: &[AtomEnvelope], edges: &[Edge]) -> OrphanAnalys
     } else {
         orphan_atoms as f32 / total_atoms as f32
     };
+    let by_type_out: Vec<OrphanByType> = by_type
+        .iter()
+        .map(|(t, orph, tot)| OrphanByType {
+            atom_type: (*t).to_string(),
+            orphan_count: *orph,
+            total_count: *tot,
+            orphan_fraction: if *tot == 0 {
+                0.0
+            } else {
+                *orph as f32 / *tot as f32
+            },
+        })
+        .collect();
     OrphanAnalysis {
         orphan_atoms,
         total_atoms,
         orphan_fraction,
+        by_type: by_type_out,
     }
 }
 
@@ -838,6 +902,16 @@ fn recommendation_for(signature: &str) -> String {
         "orphans:fraction_over_30pct" => {
             Some("many atoms have no edges — Phase 3b linking rules or schema expectations around connectivity may need loosening")
         }
+        s if s.starts_with("orphans:type_over_80pct:") => {
+            let atom_type = &s["orphans:type_over_80pct:".len()..];
+            Some(match atom_type {
+                "Claim" => "most claims have no Grounds edge — Phase 3b claim-grounding detector is under-wiring or the prompt rarely emits grounding evidence",
+                "Entity" => "most entities have no Involves / Grounding edges — event extraction is missing participant wiring or entity resolution is dropping matches",
+                "Question" => "most questions have no Raises / Addresses edges — Phase 3b hasn't linked questions to the claims that address them",
+                "Event" | "State" | "Relation" => "this atom type is systematically unreferenced — resolver or schema needs review",
+                _ => "orphan rate is systematically high for this atom type",
+            })
+        }
         s if s.starts_with("discourse:dominance:") => {
             Some("prompt isn't exercising the full discourse vocabulary; consider dropping rare acts from the schema or adding more exemplars")
         }
@@ -892,7 +966,7 @@ mod tests {
             scope: ClaimScope::Universal,
             evidence: vec![],
             attributed_to: None,
-            confidence,
+            confidence: Some(confidence),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
     }
@@ -905,7 +979,7 @@ mod tests {
             state_type: StateType::Other("x".into()),
             evidence: vec![],
             section_range: SectionRange::point("sec_0001"),
-            confidence,
+            confidence: Some(confidence),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
     }
@@ -1117,6 +1191,127 @@ mod tests {
         let analysis = build_orphan_analysis(&atoms, &edges);
         assert_eq!(analysis.total_atoms, 2);
         assert_eq!(analysis.orphan_atoms, 1);
+    }
+
+    #[test]
+    fn orphan_analysis_breaks_down_by_atom_type() {
+        // 2 entities (both referenced via Involves), 1 event (orphan),
+        // 2 claims (1 grounded, 1 orphan). Per-type breakdown should
+        // show Entity 0/2, Event 1/1, Claim 1/2, and fractions
+        // computed accordingly — this is the signal that lets an
+        // operator tell "Question orphans expected" from "Claim
+        // orphans = grounding regression".
+        let atoms = vec![
+            AtomEnvelope::Entity(entity(1, "A", 1.0)),
+            AtomEnvelope::Entity(entity(2, "B", 1.0)),
+            AtomEnvelope::Event(event(1)),
+            AtomEnvelope::Claim(claim_with_act(1, DiscourseAct::Assert, 0.9)),
+            AtomEnvelope::Claim(claim_with_act(2, DiscourseAct::Assert, 0.9)),
+        ];
+        let edges = vec![
+            Edge {
+                id: EdgeId::from_raw("involves-1"),
+                edge_type: EdgeType::Involves,
+                source: AtomId::event(42),
+                target: AtomId::entity(1),
+                evidence: vec![],
+                trigger_event: None,
+                sub_question: None,
+                confidence: 1.0,
+                provenance: EdgeProvenance::Derived,
+            },
+            Edge {
+                id: EdgeId::from_raw("involves-2"),
+                edge_type: EdgeType::Involves,
+                source: AtomId::event(43),
+                target: AtomId::entity(2),
+                evidence: vec![],
+                trigger_event: None,
+                sub_question: None,
+                confidence: 1.0,
+                provenance: EdgeProvenance::Derived,
+            },
+            grounds_edge(99, 1),
+        ];
+        let analysis = build_orphan_analysis(&atoms, &edges);
+        let by = |t: &str| {
+            analysis
+                .by_type
+                .iter()
+                .find(|b| b.atom_type == t)
+                .expect("type in breakdown")
+        };
+        assert_eq!(by("Entity").total_count, 2);
+        assert_eq!(by("Entity").orphan_count, 0);
+        assert_eq!(by("Event").total_count, 1);
+        assert_eq!(by("Event").orphan_count, 1);
+        assert_eq!(by("Claim").total_count, 2);
+        assert_eq!(by("Claim").orphan_count, 1);
+        // Types with zero atoms still appear in stable order but are
+        // filtered by the CLI printer, not by this builder.
+        assert_eq!(by("Question").total_count, 0);
+        assert_eq!(analysis.by_type.len(), 6);
+    }
+
+    #[test]
+    fn orphan_analysis_flags_per_type_signature_over_80pct() {
+        // 10 claims, 9 orphan → 90% orphan rate on Claim, above the
+        // 80% per-type threshold. Emits
+        // `orphans:type_over_80pct:Claim`. The single grounded claim
+        // via grounds_edge(1, 10) keeps the edge count nonzero.
+        let mut atoms = Vec::new();
+        for i in 1..=10 {
+            atoms.push(AtomEnvelope::Claim(claim_with_act(
+                i,
+                DiscourseAct::Assert,
+                0.9,
+            )));
+        }
+        let edges = vec![grounds_edge(99, 10)];
+        let report = build_report(SchemaValidationInput {
+            corpus_id: "test",
+            atoms: &atoms_file(atoms),
+            edges: &edges_file(edges),
+            cross_corpus: None,
+            open_questions: 0,
+            ungrounded_claims: 9,
+            transitions_without_trigger: 0,
+        });
+        assert!(
+            report
+                .orphans
+                .gap_signatures()
+                .contains(&"orphans:type_over_80pct:Claim".to_string()),
+            "expected Claim per-type orphan signature, got: {:?}",
+            report.orphans.gap_signatures()
+        );
+    }
+
+    #[test]
+    fn orphan_per_type_signature_ignores_low_volume_buckets() {
+        // 2 events, both orphan → 100% but total_count < 10. We
+        // should NOT fire the per-type signature on a tiny population
+        // (one odd corpus shouldn't trigger a schema-review
+        // recommendation on a type that barely appears).
+        let atoms = vec![AtomEnvelope::Event(event(1)), AtomEnvelope::Event(event(2))];
+        let report = build_report(SchemaValidationInput {
+            corpus_id: "test",
+            atoms: &atoms_file(atoms),
+            edges: &edges_file(vec![]),
+            cross_corpus: None,
+            open_questions: 0,
+            ungrounded_claims: 0,
+            transitions_without_trigger: 0,
+        });
+        assert!(
+            !report
+                .orphans
+                .gap_signatures()
+                .iter()
+                .any(|s| s.starts_with("orphans:type_over_80pct:")),
+            "should not fire on tiny populations, got: {:?}",
+            report.orphans.gap_signatures()
+        );
     }
 
     #[test]

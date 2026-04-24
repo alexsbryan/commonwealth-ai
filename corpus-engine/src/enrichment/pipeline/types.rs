@@ -313,33 +313,194 @@ pub struct Phase1ChapterResult {
     pub section_extraction: Option<SectionExtraction>,
 }
 
-/// Structured classification of a Phase 1 failure. Used alongside
-/// the free-text `reason` so the CLI can route each chapter to the
-/// right recovery path without sniffing the reason string:
+/// Structured classification of a phase failure. Widened from the
+/// original Phase-1-only enum to cover every phase's failure modes —
+/// the `sovereign enrich errors` aggregator groups by this kind
+/// across phases so an operator sees one bucket per root cause
+/// instead of one row per incident. A failure that doesn't fit here
+/// yet uses `Other` and is flagged in the aggregator as
+/// "unclassified", which is itself a signal that a new kind is
+/// warranted.
 ///
-/// - `ThinkTruncated` → retry with the terse prompt variant (if the
-///   pipeline has one) and/or a larger `max_output_tokens` budget.
-/// - `ParseDrift` → the JSON was malformed in a way the tolerant
-///   parser couldn't recover; a plain retry may succeed.
-/// - `ChatError` → transport-level failure; a plain retry is
-///   appropriate.
-/// - `EmptyExtraction` → the model returned a well-formed envelope
-///   with zero atoms; usually a schema-echo case, needs prompt fix.
-/// - `Skipped` → the runner declined to dispatch (body too short,
-///   heading-only section).
-/// - `Other` → anything the classifier can't bucket yet.
+/// Grouped by origin:
 ///
-/// Kept as a small closed enum so `sovereign enrich status` can
-/// tally by kind without re-parsing run files.
+/// **LLM-driven extraction (Phase 1, 3-naming, 6, 8)** — share a
+/// common failure vocabulary because the same underlying model
+/// pattern (reasoning → JSON) fails in the same ways across phases:
+/// - `ThinkTruncated` → retry with the terse prompt variant and/or a
+///   larger `max_output_tokens` budget.
+/// - `ParseDrift` → JSON was malformed; a plain retry often recovers.
+/// - `ChatError` → transport-level failure; retry.
+/// - `EmptyExtraction` → well-formed envelope, zero atoms; prompt
+///   needs attention.
+/// - `Skipped` → runner declined to dispatch (e.g. body too short).
+///
+/// **Deterministic resolution (Phase 3a/3b)** — named drops that
+/// were silent before Landing 3.A and are now surfaced so the
+/// operator can see how much evidence the resolver is losing:
+/// - `UnresolvedEntityName` — a sketch references a name that the
+///   fuzzy resolver couldn't snap to any Entity atom. The sketch is
+///   dropped; Phase 1's entity-extraction pass likely missed the
+///   name or the seed list diverged.
+/// - `EntityMergeAmbiguous` — the fuzzy resolver found ≥ 2
+///   candidates and refused to guess. Remediate by tightening the
+///   seed list or by promoting this to LLM-driven disambiguation.
+/// - `UnresolvedRelationParticipant` — a Relation sketch's
+///   participant string didn't resolve to an Entity atom. The
+///   participant drops out of the relation's participant_ids list.
+/// - `UnresolvedClaimAttribution` — a Claim sketch's `attributed_to`
+///   string didn't match any Entity atom; claim keeps content but
+///   loses attribution.
+///
+/// **Clustering / naming (Phase 2, Phase 3)** — structural signals:
+/// - `NoClusterableItems` — a facet had 0 sketches to cluster.
+///   Silent before; now named so the operator sees which facet the
+///   corpus isn't exercising.
+/// - `ClusterNamingFailed` — per-cluster LLM naming call returned
+///   but couldn't be parsed. Cluster keeps its id but loses its
+///   human-readable label.
+///
+/// `Other` is the escape hatch; if a kind appears in the aggregator
+/// frequently enough, promote it to its own variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PhaseFailureKind {
+    // LLM-driven extraction failures
     ThinkTruncated,
     ParseDrift,
     ChatError,
     EmptyExtraction,
     Skipped,
+
+    // Phase 3a/3b resolution drops (previously silent)
+    UnresolvedEntityName,
+    EntityMergeAmbiguous,
+    UnresolvedRelationParticipant,
+    UnresolvedClaimAttribution,
+
+    // Clustering / naming
+    NoClusterableItems,
+    ClusterNamingFailed,
+
     Other,
+}
+
+impl PhaseFailureKind {
+    /// One-line remediation hint the aggregator prints next to a
+    /// group of failures. Concrete and actionable: either names the
+    /// exact retry command, points at a prompt/schema fix, or
+    /// explains why the drop is structurally correct (so the
+    /// operator doesn't chase it).
+    ///
+    /// Keep the text imperative and under ~140 chars — the CLI
+    /// prints it indented after the group header, and the desktop
+    /// error panel shows it inline with the failure count.
+    pub const fn remediation_hint(&self) -> &'static str {
+        match self {
+            Self::ThinkTruncated => {
+                "Retry with `sovereign enrich extract <corpus> --retry-failed --terse` — the terse variant doubles max_output_tokens."
+            }
+            Self::ParseDrift => {
+                "Retry with `sovereign enrich extract <corpus> --retry-failed` — a plain retry recovers most parse-drift cases (temperature noise)."
+            }
+            Self::ChatError => {
+                "Transport-level error. Verify the daemon at localhost:9741 is up (`sovereign doctor`), then retry with `--retry-failed`."
+            }
+            Self::EmptyExtraction => {
+                "Model returned an envelope with no atoms. Inspect the prompt and exemplars for the failing phase; a schema-echo suggests the few-shot examples look like the target shape."
+            }
+            Self::Skipped => {
+                "Section was too short or heading-only. Not a bug — either merge the section into its neighbor in the manifest or leave as-is."
+            }
+            Self::UnresolvedEntityName => {
+                "Fuzzy resolver couldn't match the name to any Entity atom. Either add the name to seed list (`enrich seed <corpus> --force`) or accept the drop if the reference is truly fleeting."
+            }
+            Self::EntityMergeAmbiguous => {
+                "Fuzzy resolver found ≥ 2 candidates and refused to guess. Tighten the seed list so the canonical name is unambiguous, or tune transliterate_cyrillic + Levenshtein thresholds."
+            }
+            Self::UnresolvedRelationParticipant => {
+                "Relation participant string didn't match any Entity. Usually a Phase 1 entity-extraction miss — check whether the entity was introduced anywhere in the corpus."
+            }
+            Self::UnresolvedClaimAttribution => {
+                "Claim `attributed_to` didn't match any Entity. The claim keeps its content; only attribution is lost. Same fix path as UnresolvedEntityName."
+            }
+            Self::NoClusterableItems => {
+                "Facet had 0 sketches. Structural — not a bug. If unexpected, check whether the corpus genuinely exercises this facet (e.g. philosophical essays vs. narrative fiction)."
+            }
+            Self::ClusterNamingFailed => {
+                "Per-cluster LLM naming parse failure. Re-run `sovereign enrich name-atlas-clusters <corpus>` — naming is idempotent and cluster ids are stable."
+            }
+            Self::Other => {
+                "Unclassified failure. Check the `reason` + `raw_response_head` fields in the run file and consider promoting this to a named PhaseFailureKind variant."
+            }
+        }
+    }
+}
+
+/// Subject of a failure — what was being worked on when things went
+/// wrong. Free-form string with a prefix convention so CLI filters
+/// and aggregators can group sensibly across phases:
+///
+/// | Prefix | Example | Produced by |
+/// |---|---|---|
+/// | `chapter:` | `chapter:sec_0017` | Phase 1 |
+/// | `cluster:` | `cluster:claim:cluster-04` | Phase 2/3 |
+/// | `sketch:` | `sketch:entity_state:sec_0003#7` | Resolution drops |
+/// | `atom:` | `atom:claim-0042` | Phase 6/8 |
+/// | `pair:` | `pair:claim-0017:state-0021` | Phase 6 tensions |
+/// | `facet:` | `facet:entity_state` | Phase 2 clustering |
+/// | `corpus:` | `corpus:dopesick_jesus` | Corpus-wide |
+///
+/// A string (not an enum) because new subject kinds show up
+/// naturally as phases are added; the prefix convention keeps the
+/// aggregator's grouping stable without schema churn.
+pub type FailureSubject = String;
+
+/// Universal phase-failure record. Every phase output carries a
+/// `Vec<PhaseFailure>` (even when empty), and the
+/// `sovereign enrich errors` aggregator walks every phase's cache to
+/// group these by `(phase, kind)` and print remediation.
+///
+/// The shape is deliberately close to the legacy `Phase1Failure` so
+/// the classifier that produces Phase 1 failures can migrate with a
+/// one-line shim. The critical addition is the `phase` field: it's
+/// what lets the aggregator tell a cluster-naming ParseDrift from a
+/// Phase-1 ParseDrift without file-path inference.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhaseFailure {
+    /// Which phase emitted this failure. Enables cross-phase
+    /// aggregation without reparsing the enclosing file path.
+    pub phase: PipelinePhase,
+    /// What the phase was working on — see `FailureSubject` for
+    /// the prefix convention.
+    pub subject: FailureSubject,
+    pub kind: PhaseFailureKind,
+    pub reason: String,
+    /// First ~1 KiB of the raw model response when the failure was
+    /// LLM-driven. `None` for deterministic failures (clustering,
+    /// resolution drops) — those capture their evidence in `reason`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_response_head: Option<String>,
+}
+
+impl PhaseFailure {
+    /// Helper for Phase 1 compat — builds a failure with the
+    /// `chapter:` subject prefix from a bare chapter id.
+    pub fn for_chapter(
+        phase: PipelinePhase,
+        chapter_id: impl Into<String>,
+        kind: PhaseFailureKind,
+        reason: impl Into<String>,
+        raw_response_head: Option<String>,
+    ) -> Self {
+        Self {
+            phase,
+            subject: format!("chapter:{}", chapter_id.into()),
+            kind,
+            reason: reason.into(),
+            raw_response_head,
+        }
+    }
 }
 
 /// Chapter-level failure record. Carried through `Phase1RunResult` for
@@ -347,6 +508,11 @@ pub enum PhaseFailureKind {
 /// run file preserves a truncated head of whatever the model actually
 /// said. Without this the only signal on a parse failure is the
 /// exception text, which makes prompt debugging a guessing game.
+///
+/// Kept as the Phase-1-specific shape for backward compatibility with
+/// cached `questions-*.json` files that predate the unified
+/// `PhaseFailure` type. The `sovereign enrich errors` aggregator
+/// adapts these into `PhaseFailure` via `to_phase_failure()`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Phase1Failure {
     pub chapter_id: String,
@@ -364,6 +530,21 @@ pub struct Phase1Failure {
     /// without string-sniffing the `reason` field.
     #[serde(default = "phase_failure_kind_other")]
     pub failure_kind: PhaseFailureKind,
+}
+
+impl Phase1Failure {
+    /// Adapt a legacy Phase-1 failure record into the unified
+    /// `PhaseFailure` shape. Used by the aggregator to normalize
+    /// cached files without re-writing them.
+    pub fn to_phase_failure(&self) -> PhaseFailure {
+        PhaseFailure::for_chapter(
+            PipelinePhase::Questions,
+            self.chapter_id.clone(),
+            self.failure_kind,
+            self.reason.clone(),
+            self.raw_response_head.clone(),
+        )
+    }
 }
 
 fn phase_failure_kind_other() -> PhaseFailureKind {
@@ -576,6 +757,13 @@ pub struct Phase2Output {
     pub pipeline_id: String,
     pub clusters: Vec<QuestionCluster>,
     pub unclustered: Vec<QuestionRef>,
+    /// Structured failures surfaced by this phase. Empty for the
+    /// common case. `#[serde(default)]` means cached files written
+    /// before Landing 3.A deserialise cleanly — old runs simply
+    /// expose no failures, which is indistinguishable from "ran
+    /// clean" in the aggregator.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<PhaseFailure>,
     pub written_at: String,
 }
 
@@ -602,6 +790,8 @@ pub struct Phase3Output {
     pub schema_version: u32,
     pub pipeline_id: String,
     pub concerns: Vec<CanonicalConcern>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<PhaseFailure>,
     pub written_at: String,
 }
 
@@ -706,6 +896,8 @@ pub struct Phase2AtlasOutput {
     pub pipeline_id: String,
     pub clusters: Vec<AtlasCluster>,
     pub unclustered: Vec<SketchRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<PhaseFailure>,
     pub written_at: String,
 }
 
@@ -740,6 +932,8 @@ pub struct Phase3AtlasOutput {
     pub schema_version: u32,
     pub pipeline_id: String,
     pub named_clusters: Vec<NamedCluster>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<PhaseFailure>,
     pub written_at: String,
 }
 
@@ -816,6 +1010,8 @@ pub struct Phase4Output {
     pub schema_version: u32,
     pub pipeline_id: String,
     pub clusters: Vec<ChunkCluster>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<PhaseFailure>,
     pub written_at: String,
 }
 
@@ -849,6 +1045,8 @@ pub struct Phase5Output {
     pub schema_version: u32,
     pub pipeline_id: String,
     pub positions: Vec<Position>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<PhaseFailure>,
     pub written_at: String,
 }
 
@@ -877,6 +1075,8 @@ pub struct Phase6Output {
     pub schema_version: u32,
     pub pipeline_id: String,
     pub tensions: Vec<Tension>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<PhaseFailure>,
     pub written_at: String,
 }
 
@@ -900,6 +1100,8 @@ pub struct Phase7Output {
     pub schema_version: u32,
     pub pipeline_id: String,
     pub gaps: Vec<Gap>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<PhaseFailure>,
     pub written_at: String,
 }
 
@@ -1020,6 +1222,7 @@ mod tests {
                 },
             ],
             unclustered: Vec::new(),
+            failures: Vec::new(),
             written_at: "t".into(),
         };
         let claims: Vec<&AtlasCluster> = output.clusters_by_facet(Facet::Claim).collect();
@@ -1055,6 +1258,7 @@ mod tests {
             schema_version: Phase3AtlasOutput::SCHEMA_VERSION,
             pipeline_id: "literary_atlas".into(),
             named_clusters: Vec::new(),
+            failures: Vec::new(),
             written_at: "t".into(),
         };
         let json = serde_json::to_string(&out).unwrap();

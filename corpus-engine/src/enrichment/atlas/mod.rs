@@ -56,6 +56,7 @@ pub use schema_validation::{
 };
 pub use writer::{
     read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, write_atlas,
-    write_atlas_configurations, write_atlas_cross_corpus_edges, write_atlas_full,
-    write_atlas_gaps, write_tension_candidates, AtlasWritten, TrajectoriesFile, ATLAS_DIRNAME,
+    write_atlas_configurations, write_atlas_cross_corpus_edges, write_atlas_failures,
+    write_atlas_full, write_atlas_gaps, write_tension_candidates, AtlasWritten,
+    ResolutionFailuresFile, TrajectoriesFile, ATLAS_DIRNAME,
 };

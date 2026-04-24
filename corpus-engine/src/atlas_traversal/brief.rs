@@ -94,7 +94,7 @@ fn assemble_entity_lookup(result: &TraversalResult) -> Brief {
         frame.records,
         bold(&entity.canonical_name),
         entity.first_appearance.chunk_id,
-        hedge_confidence(&entity.description, 1.0),
+        hedge_confidence(&entity.description, Some(1.0)),
     ));
     if !entity.aliases.is_empty() {
         body.push_str(&format!(
@@ -301,7 +301,10 @@ fn assemble_configuration_list(result: &TraversalResult) -> Brief {
             depth_tag(c.enrichment_depth)
         ));
         body.push_str(&format!("{}\n", c.description));
-        let hedge = hedge_confidence("", c.confidence);
+        // Configuration.confidence is still `f32` (LLM-reported by
+        // design) so wrap it to match `hedge_confidence`'s
+        // Option-aware signature.
+        let hedge = hedge_confidence("", Some(c.confidence));
         body.push_str(&format!(
             "_Alternative reading:_ {}{}\n\n",
             c.interpretive_note, hedge
@@ -388,11 +391,14 @@ fn depth_tag(depth: EnrichmentDepth) -> &'static str {
     }
 }
 
-fn hedge_confidence(_context: &str, confidence: f32) -> String {
-    if confidence >= CONFIDENCE_HEDGE_THRESHOLD {
-        String::new()
-    } else {
-        format!(" _(confidence {confidence:.2})_")
+fn hedge_confidence(_context: &str, confidence: Option<f32>) -> String {
+    // `None` means "deterministic resolver output, no LLM score" —
+    // there's nothing to hedge on, so omit the confidence qualifier.
+    // A Some value below the threshold gets the hedge as before.
+    match confidence {
+        None => String::new(),
+        Some(c) if c >= CONFIDENCE_HEDGE_THRESHOLD => String::new(),
+        Some(c) => format!(" _(confidence {c:.2})_"),
     }
 }
 
@@ -462,7 +468,7 @@ mod tests {
             scope: crate::enrichment::pipeline::atlas::ClaimScope::Universal,
             evidence: vec![],
             attributed_to: Some(e.id.clone()),
-            confidence: 0.4, // below the hedge threshold
+            confidence: Some(0.4), // below the hedge threshold
             enrichment_depth: EnrichmentDepth::Extracted,
         };
         let result = TraversalResult {
@@ -504,7 +510,7 @@ mod tests {
                 state_type: StateType::Other("x".into()),
                 evidence: vec![],
                 section_range: SectionRange::point("sec_0001"),
-                confidence: 1.0,
+                confidence: Some(1.0),
                 enrichment_depth: EnrichmentDepth::Extracted,
             },
             State {
@@ -514,7 +520,7 @@ mod tests {
                 state_type: StateType::Other("x".into()),
                 evidence: vec![],
                 section_range: SectionRange::point("sec_0003"),
-                confidence: 1.0,
+                confidence: Some(1.0),
                 enrichment_depth: EnrichmentDepth::Extracted,
             },
         ];

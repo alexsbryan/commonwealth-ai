@@ -264,7 +264,7 @@ mod tests {
             evidence: vec![ChunkRef::new("sec_0001", None)],
             attributed_to: attributed_to
                 .map(|e| AtomId::from_raw(format!("entity-{e:04}"))),
-            confidence: 1.0,
+            confidence: Some(1.0),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
     }
@@ -280,7 +280,7 @@ mod tests {
                 start: "sec_0001".into(),
                 end: "sec_0001".into(),
             },
-            confidence: 1.0,
+            confidence: Some(1.0),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
     }

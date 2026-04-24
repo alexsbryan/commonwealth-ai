@@ -36,6 +36,7 @@ impl Atlas {
                 schema_version: Phase5Output::SCHEMA_VERSION,
                 pipeline_id: concerns.pipeline_id.clone(),
                 positions: Vec::new(),
+                failures: Vec::new(),
                 written_at: String::new(),
             });
         let tensions: Phase6Output = cache
@@ -44,6 +45,7 @@ impl Atlas {
                 schema_version: Phase6Output::SCHEMA_VERSION,
                 pipeline_id: concerns.pipeline_id.clone(),
                 tensions: Vec::new(),
+                failures: Vec::new(),
                 written_at: String::new(),
             });
         let gaps: Phase7Output = cache
@@ -52,6 +54,7 @@ impl Atlas {
                 schema_version: Phase7Output::SCHEMA_VERSION,
                 pipeline_id: concerns.pipeline_id.clone(),
                 gaps: Vec::new(),
+                failures: Vec::new(),
                 written_at: String::new(),
             });
         Ok(Self {
@@ -544,6 +547,7 @@ mod tests {
             schema_version: Phase3Output::SCHEMA_VERSION,
             pipeline_id: "literary".into(),
             concerns: sample_atlas().concerns,
+            failures: Vec::new(),
             written_at: "t".into(),
         };
         cache.write(PipelinePhase::Concerns, &phase3).unwrap();

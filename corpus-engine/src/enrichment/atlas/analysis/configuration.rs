@@ -537,7 +537,7 @@ mod tests {
             state_type: StateType::Other("unknown".into()),
             evidence: vec![],
             section_range: SectionRange::point(section),
-            confidence: 1.0,
+            confidence: Some(1.0),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
     }
@@ -552,7 +552,7 @@ mod tests {
             scope: ClaimScope::Universal,
             evidence: vec![],
             attributed_to: attrib.map(AtomId::entity),
-            confidence: 0.9,
+            confidence: Some(0.9),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
     }

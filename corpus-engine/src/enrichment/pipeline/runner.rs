@@ -26,8 +26,17 @@ pub enum ChapterSelection {
     /// cache is NOT updated — subset runs are diagnostic, not ground
     /// truth for phases 2+.
     Subset(Vec<String>),
-    /// Every chapter in the manifest. Updates the cache.
+    /// Every chapter in the manifest. Overwrites the cache in one
+    /// shot.
     Full,
+    /// A recovery run targeting chapter IDs that failed in a prior
+    /// pass. Semantically a subset, but successful results are merged
+    /// into the existing cache (matching chapters overwritten, those
+    /// chapters dropped from cached failures). Distinguishes
+    /// retry-of-failed from ad-hoc diagnostic subsets so the operator
+    /// doesn't have to hand-merge the run file after a successful
+    /// retry.
+    RetryFailed(Vec<String>),
 }
 
 impl ChapterSelection {
@@ -35,11 +44,21 @@ impl ChapterSelection {
         match self {
             Self::Subset(_) => "subset",
             Self::Full => "full",
+            Self::RetryFailed(_) => "retry",
         }
     }
 
+    /// True when a successful run should *overwrite* the cache in
+    /// full (`Full` only).
     pub fn should_update_cache(&self) -> bool {
         matches!(self, Self::Full)
+    }
+
+    /// True when a successful run should *merge* into the existing
+    /// cache (replace matching chapters, drop matching failures)
+    /// rather than overwriting it.
+    pub fn should_merge_into_cache(&self) -> bool {
+        matches!(self, Self::RetryFailed(_))
     }
 }
 
@@ -416,7 +435,7 @@ impl PhaseRunner {
         // Resolve which chapters to run.
         let targets: Vec<&ChapterInput> = match selection {
             ChapterSelection::Full => chapters.iter().collect(),
-            ChapterSelection::Subset(ids) => {
+            ChapterSelection::Subset(ids) | ChapterSelection::RetryFailed(ids) => {
                 let mut picked = Vec::with_capacity(ids.len());
                 for id in ids {
                     let found = chapters.iter().find(|c| c.chapter_id == *id).ok_or_else(
@@ -639,8 +658,9 @@ impl PhaseRunner {
         // Write the run file + apply cache semantics. Mode label
         // reflects the retry mode when one is active so run files
         // are distinguishable at a glance
-        // (`questions-terse-retry-NNN.json`). Cache semantics split
-        // three ways:
+        // (`questions-terse-retry-NNN.json`,
+        // `questions-retry-NNN.json`). Cache semantics split four
+        // ways:
         //
         //   - Full run, no retry mode → overwrite the cache in one
         //     shot. Existing behaviour.
@@ -650,6 +670,11 @@ impl PhaseRunner {
         //     cache means nothing to merge into — the flag is a
         //     no-op rather than an error, which lets an operator
         //     re-run without worrying about order.
+        //   - RetryFailed selection (any retry mode) → same
+        //     merge-into-cache behaviour as terse retry. The point
+        //     of `--retry-failed` is that a successful recovery
+        //     promotes those chapters into the cache without
+        //     requiring a hand-merge.
         //   - Subset run, no retry mode → diagnostic; cache
         //     untouched.
         let mode_label: &'static str = match retry_mode {
@@ -661,43 +686,15 @@ impl PhaseRunner {
             mode_label,
             &output,
         )?;
-        let cache_updated = match retry_mode {
-            Some(RetryMode::Terse { .. }) => {
-                if let Some(mut existing) = self
-                    .cache
-                    .read::<Phase1Output>(PipelinePhase::Questions)?
-                {
-                    let mut merged = 0usize;
-                    for q in &extracted {
-                        if let Some(slot) = existing
-                            .questions_by_chapter
-                            .iter_mut()
-                            .find(|e| e.chapter_id == q.chapter_id)
-                        {
-                            *slot = q.clone();
-                        } else {
-                            existing.questions_by_chapter.push(q.clone());
-                        }
-                        // Any previously-cached failure for this
-                        // chapter is resolved by the retry — drop
-                        // it.
-                        existing
-                            .failures
-                            .retain(|f| f.chapter_id != q.chapter_id);
-                        merged += 1;
-                    }
-                    existing.written_at = now_rfc3339();
-                    self.cache.write(PipelinePhase::Questions, &existing)?;
-                    merged > 0
-                } else {
-                    false
-                }
-            }
-            None if selection.should_update_cache() => {
-                self.cache.write(PipelinePhase::Questions, &output)?;
-                true
-            }
-            _ => false,
+        let should_merge =
+            matches!(retry_mode, Some(RetryMode::Terse { .. })) || selection.should_merge_into_cache();
+        let cache_updated = if should_merge {
+            merge_phase1_into_cache(&self.cache, &extracted)?
+        } else if retry_mode.is_none() && selection.should_update_cache() {
+            self.cache.write(PipelinePhase::Questions, &output)?;
+            true
+        } else {
+            false
         };
 
         progress(Phase1Progress::Done {
@@ -725,19 +722,15 @@ pub struct PhaseRunResult<T> {
     pub failures: Vec<PhaseFailure>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct PhaseFailure {
-    /// Free-form identifier for whatever the phase was processing
-    /// (cluster id, concern id, position-pair, etc.). Paired with
-    /// `reason` to surface which unit failed and why.
-    pub context: String,
-    pub reason: String,
-    /// First ~1 KiB of the raw model response when the failure came
-    /// from parsing. `None` for chat-level errors (connection loss,
-    /// HTTP 5xx) — no response body ever arrived.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub raw_response_head: Option<String>,
-}
+// ── PhaseFailure (unified) ──────────────────────────────────
+//
+// The canonical `PhaseFailure` type lives in
+// `pipeline::types::PhaseFailure` so every phase's output shares one
+// shape and the `sovereign enrich errors` aggregator groups across
+// phases without adapters. The runner's older context-string-only
+// shape was replaced in Landing 3.A; all construction sites now
+// populate `phase`, `subject`, and `kind` explicitly.
+pub use super::types::PhaseFailure;
 
 pub type Phase2RunResult = PhaseRunResult<Phase2Output>;
 pub type Phase3RunResult = PhaseRunResult<Phase3Output>;
@@ -842,6 +835,7 @@ impl PhaseRunner {
             pipeline_id: self.pipeline.id().to_string(),
             clusters: cluster_vec,
             unclustered,
+            failures: Vec::new(),
             written_at: now_rfc3339(),
         };
         let run_path = self.runs.write(
@@ -909,6 +903,7 @@ impl PhaseRunner {
             pipeline_id: self.pipeline.id().to_string(),
             clusters,
             unclustered,
+            failures: Vec::new(),
             written_at: now_rfc3339(),
         };
         let run_path = self.runs.write(
@@ -974,7 +969,9 @@ impl PhaseRunner {
                 Ok(r) => r,
                 Err(e) => {
                     failures.push(PhaseFailure {
-                        context: cluster.id.clone(),
+                        phase: PipelinePhase::Concerns,
+                        subject: format!("cluster:{}", cluster.id),
+                        kind: PhaseFailureKind::ChatError,
                         reason: format!("chat: {e}"),
                         raw_response_head: None,
                     });
@@ -989,8 +986,11 @@ impl PhaseRunner {
                         .as_deref()
                         .map(one_line_excerpt)
                         .unwrap_or_else(|| "<empty response>".into());
+                    let kind = classify_phase1_parse_failure(&response, &e);
                     failures.push(PhaseFailure {
-                        context: cluster.id.clone(),
+                        phase: PipelinePhase::Concerns,
+                        subject: format!("cluster:{}", cluster.id),
+                        kind,
                         reason: format!("parse: {e} | response[head]: {excerpt}"),
                         raw_response_head: head,
                     });
@@ -1010,6 +1010,7 @@ impl PhaseRunner {
             schema_version: Phase3Output::SCHEMA_VERSION,
             pipeline_id: self.pipeline.id().to_string(),
             concerns,
+            failures: failures.clone(),
             written_at: now_rfc3339(),
         };
         let run_path = self.runs.write(PipelinePhase::Concerns, "full", &output)?;
@@ -1080,6 +1081,7 @@ impl PhaseRunner {
             schema_version: Phase4Output::SCHEMA_VERSION,
             pipeline_id: self.pipeline.id().to_string(),
             clusters,
+            failures: Vec::new(),
             written_at: now_rfc3339(),
         };
         let run_path = self.runs.write(PipelinePhase::ChunkClusters, "full", &output)?;
@@ -1178,7 +1180,9 @@ impl PhaseRunner {
                     Ok(r) => r,
                     Err(e) => {
                         failures.push(PhaseFailure {
-                            context: format!("{}:{}", concern.id, cluster.id),
+                            phase: PipelinePhase::Positions,
+                            subject: format!("pair:{}:{}", concern.id, cluster.id),
+                            kind: PhaseFailureKind::ChatError,
                             reason: format!("chat: {e}"),
                             raw_response_head: None,
                         });
@@ -1193,8 +1197,11 @@ impl PhaseRunner {
                             .as_deref()
                             .map(one_line_excerpt)
                             .unwrap_or_else(|| "<empty response>".into());
+                        let kind = classify_phase1_parse_failure(&response, &e);
                         failures.push(PhaseFailure {
-                            context: format!("{}:{}", concern.id, cluster.id),
+                            phase: PipelinePhase::Positions,
+                            subject: format!("pair:{}:{}", concern.id, cluster.id),
+                            kind,
                             reason: format!("parse: {e} | response[head]: {excerpt}"),
                             raw_response_head: head,
                         });
@@ -1232,6 +1239,7 @@ impl PhaseRunner {
             schema_version: Phase5Output::SCHEMA_VERSION,
             pipeline_id: self.pipeline.id().to_string(),
             positions,
+            failures: failures.clone(),
             written_at: now_rfc3339(),
         };
         let run_path = self.runs.write(PipelinePhase::Positions, "full", &output)?;
@@ -1298,7 +1306,9 @@ impl PhaseRunner {
                         Ok(r) => r,
                         Err(e) => {
                             failures.push(PhaseFailure {
-                                context: format!("{}×{}", a.id, b.id),
+                                phase: PipelinePhase::Tensions,
+                                subject: format!("pair:{}:{}", a.id, b.id),
+                                kind: PhaseFailureKind::ChatError,
                                 reason: format!("chat: {e}"),
                                 raw_response_head: None,
                             });
@@ -1313,8 +1323,11 @@ impl PhaseRunner {
                                 .as_deref()
                                 .map(one_line_excerpt)
                                 .unwrap_or_else(|| "<empty response>".into());
+                            let kind = classify_phase1_parse_failure(&response, &e);
                             failures.push(PhaseFailure {
-                                context: format!("{}×{}", a.id, b.id),
+                                phase: PipelinePhase::Tensions,
+                                subject: format!("pair:{}:{}", a.id, b.id),
+                                kind,
                                 reason: format!("parse: {e} | response[head]: {excerpt}"),
                                 raw_response_head: head,
                             });
@@ -1340,6 +1353,7 @@ impl PhaseRunner {
             schema_version: Phase6Output::SCHEMA_VERSION,
             pipeline_id: self.pipeline.id().to_string(),
             tensions,
+            failures: failures.clone(),
             written_at: now_rfc3339(),
         };
         let run_path = self.runs.write(PipelinePhase::Tensions, "full", &output)?;
@@ -1412,6 +1426,7 @@ impl PhaseRunner {
             schema_version: Phase7Output::SCHEMA_VERSION,
             pipeline_id: self.pipeline.id().to_string(),
             gaps,
+            failures: Vec::new(),
             written_at: now_rfc3339(),
         };
         let run_path = self.runs.write(PipelinePhase::Gaps, "full", &output)?;
@@ -1573,6 +1588,49 @@ fn phase1_query_text(chapter: &ChapterInput) -> String {
 
 fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
+}
+
+/// Merge a batch of Phase-1 successes into the existing
+/// `cache/questions.json`.
+///
+/// Each extracted chapter replaces any cached entry with the same id
+/// (or is appended if new), and the corresponding entry is dropped
+/// from the cached failures list — a retry that succeeds resolves
+/// that failure by construction.
+///
+/// Returns `true` when at least one chapter was merged and the cache
+/// was rewritten; `false` when no cache exists yet (nothing to merge
+/// into) or `extracted` is empty. The empty-cache branch is
+/// deliberately a no-op rather than an error: an operator running
+/// `--retry-failed` before a first full run gets a clean skip
+/// instead of a cryptic failure.
+fn merge_phase1_into_cache(
+    cache: &PhaseCache,
+    extracted: &[ExtractedQuestion],
+) -> Result<bool> {
+    if extracted.is_empty() {
+        return Ok(false);
+    }
+    let Some(mut existing) = cache.read::<Phase1Output>(PipelinePhase::Questions)? else {
+        return Ok(false);
+    };
+    let mut merged = 0usize;
+    for q in extracted {
+        if let Some(slot) = existing
+            .questions_by_chapter
+            .iter_mut()
+            .find(|e| e.chapter_id == q.chapter_id)
+        {
+            *slot = q.clone();
+        } else {
+            existing.questions_by_chapter.push(q.clone());
+        }
+        existing.failures.retain(|f| f.chapter_id != q.chapter_id);
+        merged += 1;
+    }
+    existing.written_at = now_rfc3339();
+    cache.write(PipelinePhase::Questions, &existing)?;
+    Ok(merged > 0)
 }
 
 #[cfg(test)]
@@ -1887,6 +1945,156 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.output.questions_by_chapter.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn phase_1_retry_failed_merges_into_cache() {
+        // `--retry-failed` → ChapterSelection::RetryFailed. A success
+        // for one of the previously-failed chapter ids should (a) flip
+        // `cache_updated = true`, (b) replace the cached entry for
+        // that chapter, (c) drop the now-resolved failure from the
+        // cached failures list. Unrelated cached chapters are
+        // untouched. This is the architectural fix for the
+        // hand-merge workaround we used on the Dopesick Jesus
+        // recovery.
+        let dir = tempdir().unwrap();
+        let runner = runner_under_test(dir.path());
+
+        // Seed an existing cache with one success (ch_01) and one
+        // failure (ch_02) — the shape left by a `--full` run that
+        // stumbled on one chapter.
+        let seeded = Phase1Output {
+            schema_version: Phase1Output::SCHEMA_VERSION,
+            pipeline_id: "literary".into(),
+            questions_by_chapter: vec![ExtractedQuestion {
+                chapter_id: "ch_01".into(),
+                questions: vec!["pre-existing".into()],
+                reveals: None,
+                thematic_carriers: Vec::new(),
+                setting: None,
+                plot: None,
+                section_extraction: None,
+            }],
+            failures: vec![Phase1Failure {
+                chapter_id: "ch_02".into(),
+                reason: "parse error".into(),
+                raw_response_head: None,
+                failure_kind: PhaseFailureKind::ParseDrift,
+            }],
+            written_at: "prior".into(),
+        };
+        runner
+            .cache
+            .write(PipelinePhase::Questions, &seeded)
+            .expect("seed cache");
+
+        let chapters = vec![
+            chapter("ch_01", "One", "body"),
+            chapter("ch_02", "One", "body"),
+        ];
+        let res = runner
+            .phase_1_extract_questions_with_retry(
+                &chapters,
+                &ChapterSelection::RetryFailed(vec!["ch_02".into()]),
+                None,
+                |_| {},
+            )
+            .await
+            .expect("retry-failed run");
+
+        assert!(res.cache_updated, "RetryFailed with a success must merge into cache");
+        assert_eq!(res.output.questions_by_chapter.len(), 1);
+        assert_eq!(res.output.questions_by_chapter[0].chapter_id, "ch_02");
+
+        // Read back the cache. Both chapters should now be present as
+        // successes; the failures list is empty.
+        let cached: Phase1Output = runner
+            .cache
+            .read(PipelinePhase::Questions)
+            .expect("read cache")
+            .expect("cache present");
+        assert_eq!(cached.questions_by_chapter.len(), 2);
+        let ch1 = cached
+            .questions_by_chapter
+            .iter()
+            .find(|e| e.chapter_id == "ch_01")
+            .expect("ch_01 still cached");
+        // ch_01 was NOT targeted by the retry — its questions must
+        // remain the pre-existing value.
+        assert_eq!(ch1.questions, vec!["pre-existing".to_string()]);
+        let ch2 = cached
+            .questions_by_chapter
+            .iter()
+            .find(|e| e.chapter_id == "ch_02")
+            .expect("ch_02 merged");
+        assert!(!ch2.questions.is_empty());
+        assert!(
+            cached.failures.is_empty(),
+            "resolved failure must drop out of cached failures list, got: {:?}",
+            cached.failures
+        );
+    }
+
+    #[tokio::test]
+    async fn phase_1_retry_failed_with_no_prior_cache_is_noop() {
+        // An operator who runs `--retry-failed` before any `--full`
+        // has been successful (no cache file yet) should get a clean
+        // `cache_updated = false` rather than an error. The run file
+        // still captures the recovery attempt; only the promote step
+        // is skipped.
+        let dir = tempdir().unwrap();
+        let runner = runner_under_test(dir.path());
+        let chapters = vec![chapter("ch_01", "One", "body")];
+        let res = runner
+            .phase_1_extract_questions_with_retry(
+                &chapters,
+                &ChapterSelection::RetryFailed(vec!["ch_01".into()]),
+                None,
+                |_| {},
+            )
+            .await
+            .expect("run completes even without a prior cache");
+        assert!(!res.cache_updated);
+        // The run file exists for debugging.
+        assert!(res.run_path.exists(), "run file should be written");
+        // No cache was seeded → none should have been written.
+        let cached: Option<Phase1Output> = runner
+            .cache
+            .read(PipelinePhase::Questions)
+            .expect("read cache");
+        assert!(
+            cached.is_none(),
+            "retry with empty cache must not create a cache file"
+        );
+    }
+
+    #[tokio::test]
+    async fn phase_1_retry_failed_labels_run_file_with_retry_mode() {
+        // Mode label "retry" distinguishes RetryFailed runs from
+        // diagnostic subsets ("subset") in the runs/ directory. The
+        // run filename shape is `questions-<mode>-NNN.json`.
+        let dir = tempdir().unwrap();
+        let runner = runner_under_test(dir.path());
+        let chapters = vec![chapter("ch_01", "One", "body")];
+        let res = runner
+            .phase_1_extract_questions_with_retry(
+                &chapters,
+                &ChapterSelection::RetryFailed(vec!["ch_01".into()]),
+                None,
+                |_| {},
+            )
+            .await
+            .expect("run completes");
+        let name = res
+            .run_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert!(
+            name.starts_with("questions-retry-"),
+            "expected retry-labelled run file, got: {name}"
+        );
     }
 
     #[tokio::test]

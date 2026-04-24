@@ -184,8 +184,12 @@ fn detect_ungrounded_claims(input: GapDetectionInput<'_>) -> Vec<Gap> {
         if claim.evidence.is_empty() && !grounded_claim_ids.contains(claim.id.as_str()) {
             // Significance scales with the claim's own extraction
             // confidence — a high-confidence ungrounded claim is a
-            // louder gap than a hedged one.
-            let significance = claim.confidence.clamp(0.0, 1.0) * 0.7;
+            // louder gap than a hedged one. `None` confidence (the
+            // deterministic resolver didn't score this claim) rings
+            // the middle bell at 0.5: a partial signal rather than
+            // a loud or quiet one.
+            let raw = claim.confidence.unwrap_or(0.5);
+            let significance = raw.clamp(0.0, 1.0) * 0.7;
             gaps.push(Gap {
                 id: String::new(),
                 kind: GapKind::UngroundedClaim,
@@ -247,7 +251,7 @@ mod tests {
                 Vec::new()
             },
             attributed_to: None,
-            confidence: 0.9,
+            confidence: Some(0.9),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
     }
@@ -263,7 +267,7 @@ mod tests {
                 start: "sec_0001".into(),
                 end: "sec_0001".into(),
             },
-            confidence: 1.0,
+            confidence: Some(1.0),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
     }
