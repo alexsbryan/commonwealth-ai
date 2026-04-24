@@ -1,23 +1,30 @@
 # Running sovereign on AMD Strix Halo via a toolbox
 
 This walks through running the whole stack (sovereign daemon, corpus
-enrichment, CLI) on an AMD Ryzen AI Max ("Strix Halo") Linux
-machine, inside one of [kyuz0/amd-strix-halo-toolboxes][kyuz0]. The
-toolbox ships a pre-built llama.cpp against the chosen GPU backend
-and leaves your host untouched; sovereign builds + runs inside it
-and reads/writes `~/.sovereign/` on the shared host home.
+enrichment, CLI, desktop app) on an AMD Ryzen AI Max ("Strix Halo")
+Linux machine, inside one of [kyuz0/amd-strix-halo-toolboxes][kyuz0].
+The toolbox ships a pre-built llama.cpp against the chosen GPU
+backend and leaves your host untouched; sovereign builds + runs
+inside it and reads/writes `~/.sovereign/` on the shared host home.
 
 [kyuz0]: https://github.com/kyuz0/amd-strix-halo-toolboxes
 
-**You will end up with**: sovereign-cli binary inside the toolbox,
-daemon auto-loading your GGUF models onto the Strix Halo iGPU via
-ROCm or Vulkan, and the `sovereign enrich ...` flow running against
-corpora in `~/.sovereign/enrichment/`.
+**You will end up with**: sovereign binaries (CLI, daemon, desktop)
+inside the toolbox, daemon auto-loading your GGUF models onto the
+Strix Halo iGPU via ROCm or Vulkan, and the `sovereign enrich ...`
+flow running against corpora in `~/.sovereign/enrichment/`.
 
 The target path is: pick a toolbox image (§1–2), run
 `./scripts/bootstrap-linux.sh` (§3), `cargo build --release` (§5),
-go. The per-section walkthroughs below explain what the script does
-and how to recover when it doesn't.
+go. The script autodetects ROCm vs Vulkan from the image. The
+per-section walkthroughs below explain what the script does and how
+to recover when it doesn't.
+
+Both backends have been exercised end-to-end (ROCm 7.2.1 and
+`vulkan-radv`). §3 / §9 document a couple of kyuz0 image quirks —
+notably `vulkan-radv` ships with a broken `sudo` and a dangling
+`/usr/bin/ld` alternative; the bootstrap script preflights both and
+prints the host-side `podman exec` fixes.
 
 The one confirmed follow-up still open: `sovereign daemon install`
 on Linux has a systemd path but hasn't been exercised on hardware
@@ -128,12 +135,16 @@ host**:
 | **ROCm 7.2.1** (recommended default) | Full feature parity with upstream llama.cpp; no buffer caps; biggest image | You want the 27B / 35B-A3B thoughtful-slot models to load. |
 | ROCm 6.4.4 | Stable older ROCm | You hit a regression on 7.2.1 specifically. |
 | ROCm 7 Nightly | Tip of tree | You're upstreaming fixes. |
-| Vulkan — Mesa RADV | Stable, broad compatibility | ROCm won't load on your kernel and you want to keep moving. |
+| **Vulkan — Mesa RADV** (tested) | Stable, broad compatibility; ships with two image quirks bootstrap fixes | ROCm won't load on your kernel, or you want a smaller image for CLI/daemon work. |
 | Vulkan — AMDVLK | Fastest small-model decode in the author's benches | You're only running ≤ 8B models (**2 GiB buffer cap** means 27B / 35B-A3B Q4 loads won't fit). |
 
-This doc uses **ROCm 7.2.1** throughout. If you pick a different
-variant, swap the image tag in §2 and the cargo feature flag in
-§4 (`rocm` → `vulkan`).
+Both backends are supported first-class by `bootstrap-linux.sh` — it
+autodetects which you're in and installs the right deps. The
+examples below use **ROCm 7.2.1**; the Vulkan path differs only in
+the image tag (`vulkan-radv` instead of `rocm-7.2.1`), and bootstrap
+handles the `rocm` → `vulkan` feature swap in
+`crates/sovereign-inference/Cargo.toml` automatically (as a local,
+uncommitted edit — see §4).
 
 ---
 
@@ -182,31 +193,92 @@ If these fail, leave the toolbox, double-check `/dev/kfd` +
 
 ## 3. Install build deps inside the toolbox
 
-The kyuz0 images ship the llama.cpp **runtime** (libamdhip64,
-libhipblas, librocblas) and `rocminfo` for sanity-checking the GPU,
-but not a Rust toolchain, not `libclang` for bindgen, and — perhaps
-surprisingly — not the **HIP compiler / dev headers** needed to
-build llama.cpp from source. There's a one-shot script that installs
-everything + wires up the runtime:
+The kyuz0 images ship the llama.cpp **runtime** (libamdhip64 /
+libhipblas / librocblas on ROCm, or libvulkan + ICDs on Vulkan) and
+the GPU sanity-check tooling (`rocminfo`, `vulkaninfo`), but not a
+Rust toolchain, not `libclang` for bindgen, and — perhaps
+surprisingly on ROCm — not the **HIP compiler / dev headers** needed
+to build llama.cpp from source. There's a one-shot script that
+installs everything + wires up the runtime:
 
 ```bash
 cd ~/dev/commonwealth-ai/sovereign
-./scripts/bootstrap-linux.sh
+./scripts/bootstrap-linux.sh                 # autodetect
+./scripts/bootstrap-linux.sh --backend=vulkan  # force-pick
 ```
 
-It detects Fedora vs Ubuntu/Debian and handles:
+It detects Fedora vs Ubuntu/Debian, autodetects ROCm vs Vulkan from
+what's already in the image, and handles:
 
-- Rust + cargo (if not already installed),
+- Rust + cargo via `rustup` (if not already installed), **plus the
+  `rustfmt` component** (llama-cpp-sys-2's bindgen needs it — the
+  minimal rustup profile omits it and the build errors confusingly
+  with `'rustfmt' is not installed for the toolchain`),
 - clang + `libclang.so` (for bindgen),
-- cmake, gcc, protobuf-compiler + **devel**, OpenSSL dev,
-- `rocm-hip-sdk7.2.1` (the version-matched HIP SDK — hipcc, HIP
-  headers, rocBLAS/hipBLAS dev, ROCm LLVM, rocm-device-libs),
+- cmake, gcc, `binutils` (for `ld`), protobuf-compiler + **devel**,
+  OpenSSL dev,
 - Tauri 2's GTK/WebKit build deps (webkit2gtk4.1, gtk3, libsoup3,
   librsvg2) and runtime shim `libayatana-appindicator-gtk3`,
-- `/etc/ld.so.conf.d/sovereign-rocm.conf` so libamdhip64 resolves
-  at runtime without `LD_LIBRARY_PATH`,
-- `/etc/profile.d/sovereign-rocm.sh` so new shells have
-  `ROCM_PATH` / `HIP_PATH` / `PATH` / `CMAKE_PREFIX_PATH` pre-set.
+- ROCm path only:
+  - `rocm-hip-sdk7.2.1` (the version-matched HIP SDK — hipcc, HIP
+    headers, rocBLAS/hipBLAS dev, ROCm LLVM, rocm-device-libs),
+  - `/etc/ld.so.conf.d/sovereign-rocm.conf` so libamdhip64 resolves
+    at runtime without `LD_LIBRARY_PATH`,
+  - `/etc/profile.d/sovereign-rocm.sh` so new shells have
+    `ROCM_PATH` / `HIP_PATH` / `PATH` / `CMAKE_PREFIX_PATH` pre-set.
+- Vulkan path only:
+  - `vulkan-loader-devel`, `vulkan-headers`, `glslc` for the Vulkan
+    compile path in llama.cpp,
+  - rewrites the `llama-cpp-2` feature in
+    `crates/sovereign-inference/Cargo.toml` from `"rocm"` to
+    `"vulkan"`. **This is a local, uncommitted edit** — the repo
+    default stays ROCm (see §4). Undo with
+    `./scripts/bootstrap-linux.sh --revert-cargo`.
+- Cross-backend: if `target/.sovereign-backend` records a previous
+  build in the other backend, the script wipes
+  `target/*/build/llama-cpp-sys-2-*` so cmake reconfigures from
+  scratch (mixing ROCm and Vulkan cmake caches doesn't end well).
+
+### 3a. kyuz0 image quirks (`vulkan-radv`)
+
+Bootstrap preflights the container image for two known issues and
+stops with a clear message if either fires. Both need root inside
+the container to fix, which rootless podman doesn't grant the
+toolbox user — but Fedora's `toolbox` command can open a **root
+shell** inside the running container via `-u 0`, which is by far
+the least painful way to handle this. From a **host** terminal:
+
+```bash
+toolbox enter -u 0 <toolbox-name>    # root shell in the toolbox
+```
+
+(On Ubuntu / distrobox, the equivalent is
+`distrobox enter --root <name>`. If neither works, fall through to
+the `podman exec --user root <name> …` form; it's identical
+functionally.)
+
+Once you're in as root, run:
+
+```bash
+# Issue 1: /etc/sudoers + /etc/pam.d/sudo stripped from the image.
+# Symptoms: `sudo` dies with "unable to open /etc/sudoers";
+#           `su` aborts on PAM init.
+dnf reinstall -y sudo
+echo '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/wheel-nopasswd
+chmod 440 /etc/sudoers.d/wheel-nopasswd
+
+# Issue 2: dangling /usr/bin/ld -> /etc/alternatives/ld.
+# Symptoms: cmake compiler check dies 5 min into a build with
+#           `collect2: fatal error: cannot find 'ld'`.
+ln -sf /usr/bin/ld.bfd /etc/alternatives/ld
+```
+
+Exit back to your regular (non-root) toolbox session, re-run
+`./scripts/bootstrap-linux.sh`, and it'll clear the preflight and
+continue.
+
+Neither issue affects the ROCm 7.2.1 image. Both have been filed
+upstream at [kyuz0/amd-strix-halo-toolboxes][kyuz0].
 
 If you want to do it by hand — or see exactly what goes wrong when
 a given dep is missing — the rest of this section still holds. The
@@ -233,7 +305,7 @@ Tauri 2 frontend). If you're CLI-only, build with `cargo build
 --release -p sovereign-cli -p sovereign-server` and you can drop
 them.
 
-Three of those dependencies are load-bearing in non-obvious ways:
+Several of those dependencies are load-bearing in non-obvious ways:
 
 - **`protobuf-devel` / `libprotobuf-dev`.** `lance-encoding`'s build
   script pulls in `google/protobuf/empty.proto` from the well-known
@@ -254,6 +326,25 @@ Three of those dependencies are load-bearing in non-obvious ways:
   ['libclang.so', ...]"
   ```
 
+- **`rustfmt` rustup component.** llama-cpp-sys-2 pipes its bindgen
+  output through `rustfmt` for readability; rustup's `minimal`
+  profile (what bootstrap installs) omits it. Without it:
+
+  ```
+  error: 'rustfmt' is not installed for the toolchain 'stable-...'
+  ```
+
+  `rustup component add rustfmt` fixes it, which bootstrap now does
+  unconditionally as part of `ensure_rust`.
+
+- **`binutils` (Fedora).** Fedora images expect `binutils` to provide
+  `/usr/bin/ld` via the `alternatives` system. The kyuz0
+  `vulkan-radv` image has the symlink but not the alternatives entry
+  — any cmake compiler check dies ~5 min into a build with
+  `collect2: fatal error: cannot find 'ld'`. Bootstrap preflights
+  this case (§3a). On Ubuntu, `build-essential` pulls `binutils`
+  transitively, so there's no explicit dep.
+
 - **`rocm-hip-sdk7.2.1`.** The kyuz0 ROCm 7.2.1 image only ships the
   runtime side; building llama.cpp's HIP backend from source needs
   `hipcc`, the HIP headers, rocBLAS/hipBLAS dev headers, ROCm LLVM,
@@ -267,6 +358,11 @@ Three of those dependencies are load-bearing in non-obvious ways:
     Failed to find ROCm root directory.
   ```
 
+- **`vulkan-loader-devel` + `vulkan-headers` + `glslc`.** Needed by
+  llama.cpp's Vulkan compile path (bindgen pulls the headers; the
+  shader compile step invokes glslc). Vulkan toolboxes ship the
+  loader and ICDs but not the `-devel` headers.
+
 - **GTK / WebKit dev packages.** `sovereign-desktop` is a Tauri 2
   app; its Linux deps are `webkit2gtk4.1` (note the .1 — Tauri 2
   uses libsoup3, the older 4.0 won't work), `gtk3`, `libsoup3`, and
@@ -277,23 +373,9 @@ Three of those dependencies are load-bearing in non-obvious ways:
 
   At **runtime**, the `tray-icon` feature dlopens libappindicator —
   so install `libayatana-appindicator-gtk3` as well (runtime-only,
-  no rebuild needed):
-
-  ```bash
-  sudo dnf install -y libayatana-appindicator-gtk3
-  ```
-
-  Without it, `cargo tauri dev` compiles fine and then panics on
-  startup with `Failed to load ayatana-appindicator3 or
+  no rebuild needed). Without it, the app compiles fine and then
+  panics on startup with `Failed to load ayatana-appindicator3 or
   appindicator3 dynamic library`.
-
-Prefer `rustup` if you want a newer toolchain than Fedora's
-package repo ships:
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-```
 
 `~/.cargo/` is on the host bind mount, so installed toolchains
 persist across `toolbox enter` sessions **and** are shared with host
@@ -307,17 +389,30 @@ inside the toolbox to keep builds separate.
 ## 4. Pick a non-ROCm backend (optional)
 
 The Linux default in `sovereign-inference/Cargo.toml` is ROCm, gated
-on `cfg(target_os = "linux")`. If you picked a Vulkan toolbox variant
-in §1, edit the linux block to `features = ["vulkan"]`:
+on `cfg(target_os = "linux")`:
 
-```diff
- [target.'cfg(target_os = "linux")'.dependencies]
--llama-cpp-2 = { version = "0.1.145", features = ["rocm"] }
-+llama-cpp-2 = { version = "0.1.145", features = ["vulkan"] }
+```toml
+[target.'cfg(target_os = "linux")'.dependencies]
+llama-cpp-2 = { version = "0.1.145", features = ["rocm"] }
 ```
 
-Don't check that swap in — the repo's default should stay ROCm
-since that's what this doc targets.
+If you're in a Vulkan toolbox, bootstrap rewrites the feature to
+`"vulkan"` for you as part of §3. The swap is a **local,
+uncommitted edit** — `git status` will show Cargo.toml dirty. Do
+not commit it: the repo default stays ROCm, since that's the
+fastest and most featureful backend on Strix Halo. To undo the
+swap (e.g. before committing other work):
+
+```bash
+./scripts/bootstrap-linux.sh --revert-cargo
+```
+
+We'd prefer to make this a feature flag rather than a file edit,
+but llama-cpp-2's `rocm`/`vulkan`/`metal` features are mutually
+exclusive per-target and cargo can't express "default to rocm on
+Linux, metal on macOS, and nothing on Linux-but-with-vulkan-feature"
+cleanly. File edit is the least-bad option until cargo grows
+target-gated default features.
 
 ---
 
@@ -480,6 +575,51 @@ path is first-pass and I expect rough edges.
 
 ---
 
+## 7a. Run the desktop app (optional)
+
+`sovereign-desktop` is the Tauri 2 frontend. The dev loop is:
+
+```bash
+cd crates/sovereign-desktop
+cargo tauri dev
+```
+
+This spawns:
+- `vite dev` on `http://localhost:5173` (hot-reload frontend),
+- a debug build of `sovereign-desktop`, which embeds the daemon
+  (same `0.0.0.0:9741` + `0.0.0.0:9742` the CLI-spawned daemon uses),
+- a Tauri webview window pointed at the vite URL.
+
+First run compiles ~1000 crates in debug mode (debug and release
+targets don't share artifacts — expect ~5 min even with the release
+cache warm). Subsequent runs are incremental.
+
+For a smoke test without the dev loop, you can also run the release
+binary directly:
+
+```bash
+./target/release/sovereign-desktop
+```
+
+It uses the same `~/.config/sovereign/config.toml` as
+`sovereign-cli`, so whatever `sovereign setup` wrote is what the
+desktop app will load.
+
+Confirm the Vulkan (or ROCm) backend is in the startup log:
+
+```
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = Radeon 8060S Graphics (RADV GFX1151) (radv) | ...
+Hardware: 125.1 GB RAM, GPU: Vulkan0 (layers: 999, unified: false)
+```
+
+`layers: 999` means llama.cpp will push all layers of the primary
+model onto the GPU. `unified: false` is the Vulkan backend reporting
+that it's treating the iGPU as discrete (the GTT does behave as
+unified memory; Vulkan just doesn't expose it that way to llama.cpp).
+
+---
+
 ## 8. Run an enrichment end-to-end
 
 At this point the toolbox has no idea it's not macOS. The full
@@ -512,6 +652,34 @@ non-kyuz0 image you'd need `export HSA_OVERRIDE_GFX_VERSION=11.5.0`
 
 ## 9. Gotchas
 
+- **`vulkan-radv` image ships with broken sudo + dangling `ld`.**
+  Bootstrap's preflight detects both and prints the fix. The short
+  version: open a root shell in the container with
+  `toolbox enter -u 0 <name>` (from a host terminal), then
+  `dnf reinstall -y sudo && echo '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/wheel-nopasswd && ln -sf /usr/bin/ld.bfd /etc/alternatives/ld`.
+  See §3a.
+- **Stale ROCm env in `~/.bashrc`.** If you used a ROCm toolbox
+  before and your `~/.bashrc` has `export ROCM_PATH=/opt/rocm-*`
+  lines, they'll follow you into a Vulkan toolbox (the home dir is
+  bind-mounted) and point at paths that don't exist. Harmless for
+  the build, but confusing for debugging. Bootstrap prints a warning
+  when it spots this. Clean up the `.bashrc` lines manually, or
+  guard them with `[[ -d "$ROCM_PATH" ]] && export ...`.
+- **Misleading `compute_backend=cpu` in slot-load logs.** On Linux
+  (ROCm or Vulkan), every slot logs `compute_backend="cpu"` at load
+  time. This is a reporting gap, not an actual-compute fact:
+  `embed_compute_backend_label()` in
+  `crates/sovereign-inference/src/embedded.rs` only branches on
+  `used_metal`, so anything non-Metal falls through to the `"cpu"`
+  literal. The real signal that GPU offload is active is the
+  `Hardware: ... GPU: Vulkan0 (layers: 999, ...)` line at startup,
+  plus `ggml_vulkan: Found 1 Vulkan devices:`. Fix-me: teach the
+  label helper to return `"gpu+rocm"` / `"gpu+vulkan"` when those
+  features are on (see
+  [`embedded.rs:956`](../crates/sovereign-inference/src/embedded.rs)).
+  The embed slot is genuinely CPU-pinned via
+  `with_offload_kqv(false).with_op_offload(false)` on every
+  platform, by design — don't confuse that with the label bug.
 - **Shared `target/` with host cargo builds.** If your host (macOS
   or another Linux box) uses the same `target/` directory, the
   toolbox build will stomp its artifacts and vice versa. Isolate
@@ -565,6 +733,11 @@ non-kyuz0 image you'd need `export HSA_OVERRIDE_GFX_VERSION=11.5.0`
   in `service_install.rs` and the unit template is at
   `contrib/systemd/sovereign.service`, but it hasn't been exercised
   end-to-end on hardware. File a note when you run it.
+- **`compute_backend` label on Linux.** See §9 — the slot-load log
+  line always says `compute_backend="cpu"` on Linux even when ROCm
+  or Vulkan is offloading layers. Small fix in
+  `crates/sovereign-inference/src/embedded.rs` to branch on the
+  active feature.
 - **A project-owned toolbox image** (kyuz0 ROCm 7.2.1 base + our
   dep layer pre-baked) would cut §3 out entirely. Worth doing once
   there are multiple Linux contributors; skip it while the kyuz0
