@@ -125,7 +125,22 @@ pub async fn cmd_errors(args: &[String]) -> i32 {
         .collect();
 
     if parsed.json {
-        let json = serde_json::to_string_pretty(&filtered)
+        // Enrich each record with the kind's remediation hint so
+        // downstream consumers (desktop drawer, scripts) don't
+        // re-implement the lookup. The hint is static — derived
+        // from `PhaseFailureKind::remediation_hint()` — so there's
+        // one source of truth. We don't add `remediation` to the
+        // core `PhaseFailure` struct because that would widen the
+        // on-disk schema (every cached phase file would rewrite).
+        // Flatten-wrap at the CLI boundary instead.
+        let views: Vec<PhaseFailureView<'_>> = filtered
+            .iter()
+            .map(|f| PhaseFailureView {
+                inner: f,
+                remediation: f.kind.remediation_hint(),
+            })
+            .collect();
+        let json = serde_json::to_string_pretty(&views)
             .unwrap_or_else(|_| "[]".into());
         println!("{json}");
         return 0;
@@ -133,6 +148,16 @@ pub async fn cmd_errors(args: &[String]) -> i32 {
 
     print_report(&parsed.corpus_id, &filtered);
     0
+}
+
+/// JSON-only view that flattens a `PhaseFailure` and appends the
+/// `remediation` hint for the UI drawer. Never deserialised —
+/// only produced by the `--json` path of the aggregator.
+#[derive(serde::Serialize)]
+struct PhaseFailureView<'a> {
+    #[serde(flatten)]
+    inner: &'a PhaseFailure,
+    remediation: &'static str,
 }
 
 /// Walk every known cache + atlas file for `corpus_id` and pull
@@ -613,7 +638,14 @@ mod tests {
     /// fails this test loudly.
     #[test]
     fn collect_failures_unifies_cache_and_atlas_failure_sources() {
-        use super::mod_integration_helpers::scoped_home;
+        // Use the shared `test_env::scoped_home` guard (defined in
+        // `enrich_cmd/mod.rs`) rather than a module-local mutex so
+        // this test serialises with every *other* HOME-scoping test
+        // in the crate. Two independent mutexes would let tests
+        // collide on the process-wide `HOME` env var, causing
+        // flakiness like the one observed on the first full-suite
+        // run after Landing 3.C added a second mutex here.
+        use crate::enrich_cmd::test_env::scoped_home;
         use corpus_engine::enrichment::atlas::{write_atlas_failures, ATLAS_DIRNAME};
         use corpus_engine::enrichment::pipeline::{
             Phase1Failure, Phase1Output, PhaseCache,
@@ -698,30 +730,9 @@ mod tests {
     }
 }
 
-/// Scoped-HOME helper reused from other enrich_cmd tests. We
-/// reimplement here (rather than import from extract) to keep the
-/// module self-contained and avoid a cross-test dependency.
-#[cfg(test)]
-pub(super) mod mod_integration_helpers {
-    use std::sync::{Mutex, MutexGuard};
-
-    static HOME_LOCK: Mutex<()> = Mutex::new(());
-
-    pub struct HomeGuard {
-        dir: tempfile::TempDir,
-        _guard: MutexGuard<'static, ()>,
-    }
-
-    impl HomeGuard {
-        pub fn path(&self) -> &std::path::Path {
-            self.dir.path()
-        }
-    }
-
-    pub fn scoped_home() -> HomeGuard {
-        let guard = HOME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", dir.path());
-        HomeGuard { dir, _guard: guard }
-    }
-}
+// Earlier iterations defined a module-local `mod_integration_helpers`
+// with its own HOME_LOCK mutex. That duplicated the lock defined in
+// `enrich_cmd::test_env` (mod.rs) and let tests in the two modules
+// collide on the process-wide `HOME` env var when run
+// concurrently. The helper was consolidated into `test_env` —
+// nothing lives here now by design.

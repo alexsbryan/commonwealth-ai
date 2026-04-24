@@ -6,6 +6,7 @@ pub mod document;
 pub mod document_asset;
 pub mod document_operation;
 pub mod email;
+pub mod enrich;
 pub mod enrichment_checker;
 pub mod epistemic;
 pub mod file;

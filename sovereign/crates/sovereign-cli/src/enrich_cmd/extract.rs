@@ -502,7 +502,10 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
 ///
 /// Returns `Ok(None)` when there's nothing to retry; `Err` on I/O or
 /// deserialization problems (which signal a broken run-output file).
-fn read_latest_failures(
+///
+/// `pub(super)` because the `build` orchestration reads this to
+/// decide whether to auto-retry after an Extract step fails.
+pub(super) fn read_latest_failures(
     runs_dir: &std::path::Path,
 ) -> Result<Option<(PathBuf, Vec<(String, PhaseFailureKind)>)>, String> {
     if !runs_dir.exists() {

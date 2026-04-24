@@ -523,3 +523,73 @@ export async function lcClean(corpusId: string): Promise<LcCleanResult> {
 export async function lcCancel(corpusId: string): Promise<boolean> {
   return invoke("lc_cancel", { corpusId });
 }
+
+// ─── Atlas enrichment (Landing 3.C/3.D) ──────────────────────────────
+//
+// Wrappers for the enrichment Tauri command surface in
+// sovereign-desktop/src-tauri/src/enrich_commands.rs. One function
+// per command, typed end-to-end against the Rust signatures.
+
+import type {
+  EnrichBuildHandle,
+  EnrichedCorpusSummary,
+  PhaseFailure,
+  SepIngestResult,
+} from "./types";
+
+/** Kick off an async `enrich build` run. Returns immediately with
+ *  the channel name; the UI subscribes via
+ *  `listen<EnrichProgress>(handle.channel, ...)`.
+ *
+ *  - `chapters = null` runs `--full`
+ *  - `chapters = [ids]` runs `--chapters <csv>`
+ *  - `skipSteps` forwards `--skip <step>` flags
+ */
+export async function enrichBuildAsync(
+  corpusId: string,
+  chapters: string[] | null,
+  skipSteps: string[] | null,
+): Promise<EnrichBuildHandle> {
+  return invoke("enrich_build_async", {
+    corpusId,
+    chapters,
+    skipSteps,
+  });
+}
+
+/** Request cancellation of an in-flight build. Returns `true` if
+ *  the job was found and flagged, `false` if the job_id isn't
+ *  tracked (already finished or never started). Idempotent —
+ *  double-clicking Cancel is harmless.
+ *
+ *  Typical latency to actual subprocess kill is sub-second (the
+ *  CLI emits ≥ 1 stdout line per chapter). A terminal
+ *  `spawn_failed` event follows carrying "Build cancelled by user". */
+export async function enrichCancelBuild(jobId: string): Promise<boolean> {
+  return invoke("enrich_cancel_build", { jobId });
+}
+
+/** Read the structured-failure aggregate for one corpus. Returns
+ *  an array of `PhaseFailure` records the UI groups by kind. */
+export async function enrichErrors(corpusId: string): Promise<PhaseFailure[]> {
+  return invoke("enrich_errors", { corpusId });
+}
+
+/** Scaffold a per-article SEP enrichment corpus from the cached
+ *  parquet. `paragraphsPerSection = null` uses the recipe default
+ *  (5 paragraphs per section). */
+export async function enrichSepIngest(
+  slug: string,
+  paragraphsPerSection: number | null,
+): Promise<SepIngestResult> {
+  return invoke("enrich_sep_ingest", {
+    slug,
+    paragraphsPerSection,
+  });
+}
+
+/** Inventory of enrichment corpora on disk. Sorted newest-first
+ *  by `created_at`. */
+export async function enrichListCorpora(): Promise<EnrichedCorpusSummary[]> {
+  return invoke("enrich_list_corpora");
+}

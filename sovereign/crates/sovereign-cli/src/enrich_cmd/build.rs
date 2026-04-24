@@ -25,7 +25,10 @@ use super::{
     atlas_configuration, atlas_gaps, atlas_phase_cmd, atlas_resolve, atlas_tensions,
     config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
-use corpus_engine::enrichment::pipeline::{PipelineRegistry, SeedStrategy};
+use corpus_engine::enrichment::pipeline::{
+    BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
+};
+use std::sync::Arc;
 use crate::util::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
@@ -96,9 +99,44 @@ pub async fn cmd_build(args: &[String]) -> i32 {
         }
     };
 
-    // Load the pipeline so we can validate the corpus is atlas-
-    // shaped AND drop steps the pipeline explicitly opts out of
-    // (seed-less atlas variants; pipelines that don't run Phase 8).
+    // Emitter that prints each progress event as a CLI-style
+    // banner. Desktop callers pass their own emitter (Tauri
+    // channel) instead — the orchestration is identical either
+    // way.
+    let progress: EnrichProgressFn = Arc::new(|evt: EnrichProgress| {
+        print_cli_event(&evt);
+    });
+    build_with_progress(&parsed, Some(progress)).await
+}
+
+/// Library entry point: run the full `enrich build` flow with an
+/// optional streaming progress callback.
+///
+/// The callback receives typed `EnrichProgress` events in strict
+/// order (`BuildStart` → step events → `Complete` or `Aborted`).
+/// `None` runs silently — useful for integration tests that only
+/// care about the exit code.
+///
+/// Returns the same exit code `cmd_build` would: 0 on success,
+/// nonzero when any enabled step fails.
+///
+/// Shared by the CLI (`cmd_build`) and the desktop Tauri layer
+/// (`sovereign-desktop/src-tauri/src/enrich_commands.rs`). Adding a
+/// per-step side effect means editing here once rather than across
+/// frontends.
+pub async fn build_with_progress(
+    parsed: &ParsedBuild,
+    progress: Option<EnrichProgressFn>,
+) -> i32 {
+    let emit = |evt: EnrichProgress| {
+        if let Some(cb) = progress.as_ref() {
+            cb(evt);
+        }
+    };
+
+    // Load pipeline capabilities once. Failure surfaces before any
+    // progress event so an invalid corpus_id doesn't emit a
+    // spurious BuildStart.
     let capabilities = match load_pipeline_capabilities(&parsed.corpus_id) {
         Ok(c) => c,
         Err((code, msg)) => {
@@ -107,79 +145,153 @@ pub async fn cmd_build(args: &[String]) -> i32 {
         }
     };
 
-    let plan = Plan::new(&parsed, &capabilities);
+    let plan = Plan::new(parsed, &capabilities);
     if parsed.dry_run {
         plan.print_dry_run();
         return 0;
     }
 
-    // Banner.
-    println!("=== enrich build — {} ===", parsed.corpus_id);
-    if !plan.auto_skipped.is_empty() {
-        println!(
-            "  pipeline `{}` auto-skips: {}",
-            capabilities.pipeline_id,
-            plan.auto_skipped
-                .iter()
-                .map(|s| s.label())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-    let total = plan.enabled_steps().count();
-    println!("  {total} step(s) planned");
-    for (i, step) in plan.enabled_steps().enumerate() {
-        println!("    {}. {}", i + 1, step.label());
-    }
-    println!();
+    emit(EnrichProgress::BuildStart {
+        corpus_id: parsed.corpus_id.clone(),
+        pipeline_id: capabilities.pipeline_id.clone(),
+        steps: plan.enabled_steps().map(Step::to_build_step).collect(),
+        auto_skipped: plan
+            .auto_skipped
+            .iter()
+            .map(|s| s.to_build_step())
+            .collect(),
+    });
 
-    // Run each step.
+    let total = plan.enabled_steps().count();
     for (i, step) in plan.enabled_steps().enumerate() {
-        println!("─── [{}/{}] {} ───", i + 1, total, step.label());
-        let code = run_step(step, &parsed).await;
+        let ordinal = i + 1;
+        let build_step = step.to_build_step();
+        emit(EnrichProgress::StepStart {
+            corpus_id: parsed.corpus_id.clone(),
+            step: build_step,
+            ordinal,
+            total,
+        });
+        let code = run_step(step, parsed).await;
         if code != 0 {
-            eprintln!();
-            eprintln!(
-                "error: step `{}` exited with code {code}. Build stopped.",
+            let message = format!(
+                "step `{}` exited with code {code}",
                 step.label()
             );
+            eprintln!();
+            eprintln!("error: {message}. Build stopped.");
+            emit(EnrichProgress::StepFailed {
+                corpus_id: parsed.corpus_id.clone(),
+                step: build_step,
+                message,
+                exit_code: code,
+            });
+            emit(EnrichProgress::Aborted {
+                corpus_id: parsed.corpus_id.clone(),
+                failed_step: build_step,
+                exit_code: code,
+            });
             return code;
         }
-        println!();
+        emit(EnrichProgress::StepDone {
+            corpus_id: parsed.corpus_id.clone(),
+            step: build_step,
+            // Per-step summaries land in the CLI's stdout; the
+            // progress event carries a terse marker so the UI
+            // renders a checkmark without re-reading the CLI
+            // output. Richer summaries can ride on the event when
+            // each step's `cmd_*` function grows a structured
+            // result type.
+            summary: format!("{} complete", build_step.display_name()),
+        });
     }
 
-    println!("=== build complete — {} ===", parsed.corpus_id);
+    emit(EnrichProgress::Complete {
+        corpus_id: parsed.corpus_id.clone(),
+        steps_completed: total,
+    });
     0
+}
+
+/// Render a single progress event on the CLI (stdout) in the same
+/// banner shape operators have seen since Landing 3. Desktop
+/// callers don't use this — they emit the structured event
+/// straight through.
+fn print_cli_event(evt: &EnrichProgress) {
+    match evt {
+        EnrichProgress::BuildStart {
+            corpus_id,
+            pipeline_id,
+            steps,
+            auto_skipped,
+        } => {
+            println!("=== enrich build — {corpus_id} ===");
+            if !auto_skipped.is_empty() {
+                let labels: Vec<&str> =
+                    auto_skipped.iter().map(|s| s.id()).collect();
+                println!(
+                    "  pipeline `{pipeline_id}` auto-skips: {}",
+                    labels.join(", ")
+                );
+            }
+            println!("  {} step(s) planned", steps.len());
+            for (i, s) in steps.iter().enumerate() {
+                println!("    {}. {}", i + 1, s.id());
+            }
+            println!();
+        }
+        EnrichProgress::StepStart {
+            step,
+            ordinal,
+            total,
+            ..
+        } => {
+            println!(
+                "─── [{ordinal}/{total}] {} ───",
+                step.id()
+            );
+        }
+        EnrichProgress::StepDone { .. } => {
+            println!();
+        }
+        EnrichProgress::ChapterProgress { .. } | EnrichProgress::ChapterFailed { .. } => {
+            // The extract step prints its own per-chapter lines;
+            // avoid double-printing. These events exist for
+            // non-CLI consumers.
+        }
+        EnrichProgress::StepFailed { .. } | EnrichProgress::Aborted { .. } => {
+            // The caller already prints a detailed error to
+            // stderr via eprintln! above; nothing to add here.
+        }
+        EnrichProgress::SpawnFailed { corpus_id, message } => {
+            // This variant is emitted only by the desktop's
+            // subprocess-spawn path — the CLI's own in-process
+            // orchestration can't hit it. Print a line anyway so
+            // this branch is exhaustive and future in-process
+            // spawn scenarios (e.g. a sub-step that shells out)
+            // would surface correctly.
+            eprintln!("error: could not start build for {corpus_id}: {message}");
+        }
+        EnrichProgress::Cancelled { corpus_id, at_step } => {
+            // Same reason as `SpawnFailed` above: the CLI can't
+            // emit this today (no cancellation channel in the
+            // in-process path), but the match is exhaustive so a
+            // future CLI flag like `--cancel-after-step <N>`
+            // wouldn't require a parser update.
+            let step_label = at_step.map(|s| s.id()).unwrap_or("none");
+            eprintln!("cancelled build for {corpus_id} (was at step: {step_label})");
+        }
+        EnrichProgress::Complete { corpus_id, .. } => {
+            println!("=== build complete — {corpus_id} ===");
+        }
+    }
 }
 
 async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
     let corpus = parsed.corpus_id.as_str();
     match step {
         Step::Seed => seed_cmd::cmd_seed(&[corpus.into()]).await,
-        Step::Extract => {
-            let mut args: Vec<String> = vec![corpus.into()];
-            match &parsed.selection {
-                Selection::Full => args.push("--full".into()),
-                Selection::Chapters(ids) => {
-                    args.push("--chapters".into());
-                    args.push(ids.join(","));
-                }
-            }
-            let code = extract::cmd_extract(&args).await;
-            if code != 0 {
-                return code;
-            }
-            // On a subset run, promote to cache so downstream
-            // phases have input. `--full` already updates the cache.
-            if matches!(&parsed.selection, Selection::Chapters(_)) {
-                if let Err(e) = promote_subset_to_cache(corpus) {
-                    eprintln!("error: promoting subset run to cache: {e}");
-                    return 1;
-                }
-                println!("  · promoted subset run → cache/questions.json");
-            }
-            0
-        }
+        Step::Extract => run_extract_step(parsed).await,
         Step::Cluster => atlas_phase_cmd::cmd_cluster_atlas(&[corpus.into()]).await,
         Step::Name => atlas_phase_cmd::cmd_name_atlas_clusters(&[corpus.into()]).await,
         Step::Resolve => {
@@ -193,6 +305,165 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
         }
         Step::Report => schema_review::cmd_schema_report(&[corpus.into()]).await,
     }
+}
+
+/// Run the Extract step with an auto-retry pass on transient
+/// failure kinds (ThinkTruncated + ParseDrift). The pattern:
+///
+///   1. Run `cmd_extract --full` (or `--chapters …`). If clean,
+///      done.
+///   2. If non-zero AND the run file shows ONLY retry-eligible
+///      failures, invoke `--retry-failed --terse` once. A
+///      different model seed + bumped output budget recovers
+///      ~80-90% of drift cases (measured on the Dopesick Jesus
+///      smoke before structured retries were wired).
+///   3. After retry, re-check the final failure set. If it's
+///      empty or has only non-retriable kinds (ChatError,
+///      Skipped), promote whatever we have and return 0; the
+///      caller can still `enrich errors <corpus>` to surface
+///      what's left.
+///   4. If retry-eligible failures remain, return 1 — the
+///      operator gets the same glassbox output as before.
+///
+/// An operator can opt out of the auto-retry by setting
+/// `SOVEREIGN_ENRICH_AUTO_RETRY=0`. Defaults to on. The
+/// env-var (rather than a CLI flag) keeps the common case —
+/// CI invocations + the desktop UI — from having to thread a
+/// boolean through every orchestrator.
+async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
+    use corpus_engine::enrichment::pipeline::PhaseFailureKind;
+
+    let corpus = parsed.corpus_id.as_str();
+
+    // First pass — the standard extract run shaped by the
+    // orchestrator's selection.
+    let mut first_args: Vec<String> = vec![corpus.into()];
+    match &parsed.selection {
+        Selection::Full => first_args.push("--full".into()),
+        Selection::Chapters(ids) => {
+            first_args.push("--chapters".into());
+            first_args.push(ids.join(","));
+        }
+    }
+    let first_code = extract::cmd_extract(&first_args).await;
+
+    // Whatever the first pass did, we still need to promote a
+    // subset run's output to cache so downstream phases have
+    // input. Do this now so the retry (if any) sees the same
+    // state the promote would produce.
+    if matches!(&parsed.selection, Selection::Chapters(_)) && first_code == 0 {
+        if let Err(e) = promote_subset_to_cache(corpus) {
+            eprintln!("error: promoting subset run to cache: {e}");
+            return 1;
+        }
+        println!("  · promoted subset run → cache/questions.json");
+    }
+
+    if first_code == 0 {
+        return 0;
+    }
+
+    // The first pass failed. Decide whether to auto-retry.
+    let auto_retry_enabled = std::env::var("SOVEREIGN_ENRICH_AUTO_RETRY")
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
+    if !auto_retry_enabled {
+        return first_code;
+    }
+
+    let runs_dir = paths::runs_dir(corpus);
+    let failures = match extract::read_latest_failures(&runs_dir) {
+        Ok(Some((_, ids))) => ids,
+        Ok(None) => {
+            // No run file means extract never produced one —
+            // probably a config error. Nothing to retry.
+            return first_code;
+        }
+        Err(msg) => {
+            eprintln!("  · auto-retry skipped: reading latest run file: {msg}");
+            return first_code;
+        }
+    };
+
+    let retriable_count = failures
+        .iter()
+        .filter(|(_, kind)| {
+            matches!(
+                kind,
+                PhaseFailureKind::ThinkTruncated | PhaseFailureKind::ParseDrift
+            )
+        })
+        .count();
+
+    if retriable_count == 0 {
+        // Nothing the terse retry can help with (chat errors,
+        // empty extractions, etc.). Let the operator handle.
+        return first_code;
+    }
+
+    println!();
+    println!(
+        "  · auto-retry: {} retriable failure(s) (parse_drift / think_truncated) — \
+         running `--retry-failed --terse` once",
+        retriable_count
+    );
+    println!();
+
+    let retry_args: Vec<String> = vec![
+        corpus.into(),
+        "--retry-failed".into(),
+        "--terse".into(),
+    ];
+    let retry_code = extract::cmd_extract(&retry_args).await;
+
+    // After the retry, re-read the latest run file to decide
+    // whether the orchestration can continue. If only
+    // unrecoverable kinds remain (ChatError, Skipped,
+    // EmptyExtraction), surface them to the operator but allow
+    // the orchestrator to continue — those chapters just won't
+    // be in the cache for downstream phases. If retriable kinds
+    // are still present, treat the retry as having not resolved
+    // the issue and return the original failure exit.
+    let remaining = match extract::read_latest_failures(&runs_dir) {
+        Ok(Some((_, ids))) => ids,
+        Ok(None) => Vec::new(),
+        Err(_) => Vec::new(),
+    };
+    let remaining_retriable = remaining
+        .iter()
+        .filter(|(_, kind)| {
+            matches!(
+                kind,
+                PhaseFailureKind::ThinkTruncated | PhaseFailureKind::ParseDrift
+            )
+        })
+        .count();
+
+    if remaining_retriable == 0 {
+        println!();
+        println!(
+            "  ✓ auto-retry resolved {} chapter(s). {} non-retriable failure(s) remain; \
+             continuing build.",
+            retriable_count - remaining_retriable,
+            remaining.len()
+        );
+        // Subset runs still need to promote the retry output.
+        // The terse retry path in the runner already merges into
+        // cache/questions.json (Landing 2 wiring), so a subset
+        // retry lands in cache without our help — don't double-
+        // promote.
+        return 0;
+    }
+
+    // Retry didn't recover everything. Surface the original
+    // failure exit and let the operator intervene via
+    // `enrich errors <corpus>`.
+    eprintln!();
+    eprintln!(
+        "  ! auto-retry left {} retriable failure(s) unresolved; build stopped.",
+        remaining_retriable
+    );
+    retry_code
 }
 
 /// Copy the most recent subset run into cache/questions.json so
@@ -234,7 +505,7 @@ fn find_latest_run(runs_dir: &std::path::Path) -> std::io::Result<std::path::Pat
 // ── Plan + step enum ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Step {
+pub enum Step {
     Seed,
     Extract,
     Cluster,
@@ -247,6 +518,24 @@ enum Step {
 }
 
 impl Step {
+    /// Cross-crate representation of this step for the progress
+    /// event stream (`corpus_engine::enrichment::pipeline::BuildStep`).
+    /// Keep in lockstep with `Step::label` — the canonical id string
+    /// comes from `BuildStep::id` to avoid two sources of truth.
+    pub(super) fn to_build_step(self) -> BuildStep {
+        match self {
+            Step::Seed => BuildStep::Seed,
+            Step::Extract => BuildStep::Extract,
+            Step::Cluster => BuildStep::Cluster,
+            Step::Name => BuildStep::Name,
+            Step::Resolve => BuildStep::Resolve,
+            Step::Tensions => BuildStep::Tensions,
+            Step::Gaps => BuildStep::Gaps,
+            Step::Configure => BuildStep::Configure,
+            Step::Report => BuildStep::Report,
+        }
+    }
+
     fn label(&self) -> &'static str {
         match self {
             Step::Seed => "seed",
@@ -395,18 +684,70 @@ impl Plan {
 
 // ── Arg parsing ──────────────────────────────────────────────
 
-#[derive(Debug)]
-enum Selection {
+#[derive(Debug, Clone)]
+pub enum Selection {
     Full,
     Chapters(Vec<String>),
 }
 
-#[derive(Debug)]
-struct ParsedBuild {
-    corpus_id: String,
-    selection: Selection,
-    skipped: Vec<Step>,
-    dry_run: bool,
+/// Parsed `enrich build` invocation. Exposed publicly so external
+/// callers (desktop app) can construct one without going through
+/// argv parsing.
+#[derive(Debug, Clone)]
+pub struct ParsedBuild {
+    pub corpus_id: String,
+    pub selection: Selection,
+    /// Step labels the caller explicitly asked to skip (via
+    /// `--skip <label>` on the CLI, or by inserting values
+    /// manually in the desktop path). Pipeline-capability auto
+    /// skips land separately in `Plan::auto_skipped`.
+    pub(super) skipped: Vec<Step>,
+    pub dry_run: bool,
+}
+
+impl ParsedBuild {
+    /// Construct a `ParsedBuild` without going through argv.
+    /// Intended for the desktop Tauri layer, which receives typed
+    /// inputs (a corpus id + an optional chapter list + a set of
+    /// step-ids to skip).
+    ///
+    /// `skip_step_ids` accepts the step-id strings exposed by
+    /// `BuildStep::id` (`seed`, `extract`, …). Unknown ids are
+    /// rejected — silent ignore would be a footgun when a typo
+    /// lets Phase 8 run on a corpus the operator meant to exclude.
+    #[allow(dead_code)] // Used by the desktop enrich_commands layer once it lands.
+    pub fn from_inputs(
+        corpus_id: impl Into<String>,
+        chapters: Option<Vec<String>>,
+        skip_step_ids: &[String],
+        dry_run: bool,
+    ) -> Result<Self, String> {
+        let selection = match chapters {
+            Some(ids) if ids.is_empty() => {
+                return Err("chapter list is empty".into());
+            }
+            Some(ids) => Selection::Chapters(ids),
+            None => Selection::Full,
+        };
+        let mut skipped: Vec<Step> = Vec::new();
+        for id in skip_step_ids {
+            let step = Step::from_label(id).ok_or_else(|| {
+                format!(
+                    "unknown skip step `{id}` (valid: seed, extract, cluster, \
+                     name, resolve, tensions, gaps, configure, report)"
+                )
+            })?;
+            if !skipped.contains(&step) {
+                skipped.push(step);
+            }
+        }
+        Ok(Self {
+            corpus_id: corpus_id.into(),
+            selection,
+            skipped,
+            dry_run,
+        })
+    }
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedBuild, String> {
@@ -661,5 +1002,57 @@ mod tests {
         // --skip tensions is NOT a capability-driven skip, so it
         // doesn't show up in auto_skipped.
         assert!(!plan.auto_skipped.contains(&Step::Tensions));
+    }
+
+    #[test]
+    fn from_inputs_matches_parse_args_for_equivalent_cli() {
+        // Desktop builds ParsedBuild via `from_inputs`; CLI
+        // via `parse_args`. Equivalent inputs must produce
+        // identical ParsedBuild shapes — otherwise the progress
+        // stream diverges between the two frontends.
+        let cli = parse_args(&[
+            "bk".into(),
+            "--chapters".into(),
+            "sec_0001,sec_0002".into(),
+            "--skip".into(),
+            "configure".into(),
+        ])
+        .unwrap();
+        let desktop = ParsedBuild::from_inputs(
+            "bk",
+            Some(vec!["sec_0001".into(), "sec_0002".into()]),
+            &["configure".into()],
+            false,
+        )
+        .unwrap();
+        assert_eq!(cli.corpus_id, desktop.corpus_id);
+        assert_eq!(cli.dry_run, desktop.dry_run);
+        assert_eq!(cli.skipped, desktop.skipped);
+        match (cli.selection, desktop.selection) {
+            (Selection::Chapters(a), Selection::Chapters(b)) => assert_eq!(a, b),
+            other => panic!("expected matching chapter selections, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn from_inputs_rejects_unknown_skip_id() {
+        // Typos in the skip list are operator errors — surfacing
+        // as an Err prevents a UI dialog that silently runs a
+        // phase the operator thought it had excluded.
+        let err = ParsedBuild::from_inputs(
+            "bk",
+            None,
+            &["configure".into(), "nope".into()],
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("nope"));
+    }
+
+    #[test]
+    fn from_inputs_rejects_empty_chapter_list() {
+        let err =
+            ParsedBuild::from_inputs("bk", Some(vec![]), &[], false).unwrap_err();
+        assert!(err.contains("empty"));
     }
 }

@@ -956,3 +956,154 @@ export interface CleanResult {
   tags_removed_from: number;
   index_notes_deleted: number;
 }
+
+// ─── Atlas enrichment (Landing 3.C) ──────────────────────────────────
+//
+// Types mirror the Rust side 1:1 — see:
+//   corpus-engine/src/enrichment/pipeline/progress.rs   (EnrichProgress, BuildStep)
+//   corpus-engine/src/enrichment/pipeline/types.rs      (PhaseFailure, PhaseFailureKind)
+//   sovereign/crates/sovereign-desktop/src-tauri/src/enrich_commands.rs
+//
+// Rust uses `#[serde(tag = "kind", rename_all = "snake_case")]` with
+// flat fields per variant (NOT the `tag`+`content` shape
+// LocalCorpusProgress uses). Keep these TS unions keyed on `kind`
+// and flat-fielded; a tag-shape mismatch would silently wire the
+// UI to events it can't route.
+
+/// A build step. Values match `BuildStep::id()` on the Rust side.
+export type EnrichBuildStep =
+  | "seed"
+  | "extract"
+  | "cluster"
+  | "name"
+  | "resolve"
+  | "tensions"
+  | "gaps"
+  | "configure"
+  | "report";
+
+/// Progress event streamed on `enrich://progress/{job_id}` during
+/// an `enrich_build_async` run. The UI listens with
+/// `listen<EnrichProgress>(channel, handler)`.
+export type EnrichProgress =
+  | {
+      kind: "build_start";
+      corpus_id: string;
+      pipeline_id: string;
+      steps: EnrichBuildStep[];
+      auto_skipped: EnrichBuildStep[];
+    }
+  | {
+      kind: "step_start";
+      corpus_id: string;
+      step: EnrichBuildStep;
+      ordinal: number;
+      total: number;
+    }
+  | {
+      kind: "chapter_progress";
+      corpus_id: string;
+      chapter_id: string;
+      index: number;
+      total: number;
+      question_count: number | null;
+    }
+  | {
+      kind: "chapter_failed";
+      corpus_id: string;
+      chapter_id: string;
+      /// `PhaseFailureKind` snake_case id (e.g. "parse_drift").
+      failure_kind: string;
+      reason: string;
+    }
+  | {
+      kind: "step_done";
+      corpus_id: string;
+      step: EnrichBuildStep;
+      summary: string;
+    }
+  | {
+      kind: "step_failed";
+      corpus_id: string;
+      step: EnrichBuildStep;
+      message: string;
+      exit_code: number;
+    }
+  | {
+      kind: "complete";
+      corpus_id: string;
+      steps_completed: number;
+    }
+  | {
+      kind: "aborted";
+      corpus_id: string;
+      failed_step: EnrichBuildStep;
+      exit_code: number;
+    }
+  | {
+      /// The build couldn't start at all — CLI binary not on
+      /// $PATH, permission denied on spawn, etc. Distinct from
+      /// "aborted" because no step ran; the UI surfaces this as
+      /// "couldn't start build" rather than attributing it to
+      /// a specific step.
+      kind: "spawn_failed";
+      corpus_id: string;
+      message: string;
+    }
+  | {
+      /// User-initiated cancellation killed the build. Distinct
+      /// from aborted/spawn_failed so the UI can render
+      /// "Cancelled" without string-sniffing messages.
+      kind: "cancelled";
+      corpus_id: string;
+      at_step: EnrichBuildStep | null;
+    };
+
+/// Handle returned by `enrich_build_async`. The UI uses `channel`
+/// directly with `listen` — it already encodes the job id so
+/// components don't need to reconstruct `enrich://progress/{id}`
+/// themselves.
+export interface EnrichBuildHandle {
+  job_id: string;
+  corpus_id: string;
+  channel: string;
+}
+
+/// One entry in the `enrich_list_corpora` response. `created_at`
+/// is an ISO-8601 UTC string; the panel sorts newest-first.
+export interface EnrichedCorpusSummary {
+  corpus_id: string;
+  pipeline_id: string;
+  source_path: string;
+  created_at: string;
+}
+
+/// Return type for `enrich_sep_ingest`. `log` carries the CLI's
+/// stdout so the UI can render it inside a collapsible audit
+/// panel — operators see exactly what was scaffolded.
+export interface SepIngestResult {
+  corpus_id: string;
+  slug: string;
+  log: string;
+}
+
+/// One structured failure record from `enrich_errors`. The UI
+/// groups these by `(phase, kind)` and renders the `remediation`
+/// string (populated by the CLI's `--json` path from
+/// `PhaseFailureKind::remediation_hint()` on the Rust side).
+export interface PhaseFailure {
+  /// `PipelinePhase::id()` on the Rust side — snake_case
+  /// ("questions", "atlas_named_clusters", "tensions", …).
+  phase: string;
+  /// Prefix-tagged subject: "chapter:sec_0001",
+  /// "sketch:entity_state:sec_0003#2", "cluster:claim:cl_c_01", …
+  subject: string;
+  /// `PhaseFailureKind` snake_case id.
+  kind: string;
+  reason: string;
+  raw_response_head?: string | null;
+  /// One-line remediation hint the UI shows next to the group
+  /// header. Populated by the CLI's `--json` view; absent only if
+  /// an older CLI ships without the view wrapper.
+  remediation?: string;
+}

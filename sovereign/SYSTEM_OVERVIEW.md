@@ -558,6 +558,47 @@ full atlas pipeline. The v1 `field_model` flow is retained at
 chunk-embedding flow used by the epistemic-research skill — atlas
 and field-model enrichment coexist on the same source parquet.
 
+**Desktop enrichment surface (Landing 3.C)**: four Tauri commands
+in `sovereign-desktop/src-tauri/src/enrich_commands.rs`:
+
+| Command | What it does |
+|---|---|
+| `enrich_build_async` | Spawns `sovereign-cli enrich build <corpus>` as a subprocess, streams typed `EnrichProgress` events on `enrich://progress/{job_id}`. Returns a job handle immediately; UI subscribes via `listen<EnrichProgress>`. |
+| `enrich_errors` | Invokes `sovereign-cli enrich errors <corpus> --json`; returns the structured-failure array the desktop error panel renders grouped by kind. |
+| `enrich_sep_ingest` | Wraps `sovereign-cli enrich sep-ingest <slug>`; returns the corpus id + CLI log for the UI to surface. |
+| `enrich_list_corpora` | Reads `~/.sovereign/enrichment/*/config.json` directly, returns pipeline id + source path + created_at per enrichment corpus. |
+
+The orchestration library lives at `sovereign-tools::enrich` —
+`run_enrich_build()` spawns the CLI subprocess, parses its stdout
+banners into the canonical `EnrichProgress` enum (defined in
+`corpus-engine::enrichment::pipeline::progress`), and forwards
+events to a caller-supplied callback. A single parser source of
+truth means the CLI and the desktop share one event vocabulary.
+
+**Svelte UI (Landing 3.D)**: A new "Enrichment" tab in
+`SettingsPanel.svelte` mounts `EnrichmentPanel.svelte`, which:
+
+- Lists enriched corpora from `enrich_list_corpora` with
+  pipeline + age.
+- Scaffolds new SEP-article corpora via `enrich_sep_ingest`
+  (slug + paragraphs-per-section form).
+- Kicks off `enrich_build_async` per corpus and renders live
+  progress inline — current step, `n/total` step counter, per-
+  chapter line during Phase 1, progress bar, terminal flash
+  on complete/aborted.
+- Exposes `enrich_errors` as an expandable drawer per row,
+  grouping failures by `(phase, kind)` with count + sample +
+  phase/kind label (remediation hints surface in a follow-on
+  iteration once the backend exposes them in the JSON).
+
+State lives in `lib/stores/enrichProgress.svelte.ts` — a runes
+singleton keyed by `job_id` that attaches a per-build Tauri
+listener, applies events through a pure `applyEvent` reducer,
+and auto-prunes terminal jobs after a 1.2 s flash. Types live
+in `lib/types.ts` (hand-maintained to mirror the Rust
+`#[serde(tag = "kind")]` shape); API wrappers in `lib/api.ts`.
+9 Vitest reducer tests pin the state-transition contract.
+
 ### 3.6 Safety
 
 Hardcoded, not configurable from recipes:

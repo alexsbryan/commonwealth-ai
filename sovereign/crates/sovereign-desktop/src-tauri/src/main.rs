@@ -1,6 +1,7 @@
 mod approval;
 mod bootstrap;
 mod commands;
+mod enrich_commands;
 mod friendly_names;
 mod insight_commands;
 mod local_corpus_commands;
@@ -219,6 +220,11 @@ fn main() {
             local_corpus_commands::lc_rollback,
             local_corpus_commands::lc_clean,
             local_corpus_commands::lc_cancel,
+            enrich_commands::enrich_build_async,
+            enrich_commands::enrich_cancel_build,
+            enrich_commands::enrich_errors,
+            enrich_commands::enrich_sep_ingest,
+            enrich_commands::enrich_list_corpora,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");

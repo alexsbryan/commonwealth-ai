@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { detectBootstrap, getConfig, saveConfig } from "../api";
   import type { BootstrapSnapshot, DesktopConfig } from "../types";
+  import EnrichmentPanel from "./EnrichmentPanel.svelte";
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
   import MeshSettings from "./MeshSettings.svelte";
@@ -18,6 +19,7 @@
   type Tab =
     | "models"
     | "knowledge"
+    | "enrichment"
     | "local-knowledge"
     | "mesh"
     | "tools"
@@ -178,6 +180,7 @@
   const tabs: { id: Tab; label: string }[] = [
     { id: "models",          label: "Models"          },
     { id: "knowledge",       label: "Knowledge"       },
+    { id: "enrichment",      label: "Enrichment"      },
     { id: "local-knowledge", label: "Local Knowledge" },
     { id: "mesh",            label: "Mesh"            },
     { id: "tools",           label: "Skills"          },
@@ -517,6 +520,17 @@
 
           <p class="section-label">Installed corpora</p>
           <KnowledgeStatus />
+        {/if}
+
+        <!-- ──────────────── ENRICHMENT (atlas) ──────────────── -->
+        {#if activeTab === "enrichment"}
+          <p class="tab-intro">
+            Atlas enrichment produces a typed knowledge graph from a corpus —
+            entities, events, states, relations, claims, questions,
+            configurations. Run one article or book at a time; errors surface
+            with remediation commands you can copy-paste.
+          </p>
+          <EnrichmentPanel />
         {/if}
 
         <!-- ──────────────── LOCAL KNOWLEDGE ──────────────── -->

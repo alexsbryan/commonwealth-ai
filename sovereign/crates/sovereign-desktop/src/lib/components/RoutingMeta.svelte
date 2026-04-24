@@ -3,7 +3,16 @@
     provenance?: {
       intent: string;
       search_method?: string;
-      sources?: { origin: string; count: number }[];
+      sources?: {
+        origin: string;
+        count: number;
+        /// Set when the originating corpus_id wasn't present
+        /// locally and the hit was served via the mesh
+        /// fan-out. Rendered as "origin (count) via <peer>" so
+        /// same-corpus-two-ways ("sep" locally + "sep" from a
+        /// peer) can't be confused for a single source.
+        from_peer?: string;
+      }[];
       total_latency_ms: number;
       tokens_used: number;
       inference_backend: string;

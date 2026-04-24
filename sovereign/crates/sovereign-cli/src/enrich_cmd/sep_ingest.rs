@@ -38,7 +38,10 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "--paragraphs-per-section N",
-                "Group N parquet paragraphs into one atlas section (default: 5).",
+                "Group N parquet paragraphs into one atlas section (default: 10). \
+                 Tuning note: the compatibilism smoke at N=5 produced 19 sections = \
+                 19 Phase-1 LLM calls; N=10 halves that while keeping enough internal \
+                 structure for the trajectory + configuration phases to have signal.",
             ),
             (
                 "--parquet <path>",
@@ -131,6 +134,25 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
         help::print(&HELP);
         return 2;
     };
+
+    // Defensive slug clamp. The slug becomes part of the corpus
+    // id (`sep-<slug>`) and the file name at
+    // `~/.sovereign/corpora/sep/articles/<slug>.md`. Real SEP
+    // category slugs on plato.stanford.edu are lowercase ASCII
+    // + digits + hyphens; rejecting anything else here makes
+    // path-shape assumptions downstream safe without having to
+    // sprinkle validators through every consumer.
+    if !is_valid_sep_slug(&slug) {
+        eprintln!(
+            "error: invalid SEP slug `{slug}`: slugs must match `[a-z0-9-]+` \
+             (lowercase letters, digits, or hyphens only, 1-64 chars)."
+        );
+        eprintln!();
+        eprintln!(
+            "Hint: run `sovereign enrich sep-ingest --list` to see valid slugs."
+        );
+        return 2;
+    }
 
     // Load the article from the parquet.
     let article = match load_article(&parquet_path, &slug) {
@@ -234,6 +256,17 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
     0
 }
 
+/// Same validator as the desktop's `is_valid_sep_slug`; kept in
+/// both places so the CLI path can refuse malformed input without
+/// depending on the desktop crate (the CLI is the lower layer).
+fn is_valid_sep_slug(slug: &str) -> bool {
+    if slug.is_empty() || slug.len() > 64 {
+        return false;
+    }
+    slug.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
 fn default_parquet_path() -> PathBuf {
     // `sovereign corpus acquire sep` drops the parquet here. See
     // `recipes/sep/recipe.toml` for the URL.
@@ -266,7 +299,7 @@ struct ParsedSepIngest {
 
 fn parse_args(args: &[String]) -> Result<ParsedSepIngest, String> {
     let mut slug: Option<String> = None;
-    let mut paragraphs_per_section: usize = 5;
+    let mut paragraphs_per_section: usize = 10;
     let mut parquet_override: Option<PathBuf> = None;
     let mut list = false;
     let mut force = false;
@@ -336,7 +369,12 @@ mod tests {
     fn parse_args_defaults_are_sensible() {
         let p = parse_args(&["compatibilism".into()]).unwrap();
         assert_eq!(p.slug.as_deref(), Some("compatibilism"));
-        assert_eq!(p.paragraphs_per_section, 5);
+        // 10 paragraphs/section is the tuned default — compatibilism
+        // becomes ~10 sections (from 97 paragraphs), keeping Phase 1
+        // LLM calls cheap while preserving internal argument
+        // structure. Changing this needs a paired update in the SEP
+        // recipe toml.
+        assert_eq!(p.paragraphs_per_section, 10);
         assert!(!p.list);
         assert!(!p.force);
         assert!(p.parquet_override.is_none());
@@ -384,5 +422,29 @@ mod tests {
     fn parse_args_rejects_unknown_flag() {
         let err = parse_args(&["x".into(), "--bogus".into()]).unwrap_err();
         assert!(err.contains("--bogus"));
+    }
+
+    #[test]
+    fn sep_slug_validator_accepts_real_plato_slugs() {
+        // Sampled from the parquet's `category` column — these
+        // are the shapes the validator needs to pass.
+        assert!(is_valid_sep_slug("compatibilism"));
+        assert!(is_valid_sep_slug("recursive-functions"));
+        assert!(is_valid_sep_slug("18thgerman-prekant"));
+        assert!(is_valid_sep_slug("abner-burgos"));
+    }
+
+    #[test]
+    fn sep_slug_validator_rejects_path_traversal_and_weird_chars() {
+        // The slug becomes part of a file path; rejecting these
+        // shapes avoids reasoning about symlinks / traversal in
+        // the downstream writer.
+        assert!(!is_valid_sep_slug("../etc/passwd"));
+        assert!(!is_valid_sep_slug("slug with spaces"));
+        assert!(!is_valid_sep_slug("slug/with/slashes"));
+        assert!(!is_valid_sep_slug("UPPERCASE"));
+        assert!(!is_valid_sep_slug("unicode-ümlaut"));
+        assert!(!is_valid_sep_slug(""));
+        assert!(!is_valid_sep_slug(&"a".repeat(65)));
     }
 }
