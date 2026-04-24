@@ -90,6 +90,20 @@ pub struct Exemplar {
     /// bank files until the next save.
     #[serde(default)]
     pub created_at: String,
+
+    /// Optional facet tag for atlas-pipeline exemplars. Phase 3
+    /// naming runs one banking pass per facet
+    /// (`question`/`claim`/`entity_state`/…); the tag lets a single
+    /// bank file carry exemplars from multiple facets while still
+    /// driving facet-specific selection via `select_top_k_facet`.
+    ///
+    /// `None` means "not facet-tagged" — the entry participates in
+    /// unfiltered `select_top_k` calls but is excluded from any
+    /// facet-filtered call. Banks loaded from the per-facet
+    /// directory layout (`exemplars/<pipeline>/<phase>/<facet>.json`)
+    /// land with the facet auto-stamped at load time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facet: Option<String>,
 }
 
 impl Exemplar {
@@ -284,6 +298,24 @@ impl ExemplarBank {
     /// Returns an empty vec if `reembed` / `load_embedded` has not
     /// been called.
     pub fn select_top_k(&self, query_embedding: &[f32], k: usize) -> Vec<&Exemplar> {
+        self.select_top_k_facet(query_embedding, k, None)
+    }
+
+    /// Facet-filtered variant of `select_top_k`. When `facet_filter`
+    /// is `Some(s)`, only exemplars with that exact `facet` value
+    /// participate in scoring. `None` matches every exemplar,
+    /// reproducing the legacy `select_top_k` behaviour.
+    ///
+    /// The atlas Phase 3 naming loop uses this to fetch
+    /// facet-specific examples even when the bank on disk mixes
+    /// facets — a convenience for hand-edited banks where
+    /// splitting by facet file isn't worth the ceremony.
+    pub fn select_top_k_facet(
+        &self,
+        query_embedding: &[f32],
+        k: usize,
+        facet_filter: Option<&str>,
+    ) -> Vec<&Exemplar> {
         let Some(loaded) = &self.loaded else {
             return Vec::new();
         };
@@ -292,6 +324,10 @@ impl ExemplarBank {
         }
         let mut scored: Vec<(f32, &Exemplar)> = loaded
             .iter()
+            .filter(|l| match facet_filter {
+                None => true,
+                Some(f) => l.exemplar.facet.as_deref() == Some(f),
+            })
             .map(|l| (cosine_similarity(query_embedding, &l.embedding), &l.exemplar))
             .collect();
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -426,6 +462,7 @@ mod tests {
             rationale: "Good because it is short.".into(),
             selector_text: Some(selector.into()),
             created_at: String::new(),
+            facet: None,
         }
     }
 
@@ -454,6 +491,7 @@ mod tests {
             rationale: "model said X, should have said Y".into(),
             selector_text: Some("c".into()),
             created_at: String::new(),
+            facet: None,
         });
         bank.save().unwrap();
 
@@ -527,6 +565,69 @@ mod tests {
         assert!(!stamped.created_at.is_empty());
     }
 
+    #[tokio::test]
+    async fn select_top_k_facet_filters_by_facet_tag() {
+        // Two facet-tagged exemplars in the same bank, plus one
+        // untagged. Facet-filtered selection picks only the
+        // matching tag — the untagged exemplar is excluded even
+        // when it would otherwise score highest.
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("bank.json");
+        let mut bank = ExemplarBank::open(&path, PipelinePhase::Concerns).unwrap();
+        bank.append(Exemplar {
+            facet: Some("claim".into()),
+            ..positive("c1", "claim about love")
+        });
+        bank.append(Exemplar {
+            facet: Some("question".into()),
+            ..positive("q1", "question about love")
+        });
+        bank.append(positive("u1", "untagged about love"));
+        bank.save().unwrap();
+
+        let mut bank = ExemplarBank::open(&path, PipelinePhase::Concerns).unwrap();
+        let embed = fake_embed(|_| vec![1.0_f32, 0.0, 0.0]);
+        bank.reembed(&embed).await.unwrap();
+
+        let query: Vec<f32> = vec![1.0, 0.0, 0.0];
+
+        // Unfiltered select still returns all entries — backward
+        // compatible with callers that don't care about facet.
+        let all = bank.select_top_k(&query, 5);
+        assert_eq!(all.len(), 3);
+
+        // Facet-filtered select returns only the matching tag.
+        let claim_only = bank.select_top_k_facet(&query, 5, Some("claim"));
+        assert_eq!(claim_only.len(), 1);
+        assert_eq!(claim_only[0].id, "c1");
+
+        let question_only = bank.select_top_k_facet(&query, 5, Some("question"));
+        assert_eq!(question_only.len(), 1);
+        assert_eq!(question_only[0].id, "q1");
+
+        // Asking for a facet with no tagged entries returns empty.
+        let state_only = bank.select_top_k_facet(&query, 5, Some("entity_state"));
+        assert!(state_only.is_empty());
+    }
+
+    #[test]
+    fn exemplar_serde_roundtrip_preserves_facet_tag() {
+        let e = Exemplar {
+            facet: Some("entity_state".into()),
+            ..positive("a", "x")
+        };
+        let json = serde_json::to_string(&e).unwrap();
+        assert!(json.contains("\"facet\":\"entity_state\""));
+        let back: Exemplar = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.facet.as_deref(), Some("entity_state"));
+
+        // Absent facet omits the field entirely — old bank files
+        // stay valid wire format.
+        let e_none = positive("b", "y");
+        let json_none = serde_json::to_string(&e_none).unwrap();
+        assert!(!json_none.contains("facet"));
+    }
+
     #[test]
     fn lint_flags_empty_rationale() {
         let dir = tempdir().unwrap();
@@ -566,6 +667,7 @@ mod tests {
             rationale: "why".into(),
             selector_text: None,
             created_at: String::new(),
+            facet: None,
         });
         let lints = bank.lint();
         assert!(lints
@@ -585,6 +687,7 @@ mod tests {
             rationale: "r".into(),
             selector_text: None,
             created_at: String::new(),
+            facet: None,
         };
         let s = e.selector();
         assert!(s.contains("\"k\""));

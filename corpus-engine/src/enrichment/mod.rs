@@ -5,6 +5,7 @@
 //! named positions, detects fault lines and open questions.
 
 pub mod alignment;
+pub mod atlas;
 pub mod checkpoint;
 pub mod clustering;
 pub mod domain;
@@ -17,6 +18,8 @@ pub mod open_questions;
 pub mod pipeline;
 pub mod skeleton;
 pub(crate) mod skeleton_parse;
+
+pub use atlas::{AtlasData, AtlasIngestion, AtlasIngestionConfig, AtlasIngestionRegistry};
 
 pub use filter::is_chunk_eligible;
 pub use field_engine::{FieldModelEngine, reprocess_skeleton_failures};

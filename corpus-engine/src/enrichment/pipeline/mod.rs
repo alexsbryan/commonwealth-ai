@@ -24,6 +24,8 @@
 //! battery (`validation.rs`), and the CLI admin harness under
 //! `sovereign-cli/src/enrich_cmd/`.
 
+pub mod atlas;
+pub mod atlas_clustering;
 pub mod chapter_manifest;
 pub mod exemplar_bank;
 pub mod phase_cache;
@@ -36,14 +38,21 @@ pub mod types;
 pub mod validation;
 pub mod vector_clustering;
 
+pub use atlas::{
+    ClaimScope, ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityStateSketch,
+    EntityType, EpistemicStatus, EventSketch, EventType, QuestionSketch, QuestionType,
+    RelationSketch, RelationStateSketch, RelationType, SectionExtraction, SeedEntities,
+    SeedEntity, SeedOrigin, SeedStrategy, StateType,
+};
+pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
 pub use chapter_manifest::{ChapterEntry, ChapterManifest};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
 pub use phase_cache::{PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
 pub use registry::PipelineRegistry;
 pub use run_output::RunOutputWriter;
 pub use runner::{
-    CascadeResult, CascadeStep, ChapterSelection, Phase1Progress,
-    Phase1RunResult, Phase2RunResult, Phase3RunResult, Phase4RunResult, Phase5RunResult,
+    CascadeResult, CascadeStep, ChapterSelection, Phase1Progress, Phase1RunResult,
+    Phase2AtlasRunResult, Phase2RunResult, Phase3RunResult, Phase4RunResult, Phase5RunResult,
     Phase6RunResult, Phase7RunResult, PhaseFailure, PhaseRunResult, PhaseRunner,
 };
 pub use trait_def::Pipeline;
@@ -53,11 +62,13 @@ pub use validation::{
 };
 pub use vector_clustering::{cluster_vectors, VectorClusterResult};
 pub use types::{
-    Atlas, CanonicalConcern, ChapterInput, ChatCompletionFn, ChatPrompt, ChunkCluster,
-    ChunkRecord, CorpusContext, ExtractedQuestion, Gap, Grounding, Phase1ChapterResult,
-    Phase1Failure, Phase1Output, Phase2Output, Phase3Output, Phase3ParseResult, Phase4Output,
-    Phase5Output, Phase5ParseResult, Phase6Output, Phase6ParseResult, Phase7Output,
-    Phase7ParseItem, PipelinePhase, Position, QuestionCluster, QuestionRef, Tension,
-    Vocabulary, extract_json_block, is_placeholder_literal,
-    is_truncated_thinking_response, strip_reasoning_tags,
+    Atlas, AtlasCluster, CanonicalConcern, ChapterInput, ChatCompletionFn,
+    ChatCompletionWithTokensFn, ChatPrompt, ChunkCluster, ChunkRecord, CorpusContext,
+    ExtractedQuestion, Facet, Gap, Grounding, NamedCluster, Phase1ChapterResult, Phase1Failure,
+    Phase1Output, Phase2AtlasOutput, Phase2Output, Phase3AtlasOutput, Phase3FacetParseResult,
+    Phase3Output, Phase3ParseResult, Phase4Output, Phase5Output, Phase5ParseResult, Phase6Output,
+    Phase6ParseResult, Phase7Output, Phase7ParseItem, PhaseFailureKind, PipelinePhase, Position,
+    QuestionCluster, QuestionRef, RetryMode, SketchExcerpt, SketchRef, Tension, Vocabulary,
+    extract_json_block, is_placeholder_literal, is_truncated_thinking_response,
+    strip_reasoning_tags,
 };

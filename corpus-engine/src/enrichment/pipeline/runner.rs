@@ -13,6 +13,7 @@ use super::exemplar_bank::{Exemplar, ExemplarBank};
 use super::phase_cache::PhaseCache;
 use super::run_output::RunOutputWriter;
 use super::trait_def::Pipeline;
+use super::atlas::{SectionExtraction, SeedEntities, SeedOrigin, SeedStrategy};
 use super::types::*;
 use super::vector_clustering::cluster_vectors;
 use crate::error::{Error, Result};
@@ -78,11 +79,14 @@ pub struct Phase1RunResult {
     pub failures: Vec<Phase1Failure>,
 }
 
-/// Cap on how much of a failing model response we carry forward. A
-/// pathological response is rarely longer than this; a well-behaved
-/// response that fails parsing for some other reason (shape drift)
-/// still fits its first meaningful object inside the cap.
-const FAILURE_HEAD_CHAR_CAP: usize = 1024;
+/// Cap on how much of a failing model response we carry forward.
+///
+/// We capture the *post-thinking* content — the substring the parser
+/// actually tried to deserialize — not the reasoning preamble (see
+/// `truncate_response_head`). 2 KB comfortably fits a full atlas JSON
+/// response (typical size 0.8–1.6 KB) plus fenced markers, while
+/// keeping a run file small even when dozens of chapters fail.
+const FAILURE_HEAD_CHAR_CAP: usize = 2048;
 
 /// Below this word count, a chapter is almost certainly a `Part`
 /// heading or other front-matter section the regex picked up but
@@ -92,28 +96,110 @@ const FAILURE_HEAD_CHAR_CAP: usize = 1024;
 /// comfortably clears this bar.
 const MIN_PHASE1_CHAPTER_WORDS: usize = 40;
 
+/// Output-token budget used for seed-threaded Phase 1 calls. The
+/// seed block enlarges the prompt by a few hundred tokens of input,
+/// but the real cost is in the reasoning trace the model produces
+/// in response — it swells to match the new context, and the
+/// six-facet JSON output starts to truncate on the standard
+/// 16384 cap (observed in Landing 1 smoke test as `parse_drift` on
+/// 3/5 chapters). 24576 gives the JSON enough headroom to finish.
+/// Only applied when the pipeline has a seed to thread AND the
+/// runner has a token-aware chat closure configured.
+const PHASE1_SEED_OUTPUT_BUDGET: u32 = 24576;
+
 /// Count whitespace-separated tokens. Good-enough proxy for "words";
 /// the threshold only needs to be in the right order of magnitude.
 fn approx_word_count(text: &str) -> usize {
     text.split_whitespace().count()
 }
 
-/// Truncate `text` to at most `FAILURE_HEAD_CHAR_CAP` characters
-/// (NOT bytes — must not split a UTF-8 codepoint), appending a marker
-/// that records how many characters were dropped. Returns `None` if
-/// the input is entirely whitespace, since an empty head is less
-/// useful than the explicit `None` serde encodes as omitted.
+/// Classify a Phase 1 parse failure into a `PhaseFailureKind` the
+/// CLI can route on. Structured, not string-sniffed — the raw model
+/// response is the source of truth for whether the failure was a
+/// think-truncation (unclosed `<think>` → no answer), schema drift
+/// (JSON parsed at the envelope level but failed validation), empty
+/// extraction (well-formed envelope, zero atoms), or generic parse
+/// drift (malformed JSON after the thinking preamble).
+///
+/// The `reason` string is untouched; callers keep it for display
+/// while the enum drives recovery decisions.
+fn classify_phase1_parse_failure(response: &str, err: &Error) -> PhaseFailureKind {
+    // The cheapest-and-strongest signal first: did the model ever
+    // close its <think> block? If not, nothing past the preamble
+    // could have landed — that's specifically a think-truncation.
+    if is_truncated_thinking_response(response) {
+        return PhaseFailureKind::ThinkTruncated;
+    }
+
+    // Otherwise classify by the error text the pipeline's parser
+    // produced. We emit these strings from the atlas pipeline (see
+    // `literary_atlas::parse_phase1`); the classifier maps them
+    // into the enum without changing the reason the operator sees.
+    let msg = format!("{err}");
+    if msg.contains("did not extract anything") {
+        PhaseFailureKind::EmptyExtraction
+    } else {
+        PhaseFailureKind::ParseDrift
+    }
+}
+
+/// Capture the most diagnostically useful slice of a failing model
+/// response, capped at `FAILURE_HEAD_CHAR_CAP` characters.
+///
+/// Thinking-capable models (Qwen3, DeepSeek R1, o1-family) emit a
+/// 2–4 KB `<think>…</think>` reasoning trace followed by their actual
+/// answer. When the parser fails on such a response, the reasoning
+/// trace is almost always noise: what failed to parse lives *after*
+/// `</think>`. Truncating from the front captures only the reasoning
+/// and throws away the evidence.
+///
+/// This function prefers the post-thinking content — the substring
+/// the parser actually tried to deserialise — and falls back to the
+/// reasoning preamble only when thinking was truncated mid-trace
+/// (an unclosed `<think>` with no answer emitted), flagging the case
+/// so an operator reading the run file sees immediately which failure
+/// mode hit.
+///
+/// Returns `None` when the input is entirely whitespace.
 fn truncate_response_head(text: &str) -> Option<String> {
     if text.trim().is_empty() {
         return None;
     }
-    let total = text.chars().count();
-    if total <= FAILURE_HEAD_CHAR_CAP {
-        return Some(text.to_string());
+
+    // Normal path: capture what the parser saw, i.e. the reasoning-
+    // stripped body. `strip_reasoning_tags` removes every complete
+    // `<think>…</think>` span and drops an unclosed tail.
+    let stripped = strip_reasoning_tags(text);
+    let stripped_trim = stripped.trim();
+    if !stripped_trim.is_empty() {
+        return Some(cap_chars(stripped_trim, FAILURE_HEAD_CHAR_CAP));
     }
-    let head: String = text.chars().take(FAILURE_HEAD_CHAR_CAP).collect();
-    let dropped = total - FAILURE_HEAD_CHAR_CAP;
-    Some(format!("{head}… [+{dropped} chars]"))
+
+    // Fallback: nothing remained after stripping. Either the response
+    // was pure reasoning with no answer, or `<think>` opened and never
+    // closed (truncation mid-trace). In either case we want *some*
+    // signal — show the reasoning head so the operator can see the
+    // model was thinking when the budget ran out.
+    let marker = if is_truncated_thinking_response(text) {
+        "<think block truncated — answer never emitted>"
+    } else {
+        "<reasoning-only response — no answer after </think>>"
+    };
+    let preview = cap_chars(text.trim(), FAILURE_HEAD_CHAR_CAP.saturating_sub(marker.len() + 2));
+    Some(format!("{marker}\n{preview}"))
+}
+
+/// Truncate `s` to at most `cap` characters (NOT bytes — must not
+/// split a UTF-8 codepoint), appending a marker that records how many
+/// characters were dropped.
+fn cap_chars(s: &str, cap: usize) -> String {
+    let total = s.chars().count();
+    if total <= cap {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(cap).collect();
+    let dropped = total - cap;
+    format!("{head}… [+{dropped} chars]")
 }
 
 /// Flatten whitespace and cap at ~200 chars so a parse-failure line in
@@ -144,6 +230,16 @@ pub struct PhaseRunner {
     pipeline: Arc<dyn Pipeline>,
     embed: EmbedFn,
     chat: ChatCompletionFn,
+    /// Optional per-call token override closure. When a retry mode
+    /// requests a specific `max_output_tokens` (e.g. a terse retry
+    /// bumping from 4096 to 16384), the runner calls this closure
+    /// instead of `chat` so the cap applies to the retry only —
+    /// without mutating the shared client.
+    ///
+    /// Configured via `with_chat_with_tokens`. When unset, retries
+    /// fall back to `chat` with its existing cap; the runner still
+    /// swaps the prompt variant.
+    chat_with_tokens: Option<ChatCompletionWithTokensFn>,
     cache: PhaseCache,
     runs: RunOutputWriter,
     exemplars_dir: PathBuf,
@@ -162,10 +258,19 @@ impl PhaseRunner {
             pipeline,
             embed,
             chat,
+            chat_with_tokens: None,
             cache,
             runs,
             exemplars_dir: exemplars_dir.as_ref().to_path_buf(),
         }
+    }
+
+    /// Configure an optional per-call token-aware chat closure so
+    /// retry modes (e.g. `RetryMode::Terse`) can raise the output
+    /// budget for a single retry without rebuilding the chat client.
+    pub fn with_chat_with_tokens(mut self, chat: ChatCompletionWithTokensFn) -> Self {
+        self.chat_with_tokens = Some(chat);
+        self
     }
 
     pub fn pipeline(&self) -> &Arc<dyn Pipeline> {
@@ -184,16 +289,125 @@ impl PhaseRunner {
         self.exemplars_dir.join(format!("{}.json", phase.id()))
     }
 
-    /// Run phase 1 against the supplied chapters.
+    /// Run Stage 1a — seed entity extraction. Dispatches on the
+    /// pipeline's `seed_strategy()`:
     ///
-    /// The caller assembles `ChapterInput`s from the corpus manifest +
-    /// source text (CLI-side responsibility) and hands them in here.
-    /// The runner is then pure orchestration: select exemplars, compose
-    /// prompts, call chat, parse, persist.
+    /// - `Llm`: calls `compose_seed_prompt` on the first section,
+    ///   hands the prompt to the chat closure, parses the response
+    ///   via `parse_seed_response`, and returns the typed seed
+    ///   list wrapped in a `SeedEntities` record.
+    /// - `Structural`: calls `extract_seed_structural` with the
+    ///   supplied `CorpusContext`. No chat call.
+    /// - `None`: returns `Ok(None)` — the pipeline does not need a
+    ///   seed list.
+    ///
+    /// On success the result is written to `cache/seed.json` so
+    /// subsequent `phase_1_extract_questions_with_retry` calls can
+    /// read it without re-running Stage 1a. `force_refresh = true`
+    /// skips the cache-read optimisation and always recomputes.
+    pub async fn phase_1a_extract_seed(
+        &self,
+        corpus_id: &str,
+        ctx: &CorpusContext,
+        force_refresh: bool,
+    ) -> Result<Option<SeedEntities>> {
+        // Fast path: cache hit + not forced.
+        if !force_refresh {
+            if let Some(cached) = self
+                .cache
+                .read::<SeedEntities>(PipelinePhase::SeedExtraction)?
+            {
+                return Ok(Some(cached));
+            }
+        }
+
+        match self.pipeline.seed_strategy() {
+            SeedStrategy::None => Ok(None),
+            SeedStrategy::Llm => {
+                let first_chapter = ctx
+                    .chapters
+                    .first()
+                    .ok_or_else(|| {
+                        Error::InvalidInput(
+                            "cannot run Stage 1a seed extraction: corpus has no chapters"
+                                .into(),
+                        )
+                    })?;
+                let prompt = self
+                    .pipeline
+                    .compose_seed_prompt(first_chapter)
+                    .ok_or_else(|| {
+                        Error::InvalidInput(format!(
+                            "pipeline `{}` declares SeedStrategy::Llm but compose_seed_prompt \
+                             returned None — override the method or declare a different strategy",
+                            self.pipeline.id()
+                        ))
+                    })?;
+                let response = (self.chat)(&prompt).await?;
+                let entries = self.pipeline.parse_seed_response(&response)?;
+                let seed = SeedEntities {
+                    schema_version: SeedEntities::SCHEMA_VERSION,
+                    corpus_id: corpus_id.to_string(),
+                    origin: SeedOrigin::Llm,
+                    entries,
+                    written_at: now_rfc3339(),
+                };
+                self.cache
+                    .write(PipelinePhase::SeedExtraction, &seed)?;
+                Ok(Some(seed))
+            }
+            SeedStrategy::Structural => {
+                let entries = self.pipeline.extract_seed_structural(ctx)?;
+                let seed = SeedEntities {
+                    schema_version: SeedEntities::SCHEMA_VERSION,
+                    corpus_id: corpus_id.to_string(),
+                    origin: SeedOrigin::Structural,
+                    entries,
+                    written_at: now_rfc3339(),
+                };
+                self.cache
+                    .write(PipelinePhase::SeedExtraction, &seed)?;
+                Ok(Some(seed))
+            }
+        }
+    }
+
+    /// Run phase 1 against the supplied chapters with no retry mode —
+    /// the default path for `sovereign enrich extract`.
+    ///
+    /// Thin shim over
+    /// [`phase_1_extract_questions_with_retry`] that passes `None`.
     pub async fn phase_1_extract_questions<F>(
         &self,
         chapters: &[ChapterInput],
         selection: &ChapterSelection,
+        progress: F,
+    ) -> Result<Phase1RunResult>
+    where
+        F: Fn(Phase1Progress<'_>),
+    {
+        self.phase_1_extract_questions_with_retry(chapters, selection, None, progress)
+            .await
+    }
+
+    /// Run phase 1 against the supplied chapters, optionally with a
+    /// retry mode that selects an alternate prompt variant and/or
+    /// token budget.
+    ///
+    /// `retry_mode = None` is the default path (system prompt from
+    /// `pipeline.compose_phase1`, shared chat closure).
+    /// `retry_mode = Some(Terse { max_output_tokens })` dispatches to
+    /// `pipeline.compose_phase1_terse` and, when the runner has a
+    /// `chat_with_tokens` closure configured, uses it with the
+    /// requested cap. A pipeline that doesn't implement
+    /// `compose_phase1_terse` (returns `None`) causes an immediate
+    /// error — the runner will not silently fall back to the default
+    /// prompt for a terse retry.
+    pub async fn phase_1_extract_questions_with_retry<F>(
+        &self,
+        chapters: &[ChapterInput],
+        selection: &ChapterSelection,
+        retry_mode: Option<RetryMode>,
         progress: F,
     ) -> Result<Phase1RunResult>
     where
@@ -236,6 +450,13 @@ impl PhaseRunner {
             exemplars_loaded: bank.len(),
         });
 
+        // Read the Stage 1a seed list once per map loop. A cache
+        // miss is non-fatal — the pipeline's compose_phase1_with_seed
+        // default falls through to the seedless prompt. Pipelines
+        // with `SeedStrategy::None` never write this cache entry.
+        let seed_opt: Option<SeedEntities> =
+            self.cache.read(PipelinePhase::SeedExtraction)?;
+
         let mut extracted: Vec<ExtractedQuestion> = Vec::with_capacity(targets.len());
         let mut failures: Vec<Phase1Failure> = Vec::new();
 
@@ -269,6 +490,7 @@ impl PhaseRunner {
                     chapter_id: chapter.chapter_id.clone(),
                     reason,
                     raw_response_head: None,
+                    failure_kind: PhaseFailureKind::Skipped,
                 });
                 continue;
             }
@@ -283,9 +505,64 @@ impl PhaseRunner {
                 bank.select_top_k(&query_emb, k)
             };
 
-            let prompt = self.pipeline.compose_phase1(chapter, &picked);
+            // Prompt composition + chat dispatch branch on retry
+            // mode. Default: `compose_phase1_with_seed` (threads the
+            // Stage 1a seed list if available) + shared `chat`.
+            // Terse: `compose_phase1_terse` (error if pipeline doesn't
+            // support it) + token-aware chat if configured, else
+            // fall back to shared `chat` with its existing cap.
+            //
+            // Seed lookup: the cache holds the Stage 1a output. Read
+            // once per map loop, not once per chapter — all chapters
+            // share the same seed.
+            let prompt = match retry_mode {
+                Some(RetryMode::Terse { .. }) => match self.pipeline.compose_phase1_terse(chapter) {
+                    Some(p) => p,
+                    None => {
+                        return Err(Error::InvalidInput(format!(
+                            "retry mode `terse` requested, but pipeline `{}` does not \
+                             implement `compose_phase1_terse`. Either use a pipeline that \
+                             supports a terse variant (e.g. `literary_atlas`) or drop the \
+                             --terse flag.",
+                            self.pipeline.id()
+                        )));
+                    }
+                },
+                None => {
+                    let seed = seed_opt.as_ref();
+                    self.pipeline
+                        .compose_phase1_with_seed(chapter, &picked, seed)
+                }
+            };
 
-            let response = match (self.chat)(&prompt).await {
+            let chat_result = match retry_mode {
+                Some(RetryMode::Terse { max_output_tokens }) => match &self.chat_with_tokens {
+                    Some(chat_t) => (chat_t)(&prompt, max_output_tokens).await,
+                    None => (self.chat)(&prompt).await,
+                },
+                None => {
+                    // Seed-threaded default path gets a per-call
+                    // output-budget bump. The seed block adds ~500
+                    // tokens of input, the reasoning trace typically
+                    // grows to match the extra context, and the
+                    // six-facet JSON output then starves on the
+                    // standard 16384 cap — observed as `parse_drift`
+                    // on 3/5 chapters in the Landing 1 smoke test.
+                    // Cap at `PHASE1_SEED_OUTPUT_BUDGET` so a chapter
+                    // that was going to truncate mid-relations now
+                    // has headroom to finish its JSON on first pass.
+                    // Non-seed runs keep the baseline — they never
+                    // starved.
+                    match (seed_opt.as_ref(), &self.chat_with_tokens) {
+                        (Some(_), Some(chat_t)) => {
+                            (chat_t)(&prompt, PHASE1_SEED_OUTPUT_BUDGET).await
+                        }
+                        _ => (self.chat)(&prompt).await,
+                    }
+                }
+            };
+
+            let response = match chat_result {
                 Ok(r) => r,
                 Err(e) => {
                     let reason = format!("chat error: {e}");
@@ -298,6 +575,7 @@ impl PhaseRunner {
                         reason,
                         // No response body ever arrived — nothing to capture.
                         raw_response_head: None,
+                        failure_kind: PhaseFailureKind::ChatError,
                     });
                     continue;
                 }
@@ -321,10 +599,12 @@ impl PhaseRunner {
                         chapter_id: &chapter.chapter_id,
                         reason: &reason,
                     });
+                    let failure_kind = classify_phase1_parse_failure(&response, &e);
                     failures.push(Phase1Failure {
                         chapter_id: chapter.chapter_id.clone(),
                         reason,
                         raw_response_head: head,
+                        failure_kind,
                     });
                     continue;
                 }
@@ -342,6 +622,7 @@ impl PhaseRunner {
                 thematic_carriers: parsed.thematic_carriers,
                 setting: parsed.setting,
                 plot: parsed.plot,
+                section_extraction: parsed.section_extraction,
             });
         }
 
@@ -355,17 +636,68 @@ impl PhaseRunner {
             written_at: now_rfc3339(),
         };
 
-        // Write the run file (always) + update the cache (Full only).
+        // Write the run file + apply cache semantics. Mode label
+        // reflects the retry mode when one is active so run files
+        // are distinguishable at a glance
+        // (`questions-terse-retry-NNN.json`). Cache semantics split
+        // three ways:
+        //
+        //   - Full run, no retry mode → overwrite the cache in one
+        //     shot. Existing behaviour.
+        //   - Terse retry → merge successes into the existing
+        //     cache (replace matching chapter entries; drop those
+        //     chapters from the cached failures list). No existing
+        //     cache means nothing to merge into — the flag is a
+        //     no-op rather than an error, which lets an operator
+        //     re-run without worrying about order.
+        //   - Subset run, no retry mode → diagnostic; cache
+        //     untouched.
+        let mode_label: &'static str = match retry_mode {
+            Some(RetryMode::Terse { .. }) => "terse-retry",
+            None => selection.mode_label(),
+        };
         let run_path = self.runs.write(
             PipelinePhase::Questions,
-            selection.mode_label(),
+            mode_label,
             &output,
         )?;
-        let cache_updated = if selection.should_update_cache() {
-            self.cache.write(PipelinePhase::Questions, &output)?;
-            true
-        } else {
-            false
+        let cache_updated = match retry_mode {
+            Some(RetryMode::Terse { .. }) => {
+                if let Some(mut existing) = self
+                    .cache
+                    .read::<Phase1Output>(PipelinePhase::Questions)?
+                {
+                    let mut merged = 0usize;
+                    for q in &extracted {
+                        if let Some(slot) = existing
+                            .questions_by_chapter
+                            .iter_mut()
+                            .find(|e| e.chapter_id == q.chapter_id)
+                        {
+                            *slot = q.clone();
+                        } else {
+                            existing.questions_by_chapter.push(q.clone());
+                        }
+                        // Any previously-cached failure for this
+                        // chapter is resolved by the retry — drop
+                        // it.
+                        existing
+                            .failures
+                            .retain(|f| f.chapter_id != q.chapter_id);
+                        merged += 1;
+                    }
+                    existing.written_at = now_rfc3339();
+                    self.cache.write(PipelinePhase::Questions, &existing)?;
+                    merged > 0
+                } else {
+                    false
+                }
+            }
+            None if selection.should_update_cache() => {
+                self.cache.write(PipelinePhase::Questions, &output)?;
+                true
+            }
+            _ => false,
         };
 
         progress(Phase1Progress::Done {
@@ -413,6 +745,18 @@ pub type Phase4RunResult = PhaseRunResult<Phase4Output>;
 pub type Phase5RunResult = PhaseRunResult<Phase5Output>;
 pub type Phase6RunResult = PhaseRunResult<Phase6Output>;
 pub type Phase7RunResult = PhaseRunResult<Phase7Output>;
+
+/// Result of an atlas-pipeline Phase 2 run. Separate from
+/// `Phase2RunResult` because the atlas output shape differs — one
+/// list of facet-tagged clusters rather than the v1 question-only
+/// clusters. Phase 2 atlas has no per-item failure concept (HDBSCAN
+/// can't fail per-point), so there's no `failures` field.
+#[derive(Debug, Clone)]
+pub struct Phase2AtlasRunResult {
+    pub output: Phase2AtlasOutput,
+    pub run_path: std::path::PathBuf,
+    pub cache_updated: bool,
+}
 
 /// A single cascade step's outcome, one variant per phase that can run.
 #[derive(Debug, Clone)]
@@ -511,6 +855,73 @@ impl PhaseRunner {
             run_path,
             cache_updated: true,
             failures: Vec::new(),
+        })
+    }
+
+    /// Phase 2 (atlas) — cluster every facet of Phase 1's atlas
+    /// sketches. Reads `Questions` cache, pulls `section_extraction`
+    /// payloads from each chapter, runs HDBSCAN per facet with the
+    /// facet-specific secondary-signal post-pass, and writes
+    /// `AtlasClusters` cache.
+    ///
+    /// Returns a descriptive error when the cache is empty or when
+    /// no chapter carries a `section_extraction` — both mean the
+    /// current pipeline isn't producing atlas output and the
+    /// operator should re-init with an atlas-shaped pipeline.
+    pub async fn phase_2_cluster_atlas(&self) -> Result<Phase2AtlasRunResult> {
+        use crate::enrichment::pipeline::atlas_clustering::cluster_all_facets;
+
+        let phase1: Phase1Output = self
+            .cache
+            .read(PipelinePhase::Questions)?
+            .ok_or_else(|| missing_upstream(PipelinePhase::Questions))?;
+
+        let sections: Vec<SectionExtraction> = phase1
+            .questions_by_chapter
+            .iter()
+            .filter_map(|c| c.section_extraction.clone())
+            .collect();
+        if sections.is_empty() {
+            return Err(Error::InvalidInput(
+                "phase 1 cache has no section_extraction payloads — re-init with an \
+                 atlas pipeline (e.g. literary_atlas) and re-run extract before \
+                 clustering"
+                    .into(),
+            ));
+        }
+
+        let config = self.pipeline.question_clustering_config();
+        let facet_results = cluster_all_facets(&sections, &self.embed, &config).await?;
+
+        // Flatten per-facet results into the shared output shape.
+        // Every cluster keeps its facet tag; the `clusters_by_facet`
+        // accessor on `Phase2AtlasOutput` gives O(N) per-facet views
+        // without sacrificing the single source of truth.
+        let mut clusters: Vec<AtlasCluster> = Vec::new();
+        let mut unclustered: Vec<SketchRef> = Vec::new();
+        for r in facet_results {
+            clusters.extend(r.clusters);
+            unclustered.extend(r.unclustered);
+        }
+
+        let output = Phase2AtlasOutput {
+            schema_version: Phase2AtlasOutput::SCHEMA_VERSION,
+            pipeline_id: self.pipeline.id().to_string(),
+            clusters,
+            unclustered,
+            written_at: now_rfc3339(),
+        };
+        let run_path = self.runs.write(
+            PipelinePhase::AtlasClusters,
+            "full",
+            &output,
+        )?;
+        self.cache.write(PipelinePhase::AtlasClusters, &output)?;
+
+        Ok(Phase2AtlasRunResult {
+            output,
+            run_path,
+            cache_updated: true,
         })
     }
 
@@ -1065,6 +1476,22 @@ impl PhaseRunner {
                     let r = self.phase_7_detect_gaps(ctx).await?;
                     steps.push(CascadeStep::Phase7(r));
                 }
+                PipelinePhase::AtlasClusters | PipelinePhase::AtlasNamedClusters => {
+                    // Atlas phases are driven by their dedicated
+                    // subcommands (`atlas-cluster`, `name-atlas-clusters`)
+                    // rather than the v1 cascade. Skipping here keeps
+                    // `cascade` focused on the original
+                    // questions→positions→tensions flow and avoids
+                    // implicitly re-running atlas work that was
+                    // intentionally diagnostic.
+                }
+                PipelinePhase::SeedExtraction => {
+                    // Seed extraction is a Stage 1a pre-map step.
+                    // Cascade is a v1 flow; seed is the atlas pipeline's
+                    // business and gets run by the CLI's extract path
+                    // before calling phase_1_extract_questions.
+                    // Skipping here keeps v1 cascade behaviour stable.
+                }
             }
         }
 
@@ -1156,6 +1583,99 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::tempdir;
 
+    #[test]
+    fn classify_phase1_parse_failure_detects_think_truncation() {
+        // Unclosed <think> — no answer past the reasoning trace.
+        // Even if the serde error looks like generic parse drift,
+        // the structured classifier calls this ThinkTruncated.
+        let response = "<think>the model ran out of budget";
+        let err = Error::Serialization("no JSON".into());
+        assert_eq!(
+            classify_phase1_parse_failure(response, &err),
+            PhaseFailureKind::ThinkTruncated
+        );
+    }
+
+    #[test]
+    fn classify_phase1_parse_failure_detects_empty_extraction() {
+        // Well-formed envelope but no atoms — the pipeline parser
+        // signals this with a distinctive "did not extract" error
+        // string. The classifier maps it to EmptyExtraction so the
+        // CLI can route to prompt-fix work, not a plain retry.
+        let response = "{\"section_id\":\"sec_0001\"}";
+        let err = Error::Serialization(
+            "phase 1 (atlas) did not extract anything usable".into(),
+        );
+        assert_eq!(
+            classify_phase1_parse_failure(response, &err),
+            PhaseFailureKind::EmptyExtraction
+        );
+    }
+
+    #[test]
+    fn classify_phase1_parse_failure_defaults_to_parse_drift() {
+        // Anything else — malformed JSON, schema validation fail —
+        // is generic parse drift. A plain retry is the right first
+        // move for these.
+        let response = "<think>done</think>\n{malformed json";
+        let err = Error::Serialization("missing field `foo` at line 3".into());
+        assert_eq!(
+            classify_phase1_parse_failure(response, &err),
+            PhaseFailureKind::ParseDrift
+        );
+    }
+
+    #[test]
+    fn truncate_response_head_returns_none_on_whitespace() {
+        assert_eq!(truncate_response_head("   "), None);
+        assert_eq!(truncate_response_head(""), None);
+    }
+
+    #[test]
+    fn truncate_response_head_prefers_post_think_content() {
+        // Simulates the common failure: thinking preamble + malformed
+        // JSON. We want to see the JSON, not the reasoning.
+        let raw = format!(
+            "<think>{}</think>\n{{\"questions\": [\"?\"], \"oops: missing_brace\"",
+            "reasoning text ".repeat(500) // ~7.5 KB of think
+        );
+        let head = truncate_response_head(&raw).expect("has content");
+        assert!(
+            head.contains("oops: missing_brace"),
+            "expected post-think JSON candidate, got: {head}"
+        );
+        assert!(
+            !head.contains("reasoning text"),
+            "reasoning preamble leaked into head: {head}"
+        );
+    }
+
+    #[test]
+    fn truncate_response_head_flags_truncated_thinking() {
+        // <think> opened but never closed — no answer was emitted.
+        let raw = format!("<think>{}", "half a thought ".repeat(200));
+        let head = truncate_response_head(&raw).expect("has content");
+        assert!(
+            head.starts_with("<think block truncated"),
+            "expected truncation marker, got: {head}"
+        );
+    }
+
+    #[test]
+    fn truncate_response_head_caps_post_think_content() {
+        let raw = format!("<think>short</think>{}", "J".repeat(FAILURE_HEAD_CHAR_CAP * 2));
+        let head = truncate_response_head(&raw).expect("has content");
+        // Head is capped and carries the "+N chars" marker.
+        assert!(head.contains("+"), "expected drop marker, got: {head}");
+        assert!(head.chars().count() <= FAILURE_HEAD_CHAR_CAP + 64);
+    }
+
+    #[test]
+    fn truncate_response_head_passes_short_response_through_unchanged() {
+        let raw = "not valid json";
+        assert_eq!(truncate_response_head(raw).unwrap(), "not valid json");
+    }
+
     fn chapter(id: &str, title: &str, body: &str) -> ChapterInput {
         // Pad every test body past MIN_PHASE1_CHAPTER_WORDS so the
         // short-chapter skip doesn't fire on fixtures that are meant
@@ -1226,6 +1746,232 @@ mod tests {
             runs,
             root.join("exemplars"),
         )
+    }
+
+    #[tokio::test]
+    async fn phase_1_terse_retry_errors_when_pipeline_has_no_terse_variant() {
+        // The v1 `LiteraryPipeline` does NOT override
+        // `compose_phase1_terse` — the trait default returns None.
+        // A --terse retry against that pipeline must fail fast with
+        // a clear error rather than silently reusing the default
+        // prompt.
+        let dir = tempdir().unwrap();
+        let runner = runner_under_test(dir.path());
+        let chapters = vec![chapter("ch_01", "Chapter 1", "A body")];
+        let err = runner
+            .phase_1_extract_questions_with_retry(
+                &chapters,
+                &ChapterSelection::Subset(vec!["ch_01".into()]),
+                Some(RetryMode::Terse { max_output_tokens: 16384 }),
+                |_| {},
+            )
+            .await
+            .unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("does not implement `compose_phase1_terse`"),
+            "expected terse-unsupported error, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn phase_1_terse_retry_uses_token_aware_chat_when_available() {
+        // When the runner has a `chat_with_tokens` closure configured
+        // and the pipeline supports a terse variant, a Terse retry
+        // routes through the token-aware closure with the requested
+        // cap.
+        use crate::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
+
+        let dir = tempdir().unwrap();
+        let cache = PhaseCache::new(dir.path().join("cache"));
+        let runs = RunOutputWriter::new(dir.path().join("runs"));
+
+        // The token-aware chat records the requested max_output_tokens
+        // for inspection. Returns a canned atlas JSON so the chapter
+        // succeeds.
+        let observed = Arc::new(std::sync::Mutex::new(Vec::<u32>::new()));
+        let observed_c = observed.clone();
+        let chat_with_tokens: ChatCompletionWithTokensFn =
+            Arc::new(move |_prompt: &ChatPrompt, tokens: u32| {
+                observed_c.lock().unwrap().push(tokens);
+                let body = r#"{
+                  "section_id": "ch_01",
+                  "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
+                  "questions_raised": [{"content": "Why?"}]
+                }"#
+                .to_string();
+                Box::pin(async move { Ok(body) })
+            });
+
+        // The default chat is used only when retry_mode is None.
+        // Our test sets retry_mode = Some(Terse), so this closure
+        // should NOT be invoked — we make it panic to prove that.
+        let default_chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
+            Box::pin(async move {
+                panic!("default chat should not be invoked when terse retry is active");
+            })
+        });
+
+        let runner = PhaseRunner::new(
+            Arc::new(LiteraryAtlasPipeline::new()),
+            alphabet_embed(),
+            default_chat,
+            cache,
+            runs,
+            dir.path().join("exemplars"),
+        )
+        .with_chat_with_tokens(chat_with_tokens);
+
+        let chapters = vec![chapter("ch_01", "Chapter 1", "body")];
+        let res = runner
+            .phase_1_extract_questions_with_retry(
+                &chapters,
+                &ChapterSelection::Subset(vec!["ch_01".into()]),
+                Some(RetryMode::Terse { max_output_tokens: 12345 }),
+                |_| {},
+            )
+            .await
+            .expect("terse retry succeeds on literary_atlas");
+
+        assert_eq!(res.output.questions_by_chapter.len(), 1);
+        let recorded = observed.lock().unwrap().clone();
+        assert_eq!(
+            recorded,
+            vec![12345],
+            "expected exactly one token-aware call at the requested cap"
+        );
+    }
+
+    #[tokio::test]
+    async fn phase_1_default_variant_ignores_token_aware_chat() {
+        // Sanity check the other direction: when retry_mode is None,
+        // the runner goes through the default `chat` closure and
+        // does NOT touch `chat_with_tokens`, even if configured.
+        use crate::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
+
+        let dir = tempdir().unwrap();
+        let cache = PhaseCache::new(dir.path().join("cache"));
+        let runs = RunOutputWriter::new(dir.path().join("runs"));
+
+        let chat_with_tokens: ChatCompletionWithTokensFn =
+            Arc::new(move |_prompt: &ChatPrompt, _tokens: u32| {
+                Box::pin(async move {
+                    panic!(
+                        "chat_with_tokens should not be invoked when retry_mode is None"
+                    );
+                })
+            });
+
+        let runner = PhaseRunner::new(
+            Arc::new(LiteraryAtlasPipeline::new()),
+            alphabet_embed(),
+            // Canned atlas response so the chapter parses cleanly.
+            Arc::new(move |_prompt: &ChatPrompt| {
+                let body = r#"{
+                  "section_id": "ch_01",
+                  "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
+                  "questions_raised": [{"content": "Why?"}]
+                }"#
+                .to_string();
+                Box::pin(async move { Ok(body) })
+            }),
+            cache,
+            runs,
+            dir.path().join("exemplars"),
+        )
+        .with_chat_with_tokens(chat_with_tokens);
+
+        let chapters = vec![chapter("ch_01", "Chapter 1", "body")];
+        let res = runner
+            .phase_1_extract_questions(&chapters, &ChapterSelection::Full, |_| {})
+            .await
+            .unwrap();
+        assert_eq!(res.output.questions_by_chapter.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn phase_1_with_seed_cache_routes_to_chat_with_tokens_at_seed_budget() {
+        // Landing 2.B invariant: when the cache has a seed file AND
+        // the runner has `chat_with_tokens` configured, the default
+        // Phase 1 branch routes through that closure with the
+        // runner's seed-scoped output budget (`PHASE1_SEED_OUTPUT_BUDGET`).
+        // Without a seed cached, the runner falls back to the
+        // un-capped default chat (covered by
+        // `phase_1_default_variant_ignores_token_aware_chat`).
+        use crate::enrichment::pipeline::atlas::{
+            EntityType as AtlasEntityType, SeedEntities, SeedEntity, SeedOrigin,
+        };
+        use crate::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
+
+        let dir = tempdir().unwrap();
+        let cache = PhaseCache::new(dir.path().join("cache"));
+        let runs = RunOutputWriter::new(dir.path().join("runs"));
+
+        // Pre-populate the seed cache so the default Phase 1 branch
+        // sees `seed_opt = Some(...)` and routes to chat_with_tokens.
+        let seed = SeedEntities {
+            schema_version: SeedEntities::SCHEMA_VERSION,
+            corpus_id: "bk".into(),
+            origin: SeedOrigin::Llm,
+            entries: vec![SeedEntity {
+                canonical_name: "A".into(),
+                aliases: Vec::new(),
+                entity_type: AtlasEntityType::Person,
+                description: "seed".into(),
+            }],
+            written_at: "2026-04-23T00:00:00Z".into(),
+        };
+        cache.write(PipelinePhase::SeedExtraction, &seed).unwrap();
+
+        // Record the token cap each chat_with_tokens call is invoked
+        // with. Return a minimal atlas JSON so parse succeeds.
+        let observed = Arc::new(std::sync::Mutex::new(Vec::<u32>::new()));
+        let observed_c = observed.clone();
+        let chat_with_tokens: ChatCompletionWithTokensFn =
+            Arc::new(move |_prompt: &ChatPrompt, tokens: u32| {
+                observed_c.lock().unwrap().push(tokens);
+                let body = r#"{
+                  "section_id": "ch_01",
+                  "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
+                  "questions_raised": [{"content": "Why?"}]
+                }"#
+                .to_string();
+                Box::pin(async move { Ok(body) })
+            });
+
+        // Default chat must NOT be touched when the seed-bump path
+        // activates.
+        let default_chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
+            Box::pin(async move {
+                panic!(
+                    "default chat should not be invoked when seed is cached \
+                     and chat_with_tokens is configured"
+                );
+            })
+        });
+
+        let runner = PhaseRunner::new(
+            Arc::new(LiteraryAtlasPipeline::new()),
+            alphabet_embed(),
+            default_chat,
+            cache,
+            runs,
+            dir.path().join("exemplars"),
+        )
+        .with_chat_with_tokens(chat_with_tokens);
+
+        let chapters = vec![chapter("ch_01", "Chapter 1", "body")];
+        let res = runner
+            .phase_1_extract_questions(&chapters, &ChapterSelection::Full, |_| {})
+            .await
+            .unwrap();
+        assert_eq!(res.output.questions_by_chapter.len(), 1);
+        let recorded = observed.lock().unwrap().clone();
+        assert_eq!(
+            recorded,
+            vec![PHASE1_SEED_OUTPUT_BUDGET],
+            "expected one token-aware call at the seed output budget"
+        );
     }
 
     #[tokio::test]
@@ -1509,6 +2255,247 @@ mod tests {
             res.output.clusters.iter().map(|c| c.question_refs.len()).sum::<usize>()
                 + res.output.unclustered.len();
         assert_eq!(total, 9);
+    }
+
+    #[tokio::test]
+    async fn phase_2_atlas_errors_when_cache_has_no_section_extraction() {
+        // The v1 LiteraryPipeline doesn't populate section_extraction.
+        // Phase 2 atlas against a v1 cache should fail with a clear
+        // message pointing the operator at an atlas pipeline.
+        let dir = tempdir().unwrap();
+        let runner = multiphase_runner(dir.path());
+        let ctx = synth_context();
+        runner
+            .phase_1_extract_questions(&ctx.chapters, &ChapterSelection::Full, |_| {})
+            .await
+            .unwrap();
+
+        let err = runner.phase_2_cluster_atlas().await.unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("section_extraction"),
+            "expected error about missing atlas sketches: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn phase_2_atlas_clusters_synthesized_sketches() {
+        use crate::enrichment::pipeline::atlas::{
+            ClaimSketch, DiscourseAct, EnrichmentDepth, EpistemicStatus, QuestionSketch,
+            SectionExtraction,
+        };
+        use crate::enrichment::pipeline::{ExtractedQuestion, Phase1Output};
+
+        let dir = tempdir().unwrap();
+        let runner = multiphase_runner(dir.path());
+
+        // Seed a synthetic Phase 1 cache whose chapters carry
+        // atlas sketches — bypasses the v1 pipeline, which doesn't
+        // produce them.
+        let section = |id: &str| SectionExtraction {
+            section_id: id.into(),
+            enrichment_depth: EnrichmentDepth::Extracted,
+            claims: vec![
+                ClaimSketch {
+                    content: "love costs".into(),
+                    discourse_act: DiscourseAct::Enact,
+                    epistemic_status: EpistemicStatus::Confident,
+                    attributed_to: None,
+                    anchor: String::new(),
+                },
+                ClaimSketch {
+                    content: "love rewards".into(),
+                    discourse_act: DiscourseAct::Enact,
+                    epistemic_status: EpistemicStatus::Confident,
+                    attributed_to: None,
+                    anchor: String::new(),
+                },
+            ],
+            questions_raised: vec![QuestionSketch {
+                content: "what remains after loss?".into(),
+                anchor: String::new(),
+            }],
+            ..Default::default()
+        };
+        let phase1 = Phase1Output {
+            schema_version: Phase1Output::SCHEMA_VERSION,
+            pipeline_id: "literary_atlas".into(),
+            questions_by_chapter: vec![
+                ExtractedQuestion {
+                    chapter_id: "sec_0001".into(),
+                    questions: vec!["what remains after loss?".into()],
+                    reveals: None,
+                    thematic_carriers: Vec::new(),
+                    setting: None,
+                    plot: None,
+                    section_extraction: Some(section("sec_0001")),
+                },
+                ExtractedQuestion {
+                    chapter_id: "sec_0002".into(),
+                    questions: vec!["what remains after loss?".into()],
+                    reveals: None,
+                    thematic_carriers: Vec::new(),
+                    setting: None,
+                    plot: None,
+                    section_extraction: Some(section("sec_0002")),
+                },
+            ],
+            failures: Vec::new(),
+            written_at: "t".into(),
+        };
+        runner
+            .cache()
+            .write(PipelinePhase::Questions, &phase1)
+            .unwrap();
+
+        let res = runner.phase_2_cluster_atlas().await.unwrap();
+        assert!(res.cache_updated);
+        assert!(res.run_path.exists());
+        // 4 claim sketches (2 per chapter × 2 chapters) + 2
+        // questions. Every ref lands either in a cluster or in
+        // the unclustered noise pile.
+        let total: usize = res
+            .output
+            .clusters
+            .iter()
+            .map(|c| c.refs.len())
+            .sum::<usize>()
+            + res.output.unclustered.len();
+        assert_eq!(total, 6);
+        // Every produced cluster carries its facet tag.
+        for cluster in &res.output.clusters {
+            assert!(matches!(
+                cluster.facet,
+                Facet::Claim | Facet::Question
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn phase_1a_returns_none_for_pipelines_with_no_seed_strategy() {
+        // LiteraryPipeline (v1) inherits SeedStrategy::None via the
+        // trait default; phase_1a_extract_seed returns None without
+        // running chat or writing cache.
+        let dir = tempdir().unwrap();
+        let runner = runner_under_test(dir.path()); // v1 LiteraryPipeline
+        let ctx = CorpusContext {
+            chapters: vec![chapter("ch_01", "Chapter 1", "text body")],
+            chunks: vec![],
+            chapter_titles: vec!["Chapter 1".into()],
+        };
+        let seed = runner.phase_1a_extract_seed("test_corpus", &ctx, false).await.unwrap();
+        assert!(seed.is_none());
+        let cached: Option<crate::enrichment::pipeline::atlas::SeedEntities> = runner
+            .cache()
+            .read(PipelinePhase::SeedExtraction)
+            .unwrap();
+        assert!(cached.is_none());
+    }
+
+    #[tokio::test]
+    async fn phase_1a_llm_path_writes_cache_and_threads_seed_into_phase_1() {
+        use crate::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
+        let dir = tempdir().unwrap();
+        let cache = PhaseCache::new(dir.path().join("cache"));
+        let runs = RunOutputWriter::new(dir.path().join("runs"));
+
+        let saw_seed_block = Arc::new(std::sync::Mutex::new(false));
+        let saw_seed_block_c = saw_seed_block.clone();
+        let chat: ChatCompletionFn = Arc::new(move |prompt: &ChatPrompt| {
+            let is_seed = prompt.system.contains("seed entity list");
+            let saw = saw_seed_block_c.clone();
+            let body = if is_seed {
+                r#"{"entries":[{"canonical_name":"Alyosha","aliases":["Alyoshka"],"entity_type":"person","description":"Youngest Karamazov."}]}"#
+                    .to_string()
+            } else {
+                if prompt.user.contains("Known canonical names") {
+                    *saw.lock().unwrap() = true;
+                }
+                r#"{"section_id":"ch_01","entities_introduced":[{"canonical_name":"Alyosha","entity_type":"person"}],"questions_raised":[{"content":"?"}]}"#
+                    .to_string()
+            };
+            Box::pin(async move { Ok(body) })
+        });
+
+        let runner = PhaseRunner::new(
+            Arc::new(LiteraryAtlasPipeline::new()),
+            alphabet_embed(),
+            chat,
+            cache,
+            runs,
+            dir.path().join("exemplars"),
+        );
+
+        let ctx = CorpusContext {
+            chapters: vec![chapter("ch_01", "Chapter 1", "body with Alyosha")],
+            chunks: vec![],
+            chapter_titles: vec!["Chapter 1".into()],
+        };
+
+        let seed = runner
+            .phase_1a_extract_seed("test_corpus", &ctx, false)
+            .await
+            .unwrap()
+            .expect("Llm strategy returns Some");
+        assert_eq!(seed.entries.len(), 1);
+        assert_eq!(seed.entries[0].canonical_name, "Alyosha");
+
+        // Cache-hit short-circuit: second call no chat.
+        let seed2 = runner
+            .phase_1a_extract_seed("test_corpus", &ctx, false)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(seed2.entries[0].canonical_name, "Alyosha");
+
+        // Phase 1 must carry the seed block.
+        let _ = runner
+            .phase_1_extract_questions(&ctx.chapters, &ChapterSelection::Full, |_| {})
+            .await
+            .unwrap();
+        assert!(
+            *saw_seed_block.lock().unwrap(),
+            "phase 1 prompt must include the Known canonical names block \
+             when Stage 1a seed cache is populated"
+        );
+    }
+
+    #[tokio::test]
+    async fn phase_1a_force_refresh_recomputes_even_when_cache_present() {
+        use crate::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
+        let dir = tempdir().unwrap();
+        let cache = PhaseCache::new(dir.path().join("cache"));
+        let runs = RunOutputWriter::new(dir.path().join("runs"));
+
+        let chat_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let chat_calls_c = chat_calls.clone();
+        let chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
+            chat_calls_c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let body = r#"{"entries":[{"canonical_name":"X","entity_type":"person","description":"x"}]}"#.to_string();
+            Box::pin(async move { Ok(body) })
+        });
+
+        let runner = PhaseRunner::new(
+            Arc::new(LiteraryAtlasPipeline::new()),
+            alphabet_embed(),
+            chat,
+            cache,
+            runs,
+            dir.path().join("exemplars"),
+        );
+
+        let ctx = CorpusContext {
+            chapters: vec![chapter("ch_01", "Chapter 1", "body")],
+            chunks: vec![],
+            chapter_titles: vec!["Chapter 1".into()],
+        };
+
+        let _ = runner.phase_1a_extract_seed("c", &ctx, false).await.unwrap();
+        let _ = runner.phase_1a_extract_seed("c", &ctx, false).await.unwrap();
+        assert_eq!(chat_calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+
+        let _ = runner.phase_1a_extract_seed("c", &ctx, true).await.unwrap();
+        assert_eq!(chat_calls.load(std::sync::atomic::Ordering::Relaxed), 2);
     }
 
     #[tokio::test]

@@ -433,6 +433,12 @@ Notable dependencies, all pinned via workspace versions in consumers:
 
 **Build requirement:** LanceDB pulls in `lance-table` which requires the protobuf compiler (`protoc`). Install it with `brew install protobuf` on macOS or `apt install protobuf-compiler` on Debian/Ubuntu before building.
 
+## Roadmap
+
+The v2 enrichment pipeline (typed-graph atlas — seven atom types, seven edge types, stage-by-stage map-reduce with seed-threaded extraction) has its own plan of record:
+
+- **[ENRICHMENT_V2.md](ENRICHMENT_V2.md)** — status table, landing-by-landing scope, verification targets.
+
 ## License
 
 Apache-2.0

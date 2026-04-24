@@ -4,3 +4,5 @@
 //! Registration happens in `super::registry::PipelineRegistry::builtin`.
 
 pub mod literary;
+pub mod literary_atlas;
+pub mod philosophy_atlas;

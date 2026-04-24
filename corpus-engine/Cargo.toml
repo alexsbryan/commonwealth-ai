@@ -71,6 +71,13 @@ hdbscan = "0.12"
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Unicode normalization — used by the atlas resolver's `fold()` to
+# strip Latin combining diacritics so `Karámazov` and `Karamazov`
+# collapse to the same folded key. NFD decomposes the precomposed
+# á into a + U+0301 (combining acute accent); dropping marks
+# afterwards yields plain a. Small, pure-Rust, widely used.
+unicode-normalization = "0.1"
+
 # Unique IDs (used by NoteStore)
 uuid = { version = "1", features = ["v4"] }
 

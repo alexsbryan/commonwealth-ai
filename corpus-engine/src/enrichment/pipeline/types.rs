@@ -13,6 +13,8 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use super::atlas::SectionExtraction;
+
 // ── Phase identity + dependencies ─────────────────────────────
 
 /// The eight phases of the v2 enrichment pipeline.
@@ -24,6 +26,11 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum PipelinePhase {
     Ingest,
+    /// Stage 1a seed-entity extraction — one LLM call (or
+    /// structural parse) over the first section produces the seed
+    /// entity list threaded into every Stage 1b map call. Cached
+    /// at `cache/seed.json`.
+    SeedExtraction,
     Questions,
     QuestionClusters,
     Concerns,
@@ -31,6 +38,16 @@ pub enum PipelinePhase {
     Positions,
     Tensions,
     Gaps,
+    /// Phase 2 output for atlas pipelines — facet-typed clusters
+    /// across questions, claims, entity-states, relation-states,
+    /// and events. Parallel to `QuestionClusters` (which only holds
+    /// question clusters). The two cache slots coexist so legacy
+    /// `literary` runs don't collide with `literary_atlas` runs on
+    /// the same corpus.
+    AtlasClusters,
+    /// Phase 3 output for atlas pipelines — per-cluster `NamedCluster`
+    /// labels. Parallel to `Concerns`.
+    AtlasNamedClusters,
 }
 
 impl PipelinePhase {
@@ -43,11 +60,22 @@ impl PipelinePhase {
         Self::Positions,
         Self::Tensions,
         Self::Gaps,
+        Self::AtlasClusters,
+        Self::AtlasNamedClusters,
+        // Stage 1a seed extraction — appended so ordinals stay
+        // sequential with positions in this array per the
+        // `phase_ordinals_are_sequential` test invariant. The
+        // logical position is between Ingest and Questions; the
+        // runner dispatches it independent of the v1 cascade.
+        Self::SeedExtraction,
     ];
 
     pub const fn ordinal(&self) -> u8 {
         match self {
             Self::Ingest => 0,
+            // Seed extraction slots between Ingest and per-section
+            // Questions — produced once before the map loop fires.
+            Self::SeedExtraction => 10,
             Self::Questions => 1,
             Self::QuestionClusters => 2,
             Self::Concerns => 3,
@@ -55,6 +83,12 @@ impl PipelinePhase {
             Self::Positions => 5,
             Self::Tensions => 6,
             Self::Gaps => 7,
+            // Atlas phases slot after the v1 chain. They ride on
+            // Phase 1 output (Questions) directly and don't gate
+            // any of the v1 phases, so their ordinals are
+            // informational only.
+            Self::AtlasClusters => 8,
+            Self::AtlasNamedClusters => 9,
         }
     }
 
@@ -62,6 +96,7 @@ impl PipelinePhase {
     pub const fn id(&self) -> &'static str {
         match self {
             Self::Ingest => "ingest",
+            Self::SeedExtraction => "seed",
             Self::Questions => "questions",
             Self::QuestionClusters => "question-clusters",
             Self::Concerns => "concerns",
@@ -69,12 +104,15 @@ impl PipelinePhase {
             Self::Positions => "positions",
             Self::Tensions => "tensions",
             Self::Gaps => "gaps",
+            Self::AtlasClusters => "atlas-clusters",
+            Self::AtlasNamedClusters => "atlas-named-clusters",
         }
     }
 
     pub const fn display_name(&self) -> &'static str {
         match self {
             Self::Ingest => "Ingest",
+            Self::SeedExtraction => "Extract seed entities (Stage 1a)",
             Self::Questions => "Extract per-chapter questions",
             Self::QuestionClusters => "Cluster questions",
             Self::Concerns => "Name canonical concerns",
@@ -82,6 +120,8 @@ impl PipelinePhase {
             Self::Positions => "Extract grounded positions",
             Self::Tensions => "Detect pairwise tensions",
             Self::Gaps => "Detect gaps",
+            Self::AtlasClusters => "Cluster atlas sketches by facet",
+            Self::AtlasNamedClusters => "Name atlas clusters per facet",
         }
     }
 
@@ -93,6 +133,11 @@ impl PipelinePhase {
     pub const fn dependencies(&self) -> &'static [Self] {
         match self {
             Self::Ingest => &[],
+            // Seed extraction reads the first chapter from the
+            // corpus state (which comes from Ingest) — but it's
+            // not gated on the Ingest cache since the runner
+            // threads the first chapter in directly.
+            Self::SeedExtraction => &[Self::Ingest],
             Self::Questions => &[Self::Ingest],
             Self::QuestionClusters => &[Self::Questions],
             Self::Concerns => &[Self::QuestionClusters],
@@ -100,6 +145,11 @@ impl PipelinePhase {
             Self::Positions => &[Self::Concerns, Self::ChunkClusters],
             Self::Tensions => &[Self::Positions],
             Self::Gaps => &[Self::Concerns, Self::Positions, Self::Tensions],
+            // Atlas phases consume Phase 1 output directly. They
+            // don't depend on the v1 clustering chain (different
+            // clusters, different downstream consumers).
+            Self::AtlasClusters => &[Self::Questions],
+            Self::AtlasNamedClusters => &[Self::AtlasClusters],
         }
     }
 }
@@ -116,6 +166,9 @@ impl FromStr for PipelinePhase {
             "positions" | "extract-positions" => Ok(Self::Positions),
             "tensions" | "detect-tensions" => Ok(Self::Tensions),
             "gaps" | "detect-gaps" => Ok(Self::Gaps),
+            "seed" | "seed-extraction" | "stage-1a" => Ok(Self::SeedExtraction),
+            "atlas-clusters" | "cluster-atlas" => Ok(Self::AtlasClusters),
+            "atlas-named-clusters" | "name-atlas-clusters" => Ok(Self::AtlasNamedClusters),
             other => Err(format!("unknown phase: {other}")),
         }
     }
@@ -164,6 +217,37 @@ pub type ChatCompletionFn = Arc<
         + Sync,
 >;
 
+/// Chat-completion function with a per-call `max_tokens` override.
+/// Used by the runner when a retry mode needs a larger output budget
+/// for specific chapters without mutating the shared client.
+///
+/// Callers that don't need per-call overrides can keep using
+/// `ChatCompletionFn` directly; the runner selects which closure to
+/// invoke based on whether a retry mode is active.
+pub type ChatCompletionWithTokensFn = Arc<
+    dyn Fn(&ChatPrompt, u32) -> Pin<Box<dyn Future<Output = crate::error::Result<String>> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// Per-invocation retry mode for Phase 1. Passed to
+/// `PhaseRunner::phase_1_extract_questions_with_retry` by the CLI
+/// when the user requests `--retry-failed --terse`. Extensible —
+/// future variants (e.g. a philosophy-specific retry mode) land as
+/// additional enum members without changing the runner's entry
+/// point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RetryMode {
+    /// Terse prompt variant — the pipeline's `compose_phase1_terse`
+    /// fires and the chat call honours `max_output_tokens` for the
+    /// retry only. A pipeline that doesn't expose a terse variant
+    /// (returns `None`) causes the retry to fail fast with a clear
+    /// error; the runner does not silently fall back to the default
+    /// prompt.
+    Terse { max_output_tokens: u32 },
+}
+
 // ── Phase 1: per-chapter question extraction ──────────────────
 
 /// Input to phase 1. Constructed by the runner from the chunk index +
@@ -201,6 +285,13 @@ pub struct ExtractedQuestion {
     /// the event the thematic question is carried by.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot: Option<String>,
+    /// Atlas v2.1 widening — populated by pipelines that extract the
+    /// full typed atom graph (e.g. `literary_atlas`). Left `None` by
+    /// v1-shaped pipelines (`literary`) so both schemas coexist in the
+    /// same `Phase1Output` cache file. Phase 5 onwards reads this when
+    /// present and falls back to the `questions` field otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section_extraction: Option<SectionExtraction>,
 }
 
 /// Parsed result of one phase-1 call. The runner stamps `chapter_id`
@@ -217,6 +308,38 @@ pub struct Phase1ChapterResult {
     pub setting: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot: Option<String>,
+    /// Atlas v2.1 widening (see `ExtractedQuestion::section_extraction`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section_extraction: Option<SectionExtraction>,
+}
+
+/// Structured classification of a Phase 1 failure. Used alongside
+/// the free-text `reason` so the CLI can route each chapter to the
+/// right recovery path without sniffing the reason string:
+///
+/// - `ThinkTruncated` → retry with the terse prompt variant (if the
+///   pipeline has one) and/or a larger `max_output_tokens` budget.
+/// - `ParseDrift` → the JSON was malformed in a way the tolerant
+///   parser couldn't recover; a plain retry may succeed.
+/// - `ChatError` → transport-level failure; a plain retry is
+///   appropriate.
+/// - `EmptyExtraction` → the model returned a well-formed envelope
+///   with zero atoms; usually a schema-echo case, needs prompt fix.
+/// - `Skipped` → the runner declined to dispatch (body too short,
+///   heading-only section).
+/// - `Other` → anything the classifier can't bucket yet.
+///
+/// Kept as a small closed enum so `sovereign enrich status` can
+/// tally by kind without re-parsing run files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PhaseFailureKind {
+    ThinkTruncated,
+    ParseDrift,
+    ChatError,
+    EmptyExtraction,
+    Skipped,
+    Other,
 }
 
 /// Chapter-level failure record. Carried through `Phase1RunResult` for
@@ -233,6 +356,18 @@ pub struct Phase1Failure {
     /// failure happened before any response arrived (e.g. chat error).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw_response_head: Option<String>,
+    /// Structured failure category. Defaults to `Other` so failure
+    /// records written before this field existed still deserialise.
+    /// New failures should always populate it — the classifier in
+    /// `runner.rs::classify_phase1_failure` maps raw evidence (parse
+    /// error, response body, chat transport error) into the enum
+    /// without string-sniffing the `reason` field.
+    #[serde(default = "phase_failure_kind_other")]
+    pub failure_kind: PhaseFailureKind,
+}
+
+fn phase_failure_kind_other() -> PhaseFailureKind {
+    PhaseFailureKind::Other
 }
 
 /// Parsed result of one phase-3 call. Runner stamps `id` + `cluster_id`.
@@ -474,6 +609,175 @@ impl Phase3Output {
     pub const SCHEMA_VERSION: u32 = 1;
 }
 
+// ── Phase 2/3: atlas-pipeline clustering + naming ─────────────
+//
+// The v1 Phase 2/3 types above (QuestionCluster, CanonicalConcern)
+// serve the legacy questions-only flow. The atlas pipeline produces
+// typed clusters across five facets — the types below carry that
+// shape end-to-end from clustering (Phase 2) through naming
+// (Phase 3) and into Phase 5 grounded resolution.
+
+/// Which atlas sketch field a cluster or reference belongs to.
+/// Matches the per-section fields on `SectionExtraction`:
+/// `questions_raised`, `claims`, `entities_developed`,
+/// `relations_developed`, and `events`. `entities_introduced` and
+/// `relations_introduced` aren't clustered — they name things, not
+/// developments, and feed directly into Phase 3a entity/event
+/// resolution rather than into Phase 2 clustering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Facet {
+    Question,
+    Claim,
+    EntityState,
+    RelationState,
+    Event,
+}
+
+impl Facet {
+    /// Stable string form. Used by the exemplar directory layout
+    /// (`exemplars/<pipeline>/<phase>/<facet>.json`) and by the
+    /// naming prompts' file stems
+    /// (`phase3_{question,claim,entity_state_trajectory,…}_naming.md`).
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Question => "question",
+            Self::Claim => "claim",
+            Self::EntityState => "entity_state",
+            Self::RelationState => "relation_state",
+            Self::Event => "event",
+        }
+    }
+
+    /// Suffix used in Phase 3 prompt file names — tracks the
+    /// "trajectory" / "thread" terminology from spec §5.3.
+    pub const fn prompt_suffix(&self) -> &'static str {
+        match self {
+            Self::Question => "question_naming",
+            Self::Claim => "claim_naming",
+            Self::EntityState => "entity_state_trajectory_naming",
+            Self::RelationState => "relation_state_trajectory_naming",
+            Self::Event => "event_thread_naming",
+        }
+    }
+
+    pub const ALL: &'static [Self] = &[
+        Self::Question,
+        Self::Claim,
+        Self::EntityState,
+        Self::RelationState,
+        Self::Event,
+    ];
+}
+
+/// A reference from a cluster (or the noise pile) back to a specific
+/// sketch inside a `SectionExtraction`. The tuple `(section_id,
+/// facet, sketch_index)` uniquely identifies a sketch.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SketchRef {
+    pub section_id: String,
+    pub facet: Facet,
+    /// Index into the facet's vector on the source `SectionExtraction`
+    /// (e.g. `section.claims[sketch_index]`).
+    pub sketch_index: usize,
+}
+
+/// One cluster of sketches sharing a facet.
+///
+/// The cluster carries its facet tag so Phase 3 naming can branch
+/// on it without a second lookup. Consumers that want per-facet
+/// partitions can `clusters.iter().filter(|c| c.facet == F)`; the
+/// `Phase2AtlasOutput` methods expose that as a one-liner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtlasCluster {
+    pub id: String,
+    pub facet: Facet,
+    pub refs: Vec<SketchRef>,
+}
+
+/// Top-level Phase 2 output for atlas pipelines. All facets live
+/// in one `clusters` list tagged with `Facet`; `unclustered` is
+/// the union of noise points across facets (each noise point
+/// carries its own facet so downstream code can partition when
+/// needed).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Phase2AtlasOutput {
+    pub schema_version: u32,
+    pub pipeline_id: String,
+    pub clusters: Vec<AtlasCluster>,
+    pub unclustered: Vec<SketchRef>,
+    pub written_at: String,
+}
+
+impl Phase2AtlasOutput {
+    pub const SCHEMA_VERSION: u32 = 1;
+
+    /// Iterate only the clusters of a given facet. Thin wrapper
+    /// that keeps the common "give me the claim clusters" call a
+    /// one-liner without collapsing the facet tag at storage time.
+    pub fn clusters_by_facet(&self, facet: Facet) -> impl Iterator<Item = &AtlasCluster> {
+        self.clusters.iter().filter(move |c| c.facet == facet)
+    }
+}
+
+/// Phase 3 output — one named label per Phase 2 cluster, keyed by
+/// cluster id. `metadata` carries facet-specific extensions (e.g.
+/// `primary_arcs` on entity-state trajectory labels, `attributed_to`
+/// on claim labels) without forcing the top-level schema to enumerate
+/// every future field.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NamedCluster {
+    pub id: String,
+    pub cluster_id: String,
+    pub facet: Facet,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Phase3AtlasOutput {
+    pub schema_version: u32,
+    pub pipeline_id: String,
+    pub named_clusters: Vec<NamedCluster>,
+    pub written_at: String,
+}
+
+impl Phase3AtlasOutput {
+    pub const SCHEMA_VERSION: u32 = 1;
+}
+
+/// Parse result from `parse_phase3_facet` — the fields a naming
+/// prompt is expected to return. The runner combines this with the
+/// cluster id + facet to build a `NamedCluster`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Phase3FacetParseResult {
+    pub label: String,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, String>,
+}
+
+/// One sketch's content rendered for a Phase 3 naming prompt. The
+/// CLI (or any runner) assembles a vector of these by walking a
+/// cluster's `refs` and looking up each (section_id, facet,
+/// sketch_index) in the Phase 1 cache. The prompt composer reads
+/// the list without re-fetching source material — everything the
+/// LLM needs to name the cluster is in the excerpt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SketchExcerpt {
+    pub section_id: String,
+    /// Facet-specific rendering of the sketch:
+    /// - Question → the question content.
+    /// - Claim → `"[discourse_act/epistemic_status] content"`; when
+    ///   the claim is attributed, prefix with `"<entity>: "`.
+    /// - EntityState → `"<entity>: <label>"`.
+    /// - RelationState → `"<p1 × p2>: <label>"`.
+    /// - Event → the event description.
+    pub content: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub anchor: String,
+}
+
 // ── Phase 4: chunk clustering ─────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -644,6 +948,119 @@ impl Atlas {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn facet_stringification_matches_spec_taxonomy() {
+        // Pins the wire format. The exemplar directory layout and
+        // the Phase 3 prompt file names both read these strings,
+        // so a rename here is load-bearing — tests fail loudly.
+        assert_eq!(Facet::Question.as_str(), "question");
+        assert_eq!(Facet::Claim.as_str(), "claim");
+        assert_eq!(Facet::EntityState.as_str(), "entity_state");
+        assert_eq!(Facet::RelationState.as_str(), "relation_state");
+        assert_eq!(Facet::Event.as_str(), "event");
+
+        assert_eq!(
+            Facet::EntityState.prompt_suffix(),
+            "entity_state_trajectory_naming"
+        );
+        assert_eq!(Facet::Event.prompt_suffix(), "event_thread_naming");
+    }
+
+    #[test]
+    fn facet_enumeration_is_complete() {
+        // Every variant must be in ALL — Phase 2 iterates over
+        // Facet::ALL to drive clustering, so a missed entry means a
+        // silent gap in coverage.
+        let all_via_match: Vec<Facet> = vec![
+            Facet::Question,
+            Facet::Claim,
+            Facet::EntityState,
+            Facet::RelationState,
+            Facet::Event,
+        ];
+        assert_eq!(all_via_match.len(), Facet::ALL.len());
+        for f in &all_via_match {
+            assert!(Facet::ALL.contains(f));
+        }
+    }
+
+    #[test]
+    fn facet_serializes_as_snake_case() {
+        let json = serde_json::to_string(&Facet::EntityState).unwrap();
+        assert_eq!(json, "\"entity_state\"");
+        let back: Facet = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, Facet::EntityState);
+    }
+
+    #[test]
+    fn phase2_atlas_output_partitions_by_facet() {
+        let output = Phase2AtlasOutput {
+            schema_version: Phase2AtlasOutput::SCHEMA_VERSION,
+            pipeline_id: "literary_atlas".into(),
+            clusters: vec![
+                AtlasCluster {
+                    id: "cl_q_01".into(),
+                    facet: Facet::Question,
+                    refs: vec![SketchRef {
+                        section_id: "sec_0001".into(),
+                        facet: Facet::Question,
+                        sketch_index: 0,
+                    }],
+                },
+                AtlasCluster {
+                    id: "cl_c_01".into(),
+                    facet: Facet::Claim,
+                    refs: Vec::new(),
+                },
+                AtlasCluster {
+                    id: "cl_c_02".into(),
+                    facet: Facet::Claim,
+                    refs: Vec::new(),
+                },
+            ],
+            unclustered: Vec::new(),
+            written_at: "t".into(),
+        };
+        let claims: Vec<&AtlasCluster> = output.clusters_by_facet(Facet::Claim).collect();
+        assert_eq!(claims.len(), 2);
+        let questions: Vec<&AtlasCluster> =
+            output.clusters_by_facet(Facet::Question).collect();
+        assert_eq!(questions.len(), 1);
+        let states: Vec<&AtlasCluster> =
+            output.clusters_by_facet(Facet::EntityState).collect();
+        assert!(states.is_empty());
+    }
+
+    #[test]
+    fn named_cluster_metadata_roundtrips() {
+        let mut md = HashMap::new();
+        md.insert("attributed_to".into(), "Zosima".into());
+        let nc = NamedCluster {
+            id: "ncl_01".into(),
+            cluster_id: "cl_c_01".into(),
+            facet: Facet::Claim,
+            label: "Active love costs more than dreamt love.".into(),
+            metadata: md,
+        };
+        let json = serde_json::to_string(&nc).unwrap();
+        let back: NamedCluster = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.facet, Facet::Claim);
+        assert_eq!(back.metadata.get("attributed_to").unwrap(), "Zosima");
+    }
+
+    #[test]
+    fn phase3_atlas_output_is_json_stable() {
+        let out = Phase3AtlasOutput {
+            schema_version: Phase3AtlasOutput::SCHEMA_VERSION,
+            pipeline_id: "literary_atlas".into(),
+            named_clusters: Vec::new(),
+            written_at: "t".into(),
+        };
+        let json = serde_json::to_string(&out).unwrap();
+        assert!(json.contains("\"pipeline_id\":\"literary_atlas\""));
+        assert!(json.contains("\"named_clusters\":[]"));
+    }
 
     #[test]
     fn phase_ordinals_are_sequential() {
@@ -818,11 +1235,13 @@ mod tests {
                 thematic_carriers: vec!["Anna".into()],
                 setting: Some("Moscow drawing-room, 1870s".into()),
                 plot: Some("A letter arrives and is read aloud.".into()),
+                section_extraction: None,
             }],
             failures: vec![Phase1Failure {
                 chapter_id: "ch_0007".into(),
                 reason: "parse error: missing questions".into(),
                 raw_response_head: Some("I cannot help with that.".into()),
+                failure_kind: PhaseFailureKind::ParseDrift,
             }],
             written_at: "2026-04-22T00:00:00Z".into(),
         };

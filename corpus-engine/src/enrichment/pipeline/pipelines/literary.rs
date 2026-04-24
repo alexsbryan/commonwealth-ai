@@ -180,6 +180,10 @@ impl Pipeline for LiteraryPipeline {
                 .collect(),
             setting: sanitize_optional_string(raw.setting),
             plot: sanitize_optional_string(raw.plot),
+            // The legacy `literary` pipeline does not populate the
+            // atlas atom graph; it stays a questions-only extractor.
+            // `literary_atlas` is the pipeline that fills this field.
+            section_extraction: None,
         })
     }
 
@@ -554,7 +558,7 @@ impl Pipeline for LiteraryPipeline {
 /// Drop an `Option<String>` that's empty, whitespace-only, or a
 /// placeholder literal. Used for phase-1 optional fields where a
 /// `"..."` echo should be treated the same as no answer.
-fn sanitize_optional_string(opt: Option<String>) -> Option<String> {
+pub(super) fn sanitize_optional_string(opt: Option<String>) -> Option<String> {
     opt.map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty() && !is_placeholder_literal(s))
 }
@@ -564,7 +568,9 @@ fn sanitize_optional_string(opt: Option<String>) -> Option<String> {
 /// `["Alice", null, "Bob"]` when they're unsure about a position in
 /// an array; treating that as a hard parse failure wastes the whole
 /// response when the meaningful entries are right there.
-fn deserialize_vec_string_filter_null<'de, D>(d: D) -> std::result::Result<Vec<String>, D::Error>
+pub(super) fn deserialize_vec_string_filter_null<'de, D>(
+    d: D,
+) -> std::result::Result<Vec<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -599,7 +605,7 @@ where
 /// running. When the model opened a `<think>` block but never closed
 /// it, the returned error names the root cause — "truncated
 /// reasoning trace" — instead of the generic "no JSON object."
-fn prepare_phase_json(response: &str, phase_label: &str) -> Result<String> {
+pub(super) fn prepare_phase_json(response: &str, phase_label: &str) -> Result<String> {
     let cleaned = strip_reasoning_tags(response);
     let block = extract_json_block(&cleaned).ok_or_else(|| {
         if is_truncated_thinking_response(response) {
@@ -729,6 +735,7 @@ mod tests {
             rationale: "Names the stakes, not the plot.".into(),
             selector_text: None,
             created_at: String::new(),
+            facet: None,
         }
     }
 

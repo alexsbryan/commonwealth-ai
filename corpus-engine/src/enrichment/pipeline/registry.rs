@@ -28,6 +28,12 @@ impl PipelineRegistry {
         r.register("literary", || {
             Arc::new(super::pipelines::literary::LiteraryPipeline::new())
         });
+        r.register(super::pipelines::literary_atlas::PIPELINE_ID, || {
+            Arc::new(super::pipelines::literary_atlas::LiteraryAtlasPipeline::new())
+        });
+        r.register(super::pipelines::philosophy_atlas::PIPELINE_ID, || {
+            Arc::new(super::pipelines::philosophy_atlas::PhilosophyAtlasPipeline::new())
+        });
         r
     }
 
@@ -58,6 +64,26 @@ mod tests {
     fn builtin_registers_literary() {
         let r = PipelineRegistry::builtin();
         assert!(r.get("literary").is_some());
+    }
+
+    #[test]
+    fn builtin_registers_literary_atlas() {
+        let r = PipelineRegistry::builtin();
+        let p = r.get("literary_atlas").expect("literary_atlas registered");
+        assert_eq!(p.id(), "literary_atlas");
+    }
+
+    #[test]
+    fn builtin_registers_philosophy_atlas() {
+        let r = PipelineRegistry::builtin();
+        let p = r
+            .get("philosophy_atlas")
+            .expect("philosophy_atlas should be registered as a builtin pipeline");
+        assert_eq!(p.id(), "philosophy_atlas");
+        // Phase C Step 7's acceptance: the philosophy pipeline
+        // opts into the configuration phase without any code
+        // branches in the runner.
+        assert!(p.runs_configuration_phase());
     }
 
     #[test]

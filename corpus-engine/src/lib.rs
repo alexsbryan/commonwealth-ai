@@ -11,6 +11,7 @@
 //! It has zero dependency on Sovereign or Commonwealth crates.
 
 pub mod acquirers;
+pub mod atlas_traversal;
 pub mod chunkers;
 pub mod engine;
 pub mod enrichment;
