@@ -30,6 +30,7 @@ pub mod chapter_manifest;
 pub mod exemplar_bank;
 pub mod phase_cache;
 pub mod pipelines;
+pub mod progress;
 pub mod registry;
 pub mod run_output;
 pub mod runner;
@@ -48,6 +49,7 @@ pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult
 pub use chapter_manifest::{ChapterEntry, ChapterManifest};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
 pub use phase_cache::{PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
+pub use progress::{BuildStep, EnrichProgress, EnrichProgressFn};
 pub use registry::PipelineRegistry;
 pub use run_output::RunOutputWriter;
 pub use runner::{

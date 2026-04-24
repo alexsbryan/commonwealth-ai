@@ -52,7 +52,7 @@ type = "atlas"
 pipeline = "philosophy_atlas"
 domain = "philosophy"
 prompt_version = "2.1.0"
-paragraphs_per_section = 5
+paragraphs_per_section = 10
 
 # HDBSCAN / alignment / fault-line params retained for the legacy
 # full-corpus field-model flow. Atlas (per-article) + field-model
