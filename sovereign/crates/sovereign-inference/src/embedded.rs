@@ -62,23 +62,26 @@ impl ModelSlot {
 
         let n_threads = llama_threads_for_host();
 
-        // Metal offload for chat slots on macOS — mirrors the EmbedSlot
-        // decision. `with_n_gpu_layers(999)` alone puts the model weights
-        // on the GPU but leaves the KV cache in CPU memory and may route
-        // some compute ops back to CPU. Setting `offload_kqv(true)` +
-        // `op_offload(true)` pins the whole forward pass on Metal.
+        // GPU offload for chat slots. `with_n_gpu_layers(999)` alone
+        // puts the model weights on the GPU but leaves the KV cache in
+        // CPU memory and may route some compute ops back to CPU.
+        // Setting `offload_kqv(true)` + `op_offload(true)` pins the
+        // whole forward pass on the GPU.
         //
-        // Measured impact (parallel to the EmbedSlot note, M2 Max,
-        // Qwen3.5-9B.Q8_0): decode tok/sec ~49 without these flags,
-        // ~70-80 with them — the last 5s of the Joan Robinson fix.
+        // Measured impact (M2 Max, Qwen3.5-9B.Q8_0): decode tok/sec
+        // ~49 without these flags, ~70-80 with them — the last 5s
+        // of the Joan Robinson fix. Strix Halo Vulkan shows a similar
+        // gap (embed ingest was 3.7 chunks/s CPU-only with weights on
+        // GPU but KQV in RAM; see docs/TOOLBOX_SETUP.md §9).
         //
-        // Try-Metal-then-CPU-fallback identical to EmbedSlot: a future
-        // llama.cpp upgrade could reintroduce a Metal crash on some
-        // quant/platform, and silent fallback to CPU is what made the
-        // original embed regression invisible. Always log the actual
-        // backend so operators can spot a silent fallback.
-        let wants_metal = cfg!(target_os = "macos") && n_gpu_layers > 0;
-        let build_ctx_params = |metal: bool| {
+        // Try-GPU-then-CPU-fallback: a future llama.cpp upgrade could
+        // reintroduce a crash on some quant/backend combo, and silent
+        // fallback to CPU is what made the original embed regression
+        // invisible. Always log the actual backend so operators can
+        // spot a silent fallback.
+        let wants_gpu =
+            cfg!(any(target_os = "macos", target_os = "linux")) && n_gpu_layers > 0;
+        let build_ctx_params = |gpu: bool| {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
                 // Chat slots are serial: a Mutex<SlotContext> guards the
@@ -109,11 +112,11 @@ impl ModelSlot {
                 // 400% of the CPU was busy.
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
-                .with_offload_kqv(metal)
-                .with_op_offload(metal)
+                .with_offload_kqv(gpu)
+                .with_op_offload(gpu)
         };
 
-        let (ctx, used_metal) = match if wants_metal {
+        let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
                 let model_ref: &'static LlamaModel =
                     &*(Arc::as_ptr(&model) as *const LlamaModel);
@@ -126,11 +129,11 @@ impl ModelSlot {
         } {
             Ok(pair) => pair,
             Err(e) => {
-                if wants_metal {
+                if wants_gpu {
                     tracing::warn!(
                         error = ?e,
                         model_id = %model_id,
-                        "Metal chat-slot context failed, falling back to CPU"
+                        "GPU chat-slot context failed, falling back to CPU"
                     );
                 }
                 let ctx = unsafe {
@@ -146,8 +149,8 @@ impl ModelSlot {
             }
         };
 
-        let compute_backend = if used_metal {
-            "gpu+metal"
+        let compute_backend = if used_gpu {
+            gpu_backend_label()
         } else {
             embed_compute_backend_label()
         };
@@ -485,19 +488,21 @@ impl EmbedSlot {
         n_gpu_layers: u32,
         embed_quirks: Option<EmbedQuirks>,
     ) -> Result<Self> {
-        // Force Metal offload on Apple Silicon only. On M-series chips
-        // Metal embedding runs at ~33 seq/sec vs ~2.8 seq/sec on CPU —
-        // a 12× speedup. On Intel Macs the Metal scheduler crashes in
-        // ggml_metal_synchronize (hardware OOM or command-buffer timeout),
-        // so the override is gated on aarch64 (Apple Silicon) rather than
-        // the broader "macos" predicate.
+        // Force full-GPU offload when a GPU is present but the caller
+        // passed 0. On Apple Silicon, Metal embed runs at ~33 seq/sec
+        // vs ~2.8 seq/sec CPU (12×). On Strix Halo Vulkan it's ~40+
+        // seq/sec vs 3.7-4.9 chunks/s CPU (see docs/TOOLBOX_SETUP.md
+        // §9). Intel Macs stay excluded: the Metal scheduler crashes
+        // in `ggml_metal_synchronize` there (hardware OOM / command-
+        // buffer timeout), which is why the macOS arm is gated on
+        // aarch64 rather than the broader "macos" predicate.
         // The old `GGML_ASSERT(buf_src)` crash was fixed in
         // llama-cpp-2 0.1.141; the fallback-to-CPU path below still
         // guards against context-creation failures on any platform.
-        let requested_gpu_layers = if cfg!(all(target_os = "macos", target_arch = "aarch64"))
-            && n_gpu_layers == 0
-        {
-            999 // every layer on GPU — Apple Silicon only
+        let gpu_default_available = cfg!(all(target_os = "macos", target_arch = "aarch64"))
+            || cfg!(target_os = "linux");
+        let requested_gpu_layers = if gpu_default_available && n_gpu_layers == 0 {
+            999 // every layer on GPU
         } else {
             n_gpu_layers
         };
@@ -512,12 +517,13 @@ impl EmbedSlot {
         // so a full-length chunk always fits in one KV cache slot.
         let max_input_tokens = 1024;
         // Aggregate KV cache capacity. 16 slots × 1024 tokens = 16384.
-        // On CPU (Intel or Apple Silicon fallback) this is pure RAM —
+        // On CPU (Intel Mac or a GPU-fallback path) this is pure RAM —
         // ~3.7 GB for a 28-layer/1024-dim model, well within 16 GB+.
-        // On Apple Silicon Metal the same 16384 tokens work fine (30 GB+
-        // unified memory). Intel Mac never reaches this path because the
-        // aarch64 gate above keeps requested_gpu_layers=0 there, so
-        // wants_metal=false and we always take the CPU context branch.
+        // On Apple Silicon Metal or Linux ROCm/Vulkan the same 16384
+        // tokens work fine (30 GB+ unified on macOS; 124 GiB GTT on
+        // Strix Halo). Intel Mac never reaches the GPU path because
+        // the aarch64 gate above keeps requested_gpu_layers=0 there,
+        // so wants_gpu=false and we always take the CPU context branch.
         let ctx_tokens: u32 = 16384;
         // 16 parallel sequence slots. Drives 256-seq batches through
         // 256/16=16 decode calls instead of 256/4=64, giving ~4× the
@@ -535,8 +541,9 @@ impl EmbedSlot {
         };
 
         let n_threads = llama_threads_for_host();
-        let wants_metal = cfg!(target_os = "macos") && requested_gpu_layers > 0;
-        let build_params = |metal: bool| {
+        let wants_gpu =
+            cfg!(any(target_os = "macos", target_os = "linux")) && requested_gpu_layers > 0;
+        let build_params = |gpu: bool| {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
@@ -546,23 +553,23 @@ impl EmbedSlot {
                 .with_n_threads_batch(n_threads as i32)
                 .with_embeddings(true)
                 .with_pooling_type(pooling_type)
-                // Metal offload toggles. `with_offload_kqv(true)` puts
+                // GPU offload toggles. `with_offload_kqv(true)` puts
                 // the KV cache in GPU memory; `with_op_offload(true)`
-                // lets the GGML scheduler route compute ops to Metal.
-                // When both are true (the default when Metal works),
-                // the decode runs entirely on the GPU. The CPU-only
-                // fallback disables both explicitly so the scheduler
-                // keeps every tensor in main memory.
-                .with_offload_kqv(metal)
-                .with_op_offload(metal)
+                // lets the GGML scheduler route compute ops to the GPU.
+                // When both are true (the default when GPU works), the
+                // decode runs entirely on the GPU. The CPU-only fallback
+                // disables both explicitly so the scheduler keeps every
+                // tensor in main memory.
+                .with_offload_kqv(gpu)
+                .with_op_offload(gpu)
         };
 
-        // Try Metal first if compiled in; fall back to CPU on any
+        // Try GPU first if compiled in; fall back to CPU on any
         // context-creation error. The common failure mode on older
-        // llama.cpp builds was `GGML_ASSERT(buf_src)` — ugly from
-        // the crash's perspective, but if it happens before
+        // llama.cpp builds was Metal's `GGML_ASSERT(buf_src)` — ugly
+        // from the crash's perspective, but if it happens before
         // `new_context` returns we just see `Err` here and retry.
-        let (ctx, used_metal) = match if wants_metal {
+        let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
                 let model_ref: &'static LlamaModel =
                     &*(Arc::as_ptr(&model) as *const LlamaModel);
@@ -575,10 +582,10 @@ impl EmbedSlot {
         } {
             Ok(pair) => pair,
             Err(e) => {
-                if wants_metal {
+                if wants_gpu {
                     tracing::warn!(
                         error = ?e,
-                        "Metal embed context failed, falling back to CPU"
+                        "GPU embed context failed, falling back to CPU"
                     );
                 }
                 let ctx = unsafe {
@@ -601,14 +608,15 @@ impl EmbedSlot {
             Some(PoolingStrategy::Cls)  => "cls",
             _                           => "mean",
         };
-        // Report the actual backend so logs show whether Metal
-        // took (33 seq/sec on M2 Max, measured) or we fell back
-        // to CPU (2.8 seq/sec peak). Key diagnostic — a silent
-        // CPU fallback is the exact class of regression that
-        // triggered the benchmark-driven investigation of this
-        // path.
-        let compute_backend = if used_metal {
-            "gpu+metal"
+        // Report the actual backend so logs show whether GPU
+        // took (33 seq/sec on M2 Max Metal, measured; ~40+ seq/sec
+        // on Strix Halo Vulkan) or we fell back to CPU (2.8 seq/sec
+        // peak on M2 Max, 3.7-4.9 chunks/s on Strix Halo).
+        // Key diagnostic — a silent CPU fallback is the exact class
+        // of regression that triggered the benchmark-driven
+        // investigation of this path.
+        let compute_backend = if used_gpu {
+            gpu_backend_label()
         } else {
             embed_compute_backend_label()
         };
@@ -921,11 +929,6 @@ fn l2_normalize(mut v: Vec<f32>) -> Vec<f32> {
     v
 }
 
-/// Describe which compute backend the embed slot effectively
-/// uses. Logged at slot load so the operator can tell at a glance
-/// whether matmul is hitting Accelerate, OpenBLAS, or plain CPU.
-/// The embed context is always CPU-pinned (see `EmbedSlot::load`)
-/// so the only question is which CPU math library GGML picked.
 /// How many CPU threads to hand llama.cpp for a single context.
 ///
 /// Benchmarked on M2 Max (8P + 4E) with Qwen3-Embedding-0.6B:
@@ -953,11 +956,12 @@ fn llama_threads_for_host() -> usize {
     raw.clamp(2, 8)
 }
 
+/// Label emitted in slot-load logs when the GPU path wasn't taken
+/// (GPU context creation failed, or caller didn't request it).
+/// Tells the operator which CPU math backend GGML is using.
 fn embed_compute_backend_label() -> &'static str {
-    // Embed context is CPU-pinned (see `EmbedSlot::load`'s
-    // `with_offload_kqv(false).with_op_offload(false)`). On
-    // Apple Silicon, GGML's CPU backend links Accelerate's
-    // SGEMM — that's where real throughput comes from. Other
+    // On Apple Silicon, GGML's CPU backend links Accelerate's SGEMM
+    // — that's where real CPU-path throughput comes from. Other
     // platforms fall back to plain llama.cpp CPU kernels.
     #[cfg(target_os = "macos")]
     {
@@ -966,6 +970,23 @@ fn embed_compute_backend_label() -> &'static str {
     #[cfg(not(target_os = "macos"))]
     {
         "cpu"
+    }
+}
+
+/// Label emitted in slot-load logs when `wants_gpu` succeeded.
+/// The specific backend (metal / rocm / vulkan) is still visible
+/// in the nearby `ggml_*_init` llama.cpp output at startup.
+fn gpu_backend_label() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "gpu+metal"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // llama-cpp-2's `rocm` vs `vulkan` feature is selected at
+        // the workspace level (see crates/sovereign-inference/Cargo.toml)
+        // and not re-exposed as a rustc cfg here, so we just say "gpu".
+        "gpu"
     }
 }
 
@@ -1215,14 +1236,19 @@ impl EmbeddedLlamaCpp {
                     family = ?embed_family,
                     "loading slot"
                 );
-                // Embedding contexts always run CPU-only (n_gpu_layers = 0).
-                // The Metal scheduler mis-handles embedding tensor graphs in
-                // several llama.cpp versions (GGML_ASSERT buf_src failure),
-                // and embedding workloads are not compute-bound enough to
-                // benefit from GPU offloading.
-                match EmbedSlot::load(&backend, path, 0, embed_quirks) {
+                // Embedding offload mirrors the chat slot: pass the
+                // hardware-derived n_gpu_layers and let `EmbedSlot::load`
+                // try-GPU-then-fallback. The old comment here said
+                // "embedding workloads are not compute-bound enough to
+                // benefit from GPU offloading" — measured to be wrong
+                // on Strix Halo Vulkan (ingest was stuck at ~4 chunks/s
+                // CPU-only; GPU embed is ~10× faster) and on Apple
+                // Silicon Metal (33 vs 2.8 seq/sec, 12×). The Metal
+                // GGML_ASSERT(buf_src) crash referenced in the old
+                // comment was fixed in llama-cpp-2 0.1.141.
+                match EmbedSlot::load(&backend, path, n_gpu_layers, embed_quirks) {
                     Ok(slot) => {
-                        tracing::info!(slot = "embed", "slot loaded (CPU-only)");
+                        tracing::info!(slot = "embed", "slot loaded");
                         Some(Arc::new(slot))
                     }
                     Err(e) => {
