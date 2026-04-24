@@ -3,12 +3,28 @@
   import { onDestroy, onMount } from "svelte";
 
   import { lcIncompleteJobs, lcList, lcRemove } from "../../api";
-  import type { IncompleteJob, LocalCorpusConfig } from "../../types";
+  import type {
+    IncompleteJob,
+    LocalCorpusConfig,
+    StarterQuestion,
+  } from "../../types";
 
   import FolderDropFlow from "./folder/FolderDropFlow.svelte";
   import LocalKnowledgeAdd from "./LocalKnowledgeAdd.svelte";
   import LocalKnowledgeList from "./LocalKnowledgeList.svelte";
   import ResumePrompt from "./ResumePrompt.svelte";
+
+  interface Props {
+    /// Pipe-through from SettingsPanel → App.svelte: when a user
+    /// clicks a starter chip on the atlas-complete screen, fire so
+    /// the chat view opens with the question seeded + auto-submitted.
+    onOpenChatWithSeed?: (question: StarterQuestion) => void;
+    /// Pipe-through: "Start chatting — atlas keeps building" button
+    /// on the sample-atlas progress screen. App closes Settings + the
+    /// toast fires when the atlas finishes.
+    onDropToChat?: () => void;
+  }
+  let { onOpenChatWithSeed, onDropToChat }: Props = $props();
 
   import "./_theme.css";
 
@@ -148,7 +164,7 @@
         <p class="lk-label">Sources</p>
         <span class="plate-count lk-folio">{corpora.length}</span>
       </div>
-      <LocalKnowledgeList {corpora} onRemove={handleRemove} />
+      <LocalKnowledgeList {corpora} onRemove={handleRemove} {onOpenChatWithSeed} />
     </section>
 
     <section class="plate">
@@ -167,6 +183,8 @@
       resumeCorpusId={mode.resumeCorpusId ?? null}
       resumeDisplayName={mode.resumeDisplayName ?? null}
       onExit={exitFlow}
+      {onOpenChatWithSeed}
+      {onDropToChat}
     />
   {/if}
 </div>

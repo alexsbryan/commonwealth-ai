@@ -599,6 +599,78 @@ in `lib/types.ts` (hand-maintained to mirror the Rust
 `#[serde(tag = "kind")]` shape); API wrappers in `lib/api.ts`.
 9 Vitest reducer tests pin the state-transition contract.
 
+**First-time-experience bridge (Landings O1–O5, P1–P5).** The
+onboarding optimises for time-to-first-value. SetupWizard is now
+collapsed to a single step — pick a model, toggle capabilities,
+continue. Persona selection, knowledge-tier picker, and
+web-search step are retired (the first two didn't earn their
+keep; the third has a sensible default). After setup on a truly-
+first launch, `App.svelte` routes through `FirstCorpusFlow.svelte`
+(explainer → pick method → auto-enrich). Ingest runs as today;
+then instead of a "do you want to build an atlas?" gate, the
+backend automatically spawns a **sample-atlas build** covering
+the first `SAMPLE_SIZE = 5` documents. This lands the atlas in
+2–3 min on an M2 Max (vs 15–30 for a full folder), and the user
+can drop straight to chat during the build ("Start chatting —
+atlas keeps building"). A global toast fires when the sample
+atlas finishes ("Ready to ask about X, Y, and 3 more — what
+connections can we make?") with an "Ask a question" action that
+seeds the first chat turn.
+
+Cross-component seed handoff runs through
+`stores/chatSeed.svelte.ts` — module-level store so the toast
+survives the originating component unmounting. Toast rendering
+lives in `ToastHost.svelte`, mounted once at App.svelte.
+
+Backend bridge commands live in the existing
+`sovereign-desktop/src-tauri/src/enrich_commands.rs`:
+
+| Command | What it does |
+|---|---|
+| `enrich_init_for_local_corpus(corpus_id, pipeline_id, sample_size?)` | Synthesises a plaintext source from the staged JSONL (one `===== <title> =====` delimited section per document) then shells to `sovereign-cli enrich init --force`. When `sample_size` is set, only the first N usable records are included in the synthetic source — enables the TTFV sample-first path. Returns `SampledDocuments { titles, total }` so the UI can surface "atlas covers X of Y". Idempotent — no-op when `config.json` pins the same pipeline AND the existing source covers the requested sample size. Gated server-side to `literary_atlas` / `philosophy_atlas`. |
+| `enrich_estimate(corpus_id)` | Reads `chapters.json`, applies a static 1.5–3 min/section heuristic, returns `{ sections, total_words, est_tokens, minutes_low, minutes_high }`. |
+| `enrich_get_active_job(corpus_id)` | Looks up the in-flight job via a new `job_id_by_corpus` map on `EnrichJobRegistry` so a second UI surface can attach to an existing build. |
+| `enrich_get_starter_questions(corpus_id, limit)` | Reads `atlas/atoms.json` via `read_atlas_atoms`, filters Question atoms to the 25–220 char length band, ranks by `question_type` (thematic ▸ interpretive ▸ open ▸ factual ▸ rhetorical), diversifies by first `raised_at.chunk_id`. Empty vec when atoms.json is absent — UI branches on length. |
+| `is_first_run` / `mark_first_run_complete` | File marker at `~/.sovereign/first_run_complete`. |
+
+Key Svelte surfaces:
+
+- `components/EnrichmentStage.svelte` — single source of truth
+  for rendering an `EnrichJobState` + Cancel button. Composed by
+  `EnrichmentPanel.svelte` (Settings tab), `FolderDropFlow.svelte`
+  (inline post-ingest), and `OrganizerPanel.svelte` (Obsidian
+  post-writeback).
+- `components/StarterChips.svelte` — reusable chip row used by
+  the onboarding celebration screen and the chat empty state.
+- `components/onboarding/FirstCorpusFlow.svelte` — wizard-free
+  explainer + pick-method + embedded `FolderDropFlow` with
+  starter-question handoff back to App.
+- `components/onboarding/HonestExpectations.svelte` — Strong at /
+  Weaker at / Better with friends content block.
+- `components/onboarding/MeshBoost.svelte` — mesh-of-friends
+  callout (aspirational copy today; upgrades when GPU delegation
+  lands).
+
+Routing: `App.svelte` adds a `first_corpus` view that fires when
+(a) `is_first_run()` is true AND (b) `enrich_list_corpora()` is
+empty. `pendingSeed: StarterQuestion | null` threads through to
+`ChatView`'s new `seedQuestion` prop; ChatView pre-fills the
+input + auto-sends, then fires `onSeedConsumed` to clear the
+seed. `ChatView` also subscribes to the progress store so the
+empty-state chip row refetches when any atlas completes.
+
+Bridge contract for the plaintext synthesis: each `lc_ingest`
+document becomes one section; titles containing `=====` are
+rewritten to `ooooo` to avoid false delimiter matches; empty
+records drop silently; the pipeline init uses
+`--chapter-regex '(?m)^=====\s+.+\s+=====\s*$'` with
+`--min-section-body-words 20`.
+
+Tests: 10 new unit tests in `enrich_commands.rs` (ranker,
+synthesizer, reverse-lookup map, pipeline-id contract); existing
+Vitest suite still green (119 tests). Resume-on-relaunch +
+cancellation from EnrichmentStage cover the mid-flight paths.
+
 ### 3.6 Safety
 
 Hardcoded, not configurable from recipes:

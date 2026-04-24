@@ -1,9 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { initEventListeners } from "./lib/events";
-  import { detectBootstrap, isSetupComplete } from "./lib/api";
-  import type { BootstrapSnapshot } from "./lib/types";
+  import {
+    detectBootstrap,
+    isFirstRun,
+    isSetupComplete,
+  } from "./lib/api";
+  import type { BootstrapSnapshot, StarterQuestion } from "./lib/types";
   import { approvalStore } from "./lib/stores/approval.svelte";
+  import { chatSeedStore } from "./lib/stores/chatSeed.svelte";
   import { joinLinkStore } from "./lib/stores/joinLink.svelte";
   import type {
     StepDonePayload,
@@ -15,8 +20,10 @@
   import InsightsPanel from "./lib/components/InsightsPanel.svelte";
   import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
   import SetupWizard from "./lib/setup/SetupWizard.svelte";
+  import FirstCorpusFlow from "./lib/components/onboarding/FirstCorpusFlow.svelte";
+  import ToastHost from "./lib/components/ToastHost.svelte";
 
-  type AppView = "loading" | "setup" | "chat" | "settings";
+  type AppView = "loading" | "setup" | "first_corpus" | "chat" | "settings";
 
   let view: AppView = $state("loading");
   let backendReady = $state(false);
@@ -44,12 +51,64 @@
   let bootstrap = $state<BootstrapSnapshot | null>(null);
   let attachedToDaemon = $derived(bootstrap?.daemon_running === true);
 
+  async function shouldRouteToFirstCorpus(): Promise<boolean> {
+    // The first-run marker (`~/.sovereign/first_run_complete`) is
+    // the single source of truth. It's written by
+    // `markFirstRunComplete()` at the end of the onboarding flow
+    // (whether the user built an atlas or skipped). Absent marker =
+    // user hasn't been through onboarding yet.
+    //
+    // An earlier version also checked `enrichListCorpora().length`,
+    // on the theory that anyone with enriched corpora had clearly
+    // onboarded. That gave false negatives for developers/testers
+    // with prior SEP/book corpora from manual CLI runs — they'd be
+    // skipped past onboarding despite having never seen it. The
+    // marker is a cleaner contract.
+    try {
+      return await isFirstRun();
+    } catch (e) {
+      console.warn("shouldRouteToFirstCorpus probe failed:", e);
+      // Fail open: land on chat rather than stranding the user on
+      // a broken onboarding gate.
+      return false;
+    }
+  }
+
+  function handleFirstCorpusComplete(seed: StarterQuestion | null) {
+    if (seed) chatSeedStore.set(seed);
+    view = "chat";
+  }
+
+  function handleSettingsStarterPick(question: StarterQuestion) {
+    chatSeedStore.set(question);
+    showSettings = false;
+  }
+
+  /// Called by FolderDropFlow (inside FirstCorpusFlow or Settings)
+  /// when the user clicks "Start chatting — atlas keeps building".
+  /// The sample atlas is still running; the toast will fire when it
+  /// completes, and ChatView's empty-state chips will populate from
+  /// `enrich_get_starter_questions` in the meantime.
+  function handleDropToChat() {
+    view = "chat";
+    showSettings = false;
+  }
+
   onMount(async () => {
     await initEventListeners({
       onBackendReady: () => {
         backendReady = true;
         backendError = null;
-        if (view === "loading") view = "chat";
+        if (view === "loading") {
+          // First-corpus probe runs async; default to chat and
+          // upgrade if the probe says onboarding is warranted.
+          view = "chat";
+          void (async () => {
+            if (await shouldRouteToFirstCorpus()) {
+              view = "first_corpus";
+            }
+          })();
+        }
       },
       onBackendError: (error) => {
         backendError = error;
@@ -109,13 +168,20 @@
     }
   });
 
-  function handleSetupComplete() {
+  async function handleSetupComplete() {
     // complete_setup already bootstrapped the backend before returning,
     // so we can go directly to chat rather than waiting for backend-ready.
     // (backend-ready fires before complete_setup returns, so it would be
     // missed if we set view = "loading" here.)
     backendReady = true;
-    view = "chat";
+    // One-time gate: first launch with no enriched corpora → route
+    // to the onboarding corpus flow. Returning users (marker exists
+    // OR they already have an atlas) land on chat as today.
+    if (await shouldRouteToFirstCorpus()) {
+      view = "first_corpus";
+    } else {
+      view = "chat";
+    }
   }
 
   function handleConversationSelect(id: string | null) {
@@ -171,6 +237,11 @@
   </div>
 {:else if view === "setup"}
   <SetupWizard onComplete={handleSetupComplete} />
+{:else if view === "first_corpus"}
+  <FirstCorpusFlow
+    onComplete={handleFirstCorpusComplete}
+    onDropToChat={handleDropToChat}
+  />
 {:else}
   <div class="app-layout">
     <aside class="sidebar">
@@ -183,7 +254,11 @@
     </aside>
     <main class="main-content">
       {#if showSettings}
-        <SettingsPanel onClose={() => (showSettings = false)} />
+        <SettingsPanel
+          onClose={() => (showSettings = false)}
+          onOpenChatWithSeed={handleSettingsStarterPick}
+          onDropToChat={handleDropToChat}
+        />
       {:else}
         <ChatView
           conversationId={selectedConversationId}
@@ -207,6 +282,8 @@
     {/if}
   </div>
 {/if}
+
+<ToastHost />
 
 {#if attachedToDaemon}
   <!-- Small pill anchored bottom-left; informational only. Lets

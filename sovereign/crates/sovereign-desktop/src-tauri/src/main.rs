@@ -225,6 +225,12 @@ fn main() {
             enrich_commands::enrich_errors,
             enrich_commands::enrich_sep_ingest,
             enrich_commands::enrich_list_corpora,
+            enrich_commands::enrich_init_for_local_corpus,
+            enrich_commands::enrich_estimate,
+            enrich_commands::enrich_get_active_job,
+            enrich_commands::enrich_get_starter_questions,
+            enrich_commands::is_first_run,
+            enrich_commands::mark_first_run_complete,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");

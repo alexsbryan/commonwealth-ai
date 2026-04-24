@@ -1087,6 +1087,53 @@ export interface SepIngestResult {
   log: string;
 }
 
+/// Returned by `enrich_init_for_local_corpus`. Lets the UI say
+/// "Ready to ask about {titles} — X of Y documents covered" after
+/// the sample-first atlas build finishes.
+export interface SampledDocuments {
+  /// Up to `sample_size` document titles actually written to the
+  /// synthetic source. In ingest-walker order (deterministic).
+  titles: string[];
+  /// Every usable record present in the staged JSONL at init time.
+  /// `titles.length < total` means this is a sample build.
+  total: number;
+}
+
+/// Pre-run estimate for an atlas build. `minutes_low`..`minutes_high`
+/// is the range the onboarding UI surfaces; `sections` + `est_tokens`
+/// power the transparency panel ("we'll process N documents").
+export interface EnrichEstimate {
+  sections: number;
+  total_words: number;
+  est_tokens: number;
+  minutes_low: number;
+  minutes_high: number;
+}
+
+/// Returned by `enrich_get_active_job` when a build is in flight
+/// for this corpus. Absent when no job is running. Lets one UI
+/// surface attach to a subprocess another surface kicked off.
+export interface ActiveEnrichJob {
+  job_id: string;
+  channel: string;
+}
+
+/// One starter question mined from an atlas's Question atoms by
+/// `enrich_get_starter_questions`. Rendered as a chip in the
+/// onboarding celebration screen + ChatView empty state. Clicking
+/// a chip pre-fills + auto-submits the chat input.
+export interface StarterQuestion {
+  /// Already normalised to end with `?`.
+  text: string;
+  /// Provenance pointer — stable atom id (e.g. "question-0003").
+  atom_id: string;
+  /// First `raised_at` chunk id (section id, usually). `null` when
+  /// the atom has no passage reference.
+  source_section: string | null;
+  /// Snake-case QuestionType tag ("thematic", "interpretive", …).
+  question_type: string;
+}
+
 /// One structured failure record from `enrich_errors`. The UI
 /// groups these by `(phase, kind)` and renders the `remediation`
 /// string (populated by the CLI's `--json` path from

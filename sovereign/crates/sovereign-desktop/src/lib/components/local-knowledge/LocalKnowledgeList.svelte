@@ -1,13 +1,14 @@
 <script lang="ts">
-  import type { LocalCorpusConfig } from "../../types";
+  import type { LocalCorpusConfig, StarterQuestion } from "../../types";
   import OrganizerPanel from "./obsidian/OrganizerPanel.svelte";
 
   interface Props {
     corpora: LocalCorpusConfig[];
     onRemove: (id: string) => void;
+    onOpenChatWithSeed?: (question: StarterQuestion) => void;
   }
 
-  let { corpora, onRemove }: Props = $props();
+  let { corpora, onRemove, onOpenChatWithSeed }: Props = $props();
 
   let expandedId: string | null = $state(null);
 
@@ -59,7 +60,7 @@
 
         {#if expandedId === c.id && isVault(c)}
           <div class="expanded">
-            <OrganizerPanel config={c} />
+            <OrganizerPanel config={c} {onOpenChatWithSeed} />
           </div>
         {/if}
       </li>

@@ -296,19 +296,30 @@
       <span class="spinner-small"></span> Scanning for models...
     </div>
   {:else if discovered.length > 0}
-    <div class="section-header">Models found on this machine</div>
+    <div class="section-header">Models on this machine</div>
     <div class="model-grid">
       {#each discovered as model (model.path)}
+        {@const isSelected = selectedPath === model.path}
         <button
           class="model-card"
-          class:selected={selectedPath === model.path}
+          class:selected={isSelected}
           onclick={() => onSelect(model.path)}
+          aria-pressed={isSelected}
         >
-          <div class="model-name">{model.file_name}</div>
-          <div class="model-meta">
-            <span class="model-size">{formatSize(model.size_bytes)}</span>
-            <span class="model-location">{model.location_label}</span>
-          </div>
+          <span class="card-rail" aria-hidden="true"></span>
+          <span class="card-main">
+            <span class="model-name">{model.file_name}</span>
+            <span class="model-meta">
+              <span class="model-size">{formatSize(model.size_bytes)}</span>
+              <span class="model-location">{model.location_label}</span>
+            </span>
+          </span>
+          {#if isSelected}
+            <span class="using-pill" aria-hidden="true">
+              <span class="using-check">✓</span>
+              <span class="using-text">Using this</span>
+            </span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -432,10 +443,15 @@
     </div>
   {/if}
 
-  <!-- Selected indicator -->
+  <!-- Selected indicator — doubles as the slot explainer so the
+       user knows what this model is for without needing to read
+       docs. -->
   {#if selectedPath}
     <div class="selected-indicator">
-      Selected: <code>{selectedPath}</code>
+      <code>{selectedPath}</code>
+      <span class="selected-role">
+        chat · search · atlas enrichment
+      </span>
     </div>
   {/if}
 </div>
@@ -468,67 +484,146 @@
   }
 
   .model-card {
-    padding: 12px 16px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px 12px 18px;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     text-align: left;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
     transition:
-      border-color 0.15s,
-      background 0.15s;
+      border-color 160ms ease,
+      background 160ms ease,
+      box-shadow 160ms ease;
     width: 100%;
   }
 
   button.model-card:hover {
-    border-color: var(--accent);
+    border-color: var(--border-bright);
     background: var(--bg-surface);
+  }
+
+  /* Inline rail — lives at the left edge, acts like a page-gutter
+     mark. Idle: 2px amethyst tint. Selected: 3px gold foil with
+     subtle glow. Immediately legible without dominating color. */
+  .card-rail {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    background: var(--border-mid);
+    border-radius: 1px;
+    transition: background 160ms ease, width 160ms ease, box-shadow 160ms ease;
+  }
+  .card-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
   }
 
   .model-card.selected {
     border-color: var(--accent);
-    background: rgba(201, 168, 76, 0.1);
+    background: var(--accent-dim);
+    box-shadow:
+      inset 0 1px 0 rgba(223, 192, 104, 0.12),
+      0 2px 12px var(--accent-glow);
+  }
+  .model-card.selected .card-rail {
+    width: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 12px rgba(201, 168, 76, 0.55);
+  }
+  .model-card.selected .model-name {
+    color: var(--text-primary);
+  }
+
+  /* "Using this" pill — Syne Mono ledger stamp. Gold foil tint on
+     a dark inset so it reads as a press mark, not a material chip. */
+  .using-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border: 1px solid var(--accent);
+    background: var(--bg-root);
+    color: var(--accent-light);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .using-check {
+    color: var(--accent);
+    font-size: 0.8rem;
+  }
+  .using-text {
+    line-height: 1;
   }
 
   .model-name {
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
+    color: var(--text-primary);
     margin-bottom: 2px;
+    word-break: break-word;
   }
 
   .model-desc {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     color: var(--text-secondary);
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    line-height: 1.5;
   }
 
   .model-meta {
     display: flex;
     gap: 12px;
-    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
     color: var(--text-muted);
+    letter-spacing: 0.02em;
   }
 
   .model-size {
-    font-weight: 500;
+    color: var(--text-secondary);
   }
 
   .download-card {
     cursor: default;
+    display: block;
   }
 
+  /* Recommendation wears lavender so it never competes with the
+     gold "selected / using this" state on a discovered model.
+     Lavender is the court's crown color per the palette notes;
+     gold is reserved for the choice the user has already made. */
   .download-card.recommended {
-    border-color: var(--accent);
-    background: rgba(201, 168, 76, 0.07);
+    border-color: var(--lavender);
+    background: var(--lavender-dim);
+    box-shadow: inset 0 1px 0 rgba(196, 184, 232, 0.12);
   }
 
   .badge {
     display: inline-block;
     margin-left: 8px;
-    padding: 2px 8px;
+    padding: 2px 10px;
     border-radius: 999px;
-    background: var(--accent);
-    color: var(--text-on-accent);
-    font-size: 0.7rem;
+    background: transparent;
+    border: 1px solid var(--lavender);
+    color: var(--lavender-light);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     font-weight: 500;
     vertical-align: middle;
   }
@@ -542,37 +637,49 @@
   }
 
   .btn-action {
-    margin-top: 8px;
-    padding: 6px 16px;
+    margin-top: 10px;
+    padding: 7px 14px;
     border-radius: var(--radius);
-    font-weight: 500;
+    border: 1px solid transparent;
+    font-family: var(--font-sans);
+    font-weight: 600;
     font-size: 0.85rem;
-    transition: background 0.2s;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 120ms ease;
   }
 
+  /* Download: hollow lavender outline — it's an action on a
+     model the user hasn't chosen yet, so it shouldn't claim
+     primary-CTA territory (gold is reserved for "selected"). */
   .btn-download {
-    background: var(--accent);
-    color: var(--text-on-accent);
+    background: transparent;
+    color: var(--lavender-light);
+    border-color: var(--lavender);
   }
-
   .btn-download:hover:not(:disabled) {
-    background: var(--accent-hover);
+    background: var(--lavender-dim);
+    border-color: var(--lavender-light);
+    transform: translateY(-1px);
   }
-
   .btn-download:disabled {
-    opacity: 0.4;
+    opacity: 0.38;
     cursor: not-allowed;
   }
 
+  /* Use-this for an already-downloaded model: sage green foil —
+     semantic "this one's ready to pick". */
   .btn-select {
-    background: var(--success);
+    background: var(--growth);
     color: var(--text-on-accent);
+    border-color: var(--growth);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
-
   .btn-select:hover:not(:disabled) {
-    background: #6ed876;
+    background: #8FD28E;
+    border-color: #8FD28E;
+    transform: translateY(-1px);
   }
-
   .btn-select:disabled {
     opacity: 0.4;
     cursor: not-allowed;
@@ -663,21 +770,44 @@
   }
 
   .selected-indicator {
-    margin-top: 12px;
-    padding: 8px 12px;
-    background: rgba(76, 175, 80, 0.08);
-    border: 1px solid var(--success);
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-bright);
+    border-left: 2px solid var(--accent);
     border-radius: var(--radius);
-    font-size: 0.8rem;
-    color: var(--success);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    flex-wrap: wrap;
   }
-
+  .selected-indicator::before {
+    content: "DEFAULT MODEL";
+    color: var(--accent-light);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
   .selected-indicator code {
-    background: var(--bg-primary);
-    padding: 1px 4px;
+    background: var(--bg-root);
+    padding: 2px 6px;
     border-radius: 3px;
-    font-size: 0.8rem;
+    color: var(--text-primary);
+    font-size: 0.72rem;
     word-break: break-all;
+    border: 1px solid var(--border);
+  }
+  .selected-role {
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-left: auto;
   }
 
   /* ── Tier badges ── */

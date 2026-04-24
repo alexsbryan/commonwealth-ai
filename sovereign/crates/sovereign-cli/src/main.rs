@@ -1,6 +1,7 @@
 mod amend;
 mod atos_cmd;
 mod atos_plugin;
+mod chat_cmd;
 mod code_cmd;
 mod daemon_cmd;
 mod design_onboarding;
@@ -154,6 +155,7 @@ const HELP: Help = Help {
         ),
         HelpSection::Subcommands(&[
             ("setup",   "First-run: detect hardware, download models, start daemon"),
+            ("chat",    "CLI mirror of the desktop chat flow (ask / session / inspect)"),
             ("project", "Per-project code intelligence (init / serve / status / refresh)"),
             ("mesh",    "Mesh management (create / join / rotate / status)"),
             ("corpus",  "Knowledge corpus install / remove / status"),
@@ -325,6 +327,10 @@ async fn main() {
                 let code = enrich_cmd::run_enrich(&raw_args[1..]).await;
                 std::process::exit(code);
             }
+            "chat" => {
+                let code = chat_cmd::run_chat(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
             "doctor" => {
                 let code = doctor_cmd::run_doctor(&raw_args[1..]).await;
                 std::process::exit(code);
@@ -472,8 +478,27 @@ async fn main() {
     let indexes_dir = home.join(".sovereign").join("indexes");
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference_arc));
     let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference_arc));
+    // Derive the embed model stem from whatever the REPL loaded:
+    // prefer `SetupConfig.models.embed` (the daemon's canonical
+    // source), fall back to the `--model` path we were invoked
+    // with (which in the REPL context is the quick-responder
+    // slot — not technically the embed slot, but at least a stable
+    // label). A missing stem becomes `"unknown-embed"`; the engine
+    // will refuse to `ingest()` with an empty string so this path
+    // still surfaces the error rather than writing a bogus label.
+    let repl_embed_stem = sovereign_core::setup_config::SetupConfig::load()
+        .ok()
+        .and_then(|c| c.models.embed.file_stem().and_then(|s| s.to_str()).map(String::from))
+        .or_else(|| {
+            args.model
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .map(String::from)
+        })
+        .unwrap_or_else(|| "unknown-embed".to_string());
     let corpus_engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
+            .with_embedding_model(&repl_embed_stem)
             .with_inference_fn(inference_fn.clone()),
     );
 

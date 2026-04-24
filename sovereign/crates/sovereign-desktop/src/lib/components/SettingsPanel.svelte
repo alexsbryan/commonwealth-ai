@@ -1,7 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { detectBootstrap, getConfig, saveConfig } from "../api";
-  import type { BootstrapSnapshot, DesktopConfig } from "../types";
+  import type {
+    BootstrapSnapshot,
+    DesktopConfig,
+    StarterQuestion,
+  } from "../types";
   import EnrichmentPanel from "./EnrichmentPanel.svelte";
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
@@ -12,9 +16,15 @@
 
   interface Props {
     onClose: () => void;
+    /// Piped from App.svelte: when LocalKnowledge's atlas-complete
+    /// screen fires a starter-chip click, close Settings + seed chat.
+    onOpenChatWithSeed?: (question: StarterQuestion) => void;
+    /// Piped from App.svelte: "Start chatting — atlas keeps
+    /// building" from the sample-atlas progress screen.
+    onDropToChat?: () => void;
   }
 
-  let { onClose }: Props = $props();
+  let { onClose, onOpenChatWithSeed, onDropToChat }: Props = $props();
 
   type Tab =
     | "models"
@@ -539,7 +549,7 @@
             Point Sovereign at a folder of documents or an Obsidian vault.
             Files stay on your computer. Nothing is uploaded.
           </p>
-          <LocalKnowledgeSection />
+          <LocalKnowledgeSection {onOpenChatWithSeed} {onDropToChat} />
         {/if}
 
         <!-- ──────────────── MESH ──────────────── -->

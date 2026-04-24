@@ -14,6 +14,8 @@
     ingestDocument,
     askDocument,
     getDocumentAsset,
+    enrichListCorpora,
+    enrichGetStarterQuestions,
   } from "../api";
   import type { IngestDocumentResult } from "../api";
   import type {
@@ -31,7 +33,11 @@
     InformationRequestPayload,
     MessageRefinedPayload,
     NextStepOffer,
+    StarterQuestion,
   } from "../types";
+  import { enrichProgressStore } from "../stores/enrichProgress.svelte";
+  import { chatSeedStore } from "../stores/chatSeed.svelte";
+  import StarterChips from "./StarterChips.svelte";
   import { MAX_TURN_MESSAGE_CHARS, OVERSIZE_MESSAGE_HINT } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { chatMachine } from "../machines/chat.machine";
@@ -65,6 +71,86 @@
     onToggleInsights,
     onConversationCreated,
   }: Props = $props();
+
+  // ── Starter questions for the empty state ────────────────────
+  //
+  // Mined from every enriched corpus on disk. Round-robins across
+  // corpora so a user with `folder-abc` + `obsidian-def` sees a mix,
+  // not five from whichever one indexed first. Refetched whenever an
+  // enrichment job transitions to `complete` so a freshly-built atlas
+  // flows into the empty state without a refresh.
+  let starters: StarterQuestion[] = $state([]);
+  let buildingCorporaCount = $state(0);
+
+  async function refreshStarters() {
+    try {
+      const corpora = await enrichListCorpora();
+      if (corpora.length === 0) {
+        starters = [];
+        return;
+      }
+      const perCorpus: StarterQuestion[][] = await Promise.all(
+        corpora.map((c) =>
+          enrichGetStarterQuestions(c.corpus_id, 3).catch(() => []),
+        ),
+      );
+      // Round-robin interleave up to 5.
+      const picked: StarterQuestion[] = [];
+      let idx = 0;
+      while (picked.length < 5 && perCorpus.some((p) => p.length > idx)) {
+        for (const row of perCorpus) {
+          if (idx < row.length && picked.length < 5) picked.push(row[idx]);
+        }
+        idx += 1;
+      }
+      starters = picked;
+    } catch (e) {
+      console.warn("refreshStarters failed:", e);
+      starters = [];
+    }
+  }
+
+  async function pickStarter(q: StarterQuestion) {
+    // Simpler than handleNextStep's session-resume path: this is a
+    // fresh turn, no parent session context.
+    inputText = q.text;
+    await handleSend();
+  }
+
+  // Watch the enrichment progress store: when any active job flips
+  // to terminal `complete`, refetch starters so the empty-state chip
+  // row upgrades from excerpt-derived (pre-atlas) to atom-derived
+  // (post-atlas). Also update the in-flight count so the empty
+  // state can show "Building atlas · N in flight".
+  let lastSeenCompletions = $state(0);
+  $effect(() => {
+    const allJobs = Object.values(enrichProgressStore.byJobId);
+    const completed = allJobs.filter((j) => j.terminal === "complete").length;
+    const building = allJobs.filter((j) => !j.terminal).length;
+    buildingCorporaCount = building;
+    if (completed > lastSeenCompletions) {
+      lastSeenCompletions = completed;
+      void refreshStarters();
+    }
+  });
+
+  // Seed-question handoff: any surface (FolderDropFlow, toast action,
+  // FirstCorpusFlow, SettingsPanel) can push a seed into
+  // `chatSeedStore`. We consume + submit it here when the chat pane
+  // is empty and idle. Gated on messages.length === 0 so an
+  // in-progress conversation doesn't get hijacked.
+  $effect(() => {
+    const pending = chatSeedStore.pending;
+    if (!pending) return;
+    if (messages.length > 0) return;
+    const q = chatSeedStore.consume();
+    if (!q) return;
+    // Defer one microtask so the store's $state writers see the
+    // consume before we mutate additional state below.
+    queueMicrotask(() => {
+      void pickStarter(q);
+    });
+  });
 
   // ── chatMachine — owns messages, streaming, info-request state ─
   //
@@ -195,6 +281,11 @@
   });
 
   onMount(async () => {
+    // Kick off starter-question fetch before wiring the stream
+    // listeners — it's cheap (reads atoms.json from disk) and the
+    // empty state reads `starters` directly.
+    void refreshStarters();
+
     // Stream handlers now forward into the machine. The wordBuffer
     // stays component-local (pure output smoothing) — only flushed
     // words are sent as MESSAGE_CHUNK, so the machine never has to
@@ -725,6 +816,25 @@
         {:catch}
           <!-- silently ignore if corpus listing fails -->
         {/await}
+
+        {#if starters.length > 0}
+          <div class="empty-starters">
+            <StarterChips
+              questions={starters}
+              onPick={pickStarter}
+              heading="Try asking"
+              subheading="Mined from your enriched knowledge"
+            />
+          </div>
+        {/if}
+        {#if buildingCorporaCount > 0}
+          <p class="empty-building">
+            Building atlas · {buildingCorporaCount} in flight
+            <span class="empty-building-hint">
+              — questions will improve once the atlas is ready.
+            </span>
+          </p>
+        {/if}
       </div>
     {:else}
       {#each messages as msg (msg.id)}
@@ -962,6 +1072,27 @@
     font-family: 'Syne Mono', monospace;
     letter-spacing: 0.04em;
     background: var(--bg-surface);
+  }
+
+  /* ── Starter chips + build indicator in empty state ── */
+  .empty-starters {
+    margin-top: 24px;
+    max-width: 640px;
+    text-align: left;
+    position: relative;
+  }
+  .empty-building {
+    margin-top: 16px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    font-family: 'Syne Mono', monospace;
+    position: relative;
+  }
+  .empty-building-hint {
+    color: var(--text-muted);
+    margin-left: 4px;
+    font-style: italic;
   }
 
   @keyframes empty-breathe {

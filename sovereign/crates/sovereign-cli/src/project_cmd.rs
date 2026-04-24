@@ -252,12 +252,26 @@ const HELP_STATUS: crate::util::help::Help = crate::util::help::Help {
 
 const HELP_REFRESH: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign project refresh",
-    summary: "Re-export the SCIP call graph. Runs automatically on commit via the installed hook.",
+    summary: "Re-export the SCIP call graph + rebuild the LanceDB index when embeddings are stale.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign project refresh [--quiet]"),
+        crate::util::help::HelpSection::Usage(
+            "sovereign project refresh [--quiet] [--rebuild-index]",
+        ),
         crate::util::help::HelpSection::Flags(&[
             ("--quiet", "Suppress progress output (use from hook scripts)"),
+            (
+                "--rebuild-index",
+                "Force-rebuild the LanceDB corpus index (chunks + embeddings) \
+                 even when the on-disk embed model matches the current daemon.",
+            ),
         ]),
+        crate::util::help::HelpSection::Notes(
+            "Runs automatically on commit via the installed hook (SCIP only; the hook does \
+             NOT force a LanceDB rebuild). The LanceDB index auto-rebuilds whenever this \
+             command detects an embed-model mismatch between `_corpus_meta.json` and \
+             `SetupConfig.models.embed` — once the indexes are on the current model, \
+             subsequent refreshes stay SCIP-only and fast.",
+        ),
     ],
 };
 
@@ -1893,6 +1907,10 @@ async fn cmd_refresh(args: &[String]) -> i32 {
     let mut local = false;
     let mut data_dir: Option<PathBuf> = None;
     let mut explicit_name: Option<String> = None;
+    // `--rebuild-index` forces a LanceDB rebuild unconditionally.
+    // Without it, the LanceDB rebuild only runs when an embed-
+    // model mismatch is detected (see `needs_lancedb_rebuild`).
+    let mut force_rebuild_index = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -1902,6 +1920,7 @@ async fn cmd_refresh(args: &[String]) -> i32 {
             // of nudging the daemon. Useful when the daemon is
             // down or the user is debugging the exporter itself.
             "--local" => local = true,
+            "--rebuild-index" => force_rebuild_index = true,
             "--name" => {
                 i += 1;
                 explicit_name = args.get(i).cloned();
@@ -1941,7 +1960,26 @@ async fn cmd_refresh(args: &[String]) -> i32 {
                     println!("  \u{2713} Rebuild nudged for \"{corpus_id}\".");
                     println!("    Check progress with `sovereign project watch status {corpus_id}`.");
                 }
-                return 0;
+                // SCIP is nudged; now gate the LanceDB corpus
+                // rebuild on either the explicit `--rebuild-index`
+                // flag or a detected embed-model mismatch. Common
+                // case on an already-migrated installation: no
+                // mismatch → no-op → `refresh` stays fast.
+                let data_dir_for_rebuild = data_dir
+                    .clone()
+                    .or_else(default_data_dir)
+                    .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
+                let abs_repo = repo_root
+                    .canonicalize()
+                    .unwrap_or_else(|_| repo_root.clone());
+                return maybe_rebuild_lancedb_corpus(
+                    &abs_repo,
+                    &corpus_id,
+                    &data_dir_for_rebuild,
+                    force_rebuild_index,
+                    quiet,
+                )
+                .await;
             }
             Err(e) => {
                 if !quiet {
@@ -2143,12 +2181,210 @@ async fn cmd_refresh(args: &[String]) -> i32 {
                 );
                 eprintln!("    \u{2713} Done in {elapsed} seconds");
             }
-            0
+            // Fall through to the LanceDB rebuild gate — see the
+            // matching branch in the daemon-nudge path above for
+            // the rationale.
+            maybe_rebuild_lancedb_corpus(
+                &abs_path,
+                &corpus_id,
+                &data_dir,
+                force_rebuild_index,
+                quiet,
+            )
+            .await
         }
         Err(e) => {
             eprintln!("error: SCIP export failed: {e}");
             1
         }
+    }
+}
+
+/// Decide whether the LanceDB corpus index needs to be rebuilt,
+/// then do it (or skip explaining why).
+///
+/// Rebuild triggers, in precedence order:
+///   1. `--rebuild-index` on the command line (operator override).
+///   2. The on-disk `_corpus_meta.json.embedding_model` differs from
+///      the daemon's currently-configured embed model stem. This is
+///      the common "I changed embed models, reindex" path and the
+///      one that rescues the historical 768-dim-zero-vector code
+///      corpora.
+///   3. No `_corpus_meta.json` exists — corpus isn't indexed yet;
+///      treat the first refresh as an initial build.
+///
+/// On skip, prints a one-liner so the user sees the branch was
+/// considered rather than silently bypassed (glassbox principle).
+async fn maybe_rebuild_lancedb_corpus(
+    abs_repo: &Path,
+    corpus_id: &str,
+    data_dir: &Path,
+    force: bool,
+    quiet: bool,
+) -> i32 {
+    let meta_path = data_dir.join(corpus_id).join("_corpus_meta.json");
+    let current_embed_stem = sovereign_core::setup_config::SetupConfig::load()
+        .ok()
+        .and_then(|c| {
+            c.models
+                .embed
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_string())
+        });
+
+    let reason = lancedb_rebuild_reason(force, &meta_path, current_embed_stem.as_deref());
+    let reason = match reason {
+        Some(r) => r,
+        None => {
+            if !quiet {
+                eprintln!(
+                    "  \u{2713} LanceDB index current — skipping (pass --rebuild-index to force)."
+                );
+            }
+            return 0;
+        }
+    };
+
+    if !quiet {
+        eprintln!();
+        eprintln!("  Rebuilding LanceDB corpus index: {reason}");
+    }
+    match crate::code_cmd::rebuild_code_corpus(abs_repo, corpus_id, data_dir).await {
+        Ok(stats) => {
+            if !quiet {
+                eprintln!(
+                    "  \u{2713} LanceDB: {} chunks in {}s ({} KB)",
+                    stats.chunks_created,
+                    stats.duration_secs,
+                    stats.index_size_bytes / 1024,
+                );
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("  \u{2717} LanceDB rebuild failed: {e}");
+            1
+        }
+    }
+}
+
+/// Returns `Some(human-readable reason)` when the LanceDB index
+/// should be rebuilt, `None` when it can be left alone. Pure for
+/// testability — no filesystem mutations, no daemon calls.
+///
+/// Deliberately does NOT do a string comparison between the
+/// on-disk `embedding_model` and the daemon's model stem. The
+/// corpus-engine ingest path today writes its recipe-level default
+/// (`qwen3-embedding-0.6b`) to `_corpus_meta.json` regardless of
+/// which model actually produced the vectors, so the names drift
+/// even when the embeddings are fully compatible. Dim-based checks
+/// are the reliable truth — a 1024-dim query against a 1024-dim
+/// index works regardless of model-name cosmetics; a 768-dim
+/// index is always the legacy zero-vector artefact and needs
+/// rebuilding.
+///
+/// `current_embed_stem` is accepted for future use (when corpus-
+/// engine's ingest is fixed to record the real model name) but is
+/// currently unused. The compiler won't flag it unused because we
+/// accept it by value.
+fn lancedb_rebuild_reason(
+    force: bool,
+    meta_path: &Path,
+    _current_embed_stem: Option<&str>,
+) -> Option<String> {
+    if force {
+        return Some("--rebuild-index flag set".into());
+    }
+    let meta_bytes = match std::fs::read_to_string(meta_path) {
+        Ok(b) => b,
+        Err(_) => {
+            return Some(format!(
+                "no existing index at {} — first build",
+                meta_path.display()
+            ));
+        }
+    };
+    let meta: serde_json::Value = match serde_json::from_str(&meta_bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            return Some(format!(
+                "could not parse existing {}: {e}",
+                meta_path.display()
+            ));
+        }
+    };
+    if meta
+        .get("embedding_dimensions")
+        .and_then(|v| v.as_u64())
+        == Some(768)
+    {
+        return Some("on-disk index is 768-dim (legacy zero-vector code index)".into());
+    }
+    None
+}
+
+#[cfg(test)]
+mod lancedb_rebuild_tests {
+    use super::*;
+
+    #[test]
+    fn force_flag_always_rebuilds() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("nope.json");
+        assert!(lancedb_rebuild_reason(true, &missing, Some("any")).is_some());
+    }
+
+    #[test]
+    fn missing_meta_triggers_first_build() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("_corpus_meta.json");
+        let r = lancedb_rebuild_reason(false, &missing, Some("qwen-embedding-0.6b")).unwrap();
+        assert!(r.contains("no existing index"));
+    }
+
+    #[test]
+    fn matching_embed_skips() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("_corpus_meta.json");
+        std::fs::write(
+            &p,
+            r#"{"embedding_model":"qwen-embedding-0.6b","embedding_dimensions":1024}"#,
+        )
+        .unwrap();
+        assert!(lancedb_rebuild_reason(false, &p, Some("qwen-embedding-0.6b")).is_none());
+    }
+
+    #[test]
+    fn name_difference_alone_does_not_trigger_rebuild() {
+        // corpus-engine's ingest writes `qwen3-embedding-0.6b` as
+        // a recipe-default cosmetic label even when the real
+        // embed model is `qwen-embedding-0.6b`. If the dims
+        // match, the vectors are compatible; name drift should
+        // NOT force a pointless reindex.
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("_corpus_meta.json");
+        std::fs::write(
+            &p,
+            r#"{"embedding_model":"qwen3-embedding-0.6b","embedding_dimensions":1024}"#,
+        )
+        .unwrap();
+        assert!(lancedb_rebuild_reason(false, &p, Some("qwen-embedding-0.6b")).is_none());
+    }
+
+    #[test]
+    fn legacy_768_dim_triggers_rebuild_even_with_matching_name() {
+        // Historical case: code indexes wrote `qwen-embedding-0.6b`
+        // as the model name but hardcoded 768-dim zero vectors.
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("_corpus_meta.json");
+        std::fs::write(
+            &p,
+            r#"{"embedding_model":"qwen-embedding-0.6b","embedding_dimensions":768}"#,
+        )
+        .unwrap();
+        let r = lancedb_rebuild_reason(false, &p, Some("qwen-embedding-0.6b")).unwrap();
+        assert!(r.contains("768-dim"));
     }
 }
 

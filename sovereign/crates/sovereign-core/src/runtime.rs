@@ -1183,11 +1183,44 @@ impl Runtime {
             tracing::info!(count = indexes.len(), "{label}: found corpus indexes");
         }
 
-        // Pre-filter indexes by embedding dimension so a corpus built
-        // with a different embedding model doesn't waste a round-trip
-        // on a guaranteed-to-fail hybrid-search call. When the query
-        // embedding is empty (FTS-only path), we skip the filter and
-        // let every index serve its BM25 results.
+        // Filter 1 — drop Code corpora. Code indexes (produced by
+        // `sovereign code index`) are served by the dedicated
+        // symbol_lookup / code_search MCP tools; pulling them into
+        // chat retrieval lets BM25 keyword overlap on tokens like
+        // `main`, `argument`, or `democracy` drown out the actual
+        // knowledge corpus for the turn. Keeping them completely
+        // out of chat search is the default the user signed up for;
+        // an explicit "search my code too" affordance can re-enable
+        // them later with a scoped flag.
+        let total_indexes = indexes.len();
+        let indexes: Vec<_> = indexes
+            .into_iter()
+            .filter(|info| {
+                if matches!(info.kind, corpus_engine::CorpusKind::Knowledge) {
+                    true
+                } else {
+                    tracing::debug!(
+                        corpus = %info.corpus_id,
+                        kind = ?info.kind,
+                        "{label}: skipping code corpus for chat retrieval"
+                    );
+                    false
+                }
+            })
+            .collect();
+        if indexes.len() < total_indexes {
+            tracing::info!(
+                knowledge = indexes.len(),
+                code_skipped = total_indexes - indexes.len(),
+                "{label}: filtered code corpora"
+            );
+        }
+
+        // Filter 2 — drop dimension mismatches. A corpus built with
+        // a different embedding model can't serve hybrid search for
+        // the current query. When the query embedding is empty
+        // (FTS-only path), skip this filter so every remaining
+        // (knowledge) index serves its BM25 results.
         let query_dims = embedding.len();
         let total_indexes = indexes.len();
         let eligible: Vec<_> = if query_dims == 0 {

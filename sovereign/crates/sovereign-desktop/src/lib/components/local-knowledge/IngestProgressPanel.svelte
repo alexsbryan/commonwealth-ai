@@ -1,16 +1,13 @@
 <script lang="ts">
   import type { LocalCorpusProgress } from "../../types";
+  import InkStamp from "../onboarding/InkStamp.svelte";
+  import ProgressRule from "../onboarding/ProgressRule.svelte";
 
   interface Props {
     progress: LocalCorpusProgress | null;
   }
 
   let { progress }: Props = $props();
-
-  function pct(done: number, total: number): number {
-    if (total <= 0) return 0;
-    return Math.min(100, Math.round((done / total) * 100));
-  }
 
   let phaseLabel = $derived.by(() => {
     if (!progress) return "Starting";
@@ -27,8 +24,13 @@
     }
   });
 
-  let percent = $derived.by(() => {
-    if (!progress) return 0;
+  /// null → indeterminate (ProgressRule renders a sweep). 0..1
+  /// otherwise. We can't compute a fraction for `scanning` until
+  /// the walker emits a total; let it read as indeterminate there.
+  let fraction = $derived.by<number | null>(() => {
+    if (!progress) return null;
+    if (progress.phase === "complete") return 1;
+    if (progress.phase === "error") return null;
     if (
       progress.phase === "scanning" ||
       progress.phase === "staging" ||
@@ -36,13 +38,18 @@
       progress.phase === "writing" ||
       progress.phase === "rolling_back"
     ) {
-      return pct(progress.data.done, progress.data.total);
+      const total = progress.data.total;
+      const done = progress.data.done;
+      if (!total || total <= 0) return null;
+      return done / total;
     }
     if (progress.phase === "ingesting") {
-      return pct(Number(progress.data.done), Number(progress.data.total));
+      const total = Number(progress.data.total);
+      const done = Number(progress.data.done);
+      if (!total || total <= 0) return null;
+      return done / total;
     }
-    if (progress.phase === "complete") return 100;
-    return 0;
+    return null;
   });
 
   let counter = $derived.by(() => {
@@ -69,37 +76,49 @@
     }
   });
 
+  let counterStr = $derived.by(() => {
+    if (counter.total > 0) {
+      return `${counter.done.toLocaleString()} / ${counter.total.toLocaleString()}`;
+    }
+    if (fraction !== null) {
+      return `${Math.round(fraction * 100)}%`;
+    }
+    return "";
+  });
+
   let detail = $derived.by(() => {
     if (!progress) return "";
     if (progress.phase === "error") return progress.data.message;
     return "";
   });
+
+  let active = $derived(
+    !!progress && progress.phase !== "complete" && progress.phase !== "error",
+  );
+  let tone = $derived<"error" | "neutral" | "rest">(
+    progress?.phase === "error" ? "error" : "neutral",
+  );
 </script>
 
 <section class="panel" class:is-error={progress?.phase === "error"}>
   <header class="head">
+    <span class="head-mark">
+      <InkStamp size="sm" {active} />
+    </span>
     <h2 class="phase">{phaseLabel}</h2>
-    {#if counter.total > 0}
-      <span class="ratio lk-folio">
-        {counter.done.toLocaleString()} / {counter.total.toLocaleString()}
-      </span>
-    {:else}
-      <span class="ratio lk-folio">{percent}%</span>
-    {/if}
   </header>
 
-  <div
-    class="bar"
-    role="progressbar"
-    aria-valuenow={percent}
-    aria-valuemin={0}
-    aria-valuemax={100}
-  >
-    <div class="bar-fill" style="width: {percent}%"></div>
-  </div>
+  <ProgressRule
+    value={fraction}
+    counter={counterStr || undefined}
+    {tone}
+  />
 
   {#if counter.file}
-    <p class="file lk-folio" title={counter.file}>{counter.file}</p>
+    <p class="file" title={counter.file}>
+      <span class="file-dot" aria-hidden="true">·</span>
+      <span class="file-name">{counter.file}</span>
+    </p>
   {/if}
 
   {#if detail}
@@ -109,49 +128,47 @@
 
 <style>
   .panel {
-    padding: 20px 0;
-    animation: lk-fade-in 220ms ease-out both;
+    padding: 24px 0 4px;
+    animation: lk-fade-in 240ms ease-out both;
   }
 
   .head {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    margin-bottom: 10px;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .head-mark {
+    display: inline-flex;
   }
   .phase {
     margin: 0;
     font-size: var(--lk-size-lead);
     font-weight: 500;
     color: var(--lk-ink);
-  }
-  .ratio {
-    color: var(--lk-ink-faded);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .bar {
-    height: 4px;
-    background: var(--lk-paper-deep);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-  .bar-fill {
-    height: 100%;
-    background: var(--lk-crown);
-    transition: width 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-  .is-error .bar-fill {
-    background: var(--lk-err);
+    letter-spacing: -0.01em;
   }
 
   .file {
     margin: 10px 0 0;
-    color: var(--lk-ink-soft);
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    min-width: 0;
+  }
+  .file-dot {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .file-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+    min-width: 0;
   }
   .detail {
     margin: 10px 0 0;

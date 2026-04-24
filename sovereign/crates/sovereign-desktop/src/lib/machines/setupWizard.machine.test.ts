@@ -1,26 +1,17 @@
-// Unit tests for setupWizardMachine. Covers happy paths per persona,
-// the developer shortcut, the PERSONA_CONFIGURED guard, and
-// finishing-failure recovery.
+// Unit tests for setupWizardMachine — collapsed model-only flow.
+// Covers the happy path, the hasModelPath guard, and finishing-
+// failure recovery. The old persona / knowledge / websearch tests
+// were removed when those states were collapsed.
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import { setupWizardMachine } from "./setupWizard.machine";
 import type { BootstrapSnapshot, SetupConfig } from "../types";
 
-/** Snapshot that looks like a first-time user (no CLI config, no
- *  daemon running). The machine should fall through the `detecting`
- *  state into the full wizard. */
+/** Snapshot that looks like a first-time user. The machine should
+ *  fall through `detecting` into `modelSetup`. */
 const FRESH_SNAPSHOT: BootstrapSnapshot = {
   daemon_running: false,
   cli_config_present: false,
-  desktop_setup_complete: false,
-  client_port: 9741,
-};
-
-/** Snapshot indicating `sovereign setup` already ran. Wizard should
- *  skip the personaSetup (model picker) step. */
-const CLI_CONFIG_SNAPSHOT: BootstrapSnapshot = {
-  daemon_running: false,
-  cli_config_present: true,
   desktop_setup_complete: false,
   client_port: 9741,
 };
@@ -31,16 +22,13 @@ function configWithModel(): SetupConfig {
     primary_model_path: undefined,
     embed_model_path: "/models/embed.gguf",
     data_dir: undefined,
-    active_skills: ["collaborative-research"],
-    enabled_tools: ["shell", "search"],
+    active_skills: [],
+    enabled_tools: ["shell", "search", "web_fetch", "document"],
   };
 }
 
 function makeMachine(opts: {
   completeSetup?: (input: { config: SetupConfig }) => Promise<void>;
-  /** Override the bootstrap probe's return value. Defaults to the
-   *  fresh-install snapshot — no CLI config, no daemon — so existing
-   *  tests exercise the full wizard path unchanged. */
   bootstrap?: BootstrapSnapshot;
 } = {}) {
   const impl = opts.completeSetup ?? (async () => {});
@@ -55,9 +43,8 @@ function makeMachine(opts: {
   });
 }
 
-/** Start the actor and wait for the `detecting` gate to clear. All
- *  tests go through this so the startup transition is consistent. */
-async function startAtPersona(
+/** Start the actor and wait for the `detecting` gate to clear. */
+async function startAtModel(
   actor: ReturnType<typeof createActor>,
 ): Promise<void> {
   actor.start();
@@ -84,238 +71,73 @@ function waitFor(
   });
 }
 
-describe("setupWizardMachine — happy paths", () => {
-  it("research persona: persona → personaSetup → knowledge → websearch → done", async () => {
+describe("setupWizardMachine — collapsed model-only flow", () => {
+  it("happy path: detecting → modelSetup → finishing → done", async () => {
     const complete = vi.fn<
       (input: { config: SetupConfig }) => Promise<void>
     >(async () => {});
     const actor = createActor(makeMachine({ completeSetup: complete }));
-    await startAtPersona(actor);
+    await startAtModel(actor);
 
-    expect(actor.getSnapshot().matches("persona")).toBe(true);
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
-    expect(actor.getSnapshot().matches("personaSetup")).toBe(true);
-
-    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    expect(actor.getSnapshot().matches("knowledge")).toBe(true);
-
-    actor.send({ type: "TIER_SELECTED", tierId: "research" });
-    expect(actor.getSnapshot().matches("websearch")).toBe(true);
-    expect(actor.getSnapshot().context.config.selected_tier).toBe("research");
-
-    actor.send({ type: "WEB_CONFIGURED", provider: "brave", apiKey: "k" });
-    await waitFor(actor, (s) => s.matches("done"));
-    expect(complete).toHaveBeenCalledTimes(1);
-    expect(complete.mock.calls[0][0].config.model_path).toBe(
-      "/models/fast.gguf",
-    );
-    expect(complete.mock.calls[0][0].config.search_provider).toBe("brave");
-  });
-
-  it("developer persona shortcut: knowledge → finishing (skips websearch)", async () => {
-    const complete = vi.fn<
-      (input: { config: SetupConfig }) => Promise<void>
-    >(async () => {});
-    const actor = createActor(makeMachine({ completeSetup: complete }));
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "developer" });
-    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    actor.send({ type: "TIER_SELECTED", tierId: "technical" });
-    // Straight to finishing — must never enter websearch.
-    await waitFor(actor, (s) => s.matches("done"));
-    expect(complete).toHaveBeenCalled();
-  });
-
-  it("research persona SKIP_KNOWLEDGE goes to websearch", async () => {
-    const actor = createActor(makeMachine());
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
-    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    actor.send({ type: "SKIP_KNOWLEDGE" });
-    expect(actor.getSnapshot().matches("websearch")).toBe(true);
-  });
-
-  it("developer persona SKIP_KNOWLEDGE goes straight to finishing", async () => {
-    const complete = vi.fn<
-      (input: { config: SetupConfig }) => Promise<void>
-    >(async () => {});
-    const actor = createActor(makeMachine({ completeSetup: complete }));
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "developer" });
-    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    actor.send({ type: "SKIP_KNOWLEDGE" });
-    await waitFor(actor, (s) => s.matches("done"));
-    expect(complete).toHaveBeenCalled();
-  });
-
-  it("SKIP_WEBSEARCH advances to finishing", async () => {
-    const complete = vi.fn<
-      (input: { config: SetupConfig }) => Promise<void>
-    >(async () => {});
-    const actor = createActor(makeMachine({ completeSetup: complete }));
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "assistant" });
-    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    actor.send({ type: "SKIP_KNOWLEDGE" });
-    actor.send({ type: "SKIP_WEBSEARCH" });
-    await waitFor(actor, (s) => s.matches("done"));
-    expect(complete).toHaveBeenCalled();
-  });
-});
-
-describe("setupWizardMachine — CLI config detected", () => {
-  it("non-developer persona skips personaSetup and goes to knowledge", async () => {
-    const actor = createActor(
-      makeMachine({ bootstrap: CLI_CONFIG_SNAPSHOT }),
-    );
-    await startAtPersona(actor);
-    expect(actor.getSnapshot().matches("persona")).toBe(true);
-
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
-    // Must skip past personaSetup (model picker) entirely.
-    expect(actor.getSnapshot().matches("personaSetup")).toBe(false);
-    expect(actor.getSnapshot().matches("knowledge")).toBe(true);
-  });
-
-  it("developer persona goes straight to finishing (no model + no knowledge)", async () => {
-    const complete = vi.fn<
-      (input: { config: SetupConfig }) => Promise<void>
-    >(async () => {});
-    const actor = createActor(
-      makeMachine({
-        completeSetup: complete,
-        bootstrap: CLI_CONFIG_SNAPSHOT,
-      }),
-    );
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "developer" });
-    await waitFor(actor, (s) => s.matches("done"));
-    // completeSetup runs with empty model_path — the backend
-    // `complete_setup` command backfills from SetupConfig on disk.
-    expect(complete).toHaveBeenCalledTimes(1);
-    expect(complete.mock.calls[0][0].config.model_path).toBe("");
-  });
-
-  it("bootstrap probe failure falls back to full wizard", async () => {
-    const machine = setupWizardMachine.provide({
-      actors: {
-        completeSetup: fromPromise(async () => {}),
-        detectBootstrap: fromPromise<BootstrapSnapshot>(async () => {
-          throw new Error("probe failed");
-        }),
-      },
-    });
-    const actor = createActor(machine);
-    actor.start();
-    await waitFor(actor, (s) => !s.matches("detecting"));
-    expect(actor.getSnapshot().matches("persona")).toBe(true);
-    expect(actor.getSnapshot().context.bootstrap).toBeNull();
-
-    // Persona selected → goes to personaSetup because no CLI config.
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
-    expect(actor.getSnapshot().matches("personaSetup")).toBe(true);
-  });
-});
-
-describe("setupWizardMachine — guards", () => {
-  it("PERSONA_CONFIGURED with empty model_path is rejected", async () => {
-    const actor = createActor(makeMachine());
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
-    // Empty model path — the guard blocks advancement.
-    const badConfig: SetupConfig = {
-      ...configWithModel(),
-      model_path: "",
-    };
-    actor.send({ type: "PERSONA_CONFIGURED", config: badConfig });
-    expect(actor.getSnapshot().matches("personaSetup")).toBe(true);
-  });
-
-  it("PERSONA_CONFIGURED with whitespace-only model_path is rejected", async () => {
-    const actor = createActor(makeMachine());
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
-    actor.send({
-      type: "PERSONA_CONFIGURED",
-      config: { ...configWithModel(), model_path: "   " },
-    });
-    expect(actor.getSnapshot().matches("personaSetup")).toBe(true);
-  });
-});
-
-describe("setupWizardMachine — failure recovery", () => {
-  it("completeSetup rejection bounces back to knowledge with errorMessage", async () => {
-    const actor = createActor(
-      makeMachine({
-        completeSetup: async () => {
-          throw new Error("disk full");
-        },
-      }),
-    );
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
-    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    actor.send({ type: "TIER_SELECTED", tierId: "research" });
-    actor.send({ type: "WEB_CONFIGURED", provider: "duckduckgo", apiKey: null });
-
-    await waitFor(actor, (s) => s.matches("knowledge"));
-    expect(actor.getSnapshot().context.errorMessage).toContain("disk full");
-  });
-
-  it("retrying from knowledge after a failure clears the error and succeeds", async () => {
-    let attempt = 0;
-    const actor = createActor(
-      makeMachine({
-        completeSetup: async () => {
-          attempt++;
-          if (attempt === 1) throw new Error("transient");
-        },
-      }),
-    );
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
-    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    actor.send({ type: "TIER_SELECTED", tierId: "research" });
-    actor.send({ type: "SKIP_WEBSEARCH" });
-
-    await waitFor(actor, (s) => s.matches("knowledge"));
-    expect(actor.getSnapshot().context.errorMessage).not.toBe("");
-
-    // Retry path: TIER_SELECTED re-entry clears the error on entry,
-    // then advances to websearch → finishing successfully.
-    actor.send({ type: "TIER_SELECTED", tierId: "research" });
-    expect(actor.getSnapshot().context.errorMessage).toBe("");
-    actor.send({ type: "SKIP_WEBSEARCH" });
-    await waitFor(actor, (s) => s.matches("done"));
-    expect(attempt).toBe(2);
-  });
-});
-
-describe("setupWizardMachine — context accumulation", () => {
-  it("preserves persona through the flow", async () => {
-    const actor = createActor(makeMachine());
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "assistant" });
-    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    actor.send({ type: "SKIP_KNOWLEDGE" });
+    // Collapsed machine lands on modelSetup directly. No persona
+    // selection step, no knowledge step, no websearch step.
+    expect(actor.getSnapshot().matches("modelSetup")).toBe(true);
+    // Context carries a default "assistant" persona for SetupConfig
+    // compatibility.
     expect(actor.getSnapshot().context.persona).toBe("assistant");
+
+    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
+    // Either finishing (pending) or done (already resolved).
+    expect(
+      actor.getSnapshot().matches("finishing") ||
+        actor.getSnapshot().matches("done"),
+    ).toBe(true);
+
+    await waitFor(actor, (s) => s.matches("done"));
+    expect(complete).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledWith({ config: configWithModel() });
   });
 
-  it("DuckDuckGo as provider is not persisted to config (default elision)", async () => {
-    const complete = vi.fn<
-      (input: { config: SetupConfig }) => Promise<void>
-    >(async () => {});
-    const actor = createActor(makeMachine({ completeSetup: complete }));
-    await startAtPersona(actor);
-    actor.send({ type: "PERSONA_SELECTED", persona: "research" });
+  it("rejects PERSONA_CONFIGURED with empty model_path (hasModelPath guard)", async () => {
+    const actor = createActor(makeMachine());
+    await startAtModel(actor);
+
+    const bad: SetupConfig = { ...configWithModel(), model_path: "   " };
+    actor.send({ type: "PERSONA_CONFIGURED", config: bad });
+    // Guard refuses — machine stays on modelSetup.
+    expect(actor.getSnapshot().matches("modelSetup")).toBe(true);
+  });
+
+  it("returns to modelSetup with errorMessage on finishing failure", async () => {
+    const fail = vi.fn<(input: { config: SetupConfig }) => Promise<void>>(
+      async () => {
+        throw new Error("daemon not reachable");
+      },
+    );
+    const actor = createActor(makeMachine({ completeSetup: fail }));
+    await startAtModel(actor);
+
     actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
-    actor.send({ type: "SKIP_KNOWLEDGE" });
-    actor.send({
-      type: "WEB_CONFIGURED",
-      provider: "duckduckgo",
-      apiKey: null,
-    });
-    await waitFor(actor, (s) => s.matches("done"));
-    expect(complete.mock.calls[0][0].config.search_provider).toBeUndefined();
+
+    await waitFor(
+      actor,
+      (s) => s.matches("modelSetup") && !!s.context.errorMessage,
+    );
+    const err = actor.getSnapshot().context.errorMessage;
+    expect(err).toContain("Setup failed");
+    expect(err).toContain("daemon not reachable");
+  });
+
+  it("accumulates model fields into context.config", async () => {
+    const actor = createActor(makeMachine());
+    await startAtModel(actor);
+
+    actor.send({ type: "PERSONA_CONFIGURED", config: configWithModel() });
+
+    const ctx = actor.getSnapshot().context;
+    expect(ctx.config.model_path).toBe("/models/fast.gguf");
+    expect(ctx.config.embed_model_path).toBe("/models/embed.gguf");
+    expect(ctx.config.enabled_tools).toContain("shell");
+    expect(ctx.config.enabled_tools).toContain("document");
   });
 });

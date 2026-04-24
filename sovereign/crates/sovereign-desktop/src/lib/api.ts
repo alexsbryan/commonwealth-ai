@@ -535,6 +535,10 @@ import type {
   EnrichedCorpusSummary,
   PhaseFailure,
   SepIngestResult,
+  EnrichEstimate,
+  ActiveEnrichJob,
+  StarterQuestion,
+  SampledDocuments,
 } from "./types";
 
 /** Kick off an async `enrich build` run. Returns immediately with
@@ -592,4 +596,77 @@ export async function enrichSepIngest(
  *  by `created_at`. */
 export async function enrichListCorpora(): Promise<EnrichedCorpusSummary[]> {
   return invoke("enrich_list_corpora");
+}
+
+/** Idempotent bridge: wrap the local-corpus staged JSONL for a
+ *  folder/Obsidian ingest as a synthetic plaintext source and
+ *  invoke `sovereign enrich init` against it.
+ *
+ *  `pipelineId` must be `literary_atlas` or `philosophy_atlas` —
+ *  only atlas-producing pipelines are allowed through this path.
+ *
+ *  `sampleSize` optimises time-to-first-value. When set, only the
+ *  first N usable records from the staged JSONL are written to the
+ *  synthetic plaintext; the atlas covers that sample only. The
+ *  returned `SampledDocuments.total` always reflects every usable
+ *  record, so the UI can say "atlas covers 5 of your 47 documents".
+ *
+ *  Safe to call multiple times; if `config.json` already pins the
+ *  same pipeline AND the synthetic source already covers the
+ *  requested sample size, it's a no-op. */
+export async function enrichInitForLocalCorpus(
+  corpusId: string,
+  pipelineId: "literary_atlas" | "philosophy_atlas",
+  sampleSize: number | null = null,
+): Promise<SampledDocuments> {
+  return invoke("enrich_init_for_local_corpus", {
+    corpusId,
+    pipelineId,
+    sampleSize,
+  });
+}
+
+/** Pre-run estimate for an atlas build. Requires
+ *  `enrich_init_for_local_corpus` (or equivalent) to have written
+ *  `~/.sovereign/indexes/<corpus>/chapters.json`. The UI surfaces
+ *  `minutes_low`..`minutes_high` as a range; the point estimates
+ *  (`sections`, `est_tokens`) feed the transparency panel. */
+export async function enrichEstimate(
+  corpusId: string,
+): Promise<EnrichEstimate> {
+  return invoke("enrich_estimate", { corpusId });
+}
+
+/** If a build is currently in flight for this corpus, return the
+ *  job_id + progress channel. Lets the UI attach to an existing
+ *  subprocess from a different surface (e.g., the onboarding
+ *  flow finds a Settings-initiated build). */
+export async function enrichGetActiveJob(
+  corpusId: string,
+): Promise<ActiveEnrichJob | null> {
+  return invoke("enrich_get_active_job", { corpusId });
+}
+
+/** Mined starter questions for the chat empty state + onboarding
+ *  celebration screen. Returns an empty array when the atlas
+ *  hasn't been built yet (NOT an error — the UI branches on the
+ *  length to show excerpt-based fallbacks). */
+export async function enrichGetStarterQuestions(
+  corpusId: string,
+  limit: number,
+): Promise<StarterQuestion[]> {
+  return invoke("enrich_get_starter_questions", { corpusId, limit });
+}
+
+/** True when the user has never completed the onboarding corpus
+ *  flow. Checked alongside `enrichListCorpora().length === 0` in
+ *  App.svelte to decide whether to gate the first-corpus flow. */
+export async function isFirstRun(): Promise<boolean> {
+  return invoke("is_first_run");
+}
+
+/** Write the `~/.sovereign/first_run_complete` marker so subsequent
+ *  launches skip the first-corpus onboarding flow. */
+export async function markFirstRunComplete(): Promise<void> {
+  return invoke("mark_first_run_complete");
 }

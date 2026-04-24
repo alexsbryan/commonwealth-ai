@@ -3,25 +3,30 @@
 //! Ships two commands in v1:
 //!
 //!   sovereign code index <path> [--corpus-id <id>]
-//!       Walks a local repository with tree-sitter, produces one chunk per
-//!       symbol, and writes a LanceDB index under
-//!       `~/.sovereign/indexes/{corpus_id}/`. Uses a zero-vector `EmbedFn`
-//!       today — symbol lookup works via metadata filter pushdown (the
-//!       P1 primary use case) but semantic search requires Phase 2 tools
-//!       that wire in a real embedding model.
+//!       Walks a local repository with tree-sitter, produces one chunk
+//!       per symbol, embeds each chunk through the running daemon's
+//!       standard embedding model, and writes a LanceDB index under
+//!       `~/.sovereign/indexes/{corpus_id}/`. Symbol lookup uses the
+//!       SCIP graph + metadata filter pushdown; semantic code search
+//!       uses the same embedding space as knowledge retrieval, which
+//!       keeps the retrieval surface coherent across corpus kinds.
 //!
 //!   sovereign code search <query>
 //!       Phase-2 placeholder. Prints a friendly message explaining which
 //!       tools land in P2.
 //!
-//! This command does not load a full inference model — it reuses the same
-//! zero-vector strategy as `recipe test` so `sovereign code index` stays
-//! lightweight and can run against huge repos without GPU memory.
+//! Embeds go through the daemon HTTP endpoint (localhost:9741 by
+//! default), not an in-process model load. That keeps the CLI light
+//! *and* guarantees every corpus — knowledge or code — is embedded
+//! with the same model, so `embedding_dimensions` is consistent
+//! across the installation.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
+use sovereign_core::traits::InferenceProvider;
+use sovereign_inference::remote::RemoteApiProvider;
 
 /// Run a `code` subcommand. Returns the exit code.
 pub async fn run_code(args: &[String]) -> i32 {
@@ -126,14 +131,71 @@ async fn cmd_index(args: &[String]) -> i32 {
         .or_else(|| default_data_dir())
         .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
 
-    if let Err(e) = std::fs::create_dir_all(&data_dir) {
-        eprintln!("error: cannot create data dir {}: {e}", data_dir.display());
-        return 1;
+    match rebuild_code_corpus(&abs_path, &corpus_id, &data_dir).await {
+        Ok(stats) => {
+            eprintln!();
+            eprintln!(
+                "✓ Indexed {} chunks in {}s",
+                stats.chunks_created, stats.duration_secs
+            );
+            eprintln!(
+                "  Corpus: {}  ({} KB on disk)",
+                stats.corpus_id,
+                stats.index_size_bytes / 1024,
+            );
+            eprintln!("  Location: {}/{}", data_dir.display(), stats.corpus_id);
+            0
+        }
+        Err(e) => {
+            eprintln!();
+            eprintln!("✗ Indexing failed: {e}");
+            1
+        }
     }
+}
 
-    // Build an ephemeral recipe TOML with the supplied path and corpus_id.
-    // This is simpler than adding a programmatic Recipe constructor —
-    // ingest already knows how to handle a RecipePath.
+/// Full rebuild of a code corpus's LanceDB index. Shared between
+/// `sovereign code index` and `sovereign project refresh` so both
+/// surfaces write exactly the same thing: an ephemeral code-extract
+/// recipe, embedded through the running daemon, ingested to
+/// `<data_dir>/<corpus_id>/`.
+///
+/// Bails early (error, never zero-vector fallback) when the daemon
+/// is unreachable — see the `build_daemon_embed_fn` docstring for
+/// rationale.
+pub async fn rebuild_code_corpus(
+    root: &std::path::Path,
+    corpus_id: &str,
+    data_dir: &std::path::Path,
+) -> std::result::Result<corpus_engine::IngestResult, String> {
+    std::fs::create_dir_all(data_dir)
+        .map_err(|e| format!("cannot create data dir {}: {e}", data_dir.display()))?;
+
+    // A `rebuild` is a rebuild. Clear prior LanceDB state so
+    // `create_empty_table` doesn't trip with `Table 'chunks' already
+    // exists`. Keep the SCIP graph DB (`scip_graph.db*`) intact —
+    // it's owned by the daemon's Reindexer on a parallel cadence,
+    // and wiping it here would race with a just-nudged rebuild.
+    //
+    // Two targets: the canonical `<corpus>/` directory AND every
+    // `<corpus>-partition-*/` sibling. The engine writes new ingests
+    // into a partition directory and only renames to canonical at
+    // finalize; a stale partition from a prior run would make
+    // `create_empty_table` collide on the second pass.
+    let target = data_dir.join(corpus_id);
+    if target.exists() {
+        clear_lancedb_artifacts(&target).map_err(|e| {
+            format!("cannot clear existing LanceDB index at {}: {e}", target.display())
+        })?;
+    }
+    clear_partitions_for(data_dir, corpus_id).map_err(|e| {
+        format!("cannot clear partition dirs under {}: {e}", data_dir.display())
+    })?;
+
+    // Vector ANN enabled — every corpus on this node shares one
+    // embedding model so the `embedding_dimensions` is consistent
+    // across knowledge + code indexes. Symbol lookup still uses
+    // metadata filter pushdown; vector search is additive.
     let recipe_toml = format!(
         r#"[corpus]
 id = "{corpus_id}"
@@ -156,67 +218,42 @@ max_lines_per_chunk = 150
 [chunk]
 type = "passthrough"
 
-# Vector ANN is intentionally disabled in P1: we use zero embeddings so
-# IVF-PQ training would fail (KMeans cannot find 45 centroids in 0-variance
-# data). Phase 2 wires in a real embed model and re-enables this.
-# Metadata filter pushdown (symbol_name, file_path, mtime) still works with
-# `vector = false` because it's a direct column scan, not an ANN lookup.
 [index]
 fts = true
-vector = false
+vector = true
 "#,
         corpus_id = corpus_id,
-        path = abs_path.display(),
+        path = root.display(),
     );
 
-    let tempdir = match tempfile_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("error: cannot create temp dir: {e}");
-            return 1;
-        }
-    };
+    let tempdir = tempfile_dir().map_err(|e| format!("cannot create temp dir: {e}"))?;
     let recipe_path = tempdir.join(format!("{corpus_id}.toml"));
-    if let Err(e) = std::fs::write(&recipe_path, recipe_toml) {
-        eprintln!("error: cannot write ephemeral recipe: {e}");
-        return 1;
-    }
+    std::fs::write(&recipe_path, recipe_toml)
+        .map_err(|e| format!("cannot write ephemeral recipe: {e}"))?;
 
-    // Zero-vector EmbedFn — sufficient for P1 (symbol lookup via metadata
-    // filter pushdown is the primary use case). Phase 2 wires in a real
-    // embedding model for semantic search.
-    let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
-    });
-    let recipes_dir = tempdir.clone();
-    let engine = CorpusEngine::new(recipes_dir, data_dir.clone(), embed);
+    let (embed, embed_model_name) = build_daemon_embed_fn().await.map_err(|e| {
+        format!(
+            "{e}\n\n`sovereign code index` / `sovereign project refresh` now embed via the daemon \
+             so code corpora share the standard embedding model. Start the daemon with \
+             `sovereign daemon run` and re-run this command."
+        )
+    })?;
+    // Pass the embed model stem through so `_corpus_meta.json`
+    // records exactly what produced the vectors (not the engine's
+    // legacy default). See `corpus-engine::with_embedding_model`
+    // rationale.
+    let engine = CorpusEngine::new(tempdir.clone(), data_dir.to_path_buf(), embed)
+        .with_embedding_model(&embed_model_name);
 
-    eprintln!("Indexing {} as corpus '{corpus_id}'", abs_path.display());
+    eprintln!("Indexing {} as corpus '{corpus_id}'", root.display());
     eprintln!("Index directory: {}", data_dir.display());
     eprintln!();
 
     let spec = CorpusSpec::RecipePath(recipe_path);
-    match engine.ingest(&spec, None).await {
-        Ok(result) => {
-            eprintln!();
-            eprintln!(
-                "✓ Indexed {} chunks in {}s",
-                result.chunks_created, result.duration_secs
-            );
-            eprintln!(
-                "  Corpus: {}  ({} KB on disk)",
-                result.corpus_id,
-                result.index_size_bytes / 1024,
-            );
-            eprintln!("  Location: {}/{}", data_dir.display(), result.corpus_id);
-            0
-        }
-        Err(e) => {
-            eprintln!();
-            eprintln!("✗ Indexing failed: {e}");
-            1
-        }
-    }
+    engine
+        .ingest(&spec, None)
+        .await
+        .map_err(|e| format!("ingest failed: {e}"))
 }
 
 // ─── watch (P3) ───────────────────────────────────────────────
@@ -504,6 +541,76 @@ fn default_data_dir() -> Option<PathBuf> {
     if p == PathBuf::from(".") { None } else { Some(p) }
 }
 
+/// Remove every entry in `dir` that belongs to the LanceDB index
+/// (the `_corpus_meta.json`, the `.lance` table dirs, the `_indices`
+/// directory, any FTS/vector build scratch). Preserve anything named
+/// `scip_graph.db*` — the daemon's Reindexer owns those.
+///
+/// If the directory ends up empty after clearing, remove the directory
+/// itself. Reason: `finalise_solo_ingest` promotes
+/// `<corpus>-partition-<node>/` to canonical `<corpus>/` via rename,
+/// and that rename is skipped when the canonical path already
+/// exists — even if empty. An empty leftover would silently leave
+/// the fresh ingest stranded in the partition path.
+///
+/// Returns the first IO error encountered; partial cleanup is fine
+/// since the next `create_empty_table` will still succeed against
+/// whatever's left as long as the `chunks` table itself is gone.
+fn clear_lancedb_artifacts(dir: &std::path::Path) -> std::io::Result<()> {
+    let mut any_kept = false;
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.starts_with("scip_graph.db") {
+            any_kept = true;
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
+        } else {
+            std::fs::remove_file(&path)?;
+        }
+    }
+    if !any_kept {
+        // Swallow the error — a racing observer could have created
+        // a file between our last read and this rmdir. The next
+        // ingest step will create a fresh partition either way.
+        let _ = std::fs::remove_dir(dir);
+    }
+    Ok(())
+}
+
+/// Remove every `<corpus_id>-partition-*` directory under `root`.
+/// Called before a full rebuild so stale partition-of-self /
+/// partition-of-peer dirs don't collide with the fresh ingest's
+/// `create_empty_table` call.
+///
+/// Non-partition siblings (other corpora, arbitrary files) are
+/// untouched. A missing `root` is not an error — first-ever
+/// rebuild on a machine with no indexes yet is a normal state.
+fn clear_partitions_for(
+    root: &std::path::Path,
+    corpus_id: &str,
+) -> std::io::Result<()> {
+    let prefix = format!("{corpus_id}-partition-");
+    let entries = match std::fs::read_dir(root) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for entry in entries {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.starts_with(&prefix) {
+            std::fs::remove_dir_all(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 fn tempfile_dir() -> std::io::Result<PathBuf> {
     // Avoid pulling in the `tempfile` crate — sovereign-cli doesn't
     // already use it, and a one-shot per-run dir is enough. Use the
@@ -513,5 +620,62 @@ fn tempfile_dir() -> std::io::Result<PathBuf> {
     let path = base.join(suffix);
     std::fs::create_dir_all(&path)?;
     Ok(path)
+}
+
+/// Build an `EmbedFn` that POSTs to the running daemon's
+/// `/v1/embeddings` endpoint with the daemon's configured embed
+/// model. Returns `(EmbedFn, embed_model_stem)` — the stem is the
+/// filename of the GGUF without the `.gguf` suffix, matching what
+/// the daemon advertises on `/v1/models`.
+///
+/// Returns `Err(message)` when the daemon is unreachable or the
+/// embed model can't be resolved.
+///
+/// Using the daemon (rather than loading a model in-process) keeps
+/// `sovereign code index` lightweight — no GPU/RAM for llama.cpp
+/// — and guarantees code corpora land in the same embedding space
+/// as knowledge corpora.
+async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), String> {
+    let cfg = sovereign_core::setup_config::SetupConfig::load()
+        .map_err(|e| format!("read ~/.config/sovereign/config.toml: {e}"))?;
+    let port = cfg.daemon.client_port;
+    let endpoint = format!("http://localhost:{port}/v1");
+    let embed_model = cfg
+        .models
+        .embed
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| "SetupConfig.models.embed has no filename stem".to_string())?
+        .to_string();
+
+    // Probe before we return — a daemon-down failure 40 minutes
+    // into a 10k-file reindex is much worse than an up-front bail.
+    let probe = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .map_err(|e| format!("http client build: {e}"))?;
+    let probe_url = format!("{endpoint}/models");
+    match probe.get(&probe_url).send().await {
+        Ok(r) if r.status().is_success() => {}
+        Ok(r) => {
+            return Err(format!("daemon at :{port} returned {} from /v1/models", r.status()));
+        }
+        Err(_) => {
+            return Err(format!("daemon unreachable at localhost:{port}"));
+        }
+    }
+
+    // `RemoteApiProvider` is constructed with the embed model as
+    // its single `model_id`. Its `InferenceProvider::embed` sends
+    // `{"model": "<embed_model>", "input": "<text>"}` to
+    // `/embeddings`, which is the exact contract we want.
+    let provider: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
+        &endpoint,
+        None,
+        &embed_model,
+        8192,
+    ));
+    let f = sovereign_tools::corpus::inference_to_embed_fn(provider);
+    Ok((f, embed_model))
 }
 

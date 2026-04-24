@@ -23,11 +23,11 @@
     enrichSepIngest,
   } from "../api";
   import type {
-    EnrichBuildStep,
     EnrichedCorpusSummary,
     PhaseFailure,
   } from "../types";
   import { enrichProgressStore } from "../stores/enrichProgress.svelte";
+  import EnrichmentStage from "./EnrichmentStage.svelte";
 
   // ── Corpora list ────────────────────────────────────────
 
@@ -67,17 +67,16 @@
     }
   }
 
+  // Cancel is owned by `EnrichmentStage` when it's rendering the
+  // active job. This helper remains only for the (rare) case where
+  // the panel needs to cancel from outside the stage — currently
+  // unused, kept as a seam for future toolbar actions. If it stays
+  // unused after O3 lands, delete it.
   async function cancelBuild(jobId: string) {
     cancellingJobs = { ...cancellingJobs, [jobId]: true };
     try {
       await enrichCancelBuild(jobId);
-      // The backend flips the flag; the subprocess polls it on
-      // the next stdout read and kills itself. The terminal
-      // `spawn_failed` event lands on the channel shortly after
-      // and the store transitions the job to its terminal state.
     } catch (e) {
-      // Failure here is rare (IPC-level) — record against the
-      // job's corpus so the operator sees a hint.
       const job = enrichProgressStore.get(jobId);
       if (job) {
         rowErrors = { ...rowErrors, [job.corpus_id]: `Cancel failed: ${e}` };
@@ -178,20 +177,6 @@
     }
     return map;
   });
-
-  function stepLabel(step: EnrichBuildStep): string {
-    switch (step) {
-      case "seed":       return "Seed entities";
-      case "extract":    return "Per-section extraction";
-      case "cluster":    return "Cluster by facet";
-      case "name":       return "Name clusters";
-      case "resolve":    return "Resolve atoms + edges";
-      case "tensions":   return "Tension candidates";
-      case "gaps":       return "Structural gaps";
-      case "configure":  return "Configurations";
-      case "report":     return "Schema validation";
-    }
-  }
 
   function formatAge(iso: string): string {
     if (!iso) return "";
@@ -308,61 +293,10 @@
             <p class="err-msg">{rowErrors[corpus.corpus_id]}</p>
           {/if}
 
-          <!-- Live progress inline on the row. -->
-          {#if job}
-            {@const stepsDone = job.stepsCompleted.length}
-            {@const stepsTotal = job.plannedSteps.length || (job.currentStep?.total ?? 0)}
-            {@const pct = stepsTotal > 0 ? Math.round((stepsDone / stepsTotal) * 100) : 0}
-            <div
-              class="progress-block"
-              class:is-error={job.terminal === "aborted" || job.terminal === "spawn_failed"}
-              class:is-cancelled={job.terminal === "cancelled"}
-            >
-              <div class="progress-head">
-                {#if job.terminal === "complete"}
-                  <span class="progress-label">Complete — {job.stepsCompleted.length} step(s) finished</span>
-                {:else if job.terminal === "aborted"}
-                  <span class="progress-label">
-                    Failed at {job.failedStep ? stepLabel(job.failedStep) : "unknown step"}
-                    (exit {job.exitCode ?? "?"})
-                  </span>
-                {:else if job.terminal === "cancelled"}
-                  <span class="progress-label">
-                    Cancelled{job.failedStep ? ` mid-${stepLabel(job.failedStep).toLowerCase()}` : ""}
-                  </span>
-                {:else if job.terminal === "spawn_failed"}
-                  <span class="progress-label">
-                    Could not start: {job.spawnErrorMessage ?? "unknown error"}
-                  </span>
-                {:else if job.currentStep}
-                  <span class="progress-label">
-                    Step {job.currentStep.ordinal}/{job.currentStep.total}:
-                    {stepLabel(job.currentStep.step)}
-                  </span>
-                {:else}
-                  <span class="progress-label">Starting…</span>
-                {/if}
-                <span class="progress-pct">{pct}%</span>
-              </div>
-              <div class="bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-                <div class="bar-fill" style="width: {pct}%"></div>
-              </div>
-              {#if job.chapterProgress}
-                <p class="chapter-line">
-                  ↳ chapter {job.chapterProgress.index}/{job.chapterProgress.total}
-                  · <code>{job.chapterProgress.chapter_id}</code>
-                  {#if job.chapterProgress.question_count !== null}
-                    · {job.chapterProgress.question_count} q
-                  {/if}
-                </p>
-              {/if}
-              {#if job.chapterFailures.length > 0}
-                <p class="chapter-failures">
-                  {job.chapterFailures.length} chapter failure(s) captured — see the Errors panel for remediation.
-                </p>
-              {/if}
-            </div>
-          {/if}
+          <!-- Live progress inline on the row. Cancel is hidden here
+               because the row header already renders a Cancel button
+               while the job is non-terminal. -->
+          <EnrichmentStage job={job ?? null} hideCancel={true} />
 
           <!-- Structured failures panel. -->
           {#if errorsOpen[corpus.corpus_id]}
@@ -539,57 +473,7 @@
     gap: 6px;
   }
 
-  /* ── Progress block ───────────────────── */
-  .progress-block {
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border, #333);
-  }
-  .progress-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 12px;
-  }
-  .progress-label {
-    font-size: 0.9em;
-    color: var(--text-primary, #eee);
-  }
-  .progress-pct {
-    font-variant-numeric: tabular-nums;
-    color: var(--text-muted, var(--text-secondary));
-    font-size: 0.9em;
-  }
-  .bar {
-    margin-top: 6px;
-    height: 4px;
-    background: var(--border, #333);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-  .bar-fill {
-    height: 100%;
-    background: var(--accent, #c4a46a);
-    transition: width 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-  .progress-block.is-error .bar-fill {
-    background: var(--error, #d27979);
-  }
-  /* Cancellation is neither success nor failure — muted grey so
-     it reads as "stopped" rather than pulling eye like error red. */
-  .progress-block.is-cancelled .bar-fill {
-    background: var(--text-muted, #888);
-  }
-  .chapter-line {
-    margin: 8px 0 0;
-    color: var(--text-secondary, var(--text-primary));
-    font-size: 0.85em;
-  }
-  .chapter-failures {
-    margin: 6px 0 0;
-    font-size: 0.85em;
-    color: var(--error, #d27979);
-  }
+  /* Progress styles moved to EnrichmentStage.svelte (O2). */
 
   /* ── Errors panel ─────────────────────── */
   .errors-block {

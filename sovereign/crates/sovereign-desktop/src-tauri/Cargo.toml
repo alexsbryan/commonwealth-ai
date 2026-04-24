@@ -44,3 +44,6 @@ tauri-build = { version = "2", features = [] }
 # responder and rejects an arbitrary HTTP server that happens to own
 # the port.
 axum = { workspace = true }
+# Used by enrich_commands.rs tests for isolated tempdir fixtures
+# (JSONL synthesizer smoke + future filesystem-touching tests).
+tempfile = "3"

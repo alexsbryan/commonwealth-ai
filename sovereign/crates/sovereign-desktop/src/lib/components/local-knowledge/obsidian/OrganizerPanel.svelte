@@ -2,14 +2,26 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { onDestroy } from "svelte";
 
-  import { lcCluster, lcGetPreview, lcWriteTags } from "../../../api";
+  import {
+    enrichBuildAsync,
+    enrichCancelBuild,
+    enrichGetStarterQuestions,
+    enrichInitForLocalCorpus,
+    lcCluster,
+    lcGetPreview,
+    lcWriteTags,
+  } from "../../../api";
   import type {
     ClusterConfig,
     LocalCorpusConfig,
     LocalCorpusProgress,
+    StarterQuestion,
     VaultPreview,
     WriteBackResult,
   } from "../../../types";
+  import { enrichProgressStore } from "../../../stores/enrichProgress.svelte";
+  import EnrichmentStage from "../../EnrichmentStage.svelte";
+  import StarterChips from "../../StarterChips.svelte";
 
   // v1 defaults — spec §6.3 plus the M5.1 additions. The slider in
   // the review panel mutates `min_confidence` and
@@ -32,9 +44,14 @@
 
   interface Props {
     config: LocalCorpusConfig;
+    /// Optional: when the user clicks a starter chip on atlas_complete,
+    /// fire this so the caller can switch to chat + seed the input.
+    onOpenChatWithSeed?: (question: StarterQuestion) => void;
   }
 
-  let { config }: Props = $props();
+  let { config, onOpenChatWithSeed }: Props = $props();
+
+  type AtlasPipelineId = "literary_atlas" | "philosophy_atlas";
 
   type Step =
     | { kind: "idle" }
@@ -47,6 +64,18 @@
     | { kind: "confirm"; preview: VaultPreview }
     | { kind: "writing" }
     | { kind: "write_complete"; result: WriteBackResult }
+    | {
+        kind: "atlas_running";
+        result: WriteBackResult;
+        pipelineId: AtlasPipelineId;
+        jobId: string | null;
+        initError: string | null;
+      }
+    | {
+        kind: "atlas_complete";
+        result: WriteBackResult;
+        starters: StarterQuestion[];
+      }
     | { kind: "error"; message: string };
 
   let step: Step = $state({ kind: "idle" });
@@ -60,7 +89,63 @@
 
   onDestroy(() => {
     if (unlisten) unlisten();
+    // Don't orphan a mid-flight atlas subprocess if the panel unmounts.
+    if (step.kind === "atlas_running" && step.jobId) {
+      void enrichCancelBuild(step.jobId).catch(() => {});
+    }
   });
+
+  // ── Atlas enrichment (post-writeback offer) ──────────────────────
+
+  async function startAtlas(pipelineId: AtlasPipelineId) {
+    if (step.kind !== "write_complete") return;
+    const baseResult = step.result;
+    step = {
+      kind: "atlas_running",
+      result: baseResult,
+      pipelineId,
+      jobId: null,
+      initError: null,
+    };
+    try {
+      await enrichInitForLocalCorpus(config.id, pipelineId);
+      const handle = await enrichBuildAsync(config.id, null, null);
+      await enrichProgressStore.track(handle);
+      if (step.kind === "atlas_running") {
+        step = { ...step, jobId: handle.job_id };
+      }
+    } catch (e: unknown) {
+      if (step.kind === "atlas_running") {
+        step = { ...step, initError: String(e) };
+      }
+    }
+  }
+
+  async function handleAtlasTerminal(kind: string) {
+    if (step.kind !== "atlas_running") return;
+    if (kind === "complete") {
+      let starters: StarterQuestion[] = [];
+      try {
+        starters = await enrichGetStarterQuestions(config.id, 5);
+      } catch (e) {
+        console.warn("enrichGetStarterQuestions failed:", e);
+      }
+      step = { kind: "atlas_complete", result: step.result, starters };
+    }
+  }
+
+  let activeEnrichJob = $derived.by(() => {
+    if (step.kind !== "atlas_running" || !step.jobId) return null;
+    return enrichProgressStore.get(step.jobId) ?? null;
+  });
+
+  function handleStarterPick(question: StarterQuestion) {
+    if (onOpenChatWithSeed) {
+      onOpenChatWithSeed(question);
+    } else {
+      closeReview();
+    }
+  }
 
   async function runOrganize() {
     step = { kind: "clustering", progress: null };
@@ -208,6 +293,65 @@
         A restore point was saved. Roll back from the Restore section below
         if anything looks wrong.
       </p>
+      <div class="atlas-offer">
+        <p class="atlas-offer-title">Build a knowledge atlas?</p>
+        <p class="atlas-offer-desc">
+          Extract entities, events, and claims across the vault so you can
+          ask nuanced questions. Takes several minutes.
+        </p>
+        <div class="atlas-offer-actions">
+          <button
+            class="lk-btn lk-btn--mark"
+            onclick={() => startAtlas("literary_atlas")}
+          >
+            Build atlas (notes)
+          </button>
+          <button
+            class="lk-btn lk-btn--quiet"
+            onclick={() => startAtlas("philosophy_atlas")}
+          >
+            Build atlas (argumentative)
+          </button>
+          <button class="lk-btn lk-btn--quiet" onclick={closeReview}>
+            Later
+          </button>
+        </div>
+      </div>
+    </section>
+  {:else if step.kind === "atlas_running"}
+    <section class="completion">
+      <h3 class="completion-title">Building atlas.</h3>
+      {#if step.initError}
+        <p class="completion-skipped">{step.initError}</p>
+      {/if}
+      <EnrichmentStage
+        job={activeEnrichJob}
+        label="Atlas pipeline"
+        onTerminal={(kind) => void handleAtlasTerminal(kind)}
+      />
+      <div class="atlas-offer-actions" style="margin-top: 12px;">
+        <button class="lk-btn lk-btn--quiet" onclick={closeReview}>
+          Close (atlas keeps running)
+        </button>
+      </div>
+    </section>
+  {:else if step.kind === "atlas_complete"}
+    <section class="completion">
+      <h3 class="completion-title">Atlas ready.</h3>
+      {#if step.starters.length > 0}
+        <div style="margin: 14px 0;">
+          <StarterChips
+            questions={step.starters}
+            onPick={handleStarterPick}
+            heading="Try asking"
+          />
+        </div>
+      {:else}
+        <p class="completion-hint">
+          No starter questions yet — the chat empty state will show new
+          suggestions as the atlas indexes more of your vault.
+        </p>
+      {/if}
       <button class="lk-btn lk-btn--quiet" onclick={closeReview}>Close</button>
     </section>
   {:else if step.kind === "error"}
@@ -235,6 +379,30 @@
 <style>
   .organizer {
     padding: 16px 0 8px;
+  }
+
+  /* ── Atlas offer (post-writeback) ───────────────────── */
+  .atlas-offer {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--lk-rule, #333);
+  }
+  .atlas-offer-title {
+    margin: 0 0 4px;
+    font-size: var(--lk-size-lead);
+    font-weight: 600;
+    color: var(--lk-ink);
+  }
+  .atlas-offer-desc {
+    margin: 0 0 10px;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    line-height: 1.5;
+  }
+  .atlas-offer-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .prompt {
