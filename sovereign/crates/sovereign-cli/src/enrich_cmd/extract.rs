@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    ChapterManifest, ChapterSelection, Phase1Output, Phase1Progress, PhaseCache, PhaseRunner,
-    PipelineRegistry, RunOutputWriter,
+    ChapterManifest, ChapterSelection, Phase1Output, Phase1Progress, PhaseCache, PhaseFailureKind,
+    PhaseRunner, PipelineRegistry, RetryMode, RunOutputWriter,
 };
 
 use super::config::EnrichConfig;
@@ -25,7 +25,7 @@ const HELP: Help = Help {
     summary: "Run phase 1 (per-chapter question extraction) on a subset or the full corpus.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed]",
+            "sovereign enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed] [--terse]",
         ),
         HelpSection::Flags(&[
             ("--chapters <ids>", "Comma-separated chapter ids (e.g. sec_0001,sec_0003). Subset runs do NOT update the cache."),
@@ -34,6 +34,13 @@ const HELP: Help = Help {
                 "--retry-failed",
                 "Re-run only the chapters that failed in the most recent run. Treated as a \
                  subset run (does NOT update the cache). Errors if no prior run file exists.",
+            ),
+            (
+                "--terse",
+                "Use the terse Phase 1 prompt variant and double the configured \
+                 max_output_tokens. Combinable with --chapters or --retry-failed. When paired \
+                 with --retry-failed, auto-filters to failures classified as think-truncation. \
+                 Successful retries merge into cache/questions.json.",
             ),
         ]),
         HelpSection::Examples(&[
@@ -48,6 +55,10 @@ const HELP: Help = Help {
             (
                 "sovereign enrich extract ak --retry-failed",
                 "Reprocess the chapters that failed in the last run (parse errors, transient chat failures).",
+            ),
+            (
+                "sovereign enrich extract bk --retry-failed --terse",
+                "Recover chapters whose default pass failed with <think> truncation, using the terse prompt variant.",
             ),
         ]),
         HelpSection::Notes(
@@ -115,7 +126,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (embed, chat) = client.into_closures();
+    let (embed, chat, chat_with_tokens) = client.into_closures_with_tokens();
 
     let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));
@@ -126,7 +137,8 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         cache,
         runs,
         paths::exemplars_dir(&cfg.corpus_id),
-    );
+    )
+    .with_chat_with_tokens(chat_with_tokens);
 
     // Rebuild corpus state.
     let (inputs, manifest) = match rebuild_corpus_state(&cfg) {
@@ -171,9 +183,40 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                     return 0;
                 }
                 Ok(Some((path, ids))) => {
+                    // When `--terse` is combined with `--retry-failed`
+                    // without an explicit chapter list, target only
+                    // the failures the terse variant is designed to
+                    // recover: think-truncations. Transport failures
+                    // (ChatError) and schema drift (ParseDrift) need
+                    // different fixes — a plain retry for chat, a
+                    // prompt tweak for drift — so filtering to the
+                    // terse-recoverable kind avoids burning budget
+                    // on chapters the variant can't help.
+                    let (targeted, filtered_out): (Vec<_>, Vec<_>) = if parsed.terse {
+                        ids.into_iter().partition(|(_, kind)| {
+                            matches!(kind, PhaseFailureKind::ThinkTruncated)
+                        })
+                    } else {
+                        (ids, Vec::new())
+                    };
+                    if parsed.terse && !filtered_out.is_empty() {
+                        println!(
+                            "  · --terse filter: skipping {} failure(s) not classified as \
+                             think-truncation (use --retry-failed without --terse to \
+                             target them)",
+                            filtered_out.len()
+                        );
+                    }
+                    if targeted.is_empty() {
+                        println!(
+                            "  · no retry-eligible failures in the most recent run ({}) — nothing to retry.",
+                            path.display()
+                        );
+                        return 0;
+                    }
                     println!(
                         "  · retrying {} failed chapter(s) from {}",
-                        ids.len(),
+                        targeted.len(),
                         path.display()
                     );
                     // Filter to ids actually present in the manifest
@@ -182,8 +225,9 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                         .iter()
                         .map(|c| c.chapter_id.as_str())
                         .collect();
-                    let (present, missing): (Vec<_>, Vec<_>) = ids
+                    let (present, missing): (Vec<_>, Vec<_>) = targeted
                         .into_iter()
+                        .map(|(id, _)| id)
                         .partition(|id| known.contains(id.as_str()));
                     if !missing.is_empty() {
                         eprintln!(
@@ -214,6 +258,18 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                 }
             }
         }
+    };
+
+    // Build the retry mode passed to the runner. The terse variant
+    // bumps the output cap to double the config's default so a
+    // chapter that starved the default pass has room to emit JSON
+    // after its shorter reasoning trace.
+    let retry_mode = if parsed.terse {
+        Some(RetryMode::Terse {
+            max_output_tokens: cfg.max_output_tokens.saturating_mul(2).max(8192),
+        })
+    } else {
+        None
     };
 
     println!(
@@ -249,7 +305,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     };
 
     let result = match runner
-        .phase_1_extract_questions(&inputs, &selection, progress)
+        .phase_1_extract_questions_with_retry(&inputs, &selection, retry_mode, progress)
         .await
     {
         Ok(r) => r,
@@ -331,6 +387,12 @@ enum SelectionArg {
 struct ParsedExtract {
     corpus_id: String,
     selection: SelectionArg,
+    /// Set by `--terse`. Requests the terse Phase 1 prompt variant
+    /// + an optional `max_output_tokens` bump. Combinable with
+    /// `--chapters` or `--retry-failed` but not with `--full` — a
+    /// terse pass is by design a recovery run, not a full-corpus
+    /// run.
+    terse: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
@@ -338,6 +400,7 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     let mut chapters_csv: Option<String> = None;
     let mut full = false;
     let mut retry_failed = false;
+    let mut terse = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -359,6 +422,10 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
                 retry_failed = true;
                 i += 1;
             }
+            "--terse" => {
+                terse = true;
+                i += 1;
+            }
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
             }
@@ -377,6 +444,12 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     let selection_count = chapters_csv.is_some() as u8 + full as u8 + retry_failed as u8;
     if selection_count > 1 {
         return Err("--chapters, --full, and --retry-failed are mutually exclusive".into());
+    }
+    if terse && full {
+        return Err(
+            "--terse is a recovery pass; pair it with --retry-failed or --chapters, \
+             not --full".into(),
+        );
     }
     let selection = if retry_failed {
         SelectionArg::RetryFailed
@@ -397,14 +470,19 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
             "must provide one of --chapters <ids>, --full, or --retry-failed".into(),
         );
     };
-    Ok(ParsedExtract { corpus_id, selection })
+    Ok(ParsedExtract { corpus_id, selection, terse })
 }
 
 /// Locate the most recent `questions-*.json` run file under the
-/// given `runs_dir`, read it, and return the chapter ids that failed.
+/// given `runs_dir`, read it, and return the chapter ids that failed
+/// paired with their structured `PhaseFailureKind`. Callers that only
+/// want the ids can ignore the kind.
+///
 /// Returns `Ok(None)` when there's nothing to retry; `Err` on I/O or
 /// deserialization problems (which signal a broken run-output file).
-fn read_latest_failures(runs_dir: &std::path::Path) -> Result<Option<(PathBuf, Vec<String>)>, String> {
+fn read_latest_failures(
+    runs_dir: &std::path::Path,
+) -> Result<Option<(PathBuf, Vec<(String, PhaseFailureKind)>)>, String> {
     if !runs_dir.exists() {
         return Ok(None);
     }
@@ -433,10 +511,10 @@ fn read_latest_failures(runs_dir: &std::path::Path) -> Result<Option<(PathBuf, V
     let parsed: Phase1Output = serde_json::from_str(&raw).map_err(|e| {
         format!("parsing {}: {e} (file may predate the failures field)", latest.display())
     })?;
-    let ids: Vec<String> = parsed
+    let ids: Vec<(String, PhaseFailureKind)> = parsed
         .failures
         .into_iter()
-        .map(|f| f.chapter_id)
+        .map(|f| (f.chapter_id, f.failure_kind))
         .collect();
     Ok(Some((latest.clone(), ids)))
 }
@@ -533,6 +611,44 @@ mod tests {
     }
 
     #[test]
+    fn parse_args_accepts_terse_with_retry_failed() {
+        let p = parse_args(&[
+            "ak".into(),
+            "--retry-failed".into(),
+            "--terse".into(),
+        ])
+        .unwrap();
+        assert!(matches!(p.selection, SelectionArg::RetryFailed));
+        assert!(p.terse);
+    }
+
+    #[test]
+    fn parse_args_accepts_terse_with_chapters() {
+        let p = parse_args(&[
+            "ak".into(),
+            "--chapters".into(),
+            "sec_0001".into(),
+            "--terse".into(),
+        ])
+        .unwrap();
+        assert!(matches!(p.selection, SelectionArg::Subset(_)));
+        assert!(p.terse);
+    }
+
+    #[test]
+    fn parse_args_rejects_terse_with_full() {
+        let err = parse_args(&["ak".into(), "--full".into(), "--terse".into()])
+            .unwrap_err();
+        assert!(err.contains("recovery pass"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_args_terse_defaults_to_false() {
+        let p = parse_args(&["ak".into(), "--retry-failed".into()]).unwrap();
+        assert!(!p.terse);
+    }
+
+    #[test]
     fn read_latest_failures_returns_none_when_runs_dir_missing() {
         let dir = tempfile::tempdir().unwrap();
         let got = read_latest_failures(&dir.path().join("runs")).unwrap();
@@ -553,7 +669,43 @@ mod tests {
         fs::write(runs.join("questions-full-002.json"), new).unwrap();
         let (path, ids) = read_latest_failures(&runs).unwrap().unwrap();
         assert!(path.ends_with("questions-full-002.json"), "got: {}", path.display());
-        assert_eq!(ids, vec!["sec_0005".to_string(), "sec_0018".to_string()]);
+        let id_only: Vec<String> = ids.into_iter().map(|(id, _)| id).collect();
+        assert_eq!(
+            id_only,
+            vec!["sec_0005".to_string(), "sec_0018".to_string()]
+        );
+    }
+
+    #[test]
+    fn read_latest_failures_returns_failure_kinds_for_terse_filtering() {
+        // When the run file carries `failure_kind` per entry, the
+        // caller should be able to partition failures by kind —
+        // that's what `--terse --retry-failed` does to target only
+        // `ThinkTruncated` chapters.
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let runs = dir.path().join("runs");
+        fs::create_dir_all(&runs).unwrap();
+        let payload = r#"{
+          "schema_version": 1,
+          "pipeline_id": "literary_atlas",
+          "questions_by_chapter": [],
+          "failures": [
+            {"chapter_id": "sec_0001", "reason": "<think> truncated", "failure_kind": "think_truncated"},
+            {"chapter_id": "sec_0002", "reason": "chat: transport", "failure_kind": "chat_error"},
+            {"chapter_id": "sec_0003", "reason": "missing field", "failure_kind": "parse_drift"}
+          ],
+          "written_at": "t"
+        }"#;
+        fs::write(runs.join("questions-full-001.json"), payload).unwrap();
+        let (_, ids) = read_latest_failures(&runs).unwrap().unwrap();
+        assert_eq!(ids.len(), 3);
+        let think_truncs: Vec<&String> = ids
+            .iter()
+            .filter(|(_, kind)| matches!(kind, PhaseFailureKind::ThinkTruncated))
+            .map(|(id, _)| id)
+            .collect();
+        assert_eq!(think_truncs, vec!["sec_0001"]);
     }
 
     #[test]

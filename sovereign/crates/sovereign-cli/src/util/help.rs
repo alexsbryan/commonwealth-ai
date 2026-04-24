@@ -42,6 +42,10 @@ pub enum HelpSection {
     Usage(&'static str),
     /// A list of subcommands. Each entry is `(name, one-line description)`.
     Subcommands(&'static [(&'static str, &'static str)]),
+    /// A list of subcommands with a custom section heading — lets a
+    /// single help block group its verbs into "Primary flow",
+    /// "Individual phases", "Utilities", etc.
+    SubcommandsTitled(&'static str, &'static [(&'static str, &'static str)]),
     /// A list of flags. Each entry is `("--flag <v>", description)`.
     Flags(&'static [(&'static str, &'static str)]),
     /// Concrete examples users can copy-paste. Each is
@@ -78,6 +82,10 @@ pub fn print(h: &Help) {
             }
             HelpSection::Subcommands(entries) => {
                 eprintln!("  Subcommands:");
+                print_table(entries);
+            }
+            HelpSection::SubcommandsTitled(title, entries) => {
+                eprintln!("  {title}:");
                 print_table(entries);
             }
             HelpSection::Flags(entries) => {

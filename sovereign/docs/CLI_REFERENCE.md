@@ -156,29 +156,54 @@ Output is plain text by default, shaped for LLM consumption (fenced code blocks,
 
 ### `sovereign enrich`
 
-Admin harness for iterating on the v2 enrichment pipeline. **Provisional** — retires once v2 is promoted to production (see SYSTEM_OVERVIEW §12 Roadmap). Writes state under `~/.sovereign/enrichment/<corpus>/` and `~/.sovereign/indexes/<corpus>/`.
+Build, query, and audit v2 atlas enrichments of a corpus. Writes state under `~/.sovereign/enrichment/<corpus>/` (phase caches + run outputs) and `~/.sovereign/indexes/<corpus>/atlas/` (resolved atoms + edges + trajectories + configurations + schema-validation + cross-corpus edges).
+
+The full architecture — seven atom types, seven edge types, deterministic resolver, LLM-driven Phase 8 configurations, cross-corpus bridges, §12 schema-revision protocol — lives in [`corpus-engine/ENRICHMENT_V2.md`](../../corpus-engine/ENRICHMENT_V2.md). This section documents only the command-line surface.
+
+#### Primary flow
+
+The normal loop is `init` once per corpus, then `build` to run the whole pipeline, then `query` / `report` / `review` / `bridge` to consume the result.
 
 | Subcommand | Description |
 |---|---|
-| `init <corpus-id> --source <path> [--chapter-regex <pat>] [--pipeline <id>] [--chat-model <id>] [--embed-model <id>] [--dry-run] [--force]` | Scaffold the enrichment tree. Detects sections via `SectionedChunker`, writes `chapters.json` + `config.json` + `exemplars/` + `cache/` + `runs/`. `--dry-run` prints detected sections and exits. |
-| `extract <corpus-id> [--chapters <a,b,c> \| --full]` | Phase 1: per-chapter question extraction. Subset runs write to `runs/` only; `--full` also updates `cache/questions.json`. |
-| `cluster-questions <corpus-id>` | Phase 2: HDBSCAN over phase 1 question embeddings. Writes `cache/question-clusters.json`. |
-| `name-concerns <corpus-id>` | Phase 3: name the canonical concern for each phase 2 cluster. Writes `cache/concerns.json`. |
-| `cluster-chunks <corpus-id>` | Phase 4: embed + cluster paragraph chunks. Writes `cache/chunk-clusters.json`. |
-| `extract-positions <corpus-id>` | Phase 5: grounded position extraction (aligns concerns ↔ chunk clusters by centroid cosine, top-3). Writes `cache/positions.json`. |
-| `detect-tensions <corpus-id>` | Phase 6: pairwise tension detection between same-concern positions. Writes `cache/tensions.json`. |
-| `detect-gaps <corpus-id>` | Phase 7: single-call gap identification across the atlas. Writes `cache/gaps.json`. |
-| `cascade <corpus-id> --from <phase>` | Rerun `<phase>` and every downstream phase. `<phase>` is one of `questions`, `question-clusters`, `concerns`, `chunk-clusters`, `positions`, `tensions`, `gaps`. Phase 1 uses `--full` in cascades. |
-| `query <corpus-id> "<text>" [--show-traversal] [--threshold <f>]` | Traverse the assembled atlas for a one-off query. Prints LOCATE (concern matches by cosine) / TRAVERSE (positions + tensions) / GROUNDING (passage ids). |
-| `validate <corpus-id> --questions <path> [--threshold <f>] [--pass <f>]` | Run a `QueryBattery` (JSON list of questions) against the atlas. Prints a per-question score table and a headline pass-rate. |
-| `promote <corpus-id> --phase <id> --run <path> --finding <id> --type <positive\|corrected\|negative> --rationale <text> [--selector <s>] [--model-output <json>]` | Append a curated finding from a run output into the per-phase exemplar bank. |
-| `diff <corpus-id> <run-a.json> <run-b.json>` | Side-by-side compare of two phase 1 run outputs — added/removed questions per chapter, reveals + carriers changes. |
-| `reset <corpus-id> [--from <phase>] [--full] [--include-exemplars] [--dry-run] [--yes]` | Clear phase caches + run outputs so you can re-iterate. Default: clears phases 2-7 and keeps phase 1 + exemplars + config + chapter manifest. `--from <phase>` customizes the starting point. `--full` wipes the entire tree + manifest (source text is preserved). `--include-exemplars` opts into clearing hand-crafted banks (default preserves them). Always prompts unless `--yes`; `--dry-run` previews without changes. |
-| `show <corpus-id> <target> [--chapter <id>] [--concern <id>]` | Formatted view of any cached phase (targets: `phase1` … `phase7` or full names `questions`, `question-clusters`, `concerns`, `chunk-clusters`, `positions`, `tensions`, `gaps`). |
-| `exemplars <corpus-id>` | Report per-phase bank counts and lint issues. |
-| `status <corpus-id>` | Per-phase cache-freshness table (fresh / stale / never-run). |
+| `init <corpus-id> --source <path> [--pipeline <id>] [--chapter-regex <pat>] [--chat-model <id>] [--embed-model <id>] [--dry-run] [--force]` | Scaffold the enrichment tree. Detects sections via `SectionedChunker`, writes `chapters.json` + `config.json` + `exemplars/` + `cache/` + `runs/`. `--pipeline` accepts any registered id (`literary_atlas`, `philosophy_atlas`, …); default `literary`. `--dry-run` prints detected sections and exits. |
+| `build <corpus-id> [--chapters <ids> \| --full] [--skip <step>...] [--dry-run]` | One-shot: run every atlas phase in sequence — **seed → extract → cluster → name → resolve → tensions → gaps → configure → report**. Subset runs are promoted to cache so downstream phases have inputs. `--skip <step>` is repeatable (valid steps: `seed`, `extract`, `cluster`, `name`, `resolve`, `tensions`, `gaps`, `configure`, `report`). `--dry-run` prints the planned step sequence. |
+| `query <corpus-id> "<text>" [--json]` | Classify + traverse a natural-language question against the resolved atlas; print an assembled brief. Zero LLM calls — the classifier is a keyword + known-entity-name matcher, the traversal is deterministic. `--json` emits the raw `TraversalResult`. |
+| `report <corpus-id> [--json]` | Print the §12 schema validation report for one corpus across 8 dimensions (coverage, depth distribution, confidence histogram, atom-type utilisation, orphans, discourse distribution, cross-corpus connectivity, deterministic gap counts). Writes `atlas/schema_validation.json`. |
+| `review <corpus-a> <corpus-b> [<corpus-c>...]` | Compare N corpora's schema-validation reports. Gap signatures present in ≥ 2 corpora surface as **schema-revision candidates** with targeted recommendations per kind; signatures present in exactly one corpus surface as **prompt-tuning candidates**. |
+| `bridge <local> <peer> [--explain <edge-id>]` | Detect `Grounding` edges between two resolved atlases. Prints the glass-box `CrossCorpusReport` (candidates scanned, matches accepted, rejections grouped by reason, sample rejections with folded forms). `--explain <edge-id>` dumps the full `MatchTrace` for one accepted edge — signal path, confidence, alternatives considered. |
 
-Requires the Commonwealth daemon to be running at `localhost:9741`. `init` auto-resolves chat + embed model ids via `/v1/models` unless pinned explicitly.
+#### Individual phases
+
+For debugging, partial re-runs, and iterating on a single prompt. `build` orchestrates these in order; calling them one-at-a-time lets you pause between phases to inspect outputs or tune exemplars.
+
+| Subcommand | Description |
+|---|---|
+| `seed <corpus-id>` | Stage 1a: extract the canonical seed entity list from the first section. Writes `cache/seed.json`. Threaded into every subsequent Phase 1 prompt to prevent entity-name drift across sections. |
+| `extract <corpus-id> [--chapters <ids> \| --full] [--terse]` | Phase 1: per-section atlas extraction (six facets — entities, entity-states, relations, relation-states, events, claims, questions). Subset runs write to `runs/` only; `--full` updates `cache/questions.json`. `--terse` uses the schema-only retry variant for chapters whose default pass hit a think-truncation. |
+| `cluster <corpus-id>` | Phase 2: facet-typed clustering over the Phase 1 sketches (question / claim / entity-state / relation-state / event). Writes `cache/atlas-clusters.json`. |
+| `name <corpus-id>` | Phase 3: one LLM call per cluster to name it with facet-specific vocabulary (thematic inquiry / position / conceptual arc / dialectical dynamic / argumentative thread). Writes `cache/atlas-named-clusters.json`. |
+| `resolve <corpus-id> --phase <3a\|3b\|all>` | Phase 3a/3b: resolve atoms + edges + trajectories from the Phase 1 sketches. `--phase all` runs entity/event resolution (3a) + state/relation/claim/question resolution (3b) in one pass. Writes `atlas/atoms.json`, `atlas/edges.json`, `atlas/trajectories.json`. |
+| `tensions <corpus-id>` | Phase 6 (deterministic): select tension candidates via intra-cluster + claim/claim entity-overlap + claim/state entity-overlap. Writes `atlas/tension_candidates.json`. The LLM classifier that promotes candidates into real `Tension` edges is a follow-up. |
+| `gaps <corpus-id>` | Phase 7 (deterministic): detect structural gaps across 3 kinds — `transition_without_trigger`, `ungrounded_claim`, `open_question`. Writes `atlas/gaps.json`. |
+| `configure <corpus-id>` | Phase 8 (LLM, opt-in per pipeline): 0–3 interpretive `Configuration` atoms over the atlas structure. Every configuration must carry an `interpretive_note` articulating alternative readings (the Ricoeur constraint per spec §1.2). Writes `atlas/configurations.json` and merges atoms into `atlas/atoms.json`. |
+
+#### Utilities
+
+| Subcommand | Description |
+|---|---|
+| `status <corpus-id>` | Per-phase cache-freshness table (fresh / stale / never-run). |
+| `show <corpus-id> <target> [--chapter <id>] [--concern <id>]` | Formatted view of any cached phase output. |
+| `exemplars <corpus-id>` | Report per-phase exemplar-bank counts + lint findings. |
+| `reset <corpus-id> [--from <phase>] [--full] [--include-exemplars] [--dry-run] [--yes]` | Clear phase caches + run outputs to re-iterate. Default clears phases 2-7 and keeps Phase 1 + exemplars + config + manifest. `--full` wipes the whole enrichment tree (source text preserved). `--include-exemplars` opts into clearing hand-curated banks. Always prompts unless `--yes`. |
+
+#### Daemon requirement
+
+The Commonwealth daemon at `localhost:9741` is required for LLM phases (`seed`, `extract`, `name`, `configure`) and for `init` (which resolves chat + embed model ids via `/v1/models`). Pure-Rust phases — `cluster`, `resolve`, `tensions`, `gaps`, `query`, `report`, `review`, `bridge` — run offline once the atlas is resolved.
+
+#### Legacy v1 surface
+
+The pre-atlas command set (`cluster-questions`, `name-concerns`, `cluster-chunks`, `extract-positions`, `detect-tensions`, `detect-gaps`, `cascade`, `legacy-query`, `validate`, `promote`, `diff`) remains callable by exact name for corpora mid-flight on the v1 questions/concerns/positions path. It is hidden from the default `--help` and scheduled to retire once no active corpus depends on it.
 
 ### `sovereign atos`
 

@@ -120,6 +120,7 @@ pub async fn cmd_promote(args: &[String]) -> i32 {
         rationale: parsed.rationale.clone(),
         selector_text,
         created_at: String::new(),
+        facet: None,
     };
 
     let path = paths::exemplars_dir(&parsed.corpus_id)

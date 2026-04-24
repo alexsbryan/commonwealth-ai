@@ -81,6 +81,15 @@ impl ModelSlot {
         let build_ctx_params = |metal: bool| {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
+                // Chat slots are serial: a Mutex<SlotContext> guards the
+                // single context and generate_sync builds LlamaBatch with
+                // n_seq=1. The llama-cpp-2 default n_seq_max=16 would
+                // split n_ctx into 16 slots (e.g. 16384 → 1024 per seq)
+                // and waste 15/16ths of the configured window. Pin to 1
+                // so the full context_size is the usable per-request
+                // window. (EmbedSlot keeps its own n_seq_max=16 — it
+                // genuinely batches.)
+                .with_n_seq_max(1)
                 // n_batch = context_size so the full context window is available
                 // for prompt processing. llama.cpp automatically splits the batch
                 // into n_ubatch=512 micro-batches for GPU/CPU kernel calls, so
@@ -1175,7 +1184,13 @@ impl EmbeddedLlamaCpp {
 
         let mut backend = LlamaBackend::init()
             .map_err(|e| Error::Inference(format!("Failed to init llama backend: {e}")))?;
-        backend.void_logs(); // suppress llama.cpp/ggml C-level stderr noise
+        // Suppress llama.cpp/ggml C-level stderr noise by default. Set
+        // SOVEREIGN_LLAMA_LOGS=1 when diagnosing a model-load failure
+        // (e.g. an unsupported quant or arch returning a "null result")
+        // so the underlying libllama error reaches daemon.err.
+        if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
+            backend.void_logs();
+        }
         let backend = Arc::new(backend);
 
         tracing::info!(slot = "fast", family = ?fast_family, "loading slot");

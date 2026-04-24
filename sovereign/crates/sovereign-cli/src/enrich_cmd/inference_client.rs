@@ -9,7 +9,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::enrichment::pipeline::{ChatCompletionFn, ChatPrompt};
+use corpus_engine::enrichment::pipeline::{
+    ChatCompletionFn, ChatCompletionWithTokensFn, ChatPrompt,
+};
 use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
 
@@ -83,8 +85,34 @@ impl DaemonInferenceClient {
         &self.embed_model
     }
 
-    /// Call `/v1/chat/completions` with a single system + user message.
+    /// Call `/v1/chat/completions` with a single system + user
+    /// message. Uses the client-level `max_output_tokens` configured
+    /// via `with_max_output_tokens`.
     pub async fn complete(&self, prompt: &ChatPrompt) -> Result<String> {
+        self.complete_inner(prompt, self.max_output_tokens).await
+    }
+
+    /// Call `/v1/chat/completions` with a per-call output-token
+    /// override. Used by the runner when a retry mode (e.g.
+    /// `RetryMode::Terse`) asks for a larger budget on a specific
+    /// chapter without mutating the shared client-level cap.
+    pub async fn complete_with_tokens(
+        &self,
+        prompt: &ChatPrompt,
+        max_tokens: u32,
+    ) -> Result<String> {
+        self.complete_inner(prompt, Some(max_tokens)).await
+    }
+
+    /// Shared inner path — `complete` and `complete_with_tokens`
+    /// differ only in which token cap they pass in. `None` means
+    /// "let the daemon decide" (useful for tests and environments
+    /// where no cap has been explicitly configured).
+    async fn complete_inner(
+        &self,
+        prompt: &ChatPrompt,
+        max_tokens: Option<u32>,
+    ) -> Result<String> {
         let url = format!("{}/v1/chat/completions", self.base_url);
         let mut body = serde_json::json!({
             "model": self.chat_model,
@@ -95,7 +123,7 @@ impl DaemonInferenceClient {
             "temperature": 0.2,
             "stream": false,
         });
-        if let Some(n) = self.max_output_tokens {
+        if let Some(n) = max_tokens {
             if let Some(obj) = body.as_object_mut() {
                 obj.insert("max_tokens".into(), serde_json::json!(n));
             }
@@ -175,6 +203,18 @@ impl DaemonInferenceClient {
     /// Wrap this client as the `(EmbedFn, ChatCompletionFn)` pair that
     /// `PhaseRunner::new` expects.
     pub fn into_closures(self) -> (EmbedFn, ChatCompletionFn) {
+        let (embed, chat, _) = self.into_closures_with_tokens();
+        (embed, chat)
+    }
+
+    /// Wrap this client as an `(EmbedFn, ChatCompletionFn,
+    /// ChatCompletionWithTokensFn)` triple. The third closure
+    /// routes through `complete_with_tokens`, letting the runner
+    /// raise the output budget for specific retries without
+    /// rebuilding the HTTP client.
+    pub fn into_closures_with_tokens(
+        self,
+    ) -> (EmbedFn, ChatCompletionFn, ChatCompletionWithTokensFn) {
         let arc = Arc::new(self);
         let embed_arc = arc.clone();
         let embed: EmbedFn = Arc::new(move |text: &str| {
@@ -182,13 +222,20 @@ impl DaemonInferenceClient {
             let text = text.to_string();
             Box::pin(async move { this.embed_one(&text).await })
         });
-        let chat_arc = arc;
+        let chat_arc = arc.clone();
         let chat: ChatCompletionFn = Arc::new(move |prompt: &ChatPrompt| {
             let this = chat_arc.clone();
             let prompt = prompt.clone();
             Box::pin(async move { this.complete(&prompt).await })
         });
-        (embed, chat)
+        let chat_tokens_arc = arc;
+        let chat_with_tokens: ChatCompletionWithTokensFn =
+            Arc::new(move |prompt: &ChatPrompt, tokens: u32| {
+                let this = chat_tokens_arc.clone();
+                let prompt = prompt.clone();
+                Box::pin(async move { this.complete_with_tokens(&prompt, tokens).await })
+            });
+        (embed, chat, chat_with_tokens)
     }
 }
 

@@ -66,6 +66,14 @@ const HELP: Help = Help {
                 "sovereign enrich init ak --source ak.txt --chapter-regex '^BOOK [A-Z]+' --dry-run",
                 "Preview section detection with a custom regex; do not write state.",
             ),
+            (
+                "sovereign enrich init bk --source bk.txt --pipeline literary_atlas",
+                "Use the atlas-schema Phase 1 extractor (full atom graph) instead of the legacy questions-only pipeline.",
+            ),
+            (
+                "sovereign enrich init compatibilism --source compatibilism.md --pipeline philosophy_atlas",
+                "Philosophy-tuned atlas pipeline (same schema, argumentative-prose prompts).",
+            ),
         ]),
         HelpSection::Notes(
             "Writes to ~/.sovereign/enrichment/<corpus>/ and ~/.sovereign/indexes/<corpus>/. \
@@ -90,6 +98,22 @@ pub async fn cmd_init(args: &[String]) -> i32 {
             return 2;
         }
     };
+
+    // Validate the pipeline id against the registry before doing
+    // anything expensive. A typo here would otherwise only surface at
+    // `extract` time, after section detection and model resolution.
+    {
+        let registry = corpus_engine::enrichment::pipeline::PipelineRegistry::builtin();
+        if registry.get(&parsed.pipeline_id).is_none() {
+            let mut known = registry.pipeline_ids();
+            known.sort();
+            eprintln!(
+                "error: unknown pipeline: {:?}. Known ids: {:?}",
+                parsed.pipeline_id, known
+            );
+            return 2;
+        }
+    }
 
     // Read source file.
     if !parsed.source_path.exists() {

@@ -395,6 +395,12 @@ Acquirer  →  Extractor  →  Chunker  →  Embedder  →  Index
 Each stage is a trait implementation that the engine dispatches to based on a
 **Recipe** — a TOML file describing one corpus's pipeline end-to-end.
 
+On top of the ingest pipeline sits the v2 **enrichment atlas** — a typed-graph
+layer (seven atom types, seven edge types, seed-threaded map-reduce extraction)
+that supports trajectory / relational / event-sequence queries beyond basic
+claim+question retrieval. See `corpus-engine/ENRICHMENT_V2.md` for the live
+plan of record: status table, landing-by-landing scope, verification targets.
+
 | Stage      | Implementations                                                |
 |------------|----------------------------------------------------------------|
 | Acquirer   | `bulk_download` (resumable HTTP), `huggingface`, `local_file`  |

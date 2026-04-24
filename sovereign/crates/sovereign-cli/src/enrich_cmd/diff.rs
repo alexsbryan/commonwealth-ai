@@ -228,6 +228,7 @@ mod tests {
                     thematic_carriers: Vec::new(),
                     setting: None,
                     plot: None,
+                    section_extraction: None,
                 })
                 .collect(),
             failures: Vec::new(),

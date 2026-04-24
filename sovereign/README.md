@@ -173,6 +173,7 @@ cargo run --release -p sovereign-server -- --config sovereign-server.toml
 | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Setup/daemon issues, uninstall, port conflicts |
 | [`docs/FAQ.md`](docs/FAQ.md) | Quick answers to common questions |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Building, testing, adding tools/corpora/skills |
+| [`docs/TOOLBOX_SETUP.md`](docs/TOOLBOX_SETUP.md) | Running on AMD Strix Halo via kyuz0 ROCm/Vulkan toolboxes |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Deep architectural design document |
 | [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) | Cross-project (sovereign + commonwealth + corpus-engine) map |
 
