@@ -49,6 +49,70 @@ If `/dev/kfd` is missing, `amdgpu` probably didn't initialise —
 check `dmesg | grep -i amdgpu` and make sure the kernel is recent
 enough before going further.
 
+### Unlocking > 64 GB of iGPU-addressable memory
+
+By default `amdgpu` on Linux caps the iGPU's addressable memory
+(the GTT) at roughly half of system RAM. On a 128 GB Strix Halo
+that's ~64 GB — enough for Qwen3.5-27B Q4 but tight for 35B-A3B at
+Q5 or for running a big model alongside a populated embedding
+slot. The ceiling is a kernel parameter, not a toolbox flag, so
+this is a host-side change that survives a reboot.
+
+kyuz0's recommended boot-line for a 128 GB system (leaves 4 GB
+for the OS, gives the iGPU the remaining 124 GB):
+
+```
+iommu=pt amdgpu.gttsize=126976 ttm.pages_limit=32505856
+```
+
+- `iommu=pt` — passthrough mode; reduces overhead on unified
+  memory accesses.
+- `amdgpu.gttsize=126976` — caps GTT at 126976 MiB (= 124 GiB).
+- `ttm.pages_limit=32505856` — caps pinned memory at 32 505 856
+  4 KiB pages (= ~124 GiB), the matching ceiling for the TTM
+  allocator.
+
+Apply on Fedora:
+
+```bash
+sudo grubby --update-kernel=ALL --args="iommu=pt amdgpu.gttsize=126976 ttm.pages_limit=32505856"
+sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+sudo reboot
+```
+
+Apply on Ubuntu (edit `/etc/default/grub`, append to
+`GRUB_CMDLINE_LINUX_DEFAULT`):
+
+```bash
+sudo sed -i 's|^GRUB_CMDLINE_LINUX_DEFAULT="|GRUB_CMDLINE_LINUX_DEFAULT="iommu=pt amdgpu.gttsize=126976 ttm.pages_limit=32505856 |' /etc/default/grub
+sudo update-grub
+sudo reboot
+```
+
+Adjust the two ceilings if your system has more or less than
+128 GB — the formula is `gttsize = (total_RAM_MiB - 4096)` and
+`pages_limit = gttsize * 1024 / 4`.
+
+After reboot, confirm inside the toolbox:
+
+```bash
+cat /sys/class/drm/card*/device/mem_info_gtt_total | numfmt --to=iec-i
+# Should show ~124 GiB, not ~63 GiB.
+```
+
+BIOS "UMA Frame Buffer Size" / "Variable Graphics Memory" can stay
+at the minimum (Framework Desktop ships 512 MB by default and
+kyuz0's own benches use exactly that) — the unified-memory ceiling
+on Strix Halo is owned by the kernel parameters above, not the
+BIOS reserve.
+
+**Toolbox-side cap.** Podman / Docker / distrobox do not impose a
+memory limit on containers by default, so once the kernel lets the
+iGPU see 124 GB, the toolbox inherits the whole ceiling. If you
+ever see the container OOM on a model that should fit, check
+`podman inspect <toolbox-name> | grep -i memory` for a `--memory`
+flag someone set, not the kernel side.
+
 ---
 
 ## 1. Choose a toolbox variant
@@ -120,12 +184,27 @@ The kyuz0 images ship llama.cpp + ROCm, not a Rust toolchain. Inside
 the toolbox:
 
 ```bash
-sudo dnf install -y rust cargo protobuf-compiler cmake gcc gcc-c++ \
-    pkg-config openssl-devel
+sudo dnf install -y rust cargo protobuf-compiler protobuf-devel \
+    cmake gcc gcc-c++ pkg-config openssl-devel
 ```
 
 (On the Ubuntu-based distrobox: `sudo apt install -y cargo rustc
-protobuf-compiler cmake build-essential pkg-config libssl-dev`.)
+protobuf-compiler libprotobuf-dev cmake build-essential pkg-config
+libssl-dev`.)
+
+**`protobuf-devel` / `libprotobuf-dev` is load-bearing, not
+optional.** `lance-encoding`'s build script pulls in
+`google/protobuf/empty.proto` from the well-known proto set, which
+ships with the `-devel` / `-dev` package, not the bare compiler. If
+you skip it you get this mid-build:
+
+```
+Error: protoc failed: google/protobuf/empty.proto: File not found.
+encodings_v2_0.proto:8:1: Import "google/protobuf/empty.proto" was
+not found or had errors.
+```
+
+Install the `-devel` / `-dev` variant and `cargo build` again.
 
 Prefer `rustup` if you want a newer toolchain than Fedora's
 package repo ships:
