@@ -53,7 +53,7 @@ Per-project code intelligence **and** the project-layer half of ATOS (charter + 
 | `plan [--allow-open]` | Compose `IMPLEMENTATION_PLAN.md` from `DESIGN.md` + `OPEN_QUESTIONS.md`; upsert rows into `.sovereign/plan.db` (`plan_items` table); defer stale rows from prior generations. Unanswered `OPEN_QUESTIONS.md` entries block unless `--allow-open` (then they surface as `Open risks` on the matching phase) |
 | `charter [--print]` | Create or edit `.sovereign/CHARTER.md` — the team's free-form governance/onboarding doc. First invocation writes a minimal skeleton and opens `$EDITOR`; subsequent invocations just open the existing file. `--print` outputs the current file without spawning the editor |
 | `status` | Show the status of code intelligence + ATOS scaffold (founded? current phase?) |
-| `refresh` | Re-export the SCIP call graph |
+| `refresh [--rebuild-index]` | Re-export the SCIP call graph. Auto-rebuilds the LanceDB corpus index when the on-disk meta is stale (missing `_corpus_meta.json`, or `embedding_dimensions == 768` from the legacy zero-vector code-index path); otherwise keeps LanceDB work fast by skipping it. `--rebuild-index` forces a full LanceDB rebuild even when the meta looks current. |
 | `serve` | Start a lightweight MCP server (no model required) |
 | `install-hooks` | Upgrade (or install) the post-commit hook |
 | `found [--design <path>] [--orchestrate]` | Default: four-stage founding conversation; writes `.sovereign/CHARTER.md` and `PHASES.md`, records answers as `decision` notes. Stage-1/Stage-2 predicates are signal-gated against `DesignSignals` extracted from `DESIGN.md`. `--orchestrate`: require `DESIGN.md` + answered `OPEN_QUESTIONS.md` + `IMPLEMENTATION_PLAN.md` + `CHARTER.md`, skip the questionnaire, elicit only the Phase-1 stop condition, then flip the lifecycle |
@@ -98,7 +98,7 @@ Lower-level code-intelligence primitives. `project init` wraps these for the typ
 | `index <path>` | Index a local repository with tree-sitter |
 | `watch <corpus-id>` | Run a filesystem watcher that re-indexes on save |
 | `mcp-status` | Ping the local MCP server and list exposed tools |
-| `search <query>` | (placeholder — use Sovereign chat or MCP for now) |
+| `search <query>` | (placeholder — use `sovereign chat ask` or the MCP `code_search` tool for now) |
 
 ### `sovereign doctor`
 
@@ -153,6 +153,43 @@ Invoke the 24 sovereign code-intelligence tools directly from the shell. Same `T
 | `call <id> [--key=value ...]` | Invoke the tool. Flags become the JSON params object; `--format text\|json` picks output shape; write-effectful tools print an `[audit]` banner |
 
 Output is plain text by default, shaped for LLM consumption (fenced code blocks, markdown lists) — no JSON to parse. Agents running in a terminal can call these as primitives alongside `rg` / `cargo check`.
+
+### `sovereign chat`
+
+Terminal mirror of the desktop chat flow. Streams through the same `Runtime::handle_message_stream` path the Tauri app uses — same intent classification, same multi-source retrieval (conversation-history + folder corpora + `sep` + web), same conversation persistence — so a flailing chat case in the GUI can be reproduced and diagnosed at the command line. Talks to the daemon over HTTP (no in-process model load).
+
+Code corpora (`sovereign`, `commonwealth-ai`, `corpus-engine`, …) are filtered out of chat retrieval by default — they're served by the dedicated MCP code-intelligence tools. See `CorpusKind` in `corpus-engine/src/types.rs` for the classification.
+
+| Subcommand | Description |
+|---|---|
+| `ask "<question>" [--conversation <id>] [--format text\|json] [--show-reasoning]` | One-shot turn. Streams the answer to stdout; writes the provenance footer (searched corpora · latency · intent · backend) and numbered source list to stderr. `--format json` dumps the full message + metadata payload. |
+| `session [--conversation <id>] [--show-reasoning]` | Interactive REPL over a single persistent conversation id. Type `quit` / `exit` / Ctrl-D to end; blank lines are ignored. Follow-up turns inherit the conversation context. |
+| `inspect "<question>" [--limit <N>] [--corpus <id>] [--snippet <N>] [--format text\|json]` | **Diagnostic.** Runs the retrieval stage *without* the LLM. Prints the query embedding dims, every installed corpus with its kind/dims/model, and top-N hits per corpus with scores + snippets. Code corpora are annotated `[omitted from chat by default]` so you can see the potential hit without it polluting actual retrieval. Use when the model is quoting sources that don't match the question. |
+| `list [--limit <N>] [--offset <N>]` | List recent conversations from the state store. |
+| `show <conversation-id> [--show-reasoning]` | Dump a conversation's turns + persisted provenance + retrieved-chunks metadata. |
+
+#### Global flags
+
+Accepted by every subcommand:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--daemon <url>` | `http://localhost:<SetupConfig.daemon.client_port>` | Override the daemon base URL |
+| `--data-dir <path>` | `SetupConfig.data.dir` | State-store root (`sovereign.db` lives here) |
+| `--chat-model <id>` | `SetupConfig.models.primary` stem | Chat model id sent on every request |
+| `--embed-model <id>` | `SetupConfig.models.embed` stem | Embedding model id used for retrieval |
+
+Model ids default to the filename stems of the files the daemon actually loaded — `qwen-embedding-0.6b.gguf` → `qwen-embedding-0.6b`. This sidesteps a historical race where `/v1/models` advertised both a locally-loaded and a mesh-peer version of the same model under different ids and the CLI's first-match heuristic picked non-deterministically.
+
+#### Output conventions
+
+- **Answer text** streams to **stdout** chunk-by-chunk as the model produces it. `--format json` buffers the whole turn and prints one structured payload on completion.
+- **Provenance chrome** (the `─── conversation ───` banner, `Searched …` header, `--- sources (N) ---` footer, reasoning disclosure) writes to **stderr**. `chat ask "…" > answer.txt` captures just the answer.
+- `<think>…</think>` blocks are split out client-side (the desktop does the same split in `parse-message.ts`). Collapsed by default into a `▶ reasoning (N blocks, M chars)` handle; `--show-reasoning` prints each block as quoted lines.
+
+#### Daemon requirement
+
+The daemon at `localhost:9741` must be reachable — `chat` probes `/v1/models` on bootstrap and exits with a remediation hint (`Start it with sovereign daemon run, or pass --daemon <url>`) if the probe fails. Chat + embed + MCP tool calls all flow through the daemon's OpenAI-compatible surface; no model is loaded in-process.
 
 ### `sovereign enrich`
 
