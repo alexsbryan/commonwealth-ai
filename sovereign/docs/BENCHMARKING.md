@@ -135,6 +135,30 @@ Production `wikipedia` ingest on this config: **~42 chunks/s,
 effective 17K tok/s** (overlapped-batch amplification over the
 bench's single-decode rate).
 
+**Strix Halo (Radeon 8060S, gfx1151) — ROCm 7.2.1, HSA runtime 1.18**
+<br>*Model: Qwen3-Embedding-0.6B-Q8_0 (603 MB, 28 layers, 1024 dim)*
+<br>*llama-cpp-2 0.1.145 (`rocm` feature), sovereign commit dcf5c1c, 2026-04-24*
+
+| config | seqs | tok/seq | wall ms | seq/s | tok/s | notes |
+|---|---|---|---|---|---|---|
+| base          | 16 | 400 |   813 | 19.7 | 8,590 | |
+| half-work     | 16 | 200 |   392 | 40.8 | 8,790 | |
+| 2x-par-eq     | 32 | 200 |   789 | 40.6 | 8,750 | |
+| 2x-work       | 16 | 800 | 1,718 |  9.3 | 8,060 | no pinned-mem cliff |
+| big-ctx       | 32 | 400 | 1,645 | 19.5 | 8,515 | no pinned-mem cliff |
+
+Peak observed: **~8,790 tok/s**. ~12% of the theoretical fp16 ceiling
+(75K tok/s) — nearly identical utilisation to Vulkan for sub-batches
+that stay under the Vulkan ~6,400-token pinned-mem cliff. The real
+ROCm win is shape-dependent: configs that Vulkan drops ~20% on
+(2x-work, big-ctx) run cliff-free on ROCm at 8,000–8,500 tok/s,
+18–23% faster wall-clock. At the current production `EmbedSlot` shape
+(16 × 400, ~6,400 total tokens), the two backends are within noise —
+the ROCm advantage only shows up if the batcher reshapes to use
+longer chunks or wider parallelism.
+
+Production `wikipedia` ingest on this config: *not yet measured — TODO.*
+
 ### Adding a new backend
 
 When you bench on a new backend, add a section with:
@@ -156,10 +180,12 @@ When you bench on a new backend, add a section with:
 - **Lower `n_ubatch`** (currently 2048 in both `EmbedSlot::load`
   and the bench). Dropping to 1024 or 512 might keep pinned-mem
   staging below the RADV limit for longer sub-batches.
-- **ROCm vs Vulkan on the same Strix Halo hardware.** kyuz0's
-  benchmarks suggest 20–40% compute-bound win for ROCm over
-  Vulkan on small models. Rerun this bench in a ROCm toolbox and
-  fill in the recorded-baselines section.
+- **ROCm vs Vulkan on the same Strix Halo hardware** — benched
+  2026-04-24 (see recorded-baselines above). Summary: no win at
+  the production batch shape, 18–23% win on configs that trigger
+  Vulkan's pinned-mem cliff. Still TODO: end-to-end
+  `wikipedia`-ingest chunks/s on ROCm to confirm the
+  overlapped-batch amplification carries over.
 - **Unified-memory-aware pinned allocation in upstream llama.cpp.**
   The `Failed to allocate pinned memory` message is avoidable on
   iGPU; worth an upstream issue.

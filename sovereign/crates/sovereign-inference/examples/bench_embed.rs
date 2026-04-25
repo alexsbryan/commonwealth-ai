@@ -96,7 +96,7 @@ fn main() {
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(NonZeroU32::new(args.n_ctx))
             .with_n_batch(args.n_ctx)
-            .with_n_ubatch(2048)
+            .with_n_ubatch(args.n_ubatch)
             .with_n_seq_max(args.n_seq_max)
             .with_embeddings(true)
             .with_pooling_type(LlamaPoolingType::Mean)
@@ -186,6 +186,7 @@ struct Args {
     model: PathBuf,
     thread_counts: Vec<usize>,
     n_ctx: u32,
+    n_ubatch: u32,
     n_seq_max: u32,
     seqs: usize,
     tokens_per_seq: usize,
@@ -199,6 +200,7 @@ impl Args {
         let mut model = None;
         let mut thread_counts = vec![1, 2, 4, 8, 12];
         let mut n_ctx = 16384u32;
+        let mut n_ubatch = 2048u32;
         let mut n_seq_max = 16u32;
         let mut seqs = 16usize;
         let mut tokens_per_seq = 400usize;
@@ -222,6 +224,10 @@ impl Args {
                 "--n-ctx" => {
                     i += 1;
                     n_ctx = raw[i].parse().unwrap_or(16384);
+                }
+                "--n-ubatch" => {
+                    i += 1;
+                    n_ubatch = raw[i].parse().unwrap_or(2048);
                 }
                 "--n-seq-max" => {
                     i += 1;
@@ -264,6 +270,7 @@ impl Args {
             model,
             thread_counts,
             n_ctx,
+            n_ubatch,
             n_seq_max,
             seqs,
             tokens_per_seq,
