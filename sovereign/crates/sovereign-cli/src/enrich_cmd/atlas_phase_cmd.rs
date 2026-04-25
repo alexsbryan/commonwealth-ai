@@ -245,6 +245,33 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
         std::io::stdout().flush().ok();
 
         let excerpts = render_excerpts(cluster, &sections);
+        // Defensive: if the cluster's refs don't resolve to any
+        // sketches we can render, skip rather than send an empty
+        // prompt to the LLM (which then either echoes the schema
+        // template or refuses outright — both end up as Phase 3
+        // failures that look like model-quality issues but are
+        // actually data plumbing). A non-empty refs list with empty
+        // excerpts means upstream id corruption — record as Skipped
+        // so the operator sees the signal instead of a parse error.
+        if excerpts.is_empty() {
+            println!(
+                "SKIP: cluster has no resolvable sketches ({} ref(s) but none looked up — likely upstream id mismatch)",
+                cluster.refs.len()
+            );
+            failures.push(PhaseFailure {
+                phase: PipelinePhase::AtlasNamedClusters,
+                subject: format!("cluster:{}:{}", cluster.facet.as_str(), cluster.id),
+                kind: PhaseFailureKind::Skipped,
+                reason: format!(
+                    "cluster {} has {} ref(s) but none resolved to sketches in the section map — \
+                     check Phase 1 section_id integrity",
+                    cluster.id,
+                    cluster.refs.len()
+                ),
+                raw_response_head: None,
+            });
+            continue;
+        }
         let query_text = excerpts
             .iter()
             .map(|e| e.content.as_str())
