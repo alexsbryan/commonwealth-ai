@@ -634,6 +634,17 @@ impl PhaseRunner {
                 question_count: parsed.questions.len(),
             });
 
+            // Stamp the runner-known chapter_id over whatever the model
+            // emitted as `section_id`. Models routinely truncate or
+            // mangle the section id (`sec_00`, `sec_002`, etc. instead
+            // of `sec_0001`); preserving those mangled ids cascades
+            // into Phase 2 cluster refs that don't resolve in Phase 3,
+            // producing empty clusters that fail naming. We always
+            // know which chapter we sent — trust that, not the echo.
+            let mut section_extraction = parsed.section_extraction;
+            if let Some(ref mut sx) = section_extraction {
+                sx.section_id = chapter.chapter_id.clone();
+            }
             extracted.push(ExtractedQuestion {
                 chapter_id: chapter.chapter_id.clone(),
                 questions: parsed.questions,
@@ -641,7 +652,7 @@ impl PhaseRunner {
                 thematic_carriers: parsed.thematic_carriers,
                 setting: parsed.setting,
                 plot: parsed.plot,
-                section_extraction: parsed.section_extraction,
+                section_extraction,
             });
         }
 

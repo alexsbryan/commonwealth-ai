@@ -443,11 +443,17 @@ impl Pipeline for LiteraryAtlasPipeline {
     ) -> Result<Phase3FacetParseResult> {
         let cleaned = prepare_phase_json(response, "phase 3 (atlas)")?;
 
+        // Accept arbitrary JSON values inside `metadata` because the
+        // per-facet prompts legitimately ask for arrays in some slots
+        // (e.g. `participants: ["entity_a", "entity_b"]` in the
+        // relation_state preamble). Flattening is centralised in
+        // `phase3_metadata_value_to_string` so every facet shares the
+        // same coercion rules — no facet-specific surprises.
         #[derive(serde::Deserialize)]
         struct Raw {
             label: Option<String>,
             #[serde(default)]
-            metadata: Option<std::collections::HashMap<String, Option<String>>>,
+            metadata: Option<std::collections::HashMap<String, serde_json::Value>>,
         }
         let raw: Raw = serde_json::from_str(&cleaned).map_err(|e| {
             Error::Serialization(format!("phase 3 (atlas) JSON parse error: {e}"))
@@ -466,11 +472,12 @@ impl Pipeline for LiteraryAtlasPipeline {
             .unwrap_or_default()
             .into_iter()
             .filter_map(|(k, v)| {
-                let v = v?.trim().to_string();
-                if v.is_empty() || is_placeholder_literal(&v) {
+                let s = phase3_metadata_value_to_string(v)?;
+                let s = s.trim().to_string();
+                if s.is_empty() || is_placeholder_literal(&s) {
                     None
                 } else {
-                    Some((k, v))
+                    Some((k, s))
                 }
             })
             .collect();
@@ -654,6 +661,39 @@ impl Pipeline for LiteraryAtlasPipeline {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
+
+/// Coerce a Phase 3 metadata value into a flat string for the
+/// `HashMap<String, String>` that downstream consumers expect.
+///
+/// Some per-facet preambles ask the model to emit arrays (e.g.
+/// `participants: ["entity_a", "entity_b"]` for relation-state
+/// trajectories). The downstream metadata bag is flat strings, so we
+/// flatten arrays by joining string elements with ", ". Other shapes
+/// are preserved by stringifying — better than dropping the slot
+/// entirely. Returns `None` only for explicit nulls so the parser's
+/// .filter_map drops them, matching the prior `Option<String>` shape.
+fn phase3_metadata_value_to_string(v: serde_json::Value) -> Option<String> {
+    use serde_json::Value;
+    match v {
+        Value::Null => None,
+        Value::String(s) => Some(s),
+        Value::Bool(b) => Some(b.to_string()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Array(items) => {
+            let parts: Vec<String> = items
+                .into_iter()
+                .filter_map(phase3_metadata_value_to_string)
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join(", "))
+            }
+        }
+        Value::Object(map) => serde_json::to_string(&Value::Object(map)).ok(),
+    }
+}
 
 /// Pick the first event description from the extraction to fill the
 /// legacy `plot` field. The atlas has richer event records; this is a
@@ -1647,6 +1687,30 @@ mod tests {
         let response = r#"{"label": ""}"#;
         let err = p.parse_phase3_facet(Facet::Claim, response).unwrap_err();
         assert!(format!("{err}").contains("label"));
+    }
+
+    #[test]
+    fn parse_phase3_facet_flattens_array_metadata_values() {
+        // The relation-state preamble explicitly asks for
+        // `participants: ["a", "b"]`. The downstream metadata bag is
+        // flat strings, so the parser flattens arrays by joining
+        // string elements with ", " — model can be schema-faithful
+        // without breaking the parser.
+        let p = LiteraryAtlasPipeline::new();
+        let response = r#"{
+          "label": "Frankfurt vs Fischer convergence on PAP rejection.",
+          "metadata": {
+            "participants": ["Harry Frankfurt", "John Martin Fischer"],
+            "dynamic_type": "convergence"
+          }
+        }"#;
+        let parsed = p.parse_phase3_facet(Facet::RelationState, response).unwrap();
+        assert!(parsed.label.contains("Frankfurt"));
+        assert_eq!(
+            parsed.metadata.get("participants").unwrap(),
+            "Harry Frankfurt, John Martin Fischer"
+        );
+        assert_eq!(parsed.metadata.get("dynamic_type").unwrap(), "convergence");
     }
 
     #[test]
