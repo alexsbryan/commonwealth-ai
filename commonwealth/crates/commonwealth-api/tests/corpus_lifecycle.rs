@@ -84,7 +84,22 @@ fn fast_mock_embed_fn() -> corpus_engine::types::EmbedFn {
 /// return the recipe dir + source path. The recipe uses the `jsonl`
 /// extractor + `paragraph` chunker so 500 docs produce ≈ 500 chunks
 /// at a small `max_chars`.
-fn seed_fixture(dir: &std::path::Path, corpus_id: &str, doc_count: usize) -> (PathBuf, PathBuf) {
+///
+/// `mesh_sharing` controls whether the recipe opts into distributed
+/// share-the-index gossip. License-restricted corpora (Stanford
+/// Encyclopedia of Philosophy, etc.) ship with `false`; default
+/// builtin corpora ship with `true`. The lifecycle install/pause/
+/// cancel paths don't branch on this flag (they go through
+/// `spawn_corpus_install` → `engine.ingest`, which is mesh-agnostic),
+/// so existing tests work for both values; carrying the param makes
+/// future tests of `corpus_collaborate` peer-filtering and the
+/// auto-ingest gossip path possible without forking the fixture.
+fn seed_fixture(
+    dir: &std::path::Path,
+    corpus_id: &str,
+    doc_count: usize,
+    mesh_sharing: bool,
+) -> (PathBuf, PathBuf) {
     let recipes_dir = dir.join("recipes");
     std::fs::create_dir_all(&recipes_dir).unwrap();
 
@@ -113,7 +128,7 @@ id = "{corpus_id}"
 name = "Test Corpus"
 description = "Integration-test fixture"
 license = "MIT"
-mesh_sharing = true
+mesh_sharing = {mesh_sharing}
 size_compressed_gb = 0.0
 size_indexed_gb = 0.0
 
@@ -227,6 +242,12 @@ struct CancelResp {
 }
 
 #[derive(serde::Deserialize, Debug)]
+#[allow(dead_code)] // cancel_signalled is racy; retained for Debug format only.
+struct PauseResp {
+    cancel_signalled: bool,
+}
+
+#[derive(serde::Deserialize, Debug)]
 #[allow(dead_code)] // Most fields carried for Debug-format panics only.
 struct StatusEntry {
     corpus_id: String,
@@ -302,7 +323,7 @@ async fn install_cancel_reinstall_lifecycle() {
     let tmp = TempDir::new().unwrap();
     let corpus_id = "testcorpus";
 
-    seed_fixture(tmp.path(), corpus_id, 600);
+    seed_fixture(tmp.path(), corpus_id, 600, true);
 
     // ── Phase 1: install with slow embed so cancel has room to land ──
     let state = test_state(&tmp, slow_mock_embed_fn());
@@ -376,11 +397,28 @@ async fn install_cancel_reinstall_lifecycle() {
         "entry should carry the latest IngestProgress event once one has landed"
     );
 
-    // ── Phase 2: cancel + wipe ──────────────────────────────────────
-    let (status, body) = post_json(
+    // ── Phase 2a: cancel without confirm_wipe must be rejected ──────
+    // The endpoint is destructive; missing confirm is a 400 with a
+    // pointer to /pause for the non-destructive variant. This is the
+    // guardrail introduced after an accidental wipe of weeks of
+    // ingest work.
+    let (status, _body) = post_json(
         internal_router(state.clone()),
         "/internal/corpus/cancel",
         &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "cancel without confirm_wipe must be rejected"
+    );
+
+    // ── Phase 2b: cancel + wipe (with explicit confirm) ─────────────
+    let (status, body) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/cancel",
+        &serde_json::json!({ "corpus_id": corpus_id, "confirm_wipe": true }),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "cancel returned non-OK: {:?}", String::from_utf8_lossy(&body));
@@ -461,6 +499,130 @@ async fn install_cancel_reinstall_lifecycle() {
             .map(|arr| arr.is_empty())
             .unwrap_or(false),
         "canonical meta should have no processed_shards entries"
+    );
+}
+
+/// Companion to [`install_cancel_reinstall_lifecycle`] — verifies the
+/// non-destructive `/internal/corpus/pause` route stops an in-flight
+/// ingest cleanly while leaving on-disk state intact, and that a
+/// subsequent `/internal/corpus/install` resumes rather than starting
+/// over.
+///
+/// This is the regression guard for the accidental-wipe incident:
+/// before pause existed, the only way to stop an ingest was a route
+/// that destroyed every committed chunk on the way out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn install_pause_resume_lifecycle() {
+    let tmp = TempDir::new().unwrap();
+    let corpus_id = "pausetest";
+
+    seed_fixture(tmp.path(), corpus_id, 600, true);
+
+    // ── Phase 1: install with slow embed so pause has room to land ──
+    let state = test_state(&tmp, slow_mock_embed_fn());
+    let partition_dir = tmp
+        .path()
+        .join("indexes")
+        .join(format!("{corpus_id}-partition-node-test"));
+    let canonical_dir = tmp.path().join("indexes").join(corpus_id);
+
+    let (status, _body) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/install",
+        &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "install returned non-OK");
+
+    wait_until_progress(
+        &state,
+        |snap| snap.progress.contains_key(corpus_id),
+        Duration::from_secs(10),
+        "ingest progress visible",
+    )
+    .await;
+    assert!(
+        partition_dir.exists(),
+        "partition dir should exist while ingest is running"
+    );
+
+    // ── Phase 2: pause — must NOT wipe ──────────────────────────────
+    let (status, body) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/pause",
+        &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "pause returned non-OK: {:?}",
+        String::from_utf8_lossy(&body)
+    );
+    let _pause_resp: PauseResp = serde_json::from_slice(&body).unwrap();
+
+    // /pause synchronously waits up to 5 s for the ingest task to clear
+    // out of `active_ingests` before returning, so by the time we're
+    // here the task has exited (or hit that ceiling and logged a warn).
+    // The whole point of pause: data must survive.
+    assert!(
+        partition_dir.exists(),
+        "pause must NOT wipe the partition dir — that's the regression we're guarding"
+    );
+    assert!(
+        partition_dir.join("_corpus_meta.json").exists(),
+        "pause must preserve _corpus_meta.json so resume works"
+    );
+    assert!(
+        state
+            .inner
+            .active_ingests
+            .read()
+            .await
+            .get(corpus_id)
+            .is_none(),
+        "active_ingests should be cleared after pause"
+    );
+    assert!(
+        state
+            .inner
+            .corpus_progress
+            .read()
+            .await
+            .get(corpus_id)
+            .is_none(),
+        "corpus_progress should be cleared after pause"
+    );
+
+    // ── Phase 3: resume by re-installing with a fast embed ──────────
+    // A fresh state with the fast embed lets the resumed ingest finish
+    // promptly. The committed_iter_pos written before pause means the
+    // loop skips past already-committed docs rather than re-embedding
+    // from zero.
+    let state = test_state(&tmp, fast_mock_embed_fn());
+    let (status, _body) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/install",
+        &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "resume install returned non-OK");
+
+    wait_until_filesystem(
+        || canonical_dir.join("_corpus_meta.json").exists() && !partition_dir.exists(),
+        Duration::from_secs(30),
+        "resumed ingest finalised to canonical",
+    )
+    .await;
+
+    let meta: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(canonical_dir.join("_corpus_meta.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        meta["ingestion_in_progress"],
+        serde_json::Value::Bool(false),
+        "canonical meta must not be left in-progress after resume"
     );
 }
 

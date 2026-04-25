@@ -1485,7 +1485,103 @@ pub struct ProgressSnapshotResponse {
     pub progress: std::collections::HashMap<String, corpus_engine::IngestProgress>,
 }
 
-/// POST /internal/corpus/cancel — user-initiated cancel + wipe.
+/// Signal the corpus's cancellation flag and wait (bounded) for the
+/// in-flight ingest task to exit. Shared between `/pause` and `/cancel`
+/// — both want a clean stop before they decide what to do with on-disk
+/// state.
+///
+/// Returns whether a live task was actually signalled. After this
+/// helper returns the corpus is no longer in `active_ingests` (or the
+/// 5 s ceiling was hit and we've logged a warning).
+async fn stop_in_flight_ingest(
+    state: &AppState,
+    engine: &corpus_engine::CorpusEngine,
+    corpus_id: &str,
+) -> bool {
+    let cancelled = engine.cancel_corpus_ingest(corpus_id);
+
+    // Bounded poll until the spawn clears from active_ingests. We do
+    // this via polling rather than a notify because active_ingests is
+    // mutated from multiple task sites (collaborate spawn, peer
+    // partition spawn, future install command) — a single Notify would
+    // need to be fired from every one of them and we'd miss races.
+    // 5 s is generous: the ingest loop polls cancel between each doc
+    // and between every tier-2 flush (~60 s of work max), but each
+    // individual doc takes milliseconds, so the loop exits promptly
+    // in practice. The wait only hits the ceiling when cancel is
+    // fired during a slow embed call that can't be interrupted.
+    if cancelled {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let still_active = state.inner.active_ingests.read().await.contains(corpus_id);
+            if !still_active {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    "stop_in_flight_ingest: task did not exit within 5s"
+                );
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    }
+
+    // Drop the progress entry so polling clients see "not_installed"
+    // on their next tick instead of a stale final-embedding frame.
+    state.inner.corpus_progress.write().await.remove(corpus_id);
+
+    cancelled
+}
+
+/// POST /internal/corpus/pause — non-destructive stop.
+///
+/// Signals the corpus's cancellation flag and waits for the in-flight
+/// ingest task to exit cleanly, but **does not** wipe on-disk state.
+/// `_corpus_meta.json` keeps its `committed_iter_pos`; chunks.lance
+/// keeps every flushed shard. To resume, POST /internal/corpus/install
+/// again — the loop reads existing meta and skips past committed docs.
+///
+/// This is the safe default for "user clicked Cancel during an
+/// in-progress ingest." For the destructive variant (delete everything
+/// for this corpus on this node), see /internal/corpus/cancel.
+///
+/// Returns 200 even when no ingest is active — useful for idempotent
+/// "make sure nothing is running" calls.
+pub async fn corpus_pause(
+    State(state): State<AppState>,
+    Json(req): Json<CancelRequest>,
+) -> Result<Json<PauseResponse>, (StatusCode, Json<ErrorBody>)> {
+    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: "no corpus engine available on this node".into(),
+            }),
+        )
+    })?;
+
+    let cancelled = stop_in_flight_ingest(&state, engine, &req.corpus_id).await;
+
+    tracing::info!(
+        corpus = %req.corpus_id,
+        cancel_signalled = cancelled,
+        "corpus_pause: ingest stopped, on-disk state preserved"
+    );
+
+    Ok(Json(PauseResponse {
+        cancel_signalled: cancelled,
+    }))
+}
+
+/// POST /internal/corpus/cancel — destructive stop + wipe.
+///
+/// Requires `confirm_wipe: true` in the request body. Without it the
+/// route returns 400 — the prior implicit-wipe behaviour caused
+/// accidental loss of weeks of ingest work and the explicit confirm
+/// is the guardrail against repeating that. For a non-destructive
+/// stop, POST /internal/corpus/pause instead.
 ///
 /// Flow:
 ///   1. Fire the corpus's cancellation flag via the engine's registry.
@@ -1509,6 +1605,18 @@ pub async fn corpus_cancel(
     State(state): State<AppState>,
     Json(req): Json<CancelRequest>,
 ) -> Result<Json<CancelResponse>, (StatusCode, Json<ErrorBody>)> {
+    if !req.confirm_wipe.unwrap_or(false) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: "/internal/corpus/cancel is destructive and requires \
+                    `confirm_wipe: true`. To stop without wiping, use \
+                    /internal/corpus/pause instead."
+                    .into(),
+            }),
+        ));
+    }
+
     let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1518,49 +1626,7 @@ pub async fn corpus_cancel(
         )
     })?;
 
-    let cancelled = engine.cancel_corpus_ingest(&req.corpus_id);
-
-    // Bounded poll until the spawn clears from active_ingests. We do
-    // this via polling rather than a notify because active_ingests is
-    // mutated from multiple task sites (collaborate spawn, peer
-    // partition spawn, future install command) — a single Notify would
-    // need to be fired from every one of them and we'd miss races.
-    // 5 s is generous: the ingest loop polls cancel between each doc
-    // and between every tier-2 flush (~60 s of work max), but each
-    // individual doc takes milliseconds, so the loop exits promptly
-    // in practice. The wait only hits the ceiling when cancel is
-    // fired during a slow embed call that can't be interrupted.
-    if cancelled {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        loop {
-            let still_active = state
-                .inner
-                .active_ingests
-                .read()
-                .await
-                .contains(&req.corpus_id);
-            if !still_active {
-                break;
-            }
-            if std::time::Instant::now() >= deadline {
-                tracing::warn!(
-                    corpus = %req.corpus_id,
-                    "corpus_cancel: ingest task did not exit within 5s — wiping anyway"
-                );
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-    }
-
-    // Drop the progress entry so polling clients see "not_installed"
-    // on their next tick instead of a stale final-embedding frame.
-    state
-        .inner
-        .corpus_progress
-        .write()
-        .await
-        .remove(&req.corpus_id);
+    let cancelled = stop_in_flight_ingest(&state, engine, &req.corpus_id).await;
 
     // Wipe canonical + every partition-* sibling for this corpus.
     if let Err(e) = engine.remove_corpus_everything(&req.corpus_id) {
@@ -1592,6 +1658,12 @@ pub async fn corpus_cancel(
 #[derive(Debug, Deserialize)]
 pub struct CancelRequest {
     pub corpus_id: String,
+    /// Required for `/internal/corpus/cancel` to perform the destructive
+    /// wipe. Ignored by `/internal/corpus/pause`. Optional in the wire
+    /// format so missing-field errors surface as a 400 with a helpful
+    /// message rather than a generic deserialisation error.
+    #[serde(default)]
+    pub confirm_wipe: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1602,6 +1674,13 @@ pub struct CancelResponse {
     pub cancel_signalled: bool,
     /// True when the on-disk wipe completed without error.
     pub wiped: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PauseResponse {
+    /// True when a live ingest task for this corpus existed and was
+    /// signalled to stop. False when no task was running (idempotent).
+    pub cancel_signalled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

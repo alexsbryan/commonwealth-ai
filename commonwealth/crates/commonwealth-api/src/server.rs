@@ -99,6 +99,10 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::corpus_cancel),
         )
         .route(
+            "/internal/corpus/pause",
+            post(routes_internal::corpus_pause),
+        )
+        .route(
             "/internal/corpus/install",
             post(routes_internal::corpus_install),
         )
