@@ -336,7 +336,13 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     let mut toc: bool = false;
     let mut toc_start: Option<String> = None;
     let mut toc_end: Option<String> = None;
-    let mut max_output_tokens: u32 = 4096;
+    // Mirror config::default_max_output_tokens — long sections (SEP
+    // article introductions, brothers_karamazov chapter heads) regularly
+    // exceed 4096 tokens of thinking trace + JSON answer under Q5_K_S
+    // quantization, producing parse_drift failures the auto-retry can't
+    // recover. 16384 covers the long tail; operators on tight contexts
+    // override with --max-output-tokens.
+    let mut max_output_tokens: u32 = 16384;
     let mut dry_run = false;
     let mut force = false;
 
