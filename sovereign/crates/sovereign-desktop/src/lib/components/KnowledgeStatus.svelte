@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures } from "../api";
+  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures } from "../api";
   import { corpusProgressStore } from "../stores/corpusProgress.svelte";
   import type { CorpusEntry, CorpusHealthDetail } from "../types";
 
@@ -108,6 +108,15 @@
       await refresh();
     } catch (e) {
       console.error("Remove failed:", e);
+    }
+  }
+
+  async function handlePause(id: string) {
+    try {
+      await pauseCorpus(id);
+      await refresh();
+    } catch (e) {
+      console.error("Pause failed:", e);
     }
   }
 
@@ -337,20 +346,22 @@
               <span class="status-text">Working…</span>
             {/if}
             <!--
-              Cancel and Remove both route through `removeCorpus`, which
-              POSTs `/internal/corpus/cancel` on the local daemon. That
-              endpoint fires the ingest's cancellation flag, waits for
-              the task to exit cleanly, then wipes the canonical
-              directory AND every `<corpus>-partition-*` sibling. No
-              separate "restart" affordance — the new flow is cancel →
-              click Install again.
+              In-progress "Pause" calls `pauseCorpus` → daemon
+              `/internal/corpus/pause`, which signals the ingest's
+              cancellation flag and waits for the task to exit cleanly
+              but does NOT wipe on-disk state. Committed chunks and
+              `_corpus_meta.json` are preserved so clicking Install
+              again resumes from the last flush. The destructive
+              variant ("Remove") only appears once a corpus is
+              installed; that path goes through `removeCorpus` →
+              `/internal/corpus/cancel` with `confirm_wipe: true`.
             -->
             <button
               class="action-btn cancel"
-              onclick={() => handleRemove(corpus.id)}
-              title="Stop this ingest and delete any partial data on this machine"
+              onclick={() => handlePause(corpus.id)}
+              title="Stop this ingest. Committed data is kept so you can resume by clicking Install again."
             >
-              Cancel
+              Pause
             </button>
           </div>
         {:else}

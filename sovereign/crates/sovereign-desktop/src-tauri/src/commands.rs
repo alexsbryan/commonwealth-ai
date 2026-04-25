@@ -2824,12 +2824,16 @@ struct CorpusStatusEntry {
     estimated_total_articles: Option<u64>,
 }
 
-/// Cancel (and wipe) a corpus on this node via the daemon.
+/// Remove (wipe) a corpus on this node via the daemon. Destructive —
+/// deletes canonical + every partition-* sibling dir for `corpus_id`.
 ///
 /// Replaces the old direct `engine.remove_index` call — that path
 /// ignored in-flight ingest tasks and left `<corpus>-partition-*/`
 /// dirs on disk. The daemon route handles both (signal cancel, await
-/// task exit, wipe canonical + every partition sibling).
+/// task exit, wipe canonical + every partition sibling). The
+/// `confirm_wipe: true` body field is the daemon-side guardrail
+/// against accidental wipes; this command is the explicit "remove"
+/// surface so it always passes it.
 #[tauri::command]
 pub async fn remove_corpus(
     state: State<'_, Arc<AppState>>,
@@ -2843,7 +2847,10 @@ pub async fn remove_corpus(
     let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/cancel");
     let resp = client
         .post(&url)
-        .json(&serde_json::json!({ "corpus_id": corpus_id }))
+        .json(&serde_json::json!({
+            "corpus_id": corpus_id,
+            "confirm_wipe": true,
+        }))
         .send()
         .await
         .map_err(|e| format!("POST /internal/corpus/cancel: {e}"))?;
@@ -2856,6 +2863,46 @@ pub async fn remove_corpus(
     }
 
     // Clear any stale progress entry so the UI returns to "not_installed".
+    if let Ok(mut map) = state.install_progress.try_write() {
+        map.remove(&corpus_id);
+    }
+    Ok(())
+}
+
+/// Pause an in-progress corpus ingest on this node via the daemon.
+/// Non-destructive — committed chunks and `_corpus_meta.json` are kept
+/// so a subsequent `install_corpus` call resumes from the last flush.
+///
+/// This is what the UI's in-progress "Cancel" button calls. The
+/// destructive variant lives behind the `Remove` action on installed
+/// corpora and goes through `remove_corpus` above.
+#[tauri::command]
+pub async fn pause_corpus(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/pause");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "corpus_id": corpus_id }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/corpus/pause: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/corpus/pause returned {status}: {body}"
+        ));
+    }
+
+    // Clear the in-memory progress entry so the UI immediately reflects
+    // "stopped". On-disk state is intact — `install_corpus` resumes.
     if let Ok(mut map) = state.install_progress.try_write() {
         map.remove(&corpus_id);
     }

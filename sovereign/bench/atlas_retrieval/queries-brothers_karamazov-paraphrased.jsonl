@@ -1,0 +1,563 @@
+{"query": "Who is Pyotr Alexandrovich Mi\u00fcsov?", "class": "entity.identity", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "Describe Pyotr Alexandrovich Mi\u00fcsov's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "Thinking Process:", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "Which character is described as: Liberal freethinker from the forties, atheist lawyer with ongoing lawsuit against monastery?", "class": "entity.description", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0008"}
+{"query": "Who is Shakespeare's Oph\u00e9lia?", "class": "entity.identity", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "Describe Shakespeare's Oph\u00e9lia's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "The user wants me to rewrite a question about Shakespeare's Ophelia into two distinct natural research-style phrasings that a reader of Dostoevsky's \"Brothers Karamazov\" might ask.", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "Which character is described as: Referenced as comparison for a young lady who drowned to satisfy caprice?", "class": "entity.description", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0006"}
+{"query": "Who is Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v?", "class": "entity.identity", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "Describe Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "Thinking Process:", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "Which character is described as: Eldest brother living apart at the other end of town, temperamental but respectful toward Zossima?", "class": "entity.description", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "The user wants me to rewrite a question about \"Brothers Karamazov\" into 2 distinct natural research-style phrasings. The original question asks: \"Which character is described as: Eldest brother living apart at the other end of town, temperamental but respectful toward Zossima?\"", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0003"}
+{"query": "Who is Sofya Ivanovna?", "class": "entity.identity", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "Describe Sofya Ivanovna's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "The user wants me to rewrite the question \"Describe Sofya Ivanovna's role in the story\" into two distinct natural research-style phrasings that a reader of *Brothers Karamazov* might actually ask.", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "Which character is described as: Fyodor's innocent second wife from another province, exploited for her meek appearance?", "class": "entity.description", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0009"}
+{"query": "Who is The general's widow?", "class": "entity.identity", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "The user wants me to rewrite the question \"Who is The general's widow?\" into 2 distinct natural research-style phrasings that a reader of Dostoevsky's *Brothers Karamazov* might actually ask.", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "Describe The general's widow's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "Thinking Process:", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "Which character is described as: Sofya\u2019s benefactress and tormentor who raised the orphan, later avenges her?", "class": "entity.description", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0010"}
+{"query": "Who is Grigory?", "class": "entity.identity", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "Describe Grigory's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "Thinking Process:", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "Which character is described as: A long-serving servant of Fyodor Pavlovi\u010d who aged considerably and looked after him almost like a tutor?", "class": "entity.description", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "entity-0007"}
+{"query": "Who is Zossima?", "class": "entity.identity", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "Describe Zossima's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "The user wants me to rewrite the question \"Describe Zossima's role in the story\" into 2 distinct natural research-style phrasings that a reader of Dostoevsky's *Brothers Karamazov* might actually ask.", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "Which character is described as: Sixty-five-year-old dying monk from a landowner family, former Caucasus officer, possessing intuitive knowledge of visit?", "class": "entity.description", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "entity-0012"}
+{"query": "Who is Iv\u00e1n Fy\u00f3dori\u010d K\u00e1raz\u00f2v?", "class": "entity.identity", "relevant_sections": ["sec_0001"], "source_id": "entity-0004"}
+{"query": "Who is the philosophical archetype of intellectual nihilism represented by Ivan Fy\u00f3dorovich K\u00e1ramazov in Dostoyevsky's masterpiece? In what ways does Ivan Karam\u00e1zov embody the crisis of faith and rationalist skepticism that defines his role as one of three brothers at the novel\u2019s center?", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0004"}
+{"query": "Describe Iv\u00e1n Fy\u00f3dori\u010d K\u00e1raz\u00f2v's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0001"], "source_id": "entity-0004"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0004"}
+{"query": "The user wants me to rewrite the question \"Describe Iv\u00e1n Fy\u00f3dori\u010d K\u00e1raz\u00f2v's role in the story\" into 2 distinct natural research-style phrasings that a reader of *Brothers Karamazov* might actually ask.", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0004"}
+{"query": "Which character is described as: Middle brother, educated atheist who looks curiously at Alyosha but shows indifference and contempt?", "class": "entity.description", "relevant_sections": ["sec_0001"], "source_id": "entity-0004"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0004"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0004"}
+{"query": "Who is Adela\u00efd\u00e1 Iv\u00e1novn\u00e1 Mi\u00fcsova?", "class": "entity.identity", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "How does the figure of Adela\u00efd\u00e1 Iv\u00e1novn\u00e1 Mi\u00fcsova function within Dostoevsky's exploration of familial obligation and moral corruption in Brothers Karamazov?", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "In what ways does Adela\u00efd\u00e9 Iv\u00e1novna Mi\u00fcs\u00f6va embody the tragic intersection of maternal instinct, social marginalization, and patriarchal repression as depicted by Fyodor Mikhailovich?", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "Describe Adela\u00efd\u00e1 Iv\u00e1novn\u00e1 Mi\u00fcsova's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "Thinking Process:", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "Which character is described as: Fyodor Pavlovitch's second wife, a beautiful and vigorous noblewoman who thrashed him?", "class": "entity.description", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "The user wants me to rewrite a specific question into 2 distinct natural research-style phrasings that a reader of Dostoevsky's *Brothers Karamazov* might actually ask. The original question asks about which character is described as Fyodor Pavlovitch's second wife, who was beautiful and vigorous noblewoman who thrashed him (beat him).", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0005"}
+{"query": "Who is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v?", "class": "entity.identity", "relevant_sections": ["sec_0001"], "source_id": "entity-0001"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0001"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0001"}
+{"query": "Describe Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0001"], "source_id": "entity-0001"}
+{"query": "In what capacity does Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v function within Dostoevsky's narrative architecture? How is the moral trajectory of Prince Dmitri's brother articulated through his specific contributions to the novel's unfolding events?", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0001"}
+{"query": "Which character is described as: Nineteen-year-old novice with red cheeks and dark gray eyes, a realist who believes because he desires truth rather than?", "class": "entity.description", "relevant_sections": ["sec_0001"], "source_id": "entity-0001"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0001"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0001"}
+{"query": "Who is Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v?", "class": "entity.identity", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "Describe Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "Thinking Process:", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "Which character is described as: Wealthy landowner father who suggests the family meet at Zossima as a joke but with serious intent?", "class": "entity.description", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "entity-0002"}
+{"query": "Who is Yefim Petrovich Polenov?", "class": "entity.identity", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "<think>", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "Thinking Process:", "class": "entity.identity.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "Describe Yefim Petrovich Polenov's role in the story.", "class": "entity.role", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "<think>", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "Thinking Process:", "class": "entity.role.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "Which character is described as: A benefactor and patron whose household Alyosha entered as a child, later dying leaving his widow to travel to Italy?", "class": "entity.description", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "<think>", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "Thinking Process:", "class": "entity.description.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "entity-0011"}
+{"query": "What happens when Fy\u00f3d\u00f4r K\u00e1raz\u00f4v dies thirteen years before narrative present, death described in future as 'proper place'.?", "class": "event.what", "relevant_sections": ["sec_0001"], "source_id": "event-0001"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0001"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0001"}
+{"query": "Describe the scene where Fy\u00f3d\u00f4r K\u00e1raz\u00f4v dies thirteen years before narrative present, death described in future as 'proper place'.", "class": "event.where", "relevant_sections": ["sec_0001"], "source_id": "event-0001"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0001"}
+{"query": "The user wants me to rewrite a question about Dostoevsky's \"Brothers Karamazov\" into 2 distinct natural research-style phrasings. The original question asks: \"Describe the scene where Fy\u00f3d\u00f4r K\u00e1raz\u00f4v dies thirteen years before narrative present, death described in future as 'proper place'.\"", "class": "event.where.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0001"}
+{"query": "What happens when Adela\u00efd\u00e9 Mi\u00fcsov\u00e9 commits suicide by drowning herself into a river to satisfy her caprice.?", "class": "event.what", "relevant_sections": ["sec_0001"], "source_id": "event-0002"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0002"}
+{"query": "The user wants me to rewrite a question about Adela\u00efd\u00e9 Mi\u00fcsov\u00e9's suicide in Dostoevsky's *Brothers Karamazov* into two distinct natural research-style phrasings.", "class": "event.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0002"}
+{"query": "Describe the scene where Adela\u00efd\u00e9 Mi\u00fcsov\u00e9 commits suicide by drowning herself into a river to satisfy her caprice.", "class": "event.where", "relevant_sections": ["sec_0001"], "source_id": "event-0002"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0002"}
+{"query": "The user wants me to rewrite the given question into 2 distinct natural research-style phrasings that a reader of Brothers Karamazov might actually ask. The original question is: \"Describe the scene where Adela\u00efd\u00e9 Mi\u00fcsov\u00e9 commits suicide by drowning herself into a river to satisfy her caprice.\"", "class": "event.where.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0002"}
+{"query": "What happens when Fy\u00f3d\u00f4r K\u00e1ar\u00e1z\u00f2v hears wife died in Petersburg while drunk; shouts joy then weeps.?", "class": "event.what", "relevant_sections": ["sec_0001"], "source_id": "event-0003"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0003"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0003"}
+{"query": "Describe the scene where Fy\u00f3d\u00f4r K\u00e1ar\u00e1z\u00f2v hears wife died in Petersburg while drunk; shouts joy then weeps.", "class": "event.where", "relevant_sections": ["sec_0001"], "source_id": "event-0003"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0003"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "event-0003"}
+{"query": "What happens when Baby Mitya is left in servant Grigory's cottage for nearly a year while family abandons him.?", "class": "event.what", "relevant_sections": ["sec_0002"], "source_id": "event-0004"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0004"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0004"}
+{"query": "Describe the scene where Baby Mitya is left in servant Grigory's cottage for nearly a year while family abandons him.", "class": "event.where", "relevant_sections": ["sec_0002"], "source_id": "event-0004"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0004"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0004"}
+{"query": "What happens when Pyotr Mi\u00fasov returns from Paris to intervene and secure custody of Mitya as joint guardian.?", "class": "event.what", "relevant_sections": ["sec_0002"], "source_id": "event-0005"}
+{"query": "Upon his return from Paris, how does Pyotr Mi\u00fasov's intervention to secure joint guardianship over Mitya unfold within the novel? In what way does Mi\u00farov's post-Paris arrival enable him to intervene and establish himself as a co-guardian for Mitya?", "class": "event.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0005"}
+{"query": "Describe the scene where Pyotr Mi\u00fasov returns from Paris to intervene and secure custody of Mitya as joint guardian.", "class": "event.where", "relevant_sections": ["sec_0002"], "source_id": "event-0005"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0005"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0005"}
+{"query": "What happens when Mitya reaches age of majority and visits father expecting property settlement, only to discover financial ruin.?", "class": "event.what", "relevant_sections": ["sec_0002"], "source_id": "event-0006"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0006"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0006"}
+{"query": "Describe the scene where Mitya reaches age of majority and visits father expecting property settlement, only to discover financial ruin.", "class": "event.where", "relevant_sections": ["sec_0002"], "source_id": "event-0006"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0006"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "event-0006"}
+{"query": "What happens when The general's widow slaps, shakes, then kidnaps the two orphan boys from Fyodor\u2019s house after eight years of silence.?", "class": "event.what", "relevant_sections": ["sec_0003"], "source_id": "event-0007"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0007"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0007"}
+{"query": "Describe the scene where The general's widow slaps, shakes, then kidnaps the two orphan boys from Fyodor\u2019s house after eight years of silence.", "class": "event.where", "relevant_sections": ["sec_0003"], "source_id": "event-0007"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0007"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0007"}
+{"query": "What happens when Yefim Pol\u00e9nov receives the will and assumes guardianship of both boys, keeping their inheritance intact.?", "class": "event.what", "relevant_sections": ["sec_0003"], "source_id": "event-0008"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0008"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0008"}
+{"query": "Describe the scene where Yefim Pol\u00e9nov receives the will and assumes guardianship of both boys, keeping their inheritance intact.", "class": "event.where", "relevant_sections": ["sec_0003"], "source_id": "event-0008"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0008"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0008"}
+{"query": "What happens when Iv\u00e1n enters Moscow gymnasium and later publishes a controversial article on ecclesial courts as university student.?", "class": "event.what", "relevant_sections": ["sec_0003"], "source_id": "event-0009"}
+{"query": "How does Iv\u00e1n's immersion in Moscow gymnasium and his subsequent publication of a controversial article on ecclesial courts as a university student shape his development? In what ways do Iv\u00e1n's experiences at the Moscow gymnasium influence him before he later publishes that contentious piece about church courts while still attending university?", "class": "event.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0009"}
+{"query": "Describe the scene where Iv\u00e1n enters Moscow gymnasium and later publishes a controversial article on ecclesial courts as university student.", "class": "event.where", "relevant_sections": ["sec_0003"], "source_id": "event-0009"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0009"}
+{"query": "The user wants me to rewrite a specific question about Dostoevsky's \"Brothers Karamazov\" into 2 distinct natural research-style phrasings that a reader of the novel might actually ask.", "class": "event.where.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0009"}
+{"query": "What happens when Mi\u00fcsov visits the town and meets Iv\u00e1n, recognizing his intellectual superiority despite their different backgrounds.?", "class": "event.what", "relevant_sections": ["sec_0003"], "source_id": "event-0010"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0010"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0010"}
+{"query": "Describe the scene where Mi\u00fcsov visits the town and meets Iv\u00e1n, recognizing his intellectual superiority despite their different backgrounds.", "class": "event.where", "relevant_sections": ["sec_0003"], "source_id": "event-0010"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0010"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "event-0010"}
+{"query": "What happens when Alyosha arrives at his father's house, which he finds to be a sink of filthy debauchery, and withdraws silently without contempt or condemna?", "class": "event.what", "relevant_sections": ["sec_0004"], "source_id": "event-0011"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0011"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0011"}
+{"query": "Describe the scene where Alyosha arrives at his father's house, which he finds to be a sink of filthy debauchery, and withdraws silently without contempt or condemna", "class": "event.where", "relevant_sections": ["sec_0004"], "source_id": "event-0011"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0011"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0011"}
+{"query": "What happens when Grigory erects a cast-iron tombstone on Alyosha mother's grave at his own initiative after Fyodor had abandoned the memory.?", "class": "event.what", "relevant_sections": ["sec_0004"], "source_id": "event-0012"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0012"}
+{"query": "The user wants me to rewrite a specific question about *Brothers Karamazov* into 2 distinct natural research-style phrasings. The original question is: \"What happens when Grigory erects a cast-iron tombstone on Alyosha mother's grave at his own initiative after Fyodor had abandoned the memory.\"", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0012"}
+{"query": "Describe the scene where Grigory erects a cast-iron tombstone on Alyosha mother's grave at his own initiative after Fyodor had abandoned the memory.", "class": "event.where", "relevant_sections": ["sec_0004"], "source_id": "event-0012"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0012"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0012"}
+{"query": "What happens when Alyosha announces to his father that he wants to enter the monastery as a novice, explaining this is his strong desire.?", "class": "event.what", "relevant_sections": ["sec_0004"], "source_id": "event-0013"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0013"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0013"}
+{"query": "Describe the scene where Alyosha announces to his father that he wants to enter the monastery as a novice, explaining this is his strong desire.", "class": "event.where", "relevant_sections": ["sec_0004"], "source_id": "event-0013"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0013"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0013"}
+{"query": "What happens when Fyodor gives Alyosha two thousand roubles as a dowry for entering monastic life and promises to pay what is wanted if needed.?", "class": "event.what", "relevant_sections": ["sec_0004"], "source_id": "event-0014"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0014"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0014"}
+{"query": "Describe the scene where Fyodor gives Alyosha two thousand roubles as a dowry for entering monastic life and promises to pay what is wanted if needed.", "class": "event.where", "relevant_sections": ["sec_0004"], "source_id": "event-0014"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0014"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0014"}
+{"query": "What happens when Alyosha visits his mother's tomb in the cemetery, listening solemnly to Grigory's account of its erection without uttering a word.?", "class": "event.what", "relevant_sections": ["sec_0004"], "source_id": "event-0015"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0015"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0015"}
+{"query": "Describe the scene where Alyosha visits his mother's tomb in the cemetery, listening solemnly to Grigory's account of its erection without uttering a word.", "class": "event.where", "relevant_sections": ["sec_0004"], "source_id": "event-0015"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0015"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "event-0015"}
+{"query": "What happens when The three brothers and Pyotr Mi\u00fasov gather in Elder Z\u00f3ss\u00edm\u00e1's cell for a conciliatory meeting prompted by Fydor Pavlovic.?", "class": "event.what", "relevant_sections": ["sec_0006"], "source_id": "event-0016"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "event-0016"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "event-0016"}
+{"query": "Describe the scene where The three brothers and Pyotr Mi\u00fasov gather in Elder Z\u00f3ss\u00edm\u00e1's cell for a conciliatory meeting prompted by Fydor Pavlovic.", "class": "event.where", "relevant_sections": ["sec_0006"], "source_id": "event-0016"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "event-0016"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "event-0016"}
+{"query": "What happens when Alyosh\u00e1 sends word through a friend to Dmitr\u00ed expressing love and expecting him to keep his promise regarding the meeting.?", "class": "event.what", "relevant_sections": ["sec_0006"], "source_id": "event-0017"}
+{"query": "<think>", "class": "event.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "event-0017"}
+{"query": "Thinking Process:", "class": "event.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "event-0017"}
+{"query": "Describe the scene where Alyosh\u00e1 sends word through a friend to Dmitr\u00ed expressing love and expecting him to keep his promise regarding the meeting.", "class": "event.where", "relevant_sections": ["sec_0006"], "source_id": "event-0017"}
+{"query": "<think>", "class": "event.where.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "event-0017"}
+{"query": "Thinking Process:", "class": "event.where.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "event-0017"}
+{"query": "How is Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v Senseless fantastical type capable of managing worldly affairs while remaining spiritually vacant.?", "class": "state.character", "relevant_sections": ["sec_0001"], "source_id": "state-0001"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0001"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0001"}
+{"query": "What is Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0001"], "source_id": "state-0001"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0001"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0001"}
+{"query": "How is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v Narrative frame subject positioned as future object of tracing.?", "class": "state.character", "relevant_sections": ["sec_0001"], "source_id": "state-0002"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0002"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0002"}
+{"query": "What is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0001"], "source_id": "state-0002"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0002"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0002"}
+{"query": "How is Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v Irregular youth who believes in property rights until age of majority reveals nothing remains.?", "class": "state.character", "relevant_sections": ["sec_0002"], "source_id": "state-0003"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0003"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0003"}
+{"query": "What is Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0002"], "source_id": "state-0003"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0003"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0003"}
+{"query": "How is Pyotr Alexandrovich Mi\u00fcsov Enlightened liberal whose revolutionary memories eclipse his paternal duty to Mitya.?", "class": "state.character", "relevant_sections": ["sec_0002"], "source_id": "state-0004"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0004"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0004"}
+{"query": "What is Pyotr Alexandrovich Mi\u00fcsov's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0002"], "source_id": "state-0004"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0004"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0004"}
+{"query": "How is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v Early lover of humanity with inner preoccupation and implicit trust in people, yet never judging or condemning others.?", "class": "state.character", "relevant_sections": ["sec_0004"], "source_id": "state-0005"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0005"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0005"}
+{"query": "What is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0004"], "source_id": "state-0005"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0005"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0005"}
+{"query": "How is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v Wild fanatical modesty and chastity that made him endure insults in silence without abuse or retaliation.?", "class": "state.character", "relevant_sections": ["sec_0004"], "source_id": "state-0006"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0006"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0006"}
+{"query": "What is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0004"], "source_id": "state-0006"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0006"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0006"}
+{"query": "How is Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v Prematurely aged, insolent and effronter drunkard who suddenly felt something awaken in his soul when Alyosha arrived.?", "class": "state.character", "relevant_sections": ["sec_0004"], "source_id": "state-0007"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0007"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0007"}
+{"query": "What is Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0004"], "source_id": "state-0007"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0007"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0007"}
+{"query": "How is Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v Sentimental and wicked drunkard capable of blubbering tears while discussing his own damnation with hooks in hell.?", "class": "state.character", "relevant_sections": ["sec_0004"], "source_id": "state-0008"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0008"}
+{"query": "The user wants me to rewrite a question about Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v from Dostoevsky's \"Brothers Karamazov\" into 2 distinct natural research-style phrasings.", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0008"}
+{"query": "What is Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0004"], "source_id": "state-0008"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0008"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0008"}
+{"query": "How is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v Deep inner ecstasy burning in his heart regarding Zossima, mixed with anxiety about the approaching family gathering and embarrassment at Ivan's indifference.?", "class": "state.character", "relevant_sections": ["sec_0006"], "source_id": "state-0009"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0009"}
+{"query": "The user wants me to rewrite a given question into 2 distinct natural research-style phrasings that a reader of Brothers Karamazov might actually ask. The key constraints are:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0009"}
+{"query": "What is Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0006"], "source_id": "state-0009"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0009"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0009"}
+{"query": "How is Zossima Dying from weakness yet retaining extraordinary spiritual power; intuitive knowing what visitors want before speaking, gay despite illness.?", "class": "state.character", "relevant_sections": ["sec_0006"], "source_id": "state-0010"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0010"}
+{"query": "The user wants me to rewrite a question about Father Zossima from Dostoevsky's \"Brothers Karamazov\" into 2 distinct natural research-style phrasings that a reader might actually ask.", "class": "state.character.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0010"}
+{"query": "What is Zossima's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0006"], "source_id": "state-0010"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0010"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0010"}
+{"query": "How is First marriage \u2014 elopement without mutual love; parasitic husband vs vigorous heiress. Disorderly marriage \u2014 wife's contempt and generosity contrast husband's greediness; she leaves with student leaving Dmitri behind.?", "class": "state.character", "relevant_sections": ["sec_0001"], "source_id": "state-0011"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0011"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0011"}
+{"query": "What is First marriage \u2014 elopement without mutual love; parasitic husband vs vigorous heiress.'s emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0001"], "source_id": "state-0011"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0011"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0011"}
+{"query": "How is Father-son \u2014 eldest son from first marriage, left in husband's hands after mother fled. Abandonment \u2014 father receives three-year-old son after wife flees with lover; later introduces harem.?", "class": "state.character", "relevant_sections": ["sec_0001"], "source_id": "state-0012"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0012"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0012"}
+{"query": "What is Father-son \u2014 eldest son from first marriage, left in husband's hands after mother fled.'s emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0001"], "source_id": "state-0012"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0012"}
+{"query": "The user wants me to rewrite a specific question about Dostoevsky's \"Brothers Karamazov\" into 2 distinct natural research-style phrasings.", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "state-0012"}
+{"query": "How is Unnamed relation between Pyotr Mi\u00fcsovs \u00d7 Fyodor Kar\u00e1mazov Cousin's intervention transforms contempt for father into joint guardianship.?", "class": "state.character", "relevant_sections": ["sec_0002"], "source_id": "state-0013"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0013"}
+{"query": "The user wants me to rewrite a given question into 2 distinct natural research-style phrasings that a reader of Dostoevsky's *Brothers Karamazov* might actually ask.", "class": "state.character.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0013"}
+{"query": "What is Unnamed relation between Pyotr Mi\u00fcsovs \u00d7 Fyodor Kar\u00e1mazov's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0002"], "source_id": "state-0013"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0013"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0013"}
+{"query": "How is Unnamed relation between Pyotr Mi\u00fcssov \u00d7 Dmitri KARAM\u00c1ZOV Custodial relationship dissolves when Pyotr forgets the boy during revolutionary fervor.?", "class": "state.character", "relevant_sections": ["sec_0002"], "source_id": "state-0014"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0014"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0014"}
+{"query": "What is Unnamed relation between Pyotr Mi\u00fcssov \u00d7 Dmitri KARAM\u00c1ZOV's emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0002"], "source_id": "state-0014"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0014"}
+{"query": "The user wants me to rewrite a question about Dostoevsky's *Brothers Karamazov* into two distinct natural research-style phrasings that someone reading the novel might actually ask. The original question is: \"What is Unnamed relation between Pyotr Mi\u00fcssov \u00d7 Dmitri KARAM\u00c1ZOV's emotional state in this scene?\"", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "state-0014"}
+{"query": "How is Father-son dynamic where the drunkard father suddenly feels affection and sees his son as someone who has not condemned him. Father's drunken confession of fear about hell without hooks and hope that his son will pray for him.?", "class": "state.character", "relevant_sections": ["sec_0004"], "source_id": "state-0015"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0015"}
+{"query": "Thinking Process:", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0015"}
+{"query": "What is Father-son dynamic where the drunkard father suddenly feels affection and sees his son as someone who has not condemned him.'s emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0004"], "source_id": "state-0015"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0015"}
+{"query": "The user wants me to rewrite a specific question about Dostoevsky's *Brothers Karamazov* into 2 distinct natural research-style phrasings. The original question is: \"What is Father-son dynamic where the drunkard father suddenly feels affection and sees his son as someone who has not condemned him.'s emotional state in this scene?\"", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0015"}
+{"query": "How is Father-son dynamic where the drunkard father suddenly feels affection and sees his son as someone who has not condemned him. Father's sentimental blubbering while acknowledging Alyosha is the only creature who has not judged him.?", "class": "state.character", "relevant_sections": ["sec_0004"], "source_id": "state-0016"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0016"}
+{"query": "The user wants me to rewrite a specific question about the father-son dynamic in *Brothers Karamazov* into two distinct natural research-style phrasings. The original question asks: \"How is Father-son dynamic where the drunkard father suddenly feels affection and sees his son as someone who has not condemned him. Father's sentimental blubbering while acknowledging Alyosha is the only creature who has not judged him?\"", "class": "state.character.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0016"}
+{"query": "What is Father-son dynamic where the drunkard father suddenly feels affection and sees his son as someone who has not condemned him.'s emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0004"], "source_id": "state-0016"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0016"}
+{"query": "Thinking Process:", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "state-0016"}
+{"query": "How is Devotion of a young novice to an extraordinary elder monk who became the ideal escape for his soul. Intense anticipation of the family gathering; Alyosha trembles for Z\u00f3ss\u00edma's glory and dreads any affront from Mi\u00fasov or Iv\u00e1n.?", "class": "state.character", "relevant_sections": ["sec_0006"], "source_id": "state-0017"}
+{"query": "<think>", "class": "state.character.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0017"}
+{"query": "The user wants me to rewrite a question into 2 distinct natural research-style phrasings that a reader of Brothers Karamazov might actually ask.", "class": "state.character.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0017"}
+{"query": "What is Devotion of a young novice to an extraordinary elder monk who became the ideal escape for his soul.'s emotional state in this scene?", "class": "state.emotional", "relevant_sections": ["sec_0006"], "source_id": "state-0017"}
+{"query": "<think>", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0017"}
+{"query": "The user wants me to rewrite a question about *Brothers Karamazov* into two distinct natural research-style phrasings. The original question is: \"What is Devotion of a young novice to an extraordinary elder monk who became the ideal escape for his soul.'s emotional state in this scene?\"", "class": "state.emotional.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "state-0017"}
+{"query": "What is the relationship between Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v and Adela\u00efd\u00e1 Iv\u00e1novn\u00e1 Mi\u00fcsova?", "class": "relation.pair", "relevant_sections": ["sec_0001"], "source_id": "relation-0001"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "relation-0001"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "relation-0001"}
+{"query": "How are Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v and Adela\u00efd\u00e1 Iv\u00e1novn\u00e1 Mi\u00fcsova connected? (First marriage \u2014 elopement without mutual love; parasitic husband vs vigorous heiress.)", "class": "relation.labeled", "relevant_sections": ["sec_0001"], "source_id": "relation-0001"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "relation-0001"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "relation-0001"}
+{"query": "What is the relationship between Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v and Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v?", "class": "relation.pair", "relevant_sections": ["sec_0001"], "source_id": "relation-0002"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "relation-0002"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "relation-0002"}
+{"query": "How are Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v and Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v connected? (Father-son \u2014 eldest son from first marriage, left in husband's hands after mother fled.)", "class": "relation.labeled", "relevant_sections": ["sec_0001"], "source_id": "relation-0002"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "relation-0002"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "relation-0002"}
+{"query": "What is the relationship between Grigory and Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v?", "class": "relation.pair", "relevant_sections": ["sec_0002"], "source_id": "relation-0003"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0003"}
+{"query": "The user wants me to rewrite a question about the relationship between Grigory and Dmitri Fyodorovich Karamazov from \"Brothers Karamazof\" into 2 distinct natural research-style phrasings that someone reading Dostoevsky might actually ask.", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0003"}
+{"query": "How are Grigory and Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v connected? (Caretaker bond where servant becomes sole guardian of infant son.)", "class": "relation.labeled", "relevant_sections": ["sec_0002"], "source_id": "relation-0003"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0003"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0003"}
+{"query": "What is the relationship between Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v and Sofya Ivanovna?", "class": "relation.pair", "relevant_sections": ["sec_0003"], "source_id": "relation-0004"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0004"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0004"}
+{"query": "How are Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v and Sofya Ivanovna connected? (Exploitative marriage \u2014 virtuous orphan meets vicious profligate without dowry.)", "class": "relation.labeled", "relevant_sections": ["sec_0003"], "source_id": "relation-0004"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0004"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0004"}
+{"query": "What is the relationship between The general's widow and Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v?", "class": "relation.pair", "relevant_sections": ["sec_0003"], "source_id": "relation-0005"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0005"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0005"}
+{"query": "How are The general's widow and Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v connected? (Hostile creditor-creditor dynamic that shifts to pragmatic guardianship after death.)", "class": "relation.labeled", "relevant_sections": ["sec_0003"], "source_id": "relation-0005"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0005"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0005"}
+{"query": "What is the relationship between Yefim Petrovich Polenov and Iv\u00e1n Fy\u00f3dori\u010d K\u00e1raz\u00f2v?", "class": "relation.pair", "relevant_sections": ["sec_0003"], "source_id": "relation-0006"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0006"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0006"}
+{"query": "How are Yefim Petrovich Polenov and Iv\u00e1n Fy\u00f3dori\u010d K\u00e1raz\u00f2v connected? (Mentor-mentee \u2014 generous guardian captivated by boy's genius.)", "class": "relation.labeled", "relevant_sections": ["sec_0003"], "source_id": "relation-0006"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0006"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "relation-0006"}
+{"query": "What is the relationship between Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v and Zossima?", "class": "relation.pair", "relevant_sections": ["sec_0004"], "source_id": "relation-0007"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0007"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0007"}
+{"query": "How are Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v and Zossima connected? (Devotion of a young novice to an extraordinary elder monk who became the ideal escape for his soul.)", "class": "relation.labeled", "relevant_sections": ["sec_0004"], "source_id": "relation-0007"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0007"}
+{"query": "The user wants me to rewrite a question about the connection between Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v and Zossima in Dostoevsky's \"Brothers Karymazov\" into 2 distinct natural research-style phrasings.", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0007"}
+{"query": "What is the relationship between Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v and Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v?", "class": "relation.pair", "relevant_sections": ["sec_0004"], "source_id": "relation-0008"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0008"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0008"}
+{"query": "How are Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v and Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v connected? (Father-son dynamic where the drunkard father suddenly feels affection and sees his son as someone who has not condemned him.)", "class": "relation.labeled", "relevant_sections": ["sec_0004"], "source_id": "relation-0008"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0008"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0008"}
+{"query": "What is the relationship between Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v and Grigory?", "class": "relation.pair", "relevant_sections": ["sec_0004"], "source_id": "relation-0009"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0009"}
+{"query": "The user wants me to rewrite a question about the relationship between Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v and Grigory from Dostoevsky's \"Brothers Karamazov\" into 2 distinct natural research-style phrasings.", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0009"}
+{"query": "How are Alexei Fyodor\u00f3vi\u010d Karam\u00e1z\u00f2v and Grigory connected? (Servant-master bond where Grigory erected a tombstone for Alyosha's mother at his own expense.)", "class": "relation.labeled", "relevant_sections": ["sec_0004"], "source_id": "relation-0009"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0009"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "relation-0009"}
+{"query": "What is the relationship between Pyotr Alexandrovich Mi\u00fcsov and Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v?", "class": "relation.pair", "relevant_sections": ["sec_0002"], "source_id": "relation-0010"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0010"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0010"}
+{"query": "How are Pyotr Alexandrovich Mi\u00fcsov and Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v connected? (Unnamed relation between Pyotr Mi\u00fcsovs \u00d7 Fyodor Kar\u00e1mazov)", "class": "relation.labeled", "relevant_sections": ["sec_0002"], "source_id": "relation-0010"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0010"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0010"}
+{"query": "What is the relationship between Pyotr Alexandrovich Mi\u00fcsov and Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v?", "class": "relation.pair", "relevant_sections": ["sec_0002"], "source_id": "relation-0011"}
+{"query": "<think>", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0011"}
+{"query": "Thinking Process:", "class": "relation.pair.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0011"}
+{"query": "How are Pyotr Alexandrovich Mi\u00fcsov and Dmitr\u00ed Fy\u00f3doro\u010di\u010d Kar\u00e1maz\u00f2v connected? (Unnamed relation between Pyotr Mi\u00fcssov \u00d7 Dmitri KARAM\u00c1ZOV)", "class": "relation.labeled", "relevant_sections": ["sec_0002"], "source_id": "relation-0011"}
+{"query": "<think>", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0011"}
+{"query": "Thinking Process:", "class": "relation.labeled.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "relation-0011"}
+{"query": "What is argued about: Senselessness is a distinct national form, not mere stupidity; fantastical fellows are often shrewd and intelligent.?", "class": "claim.what", "relevant_sections": ["sec_0001"], "source_id": "claim-0001"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0001"}
+{"query": "The user wants me to rewrite a given question into 2 distinct natural research-style phrasings that a reader of Brothers Karamazov might actually ask. The original question is: \"What is argued about: Senselessness is a distinct national form, not mere stupidity; fantastical fellows are often shrewd and intelligent.\"", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0001"}
+{"query": "Is the claim valid: Senselessness is a distinct national form, not mere stupidity; fantastical fellows are often shrewd and intelligent.", "class": "claim.valid", "relevant_sections": ["sec_0001"], "source_id": "claim-0001"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0001"}
+{"query": "The user wants me to rewrite a specific question into 2 distinct natural research-style phrasings that someone reading \"Brothers Karamazov\" might actually ask.", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0001"}
+{"query": "What is argued about: Adela\u00efad\u00e1 Mi\u00fcsov's suicide was an echo of other people's ideas and due to irritation from lack of mental freedom.?", "class": "claim.what", "relevant_sections": ["sec_0001"], "source_id": "claim-0002"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0002"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0002"}
+{"query": "Is the claim valid: Adela\u00efad\u00e1 Mi\u00fcsov's suicide was an echo of other people's ideas and due to irritation from lack of mental freedom.", "class": "claim.valid", "relevant_sections": ["sec_0001"], "source_id": "claim-0002"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0002"}
+{"query": "The user wants me to rewrite a specific question about Adela\u00efad\u00e1 Mi\u00fcsov's suicide from Dostoevsky's \"Brothers Karamazov\" into 2 distinct natural research-style phrasings. The answer should remain the same (i.e., validating or examining whether her death was an echo of others' ideas and caused by irritation/lack of mental freedom).", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0002"}
+{"query": "What is argued about: Mutual love did not exist between Fy\u00f3d\u00f3r and Adala\u00efd\u00e1 despite her beauty.?", "class": "claim.what", "relevant_sections": ["sec_0001"], "source_id": "claim-0003"}
+{"query": "How does Dostoevsky characterize the absence of mutual affection between Fy\u00f3d\u00f3r and Adala\u00efd\u00e1 in light of her physical attractiveness? In what way does the text suggest that beauty alone cannot generate reciprocal love within their relationship?", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0003"}
+{"query": "Is the claim valid: Mutual love did not exist between Fy\u00f3d\u00f3r and Adala\u00efd\u00e1 despite her beauty.", "class": "claim.valid", "relevant_sections": ["sec_0001"], "source_id": "claim-0003"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0003"}
+{"query": "The user wants me to rewrite a specific question into 2 distinct natural research-style phrasings that someone reading Dostoevsky's \"Brothers Karamazov\" might actually ask.", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0003"}
+{"query": "What is argued about: People are more na\u00efve and simple-hearted than we suppose; even the wicked.?", "class": "claim.what", "relevant_sections": ["sec_0001"], "source_id": "claim-0004"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0004"}
+{"query": "The user wants me to rewrite a specific question into 2 distinct natural research-style phrasings that a reader of Brothers Karamazov might actually ask. The original question is: \"What is argued about: People are more na\u00efve and simple-hearted than we suppose; even the wicked?\"", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0004"}
+{"query": "Is the claim valid: People are more na\u00efve and simple-hearted than we suppose; even the wicked.", "class": "claim.valid", "relevant_sections": ["sec_0001"], "source_id": "claim-0004"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0004"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "claim-0004"}
+{"query": "What is argued about: A man who forgets his child is not acting from malice but simply forgetting.?", "class": "claim.what", "relevant_sections": ["sec_0002"], "source_id": "claim-0005"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0005"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0005"}
+{"query": "Is the claim valid: A man who forgets his child is not acting from malice but simply forgetting.", "class": "claim.valid", "relevant_sections": ["sec_0002"], "source_id": "claim-0005"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0005"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0005"}
+{"query": "What is argued about: The eldest son Dmitri grew up with the false belief that he would inherit property.?", "class": "claim.what", "relevant_sections": ["sec_0002"], "source_id": "claim-0006"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0006"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0006"}
+{"query": "Is the claim valid: The eldest son Dmitri grew up with the false belief that he would inherit property.", "class": "claim.valid", "relevant_sections": ["sec_0002"], "source_id": "claim-0006"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0006"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0006"}
+{"query": "What is argued about: Fyodor's financial manipulation exploits Dmitri's naive belief in property rights.?", "class": "claim.what", "relevant_sections": ["sec_0002"], "source_id": "claim-0007"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0007"}
+{"query": "The user wants me to rewrite a given question into 2 distinct natural research-style phrasings that a reader of Dostoevsky's *Brothers Karamazov* might actually ask. The original question is: \"What is argued about: Fyodor's financial manipulation exploits Dmitri's naive belief in property rights.\"", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0007"}
+{"query": "Is the claim valid: Fyodor's financial manipulation exploits Dmitri's naive belief in property rights.", "class": "claim.valid", "relevant_sections": ["sec_0002"], "source_id": "claim-0007"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0007"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0007"}
+{"query": "What is argued about: Revolutionary events can eclipse personal obligations and memory.?", "class": "claim.what", "relevant_sections": ["sec_0002"], "source_id": "claim-0008"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0008"}
+{"query": "The user wants me to rewrite the question \"What is argued about: Revolutionary events can eclipse personal obligations and memory?\" into 2 distinct natural research-style phrasings that a reader of Dostoevsky's *Brothers Karamazov* might actually ask.", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0008"}
+{"query": "Is the claim valid: Revolutionary events can eclipse personal obligations and memory.", "class": "claim.valid", "relevant_sections": ["sec_0002"], "source_id": "claim-0008"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0008"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "claim-0008"}
+{"query": "What is argued about: A vicious profligate can be attracted by innocent appearance rather than coarser feminine beauty.?", "class": "claim.what", "relevant_sections": ["sec_0003"], "source_id": "claim-0009"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0009"}
+{"query": "The user wants me to rewrite a question into 2 distinct natural research-style phrasings that someone reading Dostoevsky's \"Brothers Karamazov\" might actually ask.", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0009"}
+{"query": "Is the claim valid: A vicious profligate can be attracted by innocent appearance rather than coarser feminine beauty.", "class": "claim.valid", "relevant_sections": ["sec_0003"], "source_id": "claim-0009"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0009"}
+{"query": "The user wants me to rewrite a question about Dostoevsky's *Brothers Karamazov* into two distinct natural research-style phrasings. The original question asks whether it is valid that \"A vicious profligate can be attracted by innocent appearance rather than coarser feminine beauty.\"", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0009"}
+{"query": "What is argued about: The general\u2019s widow will exact revenge for the insult done to her by Sofya.?", "class": "claim.what", "relevant_sections": ["sec_0003"], "source_id": "claim-0010"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0010"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0010"}
+{"query": "Is the claim valid: The general\u2019s widow will exact revenge for the insult done to her by Sofya.", "class": "claim.valid", "relevant_sections": ["sec_0003"], "source_id": "claim-0010"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0010"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0010"}
+{"query": "What is argued about: Iv\u00e1n\u2019s article on ecclestial courts attracted secularists and atheists despite Church party approval.?", "class": "claim.what", "relevant_sections": ["sec_0003"], "source_id": "claim-0011"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0011"}
+{"query": "The user wants me to rewrite a question about Dostoevsky's \"Brothers Karamazov\" into two distinct natural research-style phrasings that a reader of the book might actually ask.", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0011"}
+{"query": "Is the claim valid: Iv\u00e1n\u2019s article on ecclestial courts attracted secularists and atheists despite Church party approval.", "class": "claim.valid", "relevant_sections": ["sec_0003"], "source_id": "claim-0011"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0011"}
+{"query": "The user wants me to rewrite a specific question about Dostoevsky's *Brothers Karamazov* into two distinct natural research-style phrasings.", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0011"}
+{"query": "What is argued about: Iv\u00e1n has no taste for drink and dissipation despite his father\u2019s need.?", "class": "claim.what", "relevant_sections": ["sec_0003"], "source_id": "claim-0012"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0012"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0012"}
+{"query": "Is the claim valid: Iv\u00e1n has no taste for drink and dissipation despite his father\u2019s need.", "class": "claim.valid", "relevant_sections": ["sec_0003"], "source_id": "claim-0012"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0012"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "claim-0012"}
+{"query": "What is argued about: A single man in possession of good fortune is universally acknowledged as the rightful property of some family's daughter.?", "class": "claim.what", "relevant_sections": ["sec_0004"], "source_id": "claim-0013"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0013"}
+{"query": "The user wants me to rewrite a question into 2 distinct natural research-style phrasings that a reader of Dostoevsky's *Brothers Karamazov* might actually ask. However, there's an issue here: the original question is asking about something from Jane Austen's *Pride and Prejudice*, not *Brothers Karamzov*.", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0013"}
+{"query": "Is the claim valid: A single man in possession of good fortune is universally acknowledged as the rightful property of some family's daughter.", "class": "claim.valid", "relevant_sections": ["sec_0004"], "source_id": "claim-0013"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0013"}
+{"query": "The user wants me to rewrite a question into 2 distinct natural research-style phrasings that a reader of Brothers Karamazov might actually ask. The original claim is: \"A single man in possession of good fortune is universally acknowledged as the rightful property of some family's daughter.\"", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0013"}
+{"query": "What is argued about: Alyoshas inner preoccupation is entirely personal and unconcerned with other people yet so important that he seems to forget others on account of it.?", "class": "claim.what", "relevant_sections": ["sec_0004"], "source_id": "claim-0014"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0014"}
+{"query": "The user wants me to rewrite a question about Dostoevsky's *Brothers Karamazov* (specifically regarding Alyosha) into two distinct natural research-style phrasings. The answer should remain the same conceptually \u2014 that there is an argument or discussion about whether Alyosha\u2019s inner preoccupation is entirely personal/unconcerned with others yet so important he seems to forget them on account of it.", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0014"}
+{"query": "Is the claim valid: Alyoshas inner preoccupation is entirely personal and unconcerned with other people yet so important that he seems to forget others on account of it.", "class": "claim.valid", "relevant_sections": ["sec_0004"], "source_id": "claim-0014"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0014"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0014"}
+{"query": "What is argued about: Alyoscha never regarded insults as affronts and this completely conquered and captivated the boys who mocked him.?", "class": "claim.what", "relevant_sections": ["sec_0004"], "source_id": "claim-0015"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0015"}
+{"query": "The user wants me to rewrite a given question into 2 distinct natural research-style phrasings that a reader of Brothers Karamazov might actually ask. The original question is: \"What is argued about: Alyoscha never regarded insults as affronts and this completely conquered and captivated the boys who mocked him.\"", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0015"}
+{"query": "Is the claim valid: Alyoscha never regarded insults as affronts and this completely conquered and captivated the boys who mocked him.", "class": "claim.valid", "relevant_sections": ["sec_0004"], "source_id": "claim-0015"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0015"}
+{"query": "The user wants me to rewrite a specific question into 2 distinct natural research-style phrasings that a reader of Dostoevsky's \"Brothers Karamazov\" might actually ask.", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0015"}
+{"query": "What is argued about: Alyoska would be fed and sheltered at once if left alone in an unknown town of a million inhabitants without a penny.?", "class": "claim.what", "relevant_sections": ["sec_0004"], "source_id": "claim-0016"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0016"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0016"}
+{"query": "Is the claim valid: Alyoska would be fed and sheltered at once if left alone in an unknown town of a million inhabitants without a penny.", "class": "claim.valid", "relevant_sections": ["sec_0004"], "source_id": "claim-0016"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0016"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0016"}
+{"query": "What is argued about: Alyoskha is one of those youths who would give away large fortune for good works or to a clever rogue if they came into possession.?", "class": "claim.what", "relevant_sections": ["sec_0004"], "source_id": "claim-0017"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0017"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0017"}
+{"query": "Is the claim valid: Alyoskha is one of those youths who would give away large fortune for good works or to a clever rogue if they came into possession.", "class": "claim.valid", "relevant_sections": ["sec_0004"], "source_id": "claim-0017"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0017"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0017"}
+{"query": "What is argued about: Fyodor Karamzov has developed a peculiar faculty for making and hoarding money during his time in Odessa.?", "class": "claim.what", "relevant_sections": ["sec_0004"], "source_id": "claim-0018"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0018"}
+{"query": "The user wants me to rewrite a question about Fyodor Karamazov's money-making abilities during his time in Odessa into 2 distinct natural research-style phrasings that a reader of Brothers Karamzov might actually ask.", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0018"}
+{"query": "Is the claim valid: Fyodor Karamzov has developed a peculiar faculty for making and hoarding money during his time in Odessa.", "class": "claim.valid", "relevant_sections": ["sec_0004"], "source_id": "claim-0018"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0018"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0018"}
+{"query": "What is argued about: Alyossha is like an angel and nothing touches him.?", "class": "claim.what", "relevant_sections": ["sec_0004"], "source_id": "claim-0019"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0019"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0019"}
+{"query": "Is the claim valid: Alyossha is like an angel and nothing touches him.", "class": "claim.valid", "relevant_sections": ["sec_0004"], "source_id": "claim-0019"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0019"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0019"}
+{"query": "What is argued about: Fyodor feels that Alyoskha has not condemned me and is the only one who will pray for his soul.?", "class": "claim.what", "relevant_sections": ["sec_0004"], "source_id": "claim-0020"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0020"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0020"}
+{"query": "Is the claim valid: Fyodor feels that Alyoskha has not condemned me and is the only one who will pray for his soul.", "class": "claim.valid", "relevant_sections": ["sec_0004"], "source_id": "claim-0020"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0020"}
+{"query": "The user wants me to rewrite a specific question about Brothers Karamazov into 2 distinct natural research-style phrasings. The original question is: \"Is the claim valid: Fyodor feels that Alyoskha has not condemned me and is the only one who will pray for his soul.\"", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "claim-0020"}
+{"query": "What is argued about: The genuine realist admits miracles only as facts of nature until then unrecognized by him.?", "class": "claim.what", "relevant_sections": ["sec_0006"], "source_id": "claim-0021"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0021"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0021"}
+{"query": "Is the claim valid: The genuine realist admits miracles only as facts of nature until then unrecognized by him.", "class": "claim.valid", "relevant_sections": ["sec_0006"], "source_id": "claim-0021"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0021"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0021"}
+{"query": "What is argued about: Faith does not spring from the miracle but the miracle from faith.?", "class": "claim.what", "relevant_sections": ["sec_0006"], "source_id": "claim-0022"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0022"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0022"}
+{"query": "Is the claim valid: Faith does not spring from the miracle but the miracle from faith.", "class": "claim.valid", "relevant_sections": ["sec_0006"], "source_id": "claim-0022"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0022"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0022"}
+{"query": "What is argued about: Socialism is before all things the atheistic question and the tower of Babel built without God.?", "class": "claim.what", "relevant_sections": ["sec_0006"], "source_id": "claim-0023"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0023"}
+{"query": "The user wants me to rewrite a specific question into 2 distinct natural research-style phrasings that would be appropriate for someone reading Dostoevsky's \"Brothers Karamazov\".", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0023"}
+{"query": "Is the claim valid: Socialism is before all things the atheistic question and the tower of Babel built without God.", "class": "claim.valid", "relevant_sections": ["sec_0006"], "source_id": "claim-0023"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0023"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0023"}
+{"query": "What is argued about: The institution of elders was established in the East from practice rather than theory.?", "class": "claim.what", "relevant_sections": ["sec_0006"], "source_id": "claim-0024"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0024"}
+{"query": "The user wants me to rewrite a given question into 2 distinct natural research-style phrasings that someone reading Dostoevsky's \"Brothers Karamazov\" might actually ask.", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0024"}
+{"query": "Is the claim valid: The institution of elders was established in the East from practice rather than theory.", "class": "claim.valid", "relevant_sections": ["sec_0006"], "source_id": "claim-0024"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0024"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0024"}
+{"query": "What is argued about: The elder Z\u00f3ssim\u00e1 carries the secret of renewal for all and will establish truth upon earth.?", "class": "claim.what", "relevant_sections": ["sec_0006"], "source_id": "claim-0025"}
+{"query": "<think>", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0025"}
+{"query": "Thinking Process:", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0025"}
+{"query": "Is the claim valid: The elder Z\u00f3ssim\u00e1 carries the secret of renewal for all and will establish truth upon earth.", "class": "claim.valid", "relevant_sections": ["sec_0006"], "source_id": "claim-0025"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0025"}
+{"query": "The user wants me to rewrite a specific question about Father Zosima from Dostoevsky's *Brothers Karamazov* into two distinct natural research-style phrasings that a reader might actually ask.", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0025"}
+{"query": "What is argued about: The true Kingdom of Christ will come when all men are holy and love one another.?", "class": "claim.what", "relevant_sections": ["sec_0006"], "source_id": "claim-0026"}
+{"query": "In what sense does the text argue that Christ's true Kingdom is contingent upon universal holiness and mutual love? How does the argument establish that these moral conditions are necessary for the arrival of Christ's Kingdom in its authentic form?", "class": "claim.what.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0026"}
+{"query": "Is the claim valid: The true Kingdom of Christ will come when all men are holy and love one another.", "class": "claim.valid", "relevant_sections": ["sec_0006"], "source_id": "claim-0026"}
+{"query": "<think>", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0026"}
+{"query": "Thinking Process:", "class": "claim.valid.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "claim-0026"}
+{"query": "What does the senseless type reveal about national character and spiritual vacancy?", "class": "question.verbatim", "relevant_sections": ["sec_0001"], "source_id": "question-0001"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "question-0001"}
+{"query": "The user wants me to rewrite a specific question about Dostoevsky's *Brothers Karamazov* into two distinct, natural research-style phrasings that someone reading the novel might actually ask.", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "question-0001"}
+{"query": "How do class distinctions and family despotism drive women to suicide in this generation?", "class": "question.verbatim", "relevant_sections": ["sec_0001"], "source_id": "question-0002"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "question-0002"}
+{"query": "Thinking Process:", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0001"], "source_id": "question-0002"}
+{"query": "What happens when a son discovers the father has systematically erased him from existence?", "class": "question.verbatim", "relevant_sections": ["sec_0002"], "source_id": "question-0003"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "question-0003"}
+{"query": "Thinking Process:", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "question-0003"}
+{"query": "How does financial abandonment prepare for catastrophe in family dynamics?", "class": "question.verbatim", "relevant_sections": ["sec_0002"], "source_id": "question-0004"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "question-0004"}
+{"query": "Thinking Process:", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0002"], "source_id": "question-0004"}
+{"query": "What motivates a proud intellectual like Iv\u00e1n to visit his infamous father and live with him?", "class": "question.verbatim", "relevant_sections": ["sec_0003"], "source_id": "question-0005"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "question-0005"}
+{"query": "Thinking Process:", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "question-0005"}
+{"query": "How will the general\u2019s widow\u2019s revenge reshape the family dynamics after eight years?", "class": "question.verbatim", "relevant_sections": ["sec_0003"], "source_id": "question-0006"}
+{"query": "How does the widow's eight-year vendetta reconfigure the familial equilibrium following General Karamazov's death? In what ways has the passage of eight years transformed the domestic architecture under the pressure of her retaliatory actions?", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0003"], "source_id": "question-0006"}
+{"query": "What does the appearance of wild fanatical modest and chastity in a schoolboy reveal about his character?", "class": "question.verbatim", "relevant_sections": ["sec_0004"], "source_id": "question-0007"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "question-0007"}
+{"query": "Thinking Process:", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "question-0007"}
+{"query": "Why did Fyodor suddenly feel something awaken when Alyoska arrived at his house?", "class": "question.verbatim", "relevant_sections": ["sec_0004"], "source_id": "question-0008"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "question-0008"}
+{"query": "The user wants me to rewrite the question \"Why did Fyodor suddenly feel something awaken when Alyoska arrived at his house?\" into 2 distinct natural research-style phrasings that a reader of Brothers Karamazov might actually ask.", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "question-0008"}
+{"query": "What justice is there in the world if devils drag people to hell with hooks but no ceiling exists for them to hang from?", "class": "question.verbatim", "relevant_sections": ["sec_0004"], "source_id": "question-0009"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "question-0009"}
+{"query": "The user is asking me to rewrite a specific question about \"Brothers Karamazov\" into two distinct natural research-style phrasings. The original question asks: \"What justice is there in the world if devils drag people to hell with hooks but no ceiling exists for them to hang from?\"", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "question-0009"}
+{"query": "What happens when a family with discordant members gathers under the influence of a dying saint?", "class": "question.verbatim", "relevant_sections": ["sec_0006"], "source_id": "question-0010"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "question-0010"}
+{"query": "Thinking Process:", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "question-0010"}
+{"query": "Can an atheist like Mi\u00fasov genuinely seek reconciliation through spiritual authority, or is his presence merely frivolous diversion?", "class": "question.verbatim", "relevant_sections": ["sec_0006"], "source_id": "question-0011"}
+{"query": "<think>", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "question-0011"}
+{"query": "Thinking Process:", "class": "question.verbatim.paraphrase", "relevant_sections": ["sec_0006"], "source_id": "question-0011"}
+{"query": "How do these views conflict about Fy\u00f3dor Pavl\u00f3vi\u010d Kar\u00e1maz\u00f2v: 'Fyodor feels that Alyoskha has not condemned me and is the only one who will pray for his soul.' vs 'Prematurely aged, insolent and effronter drunkard who suddenly felt something awaken in his soul whe'?", "class": "tension.pair", "relevant_sections": ["sec_0004"], "source_id": "tension:claim-0020\u2192state-0007"}
+{"query": "<think>", "class": "tension.pair.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "tension:claim-0020\u2192state-0007"}
+{"query": "Thinking Process:", "class": "tension.pair.paraphrase", "relevant_sections": ["sec_0004"], "source_id": "tension:claim-0020\u2192state-0007"}

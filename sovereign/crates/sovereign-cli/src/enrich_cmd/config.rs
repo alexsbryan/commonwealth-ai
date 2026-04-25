@@ -79,12 +79,15 @@ fn default_min_section_body_words() -> usize {
     40
 }
 
-/// Default per-request output cap. 4096 is enough for a full
-/// thinking trace plus a phase-1 JSON answer on all thinking
-/// models we've tested; operators with verbose models or small
-/// contexts tune in config.json.
+/// Default per-request output cap. 16384 covers a full thinking
+/// trace plus a phase-1 JSON answer on long sections (SEP article
+/// introductions, brothers_karamazov chapter heads). 4096 was the
+/// historical default but truncated mid-JSON on long inputs under
+/// Q5_K_S quantization, leaving Phase 1 with parse_drift failures
+/// the auto-retry could not recover. Operators on tight contexts
+/// tune lower per-corpus in config.json.
 fn default_max_output_tokens() -> u32 {
-    4096
+    16384
 }
 
 impl EnrichConfig {
