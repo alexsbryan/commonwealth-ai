@@ -121,11 +121,30 @@ pub async fn resolve_entities_and_events(
     sections: &[SectionExtraction],
     embed_fn: &EmbedFn,
 ) -> Result<ResolutionOutput> {
-    let entity_result = resolve_entities(sections, embed_fn).await?;
+    let mut entity_result = resolve_entities(sections, embed_fn).await?;
+    // Materialize Entity atoms for event participants the LLM named
+    // but never separately introduced. Indirect-evidence atoms get
+    // SYNTHESIZED_ENTITY_SALIENCE so a Phase 5 reader can tell them
+    // apart from primary extractions. This recovers the entity-graph
+    // backbone for cross-section attribution that would otherwise
+    // drop in `resolve_events` below.
+    let synthesized = synthesize_entities_from_unresolved_event_participants(
+        sections,
+        &mut entity_result.entities,
+        &mut entity_result.name_index,
+    );
+    if synthesized > 0 {
+        debug!(
+            synthesized,
+            "phase 3a: synthesized {synthesized} Entity atom(s) from \
+             unresolved event participants"
+        );
+    }
     // Token-inverted index for fuzzy participant lookup — covers
     // LLM-typo names like `Alyshka` / `Alysha` / `Adeladа Miюsova`
     // that share a long token with the canonical entity but do not
-    // match exactly.
+    // match exactly. Built AFTER synthesis so synthesized atoms also
+    // catch alternative spellings via the token paths.
     let token_index = build_token_index(&entity_result.entities);
     let event_result = resolve_events(
         sections,
@@ -140,6 +159,75 @@ pub async fn resolve_entities_and_events(
         edges: event_result.involves_edges,
         failures: event_result.failures,
     })
+}
+
+/// Salience floor for entities materialized from event-participant
+/// names that Phase 1 never separately introduced. Indirect evidence
+/// — the LLM nominated the name as an event agent but did not list
+/// it under `entities_introduced`. Tagged at a low salience so:
+///
+/// * Phase 5 (state classification, gap detection) can demote them.
+/// * Operators reading `atoms.json` can spot synthesized atoms by
+///   their salience tier without an extra flag field.
+const SYNTHESIZED_ENTITY_SALIENCE: f32 = 0.1;
+
+/// Walk every event sketch and, for each participant name that the
+/// existing entity index can't resolve via name + fuzzy paths,
+/// synthesize a minimal Entity atom and add it to the resolution.
+///
+/// Rebuilds the token index after each synthesis so a later mention
+/// like `Dennett` resolves to the synthesized `Daniel Dennett`
+/// atom rather than producing a duplicate. Returns the count of new
+/// atoms added so the caller can log it for instrumentation.
+fn synthesize_entities_from_unresolved_event_participants(
+    sections: &[SectionExtraction],
+    entities: &mut Vec<Entity>,
+    name_index: &mut HashMap<String, AtomId>,
+) -> usize {
+    use crate::enrichment::pipeline::atlas::EntityType;
+
+    let mut synthesized = 0usize;
+    let mut token_index = build_token_index(entities);
+
+    for section in sections {
+        for sketch in &section.events {
+            for name in &sketch.participants {
+                let trimmed = name.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if resolve_entity_id_fuzzy(trimmed, name_index, &token_index)
+                    .is_some()
+                {
+                    continue;
+                }
+                let new_id = AtomId::entity(entities.len() + 1);
+                let entity = Entity {
+                    id: new_id.clone(),
+                    canonical_name: trimmed.to_string(),
+                    aliases: Vec::new(),
+                    entity_type: EntityType::Other("unspecified".into()),
+                    first_appearance: ChunkRef::new(
+                        section.section_id.clone(),
+                        if sketch.anchor.is_empty() {
+                            None
+                        } else {
+                            Some(sketch.anchor.clone())
+                        },
+                    ),
+                    description: String::new(),
+                    salience: SYNTHESIZED_ENTITY_SALIENCE,
+                    enrichment_depth: section.enrichment_depth,
+                };
+                name_index.insert(fold(trimmed), new_id.clone());
+                entities.push(entity);
+                token_index = build_token_index(entities);
+                synthesized += 1;
+            }
+        }
+    }
+
+    synthesized
 }
 
 /// Bundle returned by [`resolve_entities_and_events`].
@@ -2513,10 +2601,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn atlas_resolve_drops_orphan_event_participants() {
+    async fn atlas_resolve_synthesizes_entity_atoms_for_orphan_event_participants() {
         // Participant name not matching any introduced entity is
-        // dropped from the event's participant list (and no
-        // Involves edge is emitted for it). The event still lands.
+        // synthesized into a minimal Entity atom rather than dropped.
+        // The event keeps both participants and both Involves edges
+        // are emitted. (Replaces the historical "orphans drop"
+        // contract — see the SYNTHESIZED_ENTITY_SALIENCE rationale.)
         let sections = vec![section(
             "sec_0001",
             vec![entity("Alyosha", &[], "")],
@@ -2527,12 +2617,25 @@ mod tests {
         )];
         let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
         assert_eq!(out.events.len(), 1);
-        assert_eq!(out.events[0].participants.len(), 1);
-        assert_eq!(
-            out.events[0].participants[0].as_str(),
-            "entity-0001"
+        assert_eq!(out.events[0].participants.len(), 2);
+        assert_eq!(out.entities.len(), 2);
+        let stranger = out
+            .entities
+            .iter()
+            .find(|e| e.canonical_name == "Stranger")
+            .expect("Stranger should be synthesized from event participant");
+        assert!(
+            (stranger.salience - SYNTHESIZED_ENTITY_SALIENCE).abs() < 1e-6,
+            "synthesized atoms should carry the indirect-evidence salience tier"
         );
-        assert_eq!(out.edges.len(), 1);
+        // Two Involves edges, one per participant.
+        assert_eq!(
+            out.edges.iter().filter(|e| e.edge_type == EdgeType::Involves).count(),
+            2
+        );
+        // Synthesis must clear the failure buffer — no
+        // unresolved-participant signals to surface.
+        assert!(out.failures.is_empty());
     }
 
     #[test]
@@ -3668,5 +3771,94 @@ mod tests {
             .collect();
         assert_eq!(alyosha_transitions.len(), 1);
         assert!(alyosha_transitions[0].trigger_event.is_none());
+    }
+
+    #[tokio::test]
+    async fn atlas_resolve_synthesis_resolves_later_mentions_via_fuzzy_match() {
+        // Phase 1 names "Daniel Dennett" as a participant in sec_0001
+        // and the shorter form "Dennett" in sec_0002. Without
+        // synthesis both mentions drop. With synthesis, the first
+        // creates a minimal `Daniel Dennett` Entity, and the second
+        // resolves to that same atom via the fuzzy long-token path —
+        // no duplicate synthesis. Event descriptions are crafted
+        // with very different first-byte profiles so the deterministic
+        // fake embed yields cosine well below the merge thresholds —
+        // the events stay distinct across sections.
+        let sections = vec![
+            section(
+                "sec_0001",
+                vec![entity("Harry Frankfurt", &[], "Frankfurt cases author.")],
+                vec![event(
+                    "\0Anomalous: Frankfurt cases challenge PAP",
+                    &["Harry Frankfurt", "Daniel Dennett"],
+                )],
+            ),
+            section(
+                "sec_0002",
+                vec![],
+                vec![event(
+                    "zMajestic compatibilism defense by Dennett",
+                    &["Dennett"],
+                )],
+            ),
+        ];
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
+
+        // Two atoms total: the Phase-1 Frankfurt + a single
+        // synthesized `Daniel Dennett`. The sec_0002 `Dennett`
+        // mention must NOT trigger a second synthesis.
+        assert_eq!(
+            out.entities.len(),
+            2,
+            "fuzzy match against the synthesized atom should prevent a duplicate"
+        );
+        let dennett = out
+            .entities
+            .iter()
+            .find(|e| e.canonical_name == "Daniel Dennett")
+            .expect("synthesized Dennett entity missing");
+        assert!(
+            (dennett.salience - SYNTHESIZED_ENTITY_SALIENCE).abs() < 1e-6,
+            "synthesized atoms must carry the indirect-evidence salience tier"
+        );
+        assert_eq!(dennett.first_appearance.chunk_id, "sec_0001");
+
+        // sec_0001 event has 2 Involves, sec_0002 event has 1 — three
+        // total. If the events had merged the count would be 2.
+        assert_eq!(out.events.len(), 2, "events must stay distinct");
+        let involves_edges = out
+            .edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Involves)
+            .count();
+        assert_eq!(involves_edges, 3);
+
+        assert!(
+            out.failures.is_empty(),
+            "synthesis should clear participant failures: {:?}",
+            out.failures
+        );
+    }
+
+    #[tokio::test]
+    async fn atlas_resolve_synthesis_skips_empty_and_whitespace_participants() {
+        // The synthesizer must not invent atoms from blank strings —
+        // the LLM occasionally emits empty participant slots and we
+        // should silently skip those rather than create a zero-name
+        // entity.
+        let sections = vec![section(
+            "sec_0001",
+            vec![],
+            vec![event("Anonymous event with blank participant", &["", "   "])],
+        )];
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
+        assert!(
+            out.entities.is_empty(),
+            "blank participants must not synthesize entities"
+        );
     }
 }
