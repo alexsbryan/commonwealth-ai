@@ -77,6 +77,17 @@ impl InferenceStateStore {
         }
     }
 
+    /// Drop a previously-registered model from the store. Returns
+    /// `true` when an entry was removed, `false` when there was
+    /// nothing to remove. Used by the runtime
+    /// `/internal/models/unload` handler so unloaded extras stop
+    /// appearing in `/v1/models` immediately, instead of lingering
+    /// until the next daemon restart.
+    pub fn remove_model_info(&self, model_id: ModelId) -> bool {
+        let key = format!("model:{}", model_id_hex(model_id));
+        self.store.delete(APP_ID, &key).unwrap_or(false)
+    }
+
     pub fn list_models(&self) -> HashMap<ModelId, ModelInfo> {
         self.store
             .scan(APP_ID, "model:")

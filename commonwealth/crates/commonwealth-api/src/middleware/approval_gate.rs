@@ -268,6 +268,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             oicp: None,
+            response_format: None,
         }
     }
 

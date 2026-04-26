@@ -121,6 +121,13 @@ pub fn internal_router(state: AppState) -> Router {
         // App gossip endpoints.
         .route("/internal/app/state", post(routes_app_internal::recv_app_state))
         .route("/internal/app/registry", post(routes_app_internal::recv_app_registry))
+        // Runtime slot management — load/unload extras chat slots
+        // without daemon restart. Complements the static
+        // `[models.extra]` config table (loaded at startup) by
+        // letting operators swap models mid-session.
+        .route("/internal/models/load", post(routes_internal::models_load))
+        .route("/internal/models/unload", post(routes_internal::models_unload))
+        .route("/internal/models/inventory", get(routes_internal::models_inventory))
         .with_state(state)
 }
 

@@ -63,6 +63,41 @@ pub trait LocalInferenceService: Send + Sync {
     /// emitted — the handler is responsible for wrapping it in the
     /// OpenAI response envelope.
     async fn embed(&self, input: &str) -> Result<Vec<f32>, String>;
+
+    /// Add (or replace) an operator-declared additional chat slot at
+    /// runtime. Returns the model_id (advertised name) of the loaded
+    /// slot, or an error string when the underlying provider doesn't
+    /// support runtime slot mutation. Backed by
+    /// `InferenceProvider::load_extra_slot`. Routes:
+    /// `POST /internal/models/load`.
+    async fn load_extra_slot(
+        &self,
+        slot_name: String,
+        path: std::path::PathBuf,
+        context_size: u32,
+    ) -> Result<String, String> {
+        let _ = (slot_name, path, context_size);
+        Err("this local inference service does not support runtime \
+             slot load — only the embedded llama.cpp service does"
+            .to_string())
+    }
+
+    /// Drop an operator-declared additional chat slot. `Ok(Some(id))`
+    /// when a slot was removed; `Ok(None)` when no slot with that
+    /// name was loaded; `Err(...)` on backends that don't support
+    /// the operation. Routes: `POST /internal/models/unload`.
+    async fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>, String> {
+        let _ = slot_name;
+        Err("this local inference service does not support runtime \
+             slot unload — only the embedded llama.cpp service does"
+            .to_string())
+    }
+
+    /// List currently-loaded extras as `(slot_name, model_id)` pairs.
+    /// Empty by default. Routes: `GET /internal/models/inventory`.
+    async fn extras_inventory(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
 }
 
 /// Callback the route handlers fire whenever they mutate `Mesh` —
