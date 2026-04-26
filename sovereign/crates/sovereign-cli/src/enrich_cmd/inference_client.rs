@@ -17,9 +17,17 @@ use corpus_engine::types::EmbedFn;
 
 use crate::util::urls::{v1_models_url, v1_url, DEFAULT_CLIENT_PORT};
 
-/// Default chat request timeout. Long because a primary-slot LLM on
-/// an M2 can take 20-40s on a single chapter.
-const CHAT_TIMEOUT: Duration = Duration::from_secs(180);
+/// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
+/// emitting up to 16k tokens of structured JSON can run 5–15 minutes
+/// on M2 hardware. The previous 180s ceiling silently killed real
+/// SEP campaign requests (verified 2026-04-25 — 14kB request took
+/// 168s; full sections take far longer). When reqwest's timeout
+/// fires the daemon keeps the inference slot, so subsequent
+/// requests pile up against a held lock — a cascading failure
+/// that looks like the daemon itself is wedged. 1800s leaves
+/// generous headroom; if the request really is stuck, the user
+/// will notice on a 30-minute hang.
+const CHAT_TIMEOUT: Duration = Duration::from_secs(1800);
 
 /// Default embed request timeout. Embeddings are fast; we keep this
 /// tight so a hung embed surface doesn't freeze a whole run.
