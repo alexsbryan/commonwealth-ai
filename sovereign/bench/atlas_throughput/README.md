@@ -112,10 +112,18 @@ A proper `bench atlas compare` subcommand can land later if the
   single sample at the chapter sizes the model will actually see
   is good enough. Re-run any task that lands far from your prior
   for that model to sanity-check.
-- Daemon reports `prompt_tokens=0` in the `usage` block on this
-  build — that's an upstream bug in the chat-completions path, not
-  a bench issue. `completion_tokens` is correct, which is what the
-  tokens/sec measurement depends on.
+- Daemon reports `prompt_tokens=0` and ALSO mislabels
+  `completion_tokens` (it actually carries total = prompt +
+  generated). Discovered 2026-04-26 when GLM-18B with
+  `--max-tokens-cap 8000` reported `completion_tokens=12394`
+  (apparent cap violation) — real decoded output was ~7300 tokens
+  under the cap; the extra ~5000 was the prompt. Implication:
+  bench `decode_tokens_per_sec` is **inflated by ~50–75%** because
+  the numerator includes prompt tokens. Comparative ranking
+  between models is still valid (the bug applies equally) and
+  `phase1_seconds_per_chapter` / `est_hours_1800_articles_5_chapters`
+  are accurate (those measure wall-clock, not tokens). Track-and-fix
+  in the daemon's chat-completions response assembly when convenient.
 - On a failed task the result's `response_head` field carries the
   **full** model output (not a 500-char preview) so post-mortem can
   find corruption that lives deep in the body. Successful tasks
@@ -123,16 +131,35 @@ A proper `bench atlas compare` subcommand can land later if the
   the raw response for a passing task, run with `--tasks <id>`,
   trip the validator deliberately, and inspect.
 
-## Known model failure modes (build a list as you test)
+## Known model results (build out as you test)
 
-- **Darwin-9B-Opus.Q8_0** (rejected 2026-04-26): 42.7 tok/s on
-  Phase 1, ~2.8× Qwopus's 15 tok/s. Throughput is real, correctness
-  is not — long structured outputs ship with random whitespace
-  corruption (`"betwee n"`, `"an d"`, `"Fârabì's"`) and at least one
-  missing-quote at byte 11409 of the response that the parser can't
-  recover from (balanced-brace scan ends `depth=2, in_string=true`).
-  The 9B+Q8 envelope can't sustain a 14k-char strict-JSON output on
-  this hardware. Try smaller Phase 1 prompts (`--max-tokens-cap
-  4096`) before declaring it gone, but the structural drift
-  suggests no.
+| model | Phase 1 success | Phase 1 tok/s | atoms (medium) | est. 1800 × 5 | verdict |
+|---|---|---|---|---|---|
+| Qwopus3.5-27B-v3.5-Q6_K | 3/3 | ~15 | ~28–50 | ~64 d | production-ready |
+| Qwopus-GLM-18B-Healed-Q6_K | 2/3 (long fails) | 22–38 | 32 | ~14 d if you fix long | conditional |
+| Darwin-9B-Opus.Q8_0 | 0/1 | 42.7 | — | n/a | rejected |
+| Bonsai-8B-Q1_0 | 1/1 structural | 399 | 9 (empty filler) | 1.2 d | rejected for extraction |
+
+### Failure-mode notes
+
+- **Darwin-9B-Opus.Q8_0**: long structured outputs ship with
+  whitespace corruption (`"betwee n"`, `"an d"`, `"Fârabì's"`) and
+  a missing-quote at byte 11409. Balanced-brace scan ends
+  `depth=2, in_string=true`. 9B+Q8 envelope can't sustain
+  14k-char strict JSON on Strix Halo.
+- **Qwopus-GLM-18B-Healed-Q6_K**: passes short (25 atoms) and
+  medium (32 atoms) cleanly, drops a comma between key-value pairs
+  on the longest chapter (line 380: `"label": "..."` then line 381
+  `"anchor": ...` with no `,`). Decode also slows from 38 → 22
+  tok/s as context grows, consistent with attention quadratic cost.
+  Recoverable if you clamp output (`--max-tokens-cap 8000`, terse
+  Phase 1 variant) or fall back to 27B for the chapters it drops.
+- **Bonsai-8B-Q1_0**: technically passes the Phase 1 parser, but
+  the schema only requires `questions_raised` non-empty so a
+  shape-conformant response with mostly-empty arrays slips
+  through. 9 atoms vs GLM-18B's 32 for the same chapter is a
+  3.5× quality cliff. Cluster_name task fails with "trailing
+  characters" — Bonsai keeps emitting after the close brace.
+  Pattern: producing valid-shape filler, not actually answering
+  the prompt. Use as the fast slot, not a primary candidate.
 

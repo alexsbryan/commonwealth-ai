@@ -1,0 +1,42 @@
+{
+  "timestamp_utc": "unix-1777235179",
+  "base_url": "http://localhost:9741",
+  "model_id": "Qwopus-GLM-18B-Healed-Q6_K",
+  "corpus_id": "sep-al-farabi",
+  "warmup_used": true,
+  "results": [
+    {
+      "task_id": "phase1_medium",
+      "description": "Atlas Phase 1 on the median chapter (9312 bytes body)",
+      "success": true,
+      "error": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 6257,
+      "total_tokens": 6257,
+      "latency_ms": 167489,
+      "decode_tokens_per_sec": 37.35750443134582,
+      "atoms_extracted": 32,
+      "truncated": false
+    },
+    {
+      "task_id": "cluster_name_synth",
+      "description": "Synthetic Phase 3-style cluster naming (small input, single-object output)",
+      "success": true,
+      "error": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 236,
+      "total_tokens": 236,
+      "latency_ms": 5556,
+      "decode_tokens_per_sec": 42.474916819426625,
+      "atoms_extracted": null,
+      "truncated": false
+    }
+  ],
+  "summary": {
+    "decode_tps_mean": 39.91621062538623,
+    "phase1_decode_tps_mean": 37.35750443134582,
+    "phase1_success_rate": 1.0,
+    "phase1_seconds_per_chapter_mean": 167.489,
+    "est_hours_1800_articles_5_chapters": 418.7225
+  }
+}

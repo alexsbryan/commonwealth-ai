@@ -38,3 +38,6 @@ name = "bench_embed"
 
 [[example]]
 name = "bench_decode"
+
+[[example]]
+name = "grammar_smoke"

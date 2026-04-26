@@ -1,0 +1,29 @@
+{
+  "timestamp_utc": "unix-1777238821",
+  "base_url": "http://localhost:9741",
+  "model_id": "Qwopus-GLM-18B-Healed-Q6_K",
+  "corpus_id": "sep-al-farabi",
+  "warmup_used": true,
+  "results": [
+    {
+      "task_id": "phase1_long",
+      "description": "Atlas Phase 1 on the longest chapter (11579 bytes body)",
+      "success": true,
+      "error": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 8878,
+      "total_tokens": 8878,
+      "latency_ms": 312695,
+      "decode_tokens_per_sec": 28.391822228834148,
+      "atoms_extracted": 59,
+      "truncated": false
+    }
+  ],
+  "summary": {
+    "decode_tps_mean": 28.391822228834148,
+    "phase1_decode_tps_mean": 28.391822228834148,
+    "phase1_success_rate": 1.0,
+    "phase1_seconds_per_chapter_mean": 312.695,
+    "est_hours_1800_articles_5_chapters": 781.7375
+  }
+}

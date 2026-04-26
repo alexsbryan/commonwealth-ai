@@ -66,6 +66,60 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
+/// Build a chat-slot `LlamaContextParams` with the same flags
+/// `ModelSlot::load` uses (n_seq_max=1, n_batch=ctx, n_ubatch=512,
+/// host-thread counts, GPU offload). Factored out of the closure
+/// so the fresh-per-grammar-request path in
+/// `EmbeddedLlamaCpp::complete` and the slot-load path agree on
+/// their context settings — drift between them would mean
+/// grammar-enforced requests run on different params than chat
+/// requests, which would make perf comparisons mean less than they
+/// should.
+fn chat_ctx_params(context_size: u32, gpu: bool) -> LlamaContextParams {
+    let n_threads = llama_threads_for_host();
+    LlamaContextParams::default()
+        .with_n_ctx(NonZeroU32::new(context_size))
+        .with_n_seq_max(1)
+        .with_n_batch(context_size)
+        .with_n_ubatch(512)
+        .with_n_threads(n_threads as i32)
+        .with_n_threads_batch(n_threads as i32)
+        .with_offload_kqv(gpu)
+        .with_op_offload(gpu)
+}
+
+/// Build a fresh `LlamaContext` for a chat request that needs
+/// isolated state — currently grammar-enforced requests, where
+/// reusing the slot's long-lived ctx triggers
+/// `GGML_ASSERT(!stacks.empty())` at first apply on Vulkan. Tries
+/// GPU first; if context creation fails (overcommit, driver
+/// issue), falls back to CPU like `ModelSlot::load` does.
+fn build_chat_ctx<'a>(
+    backend: &'a Arc<LlamaBackend>,
+    model: &'a Arc<LlamaModel>,
+    context_size: u32,
+    n_gpu_layers: u32,
+) -> Result<llama_cpp_2::context::LlamaContext<'a>> {
+    let wants_gpu = cfg!(any(target_os = "macos", target_os = "linux")) && n_gpu_layers > 0;
+    let try_make = |gpu: bool| {
+        let params = chat_ctx_params(context_size, gpu);
+        model
+            .new_context(backend, params)
+            .map_err(|e| Error::Inference(format!("fresh chat ctx: {e}")))
+    };
+    if wants_gpu {
+        match try_make(true) {
+            Ok(ctx) => Ok(ctx),
+            Err(e) => {
+                tracing::warn!(error = %e, "fresh chat ctx GPU init failed, retrying on CPU");
+                try_make(false)
+            }
+        }
+    } else {
+        try_make(false)
+    }
+}
+
 impl ModelSlot {
     fn load(
         backend: &Arc<LlamaBackend>,
@@ -2189,6 +2243,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 drop(loaded);
 
                 let slot = primary.as_ref().unwrap();
+                let model_id = slot.model_id.clone();
                 let mut ctx_lock = slot.context.blocking_lock();
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
@@ -2218,7 +2273,10 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 Ok((CompletionResponse {
                     text,
                     tokens_used,
-                    model_id: slot.model_id.clone(),
+                    // `slot` may have been dropped on the fresh-ctx
+                    // path; use the model_id cloned before the
+                    // branch.
+                    model_id: model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
                 }, slot_label))
@@ -2801,12 +2859,51 @@ const THINK_BUDGET: usize = 512;
 /// - **penalties**: kept as a backstop for single-token repetition that DRY's
 ///   `allowed_length = 2` intentionally ignores.
 fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> LlamaSampler {
-    // Grammar-constrained decoding via LLGuidance. JSON Schema is
-    // compiled to a state machine inside `LlamaSampler::llguidance`
-    // and used to mask logits at sampling time so output stays a
-    // valid prefix of a JSON document conforming to the schema.
-    // Eliminates malformed-JSON drift on long structured outputs
-    // (Gemma-31B sep-al-farabi 2026-04-25).
+    // Grammar-constrained decoding via llama.cpp's native GBNF
+    // sampler. We translate the JSON Schema to GBNF in-process
+    // (`crate::json_grammar::schema_to_gbnf`) and hand the grammar
+    // string to `LlamaSampler::grammar`, which masks logits at
+    // sampling time so output stays a valid prefix of a JSON
+    // document conforming to the schema.
+    //
+    // Why not `LlamaSampler::llguidance`? It silently falls through
+    // on the model's first emitted token across every model we've
+    // tested (Gemma-31B, Qwopus-27B, GLM-18B, Darwin-9B): the
+    // `LlamaSampler::llguidance` constructor returns Ok, the INFO
+    // log fires, but on first decode the underlying matcher errors
+    // with `byte '{' fails parse` (a stderr printf, not a
+    // tracing::warn — easy to miss), `compute_mask` returns Err for
+    // every subsequent call, and the model decodes free-form. The
+    // BYOM "valid JSON" guarantee was a coin flip per model.
+    // llama.cpp's native grammar sampler has shipped in production
+    // for years and is model-independent. See the
+    // `bench atlas`-driven memo at memory/project_grammar_alpha_blocker.md.
+    // 2026-04-26 STATUS: Both grammar-sampler paths are stuck on
+    // upstream bugs we can't fix in our wiring layer:
+    //  - `LlamaSampler::llguidance` silently falls through on first
+    //    token across every model tested (init says ok, no
+    //    `tracing::warn` ever fires; first decode emits a stderr
+    //    `Warning: Parser Error: byte '{' fails parse; stopping`,
+    //    matcher errors, decode runs unconstrained).
+    //  - `LlamaSampler::grammar` (native GBNF, with our in-tree
+    //    `json_grammar::schema_to_gbnf` translator at the ready)
+    //    crashes the process via `GGML_ASSERT(!stacks.empty())` at
+    //    `llama-grammar.cpp:940` on FIRST apply — but ONLY in the
+    //    daemon. The standalone `examples/grammar_smoke.rs` runs the
+    //    same model, ctx params, chat template, full sampler chain,
+    //    and identical 14-byte grammar without crashing. We tried
+    //    fresh-per-grammar-request contexts (didn't help) — narrows
+    //    the bug to something process-wide that the daemon has and
+    //    the smoke doesn't (the most likely candidate is the shared
+    //    `Arc<LlamaBackend>` carrying fast + embed + primary slots).
+    //  See `memory/project_grammar_alpha_blocker.md`.
+    // We keep llguidance wired here because it doesn't crash the
+    // daemon; grammar enforcement is currently a no-op and parser
+    // hardening (`prepare_phase_json`, `extract_json_block`,
+    // `sanitize_phase1_object_arrays`) does the work. The
+    // `json_grammar` translator + tests + `grammar_smoke` example
+    // stay in tree, ready to wire up the moment the upstream bug is
+    // found.
     let grammar_sampler: Option<LlamaSampler> = request
         .structured_output
         .as_ref()
@@ -2819,7 +2916,7 @@ fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &Model
                 Ok(s) => {
                     tracing::info!(
                         schema_bytes = schema_json.len(),
-                        "grammar-constrained decoding enabled (llguidance)"
+                        "grammar-constrained decoding enabled (llguidance, falls through silently)"
                     );
                     Some(s)
                 }
