@@ -40,12 +40,37 @@ pub struct ModelsSection {
     pub embed: PathBuf,
     /// Optional code-specialist model. When present, `code`-hinted
     /// inference requests route here instead of the primary. Lazy-
-    /// loaded on first use and unloaded after the same 60 s idle
-    /// window as the primary. `None` means the node relies on the
-    /// primary model for code work (the common case; a well-rounded
-    /// general model still handles code adequately per v0.3 §4.4).
+    /// loaded on first use and unloaded after the same idle window
+    /// as the primary. `None` means the node relies on the primary
+    /// model for code work (the common case; a well-rounded general
+    /// model still handles code adequately per v0.3 §4.4).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<PathBuf>,
+
+    /// Per-slot llama.cpp context size (n_ctx). `None` falls back to
+    /// `default_context_size()` (16384), the conservative default that
+    /// fits a 30B+ primary on a 64 GB Mac without OOMing the KV cache.
+    /// Bump this on a Strix Halo (128 GB unified) or any box where the
+    /// primary's KV cache + weights + fast slot still fit comfortably:
+    /// 32768 roughly doubles output budget for atlas Phase 1, where
+    /// long structured outputs were truncating against the 16384 cap.
+    /// Applies to all loaded slots (fast / primary / embed / code) —
+    /// per-slot override would need a richer schema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_size: Option<u32>,
+}
+
+fn default_context_size() -> u32 {
+    16384
+}
+
+impl ModelsSection {
+    /// Effective n_ctx — the configured value, or the safe default.
+    /// Use this anywhere you'd otherwise hardcode a context size, so
+    /// cold-start and reload paths can't drift.
+    pub fn effective_context_size(&self) -> u32 {
+        self.context_size.unwrap_or_else(default_context_size)
+    }
 }
 
 /// Network listener configuration. Defaults match the spec:
@@ -60,6 +85,15 @@ pub struct DaemonSection {
     /// so the daemon survives logout/restart.
     #[serde(default = "default_autostart")]
     pub autostart: bool,
+    /// Idle seconds before the lazy primary slot is unloaded to reclaim
+    /// VRAM. The default of 60s suits an interactive desktop where the
+    /// model is touched once an hour; for batch workloads (the atlas
+    /// enrich pipeline runs many short LLM calls back-to-back) it
+    /// causes a 3–4 s reload tax between calls. Bump to 1800 (30 min)
+    /// for batch hosts. Set to a very high number to effectively pin
+    /// the slot for the daemon's lifetime.
+    #[serde(default = "default_primary_idle_secs")]
+    pub primary_idle_secs: u64,
 }
 
 /// Filesystem paths for mutable state.
@@ -77,6 +111,7 @@ impl Default for DaemonSection {
             client_port: default_client_port(),
             internal_port: default_internal_port(),
             autostart: default_autostart(),
+            primary_idle_secs: default_primary_idle_secs(),
         }
     }
 }
@@ -90,6 +125,7 @@ impl Default for DataSection {
 fn default_client_port() -> u16 { 9741 }
 fn default_internal_port() -> u16 { 9742 }
 fn default_autostart() -> bool { true }
+fn default_primary_idle_secs() -> u64 { 60 }
 
 /// `~/.sovereign/`. Previously lived in `sovereign-cli::util::dirs`;
 /// inlined here so `sovereign-core` has no dependency on the CLI crate.
@@ -203,6 +239,7 @@ mod tests {
                 fast: PathBuf::from("/models/fast.gguf"),
                 embed: PathBuf::from("/models/embed.gguf"),
                 code: None,
+                context_size: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

@@ -863,6 +863,7 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             fast: paths.fast,
             embed: paths.embed,
             code: paths.code,
+            context_size: None,
         },
         daemon: DaemonSection::default(),
         data: DataSection { dir: data_dir.clone() },
