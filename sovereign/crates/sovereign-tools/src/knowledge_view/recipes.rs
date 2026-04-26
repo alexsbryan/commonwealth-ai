@@ -74,6 +74,8 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
         }),
         update: None,
         prebuilt: None,
+        filters: Vec::new(),
+        filter_mode: Default::default(),
     }
 }
 
@@ -145,6 +147,8 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
         }),
         update: None,
         prebuilt: None,
+        filters: Vec::new(),
+        filter_mode: Default::default(),
     }
 }
 
@@ -240,6 +244,8 @@ pub fn conversation_history_recipe(
         }),
         update: None,
         prebuilt: None,
+        filters: Vec::new(),
+        filter_mode: Default::default(),
     }
 }
 

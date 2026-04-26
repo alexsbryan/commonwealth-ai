@@ -215,6 +215,27 @@ export async function installCorpus(corpusId: string): Promise<void> {
   return invoke("install_corpus", { corpusId });
 }
 
+/// Expand an installed corpus to a relaxed scope (e.g. Wikipedia
+/// Core → Full). Progress streams on the same `corpus-progress` event
+/// channel as `installCorpus`.
+export async function expandCorpus(corpusId: string): Promise<void> {
+  return invoke("lc_expand_corpus", { corpusId });
+}
+
+/// Probe whether a corpus advertises an `expandable` scope in
+/// `_corpus_meta.json`. Returns `false` for corpora that aren't
+/// installed, have no filter, or have already been expanded to full.
+export async function canExpandCorpus(corpusId: string): Promise<boolean> {
+  return invoke("lc_can_expand", { corpusId });
+}
+
+/// Kick off the layered Wikipedia setup: Simple English first
+/// (Layer 0, ready in ~2-3 min), then Wikipedia Core (Layer 1, ~10-12
+/// min). Returns the list of corpus IDs that will be installed.
+export async function startLayeredSetup(): Promise<string[]> {
+  return invoke("lc_start_layered_setup");
+}
+
 export async function removeCorpus(corpusId: string): Promise<number> {
   return invoke("remove_corpus", { corpusId });
 }

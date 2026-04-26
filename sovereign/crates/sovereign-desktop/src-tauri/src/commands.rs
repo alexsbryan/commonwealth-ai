@@ -166,7 +166,22 @@ pub struct CorpusProgressPayload {
 /// the engine doesn't care about tiers.
 fn tiers_for(corpus_id: &str) -> Vec<String> {
     match corpus_id {
-        "wikipedia" => vec!["essential".into(), "research".into(), "technical".into(), "full".into()],
+        // Wikipedia Core ships in every tier — its scoped 100K + Vital
+        // Articles is the baseline general-knowledge corpus.
+        "wikipedia" => vec![
+            "essential".into(),
+            "research".into(),
+            "technical".into(),
+            "full".into(),
+        ],
+        // Simple English ships alongside Core in every tier — Layer 0 of
+        // the layered Wikipedia stack, ready for chat in 2-3 min.
+        "wikipedia-simple" => vec![
+            "essential".into(),
+            "research".into(),
+            "technical".into(),
+            "full".into(),
+        ],
         "sep" => vec!["research".into(), "full".into()],
         "openalex" => vec!["research".into(), "full".into()],
         "stackexchange" => vec!["technical".into(), "full".into()],
@@ -2581,6 +2596,130 @@ pub async fn install_corpus(
     let _ = app_handle.emit("corpus-progress", initial);
 
     Ok(())
+}
+
+/// Tauri command: expand an installed corpus by relaxing its filter
+/// scope (e.g. promote Wikipedia from Core to Full). Returns
+/// immediately; progress streams on the existing `corpus-progress`
+/// event channel — same surface as `install_corpus` so the
+/// `CorpusProgressBanner` and `KnowledgeStatus` row light up
+/// automatically.
+#[tauri::command]
+pub async fn lc_expand_corpus(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/expand");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "corpus_id": corpus_id }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/corpus/expand: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/corpus/expand returned {status}: {body}"
+        ));
+    }
+
+    // Mirror install_corpus's optimistic flip: surface a "downloading"
+    // stub so the UI reacts before the next status poll lands.
+    let initial = CorpusProgressPayload {
+        corpus_id: corpus_id.clone(),
+        phase: "extracting".into(),
+        percent: 0.0,
+        chunks_processed: 0,
+        message: Some("Expanding scope…".into()),
+    };
+    if let Ok(mut map) = state.install_progress.try_write() {
+        map.insert(corpus_id.clone(), initial.clone());
+    }
+    let _ = app_handle.emit("corpus-progress", initial);
+
+    Ok(())
+}
+
+/// Tauri command: ask the daemon whether `corpus_id` can be expanded
+/// (i.e. has an active filter scope with `expandable=true` in
+/// `_corpus_meta.json`). Returns `false` if the corpus isn't installed
+/// or has no filter, `true` if a relaxed scope would add documents.
+///
+/// Reads `_corpus_meta.json` directly from the per-corpus index dir
+/// rather than going through the daemon — the file is local and
+/// avoiding the round-trip keeps the Settings render snappy.
+#[tauri::command]
+pub async fn lc_can_expand(corpus_id: String) -> Result<bool, String> {
+    let mut path = match dirs::home_dir() {
+        Some(h) => h,
+        None => return Ok(false),
+    };
+    path.push(".sovereign");
+    path.push("indexes");
+    path.push(format!("{corpus_id}-canonical"));
+    path.push("_corpus_meta.json");
+    if !path.exists() {
+        // Try the partition-of-self variant.
+        path.pop();
+        path.pop();
+        path.push(format!("{corpus_id}-local"));
+        path.push("_corpus_meta.json");
+        if !path.exists() {
+            return Ok(false);
+        }
+    }
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(_) => return Ok(false),
+    };
+    // Probe-only deserialize — we only care about the `scope` block.
+    #[derive(serde::Deserialize)]
+    struct ScopeProbe {
+        #[serde(default)]
+        scope: Option<ScopeBody>,
+    }
+    #[derive(serde::Deserialize)]
+    struct ScopeBody {
+        #[serde(default)]
+        expandable: bool,
+    }
+    let probe: ScopeProbe = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return Ok(false),
+    };
+    Ok(probe.scope.map(|s| s.expandable).unwrap_or(false))
+}
+
+/// Tauri command: kick off the layered Wikipedia setup. Installs
+/// `wikipedia-simple` (Layer 0, ~2–3 min) and `wikipedia` Core
+/// (Layer 1, ~10–12 min) back-to-back. Both run via the existing
+/// `/internal/corpus/install` daemon endpoint, so progress streams on
+/// the unchanged `corpus-progress` event channel.
+#[tauri::command]
+pub async fn lc_start_layered_setup(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<String>, String> {
+    // Layer 0 first — small, fast, gives the user grounded responses
+    // within minutes.
+    install_corpus(
+        app_handle.clone(),
+        state.clone(),
+        "wikipedia-simple".into(),
+    )
+    .await?;
+    // Layer 1 — kicks off concurrently with Layer 0. The daemon
+    // schedules both serially behind the shared embed slot, but the
+    // download phase parallelises with whichever phase Layer 0 is in.
+    install_corpus(app_handle, state, "wikipedia".into()).await?;
+    Ok(vec!["wikipedia-simple".into(), "wikipedia".into()])
 }
 
 /// Spawn the background poller that reads

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures } from "../api";
+  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus } from "../api";
   import { corpusProgressStore } from "../stores/corpusProgress.svelte";
   import type { CorpusEntry, CorpusHealthDetail } from "../types";
 
@@ -85,6 +85,9 @@
   async function refresh() {
     try {
       corpora = await listCorpora();
+      // Probe expand-affordance after corpus list refresh — cheap
+      // local file reads, runs in parallel with the next render.
+      refreshExpandable();
     } catch (e) {
       console.error("Failed to list corpora:", e);
       corpora = [];
@@ -117,6 +120,38 @@
       await refresh();
     } catch (e) {
       console.error("Pause failed:", e);
+    }
+  }
+
+  /// Tracks per-corpus "this corpus has a relaxable filter scope" so
+  /// we render the "Expand to full" affordance. Populated lazily
+  /// after `refresh()` resolves; the probe reads `_corpus_meta.json`
+  /// directly so it's cheap.
+  let expandable: Set<string> = $state(new Set());
+
+  async function refreshExpandable() {
+    const next = new Set<string>();
+    for (const c of corpora) {
+      if (c.status !== "installed") continue;
+      try {
+        if (await canExpandCorpus(c.id)) next.add(c.id);
+      } catch (_) {
+        // probe failure shouldn't block the rest of the UI
+      }
+    }
+    expandable = next;
+  }
+
+  async function handleExpand(id: string) {
+    try {
+      await expandCorpus(id);
+      // Optimistic flip — the corpus-progress poller will refresh
+      // status as the expansion runs.
+      corpora = corpora.map((c) =>
+        c.id === id ? { ...c, status: "installing" as const } : c,
+      );
+    } catch (e) {
+      console.error("Expand failed:", e);
     }
   }
 
@@ -330,6 +365,15 @@
 
       <div class="corpus-action">
         {#if corpus.status === "installed"}
+          {#if expandable.has(corpus.id)}
+            <button
+              class="action-btn expand"
+              title="Expand to the full corpus by relaxing the active filter scope. The existing index is preserved; only newly-accepted documents are embedded."
+              onclick={() => handleExpand(corpus.id)}
+            >
+              Expand to full →
+            </button>
+          {/if}
           <button class="action-btn remove" onclick={() => handleRemove(corpus.id)}>
             Remove
           </button>
