@@ -87,6 +87,24 @@ impl InferenceStateStore {
             .collect()
     }
 
+    /// Same as `list_models` but pairs each entry with the `NodeId` that
+    /// last wrote it to the store. The origin is the only liveness signal
+    /// available — `ModelInfo::available_on` is currently never populated
+    /// — so callers that need to filter by peer reachability can join
+    /// this against the mesh's online-member set.
+    pub fn list_models_with_origins(&self) -> Vec<(NodeId, ModelInfo)> {
+        self.store
+            .scan(APP_ID, "model:")
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|e| {
+                serde_json::from_slice::<ModelInfo>(&e.value)
+                    .ok()
+                    .map(|m| (e.origin, m))
+            })
+            .collect()
+    }
+
     // ── Ledger entries ──────────────────────────────────────────────
 
     pub fn append_ledger_entry(&self, entry_id: &str, entry: &LedgerEntry) {

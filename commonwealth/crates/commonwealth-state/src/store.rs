@@ -189,7 +189,12 @@ fn node_id_from_bytes(bytes: &[u8]) -> Result<NodeId> {
     }
     let mut arr = [0u8; 16];
     arr.copy_from_slice(bytes);
-    Ok(NodeId::from_u128(u128::from_le_bytes(arr)))
+    // Writers persist `origin.as_bytes().to_vec()` — a verbatim copy of
+    // NodeId's internal byte array. NodeId stores its u128 big-endian
+    // (`from_u128` calls `to_be_bytes`), so reading must invert with
+    // `from_be_bytes`. Using `from_le_bytes` here silently reversed the
+    // round-trip, leaving every `StoreEntry.origin` mis-identified.
+    Ok(NodeId::from_u128(u128::from_be_bytes(arr)))
 }
 
 #[cfg(test)]
@@ -211,6 +216,25 @@ mod tests {
         assert_eq!(entry.value.as_ref(), b"hello");
         assert_eq!(entry.app_id, "myapp");
         assert_eq!(entry.key, "greeting");
+        assert_eq!(entry.origin, node(1));
+    }
+
+    #[test]
+    fn origin_round_trips_for_realistic_node_id() {
+        // Regression test: real NodeIds (random 16 bytes, not low-int test
+        // fixtures) used to silently byte-reverse on read because writes
+        // were verbatim but reads went through `u128::from_le_bytes`. The
+        // `node(1)` fixtures don't catch this — `0...01` looks identical
+        // reversed at the display layer because Display only shows the
+        // first 8 bytes — so we use a value whose low and high halves
+        // differ.
+        let store = MeshStore::in_memory().unwrap();
+        let id = NodeId::from_u128(0x1122_3344_5566_7788_AABB_CCDD_EEFF_0011);
+        store.set("a", "k", Bytes::from("v"), id).unwrap();
+        let entry = store.get("a", "k").unwrap().unwrap();
+        assert_eq!(entry.origin, id);
+        let scanned = store.scan("a", "").unwrap();
+        assert_eq!(scanned[0].origin, id);
     }
 
     #[test]

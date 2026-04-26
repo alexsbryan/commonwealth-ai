@@ -6,11 +6,13 @@ use axum::Json;
 use futures::StreamExt;
 use tracing::{debug, info, warn};
 
-use commonwealth_core::ids::ModelId;
+use commonwealth_core::ids::{ModelId, NodeId};
+use commonwealth_core::mesh::NodeStatus;
 use commonwealth_inference::oicp::{
     self, CapabilityClaim, CapabilityHint, InferenceRequirements,
     LatencyClass, ShardingPrivacy,
 };
+use std::collections::HashSet;
 
 use crate::middleware::{
     MiddlewareError, MiddlewareSession, Pipeline, PipelineContext, ResponseView,
@@ -454,14 +456,54 @@ pub async fn embeddings(
     (StatusCode::OK, Json(resp)).into_response()
 }
 
-/// GET /v1/models — list available models.
+/// GET /v1/models — list models the daemon can actually serve right now.
+///
+/// Filters out entries whose owning peer is currently unreachable in the
+/// mesh: the `inference_store` accumulates every model any peer has
+/// gossiped, but if the advertising peer is offline a chat-completions
+/// request targeting that model would 503 with no fallback. The contract
+/// for `/v1/models` is "what the daemon can route this instant," so we
+/// drop the unreachable ones rather than make callers do liveness
+/// guessing themselves.
+///
+/// A model is kept when either:
+///   - its store entry was last written by an online peer (or by us), or
+///   - the local daemon currently has the model loaded
+///     (covers the case where the latest gossip overwrote our entry's
+///     origin with a now-offline peer's NodeId, even though we still
+///     hold the weights).
 pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
-    let models = state.inner.inference_store.list_models();
+    let local_id = state.self_node_id();
+    let live_nodes: HashSet<NodeId> = {
+        let mesh = state.inner.mesh.read().await;
+        std::iter::once(local_id)
+            .chain(
+                mesh.members
+                    .values()
+                    .filter(|m| {
+                        matches!(m.status, NodeStatus::Online | NodeStatus::Busy)
+                    })
+                    .map(|m| m.node_id),
+            )
+            .collect()
+    };
+
     let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
-    let data: Vec<ModelObject> = models
-        .values()
-        .map(|model| {
+    let data: Vec<ModelObject> = state
+        .inner
+        .inference_store
+        .list_models_with_origins()
+        .into_iter()
+        .filter(|(origin, model)| {
+            live_nodes.contains(origin)
+                || state
+                    .inner
+                    .inference_store
+                    .get_llama_address(model.id)
+                    .is_some()
+        })
+        .map(|(_, model)| {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
             let loaded = state
                 .inner
