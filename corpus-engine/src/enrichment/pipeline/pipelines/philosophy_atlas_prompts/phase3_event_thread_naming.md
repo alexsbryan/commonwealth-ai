@@ -22,6 +22,9 @@ debate, a progression, a rediscovery, a clarification?
 
 ## Output schema
 
+Return exactly one JSON object. No prose before or after. No code
+fences.
+
 ```json
 {
   "label": "<the argumentative thread in one clause>",

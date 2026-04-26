@@ -25,6 +25,9 @@ properties spec §2.6 is the atom type for.
 
 ## Output schema
 
+Return exactly one JSON object. No prose before or after. No code
+fences.
+
 ```json
 {
   "label": "<relational arc in one clause>",

@@ -24,6 +24,9 @@ at the window). Name the through-line.
 
 ## Output schema
 
+Return exactly one JSON object. No prose before or after. No code
+fences.
+
 ```json
 {
   "label": "<narrative thread in one clause>",

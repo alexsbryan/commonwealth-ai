@@ -24,6 +24,9 @@ A good dynamic captures: **what moves between the two**, not just
 
 ## Output schema
 
+Return exactly one JSON object. No prose before or after. No code
+fences.
+
 ```json
 {
   "label": "<the dialectical dynamic in one clause>",
