@@ -277,13 +277,30 @@ impl Pipeline for LiteraryAtlasPipeline {
     fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {
         let cleaned = prepare_phase_json(response, "phase 1 (atlas)")?;
 
+        // Two-step deserialization: parse to `serde_json::Value`
+        // first (which silently keeps the last value when the model
+        // emits the same key twice, observed on Gemma-31B), then
+        // sanitize array fields whose schema declares objects but
+        // where the model occasionally drops in a `"//"` comment
+        // string or other non-object literal. Only after this
+        // cleaning pass do we deserialize into the typed Raw
+        // layout. Without this pre-pass a single duplicate field or
+        // hallucinated comment string costs the whole section.
+        let mut value: serde_json::Value =
+            serde_json::from_str(&cleaned).map_err(|e| {
+                Error::Serialization(format!(
+                    "phase 1 (atlas) response is not valid JSON: {e}"
+                ))
+            })?;
+        sanitize_phase1_object_arrays(&mut value);
+
         // Deserialize through a lenient Raw layout that tolerates
         // common model-compliance drift — an individual claim missing
         // `epistemic_status`, a lone null in an array, an unknown
         // enum tag — so a single bad claim doesn't throw away the
         // rest of a chapter's extraction. Hard-failing on shape only
         // makes sense when the response as a whole is unusable.
-        let raw: RawSectionExtraction = serde_json::from_str(&cleaned).map_err(|e| {
+        let raw: RawSectionExtraction = serde_json::from_value(value).map_err(|e| {
             Error::Serialization(format!(
                 "phase 1 (atlas) response is not valid JSON: {e}"
             ))
@@ -695,6 +712,33 @@ fn phase3_metadata_value_to_string(v: serde_json::Value) -> Option<String> {
     }
 }
 
+/// Filter non-object items out of Phase 1 array fields whose schema
+/// declares structs. Observed on Gemma-31B running sep-al-farabi
+/// sec_0003: the model interleaved `"//"` comment-strings into
+/// `entities_introduced` between actual entity objects, breaking
+/// deserialization. Walks the seven known sketch arrays in the
+/// section extraction and drops anything that isn't an Object or
+/// Null. Idempotent — strings/numbers/booleans never legitimately
+/// appear in these slots.
+fn sanitize_phase1_object_arrays(value: &mut serde_json::Value) {
+    use serde_json::Value;
+    let Value::Object(top) = value else { return };
+    const OBJECT_ARRAY_FIELDS: &[&str] = &[
+        "entities_introduced",
+        "entities_developed",
+        "relations_introduced",
+        "relations_developed",
+        "events",
+        "claims",
+        "questions_raised",
+    ];
+    for key in OBJECT_ARRAY_FIELDS {
+        if let Some(Value::Array(items)) = top.get_mut(*key) {
+            items.retain(|item| matches!(item, Value::Object(_) | Value::Null));
+        }
+    }
+}
+
 /// Pick the first event description from the extraction to fill the
 /// legacy `plot` field. The atlas has richer event records; this is a
 /// one-sentence back-compat summary.
@@ -1069,7 +1113,13 @@ struct RawClaimSketch {
     content: String,
     discourse_act: Option<DiscourseAct>,
     epistemic_status: Option<EpistemicStatus>,
-    attributed_to: Option<String>,
+    // Tolerant: the prompt asks for a single string, but Qwopus-27B
+    // and other big-model variants sometimes emit a co-author array
+    // (`["Author A", "Author B"]`). Phase 1 should not lose the
+    // claim over a stylistic drift in attribution shape — flatten
+    // arrays via `phase3_metadata_value_to_string` so the same
+    // adapter that hardened Phase 3 metadata also works here.
+    attributed_to: Option<serde_json::Value>,
     anchor: String,
 }
 
@@ -1095,14 +1145,16 @@ impl RawClaimSketch {
         let epistemic_status = self
             .epistemic_status
             .unwrap_or(EpistemicStatus::Confident);
+        let attributed_to = self
+            .attributed_to
+            .and_then(phase3_metadata_value_to_string)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         Some(ClaimSketch {
             content,
             discourse_act,
             epistemic_status,
-            attributed_to: self
-                .attributed_to
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
+            attributed_to,
             anchor: self.anchor,
         })
     }
@@ -1591,6 +1643,87 @@ mod tests {
         let c = &parsed.section_extraction.unwrap().claims[0];
         assert_eq!(c.discourse_act, DiscourseAct::Enact);
         assert_eq!(c.epistemic_status, EpistemicStatus::Confident);
+    }
+
+    #[test]
+    fn parse_phase1_keeps_last_value_on_duplicate_keys() {
+        // Observed on Gemma-31B running sep-al-farabi sec_0003: the
+        // model emitted the same `description` field twice on a
+        // single entity, possibly from a self-correction mid-stream.
+        // The Value-first parse path silently keeps the last value;
+        // we lose the first description but keep the section.
+        let p = LiteraryAtlasPipeline::new();
+        let response = r#"{
+          "section_id": "sec_0001",
+          "entities_introduced": [{
+            "canonical_name": "kalâm",
+            "entity_type": "concept",
+            "description": "First description.",
+            "description": "Replacement description.",
+            "anchor": "kalam"
+          }],
+          "claims": [{"content": "X.", "discourse_act": "assert"}],
+          "questions_raised": [{"content": "What is kalâm?"}]
+        }"#;
+        let parsed = p.parse_phase1(response).unwrap();
+        let e = &parsed.section_extraction.unwrap().entities_introduced[0];
+        assert_eq!(e.description, "Replacement description.");
+    }
+
+    #[test]
+    fn parse_phase1_filters_comment_strings_from_object_arrays() {
+        // Observed on Gemma-31B running sep-al-farabi sec_0003 retry:
+        // the model interleaved `"//"` literal strings between entity
+        // objects, presumably as commentary. The pre-pass strips
+        // those so the typed deserializer sees only valid struct or
+        // null entries.
+        let p = LiteraryAtlasPipeline::new();
+        let response = r#"{
+          "section_id": "sec_0001",
+          "entities_introduced": [
+            "//",
+            {
+              "canonical_name": "Al-Fârâbî",
+              "entity_type": "person",
+              "description": "Philosopher.",
+              "anchor": "Al-Farabi"
+            },
+            "// stray note from the model"
+          ],
+          "claims": [{"content": "Y.", "discourse_act": "assert"}],
+          "questions_raised": [{"content": "Who is Al-Fârâbî?"}]
+        }"#;
+        let parsed = p.parse_phase1(response).unwrap();
+        let entities = &parsed.section_extraction.unwrap().entities_introduced;
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].canonical_name, "Al-Fârâbî");
+    }
+
+    #[test]
+    fn parse_phase1_flattens_array_attributed_to_for_claims() {
+        // Observed on Qwopus3.5-27B running sep-african-sage sec_0002:
+        // the model emitted `attributed_to: ["Henry Oruka", "Kwasi
+        // Wiredu"]` for a co-attributed claim. The schema asks for a
+        // single string, but losing the whole claim over a stylistic
+        // drift in attribution shape is too costly. The parser
+        // flattens arrays via the same string-coercion adapter that
+        // hardens Phase 3 metadata.
+        let p = LiteraryAtlasPipeline::new();
+        let response = r#"{
+          "section_id": "sec_0001",
+          "claims": [{
+            "content": "African sage philosophy admits both individual and collective authorship.",
+            "discourse_act": "argue",
+            "attributed_to": ["Henry Oruka", "Kwasi Wiredu"]
+          }],
+          "questions_raised": [{"content": "Who counts as a sage?"}]
+        }"#;
+        let parsed = p.parse_phase1(response).unwrap();
+        let c = &parsed.section_extraction.unwrap().claims[0];
+        assert_eq!(
+            c.attributed_to.as_deref(),
+            Some("Henry Oruka, Kwasi Wiredu")
+        );
     }
 
     #[test]
