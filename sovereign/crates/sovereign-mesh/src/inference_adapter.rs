@@ -183,12 +183,39 @@ impl SovereignInferenceAdapter {
         // guaranteed-reject state.
         req.tools = Self::forward_tools(request);
         req.tool_choice = request.tool_choice.clone();
+        // OpenAI `response_format: {"type":"json_schema", json_schema:
+        // {"name":..., "schema":..., "strict":...}}` → core
+        // `structured_output: <schema>`. The sampler builder
+        // (`build_sampler` in sovereign-inference::embedded) consumes
+        // this as the JSON Schema for `LlamaSampler::llguidance`. We
+        // also accept `{"type":"json_object"}` (any-JSON) by mapping
+        // to the trivial `{"type":"object"}` schema.
+        if let Some(rf) = request.response_format.as_ref() {
+            req.structured_output = extract_response_format_schema(rf);
+        }
         let speed = if req.tools.is_some() {
             sovereign_core::types::Speed::Slow
         } else {
             crate::oicp_select::pick_slot_for_oicp(self.provider.as_ref(), &req)
         };
         req.with_speed(speed)
+    }
+}
+
+/// Pull a JSON Schema out of the OpenAI `response_format` envelope.
+/// Returns `None` for unrecognised or missing shapes so we don't
+/// propagate junk into the sampler.
+pub(crate) fn extract_response_format_schema(
+    rf: &serde_json::Value,
+) -> Option<serde_json::Value> {
+    let kind = rf.get("type").and_then(|v| v.as_str())?;
+    match kind {
+        "json_schema" => rf
+            .get("json_schema")
+            .and_then(|js| js.get("schema"))
+            .cloned(),
+        "json_object" => Some(serde_json::json!({"type": "object"})),
+        _ => None,
     }
 }
 

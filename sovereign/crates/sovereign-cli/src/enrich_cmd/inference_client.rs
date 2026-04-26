@@ -136,6 +136,31 @@ impl DaemonInferenceClient {
                 obj.insert("max_tokens".into(), serde_json::json!(n));
             }
         }
+        // OpenAI-style structured-output declaration. When the
+        // pipeline attached a JSON Schema via
+        // `ChatPrompt::with_response_schema`, surface it as
+        // `response_format` so the daemon installs a
+        // grammar-constrained sampler. Schema name defaults to a
+        // generic label if the caller didn't set one.
+        if let Some(schema) = prompt.response_schema.as_ref() {
+            let name = prompt
+                .response_schema_name
+                .as_deref()
+                .unwrap_or("response_schema");
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert(
+                    "response_format".into(),
+                    serde_json::json!({
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": name,
+                            "schema": schema,
+                            "strict": true
+                        }
+                    }),
+                );
+            }
+        }
         let resp = self.client.post(&url).json(&body).send().await?;
         let status = resp.status();
         let text = resp

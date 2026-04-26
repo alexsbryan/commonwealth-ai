@@ -1989,23 +1989,26 @@ const THINK_BUDGET: usize = 512;
 /// - **penalties**: kept as a backstop for single-token repetition that DRY's
 ///   `allowed_length = 2` intentionally ignores.
 fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> LlamaSampler {
-    // Grammar-constrained decoding: if structured_output contains a JSON
-    // schema, generate a GBNF grammar and use it to constrain the sampler.
-    // DISABLED: the generated GBNF causes llama.cpp assertion failures
-    // during sampling (empty parse stacks). The grammar generator needs
-    // validation against llama.cpp's GBNF parser before we can enable this.
-    // For now, log the grammar so we can debug it offline, and fall through
-    // to the standard sampler.
+    // Grammar-constrained decoding (PARKED 2026-04-25): enabling
+    // the `llguidance` feature on `llama-cpp-2 = 0.1.145` triggered
+    // a tokio-rt-worker stack overflow at daemon startup that 8MB
+    // worker stacks did not contain — likely deep recursion in the
+    // llguidance state-machine compiler at static-init time. The
+    // OpenAI `response_format` wire surface and `ChatPrompt`
+    // schema extension are shipped so the next iteration can
+    // re-enable enforcement without changing the API. For now we
+    // log when the request asks for structured output and fall
+    // through to free-form sampling (the parser-hardening fixes
+    // already in place absorb most JSON drift; the truly malformed
+    // syntax cases will need this re-enabled).
     if let Some(ref schema) = request.structured_output {
-        let grammar_str = json_schema_to_gbnf(schema);
         tracing::info!(
-            grammar = %grammar_str,
-            schema = %schema,
-            "Grammar-constrained decoding requested (currently disabled — using standard sampler)"
+            schema_bytes = schema.to_string().len(),
+            "structured_output requested but grammar enforcement is parked — \
+             see embedded.rs build_sampler comment"
         );
-        // TODO: Re-enable once grammar is validated:
-        // match LlamaSampler::grammar(model, &grammar_str, "root") { ... }
     }
+    let grammar_sampler: Option<LlamaSampler> = None;
 
     // Temperature: per-request override → family default.
     let temp = request.temperature.unwrap_or(quirks.default_temperature);
@@ -2016,24 +2019,25 @@ fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &Model
     // Sequence breakers tell DRY where one "thought unit" ends and another
     // begins — any of these tokens resets the repeated-suffix detector.
     let breakers: &[&[u8]] = &[b"\n", b".", b"?", b"!", b":", b"\"", b"*"];
-    if temp < 0.01 {
-        // Greedy decoding — DRY and penalties still applied to prevent
-        // degenerate repetition loops even in greedy mode.
-        LlamaSampler::chain_simple([
-            LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()),
-            LlamaSampler::penalties(128, 1.15, 0.1, 0.1),
-            LlamaSampler::greedy(),
-        ])
-    } else {
-        LlamaSampler::chain_simple([
-            LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()),
-            LlamaSampler::penalties(128, 1.15, 0.1, 0.1),
-            LlamaSampler::top_k(top_k_val),
-            LlamaSampler::min_p(0.05, 1),
-            LlamaSampler::temp(temp),
-            LlamaSampler::dist(rand_seed()),
-        ])
+
+    // Assemble the chain. Grammar (if any) goes first so it masks
+    // disallowed tokens before DRY/penalties/temp run on the
+    // surviving distribution.
+    let mut samplers: Vec<LlamaSampler> = Vec::new();
+    if let Some(g) = grammar_sampler {
+        samplers.push(g);
     }
+    samplers.push(LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()));
+    samplers.push(LlamaSampler::penalties(128, 1.15, 0.1, 0.1));
+    if temp < 0.01 {
+        samplers.push(LlamaSampler::greedy());
+    } else {
+        samplers.push(LlamaSampler::top_k(top_k_val));
+        samplers.push(LlamaSampler::min_p(0.05, 1));
+        samplers.push(LlamaSampler::temp(temp));
+        samplers.push(LlamaSampler::dist(rand_seed()));
+    }
+    LlamaSampler::chain_simple(samplers)
 }
 
 fn rand_seed() -> u32 {
