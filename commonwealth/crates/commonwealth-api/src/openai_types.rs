@@ -30,6 +30,14 @@ pub struct ChatCompletionRequest {
     /// Stored as raw JSON so forward-compat shapes pass through untouched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
+    /// OpenAI-style structured-output declaration. When set to
+    /// `{"type":"json_schema","json_schema":{...}}` the daemon
+    /// installs a grammar-constrained sampler so the model's output
+    /// is forced to be valid JSON conforming to the schema. Used by
+    /// the atlas Phase 1 extractor to defeat malformed-JSON drift on
+    /// long structured outputs (Gemma-31B / Qwopus-27B).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<serde_json::Value>,
     /// Commonwealth extension: OICP requirements for model selection.
     #[serde(default)]
     pub oicp: Option<InferenceRequirements>,
