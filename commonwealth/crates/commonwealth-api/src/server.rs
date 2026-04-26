@@ -107,6 +107,10 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::corpus_install),
         )
         .route(
+            "/internal/corpus/expand",
+            post(routes_internal::corpus_expand),
+        )
+        .route(
             "/internal/corpus/progress",
             get(routes_internal::corpus_progress),
         )

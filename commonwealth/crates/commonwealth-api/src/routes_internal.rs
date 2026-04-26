@@ -1378,6 +1378,101 @@ pub struct CorpusStatusEntry {
 ///
 /// Returns `true` when a new task was spawned, `false` when a task
 /// was already live for this corpus.
+/// POST /internal/corpus/expand — relax the active filter scope on an
+/// installed corpus (e.g. promote Wikipedia from Core to Full) by
+/// running [`corpus_engine::CorpusEngine::expand_corpus`] in the
+/// background. Progress streams on the same `corpus-progress` channel
+/// the install path uses, with phase strings the Desktop poller
+/// already forwards verbatim.
+///
+/// Idempotent at the `active_ingests` layer: a second call while an
+/// expansion is already in flight returns `spawned: false`.
+pub async fn corpus_expand(
+    State(state): State<AppState>,
+    Json(req): Json<ExpandRequest>,
+) -> Result<Json<InstallResponse>, (StatusCode, Json<ErrorBody>)> {
+    if state.inner.corpus_engine.is_none() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: "no corpus engine available on this node".into(),
+            }),
+        ));
+    }
+    let spawned = spawn_corpus_expand(state, req.corpus_id.clone()).await;
+    Ok(Json(InstallResponse {
+        corpus_id: req.corpus_id,
+        spawned,
+    }))
+}
+
+/// Spawn an expand task that calls
+/// [`corpus_engine::CorpusEngine::expand_corpus_to_full`] in the
+/// background. Mirrors [`spawn_corpus_install`]'s lifecycle so the
+/// existing status / progress / cancel plumbing works unchanged.
+pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {
+    let Some(engine) = state.inner.corpus_engine.clone() else {
+        return false;
+    };
+
+    {
+        let mut active = state.inner.active_ingests.write().await;
+        if active.contains(&corpus_id) {
+            return false;
+        }
+        active.insert(corpus_id.clone());
+    }
+
+    let state_for_task = state.clone();
+    let corpus_id_for_task = corpus_id.clone();
+    tokio::spawn(async move {
+        let progress_state = state_for_task.clone();
+        let progress_cid = corpus_id_for_task.clone();
+        let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
+            let progress_state = progress_state.clone();
+            let progress_cid = progress_cid.clone();
+            tokio::spawn(async move {
+                progress_state
+                    .inner
+                    .corpus_progress
+                    .write()
+                    .await
+                    .insert(progress_cid, p);
+            });
+        });
+
+        let result = engine
+            .expand_corpus_to_full(&corpus_id_for_task, Some(progress_cb))
+            .await;
+
+        state_for_task
+            .inner
+            .active_ingests
+            .write()
+            .await
+            .remove(&corpus_id_for_task);
+
+        match result {
+            Ok(info) => tracing::info!(
+                corpus = %corpus_id_for_task,
+                chunks = info.chunks_created,
+                "spawn_corpus_expand: expansion complete"
+            ),
+            Err(e) => tracing::warn!(
+                corpus = %corpus_id_for_task,
+                error = %e,
+                "spawn_corpus_expand: expansion failed"
+            ),
+        }
+    });
+    true
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ExpandRequest {
+    pub corpus_id: String,
+}
+
 pub async fn spawn_corpus_install(state: AppState, corpus_id: String) -> bool {
     let Some(engine) = state.inner.corpus_engine.clone() else {
         tracing::warn!(
