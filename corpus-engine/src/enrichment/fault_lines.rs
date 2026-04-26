@@ -164,7 +164,24 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if denom < 1e-12 { 0.0 } else { (dot / denom) as f32 }
 }
 
-/// Extract a JSON block from model output that may be wrapped in markdown fences.
+/// Extract a JSON block from model output. Handles three shapes the
+/// pipeline regularly sees in the wild:
+///
+///   1. ` ```json … ``` ` — explicit JSON fence. What thinking models
+///      (Qwen3, Qwopus) emit by default even when `response_format` is
+///      set, because the chat template steers them toward markdown.
+///   2. ` ``` … ``` ` — bare triple-backtick fence. Less common but
+///      observed when models drop the language hint.
+///   3. **Bare JSON** — `{ … }` or `[ … ]` with no fence. What
+///      well-behaved models (Darwin-9B, schema-faithful runs) emit
+///      when `response_format: json_schema, strict: true` actually
+///      sticks. Previously dropped on the floor with "no recognisable
+///      JSON object" — silently rejecting every model that obeyed
+///      the schema cleanly. The bench surfaced this when Darwin's
+///      response started with a perfectly-formed `{"section_id": …}`
+///      and we still errored out.
+///
+/// Returns the JSON substring trimmed of surrounding whitespace.
 pub(crate) fn extract_json_block(text: &str) -> Option<&str> {
     if let Some(start) = text.find("```json") {
         let start = start + 7;
@@ -180,6 +197,17 @@ pub(crate) fn extract_json_block(text: &str) -> Option<&str> {
                 return Some(block);
             }
         }
+    }
+    // No fence — fall back to bare JSON. Trim leading/trailing
+    // whitespace and accept anything that opens with `{` or `[`.
+    // We don't try to slice out a sub-region; if the model wrapped
+    // its JSON in prose, that's a parse failure further down the
+    // pipeline (where serde_json gives a precise byte offset),
+    // not a "no JSON" failure here. The full body is preserved
+    // for the downstream parser to chew on.
+    let trimmed = text.trim();
+    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        return Some(trimmed);
     }
     None
 }
@@ -214,6 +242,39 @@ mod tests {
     fn extract_json_block_no_fences() {
         let text = "just plain text";
         assert!(extract_json_block(text).is_none());
+    }
+
+    #[test]
+    fn extract_json_block_bare_object() {
+        // Regression: schema-faithful models (response_format honoured)
+        // emit bare JSON with no fence. Used to fail with "no
+        // recognisable JSON object" until bare-JSON fallback landed.
+        let text = r#"{"section_id": "sec_0001", "claims": []}"#;
+        assert_eq!(
+            extract_json_block(text),
+            Some(r#"{"section_id": "sec_0001", "claims": []}"#)
+        );
+    }
+
+    #[test]
+    fn extract_json_block_bare_object_with_whitespace() {
+        let text = "\n\n  {\"x\": 1}\n";
+        assert_eq!(extract_json_block(text), Some(r#"{"x": 1}"#));
+    }
+
+    #[test]
+    fn extract_json_block_bare_array() {
+        let text = r#"[{"x": 1}]"#;
+        assert_eq!(extract_json_block(text), Some(r#"[{"x": 1}]"#));
+    }
+
+    #[test]
+    fn extract_json_block_fence_still_wins_over_bare() {
+        // When BOTH a fence and a leading `{` appear (rare — a model
+        // wrote both prose and fenced JSON), the fence wins because
+        // fence content is the explicitly-marked answer.
+        let text = "{\n  \"draft\": true\n}\n\n```json\n{\"final\": true}\n```";
+        assert_eq!(extract_json_block(text), Some(r#"{"final": true}"#));
     }
 
     #[test]
