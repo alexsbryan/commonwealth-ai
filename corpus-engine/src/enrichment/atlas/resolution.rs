@@ -33,7 +33,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::enrichment::pipeline::atlas::{
     EntitySketch, EventSketch, EventType, SectionExtraction,
@@ -140,6 +140,28 @@ pub async fn resolve_entities_and_events(
              unresolved event participants"
         );
     }
+    // Phase 3a hygiene: collapse near-duplicate Entity atoms produced
+    // by upstream model spelling drift (observed acutely with smaller
+    // models — sep-compatibilism on Qwopus-9B-Q8 emitted "Classical
+    // Compatibilism" alongside "Classical Compatiblistism", "Classical
+    // compatbilism", and "Classical compatibelism" as four distinct
+    // atoms). Runs after synthesis so synthesized atoms also benefit
+    // from the merge if a typo variant of the same name landed in
+    // entities_introduced earlier.
+    let typo_merges = dedup_typo_fragmented_entities(
+        &mut entity_result.entities,
+        &mut entity_result.name_index,
+    );
+    if !typo_merges.is_empty() {
+        info!(
+            merged = typo_merges.len(),
+            "phase 3a: merged {} near-duplicate Entity atom(s) (typo variants)",
+            typo_merges.len(),
+        );
+        for (loser, survivor) in &typo_merges {
+            debug!(loser, survivor, "phase 3a: typo-merge");
+        }
+    }
     // Token-inverted index for fuzzy participant lookup — covers
     // LLM-typo names like `Alyshka` / `Alysha` / `Adeladа Miюsova`
     // that share a long token with the canonical entity but do not
@@ -228,6 +250,208 @@ fn synthesize_entities_from_unresolved_event_participants(
     }
 
     synthesized
+}
+
+/// Maximum folded edit distance between two canonical names for the
+/// typo-merge pass to fire. Chosen at 3 to catch the worst observed
+/// fragmentation drift (`compatibilism` ↔ `compatiblistism` is
+/// folded-Lev 3) while still leaving the prefix guard as the primary
+/// safety against legitimate prefix-distinct concepts (`compatibilism`
+/// ↔ `incompatibilism` is folded-Lev 2 but the first 4 chars differ).
+const TYPO_DEDUP_LEVENSHTEIN_MAX: usize = 3;
+
+/// Minimum folded canonical_name length for the typo-merge pass.
+/// Below this, short names (`Wolf`, `Lewis`, `Anna`) get a pass —
+/// short names share too many edits coincidentally and the existing
+/// resolver already covers them through alias + first-token rules.
+const TYPO_DEDUP_MIN_FOLDED_LEN: usize = 8;
+
+/// Number of leading folded characters required to match before two
+/// atoms can be considered typo variants. The motivating false-merge
+/// case is `Compatibilism` vs `Incompatibilism` — folded-Lev 2, which
+/// would slip through a pure edit-distance cap. The two share zero
+/// matching characters in their first four positions, so a prefix
+/// guard cleanly separates them while keeping `Compatibilism`
+/// alignable with `compatibelism`, `compatbilism`, and
+/// `Compatiblistism`.
+const TYPO_DEDUP_PREFIX_MATCH: usize = 4;
+
+/// Collapse near-duplicate Entity atoms produced by upstream model
+/// spelling drift. Runs after [`synthesize_entities_from_unresolved_event_participants`]
+/// and before the token index is built, so `resolve_events` (which
+/// looks up via `name_index` + `token_index`) lands on the surviving
+/// atom rather than the typo variant.
+///
+/// Pairwise check across the entity vec. Two atoms merge when ALL of:
+/// - same `entity_type`
+/// - both folded canonical names ≥ [`TYPO_DEDUP_MIN_FOLDED_LEN`]
+/// - first [`TYPO_DEDUP_PREFIX_MATCH`] folded chars match — the
+///   primary guard against legitimate prefix-distinct concepts
+/// - whole-name folded Levenshtein ≤ [`TYPO_DEDUP_LEVENSHTEIN_MAX`]
+///
+/// Survivor is selected by, in order:
+/// 1. higher salience
+/// 2. earlier `first_appearance.chunk_id` (lex compare; OK for
+///    `sec_NNNN` ordering)
+/// 3. longer description
+/// 4. lower atom-id-assigned position (deterministic tiebreaker)
+///
+/// The loser's canonical_name plus its aliases get appended to the
+/// survivor's aliases (deduped case-insensitively); the longer
+/// description wins; every `name_index` value pointing at the loser
+/// id is rewritten to the survivor id; folded forms of the survivor's
+/// canonical name and aliases are re-inserted so future lookups hit.
+/// The loser is then removed from `entities`.
+///
+/// The pass repeats until no merge fires — chains like A ↔ B ↔ C
+/// collapse correctly even when A ↔ C is above the Lev cap, because
+/// after the first pass merges B into A, A's alias list contains
+/// `B`'s spelling and the next iteration's name comparison is against
+/// A's canonical (still close enough to C) plus the alias-routed
+/// `name_index`.
+///
+/// Returns `(loser_canonical_name, survivor_canonical_name)` pairs in
+/// merge order for atlas hygiene logging.
+fn dedup_typo_fragmented_entities(
+    entities: &mut Vec<Entity>,
+    name_index: &mut HashMap<String, AtomId>,
+) -> Vec<(String, String)> {
+    let mut merges: Vec<(String, String)> = Vec::new();
+
+    loop {
+        let mut chosen: Option<(usize, usize)> = None;
+        'pair_search: for i in 0..entities.len() {
+            for j in (i + 1)..entities.len() {
+                if !typo_dedup_match(&entities[i], &entities[j]) {
+                    continue;
+                }
+                chosen = Some(pick_typo_dedup_survivor(
+                    &entities[i],
+                    &entities[j],
+                    i,
+                    j,
+                ));
+                break 'pair_search;
+            }
+        }
+
+        let Some((survivor_idx, loser_idx)) = chosen else {
+            break;
+        };
+
+        let loser = entities.remove(loser_idx);
+        let survivor_position = if loser_idx < survivor_idx {
+            survivor_idx - 1
+        } else {
+            survivor_idx
+        };
+
+        merges.push((
+            loser.canonical_name.clone(),
+            entities[survivor_position].canonical_name.clone(),
+        ));
+
+        let survivor_id = entities[survivor_position].id.clone();
+        {
+            let survivor = &mut entities[survivor_position];
+            // Promote loser canonical_name + its aliases into survivor.aliases
+            // (case-insensitive dedupe against current canonical + aliases).
+            let mut promoted = vec![loser.canonical_name.clone()];
+            promoted.extend(loser.aliases.iter().cloned());
+            for alias in promoted {
+                let trimmed = alias.trim().to_string();
+                if trimmed.is_empty()
+                    || trimmed.eq_ignore_ascii_case(&survivor.canonical_name)
+                    || survivor
+                        .aliases
+                        .iter()
+                        .any(|a| a.eq_ignore_ascii_case(&trimmed))
+                {
+                    continue;
+                }
+                survivor.aliases.push(trimmed);
+            }
+            // Inherit the longer description — same rationale as
+            // `merge_into_existing`: descriptions are routing aids,
+            // a fuller one strictly dominates.
+            if loser.description.trim().len() > survivor.description.len() {
+                survivor.description = loser.description.trim().to_string();
+            }
+        }
+
+        // Redirect every name_index entry that pointed at the loser,
+        // then re-register survivor's canonical + every alias so the
+        // newly-promoted forms route to the survivor too.
+        for value in name_index.values_mut() {
+            if *value == loser.id {
+                *value = survivor_id.clone();
+            }
+        }
+        let canon = entities[survivor_position].canonical_name.clone();
+        let aliases_snapshot: Vec<String> =
+            entities[survivor_position].aliases.clone();
+        name_index.insert(fold(&canon), survivor_id.clone());
+        for alias in aliases_snapshot {
+            name_index.insert(fold(&alias), survivor_id.clone());
+        }
+    }
+
+    merges
+}
+
+/// Decide which of two near-duplicate atoms survives. Returns
+/// `(survivor_idx, loser_idx)` referring to the input vec positions.
+fn pick_typo_dedup_survivor(
+    a: &Entity,
+    b: &Entity,
+    idx_a: usize,
+    idx_b: usize,
+) -> (usize, usize) {
+    use std::cmp::Ordering;
+
+    let prefer_a = match a
+        .salience
+        .partial_cmp(&b.salience)
+        .unwrap_or(Ordering::Equal)
+    {
+        Ordering::Greater => true,
+        Ordering::Less => false,
+        Ordering::Equal => {
+            if a.first_appearance.chunk_id != b.first_appearance.chunk_id {
+                a.first_appearance.chunk_id < b.first_appearance.chunk_id
+            } else if a.description.len() != b.description.len() {
+                a.description.len() > b.description.len()
+            } else {
+                idx_a < idx_b
+            }
+        }
+    };
+
+    if prefer_a {
+        (idx_a, idx_b)
+    } else {
+        (idx_b, idx_a)
+    }
+}
+
+/// Whether two entity atoms look like typo variants of the same
+/// canonical concept. See [`dedup_typo_fragmented_entities`] for the
+/// merge contract.
+fn typo_dedup_match(a: &Entity, b: &Entity) -> bool {
+    if a.entity_type != b.entity_type {
+        return false;
+    }
+    let af = fold(&a.canonical_name);
+    let bf = fold(&b.canonical_name);
+    if af.len() < TYPO_DEDUP_MIN_FOLDED_LEN || bf.len() < TYPO_DEDUP_MIN_FOLDED_LEN {
+        return false;
+    }
+    let prefix_a: String = af.chars().take(TYPO_DEDUP_PREFIX_MATCH).collect();
+    let prefix_b: String = bf.chars().take(TYPO_DEDUP_PREFIX_MATCH).collect();
+    if prefix_a != prefix_b {
+        return false;
+    }
+    levenshtein(&af, &bf) <= TYPO_DEDUP_LEVENSHTEIN_MAX
 }
 
 /// Bundle returned by [`resolve_entities_and_events`].
@@ -3860,5 +4084,214 @@ mod tests {
             out.entities.is_empty(),
             "blank participants must not synthesize entities"
         );
+    }
+
+    fn typed_entity(
+        name: &str,
+        ty: crate::enrichment::pipeline::atlas::EntityType,
+    ) -> EntitySketch {
+        EntitySketch {
+            canonical_name: name.into(),
+            aliases: Vec::new(),
+            entity_type: ty,
+            description: String::new(),
+            anchor: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn atlas_resolve_collapses_typo_fragmented_entity_atoms() {
+        // Models with weaker spelling (Qwopus 9B Q8 on sep-compatibilism)
+        // emit four distinct entity atoms for the same canonical
+        // concept: "Classical Compatibilism" alongside three typo
+        // variants. Empty descriptions disable the existing Rule 2 /
+        // Rule 3.5 cosine-driven merges, so the existing resolver
+        // lets all four through. The post-synthesis typo-dedup pass
+        // collapses them into a single atom whose aliases preserve
+        // the variant spellings for audit.
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let sections = vec![section(
+            "sec_0001",
+            vec![
+                typed_entity("Classical Compatibilism", EntityType::Concept),
+                typed_entity("Classical Compatiblistism", EntityType::Concept),
+                typed_entity("Classical compatbilism", EntityType::Concept),
+                typed_entity("Classical compatibelism", EntityType::Concept),
+            ],
+            vec![],
+        )];
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
+        assert_eq!(
+            out.entities.len(),
+            1,
+            "all four typo variants should collapse into a single atom; got: {:?}",
+            out.entities.iter().map(|e| &e.canonical_name).collect::<Vec<_>>()
+        );
+        let survivor = &out.entities[0];
+        // The three loser spellings must surface as aliases so an
+        // operator (or downstream Phase 5) can audit which forms got
+        // folded together.
+        for variant in [
+            "Classical Compatiblistism",
+            "Classical compatbilism",
+            "Classical compatibelism",
+        ] {
+            let canonical_match = survivor.canonical_name.eq_ignore_ascii_case(variant);
+            let alias_match = survivor
+                .aliases
+                .iter()
+                .any(|a| a.eq_ignore_ascii_case(variant));
+            assert!(
+                canonical_match || alias_match,
+                "loser spelling {variant:?} should survive as canonical or alias; \
+                 canonical={:?} aliases={:?}",
+                survivor.canonical_name,
+                survivor.aliases
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn atlas_resolve_typo_dedup_does_not_merge_prefix_distinct_concepts() {
+        // "Compatibilism" and "Incompatibilism" are folded-Lev 2 — a
+        // pure edit-distance check would collapse them. The first-4-
+        // chars prefix guard cleanly separates the two: "comp" vs
+        // "inco". Both atoms must remain distinct after the dedup pass.
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let sections = vec![section(
+            "sec_0001",
+            vec![
+                typed_entity("Compatibilism", EntityType::Concept),
+                typed_entity("Incompatibilism", EntityType::Concept),
+            ],
+            vec![],
+        )];
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
+        let names: Vec<&str> = out
+            .entities
+            .iter()
+            .map(|e| e.canonical_name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"Compatibilism") && names.contains(&"Incompatibilism"),
+            "prefix-distinct concepts must stay separate; got: {names:?}"
+        );
+        assert_eq!(out.entities.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn atlas_resolve_typo_dedup_skips_short_names() {
+        // "Wolf" / "Wolfe" / "Wolff" are folded-Lev 0/1 from each
+        // other but each sits below TYPO_DEDUP_MIN_FOLDED_LEN. The
+        // dedup pass must keep its hands off short names — the
+        // existing alias and shared-token rules (or human review)
+        // are the right tool there.
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let sections = vec![section(
+            "sec_0001",
+            vec![
+                typed_entity("Wolf", EntityType::Person),
+                typed_entity("Wolfe", EntityType::Person),
+                typed_entity("Wolff", EntityType::Person),
+            ],
+            vec![],
+        )];
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
+        assert_eq!(
+            out.entities.len(),
+            3,
+            "short names must not be typo-merged; got: {:?}",
+            out.entities.iter().map(|e| &e.canonical_name).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn atlas_resolve_typo_dedup_redirects_event_participants_to_survivor() {
+        // The whole point of the dedup pass is keeping atlas
+        // hygiene through to downstream Involves edges: an event
+        // that names a typo-variant of a canonical entity should
+        // resolve to the survivor's id, not to a ghost atom or a
+        // dropped participant. Run with one canonical entity plus
+        // a typo variant, then assert the event's involves edges
+        // route through the survivor.
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let sections = vec![section(
+            "sec_0001",
+            vec![
+                typed_entity("Classical Compatibilism", EntityType::Concept),
+                typed_entity("Classical Compatiblistism", EntityType::Concept),
+            ],
+            vec![event(
+                "Classical Compatiblistism stakes its claim against the Consequence Argument.",
+                &["Classical Compatiblistism"],
+            )],
+        )];
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
+        assert_eq!(out.entities.len(), 1, "typo variant should merge");
+        let survivor_id = &out.entities[0].id;
+        let involves: Vec<_> = out
+            .edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Involves)
+            .collect();
+        assert_eq!(involves.len(), 1, "one Involves edge for the one event");
+        assert_eq!(
+            &involves[0].target,
+            survivor_id,
+            "typo-named participant must route to the survivor atom"
+        );
+        assert!(
+            out.failures.is_empty(),
+            "no participant should drop after typo-dedup: {:?}",
+            out.failures
+        );
+    }
+
+    #[test]
+    fn typo_dedup_match_blocks_short_names() {
+        use super::super::atoms::{AtomId, Entity};
+        use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+        let mk = |name: &str| Entity {
+            id: AtomId::entity(1),
+            canonical_name: name.into(),
+            aliases: Vec::new(),
+            entity_type: EntityType::Person,
+            first_appearance: ChunkRef::new("sec_0001", None),
+            description: String::new(),
+            salience: 0.5,
+            enrichment_depth: EnrichmentDepth::Extracted,
+        };
+        // Short names below TYPO_DEDUP_MIN_FOLDED_LEN must not match.
+        assert!(!typo_dedup_match(&mk("Lewis"), &mk("Lewes")));
+        // Long-enough names with prefix mismatch must not match.
+        assert!(!typo_dedup_match(
+            &mk("Compatibilism"),
+            &mk("Incompatibilism")
+        ));
+        // Long-enough names with prefix match and Lev within the cap
+        // must match.
+        assert!(typo_dedup_match(
+            &mk("Compatibilism"),
+            &mk("Compatibelism")
+        ));
+        // Different entity types must not match even when the names
+        // are otherwise dedup-eligible.
+        let person = Entity {
+            entity_type: EntityType::Person,
+            ..mk("Frankfurter")
+        };
+        let concept = Entity {
+            entity_type: EntityType::Concept,
+            ..mk("Frankfurter")
+        };
+        assert!(!typo_dedup_match(&person, &concept));
     }
 }

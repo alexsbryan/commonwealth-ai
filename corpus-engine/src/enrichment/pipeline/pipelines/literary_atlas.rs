@@ -153,10 +153,12 @@ impl Pipeline for LiteraryAtlasPipeline {
             /*include_exemplars=*/ true,
             /*seed=*/ None,
         );
-        ChatPrompt::new(self.phase1_system(), user).with_response_schema(
-            "phase1_section_extraction",
-            phase1_section_extraction_schema(),
-        )
+        ChatPrompt::new(self.phase1_system(), user)
+            .with_response_schema(
+                "phase1_section_extraction",
+                phase1_section_extraction_schema(),
+            )
+            .with_phase_id("phase1")
     }
 
     /// Terse Phase 1 variant. Dispatched by the runner when a
@@ -176,10 +178,12 @@ impl Pipeline for LiteraryAtlasPipeline {
             /*seed=*/ None,
         );
         Some(
-            ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user).with_response_schema(
-                "phase1_section_extraction",
-                phase1_section_extraction_schema(),
-            ),
+            ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user)
+                .with_response_schema(
+                    "phase1_section_extraction",
+                    phase1_section_extraction_schema(),
+                )
+                .with_phase_id("phase1_terse"),
         )
     }
 
@@ -203,7 +207,7 @@ impl Pipeline for LiteraryAtlasPipeline {
             "Respond with a single JSON object per the schema in the system \
              message. Entities only. No prose, no <think> block.",
         );
-        Some(ChatPrompt::new(PHASE1A_SEED_SYSTEM, user))
+        Some(ChatPrompt::new(PHASE1A_SEED_SYSTEM, user).with_phase_id("phase1_seed"))
     }
 
     fn parse_seed_response(&self, response: &str) -> Result<Vec<SeedEntity>> {
@@ -279,10 +283,12 @@ impl Pipeline for LiteraryAtlasPipeline {
             /*include_exemplars=*/ true,
             seed,
         );
-        ChatPrompt::new(self.phase1_system(), user).with_response_schema(
-            "phase1_section_extraction",
-            phase1_section_extraction_schema(),
-        )
+        ChatPrompt::new(self.phase1_system(), user)
+            .with_response_schema(
+                "phase1_section_extraction",
+                phase1_section_extraction_schema(),
+            )
+            .with_phase_id("phase1")
     }
 
     fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {
@@ -409,7 +415,9 @@ impl Pipeline for LiteraryAtlasPipeline {
         chapter_excerpts: &[&ChapterInput],
         exemplars: &[&Exemplar],
     ) -> ChatPrompt {
-        self.inner.compose_phase3(cluster, chapter_excerpts, exemplars)
+        self.inner
+            .compose_phase3(cluster, chapter_excerpts, exemplars)
+            .with_phase_id("phase3")
     }
 
     fn parse_phase3(&self, response: &str) -> Result<Phase3ParseResult> {
@@ -461,7 +469,7 @@ impl Pipeline for LiteraryAtlasPipeline {
             "\n---\n\nRespond with a single JSON object per the schema in the system message.",
         );
 
-        Some(ChatPrompt::new(system, user))
+        Some(ChatPrompt::new(system, user).with_phase_id("phase3_facet"))
     }
 
     fn parse_phase3_facet(
@@ -523,6 +531,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     ) -> ChatPrompt {
         self.inner
             .compose_phase5(concern, cluster, cluster_chunk_texts, exemplars)
+            .with_phase_id("phase5")
     }
 
     fn parse_phase5(&self, response: &str) -> Result<Phase5ParseResult> {
@@ -537,7 +546,9 @@ impl Pipeline for LiteraryAtlasPipeline {
         pos_b: &Position,
         exemplars: &[&Exemplar],
     ) -> ChatPrompt {
-        self.inner.compose_phase6(pos_a, pos_b, exemplars)
+        self.inner
+            .compose_phase6(pos_a, pos_b, exemplars)
+            .with_phase_id("phase6")
     }
 
     fn parse_phase6(&self, response: &str) -> Result<Option<Phase6ParseResult>> {
@@ -555,6 +566,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     ) -> ChatPrompt {
         self.inner
             .compose_phase7(concerns, positions, chapter_titles, exemplars)
+            .with_phase_id("phase7")
     }
 
     fn parse_phase7(&self, response: &str) -> Result<Vec<Phase7ParseItem>> {
@@ -663,7 +675,7 @@ impl Pipeline for LiteraryAtlasPipeline {
 
         user.push_str("\nReturn 0–3 configurations as strict JSON per the system prompt.");
 
-        Some(ChatPrompt::new(PHASE8_CONFIGURATION_SYSTEM, user))
+        Some(ChatPrompt::new(PHASE8_CONFIGURATION_SYSTEM, user).with_phase_id("phase8_configuration"))
     }
 
     fn parse_phase8_configuration(

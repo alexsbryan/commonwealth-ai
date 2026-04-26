@@ -128,7 +128,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
             /*include_exemplars=*/ true,
             /*seed=*/ None,
         );
-        ChatPrompt::new(self.phase1_system(), user)
+        ChatPrompt::new(self.phase1_system(), user).with_phase_id("phase1")
     }
 
     fn compose_phase1_terse(&self, chapter: &ChapterInput) -> Option<ChatPrompt> {
@@ -138,7 +138,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
             /*include_exemplars=*/ false,
             /*seed=*/ None,
         );
-        Some(ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user))
+        Some(ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user).with_phase_id("phase1_terse"))
     }
 
     fn compose_phase1_with_seed(
@@ -153,7 +153,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
             /*include_exemplars=*/ true,
             seed,
         );
-        ChatPrompt::new(self.phase1_system(), user)
+        ChatPrompt::new(self.phase1_system(), user).with_phase_id("phase1")
     }
 
     fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {
@@ -183,7 +183,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
             "Respond with a single JSON object per the schema in the system \
              message. Entities only. No prose, no <think> block.",
         );
-        Some(ChatPrompt::new(PHASE1A_SEED_SYSTEM, user))
+        Some(ChatPrompt::new(PHASE1A_SEED_SYSTEM, user).with_phase_id("phase1_seed"))
     }
 
     fn parse_seed_response(&self, response: &str) -> Result<Vec<SeedEntity>> {
@@ -254,7 +254,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
             "\n---\n\nRespond with a single JSON object per the schema in the system message.",
         );
 
-        Some(ChatPrompt::new(system, user))
+        Some(ChatPrompt::new(system, user).with_phase_id("phase3_facet"))
     }
 
     fn parse_phase3_facet(
@@ -416,7 +416,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
 
         user.push_str("\nReturn 0–3 configurations as strict JSON per the system prompt.");
 
-        Some(ChatPrompt::new(PHASE8_CONFIGURATION_SYSTEM, user))
+        Some(ChatPrompt::new(PHASE8_CONFIGURATION_SYSTEM, user).with_phase_id("phase8_configuration"))
     }
 
     fn parse_phase8_configuration(

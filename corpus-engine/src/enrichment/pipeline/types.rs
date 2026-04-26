@@ -215,6 +215,20 @@ pub struct ChatPrompt {
     /// field. Only meaningful when `response_schema` is `Some`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_schema_name: Option<String>,
+    /// Stable identifier of the pipeline phase that produced this
+    /// prompt — `"phase1_seed"`, `"phase1_extract"`, `"phase3_name"`,
+    /// `"phase5_tensions"`, `"phase7_configure"`, etc. Carried so the
+    /// chat client can route the request to a phase-specific model
+    /// when the operator has declared one (e.g. small/fast for bulk
+    /// extraction, large/reasoning for synthesis). When the client has
+    /// no per-phase override for this id (or this field is `None`),
+    /// the client falls back to its default `chat_model`.
+    ///
+    /// The recipe-side compose functions are the source of truth for
+    /// which phase id a prompt carries. The chat client side never
+    /// invents one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase_id: Option<String>,
 }
 
 impl ChatPrompt {
@@ -224,6 +238,7 @@ impl ChatPrompt {
             user: user.into(),
             response_schema: None,
             response_schema_name: None,
+            phase_id: None,
         }
     }
 
@@ -235,6 +250,15 @@ impl ChatPrompt {
     ) -> Self {
         self.response_schema_name = Some(name.into());
         self.response_schema = Some(schema);
+        self
+    }
+
+    /// Tag this prompt with the pipeline phase that produced it. The
+    /// chat client uses this to look up a phase-specific model in the
+    /// operator's `chat_models` map and route the request there. See
+    /// [`ChatPrompt::phase_id`] for the schema of the id strings.
+    pub fn with_phase_id(mut self, phase_id: impl Into<String>) -> Self {
+        self.phase_id = Some(phase_id.into());
         self
     }
 }
