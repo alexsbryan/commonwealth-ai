@@ -192,15 +192,50 @@ pub struct Vocabulary {
 }
 
 /// Chat message prompt ready to submit to an OpenAI-compatible endpoint.
+///
+/// When `response_schema` is set, callers signal that the daemon
+/// should run grammar-constrained generation against this JSON
+/// Schema — an OpenAI-style `response_format: { type: "json_schema",
+/// ... }` request. Used by Phase 1 to force the model into valid
+/// JSON shape, eliminating the "missing comma / unclosed bracket"
+/// failure mode observed on Gemma-31B for long structured outputs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatPrompt {
     pub system: String,
     pub user: String,
+    /// JSON Schema for grammar-constrained generation. When `None`,
+    /// the request runs without constraints (backwards-compatible).
+    /// When `Some`, the chat client serialises this into the
+    /// OpenAI-style `response_format.json_schema.schema` field; the
+    /// server's adapter maps it to `CompletionRequest.structured_output`
+    /// which `build_sampler` consumes via `LlamaSampler::llguidance`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_schema: Option<serde_json::Value>,
+    /// Schema name for the OpenAI `response_format.json_schema.name`
+    /// field. Only meaningful when `response_schema` is `Some`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_schema_name: Option<String>,
 }
 
 impl ChatPrompt {
     pub fn new(system: impl Into<String>, user: impl Into<String>) -> Self {
-        Self { system: system.into(), user: user.into() }
+        Self {
+            system: system.into(),
+            user: user.into(),
+            response_schema: None,
+            response_schema_name: None,
+        }
+    }
+
+    /// Attach a JSON Schema for grammar-constrained generation.
+    pub fn with_response_schema(
+        mut self,
+        name: impl Into<String>,
+        schema: serde_json::Value,
+    ) -> Self {
+        self.response_schema_name = Some(name.into());
+        self.response_schema = Some(schema);
+        self
     }
 }
 

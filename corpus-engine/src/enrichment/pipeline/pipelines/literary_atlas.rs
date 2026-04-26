@@ -153,7 +153,10 @@ impl Pipeline for LiteraryAtlasPipeline {
             /*include_exemplars=*/ true,
             /*seed=*/ None,
         );
-        ChatPrompt::new(self.phase1_system(), user)
+        ChatPrompt::new(self.phase1_system(), user).with_response_schema(
+            "phase1_section_extraction",
+            phase1_section_extraction_schema(),
+        )
     }
 
     /// Terse Phase 1 variant. Dispatched by the runner when a
@@ -172,7 +175,12 @@ impl Pipeline for LiteraryAtlasPipeline {
             /*include_exemplars=*/ false,
             /*seed=*/ None,
         );
-        Some(ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user))
+        Some(
+            ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user).with_response_schema(
+                "phase1_section_extraction",
+                phase1_section_extraction_schema(),
+            ),
+        )
     }
 
     // ── Stage 1a — seed extraction ─────────────────────────────
@@ -271,7 +279,10 @@ impl Pipeline for LiteraryAtlasPipeline {
             /*include_exemplars=*/ true,
             seed,
         );
-        ChatPrompt::new(self.phase1_system(), user)
+        ChatPrompt::new(self.phase1_system(), user).with_response_schema(
+            "phase1_section_extraction",
+            phase1_section_extraction_schema(),
+        )
     }
 
     fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {
@@ -1266,6 +1277,151 @@ fn render_atlas_exemplar(buf: &mut String, n: usize, e: &Exemplar) {
     buf.push_str(&format!("**Why:** {}\n\n", e.rationale));
 }
 
+// ── Phase 1 JSON Schema (for grammar-constrained generation) ─
+//
+// Lenient JSON Schema that mirrors `RawSectionExtraction`. Used by
+// `phase1_section_extraction_schema()` so the daemon can pass it to
+// `LlamaSampler::llguidance` and force the model to emit valid JSON.
+// Strictness goal: eliminate the "invalid JSON syntax" failure mode
+// (missing commas, unclosed brackets, duplicate keys) that recurs on
+// long Phase 1 prompts. We do NOT enumerate enum strings — the
+// `string_enum_with_other!` machinery already absorbs unknown values
+// into `Other(String)`. We do NOT require most fields — the existing
+// `Raw*::into_sketch()` drops sketches whose required fields are
+// missing, so the parser stays the source of truth on completeness.
+// Only `section_id` and `questions_raised` are required at the top
+// level (mirroring the existing parser checks at parse_phase1).
+const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "section_id": { "type": "string" },
+    "entities_introduced": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entity_sketch" }
+    },
+    "entities_developed": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entity_state_sketch" }
+    },
+    "relations_introduced": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relation_sketch" }
+    },
+    "relations_developed": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relation_state_sketch" }
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/event_sketch" }
+    },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/claim_sketch" }
+    },
+    "questions_raised": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/question_sketch" }
+    }
+  },
+  "required": ["section_id", "questions_raised"],
+  "$defs": {
+    "entity_sketch": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "canonical_name": { "type": "string" },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "entity_type": { "type": "string" },
+        "description": { "type": "string" },
+        "anchor": { "type": "string" }
+      },
+      "required": ["canonical_name"]
+    },
+    "entity_state_sketch": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "entity_name": { "type": "string" },
+        "label": { "type": "string" },
+        "anchor": { "type": "string" }
+      },
+      "required": ["entity_name", "label"]
+    },
+    "relation_sketch": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "label": { "type": "string" },
+        "anchor": { "type": "string" }
+      },
+      "required": ["participants", "label"]
+    },
+    "relation_state_sketch": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "label": { "type": "string" },
+        "anchor": { "type": "string" }
+      },
+      "required": ["participants", "label"]
+    },
+    "event_sketch": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "description": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "anchor": { "type": "string" }
+      },
+      "required": ["description"]
+    },
+    "claim_sketch": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "content": { "type": "string" },
+        "discourse_act": { "type": "string" },
+        "epistemic_status": { "type": "string" },
+        "attributed_to": {
+          "anyOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } },
+            { "type": "null" }
+          ]
+        },
+        "anchor": { "type": "string" }
+      },
+      "required": ["content", "discourse_act"]
+    },
+    "question_sketch": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "content": { "type": "string" },
+        "anchor": { "type": "string" }
+      },
+      "required": ["content"]
+    }
+  }
+}"##;
+
+/// Return the Phase 1 section-extraction JSON Schema as a parsed
+/// `serde_json::Value`. Callers thread this through
+/// `ChatPrompt::with_response_schema()` so the daemon's
+/// grammar-constrained sampler forces the model into valid JSON.
+///
+/// The schema lives as a const string to avoid a `schemars` dep; the
+/// const is unit-tested for parse-validity below so drift caught at
+/// compile + test time, not at first runtime use.
+pub fn phase1_section_extraction_schema() -> serde_json::Value {
+    serde_json::from_str(PHASE1_SECTION_EXTRACTION_SCHEMA)
+        .expect("PHASE1_SECTION_EXTRACTION_SCHEMA must be valid JSON")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1643,6 +1799,56 @@ mod tests {
         let c = &parsed.section_extraction.unwrap().claims[0];
         assert_eq!(c.discourse_act, DiscourseAct::Enact);
         assert_eq!(c.epistemic_status, EpistemicStatus::Confident);
+    }
+
+    #[test]
+    fn phase1_section_extraction_schema_parses_as_valid_json() {
+        // Pin the schema-string-vs-JSON-validity contract so a typo
+        // in the const fails at unit-test time rather than at first
+        // grammar-constrained chat call. The helper itself
+        // `expect()`s parse success, so this also asserts the
+        // fallback path won't panic in production.
+        let schema = phase1_section_extraction_schema();
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["section_id"].is_object());
+        assert!(schema["properties"]["questions_raised"].is_object());
+        // `$defs` carries the per-sketch object schemas — most likely
+        // place to fluff a typo when adding a new sketch type.
+        let defs = &schema["$defs"];
+        for sketch in [
+            "entity_sketch",
+            "entity_state_sketch",
+            "relation_sketch",
+            "relation_state_sketch",
+            "event_sketch",
+            "claim_sketch",
+            "question_sketch",
+        ] {
+            assert!(defs[sketch].is_object(), "missing $defs/{sketch}");
+        }
+    }
+
+    #[test]
+    fn compose_phase1_attaches_response_schema_for_grammar_constraint() {
+        // Regression: every Phase 1 prompt path (default, with-seed,
+        // terse) must carry the response_schema so the daemon's
+        // grammar-constrained sampler engages. Without this the
+        // schema is silently dropped and we're back to malformed
+        // JSON drift on Gemma-31B / Qwopus-27B.
+        let p = LiteraryAtlasPipeline::new();
+        let chap = sample_chapter();
+        let default_prompt = p.compose_phase1(&chap, &[]);
+        assert_eq!(
+            default_prompt.response_schema_name.as_deref(),
+            Some("phase1_section_extraction")
+        );
+        assert!(default_prompt.response_schema.is_some());
+
+        let terse_prompt = p.compose_phase1_terse(&chap).expect("terse variant");
+        assert!(terse_prompt.response_schema.is_some());
+
+        let seed_prompt = p.compose_phase1_with_seed(&chap, &[], None);
+        assert!(seed_prompt.response_schema.is_some());
     }
 
     #[test]
