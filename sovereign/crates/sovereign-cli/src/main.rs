@@ -1,6 +1,7 @@
 mod amend;
 mod atos_cmd;
 mod atos_plugin;
+mod bench_cmd;
 mod chat_cmd;
 mod code_cmd;
 mod daemon_cmd;
@@ -163,6 +164,7 @@ const HELP: Help = Help {
             ("doctor",  "Diagnose setup and daemon health"),
             ("reflect", "Review session reflections; retire fixed ones"),
             ("recipe",  "Run a corpus ingestion recipe"),
+            ("bench",   "Throughput + correctness benchmarks for enrichment LLM tasks"),
             ("tools",   "Invoke code-intelligence tools from the CLI (list / describe / call)"),
             ("mcp",     "MCP server diagnostics (list tools, proxy)"),
             ("daemon",  "(internal) Long-running service managed by launchd/systemd"),
@@ -325,6 +327,10 @@ async fn main() {
             }
             "enrich" => {
                 let code = enrich_cmd::run_enrich(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "bench" => {
+                let code = bench_cmd::run_bench(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "chat" => {
@@ -664,3 +670,4 @@ async fn main() {
         }
     }
 }
+// trigger

@@ -1,0 +1,138 @@
+# atlas_throughput — model-selection bench for the atlas pipeline
+
+Driver + archived results for picking which `[models].primary` to load
+for long atlas-enrichment batches (the SEP 1800-article ingest is the
+motivating workload).
+
+The bench measures **throughput** (decode tokens/sec) and
+**correctness** (does the output parse via the real
+`LiteraryAtlasPipeline::parse_phase1`?) across four representative
+tasks:
+
+| task | description | what it measures |
+|---|---|---|
+| `phase1_short` | Atlas Phase 1 prompt against the shortest chapter in the corpus | Phase 1 floor for short sections |
+| `phase1_medium` | …against the median chapter | typical Phase 1 cost |
+| `phase1_long` | …against the longest chapter | Phase 1 ceiling + truncation risk |
+| `cluster_name_synth` | Small Phase 3-style structured prompt → single-object output | short-call loops (name / resolve / configure) |
+
+## Why these four
+
+The reference run (`sep-al-farabi`, 38 min total) was 79% Phase 1 and
+21% short calls. The three Phase 1 tasks span the real input-size
+range; `cluster_name_synth` stands in for every short-call phase
+(they're all 500–900 input tokens, sub-3000 output, structured-output
+with `response_format`). A model that handles all four well will
+handle the production pipeline; a model that fails any of them is
+rejected before you spend a week on a bad ingest.
+
+## Run
+
+The bench is a `sovereign-cli` subcommand — no Python deps, no
+secondary harness. It hits the running daemon's
+`/v1/chat/completions` so the model under test is whichever
+`[models].primary` the daemon was started with.
+
+```bash
+# 1. Pick a candidate model.
+$EDITOR ~/.config/sovereign/config.toml      # set [models].primary
+
+# 2. Restart the daemon so it loads the new model.
+systemctl --user restart sovereign.service
+
+# 3. Run the bench. 30+ min for a 27B-class model on Strix Halo.
+sovereign bench atlas --output bench/atlas_throughput/run-<label>.json
+
+# 4. Repeat for each candidate.
+```
+
+The stdout summary is always printed; `--output` writes the same data
+as JSON for archival + diffing. Each run carries the
+**daemon-reported `model_id`** (from the chat completions response,
+not the user-supplied label) so an archive can't be silently
+mislabelled.
+
+### Useful flags
+
+| flag | use |
+|---|---|
+| `--tasks <ids>` | Run a subset (e.g. `--tasks phase1_medium` while iterating prompt tweaks) |
+| `--no-warmup` | Include lazy-slot load tax in the first task's timing — useful for "cold-start cost" measurements |
+| `--max-tokens-cap N` | Override the per-task max_tokens (default 16384). Tighten to test how the model handles a smaller output budget |
+| `--corpus <id>` | Source Phase 1 chapters from a different ingested corpus (default `sep-al-farabi`) |
+
+## Reading the output
+
+```
+  --- summary (Qwopus3.5-27B-v3.5-Q6_K) ---
+  decode tok/s avg ...............    29.00
+  phase1 decode tok/s avg ........    18.50
+  phase1 success rate ............   100.0%
+  phase1 secs/chapter avg ........   620.4
+  est. 1800 articles × 5 ch ......   1551.0 h  (64.6 days)
+```
+
+- **`phase1 decode tok/s avg`** is the headline number for picking a
+  model. The cluster_name task's tokens/sec is usually higher than
+  Phase 1's because short calls hide load-tax in proportion; trust
+  Phase 1 for batch projection.
+- **`phase1 success rate`** below 100% is a hard reject signal — a
+  model that can't reliably produce parseable atlas JSON wastes
+  every retry pass on top of its base latency.
+- **`est. 1800 articles × 5 ch`** assumes Phase 1 is the dominant
+  cost (~80% in our reference run); the short-call phases add
+  ~25%. So if the table says 65 days, plan for ~80 days end-to-end.
+
+## Comparing runs
+
+`jq` is enough for first-cut comparison until we have more than two
+or three candidates:
+
+```bash
+for f in run-*.json; do
+  jq -r '[.model_id, .summary.phase1_decode_tps_mean,
+          .summary.phase1_success_rate,
+          .summary.est_hours_1800_articles_5_chapters] | @tsv' "$f"
+done | sort -k2 -nr
+```
+
+A proper `bench atlas compare` subcommand can land later if the
+`jq` recipe gets unwieldy.
+
+## Caveats
+
+- The bench uses `temperature: 0.0` (greedy) for reproducibility;
+  production runs at 0.2. Decode speed is essentially identical;
+  correctness may be slightly more conservative at greedy.
+- Slot reload tax is hidden by the warmup step — first-task latency
+  reflects steady-state, not cold-start. Use `--no-warmup` to
+  measure cold-start instead.
+- Per-task results are single-shot; we'd want N=3 medians for
+  publication-grade numbers, but for picking-a-model decisions a
+  single sample at the chapter sizes the model will actually see
+  is good enough. Re-run any task that lands far from your prior
+  for that model to sanity-check.
+- Daemon reports `prompt_tokens=0` in the `usage` block on this
+  build — that's an upstream bug in the chat-completions path, not
+  a bench issue. `completion_tokens` is correct, which is what the
+  tokens/sec measurement depends on.
+- On a failed task the result's `response_head` field carries the
+  **full** model output (not a 500-char preview) so post-mortem can
+  find corruption that lives deep in the body. Successful tasks
+  drop the response to keep result files small. If you ever need
+  the raw response for a passing task, run with `--tasks <id>`,
+  trip the validator deliberately, and inspect.
+
+## Known model failure modes (build a list as you test)
+
+- **Darwin-9B-Opus.Q8_0** (rejected 2026-04-26): 42.7 tok/s on
+  Phase 1, ~2.8× Qwopus's 15 tok/s. Throughput is real, correctness
+  is not — long structured outputs ship with random whitespace
+  corruption (`"betwee n"`, `"an d"`, `"Fârabì's"`) and at least one
+  missing-quote at byte 11409 of the response that the parser can't
+  recover from (balanced-brace scan ends `depth=2, in_string=true`).
+  The 9B+Q8 envelope can't sustain a 14k-char strict-JSON output on
+  this hardware. Try smaller Phase 1 prompts (`--max-tokens-cap
+  4096`) before declaring it gone, but the structural drift
+  suggests no.
+
