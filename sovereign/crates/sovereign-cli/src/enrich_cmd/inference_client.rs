@@ -6,6 +6,7 @@
 //! takes the pair of closures (`EmbedFn` + `ChatCompletionFn`)
 //! produced by `build_client_pair`.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -46,6 +47,13 @@ pub struct DaemonInferenceClient {
     /// thread its `max_output_tokens` through via
     /// `with_max_output_tokens`.
     max_output_tokens: Option<u32>,
+    /// Per-phase chat-model overrides. When a `ChatPrompt` arrives
+    /// tagged with `phase_id`, the client looks up the phase here and
+    /// — if a matching entry exists — sends the request with that
+    /// model id instead of `chat_model`. Empty map (the default)
+    /// means "always use `chat_model`", preserving the historical
+    /// single-model behaviour.
+    chat_models_by_phase: BTreeMap<String, String>,
 }
 
 impl DaemonInferenceClient {
@@ -63,6 +71,7 @@ impl DaemonInferenceClient {
             chat_model: chat_model.into(),
             embed_model: embed_model.into(),
             max_output_tokens: None,
+            chat_models_by_phase: BTreeMap::new(),
         })
     }
 
@@ -73,12 +82,56 @@ impl DaemonInferenceClient {
         self
     }
 
+    /// Install per-phase chat-model overrides. Each `(phase_id,
+    /// model_id)` entry in the map takes precedence over the
+    /// client's default `chat_model` when a `ChatPrompt` arrives
+    /// tagged with that `phase_id`. Phases not in the map (or
+    /// untagged prompts) keep the default. An empty map is a no-op.
+    ///
+    /// Recommended wiring: load `EnrichConfig`, then call
+    /// `client.with_chat_models_by_phase(cfg.chat_models_by_phase_snapshot())`
+    /// before handing the client off to `into_closures*`.
+    pub fn with_chat_models_by_phase(
+        mut self,
+        overrides: BTreeMap<String, String>,
+    ) -> Self {
+        self.chat_models_by_phase = overrides;
+        self
+    }
+
+    /// Resolve which chat-model id this client will use for a prompt
+    /// tagged with `phase_id`. Returns the override if present;
+    /// otherwise the default `chat_model`.
+    fn resolve_model_for_phase(&self, phase_id: Option<&str>) -> &str {
+        if let Some(id) = phase_id {
+            if let Some(model) = self.chat_models_by_phase.get(id) {
+                return model.as_str();
+            }
+        }
+        self.chat_model.as_str()
+    }
+
     pub fn with_localhost(chat_model: impl Into<String>, embed_model: impl Into<String>) -> Result<Self> {
         Self::new(
             v1_url(DEFAULT_CLIENT_PORT).trim_end_matches("/v1").to_string(),
             chat_model,
             embed_model,
         )
+    }
+
+    /// Build a client from `EnrichConfig`, threading both the
+    /// operator's `max_output_tokens` cap and per-phase chat-model
+    /// overrides onto the result. Recommended construction path for
+    /// every enrich subcommand — keeps all the per-corpus config
+    /// surfaces (timeout, output cap, phase-routing) consistent.
+    pub fn from_enrich_config(cfg: &super::config::EnrichConfig) -> Result<Self> {
+        Ok(Self::new(
+            cfg.base_url.clone(),
+            cfg.chat_model.clone(),
+            cfg.embed_model.clone(),
+        )?
+        .with_max_output_tokens(cfg.max_output_tokens)
+        .with_chat_models_by_phase(cfg.chat_models_by_phase_snapshot()))
     }
 
     pub fn base_url(&self) -> &str {
@@ -122,8 +175,9 @@ impl DaemonInferenceClient {
         max_tokens: Option<u32>,
     ) -> Result<String> {
         let url = format!("{}/v1/chat/completions", self.base_url);
+        let model = self.resolve_model_for_phase(prompt.phase_id.as_deref());
         let mut body = serde_json::json!({
-            "model": self.chat_model,
+            "model": model,
             "messages": [
                 {"role": "system", "content": prompt.system},
                 {"role": "user", "content": prompt.user},
@@ -361,6 +415,34 @@ mod tests {
         assert_eq!(c.base_url(), "http://localhost:9741");
         assert_eq!(c.chat_model(), "qwen3-8b");
         assert_eq!(c.embed_model(), "qwen3-embedding-0.6b");
+    }
+
+    #[test]
+    fn resolve_model_for_phase_falls_back_to_default_without_overrides() {
+        let c =
+            DaemonInferenceClient::new("http://localhost:9741", "qwopus-27b", "embed").unwrap();
+        assert_eq!(c.resolve_model_for_phase(None), "qwopus-27b");
+        assert_eq!(c.resolve_model_for_phase(Some("phase1")), "qwopus-27b");
+        assert_eq!(c.resolve_model_for_phase(Some("anything")), "qwopus-27b");
+    }
+
+    #[test]
+    fn resolve_model_for_phase_routes_via_override_when_phase_id_matches() {
+        let mut overrides = BTreeMap::new();
+        overrides.insert("phase1".into(), "qwen-9b".into());
+        overrides.insert("phase8_configuration".into(), "qwopus-27b".into());
+        let c = DaemonInferenceClient::new("http://localhost:9741", "default-model", "embed")
+            .unwrap()
+            .with_chat_models_by_phase(overrides);
+        assert_eq!(c.resolve_model_for_phase(Some("phase1")), "qwen-9b");
+        assert_eq!(
+            c.resolve_model_for_phase(Some("phase8_configuration")),
+            "qwopus-27b"
+        );
+        // Phase id not in the map → default.
+        assert_eq!(c.resolve_model_for_phase(Some("phase5")), "default-model");
+        // Untagged prompt → default.
+        assert_eq!(c.resolve_model_for_phase(None), "default-model");
     }
 
     #[test]

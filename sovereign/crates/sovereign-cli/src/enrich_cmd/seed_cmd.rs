@@ -114,12 +114,8 @@ pub async fn cmd_seed(args: &[String]) -> i32 {
         return 1;
     }
 
-    let client = match DaemonInferenceClient::new(
-        cfg.base_url.clone(),
-        cfg.chat_model.clone(),
-        cfg.embed_model.clone(),
-    ) {
-        Ok(c) => c.with_max_output_tokens(cfg.max_output_tokens),
+    let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
+        Ok(c) => c,
         Err(e) => {
             eprintln!("error: building daemon client: {e}");
             return 1;

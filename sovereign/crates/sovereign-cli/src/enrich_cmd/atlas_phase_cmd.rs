@@ -178,12 +178,8 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
     // Build daemon closures ourselves — the runner's private chat
     // closure is the v2 chat; name-atlas-clusters drives it
     // directly without re-entering phase_*_compose_phase3.
-    let (_, chat) = match DaemonInferenceClient::new(
-        cfg.base_url.clone(),
-        cfg.chat_model.clone(),
-        cfg.embed_model.clone(),
-    ) {
-        Ok(c) => c.with_max_output_tokens(cfg.max_output_tokens).into_closures(),
+    let (_, chat) = match DaemonInferenceClient::from_enrich_config(&cfg) {
+        Ok(c) => c.into_closures(),
         Err(e) => {
             eprintln!("error: building daemon client: {e}");
             return 1;
@@ -194,11 +190,7 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
     // — the prompt stands alone; exemplars steer but don't gate.
     let exemplar_path = paths::exemplars_dir(&cfg.corpus_id)
         .join(format!("{}.json", PipelinePhase::AtlasNamedClusters.id()));
-    let (embed, _) = match DaemonInferenceClient::new(
-        cfg.base_url.clone(),
-        cfg.chat_model.clone(),
-        cfg.embed_model.clone(),
-    ) {
+    let (embed, _) = match DaemonInferenceClient::from_enrich_config(&cfg) {
         Ok(c) => c.into_closures(),
         Err(e) => {
             eprintln!("error: building embed client: {e}");
@@ -408,12 +400,8 @@ fn build_runner(cfg: &EnrichConfig) -> Result<PhaseRunner, i32> {
         return Err(1);
     };
 
-    let client = match DaemonInferenceClient::new(
-        cfg.base_url.clone(),
-        cfg.chat_model.clone(),
-        cfg.embed_model.clone(),
-    ) {
-        Ok(c) => c.with_max_output_tokens(cfg.max_output_tokens),
+    let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
+        Ok(c) => c,
         Err(e) => {
             eprintln!("error: building daemon client: {e}");
             return Err(1);

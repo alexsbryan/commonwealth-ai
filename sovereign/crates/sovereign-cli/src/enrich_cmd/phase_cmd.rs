@@ -91,11 +91,7 @@ pub async fn run_phase(op: PhaseOp, args: &[String]) -> i32 {
             return 1;
         }
     };
-    let client = match DaemonInferenceClient::new(
-        cfg.base_url.clone(),
-        cfg.chat_model.clone(),
-        cfg.embed_model.clone(),
-    ) {
+    let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: building daemon client: {e}");

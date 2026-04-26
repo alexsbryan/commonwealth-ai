@@ -160,11 +160,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     // Build the embed closure. Resolution needs embeddings for the
     // description-cosine rule; the daemon client is the same one
     // used by `extract`.
-    let client = match DaemonInferenceClient::new(
-        cfg.base_url.clone(),
-        cfg.chat_model.clone(),
-        cfg.embed_model.clone(),
-    ) {
+    let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: building daemon client: {e}");

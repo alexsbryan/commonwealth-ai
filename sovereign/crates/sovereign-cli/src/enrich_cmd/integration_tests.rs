@@ -93,6 +93,7 @@ fn scaffold_corpus(corpus_id: &str, source_path: &std::path::Path) -> EnrichConf
         chapter_regex: corpus_engine::chunkers::sectioned::ChapterRegexDetector::DEFAULT_PATTERN
             .to_string(),
         chat_model: "test-chat".into(),
+        chat_models: None,
         embed_model: "test-embed".into(),
         base_url: "http://localhost:9741".into(),
         // Synthetic fixture bodies are short; keep the filter off so

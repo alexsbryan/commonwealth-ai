@@ -7,6 +7,7 @@
 //! developer can hand-edit this file if they need to swap a model or
 //! widen the detector regex.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -26,6 +27,20 @@ pub struct EnrichConfig {
     pub source_path: PathBuf,
     pub chapter_regex: String,
     pub chat_model: String,
+    /// Optional per-phase model overrides. Keys are pipeline phase
+    /// ids (`"phase1_seed"`, `"phase1"`, `"phase1_terse"`,
+    /// `"phase3"`, `"phase3_facet"`, `"phase5"`, `"phase6"`,
+    /// `"phase7"`, `"phase8_configuration"`); values are the model
+    /// id strings the daemon will route the request to. When a phase
+    /// id is missing from this map (or this whole map is `None`),
+    /// the request falls back to `chat_model`.
+    ///
+    /// Hand-edit this in `~/.sovereign/enrichment/<corpus>/config.json`
+    /// to recruit a small/fast model for bulk extraction phases and
+    /// reserve the heavy reasoning model for synthesis phases — see
+    /// `project_qwopus_size_ab.md` for the bench that motivates this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_models: Option<BTreeMap<String, String>>,
     pub embed_model: String,
     #[serde(default = "default_base_url")]
     pub base_url: String,
@@ -144,6 +159,27 @@ impl EnrichConfig {
     pub fn source_path_abs(&self) -> &Path {
         &self.source_path
     }
+
+    /// Resolve the chat-model id to use for a given pipeline phase.
+    /// Returns the per-phase override from `chat_models` when present,
+    /// otherwise falls back to `chat_model`. Operators wire per-phase
+    /// model recruitment by editing `chat_models` in `config.json`.
+    pub fn resolve_chat_model(&self, phase_id: &str) -> &str {
+        self.chat_models
+            .as_ref()
+            .and_then(|map| map.get(phase_id))
+            .map(String::as_str)
+            .unwrap_or(self.chat_model.as_str())
+    }
+
+    /// Snapshot of the operator's per-phase model overrides for
+    /// downstream wiring. Returns an empty map when no overrides are
+    /// configured. The snapshot is owned so callers can pass it to
+    /// `DaemonInferenceClient::with_chat_models_by_phase` without
+    /// holding a borrow on the config.
+    pub fn chat_models_by_phase_snapshot(&self) -> BTreeMap<String, String> {
+        self.chat_models.clone().unwrap_or_default()
+    }
 }
 
 #[cfg(test)]
@@ -158,6 +194,7 @@ mod tests {
             source_path: PathBuf::from("/tmp/foo.txt"),
             chapter_regex: r"(?m)^Chapter".into(),
             chat_model: "chat-m".into(),
+            chat_models: None,
             embed_model: "embed-m".into(),
             base_url: "http://localhost:9741".into(),
             min_section_body_words: default_min_section_body_words(),
@@ -191,6 +228,67 @@ mod tests {
         }"#;
         let cfg: EnrichConfig = serde_json::from_str(json).unwrap();
         assert!(cfg.base_url.contains("localhost"));
+    }
+
+    #[test]
+    fn resolve_chat_model_falls_back_to_default_when_no_override() {
+        let cfg = sample_config();
+        // No chat_models map set → every phase returns the default.
+        assert_eq!(cfg.resolve_chat_model("phase1"), "chat-m");
+        assert_eq!(cfg.resolve_chat_model("phase8_configuration"), "chat-m");
+        assert_eq!(cfg.resolve_chat_model("anything-unknown"), "chat-m");
+    }
+
+    #[test]
+    fn resolve_chat_model_uses_per_phase_override() {
+        let mut overrides = BTreeMap::new();
+        overrides.insert("phase1".into(), "qwen-9b".into());
+        overrides.insert("phase8_configuration".into(), "qwopus-27b".into());
+        let cfg = EnrichConfig {
+            chat_models: Some(overrides),
+            ..sample_config()
+        };
+        assert_eq!(cfg.resolve_chat_model("phase1"), "qwen-9b");
+        assert_eq!(cfg.resolve_chat_model("phase8_configuration"), "qwopus-27b");
+        // Phase id missing from the map still falls back.
+        assert_eq!(cfg.resolve_chat_model("phase5"), "chat-m");
+    }
+
+    #[test]
+    fn chat_models_by_phase_snapshot_is_empty_when_unset() {
+        let cfg = sample_config();
+        assert!(cfg.chat_models_by_phase_snapshot().is_empty());
+    }
+
+    #[test]
+    fn chat_models_by_phase_snapshot_carries_overrides() {
+        let mut overrides = BTreeMap::new();
+        overrides.insert("phase7".into(), "big-model".into());
+        let cfg = EnrichConfig {
+            chat_models: Some(overrides.clone()),
+            ..sample_config()
+        };
+        assert_eq!(cfg.chat_models_by_phase_snapshot(), overrides);
+    }
+
+    #[test]
+    fn old_config_without_chat_models_loads_with_default_none() {
+        // Operators upgrading the binary keep their existing
+        // config.json files. The `#[serde(default)]` on chat_models
+        // means deserialisation must succeed without the field.
+        let json = r#"{
+            "schema_version": 1,
+            "corpus_id": "x",
+            "pipeline_id": "literary",
+            "source_path": "/tmp/x.txt",
+            "chapter_regex": "^Chapter",
+            "chat_model": "c",
+            "embed_model": "e",
+            "created_at": "t"
+        }"#;
+        let cfg: EnrichConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.chat_models.is_none());
+        assert_eq!(cfg.resolve_chat_model("phase1"), "c");
     }
 
     #[test]

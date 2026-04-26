@@ -279,6 +279,11 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         source_path: parsed.source_path.clone(),
         chapter_regex: regex_pattern,
         chat_model: chat.clone(),
+        // Per-phase model overrides are an opt-in operator concern;
+        // `enrich init` writes None and the operator hand-edits
+        // `chat_models` into config.json when they want bulk phases
+        // routed to a smaller/faster model than the default chat_model.
+        chat_models: None,
         embed_model: embed.clone(),
         base_url,
         min_section_body_words: min_body_words,

@@ -365,6 +365,7 @@ mod tests {
             source_path: PathBuf::from("/tmp/nonexistent.txt"),
             chapter_regex: "^Chapter".into(),
             chat_model: "c".into(),
+            chat_models: None,
             embed_model: "e".into(),
             base_url: "http://localhost:9741".into(),
             min_section_body_words: 0,
