@@ -1989,26 +1989,42 @@ const THINK_BUDGET: usize = 512;
 /// - **penalties**: kept as a backstop for single-token repetition that DRY's
 ///   `allowed_length = 2` intentionally ignores.
 fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> LlamaSampler {
-    // Grammar-constrained decoding (PARKED 2026-04-25): enabling
-    // the `llguidance` feature on `llama-cpp-2 = 0.1.145` triggered
-    // a tokio-rt-worker stack overflow at daemon startup that 8MB
-    // worker stacks did not contain — likely deep recursion in the
-    // llguidance state-machine compiler at static-init time. The
-    // OpenAI `response_format` wire surface and `ChatPrompt`
-    // schema extension are shipped so the next iteration can
-    // re-enable enforcement without changing the API. For now we
-    // log when the request asks for structured output and fall
-    // through to free-form sampling (the parser-hardening fixes
-    // already in place absorb most JSON drift; the truly malformed
-    // syntax cases will need this re-enabled).
-    if let Some(ref schema) = request.structured_output {
-        tracing::info!(
-            schema_bytes = schema.to_string().len(),
-            "structured_output requested but grammar enforcement is parked — \
-             see embedded.rs build_sampler comment"
-        );
-    }
-    let grammar_sampler: Option<LlamaSampler> = None;
+    // Grammar-constrained decoding via LLGuidance. JSON Schema is
+    // compiled to a state machine inside `LlamaSampler::llguidance`
+    // and used to mask logits at sampling time so output stays a
+    // valid prefix of a JSON document conforming to the schema.
+    // Eliminates malformed-JSON drift on long structured outputs
+    // (Gemma-31B sep-al-farabi 2026-04-25).
+    let grammar_sampler: Option<LlamaSampler> = request
+        .structured_output
+        .as_ref()
+        .and_then(|schema| match serde_json::to_string(schema) {
+            Ok(schema_json) => match LlamaSampler::llguidance(
+                model,
+                "json_schema",
+                &schema_json,
+            ) {
+                Ok(s) => {
+                    tracing::info!(
+                        schema_bytes = schema_json.len(),
+                        "grammar-constrained decoding enabled (llguidance)"
+                    );
+                    Some(s)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "llguidance grammar sampler failed to initialise — \
+                         falling back to free-form sampling"
+                    );
+                    None
+                }
+            },
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to serialise structured_output schema");
+                None
+            }
+        });
 
     // Temperature: per-request override → family default.
     let temp = request.temperature.unwrap_or(quirks.default_temperature);

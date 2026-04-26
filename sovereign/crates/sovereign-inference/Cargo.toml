@@ -22,10 +22,10 @@ reqwest = { workspace = true, features = ["stream"] }
 # toolbox on Linux, swap "rocm" → "vulkan" below (one-line edit; no
 # code changes).
 [target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-2 = { version = "0.1.145", features = ["metal"] }
+llama-cpp-2 = { version = "0.1.145", features = ["metal", "llguidance"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-llama-cpp-2 = { version = "0.1.145", features = ["vulkan"] }
+llama-cpp-2 = { version = "0.1.145", features = ["vulkan", "llguidance"] }
 
 [dev-dependencies]
 tempfile = "3"
