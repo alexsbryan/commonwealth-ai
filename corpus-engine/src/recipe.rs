@@ -3,6 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::filters::{ComposeMode, FilterConfig};
 
 // ---------------------------------------------------------------------------
 // Default helpers
@@ -112,6 +113,35 @@ pub struct Recipe {
     /// by downloading a pre-built LanceDB archive from HuggingFace.
     #[serde(default)]
     pub prebuilt: Option<PrebuiltConfig>,
+
+    /// Document-level filters that scope the corpus by accepting or
+    /// rejecting individual `ExtractedDoc`s before chunking. The
+    /// canonical use case is Wikipedia "Core" — top-N by pageview rank
+    /// ∪ Vital Articles list — but the mechanism works for any
+    /// extractor (e.g. StackExchange `min_score`, OpenAlex
+    /// `accepted_languages`).
+    ///
+    /// Empty / absent means the pipeline runs unfiltered.
+    #[serde(default, rename = "filter")]
+    pub filters: Vec<FilterConfig>,
+
+    /// How filters in `filters` combine. Defaults to
+    /// [`ComposeMode::Any`] — a document is accepted if any filter
+    /// accepts. Set `mode = "all"` to require every filter to accept.
+    /// Lives in its own `[filter_mode]` table because TOML does not
+    /// allow scalars next to an array of tables.
+    #[serde(default, rename = "filter_mode")]
+    pub filter_mode: FilterModeConfig,
+}
+
+/// Sidecar TOML table for [`Recipe::filter_mode`]. Splitting this from
+/// the `[[filter]]` array keeps the recipe TOML grammatically valid:
+/// the `[[filter]]` form is an array-of-tables and cannot host a
+/// scalar `mode = "any"` field directly.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FilterModeConfig {
+    #[serde(default)]
+    pub mode: ComposeMode,
 }
 
 // ---------------------------------------------------------------------------
@@ -565,6 +595,7 @@ impl Recipe {
 pub(crate) fn builtin_recipes() -> Vec<Recipe> {
     const SOURCES: &[&str] = &[
         include_str!("../recipes/wikipedia/recipe.toml"),
+        include_str!("../recipes/wikipedia-simple/recipe.toml"),
         include_str!("../recipes/stackexchange/recipe.toml"),
         include_str!("../recipes/openalex/recipe.toml"),
         include_str!("../recipes/gutenberg/recipe.toml"),
@@ -593,6 +624,105 @@ mod tests {
         assert_eq!(parsed.corpus.id, recipe.corpus.id);
         assert_eq!(parsed.corpus.name, recipe.corpus.name);
         assert_eq!(parsed.corpus.mesh_sharing, recipe.corpus.mesh_sharing);
+    }
+
+    #[test]
+    fn legacy_recipes_without_filter_block_parse() {
+        // Recipes from before the `[[filter]]` extension must still
+        // deserialize cleanly. The `filters` field defaults to empty.
+        let toml_str = r#"
+[corpus]
+id = "wikipedia"
+name = "Wikipedia"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "wikipedia_jsonl"
+
+[chunk]
+type = "paragraph"
+"#;
+        let r = Recipe::from_toml(toml_str).expect("legacy recipe must parse");
+        assert!(r.filters.is_empty());
+        assert_eq!(r.filter_mode.mode, ComposeMode::Any); // default
+    }
+
+    #[test]
+    fn filter_block_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "wikipedia"
+name = "Wikipedia"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "wikipedia_jsonl"
+
+[chunk]
+type = "paragraph"
+
+[[filter]]
+type = "pageview_rank"
+rank_file = "@bundled:pageview_ranks_202311"
+max_rank = 100000
+
+[[filter]]
+type = "title_list"
+list_file = "@bundled:vital_articles_l5"
+
+[filter_mode]
+mode = "any"
+"#;
+        let r = Recipe::from_toml(toml_str).expect("recipe with filters must parse");
+        assert_eq!(r.filters.len(), 2);
+        assert_eq!(r.filter_mode.mode, ComposeMode::Any);
+        match &r.filters[0] {
+            FilterConfig::PageviewRank { rank_file, max_rank } => {
+                assert_eq!(rank_file, "@bundled:pageview_ranks_202311");
+                assert_eq!(*max_rank, 100_000);
+            }
+            other => panic!("expected pageview_rank, got {other:?}"),
+        }
+        match &r.filters[1] {
+            FilterConfig::TitleList { list_file } => {
+                assert_eq!(list_file, "@bundled:vital_articles_l5");
+            }
+            other => panic!("expected title_list, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn filter_mode_all_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "x"
+name = "x"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/x.zip"
+
+[extract]
+type = "wikipedia_jsonl"
+
+[chunk]
+type = "paragraph"
+
+[[filter]]
+type = "title_list"
+list_file = "@bundled:vital_articles_l5"
+
+[filter_mode]
+mode = "all"
+"#;
+        let r = Recipe::from_toml(toml_str).unwrap();
+        assert_eq!(r.filter_mode.mode, ComposeMode::All);
     }
 
     #[test]
@@ -661,13 +791,14 @@ type = "paragraph"
     #[test]
     fn builtin_recipes_count() {
         let recipes = builtin_recipes();
-        assert_eq!(recipes.len(), 6);
+        assert_eq!(recipes.len(), 7);
     }
 
     #[test]
     fn builtin_recipes_have_valid_ids() {
         let expected_ids = [
             "wikipedia",
+            "wikipedia-simple",
             "stackexchange",
             "openalex",
             "gutenberg",
@@ -887,14 +1018,56 @@ type = "paragraph"
             other => panic!("expected WikipediaJsonl extractor, got {other:?}"),
         }
 
-        let enrichment = wp.enrichment.as_ref().expect("wikipedia must have enrichment");
-        assert!(enrichment.enabled);
+        // Wikipedia Core ships with enrichment OFF — Layer 1 prioritises
+        // time-to-grounded over atlas depth; users who promote to Full
+        // can flip it on. The enrichment block is still present so the
+        // settings/UX layer can preview the eventual config.
+        let enrichment = wp.enrichment.as_ref().expect("wikipedia must have enrichment block");
+        assert!(!enrichment.enabled, "Core must ship with enrichment disabled");
         assert_eq!(enrichment.enrichment_type, "field_model");
         assert_eq!(enrichment.domain.as_deref(), Some("multi"));
 
         let update = wp.update.as_ref().expect("wikipedia must have update config");
         assert!(update.auto_update);
         assert!(!update.manifest_url.is_empty());
+
+        // Core scope filters: pageview rank ≤ 100k OR vital articles.
+        assert_eq!(wp.filters.len(), 2, "Wikipedia Core must declare both filters");
+        assert_eq!(wp.filter_mode.mode, ComposeMode::Any, "Core combines filters with `any`");
+        match &wp.filters[0] {
+            FilterConfig::PageviewRank { max_rank, .. } => assert_eq!(*max_rank, 100_000),
+            other => panic!("first Wikipedia filter must be pageview_rank, got {other:?}"),
+        }
+        match &wp.filters[1] {
+            FilterConfig::TitleList { list_file } => {
+                assert!(list_file.contains("vital_articles"), "expected vital articles list, got {list_file}");
+            }
+            other => panic!("second Wikipedia filter must be title_list, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wikipedia_simple_recipe_loads_clean() {
+        let recipes = builtin_recipes();
+        let simple = recipes
+            .iter()
+            .find(|r| r.corpus.id == "wikipedia-simple")
+            .expect("wikipedia-simple recipe must exist");
+        match &simple.acquire {
+            AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => {
+                assert_eq!(repo, "wikimedia/wikipedia");
+                assert_eq!(subset.as_deref(), Some("20231101.simple"));
+            }
+            other => panic!("expected HuggingFaceDataset, got {other:?}"),
+        }
+        match &simple.extract {
+            ExtractorConfig::WikipediaStructured { .. } => {}
+            other => panic!("expected WikipediaStructured, got {other:?}"),
+        }
+        // Layer 0 is intentionally unfiltered and unenriched.
+        assert!(simple.filters.is_empty(), "Simple English should not have filters");
+        let enrichment = simple.enrichment.as_ref().expect("enrichment block present");
+        assert!(!enrichment.enabled);
     }
 
     #[test]
@@ -931,11 +1104,14 @@ type = "paragraph"
         }
     }
 
-    /// Only SEP and Wikipedia intentionally enable enrichment. All other
-    /// recipes must not activate it by default.
+    /// Only SEP intentionally enables enrichment by default. Wikipedia
+    /// Core ships with enrichment off (it costs hours of LLM time on a
+    /// laptop and Layer 1 is about time-to-grounded, not atlas depth);
+    /// users who expand to Full can re-enable it. All other recipes
+    /// must also be off by default.
     #[test]
     fn non_sep_builtin_recipes_skip_enrichment_by_default() {
-        let enrichment_allowed = ["sep", "wikipedia"];
+        let enrichment_allowed = ["sep"];
         let recipes = builtin_recipes();
         for recipe in &recipes {
             if enrichment_allowed.contains(&recipe.corpus.id.as_str()) {

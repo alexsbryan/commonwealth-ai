@@ -217,6 +217,8 @@ impl CorpusIndex {
             source_version: None,
             update_manifest_url: None,
             processed_shards: Vec::new(),
+            scope: None,
+            filter_override: None,
         };
         write_meta(path, &meta)?;
 
@@ -413,6 +415,44 @@ impl CorpusIndex {
         let index_dir = Path::new(self.db.uri());
         let meta = read_meta(index_dir)?;
         Ok(meta.processed_shards)
+    }
+
+    // ─── Scope / filter metadata ──────────────────────────────
+    //
+    // The scope block records which filter pipeline produced this
+    // index — set at ingest time so the UI can offer "Expand to full
+    // <corpus>" when a relaxed scope makes sense.
+
+    /// Read the active scope, if any.
+    pub fn read_scope(&self) -> Result<Option<super::ScopeMeta>> {
+        let index_dir = Path::new(self.db.uri());
+        let meta = read_meta(index_dir)?;
+        Ok(meta.scope)
+    }
+
+    /// Write or replace the scope block.
+    pub fn write_scope(&self, scope: Option<super::ScopeMeta>) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.scope = scope;
+        write_meta(index_dir, &meta)
+    }
+
+    /// Read the in-flight filter override, if any.
+    pub fn read_filter_override(&self) -> Result<Option<super::FilterOverride>> {
+        let index_dir = Path::new(self.db.uri());
+        let meta = read_meta(index_dir)?;
+        Ok(meta.filter_override)
+    }
+
+    /// Write or clear the in-flight filter override. Set by
+    /// `expand_corpus` so a restart resumes the expansion with the
+    /// relaxed scope; cleared once expansion completes.
+    pub fn write_filter_override(&self, ovr: Option<super::FilterOverride>) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.filter_override = ovr;
+        write_meta(index_dir, &meta)
     }
 
     /// Clear the `ingestion_in_progress` flag. Called by the engine once the

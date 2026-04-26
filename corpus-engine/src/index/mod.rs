@@ -274,6 +274,49 @@ struct IndexMeta {
     /// multi-shard ZIP.
     #[serde(default)]
     processed_shards: Vec<usize>,
+
+    /// Active filter scope, if any. Records what subset of the source
+    /// the index covers — e.g. Wikipedia Core's "top 100K by pageview
+    /// rank ∪ Vital Articles". Drives the Settings "Expand" affordance
+    /// (`expandable=true`) and the delta-update path (a different
+    /// `filter_signature` on a re-ingest means a new scope and triggers
+    /// a delta).
+    ///
+    /// Absent on legacy indexes that pre-date filter support.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    scope: Option<ScopeMeta>,
+
+    /// Filter pipeline override applied to this corpus, if any. Set by
+    /// `expand_corpus` so a restart mid-expansion resumes with the
+    /// correct scope (rather than the original recipe's narrower
+    /// filter). When `Some`, it shadows `recipe.filters` for this
+    /// corpus until the expansion completes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    filter_override: Option<FilterOverride>,
+}
+
+/// Snapshot of the filter pipeline that's currently in force.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct ScopeMeta {
+    /// Human-readable list of active filters, in order, e.g.
+    /// `["pageview rank ≤ 100000 (98421 titles)", "title in `vital_articles_l5` (49 titles)"]`.
+    pub filter_descriptions: Vec<String>,
+    /// Stable hash of the canonical filter config (sha256 hex). Empty
+    /// when no filter is active.
+    pub filter_signature: String,
+    /// `true` when the filter is non-empty and could be relaxed (i.e.
+    /// the corpus could be expanded). `false` once the filter is
+    /// removed (full corpus indexed) or the corpus had no filter to
+    /// begin with.
+    pub expandable: bool,
+}
+
+/// Persisted filter override (mirrors `Recipe.filters` +
+/// `Recipe.filter_mode.mode` for the run currently in progress).
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct FilterOverride {
+    pub filters: Vec<crate::filters::FilterConfig>,
+    pub mode: crate::filters::ComposeMode,
 }
 
 fn meta_path(index_dir: &Path) -> std::path::PathBuf {

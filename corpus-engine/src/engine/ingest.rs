@@ -11,7 +11,8 @@ use crate::acquirers::huggingface::HuggingFaceDatasetAcquirer;
 use crate::acquirers::local_file::LocalFileAcquirer;
 use crate::chunkers::{self, Chunker};
 use crate::error::{Error, Result};
-use crate::extractors::{self, Extractor};
+use crate::extractors::{self, ExtractedDoc, Extractor};
+use crate::filters::build_filter_pipeline;
 use crate::index::{CorpusIndex, InsertChunk};
 use crate::progress::{IngestProgress, ProgressCallback, SourceFileManifest, SourceFileStatus};
 use crate::recipe::{AcquirerConfig, ChunkerConfig, ExtractorConfig, Recipe};
@@ -271,6 +272,24 @@ impl CorpusEngine {
         progress: &Option<ProgressCallback>,
         unit_id: Option<u32>,
     ) -> Result<IngestResult> {
+        // Default to no skipset; the expansion path uses
+        // `ingest_inner_with_skipset` instead.
+        self.ingest_inner_with_skipset(recipe, index_path, progress, unit_id, None)
+            .await
+    }
+
+    /// Variant of [`Self::ingest_inner`] that takes an optional set of
+    /// already-indexed `source_doc_id`s to skip. Used by
+    /// `expand_corpus` to add only newly-accepted documents to an
+    /// existing index without re-embedding the originals.
+    pub(crate) async fn ingest_inner_with_skipset(
+        &self,
+        recipe: &Recipe,
+        index_path: &Path,
+        progress: &Option<ProgressCallback>,
+        unit_id: Option<u32>,
+        already_indexed: Option<std::sync::Arc<std::collections::HashSet<String>>>,
+    ) -> Result<IngestResult> {
         let start = Instant::now();
 
         // Step 1: Acquire source data.
@@ -282,6 +301,55 @@ impl CorpusEngine {
         // Step 2: Extract documents.
         let extractor = self.make_extractor(&recipe.extract);
         let doc_iter = extractor.extract(&source_path)?;
+
+        // Step 2.5: Apply document-level filters (recipe scope).
+        //
+        // The pipeline wraps the extractor's lazy iterator so rejected
+        // documents never reach chunking/embedding. For Wikipedia Core
+        // this is `pageview_rank ≤ 100k OR title ∈ vital_articles`.
+        // An empty `[[filter]]` block (the default) yields an inactive
+        // pipeline that passes everything through.
+        //
+        // Errors flow through unchanged so the existing
+        // skip-and-keep-going extraction-error logic in the chunk loop
+        // is preserved.
+        let filter_pipeline = build_filter_pipeline(
+            &recipe.filters,
+            recipe.filter_mode.mode,
+            Some(self.recipes_dir.as_path()),
+        )?;
+        if filter_pipeline.is_active() {
+            tracing::info!(
+                corpus = %recipe.corpus.id,
+                filter_count = recipe.filters.len(),
+                filter_mode = ?recipe.filter_mode.mode,
+                signature = %filter_pipeline.signature(),
+                "Document filter active"
+            );
+            for desc in filter_pipeline.descriptions() {
+                tracing::info!(corpus = %recipe.corpus.id, "  filter: {desc}");
+            }
+        }
+        let scope_meta = if filter_pipeline.is_active() {
+            Some(crate::index::ScopeMeta {
+                filter_descriptions: filter_pipeline.descriptions(),
+                filter_signature: filter_pipeline.signature().to_string(),
+                expandable: true,
+            })
+        } else {
+            None
+        };
+        let doc_iter: Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send> =
+            if filter_pipeline.is_active() {
+                let filter = std::sync::Arc::new(filter_pipeline);
+                let filter_clone = filter.clone();
+                Box::new(doc_iter.filter(move |r| match r {
+                    Ok(doc) => filter_clone.accept(doc),
+                    Err(_) => true, // pass extraction errors through; chunk loop handles them
+                }))
+            } else {
+                doc_iter
+            };
 
         // Step 3: Chunk, embed, and index.
         let chunker = self.make_chunker(&recipe.chunk);
@@ -324,6 +392,29 @@ impl CorpusEngine {
             )
             .await?
         };
+
+        // Persist the active filter scope to `_corpus_meta.json` so the
+        // UI can offer "Expand to full <corpus>" when this scope is
+        // narrower than the source. Idempotent — overwriting is fine
+        // when a resume run lands on the same scope.
+        //
+        // Skipped for unit-scoped (pull-queue) runs because the
+        // partition is part of a larger ingest the merge leader will
+        // finalize; scope only makes sense at the partition-wide level.
+        if !unit_scoped {
+            if let Some(ref scope) = scope_meta {
+                if let Err(e) = index.write_scope(Some(scope.clone())) {
+                    tracing::warn!(corpus = %recipe.corpus.id, "Failed to persist scope meta: {e}");
+                }
+            } else {
+                // No filter active — clear any prior scope (e.g. an
+                // expansion that just removed the filter). `expandable`
+                // flips to false implicitly via `read_scope() == None`.
+                if let Err(e) = index.write_scope(None) {
+                    tracing::warn!(corpus = %recipe.corpus.id, "Failed to clear scope meta: {e}");
+                }
+            }
+        }
 
         // Initialise counters. On resume these start from where we left off.
         let mut total_chunks = index.chunk_count().await.unwrap_or(0);
@@ -465,6 +556,26 @@ impl CorpusEngine {
                     continue;
                 }
             };
+
+            // ── Expansion skipset ────────────────────────────────────────
+            // When `expand_corpus` runs the pipeline against an existing
+            // index with a relaxed filter, it threads in the set of
+            // already-indexed `source_doc_id`s so this run only embeds
+            // newly-accepted documents. The filter pipeline already
+            // dropped articles that don't pass the new scope; the
+            // skipset additionally drops articles already covered by a
+            // previous (narrower) scope.
+            if let Some(skip) = already_indexed.as_ref() {
+                let key = doc
+                    .url
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(doc.source_id.as_str());
+                if !key.is_empty() && skip.contains(key) {
+                    docs_skipped += 1;
+                    continue;
+                }
+            }
 
             // ── File-boundary detection ────────────────────────────────
             // When `source_file` transitions from A → B, file A's last doc

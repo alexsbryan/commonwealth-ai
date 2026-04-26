@@ -163,6 +163,47 @@ impl CorpusIndex {
         Ok(())
     }
 
+    /// Return the set of distinct `source_doc_id` values currently in
+    /// the index.
+    ///
+    /// Used by `expand_corpus` to identify already-indexed documents so
+    /// the expansion run can skip them — the cheap delta path that
+    /// avoids walking through `ManifestDiff`. For Wikipedia Core
+    /// (~150K accepted articles, ~5M chunks) this returns ~150K
+    /// strings (~5–10 MB) and runs in seconds; the cost is amortised
+    /// over the multi-minute expansion.
+    pub async fn list_indexed_source_doc_ids(&self) -> Result<std::collections::HashSet<String>> {
+        use futures::TryStreamExt;
+        let batches: Vec<arrow_array::RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "source_doc_id".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("list_indexed_source_doc_ids query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("list_indexed_source_doc_ids collect: {e}")))?;
+
+        let mut out = std::collections::HashSet::new();
+        for batch in &batches {
+            let arr = batch
+                .column_by_name("source_doc_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| {
+                    Error::Serialization("missing source_doc_id column".into())
+                })?;
+            for i in 0..batch.num_rows() {
+                if !arr.is_null(i) {
+                    out.insert(arr.value(i).to_string());
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// Load specific chunks by their IDs.
     pub async fn get_chunks(&self, chunk_ids: &[u64]) -> Result<Vec<StoredChunk>> {
         if chunk_ids.is_empty() {
@@ -306,5 +347,26 @@ impl CorpusIndex {
             let _ = write_meta(dir, &meta);
         }
         self.build_indexes(false, true, None).await
+    }
+
+    /// Rebuild the IVF-PQ vector index from current data.
+    ///
+    /// Called by [`crate::CorpusEngine::expand_corpus`] after a
+    /// scope-relaxing expansion adds millions of new vectors. The IVF
+    /// centroids trained at the original (smaller) scale become
+    /// suboptimal at the new scale; rebuilding picks fresh
+    /// `optimal_partitions(num_chunks)` centroids and re-trains.
+    ///
+    /// LanceDB tolerates concurrent reads while the index is being
+    /// rebuilt — search continues to work, just falls back to a flat
+    /// scan over recently-added vectors until the new index is
+    /// committed.
+    pub async fn rebuild_vector_index(&self) -> Result<()> {
+        let dir = Path::new(self.db.uri());
+        if let Ok(mut meta) = read_meta(dir) {
+            meta.vector_index_built = false;
+            let _ = write_meta(dir, &meta);
+        }
+        self.build_indexes(true, false, None).await
     }
 }

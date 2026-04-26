@@ -1,0 +1,20 @@
+# Wikipedia Vital Articles Level 5 — placeholder
+#
+# This file is a placeholder shipped so the crate compiles on a clean
+# checkout. Replace it with the real ~50K-title list scraped from
+# https://en.wikipedia.org/wiki/Wikipedia:Vital_articles/Level/5
+# subpages. One title per line; comments (#) and blank lines are
+# ignored. The filter normalizes case and underscores at load time.
+#
+# A handful of canonical entries are listed here so unit tests can
+# exercise the filter end-to-end against bundled bytes.
+Albert Einstein
+Photosynthesis
+French Revolution
+World War II
+Mathematics
+Quantum mechanics
+Aristotle
+DNA
+Pyramid of Khufu
+Wolfgang Amadeus Mozart

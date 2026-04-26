@@ -324,7 +324,9 @@ mod tests {
     fn bundled_snapshot_parses() {
         let registry = RecipeRegistry::from_bundled(None);
         let entries = registry.list_entries();
-        assert_eq!(entries.len(), 6, "snapshot should have 6 entries");
+        // 7 since wikipedia-simple was added alongside wikipedia for the
+        // layered Wikipedia stack.
+        assert_eq!(entries.len(), 7, "snapshot should have 7 entries");
     }
 
     #[test]
@@ -345,20 +347,29 @@ mod tests {
     }
 
     #[test]
-    fn wikipedia_and_sep_have_enrichment_enabled() {
+    fn sep_has_enrichment_enabled() {
+        // Wikipedia Core ships with enrichment off (the layered-stack
+        // design — Layer 1 prioritises time-to-grounded over atlas
+        // depth). Only SEP enables enrichment by default in v1.
         let registry = RecipeRegistry::from_bundled(None);
-        for id in &["wikipedia", "sep"] {
-            let entry = registry.find_entry(id).unwrap_or_else(|| panic!("{id} must be in snapshot"));
-            assert!(entry.enrichment_enabled, "{id} should have enrichment_enabled = true");
-        }
+        let sep = registry.find_entry("sep").expect("sep must be in snapshot");
+        assert!(sep.enrichment_enabled, "sep should have enrichment_enabled = true");
+
+        let wp = registry.find_entry("wikipedia").expect("wikipedia must be in snapshot");
+        assert!(
+            !wp.enrichment_enabled,
+            "Wikipedia Core ships with enrichment disabled (Layer 1 design)"
+        );
     }
 
     #[test]
     fn catalog_returns_all_entries() {
         let registry = RecipeRegistry::from_bundled(None);
         let catalog = registry.catalog();
-        assert_eq!(catalog.len(), 6);
+        // Bumped from 6 → 7 with the addition of `wikipedia-simple`.
+        assert_eq!(catalog.len(), 7);
         assert!(catalog.iter().any(|c| c.id == "wikipedia"));
+        assert!(catalog.iter().any(|c| c.id == "wikipedia-simple"));
         assert!(catalog.iter().any(|c| c.id == "sep"));
     }
 }

@@ -17,6 +17,7 @@ pub mod engine;
 pub mod enrichment;
 pub mod error;
 pub mod extractors;
+pub mod filters;
 pub mod index;
 pub mod progress;
 pub mod recipe;
@@ -73,7 +74,13 @@ pub use enrichment::{
 };
 pub use extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
 pub use error::{Error, Result};
-pub use index::{CorpusIndex, InsertChunk, StoredChunk, StoredChunkWithMetadata};
+pub use filters::{
+    build_filter_pipeline, compute_signature as compute_filter_signature, ComposeMode,
+    DocumentFilter, FilterConfig, FilterPipeline, PageviewRankFilter, TitleListFilter,
+};
+pub use index::{
+    CorpusIndex, FilterOverride, InsertChunk, ScopeMeta, StoredChunk, StoredChunkWithMetadata,
+};
 pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,
     SourceFileManifest, SourceFileRecord, SourceFileStatus,

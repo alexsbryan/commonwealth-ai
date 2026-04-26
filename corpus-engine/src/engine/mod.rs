@@ -3,6 +3,7 @@
 
 pub mod article_stats;
 mod cancel;
+mod expand;
 mod ingest;
 
 #[cfg(feature = "treesitter")]
