@@ -1,0 +1,29 @@
+{
+  "timestamp_utc": "unix-1777243864",
+  "base_url": "http://localhost:9741",
+  "model_id": "Qwopus-GLM-18B-Healed-Q6_K",
+  "corpus_id": "sep-al-farabi",
+  "warmup_used": true,
+  "results": [
+    {
+      "task_id": "cluster_name_synth",
+      "description": "Synthetic Phase 3-style cluster naming (small input, single-object output)",
+      "success": true,
+      "error": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 236,
+      "total_tokens": 236,
+      "latency_ms": 5599,
+      "decode_tokens_per_sec": 42.14538838735773,
+      "atoms_extracted": null,
+      "truncated": false
+    }
+  ],
+  "summary": {
+    "decode_tps_mean": 42.14538838735773,
+    "phase1_decode_tps_mean": null,
+    "phase1_success_rate": 0.0,
+    "phase1_seconds_per_chapter_mean": null,
+    "est_hours_1800_articles_5_chapters": null
+  }
+}

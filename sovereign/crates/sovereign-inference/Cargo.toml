@@ -25,7 +25,7 @@ reqwest = { workspace = true, features = ["stream"] }
 llama-cpp-2 = { version = "0.1.145", features = ["metal", "llguidance"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-llama-cpp-2 = { version = "0.1.145", features = ["vulkan", "llguidance"] }
+llama-cpp-2 = { version = "0.1.145", features = ["rocm", "llguidance"] }
 
 [dev-dependencies]
 tempfile = "3"

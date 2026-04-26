@@ -28,9 +28,11 @@
 #      runtime linker finds libamdhip64 without LD_LIBRARY_PATH, and
 #      /etc/profile.d/sovereign-rocm.sh so new shells have
 #      ROCM_PATH / HIP_PATH / PATH / CMAKE_PREFIX_PATH pre-set.
-#   5. Vulkan only: rewrites the `llama-cpp-2` feature line in
-#      crates/sovereign-inference/Cargo.toml from "rocm" to "vulkan".
-#      This is a LOCAL EDIT — don't commit it. `--revert-cargo` undoes it.
+#   5. Rewrites the `llama-cpp-2` backend feature in
+#      crates/sovereign-inference/Cargo.toml to match the resolved backend
+#      (rocm ↔ vulkan, leaving llguidance and friends alone). The repo
+#      default is "rocm"; the vulkan swap is a LOCAL EDIT — don't commit
+#      it. `--revert-cargo` puts it back to the rocm default.
 #   6. Wipes target/*/build/llama-cpp-sys-2-* if the previous build used
 #      a different backend, so cmake reconfigures from scratch.
 #
@@ -302,18 +304,22 @@ swap_inference_backend() {
 
     echo "== Swapping sovereign-inference Linux backend: $current → $want =="
     # Match the Linux [target] block only, to avoid touching the macOS metal line.
+    # The features list contains the backend plus other features (e.g. llguidance),
+    # so we locate the line under the linux header and swap the rocm/vulkan token
+    # within it — tolerant of order and additional features.
     python3 - "$INFERENCE_TOML" "$want" <<'PY'
 import re, sys, pathlib
 path, want = pathlib.Path(sys.argv[1]), sys.argv[2]
 src = path.read_text()
-pat = re.compile(
-    r'(\[target\.\'cfg\(target_os = "linux"\)\'\.dependencies\]\s*\n'
-    r'llama-cpp-2 = \{ version = "[^"]+", features = \[)"(rocm|vulkan)"(\] \})'
-)
-new, n = pat.subn(lambda m: f'{m.group(1)}"{want}"{m.group(3)}', src)
+header = '[target.\'cfg(target_os = "linux")\'.dependencies]'
+m = re.search(re.escape(header) + r'\s*\n(llama-cpp-2 = \{[^\n]*\})', src)
+if not m:
+    sys.exit("couldn't find Linux llama-cpp-2 line under " + header)
+line = m.group(1)
+new_line, n = re.subn(r'"(rocm|vulkan)"', f'"{want}"', line)
 if n != 1:
-    sys.exit(f"expected exactly one Linux llama-cpp-2 feature line, found {n}")
-path.write_text(new)
+    sys.exit(f"expected exactly one rocm/vulkan token in features list, found {n}")
+path.write_text(src[:m.start(1)] + new_line + src[m.end(1):])
 PY
 }
 
@@ -386,6 +392,7 @@ main() {
         else
             configure_rocm_runtime
         fi
+        swap_inference_backend rocm
     else
         warn_stale_rocm_env
         swap_inference_backend vulkan
