@@ -258,6 +258,8 @@ mod tests {
                 fast: PathBuf::from("/m/fast.gguf"),
                 embed: PathBuf::from("/m/embed.gguf"),
                 code: None,
+                context_size: None,
+                extra: std::collections::BTreeMap::new(),
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

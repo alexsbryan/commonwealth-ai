@@ -13,6 +13,7 @@
 //! binary crate) can read the same config and attach to a CLI-started
 //! daemon without redefining the schema.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -54,10 +55,63 @@ pub struct ModelsSection {
     /// primary's KV cache + weights + fast slot still fit comfortably:
     /// 32768 roughly doubles output budget for atlas Phase 1, where
     /// long structured outputs were truncating against the 16384 cap.
-    /// Applies to all loaded slots (fast / primary / embed / code) —
-    /// per-slot override would need a richer schema.
+    /// Applies to all loaded slots (fast / primary / embed / code /
+    /// extras) — per-slot override would need a richer schema.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_size: Option<u32>,
+
+    /// Additional named chat slots loaded eagerly at daemon startup
+    /// alongside primary/fast/embed/code. Keys are operator-chosen
+    /// slot names; values are absolute paths to the GGUF files.
+    /// Slots stay resident for the daemon's lifetime — they don't
+    /// participate in the primary slot's idle-unload lifecycle.
+    ///
+    /// Routing: an inbound `/v1/chat/completions` request whose
+    /// `model` field matches an extra slot's loaded model id (the
+    /// gguf file stem) lands on that slot. Untagged requests still
+    /// route via the existing Speed-based selection across
+    /// fast/primary/code.
+    ///
+    /// Operators wire per-phase routing by combining this map with
+    /// `EnrichConfig.chat_models` (corpus-side phase → model_id
+    /// map). See `project_antifragile_pipeline_phase1.md` for the
+    /// end-to-end picture.
+    ///
+    /// TOML shape:
+    ///
+    /// ```toml
+    /// [models.extra]
+    /// reasoning = "/path/to/Qwopus-27B-v3-Q6_K.gguf"
+    /// bulk = "/path/to/Qwen3.5-9B.Q8_0.gguf"
+    /// ```
+    ///
+    /// Empty map (the default) preserves the historical 3-slot
+    /// behaviour for operators who haven't opted in.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra: BTreeMap<String, PathBuf>,
+
+    /// Total memory budget for the eagerly-loaded extras lineup,
+    /// in gigabytes. When set, an attempt to load a new extras slot
+    /// that would push (existing extras' on-disk gguf size) +
+    /// (new slot's gguf size) above this budget triggers LRU
+    /// eviction: cold extras slots are dropped (in least-recently-
+    /// used order, skipping any slot serving an in-flight request)
+    /// until the new slot fits.
+    ///
+    /// `None` (the default) disables eviction entirely — the
+    /// pre-LRU behaviour. Operators on tight VRAM (e.g. a 64 GB Mac
+    /// running Qwopus-27B Q6 ≈ 21 GB primary + Qwen3.5-9B Q8 ≈ 9 GB
+    /// extras + embed ≈ 1 GB + OS + KV cache) set this to a value
+    /// like 12.0 to keep the cumulative extras footprint bounded
+    /// without dropping the primary.
+    ///
+    /// Note: only the gguf size on disk is counted, NOT the KV
+    /// cache or activation buffers. Real GPU memory use is roughly
+    /// `gguf_size + n_ctx * model_size_factor`. Pad the budget
+    /// accordingly — `max_extras_memory_gb` is a conservative
+    /// upper bound on weights, not a strict OS-level limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_extras_memory_gb: Option<f32>,
 }
 
 fn default_context_size() -> u32 {
@@ -70,6 +124,25 @@ impl ModelsSection {
     /// cold-start and reload paths can't drift.
     pub fn effective_context_size(&self) -> u32 {
         self.context_size.unwrap_or_else(default_context_size)
+    }
+
+    /// Memory budget in raw bytes for the extras lineup.
+    /// `None` when unset — caller treats that as "no eviction".
+    /// Returned in bytes so the eviction policy can compare directly
+    /// against per-slot `size_bytes`.
+    pub fn max_extras_memory_bytes(&self) -> Option<u64> {
+        self.max_extras_memory_gb.map(|gb| {
+            // 1 GiB = 2^30 bytes. Saturate to u64::MAX on absurd
+            // inputs rather than overflow.
+            let bytes = (gb as f64) * (1u64 << 30) as f64;
+            if bytes <= 0.0 {
+                0
+            } else if bytes >= u64::MAX as f64 {
+                u64::MAX
+            } else {
+                bytes as u64
+            }
+        })
     }
 }
 
@@ -94,6 +167,20 @@ pub struct DaemonSection {
     /// the slot for the daemon's lifetime.
     #[serde(default = "default_primary_idle_secs")]
     pub primary_idle_secs: u64,
+
+    /// Idle seconds before an unused **extras** chat slot is unloaded
+    /// to reclaim VRAM. Defaults to `0` — eviction-driven only, no
+    /// idle drop. Set to a positive value (e.g. `1800` for 30 min) to
+    /// have a background task drop extras slots that haven't served a
+    /// request in that long, even when no other load is competing for
+    /// memory. Useful on shared hardware where another user might
+    /// need the GPU back.
+    ///
+    /// Slots currently serving a request (Arc strong_count > 1) are
+    /// skipped. The check runs every 10s; the actual idle window is
+    /// `max(extras_idle_secs, 10)`.
+    #[serde(default = "default_extras_idle_secs")]
+    pub extras_idle_secs: u64,
 }
 
 /// Filesystem paths for mutable state.
@@ -112,6 +199,7 @@ impl Default for DaemonSection {
             internal_port: default_internal_port(),
             autostart: default_autostart(),
             primary_idle_secs: default_primary_idle_secs(),
+            extras_idle_secs: default_extras_idle_secs(),
         }
     }
 }
@@ -126,6 +214,10 @@ fn default_client_port() -> u16 { 9741 }
 fn default_internal_port() -> u16 { 9742 }
 fn default_autostart() -> bool { true }
 fn default_primary_idle_secs() -> u64 { 60 }
+/// Default `0` keeps existing operators on the historical "extras
+/// stay loaded forever" behaviour — they explicitly opt in by
+/// setting a positive value.
+fn default_extras_idle_secs() -> u64 { 0 }
 
 /// `~/.sovereign/`. Previously lived in `sovereign-cli::util::dirs`;
 /// inlined here so `sovereign-core` has no dependency on the CLI crate.
@@ -211,6 +303,12 @@ impl SetupConfig {
         self.models.primary = expand_home(&self.models.primary);
         self.models.fast = expand_home(&self.models.fast);
         self.models.embed = expand_home(&self.models.embed);
+        if let Some(p) = self.models.code.as_mut() {
+            *p = expand_home(p);
+        }
+        for path in self.models.extra.values_mut() {
+            *path = expand_home(path);
+        }
         self.data.dir = expand_home(&self.data.dir);
     }
 }
@@ -240,6 +338,8 @@ mod tests {
                 embed: PathBuf::from("/models/embed.gguf"),
                 code: None,
                 context_size: None,
+                extra: BTreeMap::new(),
+                max_extras_memory_gb: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),
@@ -279,5 +379,115 @@ embed = "/m/e.gguf"
     fn default_path_includes_sovereign_and_config_toml() {
         let p = SetupConfig::default_path();
         assert!(p.ends_with("sovereign/config.toml"), "unexpected path: {}", p.display());
+    }
+
+    #[test]
+    fn extra_slots_default_empty_when_absent() {
+        // Operators upgrading the binary keep their existing
+        // config.toml. The `serde(default)` on `extra` means a config
+        // without the `[models.extra]` table loads with an empty
+        // map — preserving the legacy 3-slot lineup.
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert!(cfg.models.extra.is_empty());
+    }
+
+    #[test]
+    fn extra_slots_parse_from_toml_table() {
+        // `[models.extra]` table → BTreeMap<String, PathBuf>.
+        // BTreeMap iteration order is sorted, which makes startup
+        // logging deterministic across reboots.
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+
+[models.extra]
+reasoning = "/m/big.gguf"
+bulk = "/m/small.gguf"
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.models.extra.len(), 2);
+        assert_eq!(
+            cfg.models.extra.get("reasoning"),
+            Some(&PathBuf::from("/m/big.gguf"))
+        );
+        assert_eq!(
+            cfg.models.extra.get("bulk"),
+            Some(&PathBuf::from("/m/small.gguf"))
+        );
+    }
+
+    #[test]
+    fn max_extras_memory_bytes_unset_returns_none() {
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert!(cfg.models.max_extras_memory_bytes().is_none());
+    }
+
+    #[test]
+    fn max_extras_memory_bytes_converts_gigabytes() {
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+max_extras_memory_gb = 12.0
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        // 12 GiB = 12 * 2^30 bytes.
+        assert_eq!(
+            cfg.models.max_extras_memory_bytes(),
+            Some(12 * (1u64 << 30))
+        );
+    }
+
+    #[test]
+    fn max_extras_memory_bytes_saturates_on_negative_input() {
+        // Defensive: a negative or zero budget effectively forbids
+        // any extras — return Some(0) rather than panicking or
+        // overflowing.
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+max_extras_memory_gb = 0.0
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.models.max_extras_memory_bytes(), Some(0));
+    }
+
+    #[test]
+    fn extra_slots_expand_home_at_load() {
+        // `~/...` paths inside `[models.extra]` resolve like the
+        // primary/fast/embed paths do — load-time expansion via
+        // `expand_paths`.
+        let home = dirs::home_dir().unwrap();
+        let toml_str = r#"
+[models]
+primary = "~/dev/primary.gguf"
+fast = "/abs/fast.gguf"
+embed = "~/dev/embed.gguf"
+
+[models.extra]
+reasoning = "~/dev/big.gguf"
+"#;
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("config.toml");
+        std::fs::write(&path, toml_str).unwrap();
+        let cfg = SetupConfig::load_from(&path).unwrap();
+        assert_eq!(cfg.models.extra.get("reasoning"), Some(&home.join("dev/big.gguf")));
     }
 }

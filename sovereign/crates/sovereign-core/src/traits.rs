@@ -131,6 +131,51 @@ pub trait InferenceProvider: Send + Sync {
     }
 
     fn capabilities(&self) -> ProviderCapabilities;
+
+    /// Add (or replace) an operator-declared additional chat slot at
+    /// runtime. Returns the `model_id` (advertised name) loaded into
+    /// the slot — what callers send in `request.model_id` to land
+    /// here. Default returns an error: providers that don't manage
+    /// local slots (remote API, mesh peer, deterministic test stub)
+    /// have nothing to load.
+    ///
+    /// `EmbeddedLlamaCpp` overrides this to delegate to its concrete
+    /// `load_extra` method. The HTTP `/internal/models/load` handler
+    /// surfaces the error verbatim when a non-embedded provider is
+    /// the active local inference service.
+    fn load_extra_slot(
+        &self,
+        slot_name: String,
+        path: std::path::PathBuf,
+        context_size: u32,
+    ) -> Result<String> {
+        let _ = (slot_name, path, context_size);
+        Err(crate::error::Error::Inference(
+            "this inference provider does not support runtime slot \
+             load — only the embedded llama.cpp provider does"
+                .to_string(),
+        ))
+    }
+
+    /// Drop an operator-declared additional chat slot. Returns
+    /// `Some(model_id)` when a slot was removed, `None` if the slot
+    /// wasn't loaded. Default returns an error for non-embedded
+    /// providers — same rationale as `load_extra_slot`.
+    fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>> {
+        let _ = slot_name;
+        Err(crate::error::Error::Inference(
+            "this inference provider does not support runtime slot \
+             unload — only the embedded llama.cpp provider does"
+                .to_string(),
+        ))
+    }
+
+    /// List currently-loaded extras as `(slot_name, model_id)` pairs
+    /// in deterministic order. Default empty list — non-embedded
+    /// providers have no extras concept.
+    fn extras_inventory(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
 }
 
 // ─── 2. Routing ────────────────────────────────────────────────

@@ -113,6 +113,20 @@ pub struct CompletionRequest {
     /// forward-compatible shapes pass through untouched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
+    /// Operator-declared model identifier. When set, the inference
+    /// provider should route to the named slot if one matches; when
+    /// `None`, the provider falls back to its default routing
+    /// (Speed-based for `EmbeddedLlamaCpp`, OICP scoring for the
+    /// mesh provider). The id is the model name as advertised on
+    /// `/v1/models` — the gguf file stem.
+    ///
+    /// Threaded through from the OpenAI `model` field by
+    /// `sovereign_mesh::inference_adapter::build_completion_request`,
+    /// and from `ChatPrompt::phase_id` resolved against
+    /// `EnrichConfig.chat_models` by the enrich-side inference
+    /// client.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
 }
 
 /// JSON-Schema view of a function the model may call. Mirrors
@@ -142,6 +156,7 @@ impl CompletionRequest {
             oicp: None,
             tools: None,
             tool_choice: None,
+            model_id: None,
         }
     }
 
@@ -157,6 +172,14 @@ impl CompletionRequest {
 
     pub fn with_oicp(mut self, requirements: oicp::InferenceRequirements) -> Self {
         self.oicp = Some(requirements);
+        self
+    }
+
+    /// Tag this request with an explicit model id. The provider
+    /// should route to the matching slot when one is loaded; when no
+    /// match exists, the provider's default routing applies.
+    pub fn with_model_id(mut self, model_id: impl Into<String>) -> Self {
+        self.model_id = Some(model_id.into());
         self
     }
 
@@ -177,6 +200,7 @@ impl CompletionRequest {
             oicp: None,
             tools: None,
             tool_choice: None,
+            model_id: None,
         }
     }
 }

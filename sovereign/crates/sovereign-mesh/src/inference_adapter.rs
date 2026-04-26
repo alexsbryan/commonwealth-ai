@@ -168,6 +168,18 @@ impl SovereignInferenceAdapter {
         if let Some(s) = system {
             req = req.with_system(&s);
         }
+        // Forward the OpenAI `model` field as `model_id` so the
+        // local provider's slot picker can route to a named slot
+        // when one is loaded. Empty/whitespace strings stay None so
+        // the slot picker falls through to its default policy. The
+        // OpenAI `model` field is `Option<String>` because some
+        // clients omit it for legacy completions endpoints.
+        if let Some(model) = request.model.as_ref() {
+            let trimmed = model.trim();
+            if !trimmed.is_empty() {
+                req = req.with_model_id(trimmed);
+            }
+        }
         req.max_tokens = request.max_tokens.map(|n| n as usize);
         req.temperature = request.temperature;
         req.top_p = request.top_p;
@@ -457,6 +469,35 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .embed(input)
             .await
             .map_err(|e| format!("{e}"))
+    }
+
+    // ── Runtime slot management ─────────────────────────────────
+    //
+    // These delegate to the InferenceProvider trait, which has
+    // default `Err(...)` implementations for non-embedded providers
+    // (remote API, mesh peer). Only `EmbeddedLlamaCpp` overrides
+    // them. The HTTP handler returns 501/400 when the underlying
+    // provider can't service the request.
+
+    async fn load_extra_slot(
+        &self,
+        slot_name: String,
+        path: std::path::PathBuf,
+        context_size: u32,
+    ) -> Result<String, String> {
+        self.provider
+            .load_extra_slot(slot_name, path, context_size)
+            .map_err(|e| format!("{e}"))
+    }
+
+    async fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>, String> {
+        self.provider
+            .unload_extra_slot(slot_name)
+            .map_err(|e| format!("{e}"))
+    }
+
+    async fn extras_inventory(&self) -> Vec<(String, String)> {
+        self.provider.extras_inventory()
     }
 }
 
@@ -857,6 +898,7 @@ mod adapter_translation_tests {
             tools: Some(vec![tool_def("get_weather")]),
             tool_choice: Some(serde_json::json!("auto")),
             oicp: None,
+                    response_format: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -885,6 +927,7 @@ mod adapter_translation_tests {
             tools: Some(vec![tool_def("a"), tool_def("b")]),
             tool_choice: None,
             oicp: None,
+                    response_format: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -908,6 +951,7 @@ mod adapter_translation_tests {
             tools: Some(Vec::new()),
             tool_choice: None,
             oicp: None,
+                    response_format: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }

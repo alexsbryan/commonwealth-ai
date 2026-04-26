@@ -120,6 +120,46 @@ async fn run_daemon(_args: &[String]) -> i32 {
     ) {
         Ok(p) => {
             let arc = Arc::new(p);
+            // Wire the optional LRU memory budget BEFORE installing
+            // extras. With a budget set, each `load_extra` call
+            // (including the eager startup loads from `[models.extra]`)
+            // checks against it and evicts cold slots if needed.
+            // Without a budget, eviction is disabled and slots persist
+            // until manually unloaded — matches historical behaviour.
+            if let Err(e) =
+                arc.set_extras_memory_budget(config.models.max_extras_memory_bytes())
+            {
+                eprintln!("error: failed to set extras memory budget: {e}");
+                return 1;
+            }
+            // Idle-unload monitor for extras slots. Independent of
+            // the primary's idle monitor — extras have eager-load /
+            // hold-resident semantics by default; this background
+            // task lets the operator opt into "drop after N seconds
+            // idle" reclamation. Default is 0 = disabled.
+            arc.start_extras_idle_monitor(config.daemon.extras_idle_secs);
+            // Operator-declared additional chat slots. Each entry in
+            // `[models.extra]` is loaded eagerly here; failures on
+            // individual slots are warned but don't fail the daemon.
+            // Routing kicks in when `/v1/chat/completions` arrives
+            // with a `model` field matching the gguf stem of one of
+            // these slots — `select_slot_for_request` picks
+            // `SlotTarget::Extra(name)` and sidesteps Speed-based
+            // routing entirely.
+            //
+            // `install_extras` takes `&self` (interior-mutable via
+            // RwLock) so we install AFTER wrapping in `Arc` — the
+            // runtime `/internal/models/load` endpoint uses the same
+            // entry point on the same Arc.
+            if !config.models.extra.is_empty() {
+                if let Err(e) = arc.install_extras(
+                    config.models.extra.clone(),
+                    config.models.effective_context_size(),
+                ) {
+                    eprintln!("error: failed to install extras slots: {e}");
+                    return 1;
+                }
+            }
             // Sourced from `[daemon].primary_idle_secs`. Default 60s
             // suits a desktop touching the model occasionally; batch
             // workloads (atlas enrich) want 1800+ to skip the 3–4 s

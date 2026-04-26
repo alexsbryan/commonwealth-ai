@@ -378,6 +378,7 @@ mod tests {
             oicp: None,
             tools: None,
             tool_choice: None,
+                    model_id: None,
         };
 
         let body = provider.build_request(&request);
@@ -420,6 +421,7 @@ mod tests {
             ),
             tools: None,
             tool_choice: None,
+                    model_id: None,
         };
 
         let body = provider.build_request(&request);

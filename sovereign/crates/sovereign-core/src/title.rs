@@ -95,6 +95,7 @@ pub async fn generate_title_from_messages(
         oicp: None,
                 tools: None,
                 tool_choice: None,
+                    model_id: None,
     };
 
     let response = inference.complete(&request).await?;

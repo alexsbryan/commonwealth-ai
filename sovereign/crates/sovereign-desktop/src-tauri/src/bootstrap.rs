@@ -233,11 +233,15 @@ mod tests {
                 fast: "/f".into(),
                 embed: "/e".into(),
                 code: None,
+                context_size: None,
+                extra: std::collections::BTreeMap::new(),
             },
             daemon: sovereign_core::setup_config::DaemonSection {
                 client_port: 19_741,
                 internal_port: 19_742,
                 autostart: true,
+                primary_idle_secs: 60,
+                extras_idle_secs: 0,
             },
             data: sovereign_core::setup_config::DataSection::default(),
         };

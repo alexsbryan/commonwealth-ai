@@ -76,6 +76,7 @@ impl WebSearchTool {
             oicp: None,
             tools: None,
             tool_choice: None,
+                    model_id: None,
         };
 
         match self.inference.complete(&request).await {
@@ -201,6 +202,7 @@ impl WebSearchTool {
             oicp: None,
             tools: None,
             tool_choice: None,
+                    model_id: None,
         };
 
         let response = self.inference.complete(&request).await?;

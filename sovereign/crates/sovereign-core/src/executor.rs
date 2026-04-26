@@ -408,6 +408,7 @@ impl Executor {
                     oicp,
                     tools: None,
                     tool_choice: None,
+                                    model_id: None,
                 };
 
                 // Best-of-N sampling or single completion.
@@ -773,6 +774,7 @@ impl Executor {
                 oicp: None,
                 tools: None,
                 tool_choice: None,
+                            model_id: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -850,6 +852,7 @@ impl Executor {
                         oicp: None,
                 tools: None,
                 tool_choice: None,
+                                    model_id: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;
 

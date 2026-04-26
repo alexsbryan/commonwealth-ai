@@ -864,6 +864,8 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             embed: paths.embed,
             code: paths.code,
             context_size: None,
+            extra: std::collections::BTreeMap::new(),
+            max_extras_memory_gb: None,
         },
         daemon: DaemonSection::default(),
         data: DataSection { dir: data_dir.clone() },

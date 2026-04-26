@@ -108,6 +108,7 @@ async fn main() {
         oicp: None,
             tools: None,
             tool_choice: None,
+            model_id: None,
     };
 
     if args.stream {

@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -38,6 +39,31 @@ struct ModelSlot {
     model: Arc<LlamaModel>,
     context: Mutex<SlotContext>,
     model_id: String,
+    /// In-memory footprint of the loaded model, in bytes — captured
+    /// at load time. Sourced from `LlamaModel::size()` (the
+    /// backend's own accounting of the buffers it allocated) with a
+    /// gguf file-size fallback when `size()` reports zero. Used by
+    /// the LRU eviction policy to decide which slots to drop when a
+    /// new load would exceed the operator's `max_extras_memory_gb`
+    /// budget.
+    size_bytes: u64,
+    /// Last time this slot was used to serve a request, expressed
+    /// as milliseconds since UNIX epoch. Updated by `complete()` /
+    /// `complete_stream()` after dispatch. The eviction policy
+    /// orders slots by ascending `last_used` and drops the coldest
+    /// first. `AtomicU64` so updates don't need a write lock on
+    /// `ExtrasState`.
+    last_used: std::sync::atomic::AtomicU64,
+}
+
+/// Current millis-since-epoch as `u64`. Saturates at 0 if the
+/// system clock is set before 1970 (impossible in practice;
+/// guarded so we never panic).
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 impl ModelSlot {
@@ -165,6 +191,24 @@ impl ModelSlot {
             "ModelSlot::load — slot ready"
         );
 
+        // Slot footprint for the LRU eviction policy. Prefer
+        // `LlamaModel::size()` — that's the in-memory size the
+        // backend actually allocated (covers GPU offload + any
+        // backend-specific padding) — and fall back to the gguf
+        // file size when the backend reports zero. For most quants
+        // these track within ~1%, but on Vulkan with split offload
+        // the loaded size can differ enough to swing budget
+        // accounting on tight hardware.
+        let loaded_size = model.size();
+        let file_size = std::fs::metadata(model_path)
+            .map(|m| m.len())
+            .unwrap_or(0);
+        let size_bytes = if loaded_size > 0 {
+            loaded_size
+        } else {
+            file_size
+        };
+
         Ok(Self {
             model: model.clone(),
             context: Mutex::new(SlotContext {
@@ -172,6 +216,8 @@ impl ModelSlot {
                 _model: model,
             }),
             model_id,
+            size_bytes,
+            last_used: std::sync::atomic::AtomicU64::new(now_millis()),
         })
     }
 
@@ -1073,32 +1119,99 @@ pub struct EmbeddedLlamaCpp {
     fast_quirks: ModelQuirks,
     /// Quirks for the primary (thoughtful) slot.
     primary_quirks: ModelQuirks,
+
+    /// Operator-declared additional chat slots. The map itself is
+    /// behind an `RwLock` so the runtime `/internal/models/load`
+    /// + `/internal/models/unload` endpoints can mutate the lineup
+    /// without daemon restart. Inference (the hot path) takes a
+    /// read lock, clones the `Arc<ModelSlot>` for the matched slot,
+    /// and releases — so concurrent mutations don't block in-flight
+    /// requests, and dropped slots stay alive until their last
+    /// in-flight request finishes (RAII via `Arc`).
+    extras: Arc<std::sync::RwLock<ExtrasState>>,
+}
+
+/// Internal state for the operator-declared extras lineup. Held
+/// behind a single RwLock in `EmbeddedLlamaCpp.extras` so all three
+/// fields stay in sync — a partial mutation (slot loaded but
+/// `by_model_id` not updated) would route requests to the wrong
+/// place. Keeping them in one struct guarantees lock acquisition
+/// covers the whole record.
+struct ExtrasState {
+    /// slot_name → loaded chat slot. Each slot is held resident
+    /// until the operator unloads it OR the LRU policy evicts it.
+    slots: HashMap<String, Arc<ModelSlot>>,
+    /// Index from advertised model_id (gguf file stem) →
+    /// `slots` key. Lookup is the hot path for
+    /// `select_slot_for_request`, so we keep it pre-resolved.
+    by_model_id: HashMap<String, String>,
+    /// Per-slot quirks. Keys mirror `slots`. All entries today
+    /// carry `ModelFamily::Unknown` defaults — runtime adapts to
+    /// the gguf header. Reserved as its own field so a future
+    /// op-flag could pin a specific family per slot.
+    quirks: HashMap<String, ModelQuirks>,
+    /// Optional total-memory budget in bytes for the extras
+    /// lineup. When `Some(b)`, a `load_extra` that would push
+    /// `(sum of size_bytes) + new_size` above `b` triggers LRU
+    /// eviction of the coldest non-busy slots. `None` (default)
+    /// disables eviction. Wired from
+    /// `SetupConfig::ModelsSection.max_extras_memory_gb`.
+    budget_bytes: Option<u64>,
+}
+
+impl ExtrasState {
+    fn new() -> Self {
+        Self {
+            slots: HashMap::new(),
+            by_model_id: HashMap::new(),
+            quirks: HashMap::new(),
+            budget_bytes: None,
+        }
+    }
 }
 
 /// Which slot to dispatch a request to. Computed from
 /// `(request.preferred_speed, request.oicp.capability_hint,
-/// configured slots)` — see
+/// request.model_id, configured slots)` — see
 /// [`EmbeddedLlamaCpp::select_slot_for_request`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum SlotTarget {
     Fast,
     Primary,
     Code,
+    /// Operator-declared additional eagerly-loaded chat slot. The
+    /// inner string is the key in `EmbeddedLlamaCpp.extras` —
+    /// looked up via `extras_by_model_id` from
+    /// `request.model_id`. See `pick_slot` for the precedence rules.
+    Extra(String),
 }
 
 /// Pure slot-selection policy extracted from
 /// [`EmbeddedLlamaCpp::select_slot_for_request`] so the rules can
 /// be unit-tested without loading real GGUF weights. Inputs are
 /// intentionally scalar: the request + "is the primary configured?"
-/// + "is the code slot configured?" — everything `select_slot_for_request`
-/// itself consults on `self`. The hot-swap logic in
-/// `complete` / `complete_stream` depends on this decision being
-/// deterministic for a fixed (request, slot-configuration) pair.
+/// + "is the code slot configured?" + an optional pre-resolved
+/// extras key (the model_id → extras-slot lookup). The hot-swap
+/// logic in `complete` / `complete_stream` depends on this decision
+/// being deterministic for a fixed (request, slot-configuration)
+/// pair.
+///
+/// Precedence (in order):
+/// 1. **Extras match on `request.model_id`.** Operator-declared
+///    routing wins over heuristic Speed/code-hint selection. This
+///    is what makes per-phase model recruitment work end-to-end.
+/// 2. Code-hint + Code slot configured.
+/// 3. Speed-based: Fast → fast slot; Medium/Slow → primary if
+///    configured else fast.
 fn pick_slot(
     request: &CompletionRequest,
     has_primary: bool,
     has_code: bool,
+    extras_match: Option<String>,
 ) -> SlotTarget {
+    if let Some(name) = extras_match {
+        return SlotTarget::Extra(name);
+    }
     let wants_code = request
         .oicp
         .as_ref()
@@ -1285,7 +1398,447 @@ impl EmbeddedLlamaCpp {
             hardware,
             fast_quirks,
             primary_quirks,
+            extras: Arc::new(std::sync::RwLock::new(ExtrasState::new())),
         })
+    }
+
+    /// Install operator-declared additional chat slots after
+    /// construction. Each `(slot_name, gguf_path)` entry is
+    /// eagerly loaded and held resident until the operator
+    /// unloads it (via `unload_extra` or by replacing the lineup
+    /// through another `install_extras` call).
+    ///
+    /// The advertised `model_id` (gguf file stem) is the routing
+    /// key — when an inbound request carries `model_id` matching
+    /// one of these stems, the slot picker returns
+    /// [`SlotTarget::Extra`] before falling through to
+    /// Speed-based routing.
+    ///
+    /// Loading is sequential (each call to `ModelSlot::load` opens
+    /// the gguf and uploads weights). On success the slot becomes
+    /// part of the routing table; on failure the slot is skipped
+    /// with a `warn!` log and the remaining slots still load. This
+    /// matches the embed-slot policy — partial slot inventories are
+    /// preferable to a hard fail at boot, which would prevent the
+    /// daemon from serving _any_ requests.
+    ///
+    /// **Concurrency**: holds a write lock on `extras` for the full
+    /// load duration. In-flight requests on existing extras slots
+    /// are unaffected — they hold a clone of the `Arc<ModelSlot>`
+    /// and don't need the outer lock. New requests during the load
+    /// briefly block on the read lock acquisition, then proceed
+    /// against the post-load lineup.
+    ///
+    /// Re-calling this method **replaces** the previous extras
+    /// lineup. Slots dropped from the new lineup release their
+    /// `Arc<ModelSlot>` once their last in-flight request
+    /// completes (RAII). Used by the daemon at startup with the
+    /// `[models.extra]` config table.
+    pub fn install_extras(
+        &self,
+        extras: BTreeMap<String, PathBuf>,
+        context_size: u32,
+    ) -> Result<()> {
+        // Preserve any operator-set budget across reloads. The
+        // budget is set via `set_extras_memory_budget` and lives
+        // alongside the slot map; reinstalling slots shouldn't
+        // implicitly reset eviction behaviour.
+        let preserved_budget = self
+            .extras
+            .read()
+            .map(|g| g.budget_bytes)
+            .unwrap_or(None);
+        let default_quirks = ModelFamily::Unknown.default_quirks();
+        let mut state = ExtrasState::new();
+        state.budget_bytes = preserved_budget;
+        for (slot_name, path) in extras {
+            tracing::info!(
+                slot = %slot_name,
+                path = %path.display(),
+                "loading extras slot"
+            );
+            match ModelSlot::load(
+                &self.primary_backend,
+                &path,
+                context_size,
+                self.gpu_layers,
+            ) {
+                Ok(slot) => {
+                    let model_id = slot.model_id.clone();
+                    let arc = Arc::new(slot);
+                    state.slots.insert(slot_name.clone(), Arc::clone(&arc));
+                    state.by_model_id.insert(model_id.clone(), slot_name.clone());
+                    state.quirks.insert(slot_name.clone(), default_quirks.clone());
+                    tracing::info!(
+                        slot = %slot_name,
+                        model_id = %model_id,
+                        "extras slot loaded"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        slot = %slot_name,
+                        path = %path.display(),
+                        error = %e,
+                        "extras slot load failed — skipping; remaining extras still load"
+                    );
+                }
+            }
+        }
+        let mut guard = self
+            .extras
+            .write()
+            .map_err(|e| Error::Inference(format!("extras lock poisoned: {e}")))?;
+        *guard = state;
+        Ok(())
+    }
+
+    /// Add (or replace) a single extras slot at runtime. Returns
+    /// the `model_id` (gguf file stem) advertised for this slot,
+    /// which is what callers send in `request.model` / `model_id`
+    /// to land here.
+    ///
+    /// If a slot with `slot_name` already exists, its
+    /// `Arc<ModelSlot>` is replaced and the `model_id → slot_name`
+    /// index updated. The previous slot's Arc drops once the last
+    /// in-flight request finishes; if no requests are in flight,
+    /// the model unloads immediately. Use [`unload_extra`] to drop
+    /// without replacement.
+    ///
+    /// LRU eviction is **not** applied — this entry point assumes
+    /// the caller has already accounted for memory. For
+    /// budget-aware loading, use [`load_extra_with_budget`].
+    pub fn load_extra(
+        &self,
+        slot_name: String,
+        path: PathBuf,
+        context_size: u32,
+    ) -> Result<String> {
+        self.load_extra_with_budget(slot_name, path, context_size, None)
+    }
+
+    /// Budget-aware variant of [`load_extra`]. When `budget_bytes`
+    /// is `Some(B)`, this method first peeks at the new gguf's
+    /// on-disk size; if `(sum of currently-loaded extras' sizes) +
+    /// (new size) > B`, it evicts cold (least-recently-used)
+    /// slots in ascending `last_used` order until the new slot
+    /// fits. Slots currently serving a request — detected via
+    /// `Arc::strong_count` > 1 — are skipped to avoid yanking the
+    /// rug from under in-flight inference. If after walking every
+    /// non-busy slot the new load still doesn't fit, the call
+    /// returns an error with the budget shortfall.
+    ///
+    /// `None` skips eviction entirely (matches
+    /// [`load_extra`] historical behaviour).
+    pub fn load_extra_with_budget(
+        &self,
+        slot_name: String,
+        path: PathBuf,
+        context_size: u32,
+        budget_bytes: Option<u64>,
+    ) -> Result<String> {
+        tracing::info!(
+            slot = %slot_name,
+            path = %path.display(),
+            "load_extra: preparing slot"
+        );
+
+        // The pre-load eviction check uses the gguf file size as an
+        // estimate of the upcoming slot's footprint. After load, the
+        // ModelSlot stores `LlamaModel::size()` instead — usually
+        // very close, but the file-size estimate is what's available
+        // BEFORE we've called `ModelSlot::load`, and that's the
+        // gating moment for "should we make room first?". Pre-load
+        // and post-load can diverge by a few percent; the budget is
+        // a soft cap by design.
+        let new_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+
+        // LRU eviction pass under the write lock. Done BEFORE
+        // ModelSlot::load so we don't briefly OOM by holding the
+        // old + new slot's weights simultaneously. Eviction drops
+        // the slot from the map; the actual model unload happens
+        // when the last `Arc<ModelSlot>` reference releases (in-
+        // flight requests still hold theirs and finish naturally).
+        if let Some(budget) = budget_bytes {
+            self.evict_extras_for_new_load(&slot_name, new_size, budget)?;
+        }
+
+        let slot = ModelSlot::load(
+            &self.primary_backend,
+            &path,
+            context_size,
+            self.gpu_layers,
+        )?;
+        let model_id = slot.model_id.clone();
+        let arc = Arc::new(slot);
+
+        let mut guard = self
+            .extras
+            .write()
+            .map_err(|e| Error::Inference(format!("extras lock poisoned: {e}")))?;
+        // If this slot_name was previously bound to a different
+        // model_id, drop the stale `by_model_id` entry first to
+        // keep the index injective.
+        if let Some(prev_arc) = guard.slots.remove(&slot_name) {
+            let prev_model_id = &prev_arc.model_id;
+            guard.by_model_id.remove(prev_model_id);
+        }
+        guard.slots.insert(slot_name.clone(), Arc::clone(&arc));
+        guard.by_model_id.insert(model_id.clone(), slot_name.clone());
+        guard
+            .quirks
+            .insert(slot_name.clone(), ModelFamily::Unknown.default_quirks());
+        tracing::info!(slot = %slot_name, model_id = %model_id, "load_extra: slot loaded");
+        Ok(model_id)
+    }
+
+    /// Walk the extras lineup in ascending `last_used` order,
+    /// dropping cold slots until `(remaining sum) + new_size <=
+    /// budget`. Skips any slot whose `Arc<ModelSlot>` strong count
+    /// exceeds 1 (in-flight request) and any slot that matches
+    /// `incoming_slot_name` (we'll replace it shortly anyway).
+    /// Returns `Err` when not enough cold capacity is available
+    /// to make room — caller surfaces the message verbatim.
+    ///
+    /// The pure selection step lives in [`pick_evictions`] for
+    /// unit testability; this method handles the impure parts
+    /// (snapshot under lock, mutate state, log evictions).
+    fn evict_extras_for_new_load(
+        &self,
+        incoming_slot_name: &str,
+        new_size: u64,
+        budget_bytes: u64,
+    ) -> Result<()> {
+        let mut guard = self
+            .extras
+            .write()
+            .map_err(|e| Error::Inference(format!("extras lock poisoned: {e}")))?;
+        // Snapshot non-busy candidates and the current footprint
+        // (excluding any slot we're about to replace) into pure
+        // values so the selection step can be unit-tested.
+        let current: u64 = guard
+            .slots
+            .iter()
+            .filter(|(name, _)| name.as_str() != incoming_slot_name)
+            .map(|(_, slot)| slot.size_bytes)
+            .sum();
+        let candidates: Vec<EvictionCandidate> = guard
+            .slots
+            .iter()
+            .filter(|(name, _)| name.as_str() != incoming_slot_name)
+            .filter_map(|(name, arc)| {
+                if Arc::strong_count(arc) > 1 {
+                    None // in-flight; preserve
+                } else {
+                    Some(EvictionCandidate {
+                        slot_name: name.clone(),
+                        last_used_ms: arc
+                            .last_used
+                            .load(std::sync::atomic::Ordering::Relaxed),
+                        size_bytes: arc.size_bytes,
+                    })
+                }
+            })
+            .collect();
+
+        let plan = pick_evictions(&candidates, current, new_size, budget_bytes);
+        match plan {
+            EvictionPlan::Fits => Ok(()),
+            EvictionPlan::Evict(slot_names) => {
+                let mut evicted = Vec::with_capacity(slot_names.len());
+                for slot_name in slot_names {
+                    if let Some(arc) = guard.slots.remove(&slot_name) {
+                        let model_id = arc.model_id.clone();
+                        guard.by_model_id.remove(&model_id);
+                        guard.quirks.remove(&slot_name);
+                        evicted.push((slot_name, model_id));
+                    }
+                }
+                drop(guard);
+                for (slot_name, model_id) in evicted {
+                    tracing::info!(
+                        slot = %slot_name,
+                        model_id = %model_id,
+                        reason = "lru_eviction",
+                        "extras slot dropped to free memory for incoming load"
+                    );
+                }
+                Ok(())
+            }
+            EvictionPlan::Insufficient {
+                need_to_free,
+                cold_total,
+            } => {
+                tracing::warn!(
+                    budget_gb = budget_bytes as f64 / (1u64 << 30) as f64,
+                    cold_total_mb = cold_total / (1024 * 1024),
+                    need_to_free_mb = need_to_free / (1024 * 1024),
+                    "load_extra rejected: insufficient cold capacity"
+                );
+                Err(Error::Inference(format!(
+                    "load_extra rejected: cannot free enough memory under \
+                     max_extras_memory_gb budget. Cold (non-busy) extras \
+                     total {} MB but need to free {} MB. Either raise the \
+                     budget, unload an in-flight slot manually, or wait \
+                     for current inference to drain.",
+                    cold_total / (1024 * 1024),
+                    need_to_free / (1024 * 1024),
+                )))
+            }
+        }
+    }
+}
+
+/// Eviction-candidate snapshot. Pulled out of the live RwLock so
+/// the selection algorithm in [`pick_evictions`] is a pure
+/// function over scalar inputs — testable without loading any
+/// real GGUF.
+#[derive(Debug, Clone)]
+struct EvictionCandidate {
+    slot_name: String,
+    last_used_ms: u64,
+    size_bytes: u64,
+}
+
+/// Outcome of [`pick_evictions`]. Three states map to three
+/// caller actions: nothing to do, evict these names in order, or
+/// fail loud because the cold lineup can't free enough.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum EvictionPlan {
+    /// Already within budget — caller proceeds without mutating.
+    Fits,
+    /// Drop these slot names in order. The slice is sorted by
+    /// ascending `last_used` so the coldest slots go first.
+    Evict(Vec<String>),
+    /// Cold capacity isn't enough. Caller surfaces an error to
+    /// the operator; busy slots are preserved.
+    Insufficient {
+        /// How many bytes the caller still needs to free after
+        /// evicting every cold candidate.
+        need_to_free: u64,
+        /// Sum of `size_bytes` across the cold candidates. Useful
+        /// for the operator-facing error message.
+        cold_total: u64,
+    },
+}
+
+/// Pure LRU selection. Given a list of non-busy candidates plus
+/// the current footprint and incoming load size, returns which
+/// slots to evict so the new load fits under `budget_bytes`.
+/// Sorts candidates ascending by `last_used_ms` and consumes them
+/// until `freed >= need_to_free`.
+///
+/// Keeping this pure (no `&self`, no lock) means the routing-
+/// regression suite can lock-step LRU behaviour without depending
+/// on a real llama.cpp load.
+fn pick_evictions(
+    candidates: &[EvictionCandidate],
+    current_total: u64,
+    incoming_size: u64,
+    budget_bytes: u64,
+) -> EvictionPlan {
+    if current_total.saturating_add(incoming_size) <= budget_bytes {
+        return EvictionPlan::Fits;
+    }
+    let need_to_free = current_total
+        .saturating_add(incoming_size)
+        .saturating_sub(budget_bytes);
+    let mut sorted: Vec<&EvictionCandidate> = candidates.iter().collect();
+    sorted.sort_by_key(|c| c.last_used_ms);
+    let mut freed: u64 = 0;
+    let mut to_evict: Vec<String> = Vec::new();
+    for c in &sorted {
+        if freed >= need_to_free {
+            break;
+        }
+        freed = freed.saturating_add(c.size_bytes);
+        to_evict.push(c.slot_name.clone());
+    }
+    if freed >= need_to_free {
+        EvictionPlan::Evict(to_evict)
+    } else {
+        EvictionPlan::Insufficient {
+            need_to_free,
+            cold_total: sorted.iter().map(|c| c.size_bytes).sum(),
+        }
+    }
+}
+
+// Reopen the impl block so subsequent methods on EmbeddedLlamaCpp
+// keep their existing namespace.
+impl EmbeddedLlamaCpp {
+
+    /// Drop an extras slot. Returns the `model_id` that was bound
+    /// to that slot, or `None` if the slot wasn't loaded. The slot's
+    /// `Arc<ModelSlot>` releases once any in-flight request on it
+    /// completes — concurrent inference is not interrupted.
+    pub fn unload_extra(&self, slot_name: &str) -> Result<Option<String>> {
+        let mut guard = self
+            .extras
+            .write()
+            .map_err(|e| Error::Inference(format!("extras lock poisoned: {e}")))?;
+        let Some(arc) = guard.slots.remove(slot_name) else {
+            return Ok(None);
+        };
+        let model_id = arc.model_id.clone();
+        guard.by_model_id.remove(&model_id);
+        guard.quirks.remove(slot_name);
+        drop(guard);
+        tracing::info!(slot = %slot_name, model_id = %model_id, "unload_extra: slot dropped");
+        Ok(Some(model_id))
+    }
+
+    /// Install (or clear) the extras memory budget. `Some(bytes)`
+    /// turns LRU eviction on; subsequent `load_extra` calls evict
+    /// cold slots when adding the new slot would exceed the budget.
+    /// `None` disables eviction (the historical default — slots are
+    /// held until unloaded).
+    ///
+    /// The daemon calls this once at startup with
+    /// `cfg.models.max_extras_memory_bytes()`. Future runtime
+    /// adjustments (operator wants to tighten the budget without
+    /// restart) re-call this entry point.
+    pub fn set_extras_memory_budget(&self, budget_bytes: Option<u64>) -> Result<()> {
+        let mut guard = self
+            .extras
+            .write()
+            .map_err(|e| Error::Inference(format!("extras lock poisoned: {e}")))?;
+        guard.budget_bytes = budget_bytes;
+        match budget_bytes {
+            Some(b) => tracing::info!(
+                budget_gb = b as f64 / (1u64 << 30) as f64,
+                "extras memory budget set; LRU eviction active"
+            ),
+            None => tracing::info!("extras memory budget cleared; eviction disabled"),
+        }
+        Ok(())
+    }
+
+    /// Read the currently-configured extras memory budget. `None`
+    /// means eviction is disabled.
+    pub fn extras_memory_budget(&self) -> Option<u64> {
+        self.extras.read().ok().and_then(|g| g.budget_bytes)
+    }
+
+    /// Inspect the currently-loaded extras lineup. Returns
+    /// `(slot_name, model_id)` pairs in deterministic
+    /// (slot_name-sorted) order. Used by `/v1/models` registration
+    /// + the `/internal/models/inventory` endpoint.
+    pub fn extras_inventory(&self) -> Vec<(String, String)> {
+        let guard = match self.extras.read() {
+            Ok(g) => g,
+            Err(e) => {
+                tracing::error!(error = %e, "extras lock poisoned during inventory read");
+                return Vec::new();
+            }
+        };
+        let mut out: Vec<(String, String)> = guard
+            .by_model_id
+            .iter()
+            .map(|(model_id, slot_name)| (slot_name.clone(), model_id.clone()))
+            .collect();
+        out.sort();
+        out
     }
 
     /// True when a Code specialist GGUF has been configured.
@@ -1298,22 +1851,144 @@ impl EmbeddedLlamaCpp {
     /// Pick which slot should serve this request.
     ///
     /// Rules:
+    /// - `request.model_id` matches an extras slot → `Extra(name)`.
+    ///   Operator-declared routing wins over heuristics.
     /// - `code` hint + code slot configured → `Code` (hot-swaps
     ///   the lazy slot to load the code GGUF).
     /// - `Speed::Fast` → `Fast` (always loaded).
     /// - Everything else → `Primary` if a primary GGUF is
     ///   configured, otherwise `Fast` (degraded fallback).
     fn select_slot_for_request(&self, request: &CompletionRequest) -> SlotTarget {
+        let extras_match = request.model_id.as_deref().and_then(|mid| {
+            // Hot-path read: clone the matched slot_name out of the
+            // index and release the lock immediately. Concurrent
+            // load/unload mutators block briefly but inference dispatch
+            // never holds the lock across the actual generate_sync.
+            let guard = self.extras.read().ok()?;
+            guard.by_model_id.get(mid).cloned()
+        });
         pick_slot(
             request,
             self.primary_path.is_some(),
             self.code_path.is_some(),
+            extras_match,
         )
+    }
+
+    /// Resolve a slot_name in `extras` to its `(Arc<ModelSlot>,
+    /// ModelQuirks)` pair, cloning out of the lock so the dispatch
+    /// path doesn't hold the read lock across inference. Returns
+    /// `None` if the slot was unloaded between
+    /// `select_slot_for_request` and dispatch (operator unloaded
+    /// mid-flight) — caller surfaces a clear error.
+    fn extras_lookup(&self, slot_name: &str) -> Option<(Arc<ModelSlot>, ModelQuirks)> {
+        let guard = self.extras.read().ok()?;
+        let slot = guard.slots.get(slot_name)?.clone();
+        let quirks = guard
+            .quirks
+            .get(slot_name)
+            .cloned()
+            .unwrap_or_else(|| ModelFamily::Unknown.default_quirks());
+        Some((slot, quirks))
     }
 
     /// Returns true if an embedding model is loaded and ready.
     pub fn has_embed_slot(&self) -> bool {
         self.embed_slot.is_some()
+    }
+
+    /// Start a background task that unloads cold extras slots
+    /// once they pass the configured idle threshold.
+    ///
+    /// Polling cadence: every 10 seconds. A slot is dropped when:
+    /// - its `last_used` timestamp is older than `idle_secs` ago, AND
+    /// - its `Arc<ModelSlot>` strong count is exactly 1 (no
+    ///   in-flight request is holding it).
+    ///
+    /// `idle_secs == 0` is "disabled" — the task isn't spawned.
+    /// This keeps the historical "extras stay loaded forever"
+    /// default for operators who haven't opted in. Set
+    /// `[daemon].extras_idle_secs = 1800` (30 min) for a balance
+    /// between reload tax (full reload on next use) and VRAM
+    /// reclaim on a shared host.
+    ///
+    /// Independent from `start_idle_monitor` (which manages the
+    /// lazy primary slot) — extras and primary have different
+    /// load semantics so they need separate idle policies.
+    pub fn start_extras_idle_monitor(self: &Arc<Self>, idle_secs: u64) {
+        if idle_secs == 0 {
+            // Disabled — don't spawn the task.
+            tracing::debug!("extras idle monitor disabled (idle_secs=0)");
+            return;
+        }
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            tracing::info!(idle_secs, "extras idle monitor started");
+            let threshold_ms = idle_secs.saturating_mul(1000);
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                let now = now_millis();
+                // Snapshot stale slot names under read lock, then
+                // call unload_extra (which takes the write lock)
+                // outside the read scope to avoid lock-upgrade
+                // deadlocks.
+                let stale_names: Vec<String> = {
+                    let guard = match this.extras.read() {
+                        Ok(g) => g,
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                "extras lock poisoned in idle monitor — exiting"
+                            );
+                            return;
+                        }
+                    };
+                    guard
+                        .slots
+                        .iter()
+                        .filter_map(|(name, arc)| {
+                            // strong_count == 1 means only the map
+                            // holds this slot — safe to drop.
+                            if Arc::strong_count(arc) > 1 {
+                                return None;
+                            }
+                            let last_used = arc
+                                .last_used
+                                .load(std::sync::atomic::Ordering::Relaxed);
+                            if now.saturating_sub(last_used) >= threshold_ms {
+                                Some(name.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                };
+                for name in stale_names {
+                    match this.unload_extra(&name) {
+                        Ok(Some(model_id)) => {
+                            tracing::info!(
+                                slot = %name,
+                                model_id = %model_id,
+                                idle_secs,
+                                "extras: idle-unload"
+                            );
+                        }
+                        Ok(None) => {
+                            // Slot vanished between snapshot and
+                            // unload — race with operator unload.
+                            // Benign.
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                slot = %name,
+                                error = %e,
+                                "extras idle-unload failed"
+                            );
+                        }
+                    }
+                }
+            }
+        });
     }
 
     /// Start a background task that unloads the primary model after idle timeout.
@@ -1364,16 +2039,17 @@ impl EmbeddedLlamaCpp {
 impl InferenceProvider for EmbeddedLlamaCpp {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let target = self.select_slot_for_request(request);
-        let slot_name = match target {
-            SlotTarget::Fast => "fast",
-            SlotTarget::Primary => "primary",
-            SlotTarget::Code => "code",
+        let slot_name: String = match &target {
+            SlotTarget::Fast => "fast".into(),
+            SlotTarget::Primary => "primary".into(),
+            SlotTarget::Code => "code".into(),
+            SlotTarget::Extra(name) => format!("extras:{name}"),
         };
         let prompt_chars = request.prompt.len();
         let system_chars = request.system_message.as_ref().map(|s| s.len()).unwrap_or(0);
 
         tracing::debug!(
-            slot = slot_name,
+            slot = %slot_name,
             speed = ?request.preferred_speed,
             prompt_chars,
             system_chars,
@@ -1382,6 +2058,78 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             temperature = ?request.temperature,
             "inference.complete: call"
         );
+
+        // Extras slot: eagerly loaded, no hot-swap. Run it through
+        // the same generate_sync path as the fast slot, just with a
+        // different ModelSlot reference.
+        if let SlotTarget::Extra(name) = &target {
+            let Some((slot, quirks)) = self.extras_lookup(name) else {
+                // Slot was unloaded between selection and dispatch
+                // (concurrent /internal/models/unload). Fail fast
+                // with a clear error rather than silently routing
+                // to a different slot.
+                return Err(Error::Inference(format!(
+                    "extras slot {name:?} was unloaded between selection \
+                     and dispatch — retry the request, or pick a different \
+                     model_id"
+                )));
+            };
+            let request = request.clone();
+            let slot_label_owned = slot_name.clone();
+            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
+                let start = Instant::now();
+                // Stamp last_used at dispatch start. Using start
+                // (rather than completion) makes the LRU eviction
+                // policy treat a long-running request as still-warm
+                // throughout — preferred behaviour for batch atlas
+                // pipelines that fire 5-10min Phase 1 calls.
+                slot.last_used
+                    .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                let mut ctx_lock = slot.context.blocking_lock();
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request, &quirks)
+                }));
+                let (text, tokens_used) = match result {
+                    Ok(Ok(r)) => r,
+                    Ok(Err(e)) => {
+                        tracing::warn!(slot = %slot_label_owned, error = %e, "inference error");
+                        return Err(e);
+                    }
+                    Err(_) => {
+                        tracing::error!(
+                            slot = %slot_label_owned,
+                            "inference panicked — likely context overflow"
+                        );
+                        return Err(Error::Inference(
+                            "Model inference failed: prompt may exceed the model's context window. \
+                             Try a shorter message or reduce conversation history."
+                                .to_string(),
+                        ));
+                    }
+                };
+                let latency_ms = start.elapsed().as_millis() as u64;
+                Ok(CompletionResponse {
+                    text,
+                    tokens_used,
+                    model_id: slot.model_id.clone(),
+                    latency_ms,
+                    oicp_meta: None,
+                })
+            })
+            .await
+            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+            if let Ok(ref resp) = result {
+                tracing::info!(
+                    slot = %slot_name,
+                    model = %resp.model_id,
+                    latency_ms = resp.latency_ms,
+                    tokens_used = resp.tokens_used,
+                    response_chars = resp.text.len(),
+                    "inference.complete: done"
+                );
+            }
+            return result;
+        }
 
         // Primary + Code share the lazy slot (hot-swap). Fast uses
         // the always-resident slot. Pick path + quirks up front so
@@ -1398,6 +2146,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 self.code_quirks.clone(),
                 "code",
             )),
+            SlotTarget::Extra(_) => unreachable!("handled above"),
         };
 
         if let Some((target_path, quirks, slot_label)) = lazy_target {
@@ -1553,14 +2302,15 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         let target = self.select_slot_for_request(request);
-        let slot_name = match target {
-            SlotTarget::Fast => "fast",
-            SlotTarget::Primary => "primary",
-            SlotTarget::Code => "code",
+        let slot_name: String = match &target {
+            SlotTarget::Fast => "fast".into(),
+            SlotTarget::Primary => "primary".into(),
+            SlotTarget::Code => "code".into(),
+            SlotTarget::Extra(name) => format!("extras:{name}"),
         };
 
         tracing::debug!(
-            slot = slot_name,
+            slot = %slot_name,
             speed = ?request.preferred_speed,
             prompt_chars = request.prompt.len(),
             system_chars = request.system_message.as_ref().map(|s| s.len()).unwrap_or(0),
@@ -1570,6 +2320,42 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
         let request = request.clone();
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(32);
+
+        // Extras slot: eagerly loaded, mirrors the fast-slot streaming
+        // path with a different ModelSlot reference.
+        if let SlotTarget::Extra(name) = &target {
+            let Some((slot, quirks)) = self.extras_lookup(name) else {
+                return Err(Error::Inference(format!(
+                    "extras slot {name:?} was unloaded between selection \
+                     and dispatch — retry the request"
+                )));
+            };
+            let slot_label_owned = slot_name.clone();
+            tokio::task::spawn_blocking(move || {
+                let start = Instant::now();
+                slot.last_used
+                    .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                let mut ctx_lock = slot.context.blocking_lock();
+                if let Err(e) = ModelSlot::generate_stream_sync(
+                    &slot.model,
+                    &mut ctx_lock.ctx,
+                    &request,
+                    &tx,
+                    &quirks,
+                    None,
+                ) {
+                    tracing::warn!(slot = %slot_label_owned, error = %e, "stream error");
+                    let _ = tx.blocking_send(Err(e));
+                } else {
+                    tracing::info!(
+                        slot = %slot_label_owned,
+                        latency_ms = start.elapsed().as_millis() as u64,
+                        "inference.complete_stream: done"
+                    );
+                }
+            });
+            return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
+        }
 
         // Primary + Code share the lazy slot (hot-swap). Fast uses the
         // always-resident slot. Resolve path + quirks + slot-label up
@@ -1586,6 +2372,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 self.code_quirks.clone(),
                 "code",
             )),
+            SlotTarget::Extra(_) => unreachable!("handled above"),
         };
 
         if let Some((target_path, quirks, slot_label)) = lazy_target {
@@ -1831,6 +2618,31 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             },
             relative_reasoning: Depth::Deep,
         }
+    }
+
+    fn load_extra_slot(
+        &self,
+        slot_name: String,
+        path: std::path::PathBuf,
+        context_size: u32,
+    ) -> Result<String> {
+        // Honour the operator-set budget — when present, LRU
+        // eviction kicks in if the new slot's size would push the
+        // lineup past the cap. When absent, behaviour matches the
+        // historical "hold forever" semantics.
+        let budget = self.extras_memory_budget();
+        self.load_extra_with_budget(slot_name, path, context_size, budget)
+    }
+
+    fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>> {
+        self.unload_extra(slot_name)
+    }
+
+    fn extras_inventory(&self) -> Vec<(String, String)> {
+        // Delegate to the inherent method to avoid the recursive
+        // call that `EmbeddedLlamaCpp::extras_inventory` would
+        // produce if we just wrote `self.extras_inventory()` here.
+        Self::extras_inventory(self)
     }
 }
 
@@ -2302,15 +3114,15 @@ mod pick_slot_tests {
     #[test]
     fn fast_speed_without_code_hint_goes_to_fast() {
         let r = req(Speed::Fast, None);
-        assert_eq!(pick_slot(&r, true, true), SlotTarget::Fast);
-        assert_eq!(pick_slot(&r, false, false), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r, true, true, None), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r, false, false, None), SlotTarget::Fast);
     }
 
     #[test]
     fn slow_speed_without_code_hint_picks_primary_when_available() {
         let r = req(Speed::Slow, None);
-        assert_eq!(pick_slot(&r, true, false), SlotTarget::Primary);
-        assert_eq!(pick_slot(&r, true, true), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r, true, false, None), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r, true, true, None), SlotTarget::Primary);
     }
 
     #[test]
@@ -2319,7 +3131,7 @@ mod pick_slot_tests {
         // behaviour that must not regress — a Medium/Slow request
         // still runs instead of erroring out.
         let r = req(Speed::Slow, None);
-        assert_eq!(pick_slot(&r, false, false), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r, false, false, None), SlotTarget::Fast);
     }
 
     #[test]
@@ -2328,7 +3140,7 @@ mod pick_slot_tests {
         // semantics are "this work needs code reasoning"; Fast-slot
         // generals can't do that well.
         let r = req(Speed::Fast, Some(CapabilityHint::code()));
-        assert_eq!(pick_slot(&r, true, true), SlotTarget::Code);
+        assert_eq!(pick_slot(&r, true, true, None), SlotTarget::Code);
     }
 
     #[test]
@@ -2338,10 +3150,10 @@ mod pick_slot_tests {
         // mesh scheduler is responsible for routing the hint to a
         // better-matched peer; locally we do what we can.
         let r_fast = req(Speed::Fast, Some(CapabilityHint::code()));
-        assert_eq!(pick_slot(&r_fast, true, false), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r_fast, true, false, None), SlotTarget::Fast);
 
         let r_slow = req(Speed::Slow, Some(CapabilityHint::code()));
-        assert_eq!(pick_slot(&r_slow, true, false), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r_slow, true, false, None), SlotTarget::Primary);
     }
 
     #[test]
@@ -2351,7 +3163,183 @@ mod pick_slot_tests {
         // should.
         let hint = CapabilityHint::extension("prose").unwrap();
         let r = req(Speed::Slow, Some(hint));
-        assert_eq!(pick_slot(&r, true, true), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r, true, true, None), SlotTarget::Primary);
+    }
+
+    #[test]
+    fn extras_match_wins_over_speed_routing() {
+        // Operator-declared per-phase routing must override the
+        // Speed-based heuristic. A Fast-speed request with
+        // model_id matching an extras slot lands on the extras
+        // slot, NOT on the fast slot.
+        let r = req(Speed::Fast, None);
+        assert_eq!(
+            pick_slot(&r, true, false, Some("reasoning".into())),
+            SlotTarget::Extra("reasoning".into())
+        );
+    }
+
+    #[test]
+    fn extras_match_wins_over_code_hint() {
+        // Even a code-hinted request defers to an explicit extras
+        // routing — the operator's declared model recruitment is
+        // higher-precedence than any heuristic.
+        let r = req(Speed::Fast, Some(CapabilityHint::code()));
+        assert_eq!(
+            pick_slot(&r, true, true, Some("bulk".into())),
+            SlotTarget::Extra("bulk".into())
+        );
+    }
+
+    #[test]
+    fn no_extras_match_falls_through_to_speed_routing() {
+        // Untagged request OR tagged request whose model_id missed
+        // the extras lookup → existing Speed/code rules apply
+        // unchanged. Locks the back-compat invariant.
+        let r = req(Speed::Slow, None);
+        assert_eq!(pick_slot(&r, true, false, None), SlotTarget::Primary);
+    }
+}
+
+#[cfg(test)]
+mod eviction_tests {
+    //! Exercises the LRU eviction selection algorithm. Pure and
+    //! lock-free — runs without loading any real llama.cpp model.
+    use super::{pick_evictions, EvictionCandidate, EvictionPlan};
+
+    fn cand(name: &str, last_used_ms: u64, size_mb: u64) -> EvictionCandidate {
+        EvictionCandidate {
+            slot_name: name.into(),
+            last_used_ms,
+            size_bytes: size_mb * 1024 * 1024,
+        }
+    }
+
+    #[test]
+    fn fits_returns_no_eviction_needed() {
+        // current 5 GB + new 3 GB = 8 GB ≤ 12 GB budget → Fits.
+        let c = vec![cand("warm", 1000, 5 * 1024)];
+        let plan = pick_evictions(&c, 5 * 1024 * 1024 * 1024, 3 * 1024 * 1024 * 1024, 12 * 1024 * 1024 * 1024);
+        assert_eq!(plan, EvictionPlan::Fits);
+    }
+
+    #[test]
+    fn evicts_coldest_slot_first() {
+        // Two candidates: "old" used at t=100, "fresh" used at t=999.
+        // Need to free 1 MB. Algorithm picks the colder one ("old")
+        // even though "fresh" alone would also free enough — the
+        // ordering is the contract.
+        let c = vec![
+            cand("fresh", 999, 5),
+            cand("old", 100, 5),
+        ];
+        // current 10 MB + new 4 MB = 14, budget 12 → need to free 2 MB
+        let plan = pick_evictions(&c, 10 * 1024 * 1024, 4 * 1024 * 1024, 12 * 1024 * 1024);
+        match plan {
+            EvictionPlan::Evict(names) => {
+                assert_eq!(names, vec!["old".to_string()]);
+            }
+            other => panic!("expected Evict, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn evicts_multiple_when_one_isnt_enough() {
+        // Three cold slots, all 1 MB. Need to free 3 MB. Walks LRU
+        // order ("a" → "b" → "c"). Stops once enough freed.
+        let c = vec![
+            cand("c", 300, 1),
+            cand("b", 200, 1),
+            cand("a", 100, 1),
+        ];
+        // current 3 MB + new 5 MB = 8, budget 5 → need 3 MB
+        let plan = pick_evictions(&c, 3 * 1024 * 1024, 5 * 1024 * 1024, 5 * 1024 * 1024);
+        match plan {
+            EvictionPlan::Evict(names) => {
+                assert_eq!(names, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+            }
+            other => panic!("expected Evict, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stops_evicting_once_enough_freed() {
+        // Multiple candidates available, but only the coldest's
+        // capacity is needed. Stops early to preserve the warmer
+        // slots.
+        let c = vec![
+            cand("a", 100, 10), // coldest, 10 MB — alone enough
+            cand("b", 200, 10),
+            cand("c", 300, 10),
+        ];
+        // current 30 MB + new 5 MB = 35, budget 30 → need 5 MB
+        let plan = pick_evictions(&c, 30 * 1024 * 1024, 5 * 1024 * 1024, 30 * 1024 * 1024);
+        match plan {
+            EvictionPlan::Evict(names) => {
+                assert_eq!(names, vec!["a".to_string()]);
+            }
+            other => panic!("expected single eviction, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn insufficient_when_cold_capacity_too_small() {
+        // Only 1 MB of cold inventory, but need to free 5 MB.
+        // Algorithm reports the shortfall so the caller can
+        // surface an error.
+        let c = vec![cand("a", 100, 1)];
+        // current 1 MB + new 10 MB = 11, budget 5 → need 6 MB but
+        // cold total is only 1 MB.
+        let plan = pick_evictions(&c, 1024 * 1024, 10 * 1024 * 1024, 5 * 1024 * 1024);
+        match plan {
+            EvictionPlan::Insufficient {
+                need_to_free,
+                cold_total,
+            } => {
+                assert_eq!(need_to_free, 6 * 1024 * 1024);
+                assert_eq!(cold_total, 1024 * 1024);
+            }
+            other => panic!("expected Insufficient, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_candidates_with_overflow_returns_insufficient() {
+        // Edge case: budget would be exceeded but no cold slots
+        // available (everything is busy in-flight). Caller can't
+        // load.
+        let c = vec![];
+        let plan = pick_evictions(&c, 10 * 1024 * 1024, 5 * 1024 * 1024, 8 * 1024 * 1024);
+        match plan {
+            EvictionPlan::Insufficient {
+                need_to_free,
+                cold_total,
+            } => {
+                assert_eq!(need_to_free, 7 * 1024 * 1024);
+                assert_eq!(cold_total, 0);
+            }
+            other => panic!("expected Insufficient on empty cold, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ties_break_deterministically_by_input_order() {
+        // Two candidates with the same last_used. The algorithm
+        // sorts by last_used; for equal keys, sort_by_key is
+        // stable, so input order wins. Lock the contract — a
+        // future change to unstable sort would surface here.
+        let c = vec![
+            cand("first", 100, 1),
+            cand("second", 100, 1),
+        ];
+        // current 2 MB + new 1 MB = 3, budget 1 → need 2 MB.
+        let plan = pick_evictions(&c, 2 * 1024 * 1024, 1024 * 1024, 1024 * 1024);
+        match plan {
+            EvictionPlan::Evict(names) => {
+                assert_eq!(names, vec!["first".to_string(), "second".to_string()]);
+            }
+            other => panic!("expected Evict on tie, got {other:?}"),
+        }
     }
 }
 

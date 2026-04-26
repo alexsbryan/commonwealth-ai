@@ -69,6 +69,7 @@ impl HybridProvider {
                         oicp: None,
             tools: None,
             tool_choice: None,
+                                model_id: None,
                     };
 
                     match provider.complete(&probe).await {

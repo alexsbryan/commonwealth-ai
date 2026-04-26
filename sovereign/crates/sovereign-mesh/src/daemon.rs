@@ -1298,13 +1298,22 @@ fn register_local_model_slots(
     use std::collections::HashMap;
     use std::hash::{DefaultHasher, Hash, Hasher};
 
-    let slots: [(&str, &std::path::Path); 3] = [
-        ("primary", cfg.models.primary.as_path()),
-        ("fast", cfg.models.fast.as_path()),
-        ("embed", cfg.models.embed.as_path()),
+    let mut slots: Vec<(String, &std::path::Path)> = vec![
+        ("primary".into(), cfg.models.primary.as_path()),
+        ("fast".into(), cfg.models.fast.as_path()),
+        ("embed".into(), cfg.models.embed.as_path()),
     ];
+    // Operator-declared additional chat slots from `[models.extra]`
+    // also need to land in `inference_store` so `/v1/models`
+    // advertises them. Without this entry, clients sending
+    // `model: "<extras-stem>"` would see a 404 from the OICP
+    // capability lookup before the slot picker ever runs.
+    for (slot_name, path) in cfg.models.extra.iter() {
+        slots.push((format!("extras:{slot_name}"), path.as_path()));
+    }
 
-    for (role, path) in slots {
+    for (role, path) in &slots {
+        let role: &str = role.as_str();
         let Some(file_name) = path.file_name().and_then(|s| s.to_str()) else {
             continue;
         };
@@ -1729,6 +1738,8 @@ mod tests {
                 fast: PathBuf::from("/m/qwen3-1.7b.gguf"),
                 embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
                 code: None,
+                context_size: None,
+                extra: std::collections::BTreeMap::new(),
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

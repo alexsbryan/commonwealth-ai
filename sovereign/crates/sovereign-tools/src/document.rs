@@ -63,6 +63,7 @@ impl DocumentTool {
                 oicp: None,
             tools: None,
             tool_choice: None,
+                        model_id: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -129,6 +130,7 @@ impl DocumentTool {
                 oicp: None,
             tools: None,
             tool_choice: None,
+                        model_id: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -327,6 +329,7 @@ impl DocumentTool {
                 oicp: None,
             tools: None,
             tool_choice: None,
+                        model_id: None,
             };
 
             let response = self.inference.complete(&request).await?;

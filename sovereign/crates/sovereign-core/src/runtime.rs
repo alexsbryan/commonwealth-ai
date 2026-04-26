@@ -758,6 +758,7 @@ pub(crate) async fn run_collaboration(
         oicp: None,
                 tools: None,
                 tool_choice: None,
+                    model_id: None,
     };
 
     match inference.complete(&refine_req).await {
@@ -2748,6 +2749,7 @@ impl Runtime {
             oicp,
                     tools: None,
                     tool_choice: None,
+                            model_id: None,
         };
 
         let search_method = kc.search_method;
@@ -3609,6 +3611,7 @@ impl Runtime {
             oicp,
                     tools: None,
                     tool_choice: None,
+                            model_id: None,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -3729,6 +3732,7 @@ impl Runtime {
                 oicp: None,
                 tools: None,
                 tool_choice: None,
+                            model_id: None,
             };
             return KnowledgeQueryPlan {
                 request,
@@ -3801,6 +3805,7 @@ impl Runtime {
                     oicp: None,
                     tools: None,
                     tool_choice: None,
+                                    model_id: None,
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -3821,6 +3826,7 @@ impl Runtime {
                     oicp: self.build_oicp(&Intent::KnowledgeQuery),
                     tools: None,
                     tool_choice: None,
+                                    model_id: None,
                 }
             }
         };
@@ -4123,6 +4129,7 @@ impl Runtime {
             oicp: None,
             tools: None,
             tool_choice: None,
+                    model_id: None,
         };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
@@ -4413,6 +4420,7 @@ impl Runtime {
                 oicp: self.build_oicp(&Intent::ComplexTask),
             tools: None,
             tool_choice: None,
+                        model_id: None,
             })
             .await?;
 

@@ -63,6 +63,7 @@ impl Planner for LlmPlanner {
                 oicp: None,
                 tools: None,
                 tool_choice: None,
+                            model_id: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -141,6 +142,7 @@ impl Planner for LlmPlanner {
             oicp: None,
                 tools: None,
                 tool_choice: None,
+                        model_id: None,
         };
 
         let response = self.inference.complete(&request).await?;

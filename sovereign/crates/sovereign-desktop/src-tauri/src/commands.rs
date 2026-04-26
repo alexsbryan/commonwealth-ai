@@ -978,6 +978,9 @@ async fn mirror_to_setup_config(
                 .clone()
                 .unwrap_or_else(|| desktop.model_path.clone()),
             code: desktop.code_model_path.clone(),
+            context_size: None,
+            extra: std::collections::BTreeMap::new(),
+            max_extras_memory_gb: None,
         },
         daemon: DaemonSection::default(),
         data: DataSection { dir: desktop.data_dir.clone() },

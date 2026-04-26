@@ -80,6 +80,7 @@ impl HealthCheckable for RouterCircuitChecker {
                         oicp: None,
             tools: None,
             tool_choice: None,
+            model_id: None,
                     };
                     match self.inference.complete(&probe).await {
                         Ok(_) => {

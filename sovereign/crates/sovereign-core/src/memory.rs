@@ -90,6 +90,7 @@ pub async fn compress_working_memory(
         oicp: None,
                 tools: None,
                 tool_choice: None,
+                    model_id: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -230,6 +231,7 @@ pub async fn extract_long_term_memories(
         oicp: None,
                 tools: None,
                 tool_choice: None,
+                    model_id: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -337,6 +339,7 @@ pub async fn detect_contradictions(
         oicp: None,
                 tools: None,
                 tool_choice: None,
+                    model_id: None,
     };
 
     let response = inference.complete(&request).await?;
