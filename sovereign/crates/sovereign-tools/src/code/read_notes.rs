@@ -59,9 +59,18 @@ impl Tool for ReadNotesTool {
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["decision", "attempt", "invariant", "todo", "reflection"]
+                            "enum": [
+                                "decision", "attempt", "invariant", "todo", "reflection",
+                                "uncertainty", "postmortem_pointer", "redteam_finding",
+                                "deviation", "commitment", "follow_up", "goal"
+                            ]
                         },
-                        "description": "Return only notes of these kinds. Use 'reflection' to read tool calibration notes from prior sessions."
+                        "description": "Return only notes of these kinds. \
+                                        decision/attempt/invariant/todo: classic working notes. \
+                                        reflection: tool calibration notes from prior sessions. \
+                                        uncertainty/postmortem_pointer/redteam_finding/deviation: ATOS notes. \
+                                        commitment/follow_up/goal: relational + strategic notes \
+                                        anchored to a Person, Organization, or Initiative."
                     },
                     "limit": {
                         "type": "integer",

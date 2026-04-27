@@ -394,6 +394,7 @@ mod tests {
                 scope: "global".into(),
                 feature_id: None,
                 promoted_from: None,
+                related_entity: None,
             },
         ];
         let out = fallback_header_digest(&rows);

@@ -15,6 +15,22 @@ use sovereign_core::types::*;
 
 use corpus_engine::{NoteScope, NoteStore};
 
+/// Kinds the tool admits in `validate()`. Single source of truth for
+/// the schema-`enum` field, the validator, and any future test that
+/// wants to exercise round-tripping. New kinds land here in the same
+/// PR as the corpus-engine schema migration that adds them — drift
+/// between the two is the bug class this constant prevents (see
+/// ARCH_PRINCIPLES §2.1).
+pub(crate) const WRITE_NOTE_KINDS: &[&str] = &[
+    "decision",
+    "attempt",
+    "invariant",
+    "todo",
+    "commitment",
+    "follow_up",
+    "goal",
+];
+
 pub struct WriteNoteTool {
     store: Arc<NoteStore>,
 }
@@ -43,9 +59,24 @@ impl Tool for WriteNoteTool {
                 "properties": {
                     "kind": {
                         "type": "string",
-                        "enum": ["decision", "attempt", "invariant", "todo"],
+                        "enum": [
+                            "decision", "attempt", "invariant", "todo",
+                            "commitment", "follow_up", "goal"
+                        ],
                         "description": "decision=architectural choice, attempt=failed approach, \
-                                        invariant=must-not-break constraint, todo=open task"
+                                        invariant=must-not-break constraint, todo=open task, \
+                                        commitment=promise made to a named person/org \
+                                        (relational), follow_up=temporal marker tied to a \
+                                        named entity (relational), goal=declared desired \
+                                        outcome with success criterion (strategic)"
+                    },
+                    "related_entity": {
+                        "type": "string",
+                        "description": "Optional free-text name of the Person, Organization, \
+                                        or Initiative this note is anchored to. Surfaces in \
+                                        the relational/strategic digest when the entity is \
+                                        active. Required-shape (but not enforced) for \
+                                        kind=commitment | follow_up | goal."
                     },
                     "content": {
                         "type": "string",
@@ -132,9 +163,10 @@ impl Tool for WriteNoteTool {
             .get("kind")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("write_note requires 'kind'".to_string()))?;
-        if !matches!(kind, "decision" | "attempt" | "invariant" | "todo") {
+        if !WRITE_NOTE_KINDS.contains(&kind) {
             return Err(Error::InvalidInput(format!(
-                "invalid kind '{kind}': must be decision, attempt, invariant, or todo"
+                "invalid kind '{kind}': must be one of {}",
+                WRITE_NOTE_KINDS.join(", ")
             )));
         }
         params
@@ -189,11 +221,22 @@ impl Tool for WriteNoteTool {
             .get("feature_id")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty());
+        let related_entity = params
+            .get("related_entity")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
 
         let id = self
             .store
-            .write_note_scoped(
-                kind, content, symbols, files, session_id, scope, feature_id,
+            .write_note_with_relation(
+                kind,
+                content,
+                symbols,
+                files,
+                session_id,
+                scope,
+                feature_id,
+                related_entity,
             )
             .await
             .map_err(|e| Error::Tool {
@@ -207,6 +250,7 @@ impl Tool for WriteNoteTool {
             "kind": kind,
             "scope": scope.as_str(),
             "feature_id": feature_id,
+            "related_entity": related_entity,
         })))
     }
 }

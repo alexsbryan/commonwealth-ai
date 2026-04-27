@@ -14,6 +14,7 @@ use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
+use llama_cpp_2::openai::OpenAIChatTemplateParams;
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 
@@ -277,6 +278,7 @@ impl ModelSlot {
 
     fn generate_sync(
         model: &LlamaModel,
+        model_id: &str,
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         request: &CompletionRequest,
         quirks: &ModelQuirks,
@@ -288,7 +290,7 @@ impl ModelSlot {
         // M-RoPE position mismatch errors ("X = 830, Y = 0: X < Y required").
         ctx.clear_kv_cache();
 
-        let full_prompt = format_prompt(model, request, quirks)?;
+        let full_prompt = format_prompt(model, model_id, request, quirks)?;
 
         let tokens = model
             .str_to_token(&full_prompt, AddBos::Always)
@@ -399,6 +401,7 @@ impl ModelSlot {
 
     fn generate_stream_sync(
         model: &LlamaModel,
+        model_id: &str,
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         request: &CompletionRequest,
         tx: &tokio::sync::mpsc::Sender<Result<String>>,
@@ -409,7 +412,7 @@ impl ModelSlot {
         // leaves the cache dirty, causing M-RoPE position errors on the next call.
         ctx.clear_kv_cache();
 
-        let full_prompt = format_prompt(model, request, quirks)?;
+        let full_prompt = format_prompt(model, model_id, request, quirks)?;
 
         let tokens = model
             .str_to_token(&full_prompt, AddBos::Always)
@@ -2141,7 +2144,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
                 let mut ctx_lock = slot.context.blocking_lock();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
                 }));
                 let (text, tokens_used) = match result {
                     Ok(Ok(r)) => r,
@@ -2248,7 +2251,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
                 }));
 
                 let (text, tokens_used) = match result {
@@ -2310,7 +2313,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
                 }));
 
                 let (text, tokens_used) = match result {
@@ -2396,6 +2399,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let mut ctx_lock = slot.context.blocking_lock();
                 if let Err(e) = ModelSlot::generate_stream_sync(
                     &slot.model,
+                    &slot.model_id,
                     &mut ctx_lock.ctx,
                     &request,
                     &tx,
@@ -2486,7 +2490,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
+                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
                 {
                     tracing::warn!(slot = slot_label, error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
@@ -2505,7 +2509,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
+                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
                 {
                     tracing::warn!(slot = "fast", error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
@@ -2757,7 +2761,12 @@ pub(crate) fn clamp_max_tokens(
     Ok(resolved)
 }
 
-fn format_prompt(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> Result<String> {
+fn format_prompt(
+    model: &LlamaModel,
+    model_id: &str,
+    request: &CompletionRequest,
+    quirks: &ModelQuirks,
+) -> Result<String> {
     // Inject thinking-mode token into the system message based on family quirks.
     // `think_budget == Some(0)` signals the caller wants thinking suppressed.
     // For SystemPromptToken families (Qwen3, Qwen3.5, SmolLM3): append /think or /no_think.
@@ -2816,28 +2825,145 @@ fn format_prompt(model: &LlamaModel, request: &CompletionRequest, quirks: &Model
     };
     let system_with_thinking = system_with_tools;
 
-    if let Ok(template) = model.chat_template(None) {
-        let mut messages = Vec::new();
-        if !system_with_thinking.is_empty() {
-            messages.push(
-                LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
-                    .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+    // Three-tier prompt-building strategy. Each tier is tried in
+    // order; the first one that succeeds wins.
+    //
+    // 1. **Basic `apply_chat_template`** — calls llama.cpp's
+    //    built-in `llama_chat_apply_template`. Fast, no JSON
+    //    serialization, but its template parser only supports a
+    //    limited Jinja-like subset (no macros, no complex control
+    //    flow). Works for Qwen3 / Llama3 / base Phi-4 / etc.
+    //
+    // 2. **`apply_chat_template_oaicompat` with `use_jinja=true`**
+    //    — calls llama.cpp's full minja-based Jinja2 path (the
+    //    same one llama-server's `--jinja` flag uses). Handles
+    //    templates that use macros or complex control flow.
+    //    Required for Gemma 3/4 (their gguf templates start with
+    //    `{%- macro format_parameters() -%}`).
+    //
+    // 3. **Plain-text concat** (last resort) — `{system}\n\n{user}`
+    //    with no role markers. The model has no turn boundaries
+    //    so it'll role-play multi-turn ("User: ... Assistant: ...")
+    //    until `max_tokens`. We loud-warn so operators see this is
+    //    happening — it was a silent fallback up until 2026-04-26
+    //    (gemma-4-31B atlas bench debugging session).
+    let template = match model.chat_template(None) {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!(
+                model_id = %model_id,
+                error = ?e,
+                "model.chat_template(None) returned no template — model gguf has no \
+                 tokenizer.chat_template metadata. Falling back to plain-text concat; \
+                 model output may include hallucinated role markers and may not stop \
+                 at the right place."
             );
+            return Ok(plain_text_prompt(&system_with_thinking, &request.prompt));
         }
+    };
+
+    // Tier 1: built-in subset.
+    let mut messages = Vec::new();
+    if !system_with_thinking.is_empty() {
         messages.push(
-            LlamaChatMessage::new("user".to_string(), request.prompt.clone())
+            LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
                 .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
         );
-        if let Ok(formatted) = model.apply_chat_template(&template, &messages, true) {
-            return Ok(formatted);
+    }
+    messages.push(
+        LlamaChatMessage::new("user".to_string(), request.prompt.clone())
+            .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+    );
+    match model.apply_chat_template(&template, &messages, true) {
+        Ok(formatted) => return Ok(formatted),
+        Err(e) => {
+            tracing::debug!(
+                model_id = %model_id,
+                error = ?e,
+                "apply_chat_template (built-in subset) failed; retrying via Jinja2 path"
+            );
         }
     }
 
-    Ok(if system_with_thinking.is_empty() {
-        request.prompt.clone()
+    // Tier 2: Jinja2 via oaicompat path. Build an OpenAI-style
+    // messages JSON array — simpler than allocating
+    // `LlamaChatMessage` again because the oaicompat ABI takes
+    // raw JSON anyway.
+    let messages_json = build_oai_messages_json(&system_with_thinking, &request.prompt)?;
+    let params = OpenAIChatTemplateParams {
+        messages_json: &messages_json,
+        tools_json: None,
+        tool_choice: None,
+        json_schema: None,
+        grammar: None,
+        reasoning_format: None,
+        chat_template_kwargs: None,
+        add_generation_prompt: true,
+        use_jinja: true,
+        parallel_tool_calls: false,
+        enable_thinking: false,
+        // BOS/EOS handling: the caller (generate_sync /
+        // generate_stream_sync) tokenises with `AddBos::Always`,
+        // which prepends the model's BOS at tokenisation time. If
+        // we also asked the template renderer to emit BOS, we'd
+        // double-prepend and the first decode position would be
+        // off by one. EOS is never wanted on a generation prompt.
+        add_bos: false,
+        add_eos: false,
+        parse_tool_calls: false,
+    };
+    match model.apply_chat_template_oaicompat(&template, &params) {
+        Ok(result) => return Ok(result.prompt),
+        Err(e) => {
+            tracing::warn!(
+                model_id = %model_id,
+                error = ?e,
+                template_head = %template_head_for_log(&template),
+                "apply_chat_template_oaicompat (Jinja2) ALSO failed — both the built-in \
+                 parser and minja rejected the gguf's chat template. Falling back to \
+                 plain-text concat; model output may include hallucinated role markers."
+            );
+        }
+    }
+
+    // Tier 3: plain-text concat.
+    Ok(plain_text_prompt(&system_with_thinking, &request.prompt))
+}
+
+/// Final-fallback prompt when no chat-template path works. Just
+/// concatenates system + user with a blank line. The model has no
+/// turn boundaries; expect it to role-play multi-turn output.
+fn plain_text_prompt(system: &str, user: &str) -> String {
+    if system.is_empty() {
+        user.to_string()
     } else {
-        format!("{system_with_thinking}\n\n{}", request.prompt)
-    })
+        format!("{system}\n\n{user}")
+    }
+}
+
+/// Serialize a (system, user) pair into the OpenAI-compatible
+/// messages JSON shape that `apply_chat_template_oaicompat`
+/// expects. System is omitted when empty so templates that don't
+/// support a system role (e.g. Gemma) don't get a stray empty
+/// turn.
+fn build_oai_messages_json(system: &str, user: &str) -> Result<String> {
+    let mut messages: Vec<serde_json::Value> = Vec::with_capacity(2);
+    if !system.is_empty() {
+        messages.push(serde_json::json!({"role": "system", "content": system}));
+    }
+    messages.push(serde_json::json!({"role": "user", "content": user}));
+    serde_json::to_string(&messages)
+        .map_err(|e| Error::Inference(format!("Failed to serialize chat messages: {e}")))
+}
+
+/// First ~80 chars of a chat template, with newlines escaped, for
+/// log output. Lets operators identify which template format is
+/// hitting the fallback path without dumping a full multi-KB
+/// macro definition into the daemon log.
+fn template_head_for_log(template: &llama_cpp_2::model::LlamaChatTemplate) -> String {
+    let s = template.to_str().unwrap_or("<non-utf8>");
+    let head: String = s.chars().take(80).collect();
+    head.replace('\n', "\\n")
 }
 
 /// Token budget for `<think>` blocks. After this many tokens inside a thinking

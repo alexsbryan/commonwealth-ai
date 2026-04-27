@@ -11,9 +11,16 @@
 //! canonical persisted form — LanceDB paths and `_corpus_meta.json`
 //! both key on them — so the enum ↔ id mapping is the contract here.
 
-/// One of the four KnowledgeView perspectives. `CrossView` is
-/// synthetic: it has no recipe, no index, and no ingest path — it
-/// exists only as a key for the assembled resonance digest.
+/// One of the KnowledgeView perspectives. `CrossView`, `Relational`
+/// and `Strategic` are **synthetic** — they have no recipes, no
+/// indexes, and no ingest paths. They exist as keys for digest
+/// blocks assembled at splice time:
+///
+/// - `CrossView` is built from the other views' field skeletons
+///   (resonance matching).
+/// - `Relational` is built from the `Person` / `Organization` atoms
+///   in the personal + conversational atlases (entity timelines).
+/// - `Strategic` is built from `Initiative` atoms plus goal notes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ViewKind {
     /// Personal memories — recurring concerns, held positions, open
@@ -29,6 +36,16 @@ pub enum ViewKind {
     /// assembled by `cross_view::build_cross_view_digest` from the
     /// other three views' field skeletons.
     CrossView,
+    /// People + organisations the user has discussed recently.
+    /// Synthetic: derived from `Person` and `Organization` atoms in
+    /// the personal + conversational atlases. See
+    /// `knowledge_view::relational` for the formatter and
+    /// `knowledge_view::timeline` for assembly.
+    Relational,
+    /// Initiatives the user is organising work around. Synthetic:
+    /// derived from `Initiative` atoms + goal notes. ATOS phase /
+    /// charter status composed via [`crate::knowledge_view::timeline::AtosLookup`].
+    Strategic,
 }
 
 impl ViewKind {
@@ -41,6 +58,8 @@ impl ViewKind {
             Self::Conversational => "conversation-history",
             Self::Institutional => "institutional-notes",
             Self::CrossView => "cross-view",
+            Self::Relational => "relational",
+            Self::Strategic => "strategic",
         }
     }
 
@@ -52,6 +71,8 @@ impl ViewKind {
             Self::Conversational => "Conversational knowledge",
             Self::Institutional => "Institutional knowledge",
             Self::CrossView => "Cross-view connections",
+            Self::Relational => "People on your radar",
+            Self::Strategic => "Active initiatives",
         }
     }
 
@@ -64,23 +85,37 @@ impl ViewKind {
             Self::Conversational => "conversations",
             Self::Institutional => "institutional",
             Self::CrossView => "cross-view",
+            Self::Relational => "relational",
+            Self::Strategic => "strategic",
         }
     }
 
-    /// Default per-turn token budget. Chosen to total ~600 tokens
-    /// when all three primary views are spliced together, with
-    /// cross-view adding another ~100.
+    /// Default per-turn token budget. Chosen to total ~850 tokens
+    /// across the five primary blocks, with cross-view adding
+    /// another ~100. Splits per requirements §4.1:
+    ///   Personal 300 / Conversational 200 / Institutional 100 /
+    ///   Relational 150 / Strategic 100.
     pub const fn default_budget_tokens(&self) -> usize {
         match self {
             Self::Personal => 300,
             Self::Conversational => 200,
             Self::Institutional => 100,
             Self::CrossView => 100,
+            Self::Relational => 150,
+            Self::Strategic => 100,
         }
     }
 
+    /// True when the view has its own LanceDB index + recipe +
+    /// ingest path. False for synthetic views (`CrossView`,
+    /// `Relational`, `Strategic`) that are assembled from other
+    /// views' outputs at splice time.
+    pub const fn has_own_index(&self) -> bool {
+        matches!(self, Self::Personal | Self::Conversational | Self::Institutional)
+    }
+
     /// Parse a canonical id back to a `ViewKind`. Returns `None` for
-    /// anything that isn't one of the four known ids — callers that
+    /// anything that isn't one of the known ids — callers that
     /// have to reason about unknown views (e.g. during logging) can
     /// still pass the string along untyped.
     pub fn from_id(id: &str) -> Option<Self> {
@@ -89,6 +124,8 @@ impl ViewKind {
             "conversation-history" => Some(Self::Conversational),
             "institutional-notes" => Some(Self::Institutional),
             "cross-view" => Some(Self::CrossView),
+            "relational" => Some(Self::Relational),
+            "strategic" => Some(Self::Strategic),
             _ => None,
         }
     }
@@ -105,6 +142,8 @@ mod tests {
             ViewKind::Conversational,
             ViewKind::Institutional,
             ViewKind::CrossView,
+            ViewKind::Relational,
+            ViewKind::Strategic,
         ] {
             assert_eq!(ViewKind::from_id(k.id()), Some(k));
         }
@@ -117,12 +156,24 @@ mod tests {
 
     #[test]
     fn default_budgets_sum_to_spec() {
-        // Spec §11 budget contract: three primary views together
-        // stay within 600 tokens; cross-view adds at most 100 more.
+        // Requirements §4.1: total budget across the five primary
+        // blocks is 850 tokens; cross-view adds at most 100 more.
         let primary = ViewKind::Personal.default_budget_tokens()
             + ViewKind::Conversational.default_budget_tokens()
-            + ViewKind::Institutional.default_budget_tokens();
-        assert_eq!(primary, 600);
+            + ViewKind::Institutional.default_budget_tokens()
+            + ViewKind::Relational.default_budget_tokens()
+            + ViewKind::Strategic.default_budget_tokens();
+        assert_eq!(primary, 850);
         assert_eq!(ViewKind::CrossView.default_budget_tokens(), 100);
+    }
+
+    #[test]
+    fn synthetic_views_declare_no_own_index() {
+        assert!(ViewKind::Personal.has_own_index());
+        assert!(ViewKind::Conversational.has_own_index());
+        assert!(ViewKind::Institutional.has_own_index());
+        assert!(!ViewKind::CrossView.has_own_index());
+        assert!(!ViewKind::Relational.has_own_index());
+        assert!(!ViewKind::Strategic.has_own_index());
     }
 }

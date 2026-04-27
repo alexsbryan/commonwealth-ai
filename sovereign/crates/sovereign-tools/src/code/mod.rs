@@ -54,6 +54,8 @@ pub mod write_note;
 pub mod read_notes;
 #[cfg(feature = "treesitter")]
 pub mod delete_note;
+#[cfg(feature = "treesitter")]
+pub mod suggest_note;
 
 // Index health reporting — used by all SCIP-dependent tools.
 #[cfg(feature = "treesitter")]

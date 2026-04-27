@@ -112,6 +112,26 @@ A proper `bench atlas compare` subcommand can land later if the
   single sample at the chapter sizes the model will actually see
   is good enough. Re-run any task that lands far from your prior
   for that model to sanity-check.
+- **Chat templates**: until 2026-04-26 the daemon's
+  `format_prompt` silently fell back to plain-text
+  `{system}\n\n{user}` concat when llama.cpp's built-in
+  `apply_chat_template` rejected a model's gguf-embedded
+  template. That's the case for any template that uses Jinja2
+  macros / loops / complex control flow — including Gemma 3/4
+  (template starts `{%- macro format_parameters() -%}...`). Models
+  in that bucket would role-play multi-turn output ("User: ...
+  Assistant: ...") because they never saw their real
+  `<start_of_turn>user|model<end_of_turn>` special-token
+  boundaries, never emitted EOS, and decoded to `max_tokens` on
+  every request. Symptoms: phase1 fails with mid-string JSON
+  truncation or hallucinated `{"//": "..."}` commentary; raw
+  chat completions take many minutes for trivial prompts. The fix
+  retries via `apply_chat_template_oaicompat` with `use_jinja:
+  true` (llama.cpp's minja path, same as `llama-server --jinja`)
+  before falling through to the loud-warned plain-text concat.
+  If you're benching a model whose template is macro-based AND
+  you see hallucinated role markers in `response_head`, your
+  sovereign-cli build is from before that fix.
 - Daemon reports `prompt_tokens=0` and ALSO mislabels
   `completion_tokens` (it actually carries total = prompt +
   generated). Discovered 2026-04-26 when GLM-18B with
@@ -137,7 +157,9 @@ A proper `bench atlas compare` subcommand can land later if the
 |---|---|---|---|---|---|
 | Qwopus3.5-27B-v3.5-Q6_K | 3/3 | ~15 | ~28–50 | ~64 d | production-ready |
 | Qwopus-GLM-18B-Healed-Q6_K | 2/3 (long fails) | 22–38 | 32 | ~14 d if you fix long | conditional |
+| FINAL-Bench_Darwin-35B-A3B-Opus-Q8_0 | 2/3 (short fails) | 161–180 | 12 | ~3.2 d | leading candidate, atom-count needs spot-check |
 | Darwin-9B-Opus.Q8_0 | 0/1 | 42.7 | — | n/a | rejected |
+| gemma-4-31B-it-Q5_K_M | 3/3 | 25–31 | 14 | ~20 d | viable; most reliable phase1 yet (no failures) |
 | Bonsai-8B-Q1_0 | 1/1 structural | 399 | 9 (empty filler) | 1.2 d | rejected for extraction |
 
 ### Failure-mode notes
@@ -162,4 +184,31 @@ A proper `bench atlas compare` subcommand can land later if the
   characters" — Bonsai keeps emitting after the close brace.
   Pattern: producing valid-shape filler, not actually answering
   the prompt. Use as the fast slot, not a primary candidate.
+- **FINAL-Bench_Darwin-35B-A3B-Opus-Q8_0**: A3B (3B active of
+  35B MoE) gives the fastest Phase 1 throughput we've measured
+  (~170 tok/s, est. 3.2 d for 1800 × 5). Medium and long pass
+  cleanly, but the SHORTEST chapter ends mid-string ("...Cecilia
+  Mart" cut off in `relations_introduced[].participants`) — looks
+  like an early-EOS / premature-stop on small inputs, distinct
+  from Darwin-9B's whitespace-corruption failure mode. Discovered
+  2026-04-26. Atom count (12 medium, 17 long) is well below
+  GLM-18B's 32 on the same medium chapter — could be coarser
+  granularity or under-extraction; spot-check the actual atoms
+  before adopting as primary.
+- **gemma-4-31B-it-Q5_K_M**: 100% phase1 success on all three
+  chapters, 25–31 tok/s, 14 atoms on medium (similar to
+  Darwin-35B-A3B's 12). At ~27 tok/s avg phase1 the est. 1800 ×
+  5 ch is ~20 d — slower than Darwin-A3B (3 d) and GLM-18B
+  (~14 d if fixed) but the only candidate so far that didn't drop
+  any phase1 chapter. Trade-off pick: pay 6× the wall time of
+  Darwin-A3B for a strict no-retry pipeline. Atom count is on the
+  low side (14 vs GLM-18B's 32) — same spot-check caveat as
+  Darwin-A3B. NOTE: this run was unblocked by a chat-template
+  fix landed 2026-04-26 (see Caveats §"Chat templates"). On the
+  initial run Gemma role-played multi-turn output because the
+  daemon's `format_prompt` was silently falling back to plain
+  text concat after `apply_chat_template` failed; the fix retries
+  via the Jinja2 oaicompat path which handles Gemma's macro
+  template. If you're re-benching another macro-template model,
+  you need a sovereign-cli build at or after that commit.
 

@@ -6,10 +6,13 @@
 //! is in its ATOS lifecycle. `status`, `found`, `amend`, and `doctor`
 //! read from here so none of them re-run observation on every call.
 //!
-//! Schema (v1):
+//! Schema (v2):
 //!
 //! ```toml
-//! schema_version = 1
+//! schema_version = 2
+//!
+//! [project]
+//! name = "sovereign"             # default = parent dir name
 //!
 //! [observation]
 //! observed_at = 1712345678       # unix seconds
@@ -35,9 +38,14 @@
 //! current_phase = 0
 //! ```
 //!
+//! v1 → v2: introduces `[project] name` for initiative-to-project
+//! matching by the strategic digest (Phase 8 of the Relational +
+//! Strategic Awareness changeset). v1 files load fine — a missing
+//! `[project]` section defaults to `name = ""`; the read path then
+//! fills in the parent directory name on first save.
+//!
 //! Additive-only evolution: future fields go under existing tables
-//! or new tables; never repurpose a key. `schema_version` bumps on
-//! breaking reshape (there won't be one in M6).
+//! or new tables; never repurpose a key.
 
 use std::path::Path;
 
@@ -47,14 +55,34 @@ use crate::observation::{
     DepKind, DetectedDependency, LanguageObservation, ProjectObservation, ScipTooling,
 };
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProjectTomlFile {
     pub schema_version: u32,
+    pub project: ProjectSection,
     pub observation: ObservationSection,
     pub lifecycle: LifecycleSection,
+}
+
+/// Stable identity of the project — currently just the human-readable
+/// name used to match an `Initiative` entity from the conversational
+/// atlas to a local ATOS project (see
+/// `sovereign-tools::knowledge_view::timeline::AtosLookup`).
+///
+/// The name is editable: `project init` writes the parent directory
+/// name as a default, and the user can later edit `.sovereign/project.toml`
+/// directly. Empty `name` after read means "fall back to parent dir
+/// at match time" — the read helper performs that fallback so callers
+/// downstream always see a non-empty value.
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(default)]
+pub struct ProjectSection {
+    /// Display + match name. Default-empty for v1 files; the loader
+    /// fills it from the parent directory name when missing.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -125,6 +153,7 @@ impl ProjectTomlFile {
     pub fn from_observation(obs: &ProjectObservation) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
+            project: ProjectSection::default(),
             observation: ObservationSection::from_observation(obs),
             lifecycle: LifecycleSection::default(),
         }
@@ -133,6 +162,22 @@ impl ProjectTomlFile {
     pub fn read(path: &Path) -> std::io::Result<Self> {
         let text = std::fs::read_to_string(path)?;
         toml::from_str(&text).map_err(|e| std::io::Error::other(format!("parse project.toml: {e}")))
+    }
+
+    /// Read the file and ensure `project.name` is non-empty. When the
+    /// file is v1 (no `[project]` section, or `name = ""`), fall
+    /// back to the parent directory name of `.sovereign/`'s parent
+    /// — that's the repo root.
+    ///
+    /// Used by callers that want a guaranteed-populated name without
+    /// triggering a write (e.g. the strategic digest reading
+    /// project.toml at splice time).
+    pub fn read_with_name_fallback(path: &Path) -> std::io::Result<Self> {
+        let mut file = Self::read(path)?;
+        if file.project.name.is_empty() {
+            file.project.name = infer_project_name(path);
+        }
+        Ok(file)
     }
 
     pub fn write(&self, path: &Path) -> std::io::Result<()> {
@@ -146,13 +191,32 @@ impl ProjectTomlFile {
 
     /// Replace the observation section, preserve lifecycle. Use this
     /// from `init` so re-running doesn't reset the founded flag.
-    pub fn update_observation(&mut self, obs: &ProjectObservation) {
+    /// Also fills `project.name` from the parent directory if the
+    /// existing file omitted it (v1 → v2 migration without losing
+    /// any lifecycle state).
+    pub fn update_observation(&mut self, obs: &ProjectObservation, project_toml_path: &Path) {
         self.observation = ObservationSection::from_observation(obs);
+        if self.project.name.is_empty() {
+            self.project.name = infer_project_name(project_toml_path);
+        }
         // schema_version may have been defaulted to 0 when reading
         // a hypothetical future file; pin it to the current version
         // on write.
         self.schema_version = SCHEMA_VERSION;
     }
+}
+
+/// Best-effort default: parent-of-parent directory name (the dir
+/// that contains `.sovereign/`). Returns empty if the path is too
+/// shallow or non-UTF-8.
+fn infer_project_name(project_toml_path: &Path) -> String {
+    project_toml_path
+        .parent() // .sovereign/
+        .and_then(|p| p.parent()) // repo root
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .map(|s| s.to_string())
+        .unwrap_or_default()
 }
 
 impl ObservationSection {
@@ -251,6 +315,97 @@ mod tests {
     }
 
     #[test]
+    fn v1_file_loads_via_read_with_empty_name_filled_from_parent_dir() {
+        // Synthesise a v1 file (no [project] section) and confirm
+        // read_with_name_fallback fills `name` from the parent dir
+        // of `.sovereign/`.
+        let tmp = tempdir().unwrap();
+        let repo_root = tmp.path().join("my-repo");
+        std::fs::create_dir_all(repo_root.join(".sovereign")).unwrap();
+        let toml_path = repo_root.join(".sovereign").join("project.toml");
+        std::fs::write(
+            &toml_path,
+            "schema_version = 1\n\n\
+             [observation]\n\
+             observed_at = 0\n\
+             has_git = false\n\
+             embed_model_available = false\n\n\
+             [lifecycle]\n\
+             founded = false\n\
+             charter_version = 0\n\
+             current_phase = 0\n",
+        )
+        .unwrap();
+
+        let file = ProjectTomlFile::read_with_name_fallback(&toml_path).unwrap();
+        assert_eq!(file.project.name, "my-repo");
+    }
+
+    #[test]
+    fn explicit_project_name_round_trips_through_write_and_read() {
+        let tmp = tempdir().unwrap();
+        let repo_root = tmp.path().join("some-other-name");
+        std::fs::create_dir_all(repo_root.join(".sovereign")).unwrap();
+        let toml_path = repo_root.join(".sovereign").join("project.toml");
+
+        let mut file = ProjectTomlFile::default();
+        file.schema_version = SCHEMA_VERSION;
+        file.project.name = "Sovereign".into();
+        file.write(&toml_path).unwrap();
+
+        let reloaded = ProjectTomlFile::read_with_name_fallback(&toml_path).unwrap();
+        assert_eq!(
+            reloaded.project.name, "Sovereign",
+            "explicit name wins over directory inference"
+        );
+    }
+
+    #[test]
+    fn update_observation_fills_empty_project_name_from_parent_dir() {
+        // A v1 file (empty project.name) gets its name populated when
+        // `init` re-runs and calls update_observation. Lifecycle is
+        // preserved, schema_version is bumped to current.
+        let tmp = tempdir().unwrap();
+        let repo_root = tmp.path().join("commonwealth-ai");
+        std::fs::create_dir_all(&repo_root).unwrap();
+        let toml_path = repo_root.join(".sovereign").join("project.toml");
+
+        let mut file = ProjectTomlFile::default();
+        file.schema_version = 1; // v1
+        file.lifecycle.founded = true;
+        file.lifecycle.charter_version = 3;
+        // project.name intentionally empty.
+
+        let obs = observation::observe(&repo_root);
+        file.update_observation(&obs, &toml_path);
+
+        assert_eq!(file.project.name, "commonwealth-ai");
+        assert_eq!(file.schema_version, SCHEMA_VERSION);
+        assert!(file.lifecycle.founded);
+        assert_eq!(file.lifecycle.charter_version, 3);
+    }
+
+    #[test]
+    fn update_observation_preserves_explicit_project_name() {
+        let tmp = tempdir().unwrap();
+        let repo_root = tmp.path().join("dir-name");
+        std::fs::create_dir_all(&repo_root).unwrap();
+        let toml_path = repo_root.join(".sovereign").join("project.toml");
+
+        let mut file = ProjectTomlFile::default();
+        file.schema_version = SCHEMA_VERSION;
+        file.project.name = "Custom Name".into(); // user-edited
+
+        let obs = observation::observe(&repo_root);
+        file.update_observation(&obs, &toml_path);
+
+        assert_eq!(
+            file.project.name, "Custom Name",
+            "non-empty name must not be overwritten"
+        );
+    }
+
+    #[test]
     fn update_observation_preserves_lifecycle() {
         // Simulate: init runs, found sets lifecycle, init runs again.
         // The second init must NOT wipe founded=true.
@@ -268,7 +423,8 @@ mod tests {
         )
         .unwrap();
         let obs2 = observation::observe(tmp.path());
-        file.update_observation(&obs2);
+        let project_toml_path = tmp.path().join(".sovereign/project.toml");
+        file.update_observation(&obs2, &project_toml_path);
         assert!(file.lifecycle.founded, "founded survives re-observation");
         assert_eq!(file.lifecycle.charter_version, 1);
         assert_eq!(file.lifecycle.current_phase, 2);

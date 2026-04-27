@@ -369,38 +369,152 @@ pub async fn detect_contradictions(
 const DEFAULT_DECAY_RATE: f64 = 0.10; // 10% per month
 const DEFAULT_PRUNE_THRESHOLD: f64 = 0.2;
 
+/// Inventory of entity names that mark a memory as relationally /
+/// strategically relevant. Memories whose `content` mentions any
+/// inventory name decay at half the configured rate per
+/// requirements §5 (relationship-weighted decay).
+///
+/// Names are stored lowercased + trimmed; matching is whole-word
+/// case-insensitive (substring `Sarah` does NOT match `Sarahkov`).
+/// The set is rebuilt from the personal + conversational atlas's
+/// `atoms.json` files at the end of each enrichment cycle.
+pub type EntityInventory = std::collections::HashSet<String>;
+
 /// Calculate decayed confidence for a memory based on time since last use.
 /// `decay_rate` is the fraction lost per month (default 0.10 = 10%).
+///
+/// Convenience wrapper — no entity inventory, full decay applied.
 pub fn apply_confidence_decay(memory: &Memory, now: i64) -> f64 {
-    apply_confidence_decay_with_rate(memory, now, DEFAULT_DECAY_RATE)
+    apply_confidence_decay_with_rate_and_inventory(memory, now, DEFAULT_DECAY_RATE, None)
 }
 
 /// Calculate decayed confidence with a custom decay rate.
+///
+/// Convenience wrapper — no entity inventory, full rate applied.
+/// Use [`apply_confidence_decay_with_rate_and_inventory`] when an
+/// entity inventory is available so relationship-weighted decay
+/// kicks in.
 pub fn apply_confidence_decay_with_rate(memory: &Memory, now: i64, decay_rate: f64) -> f64 {
+    apply_confidence_decay_with_rate_and_inventory(memory, now, decay_rate, None)
+}
+
+/// Full-fat decay: rate halved when the memory mentions any name in
+/// the inventory.
+///
+/// The fixed-half rule (not a separately configurable parameter) is
+/// per requirements §5.2 — "a fixed ratio, not a configurable
+/// parameter." A skill that overrides `confidence_decay_per_month`
+/// to 15% sees entity-linked memories decay at 7.5%.
+///
+/// `inventory = None` short-circuits to the unweighted formula —
+/// callers without an inventory loaded yet (first run, enrichment
+/// disabled) keep the default 10%/month behaviour.
+pub fn apply_confidence_decay_with_rate_and_inventory(
+    memory: &Memory,
+    now: i64,
+    decay_rate: f64,
+    inventory: Option<&EntityInventory>,
+) -> f64 {
+    let effective_rate = match inventory {
+        Some(inv) if memory_mentions_any_entity(&memory.content, inv) => decay_rate / 2.0,
+        _ => decay_rate,
+    };
     let months_elapsed = (now - memory.last_used) as f64 / (30.0 * 86400.0);
-    let retention = 1.0 - decay_rate.clamp(0.0, 1.0);
+    let retention = 1.0 - effective_rate.clamp(0.0, 1.0);
     memory.confidence * retention.powf(months_elapsed)
+}
+
+/// Whole-word case-insensitive substring check. `entities` is a set
+/// of lowercased names; `content` is split on non-alphanumeric and
+/// each token is compared.
+///
+/// Multi-word names (e.g. "Sarah Chen", "API migration") are
+/// detected by joining adjacent tokens up to the longest matching
+/// run — we walk the memory's tokens and try each prefix slice
+/// against the inventory. Linear in `tokens.len() *
+/// max_inventory_words`; entity names are typically 1–3 words and
+/// memories are short enough that this is well below the noise
+/// floor.
+fn memory_mentions_any_entity(content: &str, entities: &EntityInventory) -> bool {
+    if entities.is_empty() {
+        return false;
+    }
+    let tokens: Vec<String> = content
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_lowercase())
+        .collect();
+    if tokens.is_empty() {
+        return false;
+    }
+    // Longest-match-wins: try 4-word, 3-word, 2-word, 1-word
+    // windows. Most personal entities are 1–2 words; the cap at 4
+    // covers full-name "First Middle Last Suffix" cases.
+    const MAX_WINDOW: usize = 4;
+    for start in 0..tokens.len() {
+        let max_w = MAX_WINDOW.min(tokens.len() - start);
+        for w in (1..=max_w).rev() {
+            let candidate = tokens[start..start + w].join(" ");
+            if entities.contains(&candidate) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Build an [`EntityInventory`] from a slice of raw entity names.
+/// Names are lowercased + trimmed; empty strings are dropped.
+/// Convenience for callers that have a `Vec<String>` from
+/// `atoms.json` and want to feed it into the decay path.
+pub fn entity_inventory_from_names<I, S>(names: I) -> EntityInventory
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    names
+        .into_iter()
+        .filter_map(|n| {
+            let trimmed = n.as_ref().trim().to_lowercase();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+        .collect()
 }
 
 /// Prune memories with decayed confidence below threshold.
 /// Uses default decay rate (10%/month) and prune threshold (0.2).
+/// No entity inventory — decay is uniform.
 pub async fn prune_decayed_memories(store: &dyn StateStore, now_ts: i64) -> Result<usize> {
-    prune_decayed_memories_with_config(store, now_ts, DEFAULT_DECAY_RATE, DEFAULT_PRUNE_THRESHOLD)
-        .await
+    prune_decayed_memories_with_config(
+        store,
+        now_ts,
+        DEFAULT_DECAY_RATE,
+        DEFAULT_PRUNE_THRESHOLD,
+        None,
+    )
+    .await
 }
 
-/// Prune memories with configurable decay rate and threshold.
+/// Prune memories with configurable decay rate, threshold, and an
+/// optional entity inventory for relationship-weighted decay.
 pub async fn prune_decayed_memories_with_config(
     store: &dyn StateStore,
     now_ts: i64,
     decay_rate: f64,
     prune_threshold: f64,
+    inventory: Option<&EntityInventory>,
 ) -> Result<usize> {
     let all = store.get_all_memories().await?;
     let mut pruned = 0;
 
     for memory in &all {
-        let decayed = apply_confidence_decay_with_rate(memory, now_ts, decay_rate);
+        let decayed = apply_confidence_decay_with_rate_and_inventory(
+            memory, now_ts, decay_rate, inventory,
+        );
         if decayed < prune_threshold {
             store.delete_memory(&memory.id).await?;
             pruned += 1;
@@ -445,11 +559,10 @@ pub async fn save_with_contradiction_check(
 mod tests {
     use super::*;
 
-    #[test]
-    fn confidence_decay_one_month() {
-        let mem = Memory {
+    fn mem_with_content(content: &str) -> Memory {
+        Memory {
             id: "1".to_string(),
-            content: "test".to_string(),
+            content: content.to_string(),
             source: "test".to_string(),
             confidence: 1.0,
             created_at: 0,
@@ -457,10 +570,99 @@ mod tests {
             version: 0,
             deleted_at: None,
             source_conversation_id: None,
-        };
+        }
+    }
+
+    #[test]
+    fn confidence_decay_one_month() {
+        let mem = mem_with_content("test");
         let one_month = 30 * 86400;
         let decayed = apply_confidence_decay(&mem, one_month);
         assert!((decayed - 0.9).abs() < 0.001);
+    }
+
+    // ── Relationship-weighted decay ───────────────────────────────
+
+    #[test]
+    fn entity_linked_memory_decays_at_half_rate() {
+        // One month at default 10%/month: unweighted lands at 0.90,
+        // entity-linked lands at 0.95.
+        let mem = mem_with_content(
+            "Discussed Q3 strategy with Sarah Chen at the offsite.",
+        );
+        let inventory = entity_inventory_from_names(["Sarah Chen", "Mike Torres"]);
+        let one_month = 30 * 86400;
+
+        let weighted = apply_confidence_decay_with_rate_and_inventory(
+            &mem, one_month, 0.10, Some(&inventory),
+        );
+        let unweighted = apply_confidence_decay_with_rate_and_inventory(
+            &mem, one_month, 0.10, None,
+        );
+
+        assert!((weighted - 0.95).abs() < 0.001, "weighted={weighted}");
+        assert!((unweighted - 0.90).abs() < 0.001, "unweighted={unweighted}");
+    }
+
+    #[test]
+    fn unmatched_memory_decays_at_full_rate_even_with_inventory() {
+        let mem = mem_with_content("Just thinking about software architecture.");
+        let inventory = entity_inventory_from_names(["Sarah Chen", "API migration"]);
+        let one_month = 30 * 86400;
+        let decayed = apply_confidence_decay_with_rate_and_inventory(
+            &mem, one_month, 0.10, Some(&inventory),
+        );
+        // No match → full decay → 0.90.
+        assert!((decayed - 0.90).abs() < 0.001);
+    }
+
+    #[test]
+    fn whole_word_match_does_not_match_substring_within_a_word() {
+        // "Sarah" must not match "Sarahkov" (a different person).
+        let mem = mem_with_content("Read about Sarahkov, the historian.");
+        let inventory = entity_inventory_from_names(["Sarah"]);
+        assert!(!memory_mentions_any_entity(&mem.content, &inventory));
+    }
+
+    #[test]
+    fn match_is_case_insensitive() {
+        let mem = mem_with_content("Brief chat with sarah about pricing.");
+        let inventory = entity_inventory_from_names(["Sarah"]);
+        assert!(memory_mentions_any_entity(&mem.content, &inventory));
+    }
+
+    #[test]
+    fn multi_word_entity_name_matches() {
+        let mem = mem_with_content(
+            "The API migration is on track for end of Q2.",
+        );
+        let inventory = entity_inventory_from_names(["API migration"]);
+        assert!(memory_mentions_any_entity(&mem.content, &inventory));
+    }
+
+    #[test]
+    fn empty_inventory_short_circuits_to_full_decay() {
+        let mem = mem_with_content("Sarah Chen mentioned the Q3 push.");
+        let inventory: EntityInventory = EntityInventory::new();
+        let one_month = 30 * 86400;
+        let decayed = apply_confidence_decay_with_rate_and_inventory(
+            &mem, one_month, 0.10, Some(&inventory),
+        );
+        assert!((decayed - 0.90).abs() < 0.001);
+    }
+
+    #[test]
+    fn skill_overridden_rate_is_halved_when_entity_matches() {
+        // A skill with confidence_decay_per_month = 0.15 should see
+        // entity-linked memories at 7.5% per month.
+        let mem = mem_with_content("Sarah Chen flagged a budget concern.");
+        let inventory = entity_inventory_from_names(["Sarah Chen"]);
+        let one_month = 30 * 86400;
+        let weighted = apply_confidence_decay_with_rate_and_inventory(
+            &mem, one_month, 0.15, Some(&inventory),
+        );
+        // Effective rate 0.075 → retention 0.925 → after 1 month 0.925.
+        assert!((weighted - 0.925).abs() < 0.001, "weighted={weighted}");
     }
 
     #[test]

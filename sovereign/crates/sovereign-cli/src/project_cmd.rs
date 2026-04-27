@@ -549,7 +549,7 @@ async fn cmd_init(args: &[String]) -> i32 {
     }
     let mut project_toml = crate::project_toml::ProjectTomlFile::read(&project_toml_path)
         .unwrap_or_else(|_| crate::project_toml::ProjectTomlFile::from_observation(&observation));
-    project_toml.update_observation(&observation);
+    project_toml.update_observation(&observation, &project_toml_path);
     // Persist a fresh git declination if the user just said "no" —
     // but preserve a prior declination (user already said no before).
     // Never un-set: once they've opted out, that stays opted out
@@ -3581,7 +3581,7 @@ async fn cmd_found(args: &[String]) -> i32 {
     // Persist the observation refresh before we head into the
     // write-on-approval stages — if the user cancels in Stage 3/4,
     // we still want the observation update to stick.
-    project_toml.update_observation(&observation);
+    project_toml.update_observation(&observation, &project_toml_path);
     if let Err(e) = project_toml.write(&project_toml_path) {
         eprintln!("    \u{2717} Could not persist observation refresh: {e}");
     }

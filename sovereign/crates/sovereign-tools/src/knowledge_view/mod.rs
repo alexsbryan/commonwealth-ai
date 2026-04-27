@@ -26,6 +26,9 @@ pub mod debouncer;
 pub mod digest;
 pub mod manager;
 pub mod recipes;
+pub mod relational;
+pub mod strategic;
+pub mod timeline;
 pub mod tokens;
 pub mod view_kind;
 
