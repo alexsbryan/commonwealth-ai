@@ -1,8 +1,10 @@
 //! Bundled filter artefacts compiled into the crate via `include_bytes!`.
 //!
-//! These are committed under `corpus-engine/assets/` and referenced by
-//! recipes through `@bundled:<key>` paths (resolved by
-//! [`crate::filters::loader`]).
+//! Source files live in the sibling `sovereign-recipes` repo (where
+//! their generator scripts live), copied into Cargo's `OUT_DIR` by
+//! [`build.rs`](../../build.rs) at compile time. corpus-engine itself
+//! tracks no generated artefacts — single source of truth in
+//! `sovereign-recipes/wikipedia/data/`.
 //!
 //! ## What ships bundled
 //!
@@ -25,9 +27,23 @@
 //!   [`crate::filters::pageview_rank::PageviewRankFilter`] for the
 //!   filter implementation — still generic and future-proof, just not
 //!   bundled with stale data.
+//!
+//! ## Build-time resolution
+//!
+//! The `build.rs` looks for source files in this order:
+//!   1. `$CORPUS_ENGINE_DATA_DIR` (escape hatch for standalone /
+//!      airgapped builds — set this to a directory containing the
+//!      filenames in `BUNDLED_ASSETS` in `build.rs`).
+//!   2. `<corpus-engine>/../sovereign-recipes/wikipedia/data/` — the
+//!      common workspace-sibling path.
+//! If neither resolves, the build fails with a remediation hint
+//! pointing at the regenerator script.
 
-/// Newline-delimited Wikipedia Vital Articles Level 5 titles.
-pub const VITAL_ARTICLES_L5: &[u8] = include_bytes!("../../assets/vital_articles_l5.txt");
+/// Newline-delimited Wikipedia Vital Articles Level 5 titles. The
+/// `OUT_DIR`-relative include path is what makes this consume the
+/// build-script-copied file rather than a tracked-in-crate artefact.
+pub const VITAL_ARTICLES_L5: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/vital_articles_l5.txt"));
 
 /// Look up a bundled asset by its `@bundled:<key>` shorthand.
 pub fn lookup_bundled(key: &str) -> Option<&'static [u8]> {

@@ -7,10 +7,13 @@
 //! single hash lookup.
 //!
 //! Source format: at 100K entries the uncompressed CSV is ~2.5 MB,
-//! gzipped ~700 KB. The bundled file is gzipped (`.csv.gz`) and lives
-//! under `corpus-engine/assets/`. See
-//! `sovereign-recipes/wikipedia/scripts/build_pageview_ranks.py` for
-//! the generation pipeline.
+//! gzipped ~700 KB. The build script
+//! `sovereign-recipes/wikipedia/scripts/build_pageview_ranks.py`
+//! generates the file from a Wikimedia pageview dump. The Wikipedia
+//! recipe deliberately does not bundle the result — see
+//! `corpus-engine/src/filters/assets.rs` for the rationale (rank data
+//! ages out within ~6 months and the freshness debt outweighs the
+//! marginal gain over the curated Vital Articles list).
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
