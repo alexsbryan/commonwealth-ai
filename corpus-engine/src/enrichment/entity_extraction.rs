@@ -81,7 +81,7 @@ pub struct PersonEntity {
     pub description: Option<String>,
     /// Chunk ids the person was mentioned in within this batch.
     /// Each becomes one Involves edge.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
     pub mentions: Vec<String>,
 }
 
@@ -96,7 +96,7 @@ pub struct OrganizationEntity {
     pub relationship: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
     pub mentions: Vec<String>,
 }
 
@@ -110,11 +110,18 @@ pub struct InitiativeEntity {
     /// merge time; orphans (names not seen as Person/Organization
     /// entities in this run) are dropped from the participants list
     /// and counted in `failures` as `OrphanParticipant`.
-    #[serde(default)]
+    ///
+    /// The on-the-wire shape is permissive: the model often emits
+    /// participants as `["Mike Torres"]` (matching the prompt's
+    /// example) but sometimes promotes the array entries to objects
+    /// like `[{"name": "Mike Torres"}]`. We accept either via a
+    /// custom deserializer; the rest of the pipeline still sees a
+    /// flat `Vec<String>` of names.
+    #[serde(default, deserialize_with = "deserialize_participants")]
     pub participants: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
     pub mentions: Vec<String>,
 }
 
@@ -376,6 +383,60 @@ fn parse_response(raw: &str) -> std::result::Result<EntityExtractionResponse, St
     serde_json::from_str::<EntityExtractionResponse>(json).map_err(|e| e.to_string())
 }
 
+/// Lenient `Vec<String>` deserializer: accepts both bare strings
+/// and `{"name": "..."}` objects, drops nulls and non-string entries
+/// silently. Used wherever the model emits an array that we want
+/// projected to a flat list of names — `participants` (the most
+/// common offender) and `mentions` arrays. The behaviour matches
+/// `rewrite_mentions`'s philosophy: tolerate model glitches at the
+/// entry level instead of dropping the whole batch.
+fn deserialize_participants<'de, D>(d: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_lenient_string_array(d)
+}
+
+fn deserialize_lenient_string_array<'de, D>(
+    d: D,
+) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error as _;
+    let raw = serde_json::Value::deserialize(d)?;
+    let arr = match raw {
+        serde_json::Value::Null => return Ok(Vec::new()),
+        serde_json::Value::Array(a) => a,
+        serde_json::Value::String(s) => return Ok(vec![s]),
+        other => {
+            return Err(D::Error::custom(format!(
+                "expected array, got {}",
+                match other {
+                    serde_json::Value::Object(_) => "object",
+                    serde_json::Value::Number(_) => "number",
+                    serde_json::Value::Bool(_) => "bool",
+                    _ => "unknown",
+                }
+            )))
+        }
+    };
+    let mut out = Vec::with_capacity(arr.len());
+    for entry in arr {
+        match entry {
+            serde_json::Value::String(s) => out.push(s),
+            serde_json::Value::Object(map) => {
+                if let Some(serde_json::Value::String(s)) = map.get("name") {
+                    out.push(s.clone());
+                }
+            }
+            // Null + non-string scalars: skip silently.
+            _ => {}
+        }
+    }
+    Ok(out)
+}
+
 /// Translate batch-relative mention labels into stable global
 /// chunk-id strings.
 ///
@@ -512,6 +573,34 @@ fn merge_responses(
         }
     }
 
+    // Short-form alias consolidation.
+    //
+    // The model frequently emits a Person or Organization by short
+    // form ("Mike", "Sarah", "Acme") in chunks where the surname or
+    // suffix wasn't repeated, alongside a separate batch where the
+    // full form ("Mike Torres", "Sarah Chen", "Acme Corp") *did*
+    // appear. Without consolidation, these become two atoms — one
+    // per form — and recall on the digest collapses (a timeline for
+    // "Sarah Chen" misses every chunk where the model wrote just
+    // "Sarah").
+    //
+    // Conservative rule: a single-token entity folds into a
+    // multi-token entity of the same kind iff the multi-token's
+    // *first whitespace-separated token* (case-insensitive) matches
+    // the single-token's name AND it's the unique such target. If
+    // two multi-token entities ("Mike Torres", "Mike Smith") share
+    // the first token, we leave the short form alone — disambiguation
+    // would require evidence we don't have here.
+    //
+    // Initiatives are excluded; their naming is too varied for a
+    // first-token rule to be safe ("API" is not "API migration").
+    consolidate_short_form_aliases(
+        &mut entities,
+        &mut mentions,
+        &mut pending_participants,
+        &mut by_folded_name,
+    );
+
     // Second pass: resolve initiative participant names to AtomIds.
     // Drop names we don't recognize (orphans) and surface them as
     // failures so the operator can see drift.
@@ -577,6 +666,148 @@ fn merge_responses(
     }
 
     MergedResult { entities, edges }
+}
+
+/// Fold single-token Person and Organization entities into their
+/// multi-token counterparts when the multi-token entity is unique
+/// for that first token. Mutates `entities`, `mentions`,
+/// `pending_participants`, and `by_folded_name` in place.
+///
+/// Implementation sketch:
+///   1. Group multi-token entities by (kind, first_token).
+///   2. For each single-token entity, look up the unique
+///      multi-token target. Record `remap[single_idx] = target_idx`.
+///   3. Apply `remap` to `mentions` and `pending_participants` so
+///      every chunk reference and every participant that pointed at
+///      the short form now points at the canonical entity.
+///   4. Compact `entities`: keep entities not in the remap source
+///      set, in original order. Renumber `AtomId`s densely so the
+///      atlas writer doesn't see gaps. The single-token's display
+///      name is appended to the canonical entity's `aliases`.
+///   5. Rebuild `by_folded_name`: every retained entity contributes
+///      its canonical name *and* every alias, all pointing at the
+///      same compacted index. This lets the second-pass participant
+///      resolution find the canonical atom even when the model
+///      cited a participant by short form.
+fn consolidate_short_form_aliases(
+    entities: &mut Vec<Entity>,
+    mentions: &mut [(usize, String)],
+    pending_participants: &mut [(usize, Vec<String>, usize)],
+    by_folded_name: &mut HashMap<String, usize>,
+) {
+    // ── Step 1: index multi-token entities by (kind, first_token) ──
+    let mut multi_by_first_token: HashMap<(EntityType, String), Vec<usize>> = HashMap::new();
+    for (idx, e) in entities.iter().enumerate() {
+        if !matches!(e.entity_type, EntityType::Person | EntityType::Institution) {
+            continue;
+        }
+        let tokens: Vec<&str> = e.canonical_name.split_whitespace().collect();
+        if tokens.len() < 2 {
+            continue;
+        }
+        let key = (e.entity_type.clone(), tokens[0].to_lowercase());
+        multi_by_first_token.entry(key).or_default().push(idx);
+    }
+
+    // ── Step 2: for each single-token, find unique target ──────────
+    let mut remap: HashMap<usize, usize> = HashMap::new();
+    for (idx, e) in entities.iter().enumerate() {
+        if !matches!(e.entity_type, EntityType::Person | EntityType::Institution) {
+            continue;
+        }
+        let tokens: Vec<&str> = e.canonical_name.split_whitespace().collect();
+        if tokens.len() != 1 {
+            continue;
+        }
+        let key = (e.entity_type.clone(), tokens[0].to_lowercase());
+        if let Some(targets) = multi_by_first_token.get(&key) {
+            // Unique multi-token target → fold. Skip if the single
+            // happens to also be in the target list (shouldn't
+            // happen — single tokens never index here — but a guard
+            // is cheap).
+            if targets.len() == 1 {
+                let target = targets[0];
+                if target != idx {
+                    remap.insert(idx, target);
+                }
+            }
+        }
+    }
+
+    if remap.is_empty() {
+        return;
+    }
+
+    // ── Step 3: rewrite mentions and pending_participants idx ──────
+    for (eidx, _) in mentions.iter_mut() {
+        if let Some(&new) = remap.get(eidx) {
+            *eidx = new;
+        }
+    }
+    for (init_idx, _, _) in pending_participants.iter_mut() {
+        if let Some(&new) = remap.get(init_idx) {
+            *init_idx = new;
+        }
+    }
+
+    // ── Step 4: compact entities, append aliases, renumber AtomIds ─
+    // For each remapped source, append its canonical name as an
+    // alias on the target — folded into the alias-set so duplicates
+    // (same alias appearing twice) collapse cleanly.
+    for (&src, &tgt) in &remap {
+        let alias = entities[src].canonical_name.clone();
+        let target = &mut entities[tgt];
+        if !target
+            .aliases
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case(&alias))
+        {
+            target.aliases.push(alias);
+        }
+    }
+
+    let mut idx_remap: HashMap<usize, usize> = HashMap::new();
+    let mut compacted: Vec<Entity> = Vec::with_capacity(entities.len() - remap.len());
+    for (old_idx, e) in entities.drain(..).enumerate() {
+        if remap.contains_key(&old_idx) {
+            continue;
+        }
+        let new_idx = compacted.len();
+        idx_remap.insert(old_idx, new_idx);
+        compacted.push(e);
+    }
+    // Targets must exist in idx_remap; remapped sources route
+    // through the target's new id.
+    for (&src, &tgt) in &remap {
+        let target_new = idx_remap[&tgt];
+        idx_remap.insert(src, target_new);
+    }
+    // Renumber AtomIds densely.
+    for (i, e) in compacted.iter_mut().enumerate() {
+        e.id = AtomId::entity(i + 1);
+    }
+    *entities = compacted;
+
+    // Apply the compaction remap to mentions and pending_participants.
+    for (eidx, _) in mentions.iter_mut() {
+        if let Some(&new) = idx_remap.get(eidx) {
+            *eidx = new;
+        }
+    }
+    for (init_idx, _, _) in pending_participants.iter_mut() {
+        if let Some(&new) = idx_remap.get(init_idx) {
+            *init_idx = new;
+        }
+    }
+
+    // ── Step 5: rebuild by_folded_name with aliases ───────────────
+    by_folded_name.clear();
+    for (i, e) in entities.iter().enumerate() {
+        by_folded_name.insert(fold_name(&e.canonical_name), i);
+        for alias in &e.aliases {
+            by_folded_name.entry(fold_name(alias)).or_insert(i);
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -732,6 +963,69 @@ mod tests {
     }
 
     #[test]
+    fn parse_response_tolerates_nulls_in_string_arrays() {
+        // Real-world failure: model emitted an array with `null`
+        // mid-array — the strict Vec<String> deserializer aborted
+        // the whole batch. The lenient deserializer drops nulls and
+        // non-string scalars silently.
+        let raw = r#"{
+          "persons": [
+            {
+              "name": "Mike Torres",
+              "mentions": ["Conversation 1", null, "Conversation 3"]
+            }
+          ],
+          "organizations": [],
+          "initiatives": [
+            {
+              "name": "API migration",
+              "participants": ["Mike Torres", null, {"name": "Sarah Chen"}],
+              "mentions": [null, "Conversation 1"]
+            }
+          ]
+        }"#;
+        let parsed = parse_response(raw).unwrap();
+        assert_eq!(parsed.persons.len(), 1);
+        assert_eq!(
+            parsed.persons[0].mentions,
+            vec!["Conversation 1", "Conversation 3"]
+        );
+        assert_eq!(parsed.initiatives.len(), 1);
+        assert_eq!(
+            parsed.initiatives[0].participants,
+            vec!["Mike Torres", "Sarah Chen"]
+        );
+        assert_eq!(parsed.initiatives[0].mentions, vec!["Conversation 1"]);
+    }
+
+    #[test]
+    fn parse_response_accepts_participants_as_objects() {
+        // Larger thinking models (observed: Qwopus-GLM-18B) often
+        // promote participant entries from strings to objects when
+        // they have anything to add. The deserializer must accept
+        // either form and project to a flat Vec<String> of names.
+        let raw = r#"{
+          "persons": [],
+          "organizations": [],
+          "initiatives": [{
+            "name": "API migration",
+            "participants": [
+              {"name": "Mike Torres"},
+              "Sarah Chen",
+              {"name": "Dana Park", "role": "CTO"}
+            ],
+            "mentions": ["Conversation 1"]
+          }]
+        }"#;
+        let parsed = parse_response(raw).unwrap();
+        assert_eq!(parsed.initiatives.len(), 1);
+        assert_eq!(
+            parsed.initiatives[0].participants,
+            vec!["Mike Torres", "Sarah Chen", "Dana Park"]
+        );
+    }
+
+    #[test]
     fn parse_response_extracts_json_from_prose_wrapper() {
         // The shared `extract_json_from_response` strips think-tags
         // and trims to the outermost {}; this test pins that the
@@ -792,6 +1086,128 @@ mod tests {
         );
 
         // No orphan participants.
+        assert!(failures
+            .iter()
+            .all(|f| f.kind != FailureKind::OrphanParticipant));
+    }
+
+    #[test]
+    fn consolidate_folds_short_form_person_into_unique_full_name() {
+        // Batch 1 sees "Mike Torres" with a role; Batch 2 sees just
+        // "Mike". The short form must fold into the canonical entry
+        // and contribute its mentions to the same atom.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.persons.push(PersonEntity {
+            name: "Mike Torres".into(),
+            affiliation: Some("Acme".into()),
+            role: Some("Engineering Lead".into()),
+            description: None,
+            mentions: vec!["c2".into()],
+        });
+        let mut b2 = EntityExtractionResponse::default();
+        b2.persons.push(PersonEntity {
+            name: "Mike".into(),
+            affiliation: None,
+            role: None,
+            description: None,
+            mentions: vec!["c5".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1), (1, b2)], &mut failures);
+
+        assert_eq!(merged.entities.len(), 1, "Mike folds into Mike Torres");
+        let e = &merged.entities[0];
+        assert_eq!(e.canonical_name, "Mike Torres");
+        assert!(e.aliases.iter().any(|a| a.eq_ignore_ascii_case("Mike")));
+        assert_eq!(e.affiliation.as_deref(), Some("Acme"));
+        assert_eq!(e.role.as_deref(), Some("Engineering Lead"));
+        // Both chunk references must survive the fold.
+        let chunk_ids: std::collections::HashSet<_> =
+            merged.edges.iter().flat_map(|e| e.evidence.iter().map(|c| c.chunk_id.clone())).collect();
+        assert!(chunk_ids.contains("c2"));
+        assert!(chunk_ids.contains("c5"));
+    }
+
+    #[test]
+    fn consolidate_leaves_short_form_alone_when_target_is_ambiguous() {
+        // Two "Mike X" candidates → "Mike" can't safely fold into
+        // either. It stays as its own atom.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.persons.push(PersonEntity {
+            name: "Mike Torres".into(),
+            affiliation: None,
+            role: None,
+            description: None,
+            mentions: vec!["c1".into()],
+        });
+        b1.persons.push(PersonEntity {
+            name: "Mike Smith".into(),
+            affiliation: None,
+            role: None,
+            description: None,
+            mentions: vec!["c2".into()],
+        });
+        b1.persons.push(PersonEntity {
+            name: "Mike".into(),
+            affiliation: None,
+            role: None,
+            description: None,
+            mentions: vec!["c3".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+        assert_eq!(
+            merged.entities.len(),
+            3,
+            "ambiguous first-token does not fold"
+        );
+    }
+
+    #[test]
+    fn consolidate_resolves_short_form_participant_to_canonical_atom() {
+        // Initiative cites a participant by short form; after
+        // consolidation, the participant resolution should target
+        // the canonical multi-token atom.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.persons.push(PersonEntity {
+            name: "Sarah Chen".into(),
+            affiliation: None,
+            role: None,
+            description: None,
+            mentions: vec!["c1".into()],
+        });
+        b1.initiatives.push(InitiativeEntity {
+            name: "Q3 enterprise push".into(),
+            status: None,
+            participants: vec!["Sarah".into()], // short form
+            description: None,
+            mentions: vec!["c2".into()],
+        });
+        b1.persons.push(PersonEntity {
+            name: "Sarah".into(),
+            affiliation: None,
+            role: None,
+            description: None,
+            mentions: vec!["c3".into()],
+        });
+
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+
+        // Persons: Sarah Chen (Sarah folded in). Initiatives: Q3.
+        assert_eq!(merged.entities.len(), 2);
+        let init = merged
+            .entities
+            .iter()
+            .find(|e| e.entity_type == EntityType::Initiative)
+            .unwrap();
+        let sarah = merged
+            .entities
+            .iter()
+            .find(|e| e.entity_type == EntityType::Person)
+            .unwrap();
+        assert_eq!(init.participants, vec![sarah.id.clone()]);
+        // No orphan failure — the alias path resolved the short form.
         assert!(failures
             .iter()
             .all(|f| f.kind != FailureKind::OrphanParticipant));

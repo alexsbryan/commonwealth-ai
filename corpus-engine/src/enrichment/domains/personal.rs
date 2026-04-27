@@ -303,6 +303,22 @@ Definitions:
   craft") are NOT initiatives — initiatives imply effort toward a
   future state.
 
+  Tactics, milestones, sub-strategies, or implementation paths
+  *within* an initiative are NOT separate initiatives — they belong
+  to the parent. "API migration" is an initiative; the "parallel
+  migration path" the user agreed to ship is a tactic inside it,
+  not a separate initiative.
+
+  Use the canonical name without possessive prefixes — write
+  "Q3 enterprise push", not "Acme's Q3 enterprise push". Capture
+  organizational ownership through `participants`, not in the name.
+
+When the same person, organization, or initiative is referenced both
+by short form ("Mike", "Acme") and long form ("Mike Torres",
+"Acme Corp") across memories, prefer the long form when any memory
+provides it — the post-extraction merger will resolve short-form
+references to the long-form atom.
+
 Use the [Memory N] labels to record where each entity appeared. The
 `mentions` array on each entity is required; list the memory labels
 that mention it. If you list a person as a participant on an initiative,
