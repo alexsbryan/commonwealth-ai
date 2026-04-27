@@ -350,6 +350,9 @@ mod tests {
             description: "x".into(),
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         };
         let event = Event {
             id: AtomId::event(1),
@@ -402,6 +405,9 @@ mod tests {
             description: "x".into(),
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         };
         write_atlas(&atlas_dir, &[entity], &[], &[]).unwrap();
         let atoms_json = fs::read_to_string(atlas_dir.join("atoms.json")).unwrap();

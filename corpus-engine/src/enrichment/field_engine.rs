@@ -157,6 +157,41 @@ impl FieldModelEngine {
             skeleton
         };
 
+        // ── Phase 1b: Entity extraction (opt-in per domain) ──────────
+        //
+        // Personal + Conversational domains override
+        // `entity_extraction_prompt` to produce typed Person /
+        // Organization / Initiative atoms with Involves edges. All
+        // other domains use the default impl (returns None) and the
+        // step is a no-op — the existing five phases run unchanged.
+        if !checkpoint.phase_1b_complete {
+            let all_chunks = index.all_chunks().await?;
+            let result = super::entity_extraction::run_and_write_entity_extraction(
+                &all_chunks,
+                self.domain.as_ref(),
+                self.inference.clone(),
+                &index_dir,
+                progress,
+            )
+            .await?;
+            tracing::info!(
+                domain = self.domain.id(),
+                entities = result.entities.len(),
+                edges = result.edges.len(),
+                failures = result.failures.len(),
+                batches_run = result.batches_run,
+                "phase_1b: entity extraction complete"
+            );
+            checkpoint.phase_1b_complete = true;
+            checkpoint.last_updated = chrono::Utc::now().to_rfc3339();
+            checkpoint.save(&index_dir)?;
+        } else {
+            progress(EnrichmentProgress::PhaseSkipped {
+                phase: 2,
+                name: "Entity extraction",
+            });
+        }
+
         // ── Phase 2: Cluster embeddings ───────────────────────────────
         let clusters = if checkpoint.phase_2_complete {
             progress(EnrichmentProgress::PhaseSkipped {

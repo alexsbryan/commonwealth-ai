@@ -95,6 +95,14 @@ pub struct NoteRow {
     /// Origin note id when this row was created by `promote_note`. `None` for
     /// native writes.
     pub promoted_from: Option<String>,
+    /// Free-text entity name this note relates to — typically a
+    /// `Person` / `Organization` name for `commitment` and
+    /// `follow_up` kinds, an `Initiative` name for `goal` kind. Not
+    /// a foreign key into the entity graph (the graph is rebuilt
+    /// each enrichment cycle); the digest matches at query time.
+    /// `None` when the note has no relational anchor (e.g. classic
+    /// `decision` / `invariant` kinds).
+    pub related_entity: Option<String>,
 }
 
 /// Retrieval filter for scope/feature combinations.
@@ -211,6 +219,20 @@ impl NoteStore {
             })?;
         }
 
+        // v4 → v5: Relational + Strategic Awareness changeset
+        // (requirements §6). Three new kinds — `commitment`,
+        // `follow_up`, `goal` — plus a `related_entity` text column
+        // on every row. Rename-recreate again because the CHECK
+        // constraint changes and SQLite can't ALTER one in place.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 5 {
+            conn.execute_batch(MIGRATION_V5).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v5: {e}")))
+            })?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -257,9 +279,41 @@ impl NoteStore {
         scope: NoteScope,
         feature_id: Option<&str>,
     ) -> Result<String> {
+        self.write_note_with_relation(
+            kind, content, symbols, files, session_id, scope, feature_id, None,
+        )
+        .await
+    }
+
+    /// Persist a note with all of: explicit scope, optional feature
+    /// id, and an optional `related_entity` anchor.
+    ///
+    /// This is the full-fat write path. The `related_entity` field
+    /// is a free-text entity name — typically a Person /
+    /// Organization name for `commitment` / `follow_up` kinds, an
+    /// Initiative name for `goal`. It's not validated against the
+    /// entity graph here (the graph is rebuilt each enrichment
+    /// cycle, so a hard FK would be a write-time race); the
+    /// Relational / Strategic digests match it at query time.
+    ///
+    /// `related_entity = None` is the existing pre-v5 behaviour and
+    /// what every caller that doesn't know about the relational
+    /// schema gets via [`write_note_scoped`].
+    #[allow(clippy::too_many_arguments)]
+    pub async fn write_note_with_relation(
+        &self,
+        kind: &str,
+        content: &str,
+        symbols: Vec<String>,
+        files: Vec<String>,
+        session_id: &str,
+        scope: NoteScope,
+        feature_id: Option<&str>,
+        related_entity: Option<&str>,
+    ) -> Result<String> {
         if scope == NoteScope::Feature && feature_id.is_none() {
             return Err(Error::InvalidInput(
-                "write_note_scoped: scope='feature' requires feature_id".into(),
+                "write_note_with_relation: scope='feature' requires feature_id".into(),
             ));
         }
         let id = uuid::Uuid::new_v4().to_string();
@@ -269,9 +323,9 @@ impl NoteStore {
 
         let conn = self.conn.lock().await;
         conn.execute(
-            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, scope, feature_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9)",
-            params![id, kind, content, symbols_json, files_json, session_id, now, scope.as_str(), feature_id],
+            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, scope, feature_id, related_entity)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10)",
+            params![id, kind, content, symbols_json, files_json, session_id, now, scope.as_str(), feature_id, related_entity],
         )
         .map_err(sqlite_err)?;
         bump_notes_version(&conn)?;
@@ -406,7 +460,7 @@ impl NoteStore {
             .query_row(
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
-                        scope, feature_id, promoted_from
+                        scope, feature_id, promoted_from, related_entity
                  FROM notes WHERE id = ?",
                 params![id],
                 map_note_row,
@@ -551,7 +605,7 @@ impl NoteStore {
                     )
                     SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                            n.created_at, n.tool_name, n.retired_at, n.retired_by,
-                           n.scope, n.feature_id, n.promoted_from
+                           n.scope, n.feature_id, n.promoted_from, n.related_entity
                     FROM notes n
                     JOIN ranked r ON r.rowid = n.rowid
                     WHERE 1=1 {retired_clause}
@@ -568,7 +622,7 @@ impl NoteStore {
                 let sql = format!(
                     "SELECT id, kind, content, symbols, files, session_id,
                             created_at, tool_name, retired_at, retired_by,
-                            scope, feature_id, promoted_from
+                            scope, feature_id, promoted_from, related_entity
                      FROM notes
                      WHERE 1=1 {retired_clause}
                      ORDER BY created_at DESC
@@ -623,7 +677,7 @@ impl NoteStore {
         let sql = format!(
             "SELECT id, kind, content, symbols, files, session_id,
                     created_at, tool_name, retired_at, retired_by,
-                    scope, feature_id, promoted_from
+                    scope, feature_id, promoted_from, related_entity
              FROM notes
              WHERE kind = 'reflection'
                AND created_at >= ?
@@ -730,7 +784,7 @@ impl NoteStore {
             .prepare(
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
-                        scope, feature_id, promoted_from
+                        scope, feature_id, promoted_from, related_entity
                  FROM notes
                  WHERE kind = 'todo' AND retired_at IS NULL
                  ORDER BY created_at DESC
@@ -819,8 +873,12 @@ impl NoteStore {
 
 // ─── Schema (new databases) ───────────────────────────────────────────────────
 
-/// Full schema for brand-new databases. Includes reflection support and
-/// tool_call_log from the start.
+/// Full schema for brand-new databases. Sets `user_version = 1`; the
+/// open path then steps the DB through migrations v1→v2→…→v5 so a
+/// fresh install lands in the same final shape as an upgraded
+/// install, with no schema drift between paths. Adding a new kind
+/// or column means writing one new migration constant — never
+/// editing this schema twice.
 const SCHEMA_NEW: &str = "
 PRAGMA journal_mode=WAL;
 
@@ -961,6 +1019,105 @@ CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
 END;
 
 PRAGMA user_version = 4;
+
+COMMIT;
+";
+
+// ─── Schema migration v4 → v5 (Relational + Strategic note kinds + related_entity) ──
+
+/// Applied to databases at `user_version = 4`. Two interleaved
+/// changes for the Relational + Strategic Awareness changeset
+/// (requirements §6):
+///
+/// 1. Expand the `notes.kind` CHECK constraint to admit
+///    `commitment`, `follow_up`, and `goal`.
+/// 2. Add a `related_entity TEXT` column. NULL for all pre-v5 rows;
+///    populated by the suggest_note tool (Phase 6) and any future
+///    relational write API.
+///
+/// Same rename-recreate-copy pattern as the prior CHECK migrations.
+/// FTS5 + triggers are rebuilt because they reference the table by
+/// name. A new partial index on `related_entity` accelerates the
+/// digest's `WHERE related_entity = ?` lookups.
+const MIGRATION_V5: &str = "
+BEGIN;
+
+ALTER TABLE notes RENAME TO notes_v4;
+
+CREATE TABLE notes (
+    id            TEXT    PRIMARY KEY,
+    kind          TEXT    NOT NULL CHECK(kind IN (
+        'decision','attempt','invariant','todo','reflection',
+        'uncertainty','postmortem_pointer','redteam_finding',
+        'deviation','commitment','follow_up','goal'
+    )),
+    content       TEXT    NOT NULL,
+    symbols       TEXT    NOT NULL DEFAULT '[]',
+    files         TEXT    NOT NULL DEFAULT '[]',
+    session_id    TEXT    NOT NULL,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    tool_name     TEXT,
+    retired_at    INTEGER,
+    retired_by    TEXT,
+    scope         TEXT    NOT NULL DEFAULT 'global'
+                  CHECK(scope IN ('global','feature','session')),
+    feature_id    TEXT,
+    promoted_from TEXT,
+    related_entity TEXT
+);
+
+INSERT INTO notes (
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from,
+    related_entity
+)
+SELECT
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from,
+    NULL
+FROM notes_v4;
+
+DROP TABLE notes_v4;
+
+CREATE INDEX IF NOT EXISTS idx_notes_kind            ON notes(kind);
+CREATE INDEX IF NOT EXISTS idx_notes_created         ON notes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_tool_name       ON notes(tool_name);
+CREATE INDEX IF NOT EXISTS idx_notes_retired_at      ON notes(retired_at);
+CREATE INDEX IF NOT EXISTS idx_notes_scope_feature   ON notes(scope, feature_id);
+CREATE INDEX IF NOT EXISTS idx_notes_feature
+    ON notes(feature_id) WHERE feature_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_related_entity
+    ON notes(related_entity) WHERE related_entity IS NOT NULL;
+
+DROP TABLE IF EXISTS notes_fts;
+CREATE VIRTUAL TABLE notes_fts USING fts5(
+    content, kind,
+    content='notes',
+    content_rowid='rowid'
+);
+INSERT INTO notes_fts(notes_fts) VALUES('rebuild');
+
+DROP TRIGGER IF EXISTS notes_fts_ai;
+DROP TRIGGER IF EXISTS notes_fts_ad;
+DROP TRIGGER IF EXISTS notes_fts_au;
+
+CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+END;
+
+CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+PRAGMA user_version = 5;
 
 COMMIT;
 ";
@@ -1255,6 +1412,7 @@ fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
         scope: row.get(10)?,
         feature_id: row.get(11)?,
         promoted_from: row.get(12)?,
+        related_entity: row.get(13)?,
     })
 }
 
@@ -1296,6 +1454,107 @@ mod tests {
         assert_eq!(notes[0].symbols, vec!["blast_radius"]);
         assert!(notes[0].tool_name.is_none());
         assert!(notes[0].retired_at.is_none());
+        // Pre-v5 path: writes that don't go through
+        // `write_note_with_relation` leave related_entity NULL.
+        assert!(notes[0].related_entity.is_none());
+    }
+
+    #[tokio::test]
+    async fn write_note_v5_kinds_round_trip() {
+        // Each of the three new kinds must be admitted by the
+        // CHECK constraint and round-trip through write → read.
+        let store = make_store().await;
+        for kind in ["commitment", "follow_up", "goal"] {
+            let id = store
+                .write_note(kind, &format!("test {kind}"), vec![], vec![], "s1")
+                .await
+                .unwrap_or_else(|e| panic!("kind {kind} should be accepted: {e}"));
+            assert!(!id.is_empty());
+        }
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
+        let kinds: std::collections::HashSet<_> =
+            notes.iter().map(|n| n.kind.as_str()).collect();
+        assert!(kinds.contains("commitment"));
+        assert!(kinds.contains("follow_up"));
+        assert!(kinds.contains("goal"));
+    }
+
+    #[tokio::test]
+    async fn write_note_with_relation_persists_related_entity() {
+        let store = make_store().await;
+        let id = store
+            .write_note_with_relation(
+                "commitment",
+                "send revised pricing to Sarah by Friday",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                Some("Sarah Chen"),
+            )
+            .await
+            .unwrap();
+        let row = store.read_note_by_id(&id).await.unwrap().unwrap();
+        assert_eq!(row.kind, "commitment");
+        assert_eq!(row.related_entity.as_deref(), Some("Sarah Chen"));
+    }
+
+    #[tokio::test]
+    async fn related_entity_filters_correctly_via_read_notes() {
+        // The sql index `idx_notes_related_entity` is a partial
+        // index — we don't query it here directly but we exercise
+        // the post-filter path that production digests use.
+        let store = make_store().await;
+        store
+            .write_note_with_relation(
+                "commitment", "alpha", vec![], vec![], "s1",
+                NoteScope::Global, None, Some("Sarah Chen"),
+            )
+            .await
+            .unwrap();
+        store
+            .write_note_with_relation(
+                "follow_up", "beta", vec![], vec![], "s1",
+                NoteScope::Global, None, Some("Mike Torres"),
+            )
+            .await
+            .unwrap();
+        store
+            .write_note_with_relation(
+                "goal", "gamma", vec![], vec![], "s1",
+                NoteScope::Global, None, None,
+            )
+            .await
+            .unwrap();
+
+        let all = store
+            .read_notes(None, &[], &[], &[], 100, false)
+            .await
+            .unwrap();
+        let with_entity: Vec<_> = all
+            .iter()
+            .filter(|n| n.related_entity.as_deref() == Some("Sarah Chen"))
+            .collect();
+        assert_eq!(with_entity.len(), 1);
+        assert_eq!(with_entity[0].content, "alpha");
+    }
+
+    #[tokio::test]
+    async fn write_note_rejects_unknown_kind_at_check_constraint() {
+        let store = make_store().await;
+        // The kind 'totally_invalid' is not in the CHECK list — the
+        // SQLite layer must reject it. We don't validate kind in
+        // the Rust API on purpose so new kinds can land in one PR
+        // (schema migration) without source-side ceremony; the
+        // CHECK constraint is the structural backstop.
+        let r = store
+            .write_note("totally_invalid", "x", vec![], vec![], "s1")
+            .await;
+        assert!(r.is_err(), "CHECK must reject unknown kind");
     }
 
     #[tokio::test]

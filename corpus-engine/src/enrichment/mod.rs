@@ -11,6 +11,7 @@ pub mod clustering;
 pub mod domain;
 pub mod domain_registry;
 pub mod domains;
+pub mod entity_extraction;
 pub mod fault_lines;
 pub mod field_engine;
 pub mod filter;

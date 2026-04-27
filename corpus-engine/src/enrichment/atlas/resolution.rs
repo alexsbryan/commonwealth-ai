@@ -240,6 +240,9 @@ fn synthesize_entities_from_unresolved_event_participants(
                     description: String::new(),
                     salience: SYNTHESIZED_ENTITY_SALIENCE,
                     enrichment_depth: section.enrichment_depth,
+                    affiliation: None,
+                    role: None,
+                    participants: Vec::new(),
                 };
                 name_index.insert(fold(trimmed), new_id.clone());
                 entities.push(entity);
@@ -601,6 +604,9 @@ async fn resolve_entities(
                         // are processed.
                         salience: 0.0,
                         enrichment_depth: section.enrichment_depth,
+                        affiliation: None,
+                        role: None,
+                        participants: Vec::new(),
                     };
                     entities.push(entity);
                     descriptions.push(candidate_emb);
@@ -2894,6 +2900,9 @@ mod tests {
                 description: "Youngest Karamazov.".into(),
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
             Entity {
                 id: AtomId::entity(2),
@@ -2904,6 +2913,9 @@ mod tests {
                 description: "Monastery elder.".into(),
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
         ];
 
@@ -3030,6 +3042,9 @@ mod tests {
             description: "x".into(),
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         }];
 
         let sections = vec![SectionExtraction {
@@ -3249,6 +3264,9 @@ mod tests {
                 description: "Patriarch.".into(),
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
             Entity {
                 id: AtomId::entity(2),
@@ -3259,6 +3277,9 @@ mod tests {
                 description: "Youngest son.".into(),
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
             Entity {
                 id: AtomId::entity(3),
@@ -3269,6 +3290,9 @@ mod tests {
                 description: "Second wife.".into(),
                 salience: 0.5,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
         ]
     }
@@ -3347,6 +3371,9 @@ mod tests {
                 description: "".into(),
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
             Entity {
                 id: AtomId::entity(2),
@@ -3357,6 +3384,9 @@ mod tests {
                 description: "".into(),
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
         ];
         let name_index = build_name_index(&entities);
@@ -3390,6 +3420,9 @@ mod tests {
             description: "".into(),
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         }];
         let name_index = build_name_index(&entities);
         let token_index = build_token_index(&entities);
@@ -3420,6 +3453,9 @@ mod tests {
             description: "Patriarch.".into(),
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         }
     }
 
@@ -3434,6 +3470,9 @@ mod tests {
             description: "Variant.".into(),
             salience: 0.2,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         }
     }
 
@@ -3448,6 +3487,9 @@ mod tests {
             description: "Brother.".into(),
             salience: 0.8,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         };
         let b = Entity {
             id: AtomId::entity(2),
@@ -3458,6 +3500,9 @@ mod tests {
             description: "Different Ivan.".into(),
             salience: 0.7,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         };
         (a, b)
     }
@@ -3503,6 +3548,9 @@ mod tests {
                 description: "".into(),
                 salience: 0.8,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
             Entity {
                 id: AtomId::entity(2),
@@ -3513,6 +3561,9 @@ mod tests {
                 description: "".into(),
                 salience: 0.7,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
         ];
         let name_index = build_name_index(&contested);
@@ -3596,6 +3647,9 @@ mod tests {
                 description: "".into(),
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
             Entity {
                 id: AtomId::entity(2),
@@ -3606,6 +3660,9 @@ mod tests {
                 description: "".into(),
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
             },
         ];
 
@@ -3662,6 +3719,9 @@ mod tests {
             description: "x".into(),
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         }
     }
 
@@ -4268,6 +4328,9 @@ mod tests {
             description: String::new(),
             salience: 0.5,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         };
         // Short names below TYPO_DEDUP_MIN_FOLDED_LEN must not match.
         assert!(!typo_dedup_match(&mk("Lewis"), &mk("Lewes")));

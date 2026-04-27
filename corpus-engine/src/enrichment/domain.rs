@@ -50,6 +50,30 @@ pub trait Domain: Send + Sync + 'static {
     ) -> String;
     fn open_question_prompt(&self, chunks: &[&Chunk]) -> String;
 
+    // ── Optional entity-extraction prompt (Phase 1b) ──────────────────────
+    //
+    // Domains that opt in produce typed Entity atoms (Person /
+    // Organization / Initiative) and Involves edges from each batch
+    // of chunks. The default impl returns `None` — most domains
+    // (philosophy, science, literary atlases) don't run this step.
+    // Personal and Conversational override to return the tuned prompt.
+    //
+    // Expected JSON shape from the model:
+    // ```json
+    // {
+    //   "persons":       [{"name":"…","affiliation":"…","role":"…","mentions":["chunk-id"]}],
+    //   "organizations": [{"name":"…","relationship":"…","mentions":["chunk-id"]}],
+    //   "initiatives":   [{"name":"…","status":"…","participants":["…"],"mentions":["chunk-id"]}]
+    // }
+    // ```
+    // `mentions` carries the chunk ids the entity appears in — the
+    // resolver builds Involves edges from those, and the timeline
+    // assembler later joins chunk_id back to the source row's
+    // `created_at` to attach a timestamp.
+    fn entity_extraction_prompt(&self, _chunks: &[&Chunk]) -> Option<String> {
+        None
+    }
+
     // ── Clustering and alignment parameters ───────────────────────────────
     fn clustering_config(&self) -> ClusteringConfig;
     fn alignment_config(&self) -> AlignmentConfig;

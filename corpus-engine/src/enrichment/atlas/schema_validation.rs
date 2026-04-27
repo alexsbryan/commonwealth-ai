@@ -954,6 +954,9 @@ mod tests {
             description: "x".into(),
             salience,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         }
     }
 

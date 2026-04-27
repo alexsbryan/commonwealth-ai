@@ -193,12 +193,19 @@ fn normalise_enum_tag(s: &str) -> String {
 
 string_enum_with_other! {
     /// Kind of named thing (§2.1).
+    ///
+    /// `Initiative` is added for the personal/conversational domains:
+    /// a recurring abstract subject the user organises work around
+    /// (a project, strategic priority, product launch). The pragmatic
+    /// distinction from `Concept` is "active effort toward a future
+    /// state" — `Initiative` implies someone is working on it.
     pub enum EntityType {
         Person = "person",
         Concept = "concept",
         Institution = "institution",
         Work = "work",
         Place = "place",
+        Initiative = "initiative",
     }
 }
 
@@ -591,11 +598,23 @@ mod tests {
             EntityType::Institution,
             EntityType::Work,
             EntityType::Place,
+            EntityType::Initiative,
         ] {
             let s = serde_json::to_string(&variant).unwrap();
             let parsed: EntityType = serde_json::from_str(&s).unwrap();
             assert_eq!(parsed, variant);
         }
+    }
+
+    #[test]
+    fn entity_type_initiative_round_trips_lowercase() {
+        // Pin the wire form — `"initiative"` (lowercase, snake_case)
+        // is the canonical literal the personal/conversational
+        // entity-extraction prompts will emit.
+        let parsed: EntityType = serde_json::from_str("\"initiative\"").unwrap();
+        assert_eq!(parsed, EntityType::Initiative);
+        let back = serde_json::to_string(&EntityType::Initiative).unwrap();
+        assert_eq!(back, "\"initiative\"");
     }
 
     #[test]

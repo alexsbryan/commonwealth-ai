@@ -281,6 +281,90 @@ Return JSON:
     fn skeleton_storage(&self) -> SkeletonStorage {
         SkeletonStorage::JsonAndLance
     }
+
+    fn entity_extraction_prompt(&self, chunks: &[&Chunk]) -> Option<String> {
+        // Empty-slice probe: the engine asks "do you opt in?" before
+        // dispatching any inference. Conversational opts in.
+        if chunks.is_empty() {
+            return Some(String::new());
+        }
+
+        let passages = chunks
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                format!(
+                    "[Conversation {} — {}]\n{}",
+                    i + 1,
+                    c.title.as_deref().unwrap_or("(untitled)"),
+                    c.content
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        Some(format!(
+            r#"You are reading conversations between one person (the user) and an
+AI assistant. Your job is named-entity extraction: identify the
+*people*, *organizations*, and *initiatives* the user discusses. The
+user is the speaker — do not extract them.
+
+Definitions:
+- **Person**: a named individual the user mentions ("Sarah Chen",
+  "Mike from engineering"). Capture organizational affiliation and
+  role if the conversation states them.
+- **Organization**: a named company, institution, or team. Capture
+  the relationship to the user (client, employer, vendor, partner,
+  internal team) if the conversation implies one.
+- **Initiative**: a concrete project, strategic priority, or piece
+  of ongoing work the user is organizing effort around ("API
+  migration", "Q3 enterprise push", "reduce churn to 5%"). An
+  initiative implies *active effort toward a future state* —
+  distinguish from topics the user is merely thinking about. The
+  rule of thumb: if the user could say "we're working on X" or "I
+  committed to X", it's an initiative; if they could only say "I
+  think about X", it's not.
+
+Use the [Conversation N] labels to record where each entity appeared
+in `mentions`. If you list a person as a participant on an initiative,
+make sure that person also appears in the `persons` array.
+
+Conversations:
+{passages}
+
+Return ONLY a JSON object:
+{{
+  "persons": [
+    {{
+      "name": "Sarah Chen",
+      "affiliation": "Acme Corp",
+      "role": "VP Engineering",
+      "mentions": ["Conversation 1"]
+    }}
+  ],
+  "organizations": [
+    {{
+      "name": "Acme Corp",
+      "relationship": "client",
+      "mentions": ["Conversation 1"]
+    }}
+  ],
+  "initiatives": [
+    {{
+      "name": "API migration",
+      "status": "phase 2 of 4, on track for Q2",
+      "participants": ["Mike Torres"],
+      "mentions": ["Conversation 2"]
+    }}
+  ]
+}}
+
+Empty arrays for any kind that didn't appear. Omit affiliation, role,
+status, or relationship fields when the conversation doesn't support
+them — do not invent. Skip first-person pronouns and the AI assistant."#,
+            passages = passages
+        ))
+    }
 }
 
 #[cfg(test)]

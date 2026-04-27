@@ -120,6 +120,12 @@ impl SectionPosition {
 // ── Entity ───────────────────────────────────────────────────
 
 /// A named thing that persists across sections (spec §2.1).
+///
+/// The `affiliation` / `role` / `participants` fields are populated by
+/// the personal-conversational entity-extraction phase and otherwise
+/// left empty. They are not part of the literary/philosophy atlas
+/// pipeline's output; they round-trip through serde as absent fields
+/// so existing atoms.json files on disk deserialise unchanged.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
     pub id: AtomId,
@@ -135,6 +141,21 @@ pub struct Entity {
     /// narrative weight, and cross-reference density.
     pub salience: f32,
     pub enrichment_depth: EnrichmentDepth,
+    /// Organisational affiliation for `Person` entities — e.g. "Acme
+    /// Corp" for "Sarah Chen at Acme". Populated only by the
+    /// personal/conversational entity-extraction phase; absent on
+    /// literary/philosophy pipeline output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affiliation: Option<String>,
+    /// Role or title for `Person` entities — e.g. "VP Engineering".
+    /// Same scoping as `affiliation`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// Participating entity IDs for `Initiative` entities — the
+    /// people and organisations involved in the work. Empty on
+    /// non-initiative entities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub participants: Vec<AtomId>,
 }
 
 // ── Event ────────────────────────────────────────────────────
@@ -402,6 +423,9 @@ mod tests {
             description: "Youngest Karamazov brother; novice at the monastery.".into(),
             salience: 0.92,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         };
         let env = AtomEnvelope::Entity(entity.clone());
         let json = serde_json::to_string(&env).unwrap();
@@ -607,6 +631,9 @@ mod tests {
             description: "x".into(),
             salience: 0.1,
             enrichment_depth: EnrichmentDepth::Structural,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         };
         let env = AtomEnvelope::Entity(entity);
         assert_eq!(env.id().as_str(), "entity-0005");

@@ -514,6 +514,9 @@ mod tests {
             description: format!("Character {name}"),
             salience,
             enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
         }
     }
 

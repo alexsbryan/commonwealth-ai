@@ -26,6 +26,12 @@ pub struct EnrichmentCheckpoint {
     /// Used to skip already-processed batches on resume.
     #[serde(default)]
     pub phase_1_batches_done: usize,
+    /// Phase 1b — entity extraction. Opt-in per domain via
+    /// `Domain::entity_extraction_prompt`. Defaults to `false` on
+    /// existing checkpoints (serde default), so older runs replay the
+    /// step on resume rather than silently skipping it.
+    #[serde(default)]
+    pub phase_1b_complete: bool,
     pub phase_2_complete: bool,  // clustering done
     pub phase_2b_complete: bool, // labeling done
     pub phase_3_complete: bool,  // alignment done
@@ -72,6 +78,8 @@ impl EnrichmentCheckpoint {
     pub fn next_phase(&self) -> EnrichmentPhase {
         if !self.phase_1_complete {
             EnrichmentPhase::SkeletonExtraction
+        } else if !self.phase_1b_complete {
+            EnrichmentPhase::EntityExtraction
         } else if !self.phase_2_complete {
             EnrichmentPhase::Clustering
         } else if !self.phase_2b_complete {
@@ -91,6 +99,11 @@ impl EnrichmentCheckpoint {
 #[derive(Debug, Clone, PartialEq)]
 pub enum EnrichmentPhase {
     SkeletonExtraction,
+    /// Phase 1b — Person / Organization / Initiative atom extraction
+    /// for the personal + conversational domains. Opt-in per domain.
+    /// Domains that don't override `entity_extraction_prompt` skip
+    /// straight to Clustering.
+    EntityExtraction,
     Clustering,
     ClusterLabeling,
     Alignment,
@@ -109,6 +122,9 @@ mod tests {
         assert_eq!(cp.next_phase(), EnrichmentPhase::SkeletonExtraction);
 
         cp.phase_1_complete = true;
+        assert_eq!(cp.next_phase(), EnrichmentPhase::EntityExtraction);
+
+        cp.phase_1b_complete = true;
         assert_eq!(cp.next_phase(), EnrichmentPhase::Clustering);
 
         cp.phase_2_complete = true;
@@ -140,6 +156,7 @@ mod tests {
             started_at: "2026-04-09T00:00:00Z".into(),
             last_updated: "2026-04-09T00:00:00Z".into(),
             phase_1_complete: true,
+            phase_1b_complete: true,
             phase_2_complete: true,
             ..Default::default()
         };
@@ -148,6 +165,7 @@ mod tests {
         let loaded = EnrichmentCheckpoint::load(&dir).unwrap().unwrap();
         assert_eq!(loaded.corpus_id, "test");
         assert!(loaded.phase_1_complete);
+        assert!(loaded.phase_1b_complete);
         assert!(loaded.phase_2_complete);
         assert!(!loaded.phase_2b_complete);
         assert_eq!(loaded.next_phase(), EnrichmentPhase::ClusterLabeling);

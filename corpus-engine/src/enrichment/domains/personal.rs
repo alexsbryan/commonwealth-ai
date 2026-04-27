@@ -270,6 +270,80 @@ Return JSON:
         // directly without a LanceDB scan.
         SkeletonStorage::JsonAndLance
     }
+
+    fn entity_extraction_prompt(&self, chunks: &[&Chunk]) -> Option<String> {
+        // Empty-slice probe: the engine asks "do you opt in?" before
+        // dispatching any inference. Personal opts in.
+        if chunks.is_empty() {
+            return Some(String::new());
+        }
+
+        let passages = chunks
+            .iter()
+            .enumerate()
+            .map(|(i, c)| format!("[Memory {}]\n{}", i + 1, c.content))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        Some(format!(
+            r#"You are reading memories from one person's long-term record. Your
+job is named-entity extraction: identify the *people*, *organizations*,
+and *initiatives* the user mentions. The user IS the subject of these
+memories — do not extract them.
+
+Definitions:
+- **Person**: a named individual (e.g. "Sarah Chen"). If the memory
+  states an organization or role, capture it.
+- **Organization**: a named company, institution, or group ("Acme Corp",
+  "the design team"). If the memory implies the user's relationship to
+  it (employer, client, vendor, partner), capture it as `relationship`.
+- **Initiative**: a concrete project, goal, or piece of ongoing work the
+  user is involved in ("the Q3 launch", "API migration", "reduce churn"
+  as an active effort). Topics of casual reflection ("I think about
+  craft") are NOT initiatives — initiatives imply effort toward a
+  future state.
+
+Use the [Memory N] labels to record where each entity appeared. The
+`mentions` array on each entity is required; list the memory labels
+that mention it. If you list a person as a participant on an initiative,
+make sure that person also appears in the `persons` array.
+
+Memories:
+{passages}
+
+Return ONLY a JSON object:
+{{
+  "persons": [
+    {{
+      "name": "Sarah Chen",
+      "affiliation": "Acme Corp",
+      "role": "VP Engineering",
+      "mentions": ["Memory 1"]
+    }}
+  ],
+  "organizations": [
+    {{
+      "name": "Acme Corp",
+      "relationship": "client",
+      "mentions": ["Memory 1"]
+    }}
+  ],
+  "initiatives": [
+    {{
+      "name": "Q3 enterprise push",
+      "status": "team aligning on vertical focus",
+      "participants": ["Sarah Chen", "Acme Corp"],
+      "mentions": ["Memory 2"]
+    }}
+  ]
+}}
+
+Empty arrays for any kind that didn't appear. Omit the description,
+affiliation, role, status, or relationship fields when the memory
+doesn't support them — do not invent."#,
+            passages = passages
+        ))
+    }
 }
 
 #[cfg(test)]
