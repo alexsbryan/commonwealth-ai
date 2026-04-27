@@ -18,7 +18,8 @@
   `onComplete(seed)` so App can transition + seed the chat.
 -->
 <script lang="ts">
-  import { markFirstRunComplete } from "../../api";
+  import { onMount } from "svelte";
+  import { markFirstRunComplete, startLayeredSetup } from "../../api";
   import type { StarterQuestion } from "../../types";
   import FolderDropFlow from "../local-knowledge/folder/FolderDropFlow.svelte";
   import HonestExpectations from "./HonestExpectations.svelte";
@@ -39,6 +40,27 @@
   }
 
   let { onComplete, onDropToChat }: Props = $props();
+
+  // Kick off the layered Wikipedia stack the moment this component
+  // mounts: Simple English (~2-3 min) gives the user grounded
+  // responses fast; Wikipedia Core (~10-12 min) layers in afterwards.
+  // The user can pick Drop-folder / Obsidian / Skip independently —
+  // both paths run in parallel so by the time onboarding completes
+  // there's *something* grounded to chat with.
+  //
+  // `startLayeredSetup` is idempotent on the daemon side: a second
+  // call while the same corpora are already in flight returns
+  // `spawned: false` and the existing tasks continue.
+  let layeredKicked = $state(false);
+  onMount(() => {
+    if (layeredKicked) return;
+    layeredKicked = true;
+    startLayeredSetup().catch((e: unknown) => {
+      // Non-fatal — the user can always install Wikipedia from
+      // Settings → Knowledge later. Log for the dev console only.
+      console.warn("startLayeredSetup failed (non-blocking):", e);
+    });
+  });
 
   type Step =
     | { kind: "explainer" }
@@ -140,6 +162,19 @@
           </span>
         </button>
       </section>
+
+      <!--
+        Layered-Wikipedia status footer. We've already fired
+        `startLayeredSetup()` in `onMount`, so this note is just
+        honesty-about-state: the user has *some* grounding regardless
+        of whether they drop a folder. Phrased as "while you decide"
+        so the call-to-action above remains the primary message.
+      -->
+      <p class="layered-status">
+        While you decide: <strong>Wikipedia is downloading in the background</strong>
+        — Simple English ready in ~3 min, the 100K-article Core in ~12 min.
+        Watch the banner at the top for progress.
+      </p>
     </div>
   {:else if step.kind === "picking_flow"}
     <div class="flow-wrap">
@@ -270,6 +305,22 @@
        stacking an extra wrapper style that would conflict with its
        internal animations. */
     animation: fade-in 260ms ease-out both;
+  }
+
+  .layered-status {
+    margin: 4px 0 0;
+    padding: 10px 14px;
+    border-left: 2px solid var(--accent);
+    background: color-mix(in oklab, var(--accent) 5%, var(--bg-surface));
+    border-radius: 0 6px 6px 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    max-width: 60ch;
+  }
+  .layered-status strong {
+    color: var(--text-primary);
+    font-weight: 600;
   }
 
   @keyframes fade-in {

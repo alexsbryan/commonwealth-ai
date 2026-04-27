@@ -649,6 +649,12 @@ fn ingest_progress_to_local(
             phase_label: "Writing index".into(),
             current_file: None,
         },
+        OptimizingIndex { current_chunks } => LocalCorpusProgress::Ingesting {
+            done: current_chunks,
+            total: current_chunks,
+            phase_label: "Optimizing search index".into(),
+            current_file: None,
+        },
         Complete {
             total_chunks,
             duration_secs,

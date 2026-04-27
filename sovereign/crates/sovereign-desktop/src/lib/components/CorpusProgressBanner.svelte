@@ -18,6 +18,7 @@
   // Friendly display names for known corpus IDs.
   const NAMES: Record<string, string> = {
     wikipedia: "Wikipedia",
+    "wikipedia-simple": "Simple English Wikipedia",
     sep: "Stanford Encyclopedia of Philosophy",
     openalex: "OpenAlex",
     stackexchange: "Stack Exchange",
@@ -25,7 +26,19 @@
     crs_reports: "CRS Reports",
   };
 
-  let visible = $derived(corpusProgressStore.active);
+  // Layer 0 of the layered Wikipedia stack — installs alongside Core
+  // but doesn't have its own row in the corpus picker. Hide its
+  // progress events from the banner too so the user sees one
+  // "Wikipedia" entry whose phase reflects whichever layer is
+  // currently active. While Simple is downloading, the Wikipedia row
+  // shows Core's "downloading" since the layered install pipelines
+  // both starts; once Simple finishes its progress entry drops out
+  // and only Core remains.
+  const HIDDEN_FROM_BANNER = new Set(["wikipedia-simple"]);
+
+  let visible = $derived(
+    corpusProgressStore.active.filter((p) => !HIDDEN_FROM_BANNER.has(p.corpus_id)),
+  );
 
   function phaseLabel(phase: string): string {
     switch (phase) {
@@ -33,6 +46,13 @@
         return "downloading";
       case "parsing":
         return "indexing";
+      // Emitted post-expansion while the IVF-PQ vector index is
+      // retrained over the new (larger) chunk set. Search remains
+      // live; this is the user-visible signal that "more is
+      // happening" between the last embed batch and the corpus
+      // flipping back to ✓ Indexed.
+      case "optimizing_index":
+        return "optimizing search index";
       default:
         return phase;
     }

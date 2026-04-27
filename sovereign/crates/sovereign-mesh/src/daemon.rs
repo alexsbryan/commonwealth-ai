@@ -1739,6 +1739,7 @@ mod tests {
                 embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
                 code: None,
                 context_size: None,
+                max_extras_memory_gb: None,
                 extra: std::collections::BTreeMap::new(),
             },
             daemon: DaemonSection::default(),

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus } from "../api";
+  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup } from "../api";
   import { corpusProgressStore } from "../stores/corpusProgress.svelte";
   import type { CorpusEntry, CorpusHealthDetail } from "../types";
 
@@ -96,7 +96,17 @@
 
   async function handleInstall(id: string) {
     try {
-      await installCorpus(id);
+      // Wikipedia is a layered stack: Simple English ships as a Layer
+      // 0 satellite that should always install alongside Core. The
+      // user only sees one "Wikipedia" row in the picker, so clicking
+      // Install must kick off both layers. `startLayeredSetup` is
+      // idempotent — already-installed sub-corpora just no-op on the
+      // daemon side.
+      if (id === "wikipedia") {
+        await startLayeredSetup();
+      } else {
+        await installCorpus(id);
+      }
       corpora = corpora.map((c) =>
         c.id === id ? { ...c, status: "installing" as const } : c,
       );
@@ -108,6 +118,18 @@
   async function handleRemove(id: string) {
     try {
       await removeCorpus(id);
+      // The user only sees one "Wikipedia" row, so Remove must also
+      // tear down the Simple English satellite. Best-effort: a stale
+      // wikipedia-simple index left behind is harmless (the next
+      // Install would resume it), but the user's mental model is
+      // "Wikipedia is gone" so we honor that.
+      if (id === "wikipedia") {
+        try {
+          await removeCorpus("wikipedia-simple");
+        } catch (e) {
+          console.warn("removing wikipedia-simple satellite failed:", e);
+        }
+      }
       await refresh();
     } catch (e) {
       console.error("Remove failed:", e);

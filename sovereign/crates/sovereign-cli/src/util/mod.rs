@@ -14,6 +14,7 @@
 
 pub mod dirs;
 pub mod help;
+pub mod log_rotation;
 pub mod prompts;
 pub mod status;
 pub mod tracing_init;

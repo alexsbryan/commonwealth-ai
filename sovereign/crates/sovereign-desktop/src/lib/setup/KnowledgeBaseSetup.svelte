@@ -7,33 +7,42 @@
 
   let { persona, onSelect, onSkip }: Props = $props();
 
+  // Sizes reflect the registry_snapshot.toml `size_indexed_gb`
+  // values. Wikipedia ships in **Core scope** (top 100K by pageview
+  // rank ∪ Vital Articles Level 5, ~6 GB) plus a Simple English
+  // satellite that installs alongside it as Layer 0 — the user only
+  // sees one "Wikipedia" entry; the layered stack is a backend
+  // detail. Expandable to full Wikipedia later from Settings →
+  // Knowledge without re-indexing.
   const tiers = [
     {
       id: "essential",
       name: "Essential",
-      size: "55 GB",
-      description: "Wikipedia only — broad general knowledge. Works offline.",
+      size: "~7 GB",
+      description:
+        "Wikipedia (~150K most-looked-up + curated articles, plain-language fallback). Ready to chat in ~12 min. Expandable to full Wikipedia later.",
       corpora: ["Wikipedia"],
     },
     {
       id: "research",
       name: "Research",
-      size: "105 GB",
+      size: "~520 GB",
       description:
-        "Wikipedia + scholarly sources + policy analysis. For academic work.",
+        "Essential plus scholarly papers, philosophy reference, and CRS policy analysis. For academic work.",
       corpora: ["Wikipedia", "OpenAlex", "SEP", "CRS Reports"],
     },
     {
       id: "technical",
       name: "Technical",
-      size: "95 GB",
-      description: "Wikipedia + expert Q&A. For programming and engineering.",
+      size: "~130 GB",
+      description:
+        "Essential plus Stack Exchange expert Q&A. For programming and engineering.",
       corpora: ["Wikipedia", "Stack Exchange"],
     },
     {
       id: "full",
       name: "Full",
-      size: "170 GB",
+      size: "~660 GB",
       description: "All knowledge bases — maximum coverage.",
       corpora: [
         "Wikipedia",

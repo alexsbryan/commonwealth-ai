@@ -1305,11 +1305,40 @@ pub struct DownloadProgress {
     pub error: Option<String>,
 }
 
+/// Returns true iff `path` starts with the GGUF magic (`GGUF`, 4 bytes
+/// ASCII).
+///
+/// Discovery scanners list every `*.gguf` file by extension, but a
+/// failed download (HTML 404 page, captive-portal interstitial, Git-LFS
+/// pointer) saved with a `.gguf` extension still slips through. The
+/// picker would surface those as selectable options and the user would
+/// land on `state::bootstrap` → `LlamaModel::load_from_file` → "null
+/// result from llama cpp" with no path back. The magic-byte check is a
+/// 4-byte read — much cheaper than `validate_gguf` (which also size-
+/// checks) and sufficient to weed out non-GGUFs at discovery time.
+fn looks_like_gguf(path: &Path) -> bool {
+    use std::io::Read;
+    match std::fs::File::open(path) {
+        Ok(mut f) => {
+            let mut buf = [0u8; 4];
+            f.read_exact(&mut buf).is_ok() && &buf == b"GGUF"
+        }
+        Err(_) => false,
+    }
+}
+
 fn scan_directory_flat(dir: &Path, label: &str, results: &mut Vec<DiscoveredModel>, seen: &mut HashSet<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() && path.extension().is_some_and(|ext| ext == "gguf") {
+            if !looks_like_gguf(&path) {
+                tracing::warn!(
+                    path = %path.display(),
+                    "scan_directory_flat: skipping non-GGUF (likely failed download or LFS pointer)"
+                );
+                continue;
+            }
             if let Ok(canonical) = path.canonicalize() {
                 if seen.insert(canonical.clone()) {
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -1330,6 +1359,13 @@ fn scan_directory_deep(dir: &Path, label: &str, max_depth: usize, results: &mut 
     for entry in walkdir::WalkDir::new(dir).max_depth(max_depth).into_iter().flatten() {
         let path = entry.path();
         if path.is_file() && path.extension().is_some_and(|ext| ext == "gguf") {
+            if !looks_like_gguf(path) {
+                tracing::warn!(
+                    path = %path.display(),
+                    "scan_directory_deep: skipping non-GGUF (likely failed download or LFS pointer)"
+                );
+                continue;
+            }
             if let Ok(canonical) = path.canonicalize() {
                 if seen.insert(canonical.clone()) {
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -1342,6 +1378,56 @@ fn scan_directory_deep(dir: &Path, label: &str, max_depth: usize, results: &mut 
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::looks_like_gguf;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn looks_like_gguf_accepts_real_magic() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("real.gguf");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"GGUF\x03\x00\x00\x00rest of file...").unwrap();
+        assert!(looks_like_gguf(&path));
+    }
+
+    #[test]
+    fn looks_like_gguf_rejects_html() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("stub.gguf");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"<!doctype html><html>404 Not Found</html>").unwrap();
+        assert!(!looks_like_gguf(&path));
+    }
+
+    #[test]
+    fn looks_like_gguf_rejects_lfs_pointer() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("ptr.gguf");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 12345\n").unwrap();
+        assert!(!looks_like_gguf(&path));
+    }
+
+    #[test]
+    fn looks_like_gguf_rejects_too_short_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("short.gguf");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"GG").unwrap();
+        assert!(!looks_like_gguf(&path));
+    }
+
+    #[test]
+    fn looks_like_gguf_rejects_missing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("missing.gguf");
+        assert!(!looks_like_gguf(&path));
     }
 }
 
@@ -1628,6 +1714,20 @@ fn ingest_progress_to_payload(
             chunks_processed: *chunks_indexed,
             message: None,
         },
+        IngestProgress::OptimizingIndex { current_chunks } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "optimizing_index".into(),
+            // The rebuild is one-shot — no incremental progress to
+            // report. Surface it as in-flight (50%) so the banner's
+            // bar doesn't snap from 100% (Indexing) back to 0% (no
+            // bar) and disorient the user mid-expansion.
+            percent: 50.0,
+            chunks_processed: *current_chunks,
+            message: Some(format!(
+                "Retraining vector index over {} chunks",
+                pretty_count(*current_chunks)
+            )),
+        },
         IngestProgress::Complete {
             total_chunks,
             duration_secs,
@@ -1659,7 +1759,20 @@ pub async fn list_corpora(
     drop(engine_guard);
 
     // Pull built-in catalog from registry snapshot (no network required).
-    let builtins = engine.builtin_corpora();
+    //
+    // `wikipedia-simple` is filtered out: it's a layer-0 satellite of
+    // the Wikipedia corpus (Layer 0 of the layered Wikipedia stack — see
+    // `lc_start_layered_setup`). The user-facing surface is a single
+    // "Wikipedia" entry whose Install button kicks off both layers via
+    // `startLayeredSetup`. Surfacing wikipedia-simple as a peer in the
+    // picker would force users to grok an internal staging detail; the
+    // recipe stays registered (so the daemon can still install it on
+    // demand) but doesn't render as its own row.
+    let builtins: Vec<_> = engine
+        .builtin_corpora()
+        .into_iter()
+        .filter(|b| b.id != "wikipedia-simple")
+        .collect();
 
     // Look up live install status. Failure here is non-fatal — we still
     // want to render the catalog so the user can choose what to install.
@@ -1675,7 +1788,19 @@ pub async fn list_corpora(
     let mut entries = Vec::new();
     for b in &builtins {
         let registry_entry = engine.registry().find_entry(&b.id);
-        let installed_info = installed.iter().find(|i| i.corpus_id == b.id && !i.is_shard);
+        // An index dir with zero committed chunks is an abandoned shell
+        // (e.g. a previous install that crashed before the first
+        // tier-2 flush). The recipe got far enough to write
+        // `_corpus_meta.json` but no chunks landed in LanceDB. Treating
+        // it as "installed" misleads the user into thinking the
+        // corpus is partially populated when in fact nothing is
+        // searchable. Filter those out so the row falls back to
+        // "not_installed" and the Install button reappears — the
+        // ingest pipeline will resume cleanly from `committed_iter_pos
+        // = 0` since the on-disk state is consistent.
+        let installed_info = installed
+            .iter()
+            .find(|i| i.corpus_id == b.id && !i.is_shard && i.chunk_count > 0);
         let is_installing = installing
             .get(&b.id)
             .is_some_and(|p| p.phase != "complete" && p.phase != "failed");
@@ -1688,8 +1813,24 @@ pub async fn list_corpora(
             "not_installed"
         };
 
-        let vector_index_ready = if installed_info.is_some() {
-            if let Some(ref s) = store_opt {
+        // `vector_index_ready` is what the UI uses to decide whether
+        // to show "Build Index" or "Hybrid search ready". Two sources
+        // of truth historically, easy to drift apart:
+        //
+        //   1. `_corpus_meta.json.vector_index_built` — written by the
+        //      ingest pipeline when IVF-PQ actually finishes.
+        //   2. The SQLite `vector_index_ready` flag — set ONLY by the
+        //      explicit `build_corpus_index` Tauri command.
+        //
+        // A regular ingest that builds the index never writes (2), so
+        // the UI shows "Keyword search only / Build Index" even though
+        // the vector index is on disk and live. Trust the on-disk meta
+        // first; fall back to the SQLite cache for installs that
+        // happened before this field was populated.
+        let vector_index_ready = if let Some(info) = installed_info {
+            if info.vector_index_built {
+                true
+            } else if let Some(ref s) = store_opt {
                 s.get_vector_index_ready(&b.id).await.unwrap_or(false)
             } else {
                 false
@@ -2872,6 +3013,14 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
             "indexing".to_string(),
             *chunks_indexed,
             Some(format!("{} chunks indexed", pretty_count(*chunks_indexed))),
+        ),
+        Some(P::OptimizingIndex { current_chunks }) => (
+            "optimizing_index".to_string(),
+            *current_chunks,
+            Some(format!(
+                "Retraining vector index over {} chunks",
+                pretty_count(*current_chunks)
+            )),
         ),
         Some(P::Complete {
             total_chunks,

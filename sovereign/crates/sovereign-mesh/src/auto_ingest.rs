@@ -581,6 +581,26 @@ async fn pull_loop(
                 handoff = %handoff_id,
                 "pull_loop: handoff no longer registered on coordinator — exiting"
             );
+            // Remove the stale handoff blob from the local mesh_store
+            // so `discover_and_spawn_pull_loops` stops respawning this
+            // loop on every auto_ingest tick. Without this cleanup, a
+            // handoff the coordinator deregistered keeps churning at
+            // 30-second cadence: spawn → 404 → exit → drop from
+            // `active_pull_loops` → next tick rescans the same blob in
+            // local gossip state → spawn again. That respawn loop is
+            // the source of the multi-MB log noise the operator was
+            // staring at. Re-creation by the coordinator (gossip
+            // re-propagation if the handoff genuinely re-opens) is
+            // automatic — `merge_entry` accepts new versions — so the
+            // delete is safe.
+            let key = format!("handoff:{}", handoff_id);
+            if let Err(e) = state.inner.mesh_store.delete("corpus-engine", &key) {
+                tracing::warn!(
+                    handoff = %handoff_id,
+                    error = %e,
+                    "pull_loop: failed to delete stale handoff from mesh_store"
+                );
+            }
             break;
         }
         if status.is_server_error() {

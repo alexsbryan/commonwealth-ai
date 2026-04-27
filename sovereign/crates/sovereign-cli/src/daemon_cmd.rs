@@ -78,6 +78,36 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
 };
 
 async fn run_daemon(_args: &[String]) -> i32 {
+    // ── Log rotation ──────────────────────────────────────────────
+    //
+    // launchd holds the FDs on `daemon.log` / `daemon.err` (set via
+    // the plist's StandardOutPath / StandardErrorPath) and never
+    // re-opens them, so rename-style rotation would leak the inode.
+    // Instead we copy-truncate at startup (cheap if under cap, safe
+    // for in-flight launchd writes — the FD continues into the
+    // now-empty file) and again on a 30-minute timer for long-running
+    // daemon processes. See `util::log_rotation` for the contract.
+    //
+    // Ordered FIRST so a daemon that's been running for days and
+    // produced a 5-GB log doesn't make the operator's `tail -f` drop
+    // dead before the new daemon prints its first useful line.
+    let log_dir = home_dir_buf().join(".sovereign").join("logs");
+    crate::util::log_rotation::rotate_daemon_logs(
+        &log_dir,
+        crate::util::log_rotation::DEFAULT_SIZE_CAP_BYTES,
+        crate::util::log_rotation::DEFAULT_KEEP_N_BAKS,
+    );
+    // 30-minute periodic rotation so a daemon that runs continuously
+    // for days stays bounded between launchd restarts. The interval is
+    // a knob — shorter cadence catches bursts faster but adds I/O
+    // wakeups; 30 min is comfortably long for a stat() + size check.
+    let _rotation_handle = crate::util::log_rotation::spawn_rotation_loop(
+        log_dir.clone(),
+        crate::util::log_rotation::DEFAULT_SIZE_CAP_BYTES,
+        crate::util::log_rotation::DEFAULT_KEEP_N_BAKS,
+        std::time::Duration::from_secs(30 * 60),
+    );
+
     // ── Load config ───────────────────────────────────────────────
     let config = match SetupConfig::load() {
         Ok(c) => c,
@@ -261,8 +291,25 @@ async fn run_daemon(_args: &[String]) -> i32 {
                     .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
             })
         });
+        // Derive the embed model identifier from the configured GGUF
+        // path so `_corpus_meta.json` records the actual model rather
+        // than failing the ingest pre-flight ("embedding model name not
+        // configured"). Matches the wiring in `state.rs:717-723` and
+        // every other call site (`main.rs:506`, `chat_cmd/bootstrap.rs`,
+        // `code_cmd.rs`, `project_cmd.rs`); the standalone daemon was
+        // the lone holdout, which is why the desktop's
+        // `/internal/corpus/install` POST hits this engine and bombs at
+        // the pre-flight before the first byte is downloaded.
+        let embed_model_name = config
+            .models
+            .embed
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown-embed-model")
+            .to_string();
         Arc::new(
             CorpusEngine::new(indexes_dir.clone(), indexes_dir, embed)
+                .with_embedding_model(&embed_model_name)
                 .with_batch_embed_fn(batch_embed)
                 .with_self_node_id(self_node_id.to_string()),
         )
