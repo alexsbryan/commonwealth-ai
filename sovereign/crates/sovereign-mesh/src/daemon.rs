@@ -1244,6 +1244,15 @@ impl EmbeddedDaemon {
 
         crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), 9742);
 
+        // Re-spawn any solo corpus ingest the daemon was running before
+        // restart. The mesh auto-collaborate loop above only handles
+        // peer-driven dispatch; a solo Wikipedia install that was
+        // mid-stream when launchd restarted us has no other waker.
+        // Without this hook the on-disk state stays "in progress"
+        // forever and the desktop banner pretends progress is happening
+        // while the embed slot is idle. See `auto_resume.rs` docstring.
+        crate::auto_resume::spawn_resume_in_progress_ingests(app_state.clone());
+
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
             app_state,

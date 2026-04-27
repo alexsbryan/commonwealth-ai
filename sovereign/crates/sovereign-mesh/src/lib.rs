@@ -12,6 +12,7 @@
 
 pub mod admin_http;
 pub mod auto_ingest;
+pub mod auto_resume;
 pub mod capabilities;
 pub mod daemon;
 pub mod loopback_guard;

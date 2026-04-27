@@ -8,6 +8,7 @@ mod daemon_cmd;
 mod design_onboarding;
 mod design_session;
 mod enrich_cmd;
+mod eval_cmd;
 mod doc_fetcher;
 mod doctor_cmd;
 mod found;
@@ -165,6 +166,7 @@ const HELP: Help = Help {
             ("reflect", "Review session reflections; retire fixed ones"),
             ("recipe",  "Run a corpus ingestion recipe"),
             ("bench",   "Throughput + correctness benchmarks for enrichment LLM tasks"),
+            ("eval",    "Run a question bank against a corpus; measure retrieval quality"),
             ("tools",   "Invoke code-intelligence tools from the CLI (list / describe / call)"),
             ("mcp",     "MCP server diagnostics (list tools, proxy)"),
             ("daemon",  "(internal) Long-running service managed by launchd/systemd"),
@@ -327,6 +329,10 @@ async fn main() {
             }
             "enrich" => {
                 let code = enrich_cmd::run_enrich(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "eval" => {
+                let code = eval_cmd::run_eval(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "bench" => {
