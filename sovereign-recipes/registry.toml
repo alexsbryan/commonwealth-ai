@@ -5,10 +5,10 @@ registry_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/m
 [[recipes]]
 id = "wikipedia"
 name = "Wikipedia (English)"
-description = "Wikipedia Core scope: top 100K articles by pageview rank ∪ Vital Articles Level 5 (≈150K articles, ~6 GB indexed). Indexes in ~10–12 min on M-series MacBook. Expandable to the full 6.7M-article dump in-place via Settings → Knowledge."
+description = "Wikipedia Core scope: ~51K Vital Articles Level 5 (community-curated, ~2.5 GB indexed). Indexes in ~5–8 min on M-series MacBook. Expandable to the full 6.7M-article dump in-place via Settings → Knowledge."
 license = "CC-BY-SA-4.0"
 size_compressed_gb = 13.0
-size_indexed_gb = 6.0
+size_indexed_gb = 2.5
 enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia/recipe.toml"
