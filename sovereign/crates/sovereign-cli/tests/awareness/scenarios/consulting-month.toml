@@ -14,16 +14,22 @@ description = "Solo consultant, one month — relational + strategic awareness e
 template = "consulting"
 
 [runner]
-inference = "mock"        # "mock" | "dry_run" | "real"
+inference = "real"        # "mock" | "dry_run" | "real" — mock reads
+                          # prompt examples and gives misleading
+                          # signal; real points at the running daemon.
 reset_before = true       # rm -rf the sandbox before seeding
 
 # ── Entity-shape assertions ─────────────────────────────────────
 
+# 25-conversation fixture: 10 people, 4 orgs, 4 initiatives. Floor
+# is set well below the expected count to allow for legitimate model
+# variance while still catching catastrophic regressions.
+
 [[assertions]]
 kind = "entity_count"
-min_people = 2
-min_organizations = 1
-min_initiatives = 1
+min_people = 7
+min_organizations = 3
+min_initiatives = 3
 
 [[assertions]]
 kind = "entity_present"
@@ -31,7 +37,23 @@ name = "Sarah Chen"
 
 [[assertions]]
 kind = "entity_present"
+name = "Mike Torres"
+
+[[assertions]]
+kind = "entity_present"
+name = "Dana Park"
+
+[[assertions]]
+kind = "entity_present"
+name = "Raj Patel"
+
+[[assertions]]
+kind = "entity_present"
 name = "API migration"
+
+[[assertions]]
+kind = "entity_present"
+name = "HIPAA compliance review"
 
 # ── Digest-shape assertions ─────────────────────────────────────
 
@@ -42,8 +64,18 @@ substring = "Sarah Chen"
 
 [[assertions]]
 kind = "digest_contains"
+digest = "relational"
+substring = "Raj Patel"
+
+[[assertions]]
+kind = "digest_contains"
 digest = "strategic"
 substring = "API migration"
+
+[[assertions]]
+kind = "digest_contains"
+digest = "strategic"
+substring = "HIPAA"
 
 # ── Suggestion-quality (drives `awareness suggest` per conv) ────
 

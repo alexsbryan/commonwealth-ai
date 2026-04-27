@@ -127,7 +127,11 @@ pub(super) async fn cmd_scenario(args: &[String]) -> i32 {
         return 1;
     }
 
-    let inference_mode = runner.inference.as_deref().unwrap_or("mock");
+    // Default to real (talk to the daemon) — mock reads prompt
+    // examples and gives misleading "good" signal that's not useful
+    // for tuning. Scenario authors can opt into mock for offline
+    // wiring checks.
+    let inference_mode = runner.inference.as_deref().unwrap_or("real");
 
     // ── Step 1: Seed ─────────────────────────────────────────────
     print_step("Seed", &template, &sandbox);
@@ -141,7 +145,15 @@ pub(super) async fn cmd_scenario(args: &[String]) -> i32 {
     // ── Step 2: Extract ──────────────────────────────────────────
     print_step("Extract", &template, &sandbox);
     let mut extract_args = vec!["extract".to_string()];
-    extract_args.push(format!("--{inference_mode}"));
+    // "real" is the default in extract::cmd_extract; only inject the
+    // flag for the explicit alternatives. The flag splitter treats
+    // unknown bare flags as value-flags and would consume the next
+    // token (e.g. "--db-path") if we passed `--real`.
+    match inference_mode {
+        "mock" => extract_args.push("--mock".to_string()),
+        "dry_run" | "dry-run" => extract_args.push("--dry-run".to_string()),
+        _ => {} // real (default), or anything else — fall through.
+    }
     extract_args.push("--db-path".to_string());
     extract_args.push(sandbox.display().to_string());
     let code = super::extract::cmd_extract(&extract_args[1..]).await;

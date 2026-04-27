@@ -1,16 +1,35 @@
-# Consulting scenario template — solo consultant managing client
-# relationships. Minimal-viable seed for the Phase 2 iteration loop;
-# extend with more conversations as the awareness CLI is tuned.
+# Consulting scenario template — solo consultant managing a portfolio
+# of clients across one month. Stress-tests the entity-extraction +
+# canonicalization + suggestion pipeline:
 #
-# Day offsets are negative integers counted from today (the day
-# `awareness seed` runs). day_offset = -29 means 29 days ago.
+#   * Cross-batch alias drift: short-form ("Mike", "Sarah", "Raj") vs
+#     long-form ("Mike Torres", "Sarah Chen", "Raj Patel") emitted
+#     across many conversations the model batches separately.
+#   * Possessive prefixes: chunks contain phrases like "Acme's
+#     procurement", "Helios's HIPAA review" — tests that the model
+#     emits canonical initiative names, not prefixed variants.
+#   * Sub-tasks vs initiatives: chunks reference tactics like
+#     "parallel migration path", "sandbox env", "phase 2 rollout" —
+#     tests that the model doesn't elevate these to initiatives.
+#   * Distractors: chunks musing about sabbaticals, ergonomic chairs,
+#     etc. — tests the "active effort vs casual reflection" rule.
+#   * Person without affiliation: a referrer (Marcus Reid) appears
+#     across multiple conversations with no employer.
+#   * Single-name organizations: "Meridian" never appears with a
+#     suffix — tests the org definition.
+#
+# Day offsets are negative integers counted from today. day_offset =
+# -29 means 29 days ago. Run with --days 30 to keep the spread
+# realistic.
 
 [meta]
 name = "consulting"
-description = "Solo consultant managing client relationships, pricing negotiations, and a multi-month API migration"
+description = "Solo consultant, one month — multi-client portfolio with cross-batch aliases, sub-task discipline, and distractor topics"
 days = 30
 
 # ── Expected entities (consumed by Phase 4 eval) ────────────────
+
+# People (10)
 
 [[expected_entities]]
 name = "Sarah Chen"
@@ -25,10 +44,52 @@ affiliation = "Acme Corp"
 role = "Engineering Lead"
 
 [[expected_entities]]
+name = "Lisa Rodriguez"
+kind = "person"
+affiliation = "Acme Corp"
+role = "Procurement"
+
+[[expected_entities]]
+name = "Priya Shah"
+kind = "person"
+affiliation = "Acme Corp"
+role = "Senior Engineer"
+
+[[expected_entities]]
 name = "Dana Park"
 kind = "person"
 affiliation = "Meridian"
 role = "CTO"
+
+[[expected_entities]]
+name = "Raj Patel"
+kind = "person"
+affiliation = "Helios Health"
+role = "CEO"
+
+[[expected_entities]]
+name = "Amelia Wong"
+kind = "person"
+affiliation = "Helios Health"
+role = "Director of Engineering"
+
+[[expected_entities]]
+name = "Brendan O'Connor"
+kind = "person"
+affiliation = "Helios Health"
+role = "Product Lead"
+
+[[expected_entities]]
+name = "Tomas Lindqvist"
+kind = "person"
+affiliation = "Stonewell Industries"
+role = "CTO"
+
+[[expected_entities]]
+name = "Marcus Reid"
+kind = "person"
+
+# Organizations (4)
 
 [[expected_entities]]
 name = "Acme Corp"
@@ -39,6 +100,16 @@ name = "Meridian"
 kind = "organization"
 
 [[expected_entities]]
+name = "Helios Health"
+kind = "organization"
+
+[[expected_entities]]
+name = "Stonewell Industries"
+kind = "organization"
+
+# Initiatives (4)
+
+[[expected_entities]]
 name = "API migration"
 kind = "initiative"
 participants = ["Sarah Chen", "Mike Torres"]
@@ -46,9 +117,19 @@ participants = ["Sarah Chen", "Mike Torres"]
 [[expected_entities]]
 name = "Q3 enterprise push"
 kind = "initiative"
-participants = ["Sarah Chen", "Dana Park"]
+participants = ["Sarah Chen", "Lisa Rodriguez"]
 
-# ── Conversations ───────────────────────────────────────────────
+[[expected_entities]]
+name = "HIPAA compliance review"
+kind = "initiative"
+participants = ["Raj Patel", "Amelia Wong"]
+
+[[expected_entities]]
+name = "Architecture refresh"
+kind = "initiative"
+participants = ["Dana Park"]
+
+# ── Conversations (25) ──────────────────────────────────────────
 
 [[conversations]]
 id = "c1"
@@ -66,29 +147,107 @@ content = "About 40 endpoints, mostly REST, some GraphQL. They want a clean rewr
 
 [[conversations]]
 id = "c2"
-day_offset = -22
+day_offset = -28
 skill = "general"
 [[conversations.messages]]
 role = "user"
-content = "Sync with Mike Torres today. He's worried about backward compatibility — wants me to ship a parallel migration path so existing integrations don't break. We agreed I'd send a draft migration plan to him by Friday."
+content = "Spent the morning sketching the migration plan for Acme. Phasing it into four passes — auth, billing, reporting, then the long tail. Should de-risk the rollout."
+
+[[conversations]]
+id = "c3"
+day_offset = -27
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "First sync with Mike Torres today. He's worried about backward compatibility — wants me to ship a parallel migration path so existing integrations don't break. We agreed I'd send a draft migration plan to him by Friday."
 [[conversations.messages]]
 role = "assistant"
 content = "Backward compat is the right concern. A parallel path adds time but de-risks rollout. I'll watch the Friday deadline."
 
 [[conversations]]
-id = "c3"
+id = "c4"
+day_offset = -25
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Discovery call with Dana Park at Meridian — Marcus Reid sent her my way. Different shape than Acme. They're not migrating; they want to think through an architecture refresh for next year. Dana is the CTO; small team, fast decisions."
+
+[[conversations]]
+id = "c5"
+day_offset = -24
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Spent an hour today thinking about whether I should buy that ergonomic chair. Probably yes. Also debating whether to take a sabbatical month in the fall, but that's far away."
+[[conversations.messages]]
+role = "assistant"
+content = "Both reasonable. The chair pays itself off in a week; the sabbatical's a planning question for later."
+
+[[conversations]]
+id = "c6"
+day_offset = -23
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Got the migration plan over to Mike yesterday — he came back with a sandbox env requirement before phase 2 rollout. Reasonable. I'll spec out the sandbox environment this week."
+
+[[conversations]]
+id = "c7"
+day_offset = -22
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Sarah pinged me about pricing. They're targeting 40% enterprise revenue by end of Q3, and the API migration is supposed to be the wedge. Our goal is to land the deal before their Q3 enterprise push hits the board."
+[[conversations.messages]]
+role = "assistant"
+content = "The Q3 deadline anchors the whole engagement. Worth tracking against it weekly."
+
+[[conversations]]
+id = "c8"
+day_offset = -20
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Discovery call with Raj Patel at Helios Health. CEO. They have a healthcare app and need a HIPAA compliance review before their Series B closes. He wants to know if I can lead it."
+
+[[conversations]]
+id = "c9"
+day_offset = -19
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Follow-up at Helios — got pulled into a call with Amelia Wong, their Director of Engineering. She walked me through their data flows. Most of the work is going to be encryption-at-rest and audit logging. I told Raj I'd draft a SOC2-to-HIPAA crosswalk by next Tuesday."
+
+[[conversations]]
+id = "c10"
 day_offset = -18
 skill = "general"
 [[conversations.messages]]
 role = "user"
-content = "Discovery call with Dana Park at Meridian. Different shape — they're not migrating, they want net-new infrastructure for their Q3 enterprise push. Dana is the CTO; small team, fast decisions."
+content = "Lisa Rodriguez from Acme procurement called. She needs the SOW reformatted to fit their procurement workflow — fixed deliverable list, not hourly. Acme's procurement is famously paperwork-heavy."
 [[conversations.messages]]
 role = "assistant"
-content = "Two clients with different shapes — keep the contexts separate so commitments don't bleed."
+content = "Fixed-deliverable is fine for the migration since the scope is bounded. Get the SOW reformatted this week."
 
 [[conversations]]
-id = "c4"
-day_offset = -14
+id = "c11"
+day_offset = -17
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Marcus Reid forwarded me another lead — Stonewell Industries. Their CTO Tomas Lindqvist is looking for someone to think through a platform overhaul. Marcus said this one's pre-budget so it might be early-stage. My target is three new client wins by end of quarter and Stonewell would be the third."
+
+[[conversations]]
+id = "c12"
+day_offset = -16
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Mike pushed back on the sandbox approach — he wants the parallel path inside the existing infra, not a separate sandbox env. Fair point; less infra surface area to maintain. I'll revise the migration plan."
+
+[[conversations]]
+id = "c13"
+day_offset = -15
 skill = "general"
 [[conversations.messages]]
 role = "user"
@@ -98,52 +257,153 @@ role = "assistant"
 content = "Usage-based is a reasonable pivot for enterprise. Track the Friday deadline."
 
 [[conversations]]
-id = "c5"
+id = "c14"
+day_offset = -14
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Helios HIPAA scope call with Raj and Amelia. We agreed the review covers their existing infra plus the new patient-portal launch. Raj asked me to attach a remediation timeline by the end of next week. Helios's HIPAA review is suddenly a bigger lift than I expected."
+
+[[conversations]]
+id = "c15"
+day_offset = -13
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Intro call with Tomas at Stonewell. He's careful — no commitments yet, but he wants me to come back with a discovery scope and pricing in two weeks. Let's check back on Stonewell pricing in two weeks."
+
+[[conversations]]
+id = "c16"
+day_offset = -12
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Real talk: I keep thinking about whether I should take a six-month sabbatical next year and write that book on regulatory engineering. Probably premature given the current pipeline."
+[[conversations.messages]]
+role = "assistant"
+content = "Both can be true — strong pipeline now, planning for a sabbatical later. Not a contradiction."
+
+[[conversations]]
+id = "c17"
+day_offset = -11
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Sarah confirmed the usage-based proposal cleared internal review. The Q3 enterprise push timing still works. Lisa is pushing the contract through procurement this week."
+
+[[conversations]]
+id = "c18"
 day_offset = -10
 skill = "general"
 [[conversations.messages]]
 role = "user"
-content = "API migration is on track — Mike approved the parallel path and we hit milestone 3 last Monday. Sarah's still negotiating pricing. Our goal is 40% enterprise revenue by end of Q3 — Sarah's deal is a big piece of that."
-[[conversations.messages]]
-role = "assistant"
-content = "Good progress. The enterprise revenue goal is concrete — useful to anchor weekly check-ins against."
+content = "API migration is on track — Mike approved the parallel path and we hit milestone 3 last Monday. Sarah's still negotiating the discount around the Q3 push, but Lisa says procurement is signing this week."
 
 [[conversations]]
-id = "c6"
+id = "c19"
+day_offset = -8
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Brendan O'Connor pinged me at Helios — he's the Product Lead on the patient portal and wants to make sure the HIPAA review doesn't block the launch. We agreed the audit can run in parallel with the rollout."
+
+[[conversations]]
+id = "c20"
+day_offset = -7
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Quick follow-up with Dana — the architecture refresh discovery for Meridian is on hold until their Q3 board meeting. She'll re-engage after that."
+
+[[conversations]]
+id = "c21"
+day_offset = -5
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Sarah introduced me to Priya Shah today, a senior engineer at Acme who's joining the migration team. Smart, asks the right questions about the parallel path. She'll pair with Mike on the auth phase."
+
+[[conversations]]
+id = "c22"
+day_offset = -4
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Helios HIPAA review is officially kicked off. Raj signed the contract this morning. Amelia is the day-to-day; Brendan stays in the loop on product side. First deliverable is the SOC2-to-HIPAA crosswalk by Friday."
+
+[[conversations]]
+id = "c23"
 day_offset = -3
 skill = "general"
 [[conversations.messages]]
 role = "user"
-content = "Quick check-in with Dana — Meridian's Q3 enterprise push is moving forward, they want me involved in the architecture review next month. Let's check back on the churn numbers after the April release."
+content = "Quick check-in with Dana — Meridian's Q3 enterprise push is moving forward unrelated to mine; they want me involved in their architecture review next month. Let's check back on the churn numbers after the April release."
 [[conversations.messages]]
 role = "assistant"
 content = "Architecture review is a natural fit. I'll surface the churn check-in when the April numbers land."
 
+[[conversations]]
+id = "c24"
+day_offset = -2
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Coffee with Marcus today. He thinks Stonewell will move faster than Tomas suggested — apparently their board approved a discretionary budget last quarter. Worth a follow-up email."
+
+[[conversations]]
+id = "c25"
+day_offset = -1
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Week wrap: API migration is on milestone 4 of 7, Q3 enterprise push contract is in legal at Acme, HIPAA crosswalk for Helios goes out Monday, Stonewell discovery scope drafted. Three of four engagements active. Architecture refresh at Meridian is the only quiet one and that's by their choice."
+
 # ── Expected suggestions (consumed by Phase 4 eval) ─────────────
 
 [[expected_suggestions]]
-conversation_id = "c2"
+conversation_id = "c3"
 turn = 1
 kind = "commitment"
 content_contains = "migration plan"
 related_entity = "Mike Torres"
 
 [[expected_suggestions]]
-conversation_id = "c4"
+conversation_id = "c9"
+turn = 0
+kind = "commitment"
+content_contains = "SOC2-to-HIPAA crosswalk"
+related_entity = "Raj Patel"
+
+[[expected_suggestions]]
+conversation_id = "c13"
 turn = 1
 kind = "commitment"
 content_contains = "usage-based"
 related_entity = "Sarah Chen"
 
 [[expected_suggestions]]
-conversation_id = "c5"
+conversation_id = "c7"
 turn = 1
 kind = "goal"
 content_contains = "40% enterprise revenue"
 related_entity = "Q3 enterprise push"
 
 [[expected_suggestions]]
-conversation_id = "c6"
+conversation_id = "c11"
+turn = 0
+kind = "goal"
+content_contains = "three new client wins"
+
+[[expected_suggestions]]
+conversation_id = "c15"
+turn = 0
+kind = "follow_up"
+content_contains = "Stonewell pricing"
+related_entity = "Stonewell Industries"
+
+[[expected_suggestions]]
+conversation_id = "c23"
 turn = 1
 kind = "follow_up"
 content_contains = "churn"
+related_entity = "Meridian"
