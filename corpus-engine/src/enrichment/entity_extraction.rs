@@ -619,6 +619,31 @@ fn merge_responses(
         &mut by_folded_name,
     );
 
+    // Third consolidation pass: strip organization-name prefixes
+    // from initiative canonicals.
+    //
+    // The model often emits "<Org>'s <Effort>" or "<Org> <Effort>"
+    // when chunks frame an initiative through its organizational
+    // owner ("Helios HIPAA compliance review", "Meridian
+    // architecture refresh", "Acme API migration"). The prompt asks
+    // for the bare canonical, but cross-batch chaos sometimes leaves
+    // only the prefixed form on the atlas — the canonical never
+    // surfaces and the digest treats them as distinct initiatives.
+    //
+    // Rule: if an Initiative's canonical_name starts with an
+    // Organization name (full canonical or its first token,
+    // optionally followed by `'s`), strip the prefix and use the
+    // bare form. Bare must be ≥ 2 tokens to avoid producing
+    // single-word initiative names like "procurement" or "board".
+    // Renamed initiatives that collide with an existing canonical
+    // fold via the shared compaction step.
+    consolidate_org_prefixed_initiatives(
+        &mut entities,
+        &mut mentions,
+        &mut pending_participants,
+        &mut by_folded_name,
+    );
+
     // Second pass: resolve initiative participant names to AtomIds.
     // Drop names we don't recognize (orphans) and surface them as
     // failures so the operator can see drift.
@@ -906,6 +931,180 @@ fn levenshtein_at_most_one(a: &str, b: &str) -> bool {
     diffs <= 1
 }
 
+/// Strip organization-name prefixes from Initiative canonicals,
+/// then fold the renamed initiatives into any matching existing
+/// canonical. The org list is data we already have on the atlas;
+/// no new model calls.
+///
+/// Rule:
+///   - Build a candidate-prefix set from every Organization atom:
+///     each org's canonical_name AND its first whitespace token
+///     (when ≥ 4 chars — guards against stripping short tokens
+///     that double as proper nouns).
+///   - For each Initiative, try to strip the longest matching
+///     candidate prefix (with optional `'s` suffix and trailing
+///     whitespace). Try longer candidates before shorter so that
+///     "Acme Corp" strips before "Acme".
+///   - The bare suffix must be ≥ 2 tokens — otherwise we'd be
+///     producing single-word initiative names like "procurement"
+///     or "board" which read as nouns, not strategic frames.
+///   - Rename in place. If two initiatives end up with the same
+///     folded name, fold the lower-chunk-count one into the
+///     higher-chunk-count one. Tie → keep the renamed one (the
+///     bare canonical is preferred).
+fn consolidate_org_prefixed_initiatives(
+    entities: &mut Vec<Entity>,
+    mentions: &mut [(usize, String)],
+    pending_participants: &mut [(usize, Vec<String>, usize)],
+    by_folded_name: &mut HashMap<String, usize>,
+) {
+    if entities.len() < 2 {
+        return;
+    }
+
+    // Build candidate org prefixes. Sort longest first so that
+    // multi-token org names match before their first-token
+    // shortcuts. Lowercased for case-insensitive matching.
+    let mut org_prefixes: Vec<String> = Vec::new();
+    for e in entities.iter() {
+        if !matches!(e.entity_type, EntityType::Institution) {
+            continue;
+        }
+        let name = e.canonical_name.trim();
+        if !name.is_empty() {
+            org_prefixes.push(name.to_lowercase());
+        }
+        if let Some(first) = name.split_whitespace().next() {
+            if first.chars().count() >= 4 {
+                org_prefixes.push(first.to_lowercase());
+            }
+        }
+    }
+    if org_prefixes.is_empty() {
+        return;
+    }
+    org_prefixes.sort_by_key(|s| std::cmp::Reverse(s.chars().count()));
+    org_prefixes.dedup();
+
+    // First pass: rename eligible initiatives. We rename in place;
+    // dedupe via the chunk-count-aware fold below.
+    let mut renamed: Vec<(usize, String, String)> = Vec::new(); // (idx, old, new)
+    for (idx, e) in entities.iter_mut().enumerate() {
+        if !matches!(e.entity_type, EntityType::Initiative) {
+            continue;
+        }
+        if let Some(stripped) = strip_org_prefix(&e.canonical_name, &org_prefixes) {
+            renamed.push((idx, e.canonical_name.clone(), stripped.clone()));
+            // Preserve the prefixed form as an alias on the renamed
+            // entity — useful for the digest and for resolving
+            // future participant references that cite the prefixed
+            // form.
+            let alias = e.canonical_name.clone();
+            e.canonical_name = stripped;
+            if !e.aliases.iter().any(|a| a.eq_ignore_ascii_case(&alias)) {
+                e.aliases.push(alias);
+            }
+        }
+    }
+    if renamed.is_empty() {
+        return;
+    }
+
+    // Compute chunk counts (deduped per-chunk) so collisions can
+    // pick the better-attested form to keep.
+    let mut chunk_counts: HashMap<usize, std::collections::HashSet<String>> = HashMap::new();
+    for (idx, chunk_id) in mentions.iter() {
+        chunk_counts
+            .entry(*idx)
+            .or_default()
+            .insert(chunk_id.clone());
+    }
+    let chunk_count = |idx: usize| -> usize {
+        chunk_counts.get(&idx).map(|s| s.len()).unwrap_or(0)
+    };
+
+    // Find collisions: every group of initiatives with the same
+    // folded canonical_name. Keep the one with more chunks; fold
+    // the rest into it. On ties, prefer the entry that was just
+    // renamed from a prefixed form (i.e. the bare canonical is the
+    // intended winner over a duplicate that pre-existed).
+    let renamed_idxs: std::collections::HashSet<usize> =
+        renamed.iter().map(|(idx, _, _)| *idx).collect();
+
+    let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+    for (idx, e) in entities.iter().enumerate() {
+        if matches!(e.entity_type, EntityType::Initiative) {
+            groups
+                .entry(fold_name(&e.canonical_name))
+                .or_default()
+                .push(idx);
+        }
+    }
+
+    let mut remap: HashMap<usize, usize> = HashMap::new();
+    for (_name, idxs) in groups {
+        if idxs.len() < 2 {
+            continue;
+        }
+        // Pick winner: highest chunk count; on tie, prefer renamed.
+        let mut winner = idxs[0];
+        for &candidate in &idxs[1..] {
+            let c_chunks = chunk_count(candidate);
+            let w_chunks = chunk_count(winner);
+            use std::cmp::Ordering;
+            match c_chunks.cmp(&w_chunks) {
+                Ordering::Greater => winner = candidate,
+                Ordering::Less => {}
+                Ordering::Equal => {
+                    if renamed_idxs.contains(&candidate) && !renamed_idxs.contains(&winner) {
+                        winner = candidate;
+                    }
+                }
+            }
+        }
+        for &idx in &idxs {
+            if idx != winner {
+                remap.insert(idx, winner);
+            }
+        }
+    }
+
+    apply_alias_remap_and_compact(
+        entities,
+        mentions,
+        pending_participants,
+        by_folded_name,
+        remap,
+    );
+}
+
+/// Try to strip the longest matching organization prefix from
+/// `name`. Tolerates `'s` after the prefix and requires at least
+/// one whitespace separator. Returns `Some(bare)` only when the
+/// remaining text has ≥ 2 whitespace tokens.
+fn strip_org_prefix(name: &str, org_prefixes_sorted_desc: &[String]) -> Option<String> {
+    let lower = name.to_lowercase();
+    for prefix in org_prefixes_sorted_desc {
+        // Try `<prefix>'s ` first, then `<prefix> `.
+        for sep in &["'s ", " "] {
+            let pat = format!("{prefix}{sep}");
+            if lower.starts_with(&pat) {
+                // Slice from the original string to preserve casing
+                // of the remainder. UTF-8-safe because `pat` is an
+                // ASCII match anchored at the start.
+                let cut = pat.len();
+                if cut < name.len() {
+                    let bare = name[cut..].trim();
+                    if bare.split_whitespace().count() >= 2 {
+                        return Some(bare.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Shared compaction step used by every `consolidate_*` pass.
 /// Appends each source's display name to its target's aliases,
 /// rewrites all `mentions` / `pending_participants` indices to point
@@ -935,16 +1134,32 @@ fn apply_alias_remap_and_compact(
         }
     }
 
-    // Append source display names to their target's alias list.
+    // Append source display names to their target's alias list,
+    // and migrate any aliases the source had collected from earlier
+    // passes (e.g. the org-prefixed canonical preserved before the
+    // rename). Without this, aliases earned in earlier consolidation
+    // steps get dropped when the entity is folded.
     for (&src, &tgt) in &remap {
-        let alias = entities[src].canonical_name.clone();
+        let primary_alias = entities[src].canonical_name.clone();
+        let inherited_aliases: Vec<String> = entities[src].aliases.clone();
         let target = &mut entities[tgt];
         if !target
             .aliases
             .iter()
-            .any(|a| a.eq_ignore_ascii_case(&alias))
+            .any(|a| a.eq_ignore_ascii_case(&primary_alias))
+            && !target.canonical_name.eq_ignore_ascii_case(&primary_alias)
         {
-            target.aliases.push(alias);
+            target.aliases.push(primary_alias);
+        }
+        for inh in inherited_aliases {
+            if !target
+                .aliases
+                .iter()
+                .any(|a| a.eq_ignore_ascii_case(&inh))
+                && !target.canonical_name.eq_ignore_ascii_case(&inh)
+            {
+                target.aliases.push(inh);
+            }
         }
     }
 
@@ -1269,6 +1484,150 @@ mod tests {
         assert!(failures
             .iter()
             .all(|f| f.kind != FailureKind::OrphanParticipant));
+    }
+
+    #[test]
+    fn strip_org_prefix_strips_apostrophe_s() {
+        let prefixes = vec!["acme corp".to_string(), "acme".to_string()];
+        let mut sorted = prefixes.clone();
+        sorted.sort_by_key(|s| std::cmp::Reverse(s.chars().count()));
+        // Acme Corp's API migration → API migration
+        assert_eq!(
+            strip_org_prefix("Acme Corp's API migration", &sorted).as_deref(),
+            Some("API migration")
+        );
+        // Acme API migration → API migration (first-token match)
+        assert_eq!(
+            strip_org_prefix("Acme API migration", &sorted).as_deref(),
+            Some("API migration")
+        );
+        // Bare canonical without org prefix → no strip
+        assert!(strip_org_prefix("API migration", &sorted).is_none());
+        // Single-token bare → reject (would produce lone noun)
+        assert!(strip_org_prefix("Acme procurement", &sorted).is_none());
+    }
+
+    #[test]
+    fn strip_org_prefix_prefers_longer_org_match() {
+        let prefixes = {
+            let mut p = vec![
+                "stonewell industries".to_string(),
+                "stonewell".to_string(),
+            ];
+            p.sort_by_key(|s| std::cmp::Reverse(s.chars().count()));
+            p
+        };
+        // Should strip the full "Stonewell Industries" prefix, not
+        // just "Stonewell".
+        assert_eq!(
+            strip_org_prefix("Stonewell Industries platform overhaul", &prefixes).as_deref(),
+            Some("platform overhaul")
+        );
+    }
+
+    #[test]
+    fn consolidate_renames_org_prefixed_initiative_to_bare_canonical() {
+        // No bare canonical exists in extracted set — only the
+        // org-prefixed form. After consolidation the initiative
+        // should be renamed to the bare form, with the prefixed
+        // name preserved as an alias.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.organizations.push(OrganizationEntity {
+            name: "Helios Health".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c1".into()],
+        });
+        b1.initiatives.push(InitiativeEntity {
+            name: "Helios HIPAA compliance review".into(),
+            status: None,
+            participants: Vec::new(),
+            description: None,
+            mentions: vec!["c1".into(), "c2".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+
+        let init = merged
+            .entities
+            .iter()
+            .find(|e| matches!(e.entity_type, EntityType::Initiative))
+            .expect("initiative survives");
+        assert_eq!(init.canonical_name, "HIPAA compliance review");
+        assert!(init
+            .aliases
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case("Helios HIPAA compliance review")));
+    }
+
+    #[test]
+    fn consolidate_merges_org_prefixed_with_existing_bare_canonical() {
+        // Both "API migration" and "Acme API migration" extracted.
+        // After consolidation: a single canonical with the prefixed
+        // form folded in as alias. Higher-chunk-count entity wins.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.organizations.push(OrganizationEntity {
+            name: "Acme Corp".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c1".into()],
+        });
+        b1.initiatives.push(InitiativeEntity {
+            name: "API migration".into(),
+            status: None,
+            participants: Vec::new(),
+            description: None,
+            mentions: vec!["c1".into(), "c2".into(), "c3".into()],
+        });
+        b1.initiatives.push(InitiativeEntity {
+            name: "Acme API migration".into(),
+            status: None,
+            participants: Vec::new(),
+            description: None,
+            mentions: vec!["c4".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+
+        let inits: Vec<&Entity> = merged
+            .entities
+            .iter()
+            .filter(|e| matches!(e.entity_type, EntityType::Initiative))
+            .collect();
+        assert_eq!(inits.len(), 1, "duplicate initiatives must collapse");
+        assert_eq!(inits[0].canonical_name, "API migration");
+        assert!(inits[0]
+            .aliases
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case("Acme API migration")));
+    }
+
+    #[test]
+    fn consolidate_does_not_strip_when_no_matching_org() {
+        // Initiative with a name that *looks* like a possessive but
+        // doesn't match any extracted Organization → leave alone.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.organizations.push(OrganizationEntity {
+            name: "Acme Corp".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c1".into()],
+        });
+        b1.initiatives.push(InitiativeEntity {
+            name: "Globex API migration".into(), // Globex isn't an org we extracted
+            status: None,
+            participants: Vec::new(),
+            description: None,
+            mentions: vec!["c2".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+        let init = merged
+            .entities
+            .iter()
+            .find(|e| matches!(e.entity_type, EntityType::Initiative))
+            .unwrap();
+        assert_eq!(init.canonical_name, "Globex API migration");
     }
 
     #[test]
