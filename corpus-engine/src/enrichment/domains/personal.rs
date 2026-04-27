@@ -303,15 +303,24 @@ Definitions:
   craft") are NOT initiatives — initiatives imply effort toward a
   future state.
 
-  Tactics, milestones, sub-strategies, or implementation paths
-  *within* an initiative are NOT separate initiatives — they belong
-  to the parent. "API migration" is an initiative; the "parallel
-  migration path" the user agreed to ship is a tactic inside it,
-  not a separate initiative.
+  Tactics, milestones, sub-strategies, implementation paths, or
+  work artifacts *within* an initiative are NOT separate initiatives
+  — they belong to the parent. "API migration" is an initiative;
+  the "parallel migration path" the user agreed to ship is a tactic
+  inside it, not a separate initiative.
 
-  Use the canonical name without possessive prefixes — write
-  "Q3 enterprise push", not "Acme's Q3 enterprise push". Capture
-  organizational ownership through `participants`, not in the name.
+  Single-memory work products are NOT initiatives — they're
+  artifacts. "the migration plan revision", "the SOC2 crosswalk",
+  "the SOW reformat", "a scoping doc" are work artifacts, not
+  initiatives, even when the user is actively producing them. An
+  initiative has a stable name across multiple memories.
+
+  Use the canonical name without possessive prefixes or scope
+  suffixes — write "Q3 enterprise push", not "Acme's Q3 enterprise
+  push"; write "Architecture refresh", not "Architecture refresh
+  discovery". Capture organizational ownership through
+  `participants`, not in the name; capture phase or status through
+  the `status` field.
 
 When the same person, organization, or initiative is referenced both
 by short form ("Mike", "Acme") and long form ("Mike Torres",

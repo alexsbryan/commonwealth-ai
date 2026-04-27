@@ -325,16 +325,30 @@ Definitions:
   committed to X", it's an initiative; if they could only say "I
   think about X", it's not.
 
-  Tactics, milestones, sub-strategies, or implementation paths
-  *within* an initiative are NOT separate initiatives — they belong
-  to the parent. Example: "API migration" is an initiative; the
-  "parallel migration path" the user agreed to ship is a tactic
-  inside it, not a separate initiative.
+  Tactics, milestones, sub-strategies, implementation paths, or
+  work artifacts *within* an initiative are NOT separate initiatives
+  — they belong to the parent. Example: "API migration" is an
+  initiative; the "parallel migration path" the user agreed to ship
+  is a tactic inside it, not a separate initiative.
 
-  Use the canonical name without possessive prefixes — write
-  "Q3 enterprise push", not "Meridian's Q3 enterprise push" or
-  "Acme's API migration". Capture organizational ownership through
-  `participants` (the org's atom appears there), not in the name.
+  Single-conversation work products and deliverables are NOT
+  initiatives — they're artifacts inside an initiative or client
+  engagement. Things that are NOT initiatives, even when the user
+  is actively working on them: "the migration plan revision",
+  "the SOC2 crosswalk", "the SOW reformat", "the discovery scope",
+  "usage-based pricing alternative", "a SOW", "a draft", "a
+  scoping doc". An initiative has a stable name the user uses
+  *across multiple conversations*; if the phrase only appears in
+  one conversation and reads like a task title, it's an artifact,
+  not an initiative.
+
+  Use the canonical name without possessive prefixes or scope
+  suffixes — write "Q3 enterprise push", not "Meridian's Q3
+  enterprise push" or "Acme's API migration"; write "Architecture
+  refresh", not "Architecture refresh discovery" or "Architecture
+  refresh kickoff". Capture organizational ownership through
+  `participants` (the org's atom appears there), not in the name;
+  capture phase or status through the `status` field.
 
 When the same person, organization, or initiative is referenced both
 by short form ("Mike", "Acme") and long form ("Mike Torres",
