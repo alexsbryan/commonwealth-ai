@@ -245,15 +245,31 @@ async fn main() {
             local_only_skills = ?local_only_skill_ids,
             "knowledge_view: enabled; skills excluded from conversational corpus"
         );
-        let mgr = Arc::new(
-            sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-                Arc::clone(&corpus_engine),
-                inference_fn.clone(),
-                config.store.path.clone(),
-                local_only_skill_ids,
-            )
-            .await,
-        );
+        // Project-local ATOS state — `.sovereign/{features.db,project.toml}`
+        // at the current working directory's repo root. Same layout
+        // `sovereign project serve` writes to. Wired into the manager
+        // so the strategic digest can render ATOS phase / drift on
+        // initiative entities; both paths are optional (the splice
+        // path falls through gracefully when missing).
+        let project_sov_dir = std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(".sovereign");
+        let features_db_path = project_sov_dir.join("features.db");
+        let project_toml_path = project_sov_dir.join("project.toml");
+        let mut mgr = sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+            Arc::clone(&corpus_engine),
+            inference_fn.clone(),
+            config.store.path.clone(),
+            local_only_skill_ids,
+        )
+        .await;
+        if features_db_path.exists() {
+            mgr = mgr.with_features_db_path(features_db_path);
+        }
+        if project_toml_path.exists() {
+            mgr = mgr.with_project_toml_path(project_toml_path);
+        }
+        let mgr = Arc::new(mgr);
         // Install as the store's observer now that the manager exists.
         // The store was Arc-wrapped earlier; interior mutability on the
         // observer slot lets us swap it in without restructuring.

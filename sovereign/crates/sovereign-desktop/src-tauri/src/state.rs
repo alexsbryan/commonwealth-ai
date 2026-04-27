@@ -804,15 +804,29 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             local_only_skills = ?local_only_skill_ids,
             "knowledge_view: enabled; skills excluded from conversational corpus"
         );
-        let mgr = Arc::new(
-            sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-                Arc::clone(&corpus_engine),
-                inference_fn.clone(),
-                knowledge_view_db_path,
-                local_only_skill_ids,
-            )
-            .await,
-        );
+        // Project-local ATOS paths — same `.sovereign/` layout as the
+        // CLI / server bootstraps. Optional; the splice path's
+        // strategic block falls through gracefully when either path
+        // is missing.
+        let project_sov_dir = std::env::current_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join(".sovereign");
+        let features_db_path = project_sov_dir.join("features.db");
+        let project_toml_path = project_sov_dir.join("project.toml");
+        let mut mgr = sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+            Arc::clone(&corpus_engine),
+            inference_fn.clone(),
+            knowledge_view_db_path,
+            local_only_skill_ids,
+        )
+        .await;
+        if features_db_path.exists() {
+            mgr = mgr.with_features_db_path(features_db_path);
+        }
+        if project_toml_path.exists() {
+            mgr = mgr.with_project_toml_path(project_toml_path);
+        }
+        let mgr = Arc::new(mgr);
         if let Some(concrete) = state.sqlite_store.read().await.as_ref() {
             concrete.set_observer(
                 mgr.clone() as sovereign_core::observer::SharedStateStoreObserver,

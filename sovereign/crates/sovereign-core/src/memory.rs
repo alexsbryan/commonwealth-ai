@@ -366,8 +366,13 @@ pub async fn detect_contradictions(
 
 // ─── Confidence Decay ─────────────────────────────────────────
 
-const DEFAULT_DECAY_RATE: f64 = 0.10; // 10% per month
-const DEFAULT_PRUNE_THRESHOLD: f64 = 0.2;
+/// Default uniform decay rate: 10% confidence loss per month.
+/// Exposed so the Runtime's prune path can construct an explicit
+/// `prune_decayed_memories_with_config` call when it has an entity
+/// inventory available.
+pub const DEFAULT_DECAY_RATE: f64 = 0.10;
+/// Confidence floor below which a memory is dropped during prune.
+pub const DEFAULT_PRUNE_THRESHOLD: f64 = 0.2;
 
 /// Inventory of entity names that mark a memory as relationally /
 /// strategically relevant. Memories whose `content` mentions any

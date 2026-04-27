@@ -31,7 +31,9 @@ arrow-array = "57"
 # Document parsing (RAG pipeline)
 pdf-extract = "0.7"
 # Stable, cryptographic short-hash for deriving corpus IDs from a
-# canonicalised root path. Used by local_corpus::config.
+# canonicalised root path. Used by local_corpus::config and by the
+# splice-extension module's CHARTER.md drift detector (mirroring
+# sovereign-atos::approval::detect_drift without the cross-crate dep).
 sha2 = "0.10"
 # Recursive directory walking for the PreScanner; keeps hidden-dir
 # filtering (`.obsidian`, `.git`) a single-call predicate.

@@ -523,15 +523,30 @@ async fn main() {
             "knowledge_view: enabled; {} local-only skill(s) excluded from conversational corpus",
             local_only_skill_ids.len()
         );
-        let mgr = Arc::new(
-            sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-                Arc::clone(&corpus_engine),
-                inference_fn.clone(),
-                db_path.clone(),
-                local_only_skill_ids,
-            )
-            .await,
-        );
+        // Project-local ATOS store paths — `.sovereign/features.db`
+        // + `.sovereign/project.toml` at the current repo root.
+        // Mirrors `sovereign atos` subcommand layout. Used by the
+        // splice path to compose initiative entities with phase + drift
+        // annotations on the strategic digest.
+        let project_sov_dir = std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(".sovereign");
+        let features_db_path = project_sov_dir.join("features.db");
+        let project_toml_path = project_sov_dir.join("project.toml");
+        let mut mgr = sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+            Arc::clone(&corpus_engine),
+            inference_fn.clone(),
+            db_path.clone(),
+            local_only_skill_ids,
+        )
+        .await;
+        if features_db_path.exists() {
+            mgr = mgr.with_features_db_path(features_db_path);
+        }
+        if project_toml_path.exists() {
+            mgr = mgr.with_project_toml_path(project_toml_path);
+        }
+        let mgr = Arc::new(mgr);
         store_concrete.set_observer(
             mgr.clone() as sovereign_core::observer::SharedStateStoreObserver,
         );

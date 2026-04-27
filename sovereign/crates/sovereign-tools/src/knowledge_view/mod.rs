@@ -27,6 +27,8 @@ pub mod digest;
 pub mod manager;
 pub mod recipes;
 pub mod relational;
+#[cfg(feature = "treesitter")]
+pub mod splice_extension;
 pub mod strategic;
 pub mod timeline;
 pub mod tokens;

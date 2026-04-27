@@ -2048,9 +2048,24 @@ impl Runtime {
             .await?;
         }
 
-        let pruned = memory::prune_decayed_memories(self.store.as_ref(), now())
-            .await
-            .unwrap_or(0);
+        // Pull a fresh entity inventory from the LandscapeDigestProvider
+        // (typically `sovereign-tools::KnowledgeViewManager`). When
+        // present, memories that mention any canonical entity name
+        // decay at half rate (Phase 7 — relationship-weighted decay).
+        // `None` = uniform decay, identical to the pre-Phase-7 path.
+        let inventory = match self.landscape_digests.as_ref() {
+            Some(p) => p.entity_inventory().await,
+            None => None,
+        };
+        let pruned = memory::prune_decayed_memories_with_config(
+            self.store.as_ref(),
+            now(),
+            memory::DEFAULT_DECAY_RATE,
+            memory::DEFAULT_PRUNE_THRESHOLD,
+            inventory.as_ref(),
+        )
+        .await
+        .unwrap_or(0);
         if pruned > 0 {
             tracing::info!(pruned, "memory: pruned decayed memories");
         }

@@ -29,6 +29,19 @@ pub trait LandscapeDigestProvider: Send + Sync {
         ctx: &mut ConversationContext,
         active_skill: Option<&str>,
     );
+
+    /// Snapshot of canonical entity names + aliases extracted from
+    /// the live atlases. Feeds the relationship-weighted memory
+    /// decay path (`memory::prune_decayed_memories_with_config`):
+    /// memories that mention any name in the inventory decay at
+    /// half rate.
+    ///
+    /// Default impl returns `None` — uniform decay applies. The
+    /// `KnowledgeViewManager` implementation overrides this to
+    /// expose its on-disk atom inventory.
+    async fn entity_inventory(&self) -> Option<crate::memory::EntityInventory> {
+        None
+    }
 }
 
 // ─── 1. Inference ──────────────────────────────────────────────
