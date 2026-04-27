@@ -62,6 +62,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "install" => cmd_corpus_install(&args[1..]).await,
         "remove" => cmd_corpus_remove(&args[1..]).await,
         "status" => cmd_corpus_status().await,
+        "diag" => cmd_corpus_diag(&args[1..]).await,
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
         other => {
@@ -145,6 +146,7 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("install <id>",              "Install a corpus (e.g. 'wikipedia')"),
             ("remove <id>",               "Remove an installed corpus"),
             ("status",                    "Show shard status for all corpora"),
+            ("diag <id>",                 "Audit an installed corpus: distinct-article count vs. recipe filter"),
             ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
             ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
         ]),
@@ -358,6 +360,239 @@ async fn cmd_corpus_remove(args: &[String]) -> i32 {
 async fn cmd_corpus_status() -> i32 {
     println!("(corpus status requires a running daemon)");
     0
+}
+
+/// `sovereign corpus diag <corpus_id> [--titles-file <path>]`
+///
+/// Audit an installed corpus's distinct-article coverage. Reads the
+/// chunks table directly via `CorpusIndex::list_indexed_source_doc_ids`
+/// — no daemon needed — and compares the article URL set against the
+/// recipe's title filter. For Wikipedia (Vital Articles L5 Core scope)
+/// this surfaces silent gaps caused by the resume-cursor bug where the
+/// `committed_iter_pos` coordinate space shifted between runs as
+/// `processed_shards` shrunk the assigned set.
+///
+/// Output: distinct articles in index, expected from filter, missing
+/// titles count, plus a sample of up to 10 missing titles for spot-
+/// checking. Non-zero exit when the gap exceeds 1% of the filter
+/// expected size, so this is wireable into a CI / preflight check.
+async fn cmd_corpus_diag(args: &[String]) -> i32 {
+    let mut corpus_id: Option<String> = None;
+    let mut titles_file: Option<PathBuf> = None;
+    let mut sample_size: usize = 10;
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--titles-file" => {
+                if let Some(p) = iter.next() {
+                    titles_file = Some(PathBuf::from(p));
+                } else {
+                    eprintln!("--titles-file requires a path argument");
+                    return 1;
+                }
+            }
+            "--sample" => {
+                if let Some(n) = iter.next() {
+                    match n.parse::<usize>() {
+                        Ok(v) => sample_size = v,
+                        Err(_) => {
+                            eprintln!("--sample requires a non-negative integer");
+                            return 1;
+                        }
+                    }
+                } else {
+                    eprintln!("--sample requires an integer argument");
+                    return 1;
+                }
+            }
+            "--help" | "-h" => {
+                println!(
+                    "Usage: sovereign corpus diag <corpus_id> \
+                     [--titles-file <path>] [--sample <n>]\n\n\
+                     Audit a corpus index against its filter title list. \
+                     For wikipedia, --titles-file defaults to the bundled \
+                     Vital Articles Level 5 list."
+                );
+                return 0;
+            }
+            other if !other.starts_with('-') => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(other.to_string());
+                }
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                return 1;
+            }
+        }
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("Missing corpus ID. Usage: sovereign corpus diag <corpus_id>");
+        return 1;
+    };
+
+    // Resolve the same indexes dir the daemon uses: read
+    // `~/.config/sovereign/config.toml`'s `[data] dir` if present,
+    // fall back to `~/.sovereign`. Diag is a read-only command so a
+    // mis-resolution is recoverable by passing --titles-file later;
+    // we still want it to "just work" against the live install
+    // without operator config.
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|cfg| cfg.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        });
+    let index_dir = data_dir.join("indexes");
+    let index_path = index_dir.join(&corpus_id);
+
+    if !index_path.exists() {
+        eprintln!(
+            "Index not found at {}. Has this corpus been installed?",
+            index_path.display()
+        );
+        return 1;
+    }
+
+    println!("Opening index at {} …", index_path.display());
+    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("Failed to open corpus index: {e}");
+            return 1;
+        }
+    };
+
+    let chunk_count = index.chunk_count().await.unwrap_or(0);
+    println!("  chunks in table: {chunk_count}");
+
+    println!("Scanning distinct source_doc_ids (this reads the full URL column)…");
+    let indexed_ids = match index.list_indexed_source_doc_ids().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Failed to list distinct source_doc_ids: {e}");
+            return 1;
+        }
+    };
+    println!("  distinct articles in index: {}", indexed_ids.len());
+
+    // Map each source_doc_id (URL) → normalized title for comparison
+    // against the filter list. Wikipedia URLs decode via
+    // `wiki_title_from_url`; for non-Wikipedia corpora the URL itself
+    // is treated as the title — same fallback as the filter uses.
+    let mut indexed_titles: std::collections::HashSet<String> =
+        std::collections::HashSet::with_capacity(indexed_ids.len());
+    for id in &indexed_ids {
+        let title = corpus_engine::extractors::wikipedia_types::wiki_title_from_url(id)
+            .unwrap_or_else(|| id.clone());
+        indexed_titles.insert(corpus_engine::filters::normalize_title(&title));
+    }
+
+    // Decide which title list to compare against. For wikipedia we
+    // default to the bundled VITAL_ARTICLES_L5; --titles-file overrides.
+    let (expected_titles, source_label) = match (titles_file.as_deref(), corpus_id.as_str()) {
+        (Some(path), _) => {
+            let bytes = match std::fs::read(path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!("Failed to read --titles-file {}: {e}", path.display());
+                    return 1;
+                }
+            };
+            (load_title_set(&bytes), format!("{}", path.display()))
+        }
+        (None, "wikipedia") => (
+            load_title_set(corpus_engine::filters::assets::VITAL_ARTICLES_L5),
+            "bundled vital_articles_l5".to_string(),
+        ),
+        (None, _) => {
+            println!(
+                "\nNo title list specified and no default for corpus '{corpus_id}'. \
+                 Pass --titles-file to compare against an expected set."
+            );
+            return 0;
+        }
+    };
+
+    let expected_count = expected_titles.len();
+    let intersect = indexed_titles.intersection(&expected_titles).count();
+    let missing: Vec<&String> =
+        expected_titles.difference(&indexed_titles).collect();
+    let unexpected: Vec<&String> =
+        indexed_titles.difference(&expected_titles).collect();
+
+    println!("\nFilter list: {source_label}");
+    println!("  titles in list:           {expected_count}");
+    println!("  in list ∩ in index:       {intersect}");
+    println!(
+        "  in list, missing in index: {} ({:.2}%)",
+        missing.len(),
+        if expected_count > 0 {
+            100.0 * missing.len() as f64 / expected_count as f64
+        } else {
+            0.0
+        }
+    );
+    println!(
+        "  in index, not in list:    {} (likely redirect / normalisation drift)",
+        unexpected.len()
+    );
+
+    if sample_size > 0 && !missing.is_empty() {
+        println!("\nSample of missing titles (up to {sample_size}):");
+        let mut sorted_missing: Vec<&String> = missing.iter().copied().collect();
+        sorted_missing.sort();
+        for t in sorted_missing.iter().take(sample_size) {
+            println!("  • {t}");
+        }
+    }
+    if sample_size > 0 && !unexpected.is_empty() {
+        println!("\nSample of unexpected titles (up to {sample_size}):");
+        let mut sorted_unexpected: Vec<&String> = unexpected.iter().copied().collect();
+        sorted_unexpected.sort();
+        for t in sorted_unexpected.iter().take(sample_size) {
+            println!("  • {t}");
+        }
+    }
+
+    // Exit non-zero if the gap is material. 1% threshold is arbitrary
+    // but above the noise floor for L5 normalization quirks (a few
+    // dozen titles shift between curator pulls).
+    let gap_pct = if expected_count > 0 {
+        100.0 * missing.len() as f64 / expected_count as f64
+    } else {
+        0.0
+    };
+    if gap_pct > 1.0 {
+        eprintln!(
+            "\n⚠ Material gap detected: {} titles missing ({:.2}%). \
+             This may indicate the resume-cursor coordinate-space bug \
+             — see plan to re-ingest with shard-set-drift fix.",
+            missing.len(),
+            gap_pct
+        );
+        return 2;
+    }
+
+    0
+}
+
+/// Parse a newline-delimited title list (the same format
+/// `TitleListFilter::from_bytes` accepts) into a normalized
+/// `HashSet<String>`. Comments (`#…`) and blank lines are skipped.
+fn load_title_set(bytes: &[u8]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    for line in bytes.split(|&b| b == b'\n') {
+        let line = std::str::from_utf8(line).unwrap_or("").trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        out.insert(corpus_engine::filters::normalize_title(line));
+    }
+    out
 }
 
 async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
