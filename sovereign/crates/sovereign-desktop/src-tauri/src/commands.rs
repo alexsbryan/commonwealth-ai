@@ -1691,21 +1691,24 @@ fn ingest_progress_to_payload(
         } => CorpusProgressPayload {
             corpus_id: corpus_id.into(),
             phase: "embedding".into(),
-            // Filter-derived percent wins when known: for filtered
-            // ingests (Wikipedia Core, etc.) the source ZIP must be
-            // scanned in full but the work scales with accepted docs,
-            // not bytes streamed. `docs_processed / expected_docs` is
-            // the only honest signal in that case. Fallback to
-            // chunk-total ratio for unfiltered ingests; both fall to 0
-            // until the pipeline has enough information.
-            percent: filtered_embed_percent(*docs_processed, *expected_docs)
-                .unwrap_or_else(|| {
-                    if *total > 0 {
-                        (*chunks_embedded as f32 / *total as f32) * 100.0
-                    } else {
-                        0.0
-                    }
-                }),
+            // Live-event path has no shard-scan signal, so all we can
+            // do is the legacy chunk-total ratio (0 until the pipeline
+            // knows the chunk count). The polling path
+            // (`status_entry_to_payload`) carries shard-scan progress
+            // via `entry.estimated_fraction` and is the primary signal
+            // the desktop banner consumes.
+            //
+            // We deliberately do NOT compute `docs_processed /
+            // expected_docs` here, even with a clamp. For Wikipedia
+            // JSONL one accepted article emits ~10× sections; the
+            // ratio hits 100% within minutes of an embed run that has
+            // hours left. The "X / Y articles" message below carries
+            // the filter-scope context without lying about completion.
+            percent: if *total > 0 {
+                (*chunks_embedded as f32 / *total as f32) * 100.0
+            } else {
+                0.0
+            },
             chunks_processed: *chunks_embedded,
             message: Some(format_embed_message(
                 *chunks_embedded,
@@ -2975,27 +2978,20 @@ pub fn spawn_corpus_status_poller(
 fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
     use corpus_engine::IngestProgress as P;
 
-    // Filter-derived percent (when the latest event carries it) wins
-    // over the shard-based estimate. Shard-scan progress lies for
-    // filtered ingests — the extractor has to read the entire source
-    // ZIP regardless of how few documents the filter accepts, so a
-    // 5%-shards-scanned reading on a Vital-Articles-filtered Wikipedia
-    // run misleads the user into expecting 19× more wall-clock when
-    // the embed work is actually nearly done.
-    let filter_percent = match entry.progress.as_ref() {
-        Some(P::Embedding {
-            docs_processed,
-            expected_docs,
-            ..
-        }) => filtered_embed_percent(*docs_processed, *expected_docs),
-        _ => None,
-    };
-    let percent = filter_percent.unwrap_or_else(|| {
-        entry
-            .estimated_fraction
-            .map(|f| (f * 100.0).clamp(0.0, 100.0))
-            .unwrap_or(0.0)
-    });
+    // Shard-scan progress is the primary signal. For filtered ingests
+    // (Wikipedia Core, etc.) the iterator must scan the entire source
+    // ZIP, so shards-completed/shards-total tracks wall-clock honestly
+    // even when most articles are rejected. An earlier revision tried
+    // `docs_processed / expected_docs` as a "filter-aware" percent —
+    // wrong, because docs are *sections* (~10× the accepted article
+    // count for `wikipedia_jsonl`) while expected_docs is the title
+    // count, so the ratio hit 100% with hours of work still ahead.
+    // The "X / Y articles" string in the message line below carries
+    // the filter-scope context without conflating units in the bar.
+    let percent = entry
+        .estimated_fraction
+        .map(|f| (f * 100.0).clamp(0.0, 100.0))
+        .unwrap_or(0.0);
 
     let (phase, chunks_processed, message) = match entry.progress.as_ref() {
         Some(P::Downloading {
@@ -3102,31 +3098,6 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
         chunks_processed,
         message,
     }
-}
-
-/// Compute the embed-phase percent from filter-derived expected-doc
-/// count. Returns `None` when the denominator is unknown (`expected
-/// is None` or zero) so the caller can fall back to a different
-/// estimate.
-///
-/// Why this is honest where the chunk- and shard-based estimates are
-/// not: `expected_docs` comes from the filter's `expected_count()` —
-/// for a `title_list` filter that's the literal number of titles in
-/// the bank file, deterministic and known up-front. `docs_processed`
-/// counts source documents the filter has accepted so far, also
-/// deterministic. Their ratio reflects real progress against the
-/// scope the filter defines, regardless of how many bytes of source
-/// ZIP have been streamed past the iterator.
-///
-/// Clamped to `[0.0, 100.0]` because the filter's expected_count is an
-/// *upper bound* and per-section emission may push docs_processed
-/// past it momentarily near the end.
-fn filtered_embed_percent(docs_processed: u64, expected: Option<u64>) -> Option<f32> {
-    let total = expected?;
-    if total == 0 {
-        return None;
-    }
-    Some(((docs_processed as f32 / total as f32) * 100.0).clamp(0.0, 100.0))
 }
 
 /// Format the embed-phase message line that both the live-event and
@@ -3684,55 +3655,33 @@ mod tests {
     }
 
     #[test]
-    fn payload_for_embedding_prefers_filter_derived_percent() {
-        // Wikipedia Core scenario: shard-scan total is irrelevant
-        // (filter rejects ~99% of source ZIP). The percent should come
-        // from `docs_processed / expected_docs`, not from the chunk
-        // total which lags far behind real progress.
+    fn payload_for_embedding_does_not_overshoot_on_per_section_emit() {
+        // Wikipedia JSONL emits one ExtractedDoc per section; for a
+        // typical curated set that's ~10× the accepted-article count.
+        // Confirm the live-event percent does NOT compute
+        // `docs_processed / expected_docs` — that was an earlier
+        // (wrong) attempt at filter-aware progress that hit 100%
+        // within minutes of an embed run with hours left. Polling-side
+        // shard-scan progress is the honest signal; the live-event
+        // path falls back to the chunk-total ratio (0 until known).
         let payload = ingest_progress_to_payload(
             "wikipedia",
             &IngestProgress::Embedding {
                 chunks_embedded: 339_200,
-                total: 0,                  // unknown — would have given 0.0
-                docs_processed: 25_643,    // ~half of 51,286 L5 articles
-                chunks_per_sec: 32.0,
-                expected_docs: Some(51_286),
+                total: 0, // unknown (streaming) → 0% live-event percent
+                docs_processed: 592_253, // 11× over the title cap
+                chunks_per_sec: 34.0,
+                expected_docs: Some(51_222),
             },
         );
         assert_eq!(payload.phase, "embedding");
-        // Half of ~51K → ~50%, not 0%.
-        assert!(
-            (payload.percent - 50.0).abs() < 0.5,
-            "filter-derived percent should be ~50, got {}",
-            payload.percent,
+        assert_eq!(
+            payload.percent, 0.0,
+            "live-event path must defer to polling shard-scan progress, not lie about completion"
         );
-    }
-
-    #[test]
-    fn payload_for_embedding_clamps_filter_overshoot() {
-        // Per-section emission can push docs_processed past
-        // expected_docs near the end (the filter expects at most N
-        // article-titles but each article emits multiple sections).
-        // Clamp to 100% so the bar doesn't read 130%.
-        let payload = ingest_progress_to_payload(
-            "wikipedia",
-            &IngestProgress::Embedding {
-                chunks_embedded: 339_200,
-                total: 0,
-                docs_processed: 128_000, // 2.5× the title count
-                chunks_per_sec: 32.0,
-                expected_docs: Some(51_286),
-            },
-        );
-        assert!(payload.percent <= 100.0);
-        assert!(payload.percent >= 99.5);
-    }
-
-    #[test]
-    fn filtered_embed_percent_returns_none_for_unknown_total() {
-        assert!(filtered_embed_percent(100, None).is_none());
-        assert!(filtered_embed_percent(100, Some(0)).is_none());
-        assert!(filtered_embed_percent(0, Some(1000)).is_some());
+        // The "/ Y articles" context still appears in the message.
+        let msg = payload.message.as_deref().unwrap_or_default();
+        assert!(msg.contains("articles"), "{msg}");
     }
 
     #[test]

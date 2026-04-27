@@ -243,6 +243,7 @@ mod tests {
                 autostart: true,
                 primary_idle_secs: 60,
                 extras_idle_secs: 0,
+                yield_to_foreground_secs: 60,
             },
             data: sovereign_core::setup_config::DataSection::default(),
         };

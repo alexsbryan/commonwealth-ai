@@ -181,6 +181,29 @@ pub struct DaemonSection {
     /// `max(extras_idle_secs, 10)`.
     #[serde(default = "default_extras_idle_secs")]
     pub extras_idle_secs: u64,
+
+    /// Cooperative yield window for background corpus ingestion. When
+    /// the daemon serves a foreground inference request on
+    /// `/v1/chat/completions`, it stamps a "last-active" timestamp;
+    /// the ingest pipeline polls this before each embed batch and
+    /// enrichment phase and pauses while the timestamp is within
+    /// `yield_to_foreground_secs` seconds of now.
+    ///
+    /// Why: an embed batch is an atomic `llama_decode` that can hold
+    /// the GPU for ~7s. While it runs the primary chat slot can't
+    /// interleave tokens, so chat latency collapses (1 tok/s instead
+    /// of 7+ on Q1_0 8B class models). Yielding between batches
+    /// frees the GPU for the user without cancelling ongoing
+    /// ingest work.
+    ///
+    /// `0` (or unset) disables the feature entirely — appropriate
+    /// for batch hosts that never serve interactive chat. Default
+    /// `60` covers the common case where a user might issue a chat
+    /// query and follow it up within a minute. Bump to 120-180 for
+    /// "stay paused while I'm working" behavior, drop to 30 for
+    /// "resume quickly between exchanges".
+    #[serde(default = "default_yield_to_foreground_secs")]
+    pub yield_to_foreground_secs: u64,
 }
 
 /// Filesystem paths for mutable state.
@@ -200,6 +223,7 @@ impl Default for DaemonSection {
             autostart: default_autostart(),
             primary_idle_secs: default_primary_idle_secs(),
             extras_idle_secs: default_extras_idle_secs(),
+            yield_to_foreground_secs: default_yield_to_foreground_secs(),
         }
     }
 }
@@ -218,6 +242,11 @@ fn default_primary_idle_secs() -> u64 { 60 }
 /// stay loaded forever" behaviour — they explicitly opt in by
 /// setting a positive value.
 fn default_extras_idle_secs() -> u64 { 0 }
+/// Default `60` enables foreground-yield with a one-minute window:
+/// background ingest pauses for a minute after each chat request, then
+/// resumes. Set to `0` in `config.toml` to disable on batch hosts
+/// where ingest throughput trumps interactive latency.
+fn default_yield_to_foreground_secs() -> u64 { 60 }
 
 /// `~/.sovereign/`. Previously lived in `sovereign-cli::util::dirs`;
 /// inlined here so `sovereign-core` has no dependency on the CLI crate.
@@ -373,6 +402,39 @@ embed = "/m/e.gguf"
         assert_eq!(cfg.daemon.client_port, 9741);
         assert_eq!(cfg.daemon.internal_port, 9742);
         assert!(cfg.daemon.autostart);
+    }
+
+    #[test]
+    fn yield_to_foreground_secs_defaults_to_60() {
+        // A config that omits the field must come back with the
+        // 60-second default so existing operators get yield enabled
+        // without editing config.toml. Lock the default here so a
+        // future bump (or zero-out) is intentional and reviewed.
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.daemon.yield_to_foreground_secs, 60);
+    }
+
+    #[test]
+    fn yield_to_foreground_secs_explicit_override() {
+        // Operators can set 0 to disable, or a higher value for a
+        // longer pause window.
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+
+[daemon]
+yield_to_foreground_secs = 0
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.daemon.yield_to_foreground_secs, 0);
     }
 
     #[test]

@@ -998,8 +998,40 @@ impl EmbeddedDaemon {
             mesh,
             mesh_store,
             app_registry,
-            corpus_engine,
+            corpus_engine.clone(),
         );
+
+        // Apply foreground-yield config from setup_config and install
+        // the AppState-backed YieldHook on the corpus engine.
+        //
+        // The wiring order is load-bearing: AppState must exist
+        // (its atomics are the YieldHook's backing store) BEFORE we
+        // install the hook on the engine. We do it here rather than
+        // at engine construction time because the engine is built by
+        // the desktop / CLI long before AppState exists. The hook is
+        // a thin Arc<AppStateInner> wrapper, so the install is one
+        // method call.
+        //
+        // When `yield_to_foreground_secs = 0` the hook still gets
+        // wired but `should_yield` short-circuits to false — so the
+        // ingest pipeline pays only the cost of one rwlock read +
+        // one atomic load per embed batch when the feature is off.
+        if let Some(engine) = corpus_engine.as_ref() {
+            if let Some(cfg) = self.setup_config.read().await.as_ref() {
+                let secs = cfg.daemon.yield_to_foreground_secs;
+                app_state.set_yield_window_secs(secs);
+                info!(
+                    yield_to_foreground_secs = secs,
+                    "foreground-yield: window configured"
+                );
+            }
+            let hook: Arc<dyn corpus_engine::YieldHook> =
+                commonwealth_api::yield_hook::AppStateYieldHook::new(
+                    app_state.inner.clone(),
+                );
+            engine.set_yield_hook(hook);
+            info!("foreground-yield: hook installed on corpus engine");
+        }
 
         // If Sovereign installed an InferenceProvider, wrap it in
         // the OpenAI-flavour adapter so this node's
