@@ -601,6 +601,24 @@ fn merge_responses(
         &mut by_folded_name,
     );
 
+    // Second consolidation pass: conservative typo fold.
+    //
+    // Model occasionally misspells novel proper nouns in some chunks
+    // ("Stonewell Industries" in c11 → "Stonewall Industries" in c20).
+    // Without this pass the two land as separate atoms and timeline /
+    // digest split between them. The rule is deliberately tight:
+    // same kind, both names ≥ 7 characters (so 4-letter name pairs
+    // like "Mike"/"Mile" can't accidentally merge), same first
+    // letter, Levenshtein distance == 1, and the higher-chunk-count
+    // entity wins. Ties don't fold — without a clear winner we'd be
+    // guessing.
+    consolidate_typo_aliases(
+        &mut entities,
+        &mut mentions,
+        &mut pending_participants,
+        &mut by_folded_name,
+    );
+
     // Second pass: resolve initiative participant names to AtomIds.
     // Drop names we don't recognize (orphans) and surface them as
     // failures so the operator can see drift.
@@ -734,11 +752,178 @@ fn consolidate_short_form_aliases(
         }
     }
 
+    apply_alias_remap_and_compact(
+        entities,
+        mentions,
+        pending_participants,
+        by_folded_name,
+        remap,
+    );
+}
+
+/// Conservative typo fold: collapse Person/Organization atoms whose
+/// canonical names differ by a single character ("Stonewell" vs
+/// "Stonewall"). Both names must be ≥7 characters (so short-name
+/// pairs like "Mike"/"Mile" can't accidentally merge), share a first
+/// letter, and the same kind. The atom with more chunk references
+/// wins; ties don't fold.
+///
+/// Runs after `consolidate_short_form_aliases` so the chunk-count
+/// signal already reflects post-canonicalization weight.
+fn consolidate_typo_aliases(
+    entities: &mut Vec<Entity>,
+    mentions: &mut [(usize, String)],
+    pending_participants: &mut [(usize, Vec<String>, usize)],
+    by_folded_name: &mut HashMap<String, usize>,
+) {
+    if entities.len() < 2 {
+        return;
+    }
+
+    // Compute per-entity chunk count from the (idx, chunk_id) pairs
+    // built during the merge loop. A unique chunk_id contributes one
+    // mention; duplicates are deduped here so the count matches what
+    // the atlas writer will emit (one Involves edge per chunk).
+    let mut chunk_counts: HashMap<usize, std::collections::HashSet<String>> = HashMap::new();
+    for (idx, chunk_id) in mentions.iter() {
+        chunk_counts
+            .entry(*idx)
+            .or_default()
+            .insert(chunk_id.clone());
+    }
+    let chunk_count = |idx: usize| -> usize {
+        chunk_counts.get(&idx).map(|s| s.len()).unwrap_or(0)
+    };
+
+    let mut remap: HashMap<usize, usize> = HashMap::new();
+    // Skip entities already remapped (transitive closure not needed
+    // — one fold per source is enough; if A→B and B→C, the second
+    // fold can run in a future pass if quality regressions ever
+    // demand it).
+    for i in 0..entities.len() {
+        if remap.contains_key(&i) {
+            continue;
+        }
+        let a = &entities[i];
+        if !matches!(a.entity_type, EntityType::Person | EntityType::Institution) {
+            continue;
+        }
+        let a_folded = fold_name(&a.canonical_name);
+        if a_folded.chars().count() < 7 {
+            continue;
+        }
+        let a_first = a_folded.chars().next();
+        for j in (i + 1)..entities.len() {
+            if remap.contains_key(&j) {
+                continue;
+            }
+            let b = &entities[j];
+            if a.entity_type != b.entity_type {
+                continue;
+            }
+            let b_folded = fold_name(&b.canonical_name);
+            if b_folded.chars().count() < 7 {
+                continue;
+            }
+            if a_first != b_folded.chars().next() {
+                continue;
+            }
+            if levenshtein_at_most_one(&a_folded, &b_folded) {
+                let a_chunks = chunk_count(i);
+                let b_chunks = chunk_count(j);
+                use std::cmp::Ordering;
+                match a_chunks.cmp(&b_chunks) {
+                    Ordering::Greater => {
+                        remap.insert(j, i);
+                    }
+                    Ordering::Less => {
+                        remap.insert(i, j);
+                        // i is now folded; can't act as target for
+                        // any later pair; break out of the inner
+                        // loop.
+                        break;
+                    }
+                    Ordering::Equal => {
+                        // Tie: don't fold ambiguously.
+                    }
+                }
+            }
+        }
+    }
+
+    apply_alias_remap_and_compact(
+        entities,
+        mentions,
+        pending_participants,
+        by_folded_name,
+        remap,
+    );
+}
+
+/// Levenshtein-distance ≤ 1 fast path. Returns true iff the two
+/// strings are equal or differ by exactly one insertion, deletion,
+/// or substitution. Cheap O(min(|a|, |b|)) — we don't need the full
+/// distance, only the ≤ 1 predicate.
+fn levenshtein_at_most_one(a: &str, b: &str) -> bool {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    if a == b {
+        return true;
+    }
+    let (short, long) = if a.len() <= b.len() {
+        (&a[..], &b[..])
+    } else {
+        (&b[..], &a[..])
+    };
+    if long.len() - short.len() > 1 {
+        return false;
+    }
+    let mut i = 0usize;
+    let mut j = 0usize;
+    let mut diffs = 0u8;
+    while i < short.len() && j < long.len() {
+        if short[i] == long[j] {
+            i += 1;
+            j += 1;
+            continue;
+        }
+        diffs += 1;
+        if diffs > 1 {
+            return false;
+        }
+        if short.len() == long.len() {
+            // substitution
+            i += 1;
+            j += 1;
+        } else {
+            // insertion in long
+            j += 1;
+        }
+    }
+    if j < long.len() {
+        diffs += long.len() as u8 - j as u8;
+    }
+    diffs <= 1
+}
+
+/// Shared compaction step used by every `consolidate_*` pass.
+/// Appends each source's display name to its target's aliases,
+/// rewrites all `mentions` / `pending_participants` indices to point
+/// at the post-compact positions, drops the source entities, and
+/// renumbers `AtomId`s densely so the atlas writer doesn't see gaps.
+/// `by_folded_name` is rebuilt from scratch including aliases.
+fn apply_alias_remap_and_compact(
+    entities: &mut Vec<Entity>,
+    mentions: &mut [(usize, String)],
+    pending_participants: &mut [(usize, Vec<String>, usize)],
+    by_folded_name: &mut HashMap<String, usize>,
+    remap: HashMap<usize, usize>,
+) {
     if remap.is_empty() {
         return;
     }
 
-    // ── Step 3: rewrite mentions and pending_participants idx ──────
+    // Rewrite per-position references.
     for (eidx, _) in mentions.iter_mut() {
         if let Some(&new) = remap.get(eidx) {
             *eidx = new;
@@ -750,10 +935,7 @@ fn consolidate_short_form_aliases(
         }
     }
 
-    // ── Step 4: compact entities, append aliases, renumber AtomIds ─
-    // For each remapped source, append its canonical name as an
-    // alias on the target — folded into the alias-set so duplicates
-    // (same alias appearing twice) collapse cleanly.
+    // Append source display names to their target's alias list.
     for (&src, &tgt) in &remap {
         let alias = entities[src].canonical_name.clone();
         let target = &mut entities[tgt];
@@ -766,6 +948,7 @@ fn consolidate_short_form_aliases(
         }
     }
 
+    // Compact + renumber AtomIds densely.
     let mut idx_remap: HashMap<usize, usize> = HashMap::new();
     let mut compacted: Vec<Entity> = Vec::with_capacity(entities.len() - remap.len());
     for (old_idx, e) in entities.drain(..).enumerate() {
@@ -776,19 +959,16 @@ fn consolidate_short_form_aliases(
         idx_remap.insert(old_idx, new_idx);
         compacted.push(e);
     }
-    // Targets must exist in idx_remap; remapped sources route
-    // through the target's new id.
     for (&src, &tgt) in &remap {
         let target_new = idx_remap[&tgt];
         idx_remap.insert(src, target_new);
     }
-    // Renumber AtomIds densely.
     for (i, e) in compacted.iter_mut().enumerate() {
         e.id = AtomId::entity(i + 1);
     }
     *entities = compacted;
 
-    // Apply the compaction remap to mentions and pending_participants.
+    // Apply compaction remap.
     for (eidx, _) in mentions.iter_mut() {
         if let Some(&new) = idx_remap.get(eidx) {
             *eidx = new;
@@ -800,7 +980,7 @@ fn consolidate_short_form_aliases(
         }
     }
 
-    // ── Step 5: rebuild by_folded_name with aliases ───────────────
+    // Rebuild folded-name index, including aliases.
     by_folded_name.clear();
     for (i, e) in entities.iter().enumerate() {
         by_folded_name.insert(fold_name(&e.canonical_name), i);
@@ -1089,6 +1269,130 @@ mod tests {
         assert!(failures
             .iter()
             .all(|f| f.kind != FailureKind::OrphanParticipant));
+    }
+
+    #[test]
+    fn levenshtein_at_most_one_predicate() {
+        // Equality.
+        assert!(levenshtein_at_most_one("stonewell", "stonewell"));
+        // Substitution: a → e.
+        assert!(levenshtein_at_most_one("stonewell", "stonewall"));
+        // Insertion.
+        assert!(levenshtein_at_most_one("stonewell", "stoneswell"));
+        // Deletion.
+        assert!(levenshtein_at_most_one("stonewell", "stonewel"));
+        // Distance ≥ 2 — reject.
+        assert!(!levenshtein_at_most_one("stonewell", "stoneward"));
+        // Length difference > 1 — early reject.
+        assert!(!levenshtein_at_most_one("ab", "abcd"));
+        // Empty + 1-char — distance 1.
+        assert!(levenshtein_at_most_one("", "a"));
+        assert!(!levenshtein_at_most_one("", "ab"));
+    }
+
+    #[test]
+    fn consolidate_folds_typo_organization_into_higher_chunk_winner() {
+        // "Stonewell Industries" appears in 3 chunks; "Stonewall
+        // Industries" in 1. The typo'd version folds into the
+        // higher-frequency canonical.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.organizations.push(OrganizationEntity {
+            name: "Stonewell Industries".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c1".into(), "c2".into(), "c3".into()],
+        });
+        b1.organizations.push(OrganizationEntity {
+            name: "Stonewall Industries".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c4".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+
+        assert_eq!(merged.entities.len(), 1, "typo'd org folds into canonical");
+        let e = &merged.entities[0];
+        assert_eq!(e.canonical_name, "Stonewell Industries");
+        assert!(e
+            .aliases
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case("Stonewall Industries")));
+        assert_eq!(merged.edges.len(), 4, "all 4 chunks should attach to canonical");
+    }
+
+    #[test]
+    fn consolidate_typo_does_not_fold_short_names() {
+        // "Mike" vs "Mile" — both 4 chars; the length floor (≥7)
+        // protects against false positives on short names.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.persons.push(PersonEntity {
+            name: "Mike".into(),
+            affiliation: None,
+            role: None,
+            description: None,
+            mentions: vec!["c1".into()],
+        });
+        b1.persons.push(PersonEntity {
+            name: "Mile".into(),
+            affiliation: None,
+            role: None,
+            description: None,
+            mentions: vec!["c2".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+        assert_eq!(merged.entities.len(), 2, "short names must not fuzz-fold");
+    }
+
+    #[test]
+    fn consolidate_typo_keeps_both_when_chunk_counts_tie() {
+        // "Stonewell Industries" and "Stonewall Industries" each
+        // appear in exactly 1 chunk. Without a clear winner we don't
+        // fold — better to keep both than guess.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.organizations.push(OrganizationEntity {
+            name: "Stonewell Industries".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c1".into()],
+        });
+        b1.organizations.push(OrganizationEntity {
+            name: "Stonewall Industries".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c2".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+        assert_eq!(
+            merged.entities.len(),
+            2,
+            "tied chunk counts should not trigger ambiguous fold"
+        );
+    }
+
+    #[test]
+    fn consolidate_typo_does_not_cross_first_letter() {
+        // Same length, distance 1, but different first letter
+        // ("Banner" vs "Manner") — almost always different entities
+        // when first letter changes.
+        let mut b1 = EntityExtractionResponse::default();
+        b1.organizations.push(OrganizationEntity {
+            name: "Banner Holdings".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c1".into(), "c2".into()],
+        });
+        b1.organizations.push(OrganizationEntity {
+            name: "Manner Holdings".into(),
+            relationship: None,
+            description: None,
+            mentions: vec!["c3".into()],
+        });
+        let mut failures = Vec::new();
+        let merged = merge_responses(vec![(0, b1)], &mut failures);
+        assert_eq!(merged.entities.len(), 2, "first-letter mismatch must not fold");
     }
 
     #[test]
