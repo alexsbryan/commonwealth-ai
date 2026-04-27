@@ -62,7 +62,7 @@ max_chars = 1024
 overlap_chars = 128
 
 [index]
-embedding_model = "nomic-embed-text-v2"
+embedding_model = "qwen3-embedding-0.6b"
 embedding_dimensions = 768
 
 [enrichment]                     # optional

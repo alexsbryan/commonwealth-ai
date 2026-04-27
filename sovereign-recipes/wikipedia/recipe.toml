@@ -2,18 +2,25 @@
 id = "wikipedia"
 name = "Wikipedia (English)"
 description = """
-English Wikipedia articles from the September 2024 structured snapshot (~6.7M articles). \
-Includes section structure, Wikidata QIDs, revision IDs, and inter-article links. \
-Wikipedia-specific claim enrichment. Delta updates via monthly revision manifest.\
+English Wikipedia — Core scope: top 100K articles by pageview rank ∪ Wikipedia Vital Articles Level 5 \
+(≈150K articles total). Covers what a general user looks up plus curated encyclopedic depth in history, \
+science, and geography that doesn't get heavy traffic. Indexes in ~10–12 min on a M-series MacBook. \
+Expand to the full ~6.7M-article dump from Settings → Knowledge once you've validated retrieval quality \
+on the Core. Delta updates via monthly revision manifest.\
 """
 license = "CC-BY-SA-4.0"
 mesh_sharing = true
 size_compressed_gb = 13.0
-size_indexed_gb = 60.0
+size_indexed_gb = 6.0
 
 # The wikimedia/structured-wikipedia dataset ships as ZIP+JSONL rather than parquet
 # shards. HuggingFace's parquet conversion API fails on this dataset (schema casting
 # error), so we use BulkDownload directly to the September 2024 English snapshot.
+#
+# Note: Core scope still downloads the full 13GB ZIP — the filter applies at extract
+# time. Embedding cost (the dominant cost) scales with what gets indexed, not what
+# gets downloaded, so this is fine: ~150K accepted articles → ~10 min embed time
+# instead of ~hours for the full 6.7M.
 [acquire]
 type = "bulk_download"
 url = "https://huggingface.co/datasets/wikimedia/structured-wikipedia/resolve/main/20240916.en/enwiki_namespace_0.zip"
@@ -25,6 +32,30 @@ resume = true
 [extract]
 type = "wikipedia_jsonl"
 # controversy_patterns and factual_patterns default to the built-in pattern lists.
+
+# ─── Core scope ──────────────────────────────────────────────────────
+# Two filters combined with `mode = "any"` — accept the article if EITHER
+# matches. Pageview rank covers popularity (what people look up); Vital
+# Articles Level 5 covers curated importance (what an encyclopedia
+# *should* have even if it doesn't trend). Together they hit ~150K
+# articles.
+#
+# Both rank/list files are bundled into corpus-engine/assets/ via
+# include_bytes!, so this scope works fully offline. Removing both
+# filter blocks (or running `expand_corpus` from the UI) promotes the
+# corpus to the full 6.7M-article scope; the existing Core index is
+# preserved and only the new articles run through embedding.
+[[filter]]
+type = "pageview_rank"
+rank_file = "@bundled:pageview_ranks_202311"
+max_rank = 100000
+
+[[filter]]
+type = "title_list"
+list_file = "@bundled:vital_articles_l5"
+
+[filter_mode]
+mode = "any"
 
 [chunk]
 type = "paragraph"
@@ -45,11 +76,11 @@ vector = true
 manifest_url = "https://updates.sovereign.dev/manifests/wikipedia-en.json"
 auto_update = true
 
-# Field model enrichment: multi-domain classification + clustering.
-# Wikipedia spans philosophy, science, policy, history, and more.
-# The MultiDomain implementation classifies each cluster into its domain.
+# Enrichment is OFF for Core — Layer 1 prioritises time-to-grounded over
+# atlas depth. Re-enable once expanded to Full or by overriding via a
+# user recipe.
 [enrichment]
-enabled = true
+enabled = false
 type = "field_model"
 domain = "multi"
 prompt_version = "1.0.0"
