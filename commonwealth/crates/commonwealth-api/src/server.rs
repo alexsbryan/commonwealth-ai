@@ -132,6 +132,14 @@ pub fn internal_router(state: AppState) -> Router {
         .route("/internal/models/load", post(routes_internal::models_load))
         .route("/internal/models/unload", post(routes_internal::models_unload))
         .route("/internal/models/inventory", get(routes_internal::models_inventory))
+        // Foreground-yield introspection — read-only snapshot of the
+        // atomics that decide whether ingest workers are pausing for
+        // chat. No POST: the window is configured at startup via
+        // `daemon.yield_to_foreground_secs`, not pushed at runtime.
+        .route(
+            "/internal/daemon/foreground_state",
+            get(routes_internal::foreground_state),
+        )
         .with_state(state)
 }
 

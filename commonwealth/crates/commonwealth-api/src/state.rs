@@ -204,6 +204,22 @@ pub struct AppStateInner {
     /// (as a peer). Prevents `auto_ingest` from spawning duplicate pull
     /// loops when the same open handoff is seen across multiple gossip ticks.
     pub active_pull_loops: RwLock<HashSet<HandoffId>>,
+    /// Unix-seconds timestamp of the last foreground inference request
+    /// observed at `chat_completions`. `0` means "never touched" — the
+    /// initial state at boot. Bumped via [`AppState::bump_foreground_active`]
+    /// and read by the corpus-engine `YieldHook` impl to decide whether
+    /// background ingest workers should pause before the next embed
+    /// batch / enrichment phase. Plain atomic — no lock contention on
+    /// the hot read path.
+    pub foreground_last_active_ts: std::sync::atomic::AtomicI64,
+    /// Yield window in seconds. While `now - last_active < window`, the
+    /// daemon's `YieldHook` returns `should_yield = true`. `0` disables
+    /// the feature (tests, hosts that never want background work to
+    /// pause). Configured via `~/.config/sovereign/config.toml`'s
+    /// `daemon.yield_to_foreground_secs` and stuffed in here at
+    /// startup; the desktop Settings tab can rewrite it at runtime
+    /// without a daemon restart.
+    pub yield_window_secs: std::sync::atomic::AtomicU64,
 }
 
 impl AppState {
@@ -295,6 +311,15 @@ impl AppState {
                 local_inference: None,
                 work_queue: Arc::new(WorkQueueManager::new()),
                 active_pull_loops: RwLock::new(HashSet::new()),
+                // 0 sentinel = no foreground activity observed yet.
+                // The yield hook treats 0 as "never active", regardless
+                // of the window — so a fresh boot doesn't accidentally
+                // pause ingest before the first chat request.
+                foreground_last_active_ts: std::sync::atomic::AtomicI64::new(0),
+                // 0 = disabled. The daemon constructor overrides this
+                // from config (`daemon.yield_to_foreground_secs`,
+                // default 60) before AppState is shared.
+                yield_window_secs: std::sync::atomic::AtomicU64::new(0),
             }),
         }
     }
@@ -424,6 +449,113 @@ impl AppState {
     pub async fn update_local_availability(&self, availability: f32) {
         *self.inner.local_inference_availability.write().await = availability;
         tracing::debug!(availability, "inference_availability updated by sovereign-server");
+    }
+
+    /// Record that a foreground inference request just landed. Called
+    /// from the `chat_completions` handler before slot dispatch so any
+    /// background ingest workers polling `should_yield_to_foreground`
+    /// will see a fresh timestamp on their next checkpoint. Cheap
+    /// (atomic store, Relaxed ordering — readers don't need
+    /// happens-before, just monotonic-enough-for-comparison).
+    pub fn bump_foreground_active(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        self.inner
+            .foreground_last_active_ts
+            .store(now, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Read whether ingest workers should currently pause for
+    /// foreground inference. `true` iff the yield window is positive
+    /// AND a foreground request landed within `window` seconds. The
+    /// `0` last-active sentinel always returns `false` (a fresh boot
+    /// shouldn't pause before the first user request).
+    pub fn should_yield_to_foreground(&self) -> bool {
+        let window = self
+            .inner
+            .yield_window_secs
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if window == 0 {
+            return false;
+        }
+        let last = self
+            .inner
+            .foreground_last_active_ts
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if last == 0 {
+            return false;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let elapsed = now.saturating_sub(last);
+        elapsed >= 0 && (elapsed as u64) < window
+    }
+
+    /// Seconds remaining in the current yield window, when one is
+    /// active. Returns `None` when not currently yielding (window=0,
+    /// never-active sentinel, or window already expired). Useful for
+    /// progress messages and the `/internal/daemon/foreground_state`
+    /// introspection route.
+    pub fn seconds_until_foreground_idle(&self) -> Option<u64> {
+        let window = self
+            .inner
+            .yield_window_secs
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if window == 0 {
+            return None;
+        }
+        let last = self
+            .inner
+            .foreground_last_active_ts
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if last == 0 {
+            return None;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let elapsed = now.saturating_sub(last);
+        if elapsed < 0 {
+            return Some(window);
+        }
+        let elapsed = elapsed as u64;
+        if elapsed >= window {
+            None
+        } else {
+            Some(window - elapsed)
+        }
+    }
+
+    /// Replace the yield window at runtime. The daemon constructor
+    /// calls this once with the configured value; the desktop's
+    /// Settings tab calls it on user toggle. Setting `0` disables
+    /// the feature entirely.
+    pub fn set_yield_window_secs(&self, secs: u64) {
+        self.inner
+            .yield_window_secs
+            .store(secs, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Read the configured yield window (seconds). `0` means disabled.
+    pub fn yield_window_secs(&self) -> u64 {
+        self.inner
+            .yield_window_secs
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Read the last-foreground-active unix timestamp. `0` when the
+    /// daemon has not yet served a chat request. Surfaced via
+    /// `/internal/daemon/foreground_state` so operators can confirm
+    /// the feature is actually wired during contention triage.
+    pub fn foreground_last_active_ts(&self) -> i64 {
+        self.inner
+            .foreground_last_active_ts
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Count online members.

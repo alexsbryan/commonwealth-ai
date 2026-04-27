@@ -2442,6 +2442,58 @@ pub async fn models_inventory(
     })
 }
 
+// ── Foreground-yield introspection ──────────────────────────
+//
+// Operators triaging contention on a peer node need a way to see
+// whether the foreground-yield mechanism is wired and what the
+// current state is — without grepping daemon.log. The
+// `GET /internal/daemon/foreground_state` route returns the two
+// atomics and a derived `currently_yielding` flag in one shot, so
+// `curl` against the daemon is enough to confirm:
+//   - that the daemon was built with yield support,
+//   - that the configured window is what the operator expects, and
+//   - whether ingest workers should be paused right now.
+//
+// The shape is deliberately small: this is a debugging endpoint,
+// not a gossip-grade contract.
+
+#[derive(Debug, Serialize)]
+pub struct ForegroundStateResponse {
+    /// Unix-seconds of the last `chat_completions` request seen.
+    /// `0` means no foreground request has hit this daemon yet.
+    pub last_active_unix_ts: i64,
+    /// Configured yield window. `0` disables the feature entirely;
+    /// any positive value means ingest workers will pause when a
+    /// chat request lands within that many seconds.
+    pub window_secs: u64,
+    /// Convenience flag: `true` iff a `YieldHook` polled now would
+    /// return `should_yield`. Equal to
+    /// `0 < window_secs && now - last_active_unix_ts < window_secs`.
+    pub currently_yielding: bool,
+    /// Seconds remaining in the current yield window when one is
+    /// active. `None` when not yielding.
+    pub seconds_until_idle: Option<u64>,
+    /// Number of corpus ingests currently registered on this node —
+    /// the actual workers that would be paused. Useful to sanity-check
+    /// "is yield even relevant right now".
+    pub active_ingests_count: usize,
+}
+
+/// `GET /internal/daemon/foreground_state` — read-only snapshot of
+/// the foreground-yield atomics. See [`ForegroundStateResponse`].
+pub async fn foreground_state(
+    State(state): State<AppState>,
+) -> Json<ForegroundStateResponse> {
+    let active_ingests_count = state.inner.active_ingests.read().await.len();
+    Json(ForegroundStateResponse {
+        last_active_unix_ts: state.foreground_last_active_ts(),
+        window_secs: state.yield_window_secs(),
+        currently_yielding: state.should_yield_to_foreground(),
+        seconds_until_idle: state.seconds_until_foreground_idle(),
+        active_ingests_count,
+    })
+}
+
 // ── Mesh join handshake ─────────────────────────────────────
 //
 // The founder (or any existing member) receives a POST from a

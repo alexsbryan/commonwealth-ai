@@ -26,6 +26,20 @@ pub async fn chat_completions(
     headers: HeaderMap,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
+    // ── Foreground-yield bump ─────────────────────────────────────────
+    //
+    // Fire-and-forget atomic store of the current unix-ts. The
+    // corpus-engine ingest pipeline polls this through a `YieldHook`
+    // before each embed batch / enrichment phase and pauses while
+    // the timestamp is recent. This is the *only* bump site for
+    // foreground activity — every chat path (HTTP, Tauri proxy,
+    // CLI `sovereign chat`, MCP `tools/call` that triggers chat)
+    // converges through this handler before slot dispatch, so a
+    // single store covers them all. The corresponding bump for
+    // `/v1/embeddings` is intentionally absent: embed requests come
+    // from ingest itself; bumping there would prevent self-yield.
+    state.bump_foreground_active();
+
     // ── ATOS pipeline resolution ──────────────────────────────────────
     //
     // If the model name matches a pipeline alias (e.g.,
