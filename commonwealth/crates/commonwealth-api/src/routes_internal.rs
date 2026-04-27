@@ -1319,6 +1319,10 @@ fn progress_fraction(progress: &corpus_engine::IngestProgress) -> Option<f32> {
         P::Indexing { chunks_indexed, total } if *total > 0 => {
             Some(((*chunks_indexed as f32) / (*total as f32)).clamp(0.0, 1.0))
         }
+        // Rebuild is one-shot — show as in-flight (0.5) so the bar
+        // doesn't snap from full back to empty between Indexing and
+        // Complete during an expansion.
+        P::OptimizingIndex { .. } => Some(0.5),
         P::Complete { .. } => Some(1.0),
         _ => None,
     }
