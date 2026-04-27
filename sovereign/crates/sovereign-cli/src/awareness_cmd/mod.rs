@@ -34,6 +34,7 @@ mod digest;
 mod entities;
 mod eval;
 mod extract;
+mod filter;
 mod golden;
 mod inference;
 mod render;
@@ -70,6 +71,7 @@ pub async fn run_awareness(args: &[String]) -> i32 {
         "decay" => decay::cmd_decay(rest).await,
         "eval" => eval::cmd_eval(rest).await,
         "scenario" => scenario::cmd_scenario(rest).await,
+        "filter" => filter::cmd_filter(rest).await,
         other => {
             eprintln!("awareness: unknown subcommand '{other}'");
             print_help();
@@ -114,6 +116,8 @@ fn print_help() {
          \x20       [--report <out-path>] [--json]\n\
          \x20   scenario <path-to-toml>        Run a scripted end-to-end scenario\n\
          \x20       [--output <dir>]\n\
+         \x20   filter                         Second-pass model filter for initiative atlas\n\
+         \x20       [--verbose] [--dry-run]\n\
          \n\
          GLOBAL FLAGS\n\
          \x20   --db-path <path>               Override .sovereign/ root (default: ~/.sovereign)\n\
