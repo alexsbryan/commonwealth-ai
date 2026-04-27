@@ -28,6 +28,7 @@ pub mod sovereign_config;
 pub mod testing;
 pub mod types;
 pub mod update;
+pub mod yield_hook;
 
 // SCIP call graph (gated on treesitter alongside the code intelligence stack).
 #[cfg(feature = "treesitter")]
@@ -97,6 +98,7 @@ pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, EmbedFn, IndexInfo,
     IndexStats, InferenceFn, IngestResult, ScoredChunk, ShardInfo,
 };
+pub use yield_hook::YieldHook;
 
 #[cfg(feature = "treesitter")]
 pub use scip_graph::{

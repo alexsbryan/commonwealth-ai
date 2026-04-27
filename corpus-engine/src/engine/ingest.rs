@@ -655,6 +655,61 @@ impl CorpusEngine {
 
                 // Tier 1: embed when we have enough pending chunks.
                 if pending_chunks.len() >= embed_batch_size {
+                    // Cooperative yield to foreground inference.
+                    //
+                    // An embed batch is an atomic `llama_decode` that
+                    // can occupy the GPU for several seconds; while
+                    // it runs the primary chat slot can't interleave
+                    // tokens. So before STARTING the next batch we
+                    // ask the daemon "is the user actively chatting?"
+                    // and park here until they're idle. Granularity
+                    // is per-batch, which is the finest the backend
+                    // actually allows.
+                    //
+                    // Cancel beats yield: if the user cancels mid-yield
+                    // we exit the same way the per-doc cancel check
+                    // does, so /internal/corpus/pause stays
+                    // responsive.
+                    if let Some(hook) = self.yield_hook() {
+                        let mut announced = false;
+                        while hook.should_yield() {
+                            if cancel_flag.is_cancelled() {
+                                tracing::info!(
+                                    corpus = %recipe.corpus.id,
+                                    iter_pos,
+                                    total_chunks,
+                                    "ingest cancelled while yielding to foreground inference"
+                                );
+                                return Err(Error::Cancelled(recipe.corpus.id.clone()));
+                            }
+                            if !announced {
+                                announced = true;
+                                tracing::info!(
+                                    corpus = %recipe.corpus.id,
+                                    "yield: pausing embed batches for foreground inference"
+                                );
+                                if let Some(ref cb) = progress {
+                                    cb(IngestProgress::Embedding {
+                                        chunks_embedded: total_chunks
+                                            + index_buffer.len() as u64,
+                                        total: 0,
+                                        docs_processed: resume_iter_pos + docs_processed,
+                                        chunks_per_sec: 0.0,
+                                        expected_docs: expected_filter_docs,
+                                    });
+                                }
+                            }
+                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        }
+                        if announced {
+                            tracing::info!(
+                                corpus = %recipe.corpus.id,
+                                "yield: resumed embed batches — foreground idle"
+                            );
+                            embed_timer = Instant::now();
+                        }
+                    }
+
                     let embed_start = Instant::now();
                     let embed_count = pending_texts.len();
                     let embeddings = if let Some(ref batch_embed) = self.batch_embed {
@@ -915,6 +970,44 @@ impl CorpusEngine {
             if enrichment_config.enabled {
                 match self.inference.as_ref() {
                     Some(inference) => {
+                        // Cooperative yield before enrichment kicks
+                        // off. Each enrichment phase issues many
+                        // long-running calls into the chat slot
+                        // (atlas extraction, cluster labelling) — the
+                        // exact contention foreground chat is trying
+                        // to avoid. Block here until the user is
+                        // idle, then proceed. Once the phase starts,
+                        // mid-phase preemption is intentionally not
+                        // attempted: cluster state is built up
+                        // incrementally and a partial run would
+                        // corrupt the checkpoint.
+                        if let Some(hook) = self.yield_hook() {
+                            let mut announced = false;
+                            while hook.should_yield() {
+                                if cancel_flag.is_cancelled() {
+                                    tracing::info!(
+                                        corpus = %recipe.corpus.id,
+                                        "ingest cancelled while yielding before enrichment"
+                                    );
+                                    return Err(Error::Cancelled(recipe.corpus.id.clone()));
+                                }
+                                if !announced {
+                                    announced = true;
+                                    tracing::info!(
+                                        corpus = %recipe.corpus.id,
+                                        "yield: deferring enrichment for foreground inference"
+                                    );
+                                }
+                                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                            }
+                            if announced {
+                                tracing::info!(
+                                    corpus = %recipe.corpus.id,
+                                    "yield: resuming enrichment — foreground idle"
+                                );
+                            }
+                        }
+
                         let field_engine =
                             crate::enrichment::field_engine::FieldModelEngine::from_recipe(
                                 &recipe,

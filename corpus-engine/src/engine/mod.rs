@@ -160,6 +160,21 @@ pub struct CorpusEngine {
     /// `sovereign-tools` via [`CorpusEngine::register_acquirer`]) so
     /// DB-reading acquirers can live outside this crate.
     custom_acquirers: Arc<RwLock<HashMap<String, CustomAcquirerFn>>>,
+    /// Optional cooperative-yield hook polled at embed-batch and
+    /// enrichment-phase boundaries. When `Some` and `should_yield()`
+    /// returns true, ingest workers sleep briefly and re-poll so the
+    /// GPU is free for foreground inference. `None` (the default)
+    /// disables the check — bare CLI flows and tests don't pay any
+    /// cost for the feature.
+    ///
+    /// Wrapped in `RwLock` so the daemon can install a hook AFTER
+    /// the engine is wrapped in an `Arc` and handed to AppState —
+    /// the wiring order is "build engine → build AppState (which
+    /// owns the foreground-active atomics) → install hook" because
+    /// the hook needs to read from those atomics. Read-cost on the
+    /// hot path is one rwlock acquisition per embed-batch start,
+    /// which is on the order of seconds — negligible.
+    yield_hook: std::sync::RwLock<Option<Arc<dyn crate::yield_hook::YieldHook>>>,
 }
 
 /// Returns the raw ZIP entry indices (in TOC order) that represent real
@@ -244,7 +259,50 @@ impl CorpusEngine {
             self_node_id: DEFAULT_LOCAL_NODE_SUFFIX.to_string(),
             cancel_registry: CancellationRegistry::new(),
             custom_acquirers: Arc::new(RwLock::new(HashMap::new())),
+            yield_hook: std::sync::RwLock::new(None),
         }
+    }
+
+    /// Install a cooperative-yield hook polled before each embed
+    /// batch and enrichment phase. Returns `self` for builder
+    /// chaining alongside `with_inference_fn` etc. Used by tests and
+    /// any caller that has the hook in hand at construction time.
+    /// The daemon's `start_daemon` builds AppState first (the hook's
+    /// backing atomics live there) and then calls
+    /// [`Self::set_yield_hook`] on the already-Arc-wrapped engine.
+    pub fn with_yield_hook(
+        self,
+        hook: Arc<dyn crate::yield_hook::YieldHook>,
+    ) -> Self {
+        self.set_yield_hook(hook);
+        self
+    }
+
+    /// Install (or replace) the cooperative-yield hook on a
+    /// constructed engine. Takes `&self` so the daemon can call
+    /// after the engine is shared via `Arc<CorpusEngine>` —
+    /// rebuilding the engine just to swap a hook would require
+    /// reconstructing the LanceDB connections it caches internally,
+    /// which is needlessly expensive.
+    pub fn set_yield_hook(&self, hook: Arc<dyn crate::yield_hook::YieldHook>) {
+        let mut guard = self
+            .yield_hook
+            .write()
+            .expect("yield_hook RwLock poisoned");
+        *guard = Some(hook);
+    }
+
+    /// Snapshot of the currently-installed yield hook (cheap Arc
+    /// clone). Returns `None` when no hook has been wired — the
+    /// default for bare CLI flows and tests. The ingest pipeline
+    /// reads through this at every embed-batch / enrichment-phase
+    /// boundary and skips the yield loop entirely when no hook is
+    /// present.
+    pub fn yield_hook(&self) -> Option<Arc<dyn crate::yield_hook::YieldHook>> {
+        self.yield_hook
+            .read()
+            .expect("yield_hook RwLock poisoned")
+            .clone()
     }
 
     /// Register a custom acquirer keyed by `kind`. Recipes referencing
