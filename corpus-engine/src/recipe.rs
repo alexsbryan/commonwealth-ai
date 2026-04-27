@@ -582,29 +582,60 @@ impl Recipe {
 // Built-in recipes
 // ---------------------------------------------------------------------------
 
+/// Bundled recipe TOML for well-known corpora, embedded at compile
+/// time. Used as a **last-resort fallback** by
+/// `RecipeRegistry::fetch_recipe()` so a corpus listed in the snapshot
+/// catalog still installs even when:
+///
+/// - the registry's `toml_url` 404s (recipe not pushed to GitHub yet —
+///   common during development);
+/// - the user has no internet; or
+/// - the user is running an air-gapped build.
+///
+/// Returns `None` for unknown ids; the caller falls back to its prior
+/// error message in that case.
+///
+/// To add a new bundled recipe: drop `recipes/<id>/recipe.toml` in the
+/// crate, add an arm here, and the live registry catalog
+/// (`registry_snapshot.toml` + `sovereign-recipes/registry.toml`) entry
+/// for it. Match-arm coverage stays paired with the snapshot via the
+/// `bundled_recipe_covers_every_snapshot_entry` test below.
+pub fn bundled_recipe_toml(id: &str) -> Option<&'static str> {
+    match id {
+        "wikipedia" => Some(include_str!("../recipes/wikipedia/recipe.toml")),
+        "wikipedia-simple" => Some(include_str!("../recipes/wikipedia-simple/recipe.toml")),
+        "stackexchange" => Some(include_str!("../recipes/stackexchange/recipe.toml")),
+        "openalex" => Some(include_str!("../recipes/openalex/recipe.toml")),
+        "gutenberg" => Some(include_str!("../recipes/gutenberg/recipe.toml")),
+        "sep" => Some(include_str!("../recipes/sep/recipe.toml")),
+        "crs_reports" => Some(include_str!("../recipes/crs_reports/recipe.toml")),
+        _ => None,
+    }
+}
+
 /// Returns `Recipe` definitions for well-known corpora, loaded from the
 /// `recipes/` directory at compile time via `include_str!`.
 ///
-/// **For tests only.** Not compiled into production binaries.
-/// Production code uses `RecipeRegistry::fetch_recipe()` which checks
-/// local overrides and fetches from the registry URL.
-///
-/// To add a new corpus, create `recipes/<id>/recipe.toml` following the
-/// pattern of the existing files, then add an `include_str!` line below.
+/// **For tests only.** Production code uses
+/// `RecipeRegistry::fetch_recipe()` which checks local overrides,
+/// fetches from the registry URL, and falls back to
+/// [`bundled_recipe_toml`].
 #[cfg(test)]
 pub(crate) fn builtin_recipes() -> Vec<Recipe> {
-    const SOURCES: &[&str] = &[
-        include_str!("../recipes/wikipedia/recipe.toml"),
-        include_str!("../recipes/wikipedia-simple/recipe.toml"),
-        include_str!("../recipes/stackexchange/recipe.toml"),
-        include_str!("../recipes/openalex/recipe.toml"),
-        include_str!("../recipes/gutenberg/recipe.toml"),
-        include_str!("../recipes/sep/recipe.toml"),
-        include_str!("../recipes/crs_reports/recipe.toml"),
+    const IDS: &[&str] = &[
+        "wikipedia",
+        "wikipedia-simple",
+        "stackexchange",
+        "openalex",
+        "gutenberg",
+        "sep",
+        "crs_reports",
     ];
-    SOURCES
-        .iter()
-        .map(|s| Recipe::from_toml(s).expect("built-in recipe.toml failed to parse"))
+    IDS.iter()
+        .map(|id| {
+            let toml = bundled_recipe_toml(id).expect("bundled recipe present");
+            Recipe::from_toml(toml).expect("built-in recipe.toml failed to parse")
+        })
         .collect()
 }
 
@@ -1031,18 +1062,22 @@ type = "paragraph"
         assert!(update.auto_update);
         assert!(!update.manifest_url.is_empty());
 
-        // Core scope filters: pageview rank ≤ 100k OR vital articles.
-        assert_eq!(wp.filters.len(), 2, "Wikipedia Core must declare both filters");
-        assert_eq!(wp.filter_mode.mode, ComposeMode::Any, "Core combines filters with `any`");
+        // Core scope filter: Vital Articles Level 5 only. Pageview-rank
+        // bundling was deliberately dropped — see
+        // `corpus-engine/src/filters/assets.rs` for the rationale.
+        assert_eq!(
+            wp.filters.len(),
+            1,
+            "Wikipedia Core ships with a single Vital Articles filter"
+        );
         match &wp.filters[0] {
-            FilterConfig::PageviewRank { max_rank, .. } => assert_eq!(*max_rank, 100_000),
-            other => panic!("first Wikipedia filter must be pageview_rank, got {other:?}"),
-        }
-        match &wp.filters[1] {
             FilterConfig::TitleList { list_file } => {
-                assert!(list_file.contains("vital_articles"), "expected vital articles list, got {list_file}");
+                assert!(
+                    list_file.contains("vital_articles"),
+                    "Wikipedia Core filter must reference the vital articles list, got {list_file}"
+                );
             }
-            other => panic!("second Wikipedia filter must be title_list, got {other:?}"),
+            other => panic!("Wikipedia Core filter must be title_list, got {other:?}"),
         }
     }
 

@@ -2,16 +2,16 @@
 id = "wikipedia"
 name = "Wikipedia (English)"
 description = """
-English Wikipedia — Core scope: top 100K articles by pageview rank ∪ Wikipedia Vital Articles Level 5 \
-(≈150K articles total). Covers what a general user looks up plus curated encyclopedic depth in history, \
-science, and geography that doesn't get heavy traffic. Indexes in ~10–12 min on a M-series MacBook. \
-Expand to the full ~6.7M-article dump from Settings → Knowledge once you've validated retrieval quality \
-on the Core. Delta updates via monthly revision manifest.\
+English Wikipedia — Core scope: ~51K Wikipedia Vital Articles Level 5. The community-curated set of \
+articles "an encyclopedia should cover" — stable across years, low maintenance burden compared to a \
+pageview-based filter that would age out in months. Indexes in ~5–8 min on a M-series MacBook. Expand \
+to the full ~6.7M-article dump from Settings → Knowledge once you've validated retrieval quality on \
+the Core. Delta updates via monthly revision manifest.\
 """
 license = "CC-BY-SA-4.0"
 mesh_sharing = true
 size_compressed_gb = 13.0
-size_indexed_gb = 6.0
+size_indexed_gb = 2.5
 
 # The wikimedia/structured-wikipedia dataset ships as ZIP+JSONL rather than parquet
 # shards. HuggingFace's parquet conversion API fails on this dataset (schema casting
@@ -19,8 +19,8 @@ size_indexed_gb = 6.0
 #
 # Note: Core scope still downloads the full 13GB ZIP — the filter applies at extract
 # time. Embedding cost (the dominant cost) scales with what gets indexed, not what
-# gets downloaded, so this is fine: ~150K accepted articles → ~10 min embed time
-# instead of ~hours for the full 6.7M.
+# gets downloaded, so this is fine: ~51K accepted articles → ~5–8 min embed
+# time instead of ~hours for the full 6.7M.
 [acquire]
 type = "bulk_download"
 url = "https://huggingface.co/datasets/wikimedia/structured-wikipedia/resolve/main/20240916.en/enwiki_namespace_0.zip"
@@ -34,28 +34,22 @@ type = "wikipedia_jsonl"
 # controversy_patterns and factual_patterns default to the built-in pattern lists.
 
 # ─── Core scope ──────────────────────────────────────────────────────
-# Two filters combined with `mode = "any"` — accept the article if EITHER
-# matches. Pageview rank covers popularity (what people look up); Vital
-# Articles Level 5 covers curated importance (what an encyclopedia
-# *should* have even if it doesn't trend). Together they hit ~150K
-# articles.
+# Vital Articles Level 5 — community-curated list of ~51K mainspace
+# articles editorially deemed "what an encyclopedia should cover."
+# Stable across years (curator-pace, not viral-pace), so the bundled
+# asset doesn't decay and the Core stays defensible without a
+# regeneration cadence. Pageview-based filtering was considered but
+# any specific month's data ages out within ~6 months — the freshness
+# debt outweighed the small popularity-coverage gain.
 #
-# Both rank/list files are bundled into corpus-engine/assets/ via
-# include_bytes!, so this scope works fully offline. Removing both
-# filter blocks (or running `expand_corpus` from the UI) promotes the
-# corpus to the full 6.7M-article scope; the existing Core index is
-# preserved and only the new articles run through embedding.
-[[filter]]
-type = "pageview_rank"
-rank_file = "@bundled:pageview_ranks_202311"
-max_rank = 100000
-
+# The list is bundled into corpus-engine/assets/ via include_bytes!,
+# so this scope works fully offline. Removing the filter block (or
+# running `expand_corpus` from the UI) promotes the corpus to the full
+# 6.7M-article scope; the existing Core index is preserved and only
+# the new articles run through embedding.
 [[filter]]
 type = "title_list"
 list_file = "@bundled:vital_articles_l5"
-
-[filter_mode]
-mode = "any"
 
 [chunk]
 type = "paragraph"

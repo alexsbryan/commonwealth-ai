@@ -64,6 +64,12 @@ impl PageviewRankFilter {
         let buf = BufReader::new(reader);
         let mut ranks = HashMap::with_capacity(max_rank as usize);
         let mut line_no: usize = 0;
+        // Header is the first non-comment, non-blank line — index can
+        // be anywhere because the file may start with `#` metadata
+        // (`# date=2023-11-01 ...`) before the `title,rank` row. Track
+        // whether we've seen *any* data line yet so the header check
+        // can tolerate a non-numeric rank exactly once.
+        let mut data_seen = false;
         for line in buf.lines() {
             let line = line.map_err(Error::Io)?;
             line_no += 1;
@@ -76,23 +82,27 @@ impl PageviewRankFilter {
             // always the trailing token. Guarding against a comma in
             // the title would require a real CSV parser; keep it simple.
             let Some((title_raw, rank_raw)) = line.rsplit_once(',') else {
-                // Line 1 is the header; tolerate it.
-                if line_no == 1 {
+                if !data_seen {
+                    data_seen = true;
                     continue;
                 }
                 return Err(Error::Recipe(format!(
                     "pageview rank file {source_label} line {line_no}: missing comma"
                 )));
             };
-            // Header detection — rank column is non-numeric.
+            // Header detection — first data-shaped row with a non-numeric
+            // rank column is treated as a header. Subsequent malformed
+            // rows are real errors.
             let Ok(rank) = rank_raw.trim().parse::<u32>() else {
-                if line_no == 1 {
+                if !data_seen {
+                    data_seen = true;
                     continue;
                 }
                 return Err(Error::Recipe(format!(
                     "pageview rank file {source_label} line {line_no}: rank '{rank_raw}' not a u32"
                 )));
             };
+            data_seen = true;
             if rank == 0 || rank > max_rank {
                 // Rank 0 is meaningless; ranks beyond the cutoff don't
                 // need to occupy memory. Bundled files are pre-trimmed

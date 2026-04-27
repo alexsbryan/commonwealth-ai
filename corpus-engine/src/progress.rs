@@ -151,6 +151,19 @@ pub enum IngestProgress {
         chunks_indexed: u64,
         total: u64,
     },
+    /// Background IVF-PQ rebuild after a delta expansion. Surfaces as
+    /// "Optimizing search index…" in the UI; search remains live
+    /// throughout. Emitted by `CorpusEngine::expand_corpus` after the
+    /// new vectors land — the centroids trained at the original (smaller)
+    /// scope are suboptimal at the new scale, so the index is rebuilt
+    /// in place.
+    ///
+    /// `current_chunks` is the chunk count at rebuild start (also the
+    /// total since rebuilds run on a frozen snapshot — partitions are
+    /// re-trained against the existing data, no chunks are added).
+    OptimizingIndex {
+        current_chunks: u64,
+    },
     Complete {
         total_chunks: u64,
         duration_secs: u64,

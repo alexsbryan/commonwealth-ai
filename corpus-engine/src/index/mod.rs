@@ -500,6 +500,7 @@ impl CorpusIndex {
             source_version: meta.source_version,
             update_manifest_url: meta.update_manifest_url,
             kind,
+            vector_index_built: meta.vector_index_built,
         })
     }
 

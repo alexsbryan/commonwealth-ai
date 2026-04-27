@@ -133,13 +133,9 @@ mod tests {
     }
 
     #[test]
-    fn bundled_pageview_rank_loads() {
-        // The bundled placeholder ships with at least one entry; we
-        // can't assert content without coupling to the placeholder's
-        // exact titles, but construction must succeed.
-        let cfg = vec![FilterConfig::PageviewRank {
-            rank_file: "@bundled:pageview_ranks_202311".into(),
-            max_rank: 1_000_000,
+    fn bundled_title_list_loads() {
+        let cfg = vec![FilterConfig::TitleList {
+            list_file: "@bundled:vital_articles_l5".into(),
         }];
         let p = build_filter_pipeline(&cfg, ComposeMode::Any, None).unwrap();
         assert!(p.is_active());
@@ -147,13 +143,23 @@ mod tests {
         assert_eq!(p.signature().len(), 64);
     }
 
+    /// `PageviewRankFilter` is still a valid filter type — it just
+    /// isn't bundled with a stale rank file. Recipes referencing a
+    /// `@bundled:pageview_ranks_*` key now error cleanly. Operators
+    /// who need pageview-rank filtering can run
+    /// `sovereign-recipes/wikipedia/scripts/build_pageview_ranks.py`
+    /// against a fresh dump and reference the resulting file by path.
     #[test]
-    fn bundled_title_list_loads() {
-        let cfg = vec![FilterConfig::TitleList {
-            list_file: "@bundled:vital_articles_l5".into(),
+    fn bundled_pageview_rank_key_is_intentionally_unavailable() {
+        let cfg = vec![FilterConfig::PageviewRank {
+            rank_file: "@bundled:pageview_ranks_202311".into(),
+            max_rank: 100_000,
         }];
-        let p = build_filter_pipeline(&cfg, ComposeMode::Any, None).unwrap();
-        assert!(p.is_active());
+        let res = build_filter_pipeline(&cfg, ComposeMode::Any, None);
+        assert!(
+            res.is_err(),
+            "pageview-rank bundling was dropped to avoid stale-data debt"
+        );
     }
 
     #[test]
@@ -174,19 +180,28 @@ mod tests {
         assert!(res.is_err());
     }
 
+    /// Compose two title-list filters with `Any` mode (each loaded
+    /// from a synthetic in-memory list, written to a temp dir so the
+    /// path-resolution branch gets coverage too). Pins that
+    /// `FilterPipeline` correctly handles a multi-filter recipe —
+    /// historically tested with rank+vital, swapped to two title
+    /// lists when pageview-rank bundling was dropped.
     #[test]
     fn composed_filter_any_mode_accepts_either() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.txt");
+        std::fs::write(&a, "Foo\nBar\n").unwrap();
+        let b = dir.path().join("b.txt");
+        std::fs::write(&b, "Baz\n").unwrap();
         let cfg = vec![
-            FilterConfig::PageviewRank {
-                rank_file: "@bundled:pageview_ranks_202311".into(),
-                max_rank: 100_000,
-            },
-            FilterConfig::TitleList {
-                list_file: "@bundled:vital_articles_l5".into(),
-            },
+            FilterConfig::TitleList { list_file: "a.txt".into() },
+            FilterConfig::TitleList { list_file: "b.txt".into() },
         ];
-        let p = build_filter_pipeline(&cfg, ComposeMode::Any, None).unwrap();
+        let p = build_filter_pipeline(&cfg, ComposeMode::Any, Some(dir.path())).unwrap();
         assert!(p.is_active());
         assert_eq!(p.descriptions().len(), 2);
+        assert!(p.accept(&doc("Foo")));
+        assert!(p.accept(&doc("Baz")));
+        assert!(!p.accept(&doc("Quux")));
     }
 }

@@ -66,50 +66,33 @@ fn empty_filter_pipeline_passes_everything() {
 }
 
 #[test]
-fn bundled_pageview_rank_filter_loads_from_compiled_in_bytes() {
-    let cfg = vec![FilterConfig::PageviewRank {
-        rank_file: "@bundled:pageview_ranks_202311".into(),
-        max_rank: 1_000_000,
-    }];
-    let pipeline = build_filter_pipeline(&cfg, ComposeMode::Any, None).unwrap();
-    assert!(pipeline.is_active());
-    // The bundled placeholder ships with at least Albert Einstein —
-    // matching the user-visible test entries the asset file documents.
-    let d = synthetic::doc(Some("Albert Einstein"), None);
-    assert!(pipeline.accept(&d));
-}
-
-#[test]
 fn bundled_vital_articles_filter_loads_from_compiled_in_bytes() {
     let cfg = vec![FilterConfig::TitleList {
         list_file: "@bundled:vital_articles_l5".into(),
     }];
     let pipeline = build_filter_pipeline(&cfg, ComposeMode::Any, None).unwrap();
     assert!(pipeline.is_active());
-    let d = synthetic::doc(Some("DNA"), None);
-    assert!(pipeline.accept(&d));
+    // Real Vital Articles L5 set has both DNA and Albert Einstein.
+    assert!(pipeline.accept(&synthetic::doc(Some("DNA"), None)));
+    assert!(pipeline.accept(&synthetic::doc(Some("Albert Einstein"), None)));
+    // Random article not on the list → rejected.
+    assert!(!pipeline.accept(&synthetic::doc(Some("Some Random Article"), None)));
 }
 
+/// Pageview-rank bundling was deliberately dropped — the rank file
+/// for any single month ages out within ~6 months and the freshness
+/// debt outweighs the marginal popularity-coverage gain over Vital
+/// Articles alone. The filter implementation stays so recipes can
+/// reference a freshly-generated rank file by path; only the
+/// `@bundled:` shorthand is gone.
 #[test]
-fn wikipedia_core_scope_combines_rank_or_vital() {
-    // Mirrors the Wikipedia Core recipe shape: rank ≤ N OR vital.
-    let cfg = vec![
-        FilterConfig::PageviewRank {
-            rank_file: "@bundled:pageview_ranks_202311".into(),
-            max_rank: 5,
-        },
-        FilterConfig::TitleList {
-            list_file: "@bundled:vital_articles_l5".into(),
-        },
-    ];
-    let pipeline = build_filter_pipeline(&cfg, ComposeMode::Any, None).unwrap();
-    // Albert Einstein is rank 2 in the placeholder rank file → accepted by branch A.
-    assert!(pipeline.accept(&synthetic::doc(Some("Albert Einstein"), None)));
-    // Aristotle is in the vital articles list but NOT in the top-5 by
-    // pageview rank in our placeholder → accepted by branch B.
-    assert!(pipeline.accept(&synthetic::doc(Some("Aristotle"), None)));
-    // Random article in neither → rejected.
-    assert!(!pipeline.accept(&synthetic::doc(Some("Some Random Article"), None)));
+fn pageview_rank_bundling_is_intentionally_unavailable() {
+    let cfg = vec![FilterConfig::PageviewRank {
+        rank_file: "@bundled:pageview_ranks_202311".into(),
+        max_rank: 100_000,
+    }];
+    let res = build_filter_pipeline(&cfg, ComposeMode::Any, None);
+    assert!(res.is_err());
 }
 
 #[test]
@@ -190,13 +173,20 @@ fn filter_signature_changes_with_config_change() {
         None,
     )
     .unwrap();
+    // Use a synthetic title-list at a temp path for the second filter
+    // — the pageview-rank bundled key was deliberately dropped, so we
+    // can't compose a second filter from a bundled source. The point
+    // of this test is signature stability under config change, which
+    // any filter swap demonstrates.
+    let dir = tempfile::tempdir().unwrap();
+    let list = dir.path().join("other.txt");
+    std::fs::write(&list, "OnlyOne\n").unwrap();
     let b = build_filter_pipeline(
-        &[FilterConfig::PageviewRank {
-            rank_file: "@bundled:pageview_ranks_202311".into(),
-            max_rank: 100,
+        &[FilterConfig::TitleList {
+            list_file: "other.txt".into(),
         }],
         ComposeMode::Any,
-        None,
+        Some(dir.path()),
     )
     .unwrap();
     assert_ne!(a.signature(), b.signature());

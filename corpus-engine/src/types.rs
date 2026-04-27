@@ -163,6 +163,15 @@ pub struct IndexInfo {
     /// any external caller that constructs `IndexInfo` by hand.
     #[serde(default)]
     pub kind: CorpusKind,
+    /// Whether the IVF-PQ vector index has been built for this corpus.
+    /// Mirrors `IndexMeta.vector_index_built` from
+    /// `_corpus_meta.json` — exposed here so desktop callers don't
+    /// need to re-read the meta file. The desktop's
+    /// `vector_index_ready` SQLite cache is allowed to lag behind
+    /// reality (the regular ingest path doesn't write to it); reading
+    /// this flag from the on-disk meta is the source of truth.
+    #[serde(default)]
+    pub vector_index_built: bool,
 }
 
 // ─── Scored Chunk (search result) ───────────────────────

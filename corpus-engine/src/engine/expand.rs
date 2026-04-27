@@ -153,11 +153,21 @@ impl CorpusEngine {
         // ── 5. Rebuild vector index (IVF-PQ centroids) ───────────
         //
         // Search remains live during this phase — LanceDB tolerates
-        // concurrent reads. Surfaced to the UI as the `optimizing_index`
-        // progress phase.
+        // concurrent reads. Surfaced to the UI as the
+        // `IngestProgress::OptimizingIndex` event so the
+        // `CorpusProgressBanner` shows "Optimizing search index…"
+        // rather than going silent for ~minutes after expansion.
         let index = CorpusIndex::open(&index_path).await?;
-        if index.chunk_count().await.unwrap_or(0) >= 256 {
-            tracing::info!(corpus = corpus_id, "expand_corpus: rebuilding IVF-PQ");
+        let current_chunks = index.chunk_count().await.unwrap_or(0);
+        if current_chunks >= 256 {
+            if let Some(ref cb) = progress {
+                cb(crate::progress::IngestProgress::OptimizingIndex { current_chunks });
+            }
+            tracing::info!(
+                corpus = corpus_id,
+                current_chunks,
+                "expand_corpus: rebuilding IVF-PQ"
+            );
             if let Err(e) = index.rebuild_vector_index().await {
                 // Don't fail the whole expansion on rebuild error —
                 // search degrades but stays functional.

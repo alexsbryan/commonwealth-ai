@@ -208,6 +208,11 @@ impl RecipeRegistry {
     /// Resolution order:
     /// 1. `<overrides_dir>/<id>.toml` — local file, no network.
     /// 2. `toml_url` from the registry entry — fetched via HTTP, SHA-256 verified.
+    /// 3. Compile-time bundled TOML via [`crate::recipe::bundled_recipe_toml`]
+    ///    — last-resort fallback. Lets a corpus install without the
+    ///    network when the recipe is part of the bundled snapshot but
+    ///    the live URL is unreachable (e.g. recipe not yet pushed to
+    ///    GitHub during development, or air-gapped use).
     pub async fn fetch_recipe(&self, id: &str) -> Result<Recipe> {
         // 1. Local override.
         if let Some(dir) = &self.overrides_dir {
@@ -224,27 +229,50 @@ impl RecipeRegistry {
             }
         }
 
-        // 2. Fetch from registry URL.
+        // 2. Fetch from registry URL — falls through to the bundled
+        // fallback on any non-success outcome (404, DNS error, sha256
+        // mismatch). Logging the URL miss makes the fallback path
+        // observable rather than silently swallowed.
         let entry = self
             .find_entry(id)
             .ok_or_else(|| Error::Recipe(format!("No registry entry for corpus '{id}'")))?;
 
-        if entry.toml_url.is_empty() {
-            return Err(Error::Recipe(format!(
-                "Registry entry for '{id}' has no toml_url"
-            )));
+        if !entry.toml_url.is_empty() {
+            tracing::debug!(corpus = %id, url = %entry.toml_url, "Fetching recipe TOML from registry");
+            match fetch_text(&entry.toml_url).await {
+                Ok(text) => {
+                    if !entry.sha256.is_empty() {
+                        if let Err(e) = verify_sha256(text.as_bytes(), &entry.sha256) {
+                            tracing::warn!(
+                                corpus = %id,
+                                "Recipe URL fetched but SHA-256 mismatch ({e}); trying bundled fallback"
+                            );
+                        } else {
+                            return Recipe::from_toml(&text);
+                        }
+                    } else {
+                        return Recipe::from_toml(&text);
+                    }
+                }
+                Err(e) => {
+                    tracing::info!(
+                        corpus = %id,
+                        url = %entry.toml_url,
+                        "Recipe URL unreachable ({e}); trying bundled fallback"
+                    );
+                }
+            }
         }
 
-        tracing::debug!(corpus = %id, url = %entry.toml_url, "Fetching recipe TOML from registry");
-        let text = fetch_text(&entry.toml_url).await?;
-
-        if !entry.sha256.is_empty() {
-            verify_sha256(text.as_bytes(), &entry.sha256).map_err(|e| {
-                Error::Recipe(format!("SHA-256 mismatch for corpus '{id}': {e}"))
-            })?;
+        // 3. Bundled compile-time fallback.
+        if let Some(toml) = crate::recipe::bundled_recipe_toml(id) {
+            tracing::debug!(corpus = %id, "Loading recipe from bundled compile-time TOML");
+            return Recipe::from_toml(toml);
         }
 
-        Recipe::from_toml(&text)
+        Err(Error::Recipe(format!(
+            "No recipe available for corpus '{id}': local override absent, registry URL unreachable, and no bundled fallback"
+        )))
     }
 
     /// Cache a fetched recipe TOML to the overrides directory so future
@@ -371,6 +399,38 @@ mod tests {
         assert!(catalog.iter().any(|c| c.id == "wikipedia"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia-simple"));
         assert!(catalog.iter().any(|c| c.id == "sep"));
+    }
+
+    /// Every snapshot entry must have a compile-time bundled TOML so
+    /// `fetch_recipe` can fall back when the registry URL is unreachable
+    /// (recipe not yet pushed to GitHub, air-gapped use, captive-portal
+    /// network). A new catalog entry without a `bundled_recipe_toml`
+    /// arm would silently regress to "live URL only" — this test pins
+    /// that contract.
+    #[test]
+    fn bundled_recipe_covers_every_snapshot_entry() {
+        let registry = RecipeRegistry::from_bundled(None);
+        for entry in registry.list_entries() {
+            assert!(
+                crate::recipe::bundled_recipe_toml(&entry.id).is_some(),
+                "snapshot entry '{}' has no compile-time bundled recipe TOML",
+                entry.id,
+            );
+        }
+    }
+
+    /// `fetch_recipe` must produce a Recipe even when the URL is broken,
+    /// so long as the id is in the bundled set. Asserted here against
+    /// `wikipedia-simple` whose live URL is intentionally a 404 in the
+    /// snapshot during initial rollout.
+    #[tokio::test]
+    async fn fetch_recipe_falls_back_to_bundled_on_url_failure() {
+        // No overrides_dir → forces the URL → bundled fallback path.
+        let registry = RecipeRegistry::from_bundled(None);
+        let r = registry.fetch_recipe("wikipedia-simple").await.expect(
+            "wikipedia-simple should resolve via bundled fallback even when URL 404s",
+        );
+        assert_eq!(r.corpus.id, "wikipedia-simple");
     }
 }
 
