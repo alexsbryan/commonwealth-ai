@@ -119,6 +119,7 @@ const BUILTINS: &[(&str, &str)] = &[
     ("consulting", include_str!("consulting.toml")),
     ("startup", include_str!("startup.toml")),
     ("team-lead", include_str!("team-lead.toml")),
+    ("chaos-month", include_str!("chaos-month.toml")),
 ];
 
 pub(super) fn list_builtin_names() -> Vec<&'static str> {
@@ -175,6 +176,20 @@ mod tests {
     #[test]
     fn team_lead_template_parses() {
         load_builtin("team-lead").expect("team-lead.toml should parse");
+    }
+
+    #[test]
+    fn chaos_month_template_parses() {
+        let t = load_builtin("chaos-month").expect("chaos-month.toml should parse");
+        assert_eq!(t.meta.name, "chaos-month");
+        assert!(
+            t.conversations.len() >= 15,
+            "chaos-month should have a meaningful number of noisy conversations"
+        );
+        assert!(
+            !t.expected_entities.is_empty(),
+            "chaos-month must declare its clean ground-truth entity set"
+        );
     }
 
     #[test]
