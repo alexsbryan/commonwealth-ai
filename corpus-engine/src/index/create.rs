@@ -217,6 +217,7 @@ impl CorpusIndex {
             source_version: None,
             update_manifest_url: None,
             processed_shards: Vec::new(),
+            committed_shard_set: None,
             scope: None,
             filter_override: None,
         };
@@ -274,8 +275,20 @@ impl CorpusIndex {
         query_sharing: Option<bool>,
         license: &str,
     ) -> Result<(Self, u64)> {
-        // Resume path: partial index exists from a previous killed run.
-        if path.exists() && !Self::is_ingestion_complete(path) {
+        // Resume path: an index exists at this location.
+        //
+        // We deliberately accept BOTH "ingest in progress" (the
+        // historical resume case — a previous run was killed) AND
+        // "ingest complete" (a successfully-finished corpus the
+        // operator has chosen to re-trigger). The latter is the
+        // drift-recovery and expand-corpus path: the chunks table
+        // already exists, the iter_pos may be stale, and the in-loop
+        // drift detection + skipset machinery handle the rest. Trying
+        // to "fresh-create" here would hit `Table 'chunks' already
+        // exists` from LanceDB and tank the recovery — so once we
+        // know the directory is openable, we open it and let the
+        // ingest loop decide what to do with the existing state.
+        if path.exists() {
             match Self::open(path).await {
                 Ok(index) => {
                     let iter_pos = read_meta(path)
@@ -386,11 +399,45 @@ impl CorpusIndex {
     /// Persist the current iterator position as a resume checkpoint.
     /// Called after each successful batch flush so that a subsequent restart
     /// can skip already-committed source documents.
+    ///
+    /// Prefer [`Self::update_committed_iter_pos_with_shards`] from any
+    /// caller that knows the assigned shard set — without it, a
+    /// resume cannot detect the coordinate-space drift that occurs
+    /// when `processed_shards` mutates between runs (see the
+    /// `committed_shard_set` field on `IndexMeta` for the full
+    /// rationale). This signature is kept for the `expand_corpus`
+    /// reset path and any caller that is genuinely shard-agnostic.
     pub fn update_committed_iter_pos(&self, iter_pos: u64) -> Result<()> {
         let index_dir = Path::new(self.db.uri());
         let mut meta = read_meta(index_dir)?;
         meta.committed_iter_pos = iter_pos;
         write_meta(index_dir, &meta)
+    }
+
+    /// Same as [`Self::update_committed_iter_pos`] but additionally
+    /// records the assigned-shard set the iterator was constructed
+    /// with at the start of this run. The saved set is what later
+    /// resumes compare against to detect coordinate-space drift.
+    /// Pass `None` for non-sharded ingests (the canonical default
+    /// signal: the iter_pos space is implicit).
+    pub fn update_committed_iter_pos_with_shards(
+        &self,
+        iter_pos: u64,
+        shard_set: Option<&[usize]>,
+    ) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.committed_iter_pos = iter_pos;
+        meta.committed_shard_set = shard_set.map(|s| s.to_vec());
+        write_meta(index_dir, &meta)
+    }
+
+    /// Read the shard set associated with the saved `committed_iter_pos`.
+    /// Returns `None` for legacy indexes that pre-date the field.
+    pub fn committed_shard_set(&self) -> Result<Option<Vec<usize>>> {
+        let index_dir = Path::new(self.db.uri());
+        let meta = read_meta(index_dir)?;
+        Ok(meta.committed_shard_set)
     }
 
     /// Mark a zip shard as fully committed. Idempotent — adding a
@@ -492,6 +539,26 @@ impl CorpusIndex {
     }
 
     /// Persist that search indexes have been successfully built.
+    /// Clear the per-phase index-built flags. Called by the drift
+    /// recovery path so the post-embed build phase actually rebuilds
+    /// IVF-PQ + FTS over the union of existing + newly-embedded
+    /// chunks. Without this, `indexes_are_built()` would short-circuit
+    /// the build and leave the recovery chunks unsearchable.
+    ///
+    /// Also flips `ingestion_in_progress` back to true so the install
+    /// state machine treats the corpus as actively re-ingesting until
+    /// `mark_ingestion_complete` runs at the end of the recovery pass.
+    pub fn reset_for_drift_recovery(&self) -> Result<()> {
+        let index_dir = std::path::Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.indexes_built = false;
+        meta.vector_index_built = false;
+        meta.content_fts_built = false;
+        meta.title_fts_built = false;
+        meta.ingestion_in_progress = true;
+        write_meta(index_dir, &meta)
+    }
+
     pub fn mark_indexes_built(&self) -> Result<()> {
         let index_dir = Path::new(self.db.uri());
         let mut meta = read_meta(index_dir)?;

@@ -220,6 +220,23 @@ struct IndexMeta {
     /// Defaults to 0 so existing complete indexes don't try to resume.
     #[serde(default)]
     committed_iter_pos: u64,
+
+    /// Snapshot of the assigned-shard set at the time `committed_iter_pos`
+    /// was last written. The iter_pos counter is meaningful only within
+    /// the iteration produced by THIS shard set — if a subsequent run
+    /// resolves a different set (because `processed_shards` mutated
+    /// between runs), the same `committed_iter_pos` value lands at a
+    /// different point in the source and either skips real work or
+    /// short-circuits the loop entirely. The resume logic compares the
+    /// saved set to the current resolved set and falls back to a
+    /// document-level skipset when they diverge.
+    ///
+    /// `None` for legacy indexes written before this field existed —
+    /// resume in that case is best-effort: we treat the iter_pos as
+    /// authoritative and log a warning if the current run produces
+    /// zero embeddings (likely the bug surfaced).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    committed_shard_set: Option<Vec<usize>>,
     /// Set to true once `build_indexes()` completes successfully.
     /// Allows a resume to skip index-building if it already finished in a
     /// previous run (e.g. process killed between build_indexes and

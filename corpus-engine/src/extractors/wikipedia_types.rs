@@ -65,10 +65,26 @@ pub fn wiki_title_from_url(url: &str) -> Option<String> {
     Some(decoded)
 }
 
-/// Minimal percent-decode that handles the most common Wikipedia URL encodings.
+/// Percent-decode for Wikipedia URLs.
+///
+/// **UTF-8 aware.** Earlier versions cast each `%XX` byte directly to a
+/// `char`, which breaks multi-byte UTF-8 sequences: `é` is encoded as
+/// `%C3%A9` (two bytes `0xC3 0xA9`), and the per-byte cast produced
+/// `Ã©` (two Latin-1 chars) instead of `é`. That mojibake then
+/// propagated into LanceDB chunks (`url`, `title`) and into the
+/// `_corpus_meta.json` if any title field used this helper. The diff
+/// against `vital_articles_l5` showed ~957 articles materializing as
+/// `1913 ottoman coup d'ã©tat` rather than `1913 ottoman coup d'état`,
+/// failing every filter and search match for those titles.
+///
+/// Correct path: accumulate the decoded `%XX` sequences into a byte
+/// buffer, then decode the buffer as UTF-8 in one shot. Falls back to
+/// `from_utf8_lossy` so a malformed title yields a U+FFFD replacement
+/// rather than panicking — the title may be junk anyway and we don't
+/// want to crash the entire ingest.
 fn percent_decode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
     let bytes = s.as_bytes();
+    let mut buf: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
@@ -76,15 +92,15 @@ fn percent_decode(s: &str) -> String {
                 hex_digit(bytes[i + 1]),
                 hex_digit(bytes[i + 2]),
             ) {
-                out.push(((h << 4) | l) as char);
+                buf.push((h << 4) | l);
                 i += 3;
                 continue;
             }
         }
-        out.push(bytes[i] as char);
+        buf.push(bytes[i]);
         i += 1;
     }
-    out
+    String::from_utf8_lossy(&buf).into_owned()
 }
 
 fn hex_digit(b: u8) -> Option<u8> {
@@ -93,5 +109,59 @@ fn hex_digit(b: u8) -> Option<u8> {
         b'a'..=b'f' => Some(b - b'a' + 10),
         b'A'..=b'F' => Some(b - b'A' + 10),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wiki_title_from_url_decodes_multibyte_utf8() {
+        // `é` is `%C3%A9` (UTF-8 0xC3 0xA9). The fix is to accumulate
+        // bytes and UTF-8-decode at the end, instead of casting each
+        // byte to a char individually (which produced `Ã©`).
+        assert_eq!(
+            wiki_title_from_url("https://en.wikipedia.org/wiki/Coup_d%27%C3%A9tat"),
+            Some("Coup d'état".to_string())
+        );
+    }
+
+    #[test]
+    fn wiki_title_from_url_decodes_multiple_utf8_chars() {
+        // Tōhoku — `ō` is `%C5%8D`. En dash — `–` is `%E2%80%93`.
+        // Both must round-trip through one buffer to UTF-8.
+        assert_eq!(
+            wiki_title_from_url(
+                "https://en.wikipedia.org/wiki/2011_T%C5%8Dhoku_earthquake_and_tsunami"
+            ),
+            Some("2011 Tōhoku earthquake and tsunami".to_string())
+        );
+        assert_eq!(
+            wiki_title_from_url(
+                "https://en.wikipedia.org/wiki/1936%E2%80%931939_Arab_revolt_in_Palestine"
+            ),
+            Some("1936–1939 Arab revolt in Palestine".to_string())
+        );
+    }
+
+    #[test]
+    fn wiki_title_from_url_strips_fragment_and_query() {
+        // The function strips `#` fragments and `?` queries, which is
+        // why distinct-section URLs collapse to a single article title.
+        assert_eq!(
+            wiki_title_from_url("https://en.wikipedia.org/wiki/Albert_Einstein#Early_life"),
+            Some("Albert Einstein".to_string())
+        );
+        assert_eq!(
+            wiki_title_from_url("https://en.wikipedia.org/wiki/Albert_Einstein?action=raw"),
+            Some("Albert Einstein".to_string())
+        );
+    }
+
+    #[test]
+    fn wiki_title_from_url_returns_none_for_non_wiki_paths() {
+        assert!(wiki_title_from_url("https://example.com/foo").is_none());
+        assert!(wiki_title_from_url("https://en.wikipedia.org/wiki/").is_none());
     }
 }

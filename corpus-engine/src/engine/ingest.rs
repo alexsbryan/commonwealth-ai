@@ -152,25 +152,32 @@ impl CorpusEngine {
         // partitions from a prior run). Missing or single-shard
         // sources keep `shard_indices = None`, preserving the
         // legacy extractor behaviour that reads everything.
-        if !legacy_resume {
-            let shard_count = self.jsonl_source_shard_count(&corpus_id).unwrap_or(1);
-            if shard_count > 1 {
-                let processed: std::collections::HashSet<usize> = self
-                    .corpus_processed_shards(&corpus_id)
-                    .into_iter()
-                    .collect();
-                let remaining: Vec<usize> = (0..shard_count)
-                    .filter(|i| !processed.contains(i))
-                    .collect();
-                if remaining.is_empty() {
-                    tracing::info!(
-                        corpus_id,
-                        shard_count,
-                        "ingest: all shards already processed — finaliser will promote"
-                    );
-                }
-                apply_jsonl_shard_override(&mut recipe, Some(remaining));
+        //
+        // Applied for BOTH new-flow ingests AND legacy-canonical
+        // resumes. Without this on the legacy path, a re-ingest
+        // against a previously-promoted canonical falls through to
+        // `WikipediaJsonl`'s flat reader, which dumb-greps the ZIP
+        // for `*.jsonl` and pulls in macOS resource forks
+        // (`__MACOSX/._*.jsonl`) as if they were data shards. The
+        // sharded path uses `canonical_jsonl_shard_entries`, which
+        // filters those out — same logic peer collaboration uses.
+        let shard_count = self.jsonl_source_shard_count(&corpus_id).unwrap_or(1);
+        if shard_count > 1 {
+            let processed: std::collections::HashSet<usize> = self
+                .corpus_processed_shards(&corpus_id)
+                .into_iter()
+                .collect();
+            let remaining: Vec<usize> = (0..shard_count)
+                .filter(|i| !processed.contains(i))
+                .collect();
+            if remaining.is_empty() {
+                tracing::info!(
+                    corpus_id,
+                    shard_count,
+                    "ingest: all shards already processed — finaliser will promote"
+                );
             }
+            apply_jsonl_shard_override(&mut recipe, Some(remaining));
         }
 
         // ── Run the actual pipeline with cleanup-on-failure ───────
@@ -372,6 +379,17 @@ impl CorpusEngine {
         // that motivated this split.
         let unit_scoped = unit_id.is_some();
 
+        // Capture the assigned shard set this run is iterating, if any.
+        // For Wikipedia JSONL ingests, `apply_jsonl_shard_override` (in the
+        // outer `ingest()`) sets this to `(0..shard_count) - processed_shards`
+        // before we get here. This is the coordinate space `iter_pos` will
+        // increment within, so we save it alongside `committed_iter_pos`
+        // and compare on resume to detect coordinate-space drift.
+        let assigned_shard_set: Option<Vec<usize>> = match &recipe.extract {
+            ExtractorConfig::WikipediaJsonl { shard_indices, .. } => shard_indices.clone(),
+            _ => None,
+        };
+
         // Open or resume a partial index (supports resuming after process kill).
         let (index, resume_iter_pos) = if unit_scoped {
             let index = CorpusIndex::create_or_open_for_unit(
@@ -424,6 +442,112 @@ impl CorpusEngine {
                 }
             }
         }
+
+        // ── Shard-set drift detection ────────────────────────────────────
+        //
+        // `committed_iter_pos` is meaningful only within the iteration
+        // produced by the shard set the previous run was iterating. If
+        // `processed_shards` mutated between runs (a shard's boundary
+        // crossed during a prior flush), the assigned set computed at
+        // the top of `ingest()` shrinks — and `committed_iter_pos`
+        // becomes a stale coordinate. Same numeric value, different
+        // source position. This is the "Wikipedia ingestion declared
+        // complete after killing the daemon" bug: the resume cursor
+        // landed past the end of the smaller iteration, the for-loop
+        // exhausted with zero docs processed, and the pipeline fell
+        // through to indexing as if it had finished.
+        //
+        // Detection: compare the saved `committed_shard_set` against
+        // the current run's assigned set. If they differ, treat the
+        // saved iter_pos as untrustworthy: reset to 0 and merge the
+        // existing chunks' source_doc_ids into the `already_indexed`
+        // skipset so the fresh iteration only embeds documents that
+        // aren't already in the table.
+        //
+        // Skipped for unit-scoped runs because their iter_pos is
+        // bounded by the work-queue lease (file_indices/article_range
+        // override), not by `committed_iter_pos` — the merge leader
+        // owns finalisation, not us.
+        let (resume_iter_pos, already_indexed) = if !unit_scoped {
+            let saved_shard_set = index.committed_shard_set().ok().flatten();
+            let drift = match (&saved_shard_set, &assigned_shard_set) {
+                (Some(saved), Some(current)) => saved != current,
+                // Legacy index (no saved shard set) with a sharded run
+                // AND a non-zero saved iter_pos: this is exactly the
+                // pre-fix state that produced the wikipedia data loss.
+                // The iter_pos was computed against an unknown shard
+                // set; we can't verify it against the current set, so
+                // treat it as untrustworthy. The skipset path will
+                // re-yield every doc, and the filter + skipset combine
+                // to embed only what's missing. Pure overhead when the
+                // index actually IS complete; correct recovery when
+                // it isn't.
+                (None, Some(_)) if resume_iter_pos > 0 => true,
+                // Fresh install on a sharded corpus (iter_pos = 0):
+                // nothing to drift against, no-op.
+                (None, Some(_)) => false,
+                // No assigned shard set on the current run (single-
+                // shard / non-Wikipedia). Iter_pos space is implicit
+                // and stable across runs.
+                (_, None) => false,
+            };
+            if drift {
+                tracing::warn!(
+                    corpus = %recipe.corpus.id,
+                    saved = ?saved_shard_set,
+                    current = ?assigned_shard_set,
+                    saved_iter_pos = resume_iter_pos,
+                    "shard-set drift detected on resume — \
+                     falling back to source_doc_id skipset"
+                );
+                eprintln!(
+                    "[{}] Shard-set drift on resume — saved set differs from current. \
+                     Loading existing source_doc_ids as skipset; iter_pos reset to 0.",
+                    recipe.corpus.id,
+                );
+                let mut skip = match index.list_indexed_source_doc_ids().await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!(
+                            corpus = %recipe.corpus.id,
+                            error = %e,
+                            "shard-set drift: list_indexed_source_doc_ids failed; \
+                             cannot safely resume — proceeding with iter_pos as-is"
+                        );
+                        return Err(Error::Database(format!(
+                            "shard-set drift recovery failed: {e}"
+                        )));
+                    }
+                };
+                if let Some(ref existing) = already_indexed {
+                    for id in existing.iter() {
+                        skip.insert(id.clone());
+                    }
+                }
+                tracing::info!(
+                    corpus = %recipe.corpus.id,
+                    skipset_size = skip.len(),
+                    "shard-set drift: skipset built from existing chunks"
+                );
+                // Force a fresh index build over the union of existing
+                // and newly-embedded chunks. Without this, the
+                // `indexes_are_built` short-circuit would leave the
+                // recovery chunks unsearchable.
+                if let Err(e) = index.reset_for_drift_recovery() {
+                    tracing::warn!(
+                        corpus = %recipe.corpus.id,
+                        error = %e,
+                        "shard-set drift: failed to reset index-built flags — \
+                         IVF-PQ + FTS may not include recovered chunks"
+                    );
+                }
+                (0u64, Some(std::sync::Arc::new(skip)))
+            } else {
+                (resume_iter_pos, already_indexed)
+            }
+        } else {
+            (resume_iter_pos, already_indexed)
+        };
 
         // Initialise counters. On resume these start from where we left off.
         let mut total_chunks = index.chunk_count().await.unwrap_or(0);
@@ -532,11 +656,6 @@ impl CorpusEngine {
         for doc_result in doc_iter {
             iter_pos += 1;
 
-            // Skip documents that were already committed in a previous run.
-            if iter_pos <= resume_iter_pos {
-                continue;
-            }
-
             // Cooperative cancellation — polled once per document (cheap
             // atomic load). Exits between documents so the current flush
             // boundary is respected and `committed_iter_pos` stays
@@ -566,30 +685,26 @@ impl CorpusEngine {
                 }
             };
 
-            // ── Expansion skipset ────────────────────────────────────────
-            // When `expand_corpus` runs the pipeline against an existing
-            // index with a relaxed filter, it threads in the set of
-            // already-indexed `source_doc_id`s so this run only embeds
-            // newly-accepted documents. The filter pipeline already
-            // dropped articles that don't pass the new scope; the
-            // skipset additionally drops articles already covered by a
-            // previous (narrower) scope.
-            if let Some(skip) = already_indexed.as_ref() {
-                let key = doc
-                    .url
-                    .as_deref()
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or(doc.source_id.as_str());
-                if !key.is_empty() && skip.contains(key) {
-                    docs_skipped += 1;
-                    continue;
-                }
-            }
-
-            // ── File-boundary detection ────────────────────────────────
+            // ── File-boundary detection (runs BEFORE resume-skip) ────────
             // When `source_file` transitions from A → B, file A's last doc
             // was the previous document (iter_pos - 1). Record that boundary
             // so we can mark A as Complete after the next tier-2 flush.
+            //
+            // CRITICAL ordering: this MUST run before the resume-skip
+            // continue so shards traversed only during fast-forward
+            // record their boundaries. Without this, shards we already
+            // processed in an earlier run (whose docs are now indexed
+            // and skipped via iter_pos) would never get marked into
+            // `processed_shards`, so the next restart's
+            // `apply_jsonl_shard_override` keeps re-assigning them.
+            // The assigned-shard set then stays inflated and the
+            // iter_pos coordinate space drifts — exactly the bug that
+            // dropped 31k Vital Articles from the wikipedia ingest.
+            //
+            // The skipset check is also moved below this block so a
+            // skipset hit (`already_indexed`) doesn't suppress
+            // boundary recording — we still know which file the doc
+            // came from regardless of whether we re-embed it.
             if let Some(ref sf) = doc.source_file {
                 let file_changed = prev_source_file.as_deref() != Some(sf.as_str());
                 if file_changed {
@@ -610,6 +725,34 @@ impl CorpusEngine {
                         }
                     }
                     prev_source_file = Some(sf.clone());
+                }
+            }
+
+            // Skip documents that were already committed in a previous run.
+            // Boundary detection above keeps `file_boundary_iter_pos`
+            // populated even for these fast-forwarded docs, so
+            // `mark_complete_shards` can promote shards that finished
+            // entirely during a previous run.
+            if iter_pos <= resume_iter_pos {
+                continue;
+            }
+
+            // ── Expansion / drift skipset ────────────────────────────────
+            // When `expand_corpus` runs the pipeline against an existing
+            // index with a relaxed filter, it threads in the set of
+            // already-indexed `source_doc_id`s so this run only embeds
+            // newly-accepted documents. The shard-set-drift recovery
+            // path also populates this set with the index's existing
+            // source_doc_ids when iter_pos has been reset to 0.
+            if let Some(skip) = already_indexed.as_ref() {
+                let key = doc
+                    .url
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(doc.source_id.as_str());
+                if !key.is_empty() && skip.contains(key) {
+                    docs_skipped += 1;
+                    continue;
                 }
             }
 
@@ -772,7 +915,13 @@ impl CorpusEngine {
                         // Partition-wide resume cursor is meaningless for
                         // unit-scoped runs — the next unit comes with its
                         // own bounded source iterator, not a continuation.
-                        let _ = index.update_committed_iter_pos(iter_pos);
+                        // Pass the captured `assigned_shard_set` so the
+                        // next resume can detect drift if `processed_shards`
+                        // mutates between this commit and the restart.
+                        let _ = index.update_committed_iter_pos_with_shards(
+                            iter_pos,
+                            assigned_shard_set.as_deref(),
+                        );
                     }
                     total_chunks += flush_count as u64;
 
@@ -837,7 +986,10 @@ impl CorpusEngine {
             total_chunks += flush_count as u64;
             index.insert_batch(&index_buffer).await?;
             if !unit_scoped {
-                let _ = index.update_committed_iter_pos(iter_pos);
+                let _ = index.update_committed_iter_pos_with_shards(
+                    iter_pos,
+                    assigned_shard_set.as_deref(),
+                );
             }
 
             // Tally AFTER successful insert.
