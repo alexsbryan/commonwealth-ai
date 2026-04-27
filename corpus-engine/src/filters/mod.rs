@@ -150,6 +150,27 @@ impl FilterPipeline {
             ComposeMode::All => self.children.iter().all(|c| c.accept(doc)),
         }
     }
+
+    /// Best-effort upper bound on accepted documents, when every child
+    /// can self-report and the composite has unambiguous semantics.
+    /// Used by the ingest progress reporter to give filtered ingests a
+    /// real percent denominator instead of shard-scan progress.
+    ///
+    /// Returns `None` when:
+    ///   - The pipeline is empty (no filter active; caller falls back).
+    ///   - The pipeline has multiple children. The semantically correct
+    ///     answer would be `min` (All mode) or somewhere in `[max, sum]`
+    ///     (Any mode, depending on overlap), but we don't have child
+    ///     overlap data and would rather return None than mislead the
+    ///     UI. Single-filter recipes are the common case today; revisit
+    ///     when a multi-filter recipe ships.
+    pub fn expected_count(&self) -> Option<usize> {
+        match self.children.len() {
+            0 => None,
+            1 => self.children[0].expected_count(),
+            _ => None,
+        }
+    }
 }
 
 /// Compute a SHA-256 over the canonical (TOML-serialised) filter

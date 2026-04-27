@@ -339,6 +339,15 @@ impl CorpusEngine {
         } else {
             None
         };
+        // Cache the filter's expected accept-count *before* the
+        // pipeline gets moved into the iterator-wrapping closure. This
+        // is what the desktop UI uses as the percent denominator for
+        // filtered ingests — `docs_processed / expected_filter_docs`
+        // is a much more honest signal than shard-scan progress when
+        // the filter rejects ~99% of the source ZIP.
+        let expected_filter_docs: Option<u64> = filter_pipeline
+            .expected_count()
+            .map(|n| n as u64);
         let doc_iter: Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send> =
             if filter_pipeline.is_active() {
                 let filter = std::sync::Arc::new(filter_pipeline);
@@ -693,6 +702,7 @@ impl CorpusEngine {
                             total: 0,
                             docs_processed: resume_iter_pos + docs_processed,
                             chunks_per_sec,
+                            expected_docs: expected_filter_docs,
                         });
                     }
                 }

@@ -146,6 +146,17 @@ pub enum IngestProgress {
         docs_processed: u64,
         /// Embedding throughput in chunks per second over the last batch.
         chunks_per_sec: f32,
+        /// Best-effort upper bound on the number of source documents the
+        /// active filter expects to accept (e.g. ~51K for Wikipedia +
+        /// `vital_articles_l5`). `None` for unfiltered ingests, where
+        /// the natural denominator is shard-scan progress instead.
+        ///
+        /// When `Some`, the desktop UI prefers `docs_processed /
+        /// expected_docs` over the shard-based estimate — that ratio is
+        /// the only honest signal for filtered ingests, where the
+        /// extractor must scan the entire source ZIP regardless of how
+        /// few documents the filter accepts.
+        expected_docs: Option<u64>,
     },
     Indexing {
         chunks_indexed: u64,
