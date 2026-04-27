@@ -705,6 +705,46 @@ impl NoteStore {
         Ok(out)
     }
 
+    /// Return all active notes whose `related_entity` matches the given
+    /// canonical name (case-sensitive match against the column value).
+    /// Filters out retired notes and orders by `created_at DESC`. Used by
+    /// the relational + strategic digests at splice time to find
+    /// commitment / follow_up / goal notes anchored to an entity.
+    ///
+    /// `kinds`, when non-empty, restricts to a subset of note kinds —
+    /// the digest passes `["commitment", "follow_up"]` for the
+    /// relational block and `["goal"]` for the strategic block.
+    pub async fn read_notes_by_related_entity(
+        &self,
+        related_entity: &str,
+        kinds: &[&str],
+    ) -> Result<Vec<NoteRow>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, kind, content, symbols, files, session_id,
+                        created_at, tool_name, retired_at, retired_by,
+                        scope, feature_id, promoted_from, related_entity
+                 FROM notes
+                 WHERE related_entity = ?1
+                   AND retired_at IS NULL
+                 ORDER BY created_at DESC",
+            )
+            .map_err(sqlite_err)?;
+        let mapped = stmt
+            .query_map(params![related_entity], map_note_row)
+            .map_err(sqlite_err)?;
+        let mut out = Vec::new();
+        for row in mapped {
+            let row = row.map_err(sqlite_err)?;
+            if !kinds.is_empty() && !kinds.iter().any(|k| *k == row.kind) {
+                continue;
+            }
+            out.push(row);
+        }
+        Ok(out)
+    }
+
     // ── Note deletion / retirement ─────────────────────────────────────────
 
     /// Delete a note by ID. Returns `true` if a row was removed, `false` if
@@ -1541,6 +1581,66 @@ mod tests {
             .collect();
         assert_eq!(with_entity.len(), 1);
         assert_eq!(with_entity[0].content, "alpha");
+    }
+
+    #[tokio::test]
+    async fn read_notes_by_related_entity_returns_only_matching_active_notes() {
+        // Three notes: two for Sarah (one commitment, one retired
+        // commitment), one for Mike. The query must surface only the
+        // active Sarah note — retired and unrelated rows are excluded.
+        let store = make_store().await;
+        let sarah_active = store
+            .write_note_with_relation(
+                "commitment", "send pricing", vec![], vec![], "s1",
+                NoteScope::Global, None, Some("Sarah Chen"),
+            )
+            .await
+            .unwrap();
+        let sarah_retired = store
+            .write_note_with_relation(
+                "commitment", "old commitment", vec![], vec![], "s1",
+                NoteScope::Global, None, Some("Sarah Chen"),
+            )
+            .await
+            .unwrap();
+        store
+            .write_note_with_relation(
+                "follow_up", "ping mike", vec![], vec![], "s1",
+                NoteScope::Global, None, Some("Mike Torres"),
+            )
+            .await
+            .unwrap();
+        store
+            .retire_by_id(&sarah_retired, "test")
+            .await
+            .unwrap();
+
+        let all_for_sarah = store
+            .read_notes_by_related_entity("Sarah Chen", &[])
+            .await
+            .unwrap();
+        assert_eq!(all_for_sarah.len(), 1);
+        assert_eq!(all_for_sarah[0].id, sarah_active);
+
+        // Kind filter narrows the result.
+        let goals_for_sarah = store
+            .read_notes_by_related_entity("Sarah Chen", &["goal"])
+            .await
+            .unwrap();
+        assert!(goals_for_sarah.is_empty());
+
+        let commitments_for_sarah = store
+            .read_notes_by_related_entity("Sarah Chen", &["commitment"])
+            .await
+            .unwrap();
+        assert_eq!(commitments_for_sarah.len(), 1);
+
+        // Unknown entity → empty.
+        let none = store
+            .read_notes_by_related_entity("Nobody", &[])
+            .await
+            .unwrap();
+        assert!(none.is_empty());
     }
 
     #[tokio::test]
