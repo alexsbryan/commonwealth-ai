@@ -20,7 +20,7 @@ the API returns verbatim.
 
 Usage:
     python build_vital_articles.py \\
-        --out ../../../corpus-engine/assets/vital_articles_l5.txt
+        --out ../data/vital_articles_l5.txt
 
 Environment:
     Set WIKI_USER_AGENT to a contact-string per Wikimedia's policy

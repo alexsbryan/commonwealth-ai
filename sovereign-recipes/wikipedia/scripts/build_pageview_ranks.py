@@ -28,8 +28,14 @@ compressed for 100K entries, vs ~2.5 MB plain).
 Usage:
     python build_pageview_ranks.py \\
         --date 2023-11-01 \\
-        --out ../../../corpus-engine/assets/pageview_ranks_202311.csv.gz \\
+        --out ../data/pageview_ranks_202311.csv.gz \\
         --top 100000
+
+The output is intentionally NOT bundled into corpus-engine — see
+`corpus-engine/src/filters/assets.rs` for the rationale (rank data
+ages out within ~6 months and the freshness debt outweighs the
+marginal gain over Vital Articles alone). Recipes that want
+pageview-rank filtering can reference the generated file by path.
 
 Notes:
     - Format spec: `domain_code page_title count_views total_response_size`

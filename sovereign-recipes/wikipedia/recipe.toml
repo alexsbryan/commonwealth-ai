@@ -42,7 +42,8 @@ type = "wikipedia_jsonl"
 # any specific month's data ages out within ~6 months — the freshness
 # debt outweighed the small popularity-coverage gain.
 #
-# The list is bundled into corpus-engine/assets/ via include_bytes!,
+# The list lives in sovereign-recipes/wikipedia/data/ and is copied
+# into corpus-engine's OUT_DIR by build.rs at compile time,
 # so this scope works fully offline. Removing the filter block (or
 # running `expand_corpus` from the UI) promotes the corpus to the full
 # 6.7M-article scope; the existing Core index is preserved and only
