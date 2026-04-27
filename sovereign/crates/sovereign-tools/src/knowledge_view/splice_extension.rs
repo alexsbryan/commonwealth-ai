@@ -31,10 +31,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
+use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
 use corpus_engine::features::FeatureStore;
 use corpus_engine::notes::NoteStore;
 use rusqlite::{Connection, OpenFlags};
 use sha2::{Digest, Sha256};
+use sovereign_core::memory::EntityInventory;
 
 use crate::knowledge_view::relational::{RelationalNote, RelationalNoteKind};
 use crate::knowledge_view::strategic::StrategicGoal;
@@ -53,7 +56,10 @@ use crate::knowledge_view::timeline::{
 /// Cost is one SELECT per table; on a typical DB (a few thousand
 /// memories, a hundred-or-so conversations) this is < 5 ms. Cheaper
 /// than per-chunk lookups which would hit the page cache repeatedly.
-pub(crate) fn load_chunk_timestamps(db_path: &Path) -> HashMap<String, i64> {
+///
+/// Public so the `sovereign awareness` glassbox CLI can resolve
+/// timestamps the same way the splice path does.
+pub fn load_chunk_timestamps(db_path: &Path) -> HashMap<String, i64> {
     let mut map = HashMap::new();
     let Ok(conn) = Connection::open_with_flags(
         db_path,
@@ -95,7 +101,7 @@ pub(crate) fn load_chunk_timestamps(db_path: &Path) -> HashMap<String, i64> {
 /// digest's `RelationalNote` payload. `created_at` becomes the
 /// anchor timestamp — the relational formatter uses it for the
 /// "(noted Mar 14)" / "(overdue)" annotations.
-pub(crate) async fn relational_notes_for_entity(
+pub async fn relational_notes_for_entity(
     notes: &NoteStore,
     entity_name: &str,
 ) -> Vec<RelationalNote> {
@@ -133,7 +139,7 @@ pub(crate) async fn relational_notes_for_entity(
 
 /// Same NoteStore query, narrowed to `goal` kinds and shaped for
 /// the strategic digest.
-pub(crate) async fn strategic_goals_for_entity(
+pub async fn strategic_goals_for_entity(
     notes: &NoteStore,
     entity_name: &str,
 ) -> Vec<StrategicGoal> {
@@ -186,7 +192,7 @@ fn shorten_summary(content: &str) -> String {
 /// materialise it eagerly because the underlying calls are async
 /// while the `AtosLookup` trait is sync — pre-loading lets the
 /// formatter stay synchronous.
-pub(crate) struct AtosSnapshot {
+pub struct AtosSnapshot {
     project: Option<ProjectMatch>,
     features: Vec<FeatureMatch>,
 }
@@ -207,7 +213,7 @@ struct FeatureMatch {
 impl AtosSnapshot {
     /// Empty snapshot — yields no matches. Used when the caller has
     /// no `project.toml` or no `features.db` configured.
-    pub(crate) fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
             project: None,
             features: Vec::new(),
@@ -219,7 +225,7 @@ impl AtosSnapshot {
     /// snapshot then carries no project entry but still surfaces any
     /// features. `features` is the live FeatureStore handle (already
     /// async-compatible — caller awaits the listing).
-    pub(crate) async fn build(
+    pub async fn build(
         features: Option<&Arc<FeatureStore>>,
         project_toml_path: Option<&Path>,
     ) -> Self {
@@ -365,18 +371,63 @@ fn fold_name(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
+// ── Entity inventory assembly ───────────────────────────────────
+
+/// Read every Entity atom's `canonical_name` + aliases across the two
+/// relational atlas dirs (`personal-knowledge` + `conversation-history`),
+/// fold to lowercase, and return as an `EntityInventory` (HashSet).
+///
+/// Used by:
+///   1. `KnowledgeViewManager::entity_inventory_from_atlases` to
+///      produce the inventory the runtime hands to the memory-decay
+///      path on each pruning cycle.
+///   2. `sovereign awareness decay` (Phase 3) — the development CLI
+///      surfaces "what survives entity-aware decay vs uniform" by
+///      passing this inventory into `apply_confidence_decay_with_rate_and_inventory`.
+///
+/// Returns an empty set when both atlases are absent — the caller
+/// treats "no inventory" as "uniform decay" (the
+/// `Option<&EntityInventory>` argument signals this with `None`).
+pub fn build_entity_inventory(index_dir: &Path) -> EntityInventory {
+    let mut inv = EntityInventory::new();
+    for view_id in ["personal-knowledge", "conversation-history"] {
+        let atlas_dir = index_dir.join(view_id).join(ATLAS_DIRNAME);
+        if !atlas_dir.exists() {
+            continue;
+        }
+        let Ok(atoms_file) = read_atlas_atoms(&atlas_dir) else {
+            continue;
+        };
+        for atom in &atoms_file.atoms {
+            if let AtomEnvelope::Entity(e) = atom {
+                let name = e.canonical_name.trim();
+                if !name.is_empty() {
+                    inv.insert(name.to_lowercase());
+                }
+                for alias in &e.aliases {
+                    let a = alias.trim();
+                    if !a.is_empty() {
+                        inv.insert(a.to_lowercase());
+                    }
+                }
+            }
+        }
+    }
+    inv
+}
+
 // ── In-conversation predicate ───────────────────────────────────
 
 /// Lowercased message bodies for the current conversation. The
 /// `format_relational` and `format_strategic` formatters call this
 /// once per entity name, so we precompute the lowercased text once
 /// per splice.
-pub(crate) struct ConversationCorpus {
+pub struct ConversationCorpus {
     lowered_messages: Vec<String>,
 }
 
 impl ConversationCorpus {
-    pub(crate) fn from_messages<I, S>(messages: I) -> Self
+    pub fn from_messages<I, S>(messages: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -389,7 +440,7 @@ impl ConversationCorpus {
         }
     }
 
-    pub(crate) fn contains_entity(&self, entity_name: &str) -> bool {
+    pub fn contains_entity(&self, entity_name: &str) -> bool {
         let needle = entity_name.trim().to_lowercase();
         if needle.is_empty() {
             return false;
@@ -592,6 +643,45 @@ mod tests {
         .unwrap();
         let m = load_project_match(&path).unwrap();
         assert_eq!(m.charter_status, CharterStatus::Clean);
+    }
+
+    #[test]
+    fn build_entity_inventory_lowercases_canonical_names_and_aliases() {
+        use corpus_engine::enrichment::atlas::atoms::{AtomId, AtomsFile, ChunkRef, Entity};
+        use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path().join("personal-knowledge").join("atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        let entity = Entity {
+            id: AtomId::entity(1),
+            canonical_name: "Sarah Chen".into(),
+            aliases: vec!["Sarah".into(), "S. Chen".into()],
+            entity_type: EntityType::Person,
+            first_appearance: ChunkRef::new("c1".to_string(), None),
+            description: String::new(),
+            salience: 0.7,
+            enrichment_depth: EnrichmentDepth::extracted_default(),
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+        };
+        let file = AtomsFile::new(vec![AtomEnvelope::Entity(entity)]);
+        let body = serde_json::to_string(&file).unwrap();
+        std::fs::write(atlas_dir.join("atoms.json"), body).unwrap();
+
+        let inv = build_entity_inventory(tmp.path());
+        assert!(inv.contains("sarah chen"));
+        assert!(inv.contains("sarah"));
+        assert!(inv.contains("s. chen"));
+        assert!(!inv.contains("Sarah Chen"), "names should be lowercased");
+    }
+
+    #[test]
+    fn build_entity_inventory_returns_empty_for_missing_atlases() {
+        let tmp = tempfile::tempdir().unwrap();
+        let inv = build_entity_inventory(tmp.path());
+        assert!(inv.is_empty());
     }
 
     #[test]

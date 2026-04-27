@@ -1,6 +1,8 @@
 mod amend;
 mod atos_cmd;
 mod atos_plugin;
+#[cfg(feature = "dev-tools")]
+mod awareness_cmd;
 mod bench_cmd;
 mod chat_cmd;
 mod code_cmd;
@@ -322,6 +324,24 @@ async fn main() {
             "atos" => {
                 let code = atos_cmd::run_atos(&raw_args[1..]).await;
                 std::process::exit(code);
+            }
+            "awareness" => {
+                #[cfg(feature = "dev-tools")]
+                {
+                    util::tracing_init::init_tracing(
+                        "sovereign_cli=info,sovereign_tools=debug,corpus_engine=debug",
+                    );
+                    let code = awareness_cmd::run_awareness(&raw_args[1..]).await;
+                    std::process::exit(code);
+                }
+                #[cfg(not(feature = "dev-tools"))]
+                {
+                    eprintln!(
+                        "awareness: this subcommand is gated behind the `dev-tools` cargo\n\
+                         feature. Rebuild with `cargo build --features dev-tools` to enable."
+                    );
+                    std::process::exit(2);
+                }
             }
             "tools" => {
                 let code = tools_cmd::run_tools(&raw_args[1..]).await;

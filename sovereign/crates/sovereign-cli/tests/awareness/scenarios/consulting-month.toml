@@ -1,0 +1,53 @@
+# Example scenario script — drives the consulting template through
+# seed → extract → assertions and reports per-assertion pass/fail.
+#
+# Run with:
+#   sovereign awareness scenario \
+#     crates/sovereign-cli/tests/awareness/scenarios/consulting-month.toml
+#
+# The runner builds a fresh sandbox under /tmp by default; pass
+# `sandbox = "<path>"` to pin a specific location.
+
+[scenario]
+name = "consulting-month"
+description = "Solo consultant, one month — relational + strategic awareness end to end"
+template = "consulting"
+
+[runner]
+inference = "mock"        # "mock" | "dry_run" | "real"
+reset_before = true       # rm -rf the sandbox before seeding
+
+# ── Entity-shape assertions ─────────────────────────────────────
+
+[[assertions]]
+kind = "entity_count"
+min_people = 2
+min_organizations = 1
+min_initiatives = 1
+
+[[assertions]]
+kind = "entity_present"
+name = "Sarah Chen"
+
+[[assertions]]
+kind = "entity_present"
+name = "API migration"
+
+# ── Digest-shape assertions ─────────────────────────────────────
+
+[[assertions]]
+kind = "digest_contains"
+digest = "relational"
+substring = "Sarah Chen"
+
+[[assertions]]
+kind = "digest_contains"
+digest = "strategic"
+substring = "API migration"
+
+# ── Suggestion-quality (drives `awareness suggest` per conv) ────
+
+[[assertions]]
+kind = "suggestion_quality"
+f1_min = 0.4
+recall_min = 0.4

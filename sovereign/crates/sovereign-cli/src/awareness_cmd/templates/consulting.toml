@@ -1,0 +1,149 @@
+# Consulting scenario template — solo consultant managing client
+# relationships. Minimal-viable seed for the Phase 2 iteration loop;
+# extend with more conversations as the awareness CLI is tuned.
+#
+# Day offsets are negative integers counted from today (the day
+# `awareness seed` runs). day_offset = -29 means 29 days ago.
+
+[meta]
+name = "consulting"
+description = "Solo consultant managing client relationships, pricing negotiations, and a multi-month API migration"
+days = 30
+
+# ── Expected entities (consumed by Phase 4 eval) ────────────────
+
+[[expected_entities]]
+name = "Sarah Chen"
+kind = "person"
+affiliation = "Acme Corp"
+role = "VP Engineering"
+
+[[expected_entities]]
+name = "Mike Torres"
+kind = "person"
+affiliation = "Acme Corp"
+role = "Engineering Lead"
+
+[[expected_entities]]
+name = "Dana Park"
+kind = "person"
+affiliation = "Meridian"
+role = "CTO"
+
+[[expected_entities]]
+name = "Acme Corp"
+kind = "organization"
+
+[[expected_entities]]
+name = "Meridian"
+kind = "organization"
+
+[[expected_entities]]
+name = "API migration"
+kind = "initiative"
+participants = ["Sarah Chen", "Mike Torres"]
+
+[[expected_entities]]
+name = "Q3 enterprise push"
+kind = "initiative"
+participants = ["Sarah Chen", "Dana Park"]
+
+# ── Conversations ───────────────────────────────────────────────
+
+[[conversations]]
+id = "c1"
+day_offset = -29
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Just got off the kickoff call with Sarah Chen at Acme Corp. She's the VP Engineering — sharp, asks direct questions. They want to start the API migration this quarter and have it done by end of Q2."
+[[conversations.messages]]
+role = "assistant"
+content = "Sounds like a solid scope. What's their current API footprint? Knowing that will shape the migration plan."
+[[conversations.messages]]
+role = "user"
+content = "About 40 endpoints, mostly REST, some GraphQL. They want a clean rewrite, not a wrapper. Sarah said the engineering lead Mike Torres will be my main point of contact for the technical work."
+
+[[conversations]]
+id = "c2"
+day_offset = -22
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Sync with Mike Torres today. He's worried about backward compatibility — wants me to ship a parallel migration path so existing integrations don't break. We agreed I'd send a draft migration plan to him by Friday."
+[[conversations.messages]]
+role = "assistant"
+content = "Backward compat is the right concern. A parallel path adds time but de-risks rollout. I'll watch the Friday deadline."
+
+[[conversations]]
+id = "c3"
+day_offset = -18
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Discovery call with Dana Park at Meridian. Different shape — they're not migrating, they want net-new infrastructure for their Q3 enterprise push. Dana is the CTO; small team, fast decisions."
+[[conversations.messages]]
+role = "assistant"
+content = "Two clients with different shapes — keep the contexts separate so commitments don't bleed."
+
+[[conversations]]
+id = "c4"
+day_offset = -14
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Sarah pushed back on the per-seat pricing. Acme's procurement won't sign anything per-seat above $20k/year. I'll put together a usage-based alternative and send it over by Friday."
+[[conversations.messages]]
+role = "assistant"
+content = "Usage-based is a reasonable pivot for enterprise. Track the Friday deadline."
+
+[[conversations]]
+id = "c5"
+day_offset = -10
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "API migration is on track — Mike approved the parallel path and we hit milestone 3 last Monday. Sarah's still negotiating pricing. Our goal is 40% enterprise revenue by end of Q3 — Sarah's deal is a big piece of that."
+[[conversations.messages]]
+role = "assistant"
+content = "Good progress. The enterprise revenue goal is concrete — useful to anchor weekly check-ins against."
+
+[[conversations]]
+id = "c6"
+day_offset = -3
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Quick check-in with Dana — Meridian's Q3 enterprise push is moving forward, they want me involved in the architecture review next month. Let's check back on the churn numbers after the April release."
+[[conversations.messages]]
+role = "assistant"
+content = "Architecture review is a natural fit. I'll surface the churn check-in when the April numbers land."
+
+# ── Expected suggestions (consumed by Phase 4 eval) ─────────────
+
+[[expected_suggestions]]
+conversation_id = "c2"
+turn = 1
+kind = "commitment"
+content_contains = "migration plan"
+related_entity = "Mike Torres"
+
+[[expected_suggestions]]
+conversation_id = "c4"
+turn = 1
+kind = "commitment"
+content_contains = "usage-based"
+related_entity = "Sarah Chen"
+
+[[expected_suggestions]]
+conversation_id = "c5"
+turn = 1
+kind = "goal"
+content_contains = "40% enterprise revenue"
+related_entity = "Q3 enterprise push"
+
+[[expected_suggestions]]
+conversation_id = "c6"
+turn = 1
+kind = "follow_up"
+content_contains = "churn"

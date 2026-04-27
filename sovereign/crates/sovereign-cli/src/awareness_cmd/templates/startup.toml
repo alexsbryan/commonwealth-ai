@@ -1,0 +1,42 @@
+# Startup scenario template — startup founder managing fundraising,
+# hiring, and product. Phase 2 ships a minimal stub so the loader
+# parses; extend with realistic conversations as the awareness CLI is
+# tuned (the spec calls for ~15 people, 6 organizations, 5 initiatives).
+
+[meta]
+name = "startup"
+description = "Startup founder — fundraising, hiring, product (stub fixture, expand as needed)"
+days = 30
+
+[[expected_entities]]
+name = "Anita Rao"
+kind = "person"
+affiliation = "Northstar Capital"
+role = "Partner"
+
+[[expected_entities]]
+name = "Northstar Capital"
+kind = "organization"
+
+[[expected_entities]]
+name = "Series B fundraise"
+kind = "initiative"
+participants = ["Anita Rao"]
+
+[[conversations]]
+id = "s1"
+day_offset = -20
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Coffee with Anita Rao at Northstar Capital. She's interested in leading our Series B — wants to see the updated growth deck by end of next week."
+[[conversations.messages]]
+role = "assistant"
+content = "Term sheet conversations move faster than founders expect. Hit the deadline."
+
+[[expected_suggestions]]
+conversation_id = "s1"
+turn = 1
+kind = "commitment"
+content_contains = "growth deck"
+related_entity = "Anita Rao"

@@ -1,0 +1,37 @@
+# Team-lead scenario template — engineering lead managing a project
+# and direct reports. Phase 2 ships a minimal stub so the loader
+# parses; extend with realistic conversations as the awareness CLI is
+# tuned (the spec calls for ~8 people, 2 organizations, 4 initiatives).
+
+[meta]
+name = "team-lead"
+description = "Team lead — project management, 1:1s, direct reports (stub fixture, expand as needed)"
+days = 30
+
+[[expected_entities]]
+name = "Priya Shah"
+kind = "person"
+role = "Senior Engineer"
+
+[[expected_entities]]
+name = "platform refactor"
+kind = "initiative"
+participants = ["Priya Shah"]
+
+[[conversations]]
+id = "t1"
+day_offset = -14
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "1:1 with Priya Shah today. She's leading the platform refactor and wants to bring in two more engineers — agreed I'd put together a hiring plan by next week."
+[[conversations.messages]]
+role = "assistant"
+content = "Hiring plans benefit from a concrete role spec. Block time to draft it."
+
+[[expected_suggestions]]
+conversation_id = "t1"
+turn = 1
+kind = "commitment"
+content_contains = "hiring plan"
+related_entity = "Priya Shah"
