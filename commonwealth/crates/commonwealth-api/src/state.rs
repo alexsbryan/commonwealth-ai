@@ -379,11 +379,15 @@ impl AppState {
                 inner.local_inference = Some(service);
             }
             None => {
-                tracing::warn!(
-                    "with_local_inference called on shared AppState; \
-                     local inference service not installed — \
-                     /v1/chat/completions will fall through to \
-                     orchestrator routing"
+                tracing::error!(
+                    strong_count = Arc::strong_count(&self.inner),
+                    "with_local_inference called on shared AppState — \
+                     local inference NOT installed and /v1/chat/completions \
+                     will 503 every request with model_not_ready. \
+                     Likely cause: another caller cloned AppState.inner \
+                     (e.g. AppStateYieldHook::new) before this point. \
+                     Move the with_* installer above any inner.clone() in \
+                     EmbeddedDaemon::start_daemon."
                 );
             }
         }
@@ -402,11 +406,15 @@ impl AppState {
                 inner.on_mesh_mutation = Some(hook);
             }
             None => {
-                tracing::warn!(
-                    "with_mesh_mutation_hook called on shared AppState; \
-                     persistence hook not installed — handlers will still \
-                     mutate correctly, but on-join persistence falls back \
-                     to the 10s gossip-loop cadence"
+                tracing::error!(
+                    strong_count = Arc::strong_count(&self.inner),
+                    "with_mesh_mutation_hook called on shared AppState — \
+                     persistence hook NOT installed; on-join persistence \
+                     falls back to 10s gossip-loop cadence. \
+                     Likely cause: another caller cloned AppState.inner \
+                     (e.g. AppStateYieldHook::new) before this point. \
+                     Move the with_* installer above any inner.clone() in \
+                     EmbeddedDaemon::start_daemon."
                 );
             }
         }
