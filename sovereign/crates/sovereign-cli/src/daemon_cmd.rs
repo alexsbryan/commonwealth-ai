@@ -910,30 +910,37 @@ fn home_dir_buf() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
 }
 
+/// `sovereign daemon restart` — stop the running daemon (whichever
+/// lifecycle owns it: pidfile or launchd) and start a fresh one.
+///
+/// Earlier versions of this command went straight to `launchctl
+/// kickstart -k gui/<uid>/com.sovereign.daemon`. That broke for every
+/// user who started the daemon via `sovereign daemon start` (the
+/// pidfile-managed path), because the launchd service isn't loaded
+/// in the gui domain — kickstart errors out with "Could not find
+/// service in domain for user". The asymmetry was: `start` and
+/// `stop` both fall back through pidfile → launchctl, but `restart`
+/// only ever spoke to launchctl.
+///
+/// Fix: compose `restart` from `stop_daemon().await + start_daemon().await`,
+/// so the same lifecycle inference (pidfile preferred, launchctl as
+/// fallback) applies to all three commands. Cost: launchd-managed
+/// installs that were previously kickstarted now end up under
+/// `daemon start`'s detached-child path — consistent with what
+/// `daemon stop && daemon start` already does, and which any user
+/// who actually wants strict launchd accounting can run via
+/// `launchctl kickstart -k gui/$(id -u)/com.sovereign.daemon`
+/// directly.
 async fn restart_daemon() -> i32 {
     eprintln!("restarting sovereign daemon …");
-    match crate::service_install::restart_service() {
-        Ok(()) => {
-            // Poll `/v1/models` so we don't hand control back to the
-            // user while the daemon is still respawning. Ready when
-            // we get any 2xx response — even an empty model list
-            // means the router is up.
-            if wait_for_ready(std::time::Duration::from_secs(10)).await {
-                eprintln!("✓ daemon restarted and answering on :9741");
-                0
-            } else {
-                eprintln!(
-                    "⚠ restart command accepted but daemon didn't respond within 10s.\n\
-                     check logs: ~/.sovereign/logs/daemon.log"
-                );
-                1
-            }
-        }
-        Err(e) => {
-            eprintln!("error: {e}");
-            1
-        }
+    let stop_rc = stop_daemon().await;
+    if stop_rc != 0 {
+        // stop_daemon already printed the failure reason. Don't try
+        // to start on top of a daemon we couldn't confirm is gone —
+        // we'd just race the old one for :9741.
+        return stop_rc;
     }
+    start_daemon().await
 }
 
 /// `sovereign daemon reload` — POST /v1/admin/reload. Hot-reloads

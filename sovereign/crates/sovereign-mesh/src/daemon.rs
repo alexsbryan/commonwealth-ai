@@ -1332,6 +1332,63 @@ impl EmbeddedDaemon {
         // while the embed slot is idle. See `auto_resume.rs` docstring.
         crate::auto_resume::spawn_resume_in_progress_ingests(app_state.clone());
 
+        // Hourly StorageSnapshot ledger emission. Without this, the
+        // dimensional ledger has no signal for "what corpora is each
+        // peer hosting" — the merge-leader pull path emits
+        // `ShardTransferred`, but until a corpus has been served
+        // there's nothing for the UI to render. The first tick of
+        // `tokio::time::interval` runs immediately, so a
+        // freshly-restarted daemon emits one snapshot at boot AND
+        // every interval after.
+        //
+        // The loop owns its own `watch` channel; the sender is moved
+        // into the spawned task so it stays alive for the task's
+        // lifetime. When the runtime drops the task at process
+        // exit, the sender drops with it. Mirrors the gossip
+        // loop's "live for the whole daemon" model without needing
+        // to thread a new field into `DaemonState::Running`.
+        let snapshot_emitter = app_state.inner.contribution_emitter.clone();
+        let snapshot_engine = corpus_engine.clone();
+        let (snapshot_shutdown_tx, snapshot_shutdown_rx) =
+            tokio::sync::watch::channel(false);
+        tokio::spawn(async move {
+            let _hold_shutdown_tx = snapshot_shutdown_tx;
+            commonwealth_state::contributions::run_storage_snapshot_loop(
+                snapshot_emitter,
+                move || {
+                    let engine = snapshot_engine.clone();
+                    async move {
+                        let Some(engine) = engine else {
+                            return Vec::new();
+                        };
+                        match engine.installed_indexes().await {
+                            Ok(list) => list
+                                .into_iter()
+                                .filter(|i| i.mesh_sharing)
+                                .map(|i| {
+                                    (
+                                        i.corpus_id,
+                                        i.index_size_bytes as f64 / 1e9,
+                                    )
+                                })
+                                .collect(),
+                            Err(e) => {
+                                tracing::warn!(
+                                    error = %e,
+                                    "storage_snapshot: installed_indexes failed"
+                                );
+                                Vec::new()
+                            }
+                        }
+                    }
+                },
+                commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL,
+                snapshot_shutdown_rx,
+            )
+            .await;
+        });
+        info!("StorageSnapshot loop started");
+
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
             app_state,

@@ -815,7 +815,8 @@ peer reachability)
 | `POST /internal/scheduling/intent`  | Scheduling decision notification |
 | `POST /internal/scheduling/plan`    | New shard plan distribution      |
 | `POST /internal/model/transfer`     | Model file transfer (peer-to-peer)|
-| `POST /internal/index/transfer`     | Corpus shard transfer            |
+| `POST /internal/index/transfer`     | Corpus shard upload (push)       |
+| `GET  /internal/index/serve`        | Corpus shard download (pull) — used by `coordinate_merge` |
 | `POST /internal/knowledge/search`   | Inter-node shard query (fan-out target) |
 | `GET  /internal/latency/probe`      | Latency probe response           |
 
@@ -915,11 +916,23 @@ and bytes_served/bytes_received).
   streams that yielded ≥1 chunk).
 - `KnowledgeQueryServed` — `routes_internal::knowledge_search` (one
   event per corpus that contributed chunks to the response).
-- `ShardTransferred` — `commonwealth-knowledge::ShardManager::stream_index`
-  on successful upload.
-- `StorageSnapshot` — hourly background task in
-  `commonwealth-daemon` (alongside `RetentionGc`) using
-  `commonwealth_state::contributions::run_storage_snapshot_loop`.
+- `ShardTransferred` — `commonwealth-knowledge::ShardManager::coordinate_merge`
+  on each successful peer-shard pull during merge. Emitted by the
+  merge leader (the puller) on behalf of the peer that shipped the
+  bytes — the peer never observes the transfer completing, so the
+  schema carries an explicit `from_node` and the aggregator's
+  pull-emission special case credits `bytes_served` to that node
+  rather than the emitter. The legacy push site
+  (`ShardManager::stream_index`) keeps its emission too, but has
+  no production callers today.
+- `StorageSnapshot` — emitted by `run_storage_snapshot_loop`,
+  spawned in TWO places: `commonwealth-daemon::main` (alongside
+  `RetentionGc`) and `sovereign-mesh::EmbeddedDaemon::start_daemon`
+  (alongside the gossip loop). Without the sovereign-side spawn
+  the in-process desktop daemon never emits snapshots — only the
+  CLI daemon would, leaving the dimensional ledger blank in
+  desktop-only meshes. The first tick fires immediately so a
+  freshly-restarted daemon emits one snapshot at boot.
 
 `X-Node-Id` parsing is centralized in
 `commonwealth-api::headers::parse_x_node_id` so every handler
