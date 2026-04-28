@@ -52,10 +52,13 @@
     enrich_get_active_job: () => null,
     mesh_get_state: () => null,
     mesh_is_running: () => false,
+    // Match the MeshDiagnostics TS type — MeshDiagnosticsPanel reads
+    // `discovered_peers.length`, so an unkeyed `peers` here renders
+    // a TypeError that the pageerror watcher surfaces as an
+    // unrelated chaos failure in any test that opens Settings.
     mesh_diagnostics: () => ({
-      mesh_active: false,
-      peers: [],
-      relay_candidates: [],
+      discovered_peers: [],
+      daemon_running: false,
     }),
     mesh_relay_candidates: () => [],
     // Mesh Health (peer preferences + dimensional contributions). The

@@ -853,11 +853,22 @@ returns an empty list / "unsupported" error — the daemon doesn't
 yet expose these over HTTP, which is captured as a TODO in the
 command body.
 
-End-to-end coverage: `tests/e2e/specs/mesh-health.spec.ts`
-exercises every new command via the Playwright/`tauri-shim.js`
-harness, including a chaos-style invariant (mirrors
-`chat-chaos.spec.ts`) that pins "unexpected null payload doesn't
-crash the page".
+`MeshSettings.svelte` consumes the four commands above:
+the legacy `contribution_level` 0–5 score and `MeshContributionSummary`
+card are gone, replaced by per-peer **Inference / Knowledge / Network**
+blocks (no totals, no ranking — incommensurable per spec §2.2). Each
+non-self peer row exposes a "Serve this peer at: [N%]" `<details>`
+control with a slider clamped to the same `(0.0, 1.0]` range the Rust
+constructor enforces, plus an optional reason field that stays local.
+
+End-to-end coverage: `tests/e2e/specs/mesh-health.spec.ts` runs **9
+specs** — six pin the Tauri command contract (response shape, the
+structural multiplier rejection, list/clear semantics) and three
+mount the real Svelte tree to assert the dimensional layout, the
+slider→`mesh_set_peer_preference` dispatch, and a chaos invariant
+(a phantom contribution row for an unknown peer renders zero ghost
+rows and triggers no `pageerror`, mirroring the
+`feedback_chaos_testing_pattern.md` discipline).
 
 ### 5.6.1 Peer preferences (Ostrom sanctions)
 

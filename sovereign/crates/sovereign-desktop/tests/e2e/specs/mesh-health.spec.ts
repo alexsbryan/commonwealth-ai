@@ -1,4 +1,4 @@
-import { test, expect } from "../fixtures/test-base";
+import { test, expect, bootToChat, type Page } from "../fixtures/test-base";
 
 // Mesh Health surfaces. Exercises the new Tauri commands
 // (mesh_get_contributions, mesh_set/clear/list_peer_preference) via
@@ -239,5 +239,239 @@ test.describe("mesh health: contributions + peer preferences", () => {
     expect(result).toBeNull();
     // No uncaught page errors.
     // (test-base attaches a pageerror listener that auto-fails.)
+  });
+});
+
+// ─── UI-rendering coverage ─────────────────────────────────────────
+//
+// The tests above pin the command-surface contract; these mount the
+// real Svelte tree (Settings → Mesh tab → MeshSettings) and assert
+// the operator sees the dimensional payload — three blocks per peer,
+// no collapsed score — and that the affinity slider dispatches the
+// right Tauri call. This is the user-visible regression net for
+// commit 4b.
+
+const SELF_NODE_HEX = "11".repeat(16);
+const PEER_NODE_HEX = "22".repeat(16);
+
+interface MeshHealthFixture {
+  members: Array<{
+    name: string;
+    node_id: string;
+    is_self: boolean;
+    status: "online" | "offline" | "busy" | "away";
+  }>;
+  contributions: Array<Record<string, unknown>>;
+  preferences: Array<Record<string, unknown>>;
+}
+
+/** Stub the mesh-side Tauri commands so the Mesh tab renders one
+ *  self-row + one peer-row with dimensional contributions. Mounting
+ *  the panel off the chat view is the cheapest way to exercise the
+ *  real Svelte template — there's no isolated MeshSettings story. */
+async function primeMeshFixture(
+  page: Page,
+  fixture: MeshHealthFixture,
+): Promise<void> {
+  await page.evaluate((f) => {
+    window.__sovereign_test__.setHandler("mesh_is_running", () => true);
+    window.__sovereign_test__.setHandler("mesh_get_state", () => ({
+      status: {
+        name: "Test Mesh",
+        members_online: f.members.length,
+        members_total: f.members.length,
+        model_name: null,
+        knowledge_corpora: [],
+        is_connected: true,
+        join_link: null,
+        join_key: null,
+      },
+      members: f.members.map((m) => ({
+        ...m,
+        contribution_level: 0,
+        contribution_label: "",
+      })),
+      corpora: [],
+      contribution: null,
+    }));
+    window.__sovereign_test__.setHandler(
+      "mesh_get_contributions",
+      () => f.contributions,
+    );
+    window.__sovereign_test__.setHandler(
+      "mesh_list_peer_preferences",
+      () => f.preferences,
+    );
+  }, fixture);
+}
+
+/** Boot to the chat surface (so the conversation toolbar with the
+ *  settings button mounts), prime the mesh-health fixtures so the
+ *  Tab body sees a "running" mesh, then click into Settings → Mesh.
+ *
+ *  Order matters: `bootToChat` calls `page.goto("/")`, which resets
+ *  the shim. Priming after that ensures the handlers are in place by
+ *  the time the user clicks the Mesh tab and `MeshSettings` mounts. */
+async function openMeshTab(
+  page: Page,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  chat: any,
+  fixture: MeshHealthFixture,
+): Promise<void> {
+  await bootToChat(page, chat);
+  await primeMeshFixture(page, fixture);
+  await page.locator(".settings-btn").first().click();
+  // Click the Mesh nav item by its visible label.
+  await page.getByRole("button", { name: /^Mesh$/ }).click();
+  // The members card renders only when meshIsRunning resolves true,
+  // which is on the next tick.
+  await page.locator(".members-card").waitFor();
+}
+
+test.describe("mesh health UI: dimensional rendering + affinity slider", () => {
+  test("each peer row renders three contribution blocks with no collapsed score", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await openMeshTab(page, chat, {
+      members: [
+        { name: "you", node_id: SELF_NODE_HEX, is_self: true, status: "online" },
+        { name: "peer", node_id: PEER_NODE_HEX, is_self: false, status: "online" },
+      ],
+      contributions: [
+        {
+          node_id: PEER_NODE_HEX,
+          window_days: 30,
+          inference_served_requests: 12,
+          inference_served_tokens: 4_800,
+          inference_served_wall_seconds: 31.5,
+          inference_consumed_requests: 3,
+          inference_consumed_tokens: 1_200,
+          corpora_hosted: [
+            {
+              corpus_id: "sep",
+              corpus_name: "sep",
+              size_gb: 1.2,
+              queries_served: 5,
+              is_sole_host: true,
+            },
+          ],
+          bytes_served: 5_000_000_000,
+          bytes_received: 800_000_000,
+        },
+      ],
+      preferences: [],
+    });
+
+    const peerRow = page.locator(`.member-row[data-node-id="${PEER_NODE_HEX}"]`);
+    await expect(peerRow).toBeVisible();
+    // Three labelled blocks, in order, no totals or aggregate score.
+    const dts = peerRow.locator(".contribution-block dt");
+    await expect(dts).toHaveText(["Inference", "Knowledge", "Network"]);
+    // Inference numbers landed in the right block.
+    const inference = peerRow.locator(".contribution-block").nth(0);
+    await expect(inference).toContainText("12");
+    await expect(inference).toContainText("served");
+    await expect(inference).toContainText("3");
+    await expect(inference).toContainText("consumed");
+    // Knowledge surface includes the sole-host annotation that lets
+    // an operator see "this peer is the only one hosting sep" — the
+    // social-pressure surface from the spec.
+    const knowledge = peerRow.locator(".contribution-block").nth(1);
+    await expect(knowledge).toContainText("sep");
+    await expect(knowledge.locator(".corpus-host-sole")).toHaveText(/sole host/);
+    // Network shows bytes-served vs bytes-received separately.
+    const network = peerRow.locator(".contribution-block").nth(2);
+    await expect(network).toContainText("served");
+    await expect(network).toContainText("received");
+  });
+
+  test("affinity slider sends the chosen multiplier to mesh_set_peer_preference", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await openMeshTab(page, chat, {
+      members: [
+        { name: "you", node_id: SELF_NODE_HEX, is_self: true, status: "online" },
+        { name: "peer", node_id: PEER_NODE_HEX, is_self: false, status: "online" },
+      ],
+      contributions: [],
+      preferences: [],
+    });
+
+    // Self-row must NOT carry a preference control — operators don't
+    // "ration" themselves. Pinned because dropping the `is_self`
+    // guard is a plausible regression.
+    const selfRow = page.locator(`.member-row[data-node-id="${SELF_NODE_HEX}"]`);
+    await expect(selfRow.locator(".member-preference")).toHaveCount(0);
+
+    const peerRow = page.locator(`.member-row[data-node-id="${PEER_NODE_HEX}"]`);
+    await peerRow.locator(".member-preference > summary").click();
+    // Default draft is 1.0 (=100% neutral). Drag the slider to ~80%.
+    // Slider min=0.05, max=1.0, step=0.05. We use input.fill() — Svelte's
+    // bind:value picks up the change event.
+    const slider = peerRow.locator('input[type="range"][aria-label="affinity multiplier"]');
+    await slider.evaluate((el: HTMLInputElement) => {
+      el.value = "0.8";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    // Optional reason; mirrors the field a real operator would type.
+    await peerRow
+      .locator('input[type="text"]')
+      .fill("over-consuming relative to its hardware");
+    await peerRow.getByRole("button", { name: /^Save$/ }).click();
+
+    // The shim records the last set call.
+    const recorded = await page.evaluate(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window.__sovereign_test__ as any)._lastSetPreference,
+    );
+    expect(recorded).toEqual({
+      nodeId: PEER_NODE_HEX,
+      multiplier: 0.8,
+      reason: "over-consuming relative to its hardware",
+    });
+  });
+
+  test("a phantom contribution row for an unknown peer does not crash the UI", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    // Chaos invariant: gossip can deliver contribution events for a
+    // node the local mesh roster doesn't know about (e.g. peer who
+    // joined and left between two ticks). The UI must tolerate this
+    // — the dimensional Map is keyed by node_id, so an extra entry
+    // just goes unused. Test pins that we don't iterate the Map
+    // looking for orphans (which would either crash or render a
+    // ghost row).
+    await openMeshTab(page, chat, {
+      members: [
+        { name: "you", node_id: SELF_NODE_HEX, is_self: true, status: "online" },
+      ],
+      contributions: [
+        {
+          node_id: "deadbeef".repeat(4),
+          window_days: 30,
+          inference_served_requests: 1,
+          inference_served_tokens: 1,
+          inference_served_wall_seconds: 1,
+          inference_consumed_requests: 0,
+          inference_consumed_tokens: 0,
+          corpora_hosted: [],
+          bytes_served: 0,
+          bytes_received: 0,
+        },
+      ],
+      preferences: [],
+    });
+
+    // Exactly one rendered row (self), no ghost row for the phantom.
+    await expect(page.locator(".member-row")).toHaveCount(1);
+    await expect(
+      page.locator(`.member-row[data-node-id="${SELF_NODE_HEX}"]`),
+    ).toBeVisible();
+    // pageerror listener in test-base would fail the test if a render
+    // exception fired.
   });
 });

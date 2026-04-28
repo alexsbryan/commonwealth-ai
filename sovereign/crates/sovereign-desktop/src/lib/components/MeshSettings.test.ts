@@ -19,6 +19,25 @@ vi.mock("../api", () => ({
     discovered_peers: [],
     daemon_running: false,
   })),
+  // Mesh Health calls — only fire once `meshIsRunning` is true, but
+  // still imported eagerly. Stub them so the eager import doesn't
+  // throw and a future test that flips `running=true` doesn't have
+  // to re-mock everything.
+  meshGetContributions: vi.fn(async () => []),
+  meshListPeerPreferences: vi.fn(async () => []),
+  meshSetPeerPreference: vi.fn(async () => undefined),
+  meshClearPeerPreference: vi.fn(async () => true),
+  // Other api functions touched on mount paths.
+  meshRotateInvite: vi.fn(),
+  meshRelayCandidates: vi.fn(async () => []),
+  getConfig: vi.fn(async () => ({
+    node_name: "",
+    embedding_model: null,
+    chat_model: null,
+    mesh_enabled: false,
+  })),
+  saveConfig: vi.fn(),
+  suggestNodeName: vi.fn(async () => "TestyMcTest"),
 }));
 
 const { joinLinkStore } = await import("../stores/joinLink.svelte");

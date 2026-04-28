@@ -376,6 +376,53 @@ export async function suggestNodeName(): Promise<string> {
   return invoke("suggest_node_name");
 }
 
+// ─── Mesh Health: dimensional contributions + peer preferences ──
+//
+// Local mode reads from the in-process daemon's contribution store.
+// Attach mode currently returns empty / errors — the CLI daemon
+// doesn't expose these over HTTP yet. The UI is honest about that
+// gap rather than faking a value.
+
+/** Per-peer dimensional contributions over the default 30-day window.
+ *  Empty in Attach mode and when no events have accumulated. */
+export async function meshGetContributions(): Promise<
+  import("./types").NodeContributionsDto[]
+> {
+  return invoke("mesh_get_contributions");
+}
+
+/** Set the operator-private affinity multiplier this node applies to
+ *  every claim it serves to `nodeId`. Multiplier must be in
+ *  `(0.0, 1.0]` — the constructor rejects anything outside that
+ *  range so there are no preferential lanes above neutral. */
+export async function meshSetPeerPreference(
+  nodeId: string,
+  multiplier: number,
+  reason: string | null,
+): Promise<void> {
+  return invoke("mesh_set_peer_preference", {
+    nodeId,
+    multiplier,
+    reason,
+  });
+}
+
+/** Clear the affinity multiplier for `nodeId`. Returns true if a
+ *  preference was actually present. */
+export async function meshClearPeerPreference(
+  nodeId: string,
+): Promise<boolean> {
+  return invoke("mesh_clear_peer_preference", { nodeId });
+}
+
+/** All currently-set peer preferences. Excluded from gossip — this
+ *  list never leaves the local node. */
+export async function meshListPeerPreferences(): Promise<
+  import("./types").PeerPreferenceDto[]
+> {
+  return invoke("mesh_list_peer_preferences");
+}
+
 export async function recipeValidate(
   recipePath: string,
   offline: boolean,

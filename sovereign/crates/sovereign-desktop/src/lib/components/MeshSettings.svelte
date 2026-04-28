@@ -2,12 +2,16 @@
   import { onMount, onDestroy } from "svelte";
   import {
     getConfig,
+    meshClearPeerPreference,
     meshCreate,
+    meshGetContributions,
     meshGetState,
     meshIsRunning,
     meshLeave,
+    meshListPeerPreferences,
     meshRelayCandidates,
     meshRotateInvite,
+    meshSetPeerPreference,
     saveConfig,
     suggestNodeName,
   } from "../api";
@@ -18,6 +22,8 @@
     DesktopConfig,
     MeshStateResponse,
     MeshMember,
+    NodeContributionsDto,
+    PeerPreferenceDto,
     RelayCandidate,
   } from "../types";
 
@@ -172,22 +178,148 @@
     }
   }
 
+  // ── Mesh Health: dimensional contributions + peer preferences ──
+  //
+  // The legacy single-score `contribution_level` per member is gone.
+  // What replaces it is three separate counters per peer (Inference /
+  // Knowledge / Network) — incommensurable on purpose, per the spec's
+  // §2.2 anti-ranking constraint. We keep them in a Map keyed by
+  // node_id so the member-row template can do an O(1) lookup.
+  let contributions = $state<Map<string, NodeContributionsDto>>(new Map());
+  let preferences = $state<Map<string, PeerPreferenceDto>>(new Map());
+  let windowDays = $state(30);
+
+  // Per-peer draft state for the affinity-multiplier control. Keyed by
+  // node_id. Only populated lazily — the row that the operator opens
+  // gets an entry seeded from the saved preference (or 1.0 / null
+  // when nothing is set). Saving merges back into `preferences` and
+  // collapses the row.
+  let prefDraft = $state<Record<string, { multiplier: number; reason: string }>>({});
+  let prefSaving = $state<Record<string, boolean>>({});
+  let prefError = $state<Record<string, string | null>>({});
+
+  /** Refresh dimensional contributions + peer preferences. Called
+   *  alongside `meshGetState` on mount + during the 5s poll. Errors
+   *  are swallowed to console — a bad refresh shouldn't blank the
+   *  member list (§9: degrade visibly, not silently). */
+  async function refreshMeshHealth() {
+    try {
+      const list = (await meshGetContributions()) ?? [];
+      const next = new Map<string, NodeContributionsDto>();
+      for (const row of list) {
+        next.set(row.node_id, row);
+        windowDays = row.window_days;
+      }
+      contributions = next;
+    } catch (e) {
+      console.error("Failed to refresh contributions:", e);
+    }
+    try {
+      const list = (await meshListPeerPreferences()) ?? [];
+      const next = new Map<string, PeerPreferenceDto>();
+      for (const p of list) next.set(p.node_id, p);
+      preferences = next;
+    } catch (e) {
+      console.error("Failed to refresh peer preferences:", e);
+    }
+  }
+
+  function ensurePrefDraft(nodeId: string) {
+    if (prefDraft[nodeId]) return;
+    const existing = preferences.get(nodeId);
+    prefDraft = {
+      ...prefDraft,
+      [nodeId]: {
+        multiplier: existing?.multiplier ?? 1.0,
+        reason: existing?.reason ?? "",
+      },
+    };
+  }
+
+  async function savePeerPreference(nodeId: string) {
+    const draft = prefDraft[nodeId];
+    if (!draft) return;
+    prefSaving = { ...prefSaving, [nodeId]: true };
+    prefError = { ...prefError, [nodeId]: null };
+    try {
+      await meshSetPeerPreference(
+        nodeId,
+        draft.multiplier,
+        draft.reason.trim() === "" ? null : draft.reason.trim(),
+      );
+      await refreshMeshHealth();
+    } catch (e) {
+      prefError = { ...prefError, [nodeId]: `${e}` };
+    }
+    prefSaving = { ...prefSaving, [nodeId]: false };
+  }
+
+  async function clearPeerPreference(nodeId: string) {
+    prefSaving = { ...prefSaving, [nodeId]: true };
+    prefError = { ...prefError, [nodeId]: null };
+    try {
+      await meshClearPeerPreference(nodeId);
+      await refreshMeshHealth();
+      // Drop the draft so the next open seeds from the (now-cleared)
+      // preferences map. Without this, the slider stays at the old
+      // value because the draft entry is sticky.
+      const { [nodeId]: _, ...rest } = prefDraft;
+      prefDraft = rest;
+    } catch (e) {
+      prefError = { ...prefError, [nodeId]: `${e}` };
+    }
+    prefSaving = { ...prefSaving, [nodeId]: false };
+  }
+
+  // ── Formatting helpers (no totals, no ranking — just legibility)
+
+  function formatBytes(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let v = n;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i += 1;
+    }
+    return `${v < 10 ? v.toFixed(1) : v.toFixed(0)} ${units[i]}`;
+  }
+
+  function formatTokens(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return "0";
+    if (n < 1_000) return n.toString();
+    if (n < 1_000_000) return `${(n / 1_000).toFixed(1)}k`;
+    return `${(n / 1_000_000).toFixed(2)}M`;
+  }
+
+  function formatGb(gb: number): string {
+    if (!Number.isFinite(gb) || gb <= 0) return "0 GB";
+    if (gb < 1) return `${(gb * 1024).toFixed(0)} MB`;
+    return `${gb < 10 ? gb.toFixed(1) : gb.toFixed(0)} GB`;
+  }
+
   let pollHandle: ReturnType<typeof setInterval> | null = null;
 
   // ── Lifecycle ──────────────────────────────────────────
   onMount(async () => {
     await refresh();
     await loadConfig();
+    if (running) {
+      await refreshMeshHealth();
+    }
     // Poll mesh state every 5s while running so the member list and
     // contribution numbers stay current without WebSocket plumbing.
+    // The dimensional contributions + peer-preferences refresh hangs
+    // off the same tick — one source of truth for "how often the
+    // mesh-health view ages."
     pollHandle = setInterval(async () => {
-      if (running) {
-        try {
-          meshState = await meshGetState();
-        } catch (e) {
-          console.error("Failed to refresh mesh state:", e);
-        }
+      if (!running) return;
+      try {
+        meshState = await meshGetState();
+      } catch (e) {
+        console.error("Failed to refresh mesh state:", e);
       }
+      await refreshMeshHealth();
     }, 5000);
   });
 
@@ -202,8 +334,11 @@
       running = await meshIsRunning();
       if (running) {
         meshState = await meshGetState();
+        await refreshMeshHealth();
       } else {
         meshState = null;
+        contributions = new Map();
+        preferences = new Map();
       }
     } catch (e) {
       error = `Failed to load mesh state: ${e}`;
@@ -340,11 +475,6 @@
     }
   }
 
-  function bar(level: number): string {
-    // 0–5 dots representation, e.g. ●●●○○ for level 3.
-    const filled = Math.max(0, Math.min(5, level));
-    return "●".repeat(filled) + "○".repeat(5 - filled);
-  }
 </script>
 
 <div class="mesh-settings">
@@ -595,21 +725,180 @@
     {/if}
 
     <div class="members-card">
-      <h5>Members</h5>
+      <div class="members-header">
+        <h5>Members</h5>
+        <p class="hint">
+          What each peer has contributed in the last {windowDays} days.
+          Three separate dimensions — never collapsed into a single
+          score, since "good peer" is incommensurable across them.
+        </p>
+      </div>
       {#if meshState.members.length === 0}
         <div class="muted">No members yet. Share your join link.</div>
       {:else}
         <ul class="members-list">
           {#each meshState.members as member}
-            <li class="member-row">
-              <span class="dot {statusDot(member)}"></span>
-              <span class="member-name">
-                {member.name}
-                {#if member.is_self}<em>(you)</em>{/if}
-              </span>
-              {#if member.contribution_label}
-                <span class="contribution-bar">{bar(member.contribution_level)}</span>
-                <span class="contribution-label">{member.contribution_label}</span>
+            {@const c = contributions.get(member.node_id)}
+            {@const pref = preferences.get(member.node_id)}
+            <li class="member-row" data-node-id={member.node_id}>
+              <header class="member-header-row">
+                <span class="dot {statusDot(member)}"></span>
+                <span class="member-name">
+                  {member.name}
+                  {#if member.is_self}<em>(you)</em>{/if}
+                </span>
+                {#if pref && !member.is_self}
+                  <span
+                    class="pref-badge"
+                    title={pref.reason ?? "no reason set"}
+                  >
+                    serving at {Math.round(pref.multiplier * 100)}%
+                  </span>
+                {/if}
+              </header>
+
+              <dl class="contribution-blocks">
+                <div class="contribution-block">
+                  <dt>Inference</dt>
+                  <dd>
+                    {#if c && (c.inference_served_requests + c.inference_consumed_requests) > 0}
+                      <span class="metric">
+                        <strong>{c.inference_served_requests.toLocaleString()}</strong>
+                        served
+                      </span>
+                      <span class="metric-sep">·</span>
+                      <span class="metric">
+                        <strong>{c.inference_consumed_requests.toLocaleString()}</strong>
+                        consumed
+                      </span>
+                      {#if c.inference_served_tokens > 0}
+                        <small class="metric-sub">
+                          {formatTokens(c.inference_served_tokens)} tokens generated
+                        </small>
+                      {/if}
+                    {:else}
+                      <small class="muted">No requests served or consumed yet.</small>
+                    {/if}
+                  </dd>
+                </div>
+
+                <div class="contribution-block">
+                  <dt>Knowledge</dt>
+                  <dd>
+                    {#if c && c.corpora_hosted.length > 0}
+                      <ul class="corpus-host-list">
+                        {#each c.corpora_hosted as host}
+                          <li class="corpus-host">
+                            <span class="corpus-host-name">{host.corpus_name}</span>
+                            <span class="corpus-host-size">{formatGb(host.size_gb)}</span>
+                            {#if host.queries_served > 0}
+                              <span class="corpus-host-queries">
+                                {host.queries_served.toLocaleString()} queries
+                              </span>
+                            {/if}
+                            {#if host.is_sole_host}
+                              <span class="corpus-host-sole" title="Only this peer hosts this corpus right now">
+                                sole host
+                              </span>
+                            {/if}
+                          </li>
+                        {/each}
+                      </ul>
+                    {:else}
+                      <small class="muted">No hosted corpora.</small>
+                    {/if}
+                  </dd>
+                </div>
+
+                <div class="contribution-block">
+                  <dt>Network</dt>
+                  <dd>
+                    {#if c && (c.bytes_served + c.bytes_received) > 0}
+                      <span class="metric">
+                        <strong>{formatBytes(c.bytes_served)}</strong> served
+                      </span>
+                      <span class="metric-sep">·</span>
+                      <span class="metric">
+                        <strong>{formatBytes(c.bytes_received)}</strong> received
+                      </span>
+                    {:else}
+                      <small class="muted">No bytes transferred yet.</small>
+                    {/if}
+                  </dd>
+                </div>
+              </dl>
+
+              {#if !member.is_self}
+                <details
+                  class="member-preference"
+                  ontoggle={(e) =>
+                    (e.currentTarget as HTMLDetailsElement).open &&
+                    ensurePrefDraft(member.node_id)}
+                >
+                  <summary>
+                    <span class="pref-summary-label">
+                      Serve this peer at:
+                    </span>
+                    <span class="pref-summary-value">
+                      {pref ? `${Math.round(pref.multiplier * 100)}%` : "100% (default)"}
+                    </span>
+                  </summary>
+                  {#if prefDraft[member.node_id]}
+                    <div class="member-preference-form">
+                      <p class="hint">
+                        A multiplier the manifest you serve to <em>this peer
+                        only</em> applies to every claim's affinity. 100% is
+                        neutral; lower values ration what they see. Never
+                        gossiped — it stays on this machine.
+                      </p>
+                      <label class="pref-row">
+                        <span>Multiplier</span>
+                        <input
+                          type="range"
+                          min="0.05"
+                          max="1.0"
+                          step="0.05"
+                          bind:value={prefDraft[member.node_id].multiplier}
+                          aria-label="affinity multiplier"
+                        />
+                        <span class="pref-value">
+                          {Math.round(prefDraft[member.node_id].multiplier * 100)}%
+                        </span>
+                      </label>
+                      <label class="pref-row pref-row-text">
+                        <span>Reason (optional, private to you)</span>
+                        <input
+                          type="text"
+                          placeholder="why are you adjusting this peer?"
+                          bind:value={prefDraft[member.node_id].reason}
+                        />
+                      </label>
+                      {#if prefError[member.node_id]}
+                        <div class="alert error small">
+                          {prefError[member.node_id]}
+                        </div>
+                      {/if}
+                      <div class="form-actions pref-actions">
+                        <button
+                          class="primary"
+                          disabled={prefSaving[member.node_id]}
+                          onclick={() => savePeerPreference(member.node_id)}
+                        >
+                          {prefSaving[member.node_id] ? "Saving…" : "Save"}
+                        </button>
+                        {#if pref}
+                          <button
+                            class="ghost"
+                            disabled={prefSaving[member.node_id]}
+                            onclick={() => clearPeerPreference(member.node_id)}
+                          >
+                            Clear (back to 100%)
+                          </button>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
+                </details>
               {/if}
             </li>
           {/each}
@@ -642,27 +931,6 @@
       {/if}
     </details>
 
-    {#if meshState.contribution}
-      <div class="contribution-card">
-        <h5>Your Contribution</h5>
-        <p class="contribution-summary">
-          {meshState.contribution.summary_text}
-        </p>
-        <details>
-          <summary>Show details</summary>
-          <dl class="contribution-details">
-            <dt>Compute contributed</dt>
-            <dd>{meshState.contribution.compute_hours_contributed.toFixed(1)} hrs</dd>
-            <dt>Compute used</dt>
-            <dd>{meshState.contribution.compute_hours_used.toFixed(1)} hrs</dd>
-            <dt>Storage hosted</dt>
-            <dd>{meshState.contribution.storage_hosted_gb.toFixed(0)} GB</dd>
-            <dt>Bandwidth served</dt>
-            <dd>{meshState.contribution.bandwidth_served_gb.toFixed(0)} GB</dd>
-          </dl>
-        </details>
-      </div>
-    {/if}
   {/if}
 
   <!-- ─── Leave confirmation modal ──────────────────────── -->
@@ -1000,7 +1268,6 @@
   .share-card,
   .status-card,
   .members-card,
-  .contribution-card,
   .invite-card {
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -1021,7 +1288,6 @@
   }
 
   .members-card h5,
-  .contribution-card h5,
   .invite-card h5 {
     font-size: 0.78rem;
     text-transform: uppercase;
@@ -1029,6 +1295,12 @@
     color: var(--text-muted);
     font-weight: 600;
     margin-bottom: 10px;
+  }
+  .members-header {
+    margin-bottom: 12px;
+  }
+  .members-header .hint {
+    margin-top: 0;
   }
 
   /* ── Rotate ghost button ─────────────────────────── */
@@ -1283,15 +1555,21 @@
 
   .member-row {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
-    padding: 6px 0;
+    padding: 12px 0;
     font-size: 0.85rem;
     border-bottom: 1px solid var(--border);
   }
 
   .member-row:last-child {
     border-bottom: none;
+  }
+
+  .member-header-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .member-name {
@@ -1306,48 +1584,175 @@
     margin-left: 4px;
   }
 
-  .contribution-bar {
-    font-family: ui-monospace, SFMono-Regular, monospace;
-    color: var(--accent);
-    font-size: 0.78rem;
-    letter-spacing: 1px;
-  }
-
-  .contribution-label {
-    color: var(--text-muted);
-    font-size: 0.75rem;
-  }
-
-  /* ── Contribution ────────────────────────────────── */
-  .contribution-summary {
-    font-size: 0.85rem;
+  .pref-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(220, 160, 60, 0.15);
     color: var(--text-secondary);
-    line-height: 1.5;
-    margin-bottom: 8px;
+    border: 1px solid rgba(220, 160, 60, 0.35);
+    white-space: nowrap;
   }
 
-  .contribution-card details summary {
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-
-  .contribution-details {
+  /* ── Dimensional contributions per peer ─────────── */
+  .contribution-blocks {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 4px 16px;
-    margin-top: 12px;
+    grid-template-columns: 90px 1fr;
+    gap: 4px 12px;
+    margin: 0;
+    padding: 8px 0 4px 18px;
     font-size: 0.8rem;
   }
 
-  .contribution-details dt {
-    color: var(--text-muted);
+  .contribution-block {
+    display: contents;
   }
 
-  .contribution-details dd {
+  .contribution-block dt {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    align-self: start;
+    padding-top: 1px;
+  }
+
+  .contribution-block dd {
     margin: 0;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
+  }
+
+  .metric strong {
+    font-weight: 600;
+  }
+  .metric-sep {
+    color: var(--text-muted);
+    margin: 0 6px;
+  }
+  .metric-sub {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    margin-top: 2px;
+  }
+
+  .corpus-host-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .corpus-host {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+  }
+
+  .corpus-host-name {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .corpus-host-size,
+  .corpus-host-queries {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+  }
+
+  .corpus-host-sole {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(220, 60, 60, 0.10);
+    color: var(--error);
+    border: 1px solid rgba(220, 60, 60, 0.25);
+  }
+
+  /* ── Per-peer affinity multiplier control ───────── */
+  .member-preference {
+    margin: 4px 0 0 18px;
+    border-top: 1px dashed var(--border);
+    padding-top: 8px;
+  }
+  .member-preference > summary {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    list-style: none;
+  }
+  .member-preference > summary::-webkit-details-marker {
+    display: none;
+  }
+  .pref-summary-label {
+    color: var(--text-muted);
+  }
+  .pref-summary-value {
+    color: var(--text-primary);
+    font-weight: 500;
+    margin-left: 6px;
+  }
+  .member-preference[open] > summary {
+    margin-bottom: 8px;
+  }
+  .member-preference-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border-radius: var(--radius);
+  }
+  .pref-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+  }
+  .pref-row > span:first-child {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+  }
+  .pref-row input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+  .pref-value {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    min-width: 3em;
+    text-align: right;
+    color: var(--text-primary);
+  }
+  .pref-row-text {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .pref-row-text input[type="text"] {
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    outline: none;
+  }
+  .pref-row-text input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+  .pref-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
   }
 
   /* ── Modal ───────────────────────────────────────── */
