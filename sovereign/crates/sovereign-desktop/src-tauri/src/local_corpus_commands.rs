@@ -109,6 +109,7 @@ pub async fn install_ocr_ctx_for_app(
     app: &AppHandle,
     manager: &Arc<LocalCorpusManager>,
     daemon_base_url: String,
+    cleanup_model: String,
 ) {
     use tauri::Manager;
 
@@ -149,7 +150,7 @@ pub async fn install_ocr_ctx_for_app(
         tessdata_dir,
         pdfium_lib_path,
         daemon_base_url,
-        cleanup_model: "fast".into(),
+        cleanup_model,
         dpi: 300,
         tesseract_timeout_secs: 30,
         cleanup_timeout_secs: 30,
@@ -158,10 +159,18 @@ pub async fn install_ocr_ctx_for_app(
         tesseract = %ctx.tesseract_bin.display(),
         tessdata = %ctx.tessdata_dir.display(),
         pdfium = ?ctx.pdfium_lib_path,
+        cleanup_model = %ctx.cleanup_model,
         "OCR context installed — folder drop will offer OCR for scanned PDFs"
     );
     manager.set_ocr_ctx(ctx).await;
 }
+
+/// Compile-time absolute path to the `src-tauri/binaries/` directory
+/// inside this crate. Lets `cargo tauri dev` find the same binaries
+/// that release bundles ship via `externalBin`/`resources`, without
+/// needing the user to set env vars or relying on Tauri's runtime
+/// `resource_dir()` (which doesn't surface those entries in dev).
+const DEV_BINARIES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/binaries");
 
 fn resolve_tesseract_path(app: &AppHandle) -> Option<PathBuf> {
     use tauri::Manager;
@@ -177,11 +186,24 @@ fn resolve_tesseract_path(app: &AppHandle) -> Option<PathBuf> {
     // Tauri may suffix the target triple — try the bare name and a
     // couple of common triples before giving up.
     let mut probes: Vec<PathBuf> = Vec::new();
+    let mut bin_dirs: Vec<PathBuf> = Vec::new();
     if let Ok(rd) = app.path().resource_dir() {
-        let bins = rd.join("binaries");
+        bin_dirs.push(rd.join("binaries"));
+        // macOS resource_dir is `Contents/Resources`, but
+        // externalBin sidecars land in `Contents/MacOS` next to
+        // the main exe — probe that too.
+        if let Some(parent) = rd.parent() {
+            bin_dirs.push(parent.join("MacOS"));
+        }
+    }
+    // Dev fallback: the canonical `src-tauri/binaries/` directory.
+    // Baked at compile time so it survives the working-directory
+    // changes Tauri's dev runner does on macOS.
+    bin_dirs.push(PathBuf::from(DEV_BINARIES_DIR));
+
+    for bins in &bin_dirs {
         probes.push(bins.join("tesseract"));
         probes.push(bins.join("tesseract.exe"));
-        // Common triples the Tauri bundler emits for sidecars.
         for triple in [
             "aarch64-apple-darwin",
             "x86_64-apple-darwin",
@@ -191,6 +213,8 @@ fn resolve_tesseract_path(app: &AppHandle) -> Option<PathBuf> {
             probes.push(bins.join(format!("tesseract-{triple}")));
             probes.push(bins.join(format!("tesseract-{triple}.exe")));
         }
+    }
+    if let Ok(rd) = app.path().resource_dir() {
         probes.push(rd.join("tesseract"));
     }
     if let Ok(exe) = std::env::current_exe() {
@@ -211,6 +235,9 @@ fn resolve_tessdata_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBu
         probes.push(rd.join("tessdata"));
         probes.push(rd.join("binaries").join("tessdata"));
     }
+    // Dev fallback — same compile-time-baked binaries dir.
+    let dev_bins = PathBuf::from(DEV_BINARIES_DIR);
+    probes.push(dev_bins.join("tessdata"));
     probes
         .into_iter()
         .find(|p| p.join("eng.traineddata").exists())
@@ -221,11 +248,17 @@ fn resolve_pdfium_lib(resource_dir: Option<&std::path::Path>) -> Option<PathBuf>
     if let Ok(env_path) = std::env::var("SOVEREIGN_PDFIUM_LIB") {
         probes.push(PathBuf::from(env_path));
     }
+    let mut search_roots: Vec<PathBuf> = Vec::new();
     if let Some(rd) = resource_dir {
+        search_roots.push(rd.to_path_buf());
+        search_roots.push(rd.join("binaries"));
+    }
+    // Dev fallback — same compile-time-baked binaries dir.
+    search_roots.push(PathBuf::from(DEV_BINARIES_DIR));
+    for root in &search_roots {
         for lib in ["libpdfium.dylib", "pdfium.dll", "libpdfium.so"] {
-            probes.push(rd.join("pdfium").join(lib));
-            probes.push(rd.join("binaries").join("pdfium").join(lib));
-            probes.push(rd.join(lib));
+            probes.push(root.join("pdfium").join(lib));
+            probes.push(root.join(lib));
         }
     }
     probes.into_iter().find(|p| p.exists())

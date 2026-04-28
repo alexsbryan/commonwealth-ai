@@ -64,9 +64,14 @@ pub struct OcrCtx {
     /// `http://127.0.0.1:9741`. The cleanup module appends
     /// `/v1/chat/completions`.
     pub daemon_base_url: String,
-    /// Model id to request for the cleanup pass. The daemon resolves
-    /// "fast" to whatever is loaded in the fast slot. Set to "fast"
-    /// in production; tests pass a fixed id.
+    /// Model id to request for the cleanup pass. Must be a name the
+    /// daemon's `/v1/chat/completions` route can resolve — typically
+    /// the file stem of the chat slot's gguf (e.g.
+    /// `"Qwen3.5-9B.Q8_0"`), since the daemon registers each loaded
+    /// slot under its file stem. The desktop layer reads this from
+    /// `AppConfig.model_path` and passes it in. There's no "fast"
+    /// alias in the routing layer today — passing `"fast"` 503s on
+    /// CLI-daemon setups.
     pub cleanup_model: String,
     /// DPI for rasterization. Tesseract's documented optimum for
     /// English printed text is 300.

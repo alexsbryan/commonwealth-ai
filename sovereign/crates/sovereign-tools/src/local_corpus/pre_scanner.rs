@@ -47,6 +47,15 @@ impl FileMeta {
 /// What kind of PDF a file is, for the purposes of pre-scan. The
 /// classifier is approximate — it runs a fast text-density heuristic
 /// on the first pages rather than a true OCR-readiness probe.
+///
+/// `ScannedNoText` is the OCR-eligible bucket. It covers two cases the
+/// UI treats identically: (a) PDFs with a text layer that's empty
+/// (true scanned-image PDFs), and (b) PDFs that pdf-extract panicked
+/// or errored on but PDFium can probably still rasterize. Lumping the
+/// two means a user with one "weird" PDF that pdf-extract chokes on
+/// (e.g. DeviceN colourspace, non-standard font tables) still gets the
+/// OCR offer instead of seeing a flat "couldn't be read" message with
+/// no recovery path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PdfClass {
     Readable,
@@ -58,19 +67,23 @@ pub enum PdfClass {
 /// Classify a single PDF. Blocking — intended to run inside
 /// `tokio::task::spawn_blocking`.
 ///
-/// Heuristic (spec §5.1):
+/// Heuristic (spec §5.1, expanded for OCR-eligibility):
 ///   1. Try to extract text. A pdf-extract error whose message
-///      mentions encryption means `PasswordProtected`. Other errors
-///      mean `Corrupt`.
-///   2. Count words in the extracted text's first 4000 characters
+///      mentions encryption means `PasswordProtected` (OCR can't help).
+///   2. A pdf-extract panic or parse error means `ScannedNoText` —
+///      pdf-extract is fragile, but PDFium-backed OCR usually
+///      succeeds where it fails.
+///   3. Count words in the extracted text's first 4000 characters
 ///      (≈ first two pages at standard density).
-///   3. If `size_kb > 100 && word_count < 20` → `ScannedNoText`.
-///   4. Otherwise → `Readable`.
+///   4. If `size_kb > 100 && word_count < 20` → `ScannedNoText`.
+///   5. Otherwise → `Readable`.
 pub fn classify_pdf_blocking(path: &Path) -> PdfClass {
     let size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     match crate::local_corpus::extract_stage::safe_extract_pdf_text(path) {
         Err(SafePdfError::Encrypted) => PdfClass::PasswordProtected,
-        Err(SafePdfError::Panic(_)) | Err(SafePdfError::Parse(_)) => PdfClass::Corrupt,
+        Err(SafePdfError::Panic(_)) | Err(SafePdfError::Parse(_)) => {
+            PdfClass::ScannedNoText
+        }
         Ok(text) => {
             let size_kb = size_bytes / 1024;
             // Look at first ~4KB of extracted text (rough proxy for
@@ -275,12 +288,13 @@ mod tests {
         let result = scanner.run_blocking(|_, _| {});
 
         // `.md` is outside the allow-list for DocumentFolder — counted
-        // as ignored. `.pdf` is in the list but it's corrupt (not a
-        // real PDF). `.txt` is readable.
+        // as ignored. `.pdf` is in the list but pdf-extract can't parse
+        // it (not a real PDF) — that lands it in `scanned_pdfs` so the
+        // OCR pipeline gets a chance to recover it. `.txt` is readable.
         assert_eq!(result.readable.len(), 1);
         assert_eq!(result.readable[0].display_name, "a");
-        // The non-real PDF lands in `corrupt_files`.
-        assert_eq!(result.corrupt_files.len(), 1);
+        assert_eq!(result.scanned_pdfs.len(), 1);
+        assert!(result.corrupt_files.is_empty());
         // `.md` doesn't match the DocumentFolder allow-list.
         assert_eq!(result.ignored_types, 1);
     }
@@ -377,16 +391,16 @@ mod tests {
     }
 
     #[test]
-    fn pdf_classification_corrupt() {
+    fn pdf_classification_unparseable_routes_to_ocr_bucket() {
         let dir = tempdir().unwrap();
         let bad_pdf = dir.path().join("bad.pdf");
         fs::write(&bad_pdf, b"definitely not a pdf file").unwrap();
         let class = classify_pdf_blocking(&bad_pdf);
-        // The bytes aren't a valid PDF header — classifier returns
-        // either Corrupt or (less likely) PasswordProtected. We accept
-        // either; the test guarantees it's not `Readable`.
-        assert_ne!(class, PdfClass::Readable);
-        assert_ne!(class, PdfClass::ScannedNoText);
+        // pdf-extract is fragile; PDFium-backed OCR usually succeeds
+        // where it fails. So non-encrypted extraction failures are
+        // routed into the OCR-eligible bucket rather than a flat
+        // "couldn't be read" with no recovery.
+        assert_eq!(class, PdfClass::ScannedNoText);
     }
 
     #[test]

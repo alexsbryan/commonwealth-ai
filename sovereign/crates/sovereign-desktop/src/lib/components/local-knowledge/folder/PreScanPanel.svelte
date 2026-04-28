@@ -108,7 +108,9 @@
         </p>
         {#if willOcr}
           <p class="ocr-note">
-            …including {result.scanned_pdfs.length} scanned PDFs read with OCR
+            …including {result.scanned_pdfs.length}
+            {result.scanned_pdfs.length === 1 ? "PDF" : "PDFs"}
+            read with text recognition
           </p>
         {/if}
       </section>
@@ -123,7 +125,9 @@
         {#if result.scanned_pdfs.length > 0 && !willOcr}
           <div class="skip-group">
             <p class="skip-reason">
-              {result.scanned_pdfs.length} scanned PDFs (no text layer)
+              {result.scanned_pdfs.length}
+              {result.scanned_pdfs.length === 1 ? "PDF" : "PDFs"}
+              with no readable text
             </p>
             <NamedFileList files={result.scanned_pdfs} showUpTo={2} />
             {#if ocrAvailable}
@@ -131,12 +135,14 @@
                 class="lk-btn lk-btn--quiet ocr-btn"
                 onclick={() => (useOcr = true)}
               >
-                Read them with OCR
+                Read {result.scanned_pdfs.length === 1 ? "it" : "them"}
+                with text recognition
               </button>
               <p class="ocr-explainer">
-                OCR uses a small built-in engine to read scanned pages.
-                Slower than indexing typed PDFs — your other documents are
-                searchable as soon as they finish.
+                Sovereign can read scanned and image-based pages with a
+                small built-in text-recognition engine. Slower than
+                indexing typed PDFs — your other documents are searchable
+                as soon as they finish.
               </p>
             {/if}
           </div>
@@ -180,7 +186,7 @@
           class="lk-btn lk-btn--quiet"
           onclick={() => (useOcr = false)}
         >
-          Skip OCR
+          Skip text recognition
         </button>
       {/if}
       <button class="lk-btn lk-btn--quiet" onclick={onChooseAgain}>

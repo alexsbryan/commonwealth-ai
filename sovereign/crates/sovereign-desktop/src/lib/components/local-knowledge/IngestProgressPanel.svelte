@@ -14,7 +14,7 @@
     switch (progress.phase) {
       case "scanning":      return "Scanning";
       case "staging":       return "Reading documents";
-      case "ocr_page":      return "Reading scanned documents";
+      case "ocr_page":      return "Recognising text";
       case "ingesting":     return progress.data.phase_label;
       case "clustering":    return "Clustering";
       case "snapshotting":  return "Saving restore point";

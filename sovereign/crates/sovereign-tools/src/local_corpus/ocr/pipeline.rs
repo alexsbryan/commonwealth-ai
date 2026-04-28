@@ -99,13 +99,28 @@ pub async fn extract_pdf_with_rasterizer<R: Rasterizer + ?Sized>(
             Ok(Ok(raw_text)) => match cleanup_page(&raw_text, ctx).await {
                 Ok(text) => text,
                 Err(e) => {
+                    // Cleanup is a quality polish, not a correctness
+                    // gate. When it fails (daemon down, model not
+                    // loaded, etc.), keep the raw tesseract text — it
+                    // still indexes and searches, just with broken
+                    // lines and OCR artefacts. Better than a black
+                    // hole. The marker tells the user this page used
+                    // raw OCR so they understand any roughness.
                     tracing::warn!(
                         path = %path.display(),
                         page = page_no,
-                        "OCR cleanup failed: {}",
+                        "OCR cleanup failed; falling back to raw OCR text: {}",
                         e.user_message()
                     );
-                    placeholder_for(page_no, &cleanup_failure_label(&e))
+                    if raw_text.trim().is_empty() {
+                        placeholder_for(page_no, &cleanup_failure_label(&e))
+                    } else {
+                        format!(
+                            "<!-- page {page_no}: raw OCR (cleanup unavailable: {}) -->\n\n{}",
+                            cleanup_failure_label(&e),
+                            raw_text.trim_end(),
+                        )
+                    }
                 }
             },
             Ok(Err(e)) => {

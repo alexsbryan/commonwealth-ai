@@ -1001,37 +1001,25 @@ impl EmbeddedDaemon {
             corpus_engine.clone(),
         );
 
-        // Apply foreground-yield config from setup_config and install
-        // the AppState-backed YieldHook on the corpus engine.
+        // ── Order is load-bearing ─────────────────────────────────
         //
-        // The wiring order is load-bearing: AppState must exist
-        // (its atomics are the YieldHook's backing store) BEFORE we
-        // install the hook on the engine. We do it here rather than
-        // at engine construction time because the engine is built by
-        // the desktop / CLI long before AppState exists. The hook is
-        // a thin Arc<AppStateInner> wrapper, so the install is one
-        // method call.
+        // The `with_*` installers below mutate `AppStateInner`
+        // through `Arc::get_mut`, which silently fails (with a
+        // tracing::warn!) the moment any other code clones
+        // `app_state.inner`. The YieldHook construction
+        // (`AppStateYieldHook::new(app_state.inner.clone())`) and
+        // the embed-info publication (`app_state.inner.inference_store
+        // .set_local_embed_model(...)`) both bump the Arc strong
+        // count, so we must run ALL `with_*` installers BEFORE any
+        // of those.
         //
-        // When `yield_to_foreground_secs = 0` the hook still gets
-        // wired but `should_yield` short-circuits to false — so the
-        // ingest pipeline pays only the cost of one rwlock read +
-        // one atomic load per embed batch when the feature is off.
-        if let Some(engine) = corpus_engine.as_ref() {
-            if let Some(cfg) = self.setup_config.read().await.as_ref() {
-                let secs = cfg.daemon.yield_to_foreground_secs;
-                app_state.set_yield_window_secs(secs);
-                info!(
-                    yield_to_foreground_secs = secs,
-                    "foreground-yield: window configured"
-                );
-            }
-            let hook: Arc<dyn corpus_engine::YieldHook> =
-                commonwealth_api::yield_hook::AppStateYieldHook::new(
-                    app_state.inner.clone(),
-                );
-            engine.set_yield_hook(hook);
-            info!("foreground-yield: hook installed on corpus engine");
-        }
+        // Inverting this order silently breaks
+        // `/v1/chat/completions` — the orchestrator path is taken
+        // and every request 503s with `model_not_ready` — and
+        // breaks mesh persistence on join (falls back to the 10s
+        // gossip-loop cadence). See `with_local_inference` and
+        // `with_mesh_mutation_hook` in
+        // commonwealth-api/src/state.rs.
 
         // If Sovereign installed an InferenceProvider, wrap it in
         // the OpenAI-flavour adapter so this node's
@@ -1053,6 +1041,59 @@ impl EmbeddedDaemon {
         } else {
             app_state
         };
+
+        // Install the persistence hook that fires on every Mesh
+        // mutation from a route handler (`/internal/join`,
+        // `/internal/gossip`). This closes the race window where
+        // the founder accepts a new member but crashes before the
+        // next 10s gossip-loop re-persist fires, forgetting the
+        // joiner on restart.
+        let app_state = if self.persistence_enabled() {
+            let data_dir = self.data_dir.clone();
+            let hook: commonwealth_api::state::MeshMutationHook = Arc::new(
+                move |mesh: &commonwealth_core::mesh::Mesh, self_id: NodeId| {
+                    if let Err(e) = persist::save(&data_dir, mesh, self_id) {
+                        tracing::warn!(
+                            error = %e,
+                            "mesh_mutation_hook: persist failed"
+                        );
+                    }
+                },
+            );
+            app_state.with_mesh_mutation_hook(hook)
+        } else {
+            app_state
+        };
+
+        // ── End of Arc::get_mut-sensitive block ───────────────────
+        // Everything below is free to clone `app_state.inner`.
+
+        // Apply foreground-yield config from setup_config and install
+        // the AppState-backed YieldHook on the corpus engine.
+        //
+        // The hook is a thin Arc<AppStateInner> wrapper. Cloning
+        // `app_state.inner` here bumps the Arc strong count.
+        //
+        // When `yield_to_foreground_secs = 0` the hook still gets
+        // wired but `should_yield` short-circuits to false — so the
+        // ingest pipeline pays only the cost of one rwlock read +
+        // one atomic load per embed batch when the feature is off.
+        if let Some(engine) = corpus_engine.as_ref() {
+            if let Some(cfg) = self.setup_config.read().await.as_ref() {
+                let secs = cfg.daemon.yield_to_foreground_secs;
+                app_state.set_yield_window_secs(secs);
+                info!(
+                    yield_to_foreground_secs = secs,
+                    "foreground-yield: window configured"
+                );
+            }
+            let hook: Arc<dyn corpus_engine::YieldHook> =
+                commonwealth_api::yield_hook::AppStateYieldHook::new(
+                    app_state.inner.clone(),
+                );
+            engine.set_yield_hook(hook);
+            info!("foreground-yield: hook installed on corpus engine");
+        }
 
         // Publish embed model info so the collaborative ingestion planner
         // can compare this node's embedding model against candidates'.
@@ -1084,31 +1125,6 @@ impl EmbeddedDaemon {
         if let Some(cfg) = self.setup_config.read().await.as_ref() {
             register_local_model_slots(&app_state, cfg, node_id);
         }
-
-        // Install a persistence hook that fires on every Mesh
-        // mutation from a route handler (`/internal/join`,
-        // `/internal/gossip`). This closes the race window where
-        // the founder accepts a new member but crashes before the
-        // next 10s gossip-loop re-persist fires, forgetting the
-        // joiner on restart. We do this BEFORE the state is
-        // .clone()'d into the HTTP servers so Arc::get_mut in the
-        // builder succeeds.
-        let app_state = if self.persistence_enabled() {
-            let data_dir = self.data_dir.clone();
-            let hook: commonwealth_api::state::MeshMutationHook = Arc::new(
-                move |mesh: &commonwealth_core::mesh::Mesh, self_id: NodeId| {
-                    if let Err(e) = persist::save(&data_dir, mesh, self_id) {
-                        tracing::warn!(
-                            error = %e,
-                            "mesh_mutation_hook: persist failed"
-                        );
-                    }
-                },
-            );
-            app_state.with_mesh_mutation_hook(hook)
-        } else {
-            app_state
-        };
 
         // Client API on 0.0.0.0:9741 — this is the OpenAI-compatible
         // public surface documented in SYSTEM_OVERVIEW.md §5.5.

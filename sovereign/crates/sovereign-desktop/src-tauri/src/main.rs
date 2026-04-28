@@ -159,10 +159,31 @@ fn main() -> ExitCode {
                             // Default daemon URL — same one the
                             // existing inference path uses.
                             let daemon_url = "http://127.0.0.1:9741".to_string();
+                            // Resolve the chat model's name (file stem)
+                            // so the cleanup pass can target it by name.
+                            // The daemon registers each loaded slot under
+                            // its file stem (see
+                            // `register_local_model_slots` in
+                            // sovereign-mesh), and there's no "fast"
+                            // alias in the routing layer — passing
+                            // `"fast"` would 503 on a CLI-daemon
+                            // setup. Falls back to "fast" only as a
+                            // last resort for older configs without a
+                            // model_path set.
+                            let cleanup_model = state_clone
+                                .config
+                                .read()
+                                .await
+                                .model_path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| "fast".to_string());
                             local_corpus_commands::install_ocr_ctx_for_app(
                                 &handle_clone,
                                 &mgr,
                                 daemon_url,
+                                cleanup_model,
                             )
                             .await;
                         }
