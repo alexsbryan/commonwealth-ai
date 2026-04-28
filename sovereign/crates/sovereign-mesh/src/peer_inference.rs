@@ -33,12 +33,15 @@
 //!
 //! Embed calls stay local unconditionally — retrieval is latency-
 //! critical and not a capability the selector has visibility into.
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures::Stream;
+use sovereign_core::oicp::THROUGHPUT_EWMA_ALPHA;
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{
     ExtensionRegistry, ExtensionStats, NodeLocality, NodeObservations,
@@ -95,12 +98,28 @@ use crate::oicp_select::{
 #[async_trait]
 pub trait PeerEndpointSource: Send + Sync {
     async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint>;
+
+    /// This node's id. Stamped onto outbound manifest fetches via
+    /// the `X-Node-Id` header so the peer can apply local-only
+    /// affinity preferences before serializing the manifest. The
+    /// default returns `None` — implementations that don't know
+    /// their id at peer-fetch time (test stubs that synthesize
+    /// peers from thin air) skip the header entirely; the manifest
+    /// endpoint then serves unmodified affinities, which is the
+    /// safe default.
+    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
+        None
+    }
 }
 
 #[async_trait]
 impl PeerEndpointSource for EmbeddedDaemon {
     async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
         EmbeddedDaemon::peer_inference_endpoints(self).await
+    }
+
+    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
+        EmbeddedDaemon::self_node_id(self).await
     }
 }
 
@@ -139,6 +158,15 @@ pub struct MeshInferenceProvider {
     /// separate promotion process that decides which extensions
     /// merit standardization.
     extension_registry: Arc<RwLock<ExtensionRegistry>>,
+    /// Local-side throughput benchmark. Set by the daemon's startup
+    /// probe via [`MeshInferenceProvider::set_local_benchmark`] once
+    /// the bundled model has been measured; read on every scoring
+    /// pass to feed the local candidate's throughput factor. `None`
+    /// before the probe completes — the scheduler then falls back to
+    /// observation-only scoring, which is safe because local
+    /// observations accumulate fast.
+    local_benchmark:
+        Arc<RwLock<Option<sovereign_core::oicp::BenchmarkResult>>>,
 }
 
 impl MeshInferenceProvider {
@@ -187,7 +215,34 @@ impl MeshInferenceProvider {
             )),
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
+            local_benchmark: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Replace the local-side benchmark result. Called once by the
+    /// daemon's startup probe after the bundled model has been
+    /// measured. Idempotent — calling twice with the same result is
+    /// a no-op for downstream scoring.
+    pub async fn set_local_benchmark(
+        &self,
+        bench: sovereign_core::oicp::BenchmarkResult,
+    ) {
+        tracing::info!(
+            model = %bench.baseline_model_id,
+            pp_tok_s = bench.pp_tok_s,
+            tg_tok_s = bench.tg_tok_s,
+            size_gb = bench.baseline_size_gb,
+            "bench: completed"
+        );
+        *self.local_benchmark.write().await = Some(bench);
+    }
+
+    /// Read-only access to the local benchmark for components that
+    /// need to advertise it (manifest construction, gossip).
+    pub async fn local_benchmark(
+        &self,
+    ) -> Option<sovereign_core::oicp::BenchmarkResult> {
+        self.local_benchmark.read().await.clone()
     }
 
     /// Snapshot the current extension-hint usage for governance
@@ -332,6 +387,19 @@ impl MeshInferenceProvider {
         // Getting this wrong silently 404s the fetch and the peer
         // drops out of scoring — which was the bug that made the
         // OICP-driven refactor look like it didn't route.
+        // Identify ourselves to the peer so they can apply any
+        // local-only affinity preference they've set for us. The
+        // header is optional on the receiving side; a peer that
+        // doesn't know our node id (test stubs, older daemons)
+        // gets None back and the manifest endpoint serves
+        // unmodified affinities — the safe default.
+        let local_node_id_hex = self.mesh.local_node_id().await.map(|id| {
+            id.as_bytes()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        });
+
         for base in &peer.base_urls {
             let root = base
                 .trim_end_matches('/')
@@ -339,7 +407,11 @@ impl MeshInferenceProvider {
                 .trim_end_matches('/');
             let url = format!("{root}/oicp/v1/capabilities");
             let started = Instant::now();
-            match self.http.get(&url).send().await {
+            let mut req = self.http.get(&url);
+            if let Some(ref id_hex) = local_node_id_hex {
+                req = req.header("X-Node-Id", id_hex);
+            }
+            match req.send().await {
                 Ok(resp) if resp.status().is_success() => {
                     // Lock the RTT in before the JSON parse — we
                     // want the network round-trip, not the parse
@@ -461,8 +533,16 @@ impl MeshInferenceProvider {
                 .observe_request(hint, Self::now_unix_secs());
         }
         let local_obs = self.local_observations.read().await.clone();
+        let local_bench = self.local_benchmark.read().await.clone();
         let local_cand = score_manifest_for_request(&self.self_manifest, req_oicp)
-            .map(|c| adjust_for_observations(c, &local_obs, NodeLocality::Local));
+            .map(|c| {
+                adjust_for_observations(
+                    c,
+                    &local_obs,
+                    NodeLocality::Local,
+                    local_bench.as_ref(),
+                )
+            });
         tracing::info!(
             local_models = self.self_manifest.models.len(),
             local_scores = local_cand.is_some(),
@@ -495,7 +575,12 @@ impl MeshInferenceProvider {
                 .get(&peer.name)
                 .cloned()
                 .unwrap_or_default();
-            let cand = adjust_for_observations(raw, &obs, classify_rtt_ms(rtt_ms));
+            let cand = adjust_for_observations(
+                raw,
+                &obs,
+                classify_rtt_ms(rtt_ms),
+                peer.benchmark.as_ref(),
+            );
             tracing::info!(
                 peer = %peer.name,
                 peer_pick = %cand.model_id,
@@ -670,7 +755,16 @@ impl InferenceProvider for MeshInferenceProvider {
                     Ok(stream) => {
                         let model_id =
                             format!("{} @ peer {}", peer_cand.model_id, peer.name);
-                        return Ok((stream, model_id));
+                        let observed: Pin<
+                            Box<dyn Stream<Item = Result<String>> + Send>,
+                        > = Box::pin(ThroughputObservedStream::new(
+                            stream,
+                            ThroughputTarget::Peer {
+                                name: peer.name.clone(),
+                                map: Arc::clone(&self.peer_observations),
+                            },
+                        ));
+                        return Ok((observed, model_id));
                     }
                     Err(e) => {
                         tracing::info!(
@@ -688,7 +782,12 @@ impl InferenceProvider for MeshInferenceProvider {
             );
         }
         let stream = self.local.complete_stream(request).await?;
-        Ok((stream, self.local.model_id_for(request.preferred_speed)))
+        let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
+            Box::pin(ThroughputObservedStream::new(
+                stream,
+                ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+            ));
+        Ok((observed, self.local.model_id_for(request.preferred_speed)))
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
@@ -718,7 +817,201 @@ impl InferenceProvider for MeshInferenceProvider {
     }
 }
 
+/// Where a `ThroughputObservedStream` should write its measurements
+/// when it terminates: either onto the local-side single
+/// `NodeObservations` slot, or onto the per-peer map keyed by name.
+/// Mirrors the dual storage already present on
+/// [`MeshInferenceProvider::peer_observations`] /
+/// [`MeshInferenceProvider::local_observations`].
+#[derive(Clone)]
+enum ThroughputTarget {
+    Local(Arc<RwLock<NodeObservations>>),
+    Peer {
+        name: String,
+        map: Arc<RwLock<HashMap<String, NodeObservations>>>,
+    },
+}
+
+/// Stream wrapper that records TTFT (time-to-first-token) and
+/// observed token-generation rate when the stream completes. Both
+/// metrics fold into the per-(local|peer) [`NodeObservations`] EWMA
+/// so [`oicp::throughput_factor`] sees real performance, not just
+/// the advertised benchmark.
+///
+/// Implementation notes:
+///
+/// - Token count is approximated as **stream chunks**. SSE-streamed
+///   output from llama.cpp emits one chunk per token in practice.
+///   This is a coarse proxy for routing — the absolute number may
+///   be off, but the relative ordering across peers is preserved
+///   (every peer is measured the same way).
+/// - We record on `Drop` so that streams aborted mid-completion
+///   still surface their TTFT — abort timing is a useful signal
+///   too. A stream that ended with zero chunks contributes only
+///   the TTFT data.
+/// - Recording is `tokio::spawn`'d because `Drop` runs in a
+///   non-async context. The spawned task uses the same EWMA α as
+///   the latency probe to stay consistent with the rest of the
+///   observation pipeline.
+struct ThroughputObservedStream {
+    inner: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
+    dispatched_at: Instant,
+    first_chunk_at: Option<Instant>,
+    chunk_count: u64,
+    target: ThroughputTarget,
+    completed: bool,
+}
+
+impl ThroughputObservedStream {
+    fn new(
+        inner: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
+        target: ThroughputTarget,
+    ) -> Self {
+        Self {
+            inner,
+            dispatched_at: Instant::now(),
+            first_chunk_at: None,
+            chunk_count: 0,
+            target,
+            completed: false,
+        }
+    }
+}
+
+impl Stream for ThroughputObservedStream {
+    type Item = Result<String>;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        match self.inner.as_mut().poll_next(cx) {
+            Poll::Ready(Some(Ok(chunk))) => {
+                if self.first_chunk_at.is_none() {
+                    self.first_chunk_at = Some(Instant::now());
+                }
+                self.chunk_count += 1;
+                Poll::Ready(Some(Ok(chunk)))
+            }
+            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
+            Poll::Ready(None) => {
+                self.completed = true;
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl Drop for ThroughputObservedStream {
+    fn drop(&mut self) {
+        let dispatched = self.dispatched_at;
+        let first_chunk = self.first_chunk_at;
+        let count = self.chunk_count;
+        let target = self.target.clone();
+
+        // Skip recording if no first token ever arrived AND no
+        // chunks were yielded. Pure-failure case — nothing to
+        // measure, and the failure tracker handles it via
+        // `record_failure`.
+        if first_chunk.is_none() && count == 0 {
+            return;
+        }
+
+        tokio::spawn(async move {
+            let now = Instant::now();
+            let ttft_ms = first_chunk
+                .map(|t| t.duration_since(dispatched).as_secs_f64() * 1000.0);
+            let tg_tok_s = first_chunk.and_then(|fc| {
+                let gen_secs = now.duration_since(fc).as_secs_f64();
+                if gen_secs > 0.0 && count > 0 {
+                    Some(count as f64 / gen_secs)
+                } else {
+                    None
+                }
+            });
+
+            match target {
+                ThroughputTarget::Local(obs) => {
+                    let mut o = obs.write().await;
+                    apply_throughput_observation(
+                        &mut o, ttft_ms, tg_tok_s,
+                    );
+                }
+                ThroughputTarget::Peer { name, map } => {
+                    let mut m = map.write().await;
+                    let entry =
+                        m.entry(name).or_insert_with(NodeObservations::default);
+                    apply_throughput_observation(
+                        entry, ttft_ms, tg_tok_s,
+                    );
+                }
+            }
+        });
+    }
+}
+
+/// EWMA update for the throughput-observation fields on
+/// [`NodeObservations`]. α follows
+/// [`THROUGHPUT_EWMA_ALPHA`] so this stays in lock-step with the
+/// latency probe and other observation paths.
+fn apply_throughput_observation(
+    obs: &mut NodeObservations,
+    ttft_ms: Option<f64>,
+    tg_tok_s: Option<f64>,
+) {
+    let alpha = THROUGHPUT_EWMA_ALPHA;
+    if let Some(ttft) = ttft_ms {
+        obs.ttft_ewma_ms = if obs.ttft_ewma_ms == 0.0 {
+            ttft
+        } else {
+            alpha * ttft + (1.0 - alpha) * obs.ttft_ewma_ms
+        };
+    }
+    if let Some(tg) = tg_tok_s {
+        obs.tg_tok_s_ewma = if obs.tg_tok_s_ewma == 0.0 {
+            tg
+        } else {
+            alpha * tg + (1.0 - alpha) * obs.tg_tok_s_ewma
+        };
+    }
+}
+
 // Selection primitive tests live in `crate::oicp_select` alongside
 // the primitives themselves; this file only tests the peer-
 // orchestration logic (HTTP manifest fetch, selection loop, etc.)
 // once we need targeted coverage for that layer.
+
+#[cfg(test)]
+mod throughput_tests {
+    use super::*;
+
+    #[test]
+    fn ewma_seed_takes_first_value_when_zero() {
+        let mut obs = NodeObservations::default();
+        apply_throughput_observation(&mut obs, Some(120.0), Some(15.0));
+        assert!((obs.ttft_ewma_ms - 120.0).abs() < 1e-9);
+        assert!((obs.tg_tok_s_ewma - 15.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ewma_blends_subsequent_samples_at_alpha() {
+        let mut obs = NodeObservations::default();
+        apply_throughput_observation(&mut obs, Some(100.0), Some(20.0));
+        apply_throughput_observation(&mut obs, Some(200.0), Some(10.0));
+        // alpha=0.3; 0.3*200 + 0.7*100 = 130
+        assert!((obs.ttft_ewma_ms - 130.0).abs() < 1e-9);
+        // 0.3*10 + 0.7*20 = 17
+        assert!((obs.tg_tok_s_ewma - 17.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ewma_ignores_none_inputs() {
+        let mut obs = NodeObservations::default();
+        apply_throughput_observation(&mut obs, Some(100.0), None);
+        assert_eq!(obs.tg_tok_s_ewma, 0.0);
+        apply_throughput_observation(&mut obs, None, Some(15.0));
+        assert!((obs.ttft_ewma_ms - 100.0).abs() < 1e-9);
+        assert!((obs.tg_tok_s_ewma - 15.0).abs() < 1e-9);
+    }
+}

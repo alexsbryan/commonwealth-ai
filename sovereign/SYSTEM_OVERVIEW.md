@@ -594,9 +594,20 @@ fold in operational adjustments (helpers in `oicp-types`):
 - **Load penalty** — hyperbolic `1 / (1 + 0.05 * in_flight)`.
 - **Locality bonus** — `Local` 1.15× / `Near` 1.05× / `Far` 1.0×; classified from manifest-fetch RTT (`<5ms` → `Local`, `<25ms` → `Near`).
 - **Cold-start ramp** — new nodes start at `0.7×` weight, ramp to `1.0×` over 20 observations.
+- **Throughput factor** — `[0.3, 1.0]` from observed token-generation rate (≥5 samples) or, in its absence, a benchmark-derived estimate scaled by model-size ratio. Returns neutral `1.0` for peers with neither signal so the change is wire-tolerant. Reference rate is 20 tok/s; the floor preserves last-resort routability for slow peers.
 - **Inference availability** — gossiped clamped `[0.2, 1.0]`.
 
 Observations are local per scheduler, never advertised between nodes.
+
+**Benchmark advertisement.** Each node runs a one-shot probe at startup
+(re-runs when `HardwareProfile` fingerprint changes) measuring prompt
+processing + token generation against a fixed prompt. The result rides
+`NodeCapabilities.benchmark` (`Option<BenchmarkResult>`, serde default
+so older peers ignore) and feeds the throughput-factor extrapolation
+when a peer hasn't accumulated observation samples yet. Probe lives in
+`sovereign-inference/src/benchmark.rs`; observation pipeline (TTFT +
+tg_tok/s EWMA, α=0.3) is wrapped around streaming completions in
+`sovereign-mesh/src/peer_inference.rs::ThroughputObservedStream`.
 
 **Advertisers:** `commonwealth-api/routes_oicp.rs::synthesize_default_claim`
 (one claim per `ModelInfo`); `sovereign-mesh/inference_adapter.rs`
@@ -825,11 +836,77 @@ and the guards fail closed for *every* caller.
 - `embed_http::http_embed_fn` — POSTs to `/v1/embeddings` (default `qwen3-embedding-0.6b`); how a node without a local embed model still ingests via the engine
 - `grounding.rs` — `GroundingConfig { enabled, corpora, max_chunks, max_context_tokens, min_relevance, citation_instructions }` + `search_for_grounding` + `format_knowledge_context`
 
-### 5.6 Ledger and fairness
+### 5.6.2 Desktop integration
 
-- `LedgerStore` — append-only. `LedgerEntryKind { Contributed { served_request_from }, Consumed { served_by } }` with units `GpuSeconds | StorageGbDays | BandwidthGb`.
-- `NodeBalance` — rolling 30-day window: `compute_hours, storage_gb_days, bandwidth_gb, balance`.
-- `FairnessPolicy` — per-mesh choice: `Transparent` / `SoftThrottle { threshold_hours, priority_reduction }` / `HardCap { threshold_hours }`. Decisions: `Allow` / `Throttle` / `Deny`.
+`sovereign-desktop/src-tauri/src/mesh_commands.rs` exposes four
+new Tauri commands for the Mesh Health UI:
+
+- `mesh_get_contributions` → `Vec<NodeContributionsDto>` (per-peer
+  dimensional view).
+- `mesh_set_peer_preference(node_id, multiplier, reason)` → `()`.
+- `mesh_clear_peer_preference(node_id)` → `bool`.
+- `mesh_list_peer_preferences` → `Vec<PeerPreferenceDto>`.
+
+Local mode talks to the in-process `EmbeddedDaemon`'s `AppState`
+(via the new `app_state()` accessor); Attach mode currently
+returns an empty list / "unsupported" error — the daemon doesn't
+yet expose these over HTTP, which is captured as a TODO in the
+command body.
+
+End-to-end coverage: `tests/e2e/specs/mesh-health.spec.ts`
+exercises every new command via the Playwright/`tauri-shim.js`
+harness, including a chaos-style invariant (mirrors
+`chat-chaos.spec.ts`) that pins "unexpected null payload doesn't
+crash the page".
+
+### 5.6.1 Peer preferences (Ostrom sanctions)
+
+`commonwealth-state::peer_preferences` is the local-only,
+gossip-excluded store of per-peer affinity multipliers. An operator
+sets a preference (clamped at construction to `(0.0, 1.0]` per
+ARCH_PRINCIPLES §7.1) via `commonwealth peer-preference set <node>
+<multiplier>`; the manifest endpoint at `/oicp/v1/capabilities`
+reads `X-Node-Id` from the inbound request, looks up any matching
+preference, and multiplies every advertised `CapabilityClaim.affinity`
+before serialization. The penalized peer's scorer sees lower
+affinities and naturally routes elsewhere — the sanction is
+expressed structurally, never communicated as a distinct signal.
+
+`MeshStore::all_entries_for_gossip` filters out the
+`peer_preferences` `app_id` so private adjustments cannot leak. The
+invariant is pinned by tests in both
+`commonwealth-state/src/peer_preferences.rs::tests::gossip_excludes_peer_preferences_app_id`
+and
+`commonwealth-state/src/store.rs::tests::all_entries_for_gossip_excludes_peer_preferences_namespace`.
+
+`sovereign-mesh::peer_inference::MeshInferenceProvider` adds the
+`X-Node-Id` header on every manifest fetch via the new
+`PeerEndpointSource::local_node_id` accessor; manifest-fetches
+without an identifiable requester serve unmodified affinities.
+
+### 5.6 Dimensional contribution ledger
+
+`commonwealth-core::contributions` defines the append-only event
+log (`LedgerEvent` + variants `InferenceServed`, `InferenceReceived`,
+`KnowledgeQueryServed`, `ShardTransferred`, `StorageSnapshot`) and
+the pure aggregation function that collapses an event stream into
+per-node `NodeContributions` (separate `InferenceActivity` totals
+for served vs. consumed, plus `corpora_hosted` with `is_sole_host`
+and bytes_served/bytes_received).
+
+Storage lives in `commonwealth-state::ContributionEmitter`, which
+writes events into the existing gossip-replicated `MeshStore` under
+`app_id = "contributions"`. Every node aggregates the same event
+stream locally and arrives at identical `NodeContributions` —
+there is **no `balance` field, no exchange rate, and no ranking**
+(the units are intentionally incommensurable per the Mesh Health
+design).
+
+`FairnessPolicy`, `FairnessConfig`, `NodeBalance`, and the old
+`LedgerEntry` machinery were deleted in the same change — none of
+them had any production write sites. Mesh-level "fairness" is now
+expressed as per-peer affinity preferences (§5.7, commit 3) rather
+than a policy enum.
 
 ### 5.7 Test harness
 

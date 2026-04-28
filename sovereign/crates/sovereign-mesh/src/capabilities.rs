@@ -69,6 +69,11 @@ pub async fn build_local_capabilities(
         // me in distribution" — safe default for nodes that haven't
         // bootstrapped an embed slot yet.
         embed_model,
+        // Benchmark is stamped in by the daemon's startup probe via
+        // a separate `with_benchmark` setter rather than passed
+        // through this constructor — the probe runs once and
+        // persists, while this builder is called every gossip tick.
+        benchmark: None,
     }
 }
 

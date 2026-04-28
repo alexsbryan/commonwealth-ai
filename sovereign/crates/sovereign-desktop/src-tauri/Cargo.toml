@@ -9,6 +9,12 @@ sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-mesh = { workspace = true }
+# Mesh Health surfaces (peer preferences, dimensional contributions) —
+# Tauri commands access the in-process AppState's accessors. The
+# `sovereign-mesh` crate already path-depends on these so version
+# skew is impossible.
+commonwealth-core = { path = "../../../../commonwealth/crates/commonwealth-core" }
+commonwealth-state = { path = "../../../../commonwealth/crates/commonwealth-state" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

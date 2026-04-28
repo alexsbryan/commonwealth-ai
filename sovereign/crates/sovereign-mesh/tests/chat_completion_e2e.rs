@@ -270,6 +270,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
         name: "Founder".into(),
         base_urls: vec![base_url],
         system_ram_gb: 64,
+        benchmark: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
@@ -347,6 +348,7 @@ async fn local_only_sharding_never_routes_to_peer() {
         name: "Founder".into(),
         base_urls: vec![base_url],
         system_ram_gb: 64,
+        benchmark: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });

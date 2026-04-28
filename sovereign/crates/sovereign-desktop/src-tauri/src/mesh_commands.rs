@@ -465,3 +465,218 @@ impl MeshStateResponse {
     }
 }
 
+// ─── Mesh Health: dimensional contributions + peer preferences ──
+//
+// Surfaces the new contribution ledger and the operator-private
+// per-peer affinity multiplier to the desktop UI. Local mode goes
+// through the in-process `EmbeddedDaemon`'s AppState; Attach mode
+// returns "not yet supported" — the daemon doesn't expose these
+// over HTTP yet (TODO). The UI degrades to "no data" in Attach
+// mode, which is honest about the gap and keeps the contract
+// simple.
+
+/// Dimensional contributions for one peer, shaped for the desktop
+/// list. Mirrors `commonwealth_core::contributions::NodeContributions`
+/// but flattened into a serde shape the frontend can consume
+/// without depending on commonwealth-core's serde layout.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeContributionsDto {
+    pub node_id: String,
+    pub window_days: u32,
+    pub inference_served_requests: u64,
+    pub inference_served_tokens: u64,
+    pub inference_served_wall_seconds: f64,
+    pub inference_consumed_requests: u64,
+    pub inference_consumed_tokens: u64,
+    pub corpora_hosted: Vec<CorpusHostingDto>,
+    pub bytes_served: u64,
+    pub bytes_received: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusHostingDto {
+    pub corpus_id: String,
+    pub corpus_name: String,
+    pub size_gb: f64,
+    pub queries_served: u64,
+    pub is_sole_host: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerPreferenceDto {
+    pub node_id: String,
+    pub multiplier: f64,
+    pub reason: Option<String>,
+    pub set_at: u64,
+}
+
+/// Snapshot of every peer's dimensional contributions. Empty list
+/// in Attach mode (TODO — expose over HTTP) and when no events
+/// have accumulated.
+#[tauri::command]
+pub async fn mesh_get_contributions(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<NodeContributionsDto>, String> {
+    if attached_port(&state).is_some() {
+        return Ok(Vec::new());
+    }
+    let Some(mesh) = state.mesh.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let Some(app_state) = mesh.app_state().await else {
+        return Ok(Vec::new());
+    };
+    let store = app_state.inner.mesh_store.clone();
+    let mesh_view = app_state.inner.mesh.read().await;
+    let caps_map: std::collections::HashMap<_, _> = mesh_view
+        .members
+        .iter()
+        .map(|(id, member)| (id.clone(), member.capabilities.clone()))
+        .collect();
+    drop(mesh_view);
+    let map = commonwealth_state::current_contributions(
+        &store,
+        &caps_map,
+        commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
+    )
+    .map_err(|e| format!("read contributions: {e}"))?;
+    let mut out: Vec<NodeContributionsDto> = map
+        .into_iter()
+        .map(|(node_id, c)| NodeContributionsDto {
+            node_id: hex_node_id(&node_id),
+            window_days: c.window_days,
+            inference_served_requests: c.inference_served.requests,
+            inference_served_tokens: c.inference_served.total_tokens_generated,
+            inference_served_wall_seconds: c.inference_served.wall_seconds,
+            inference_consumed_requests: c.inference_consumed.requests,
+            inference_consumed_tokens: c
+                .inference_consumed
+                .total_tokens_generated,
+            corpora_hosted: c
+                .corpora_hosted
+                .into_iter()
+                .map(|h| CorpusHostingDto {
+                    corpus_id: h.corpus_id,
+                    corpus_name: h.corpus_name,
+                    size_gb: h.size_gb,
+                    queries_served: h.queries_served,
+                    is_sole_host: h.is_sole_host,
+                })
+                .collect(),
+            bytes_served: c.bytes_served,
+            bytes_received: c.bytes_received,
+        })
+        .collect();
+    out.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn mesh_set_peer_preference(
+    state: State<'_, Arc<AppState>>,
+    node_id: String,
+    multiplier: f64,
+    reason: Option<String>,
+) -> Result<(), String> {
+    if attached_port(&state).is_some() {
+        return Err(
+            "peer preferences are not yet exposed over the daemon HTTP \
+             API in Attach mode — set via `commonwealth peer-preference \
+             set` instead"
+                .into(),
+        );
+    }
+    let Some(mesh) = state.mesh.as_ref() else {
+        return Err("mesh daemon not available".into());
+    };
+    let Some(app_state) = mesh.app_state().await else {
+        return Err("mesh daemon not running".into());
+    };
+    let target = parse_node_id_hex(&node_id)?;
+    let pref = commonwealth_state::PeerPreference::new(multiplier, reason)
+        .map_err(|e| format!("{e}"))?;
+    app_state
+        .inner
+        .peer_preferences
+        .set(&target, pref)
+        .map_err(|e| format!("{e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn mesh_clear_peer_preference(
+    state: State<'_, Arc<AppState>>,
+    node_id: String,
+) -> Result<bool, String> {
+    if attached_port(&state).is_some() {
+        return Err(
+            "peer preferences are not yet exposed over the daemon HTTP \
+             API in Attach mode — clear via `commonwealth peer-preference \
+             clear` instead"
+                .into(),
+        );
+    }
+    let Some(mesh) = state.mesh.as_ref() else {
+        return Err("mesh daemon not available".into());
+    };
+    let Some(app_state) = mesh.app_state().await else {
+        return Err("mesh daemon not running".into());
+    };
+    let target = parse_node_id_hex(&node_id)?;
+    app_state
+        .inner
+        .peer_preferences
+        .clear(&target)
+        .map_err(|e| format!("{e}"))
+}
+
+#[tauri::command]
+pub async fn mesh_list_peer_preferences(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<PeerPreferenceDto>, String> {
+    if attached_port(&state).is_some() {
+        return Ok(Vec::new());
+    }
+    let Some(mesh) = state.mesh.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let Some(app_state) = mesh.app_state().await else {
+        return Ok(Vec::new());
+    };
+    let entries = app_state
+        .inner
+        .peer_preferences
+        .list()
+        .map_err(|e| format!("{e}"))?;
+    Ok(entries
+        .into_iter()
+        .map(|(id, p)| PeerPreferenceDto {
+            node_id: hex_node_id(&id),
+            multiplier: p.multiplier(),
+            reason: p.reason().map(|s| s.to_string()),
+            set_at: p.set_at(),
+        })
+        .collect())
+}
+
+fn hex_node_id(id: &commonwealth_core::ids::NodeId) -> String {
+    id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn parse_node_id_hex(s: &str) -> Result<commonwealth_core::ids::NodeId, String> {
+    if s.len() != 32 {
+        return Err(format!("expected 32-hex-char node id, got '{s}'"));
+    }
+    let mut bytes = [0u8; 16];
+    for (i, b) in bytes.iter_mut().enumerate() {
+        let pair = s
+            .get(i * 2..i * 2 + 2)
+            .ok_or_else(|| format!("invalid hex id '{s}'"))?;
+        *b = u8::from_str_radix(pair, 16)
+            .map_err(|_| format!("invalid hex id '{s}'"))?;
+    }
+    Ok(commonwealth_core::ids::NodeId::from_u128(
+        u128::from_be_bytes(bytes),
+    ))
+}
+

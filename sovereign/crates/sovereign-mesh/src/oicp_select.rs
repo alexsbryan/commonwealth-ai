@@ -19,6 +19,7 @@
 //! drift out of agreement about what "best" means.
 use sovereign_core::oicp::{
     self, cold_start_weight, effective_affinity, load_penalty, locality_bonus,
+    throughput_factor, throughput_factor_source, BenchmarkResult,
     CapabilityHint, InferenceRequirements, LatencyClass, NodeLocality,
     NodeObservations, ProviderManifest,
 };
@@ -146,14 +147,20 @@ pub(crate) fn classify_rtt_ms(rtt_ms: u32) -> NodeLocality {
 }
 
 /// Fold v0.3 §7 operational adjustments (observation, load,
-/// locality, cold-start) into a claim-scored candidate. The
-/// returned candidate has `score` rescaled; all other fields are
-/// preserved so downstream tie-breaks (`size_gb`, `model_id`)
+/// locality, cold-start, throughput) into a claim-scored candidate.
+/// The returned candidate has `score` rescaled; all other fields
+/// are preserved so downstream tie-breaks (`size_gb`, `model_id`)
 /// still work.
+///
+/// `baseline_benchmark` is the peer's gossiped
+/// [`BenchmarkResult`] (or `None` for older peers) and feeds the
+/// throughput-extrapolation path. `cand.size_gb` provides the
+/// candidate-side input for the size-ratio scaling.
 pub(crate) fn adjust_for_observations(
     cand: ModelCandidate,
     obs: &NodeObservations,
     locality: NodeLocality,
+    baseline_benchmark: Option<&BenchmarkResult>,
 ) -> ModelCandidate {
     let observation_mult = if cand.claim_affinity > 0.0 {
         effective_affinity(cand.claim_affinity, obs) / cand.claim_affinity
@@ -163,8 +170,20 @@ pub(crate) fn adjust_for_observations(
     let load = load_penalty(obs);
     let loc = locality_bonus(locality);
     let cold = cold_start_weight(obs.samples);
+    let candidate_size = cand.size_gb.unwrap_or(0.0);
+    let throughput =
+        throughput_factor(obs, candidate_size, baseline_benchmark);
+    tracing::debug!(
+        model_id = %cand.model_id,
+        factor = throughput,
+        source = throughput_factor_source(obs, baseline_benchmark),
+        obs_samples = obs.samples,
+        obs_tg_tok_s = obs.tg_tok_s_ewma,
+        candidate_size_gb = candidate_size,
+        "oicp_select: throughput_factor"
+    );
     ModelCandidate {
-        score: cand.score * observation_mult * load * loc * cold,
+        score: cand.score * observation_mult * load * loc * cold * throughput,
         ..cand
     }
 }

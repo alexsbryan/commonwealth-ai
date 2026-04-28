@@ -58,6 +58,19 @@
       relay_candidates: [],
     }),
     mesh_relay_candidates: () => [],
+    // Mesh Health (peer preferences + dimensional contributions). The
+    // shim records calls via the per-command tracker below so tests
+    // can assert what arguments the UI dispatched.
+    mesh_get_contributions: () => [],
+    mesh_set_peer_preference: (args) => {
+      window.__sovereign_test__._lastSetPreference = args;
+      return undefined;
+    },
+    mesh_clear_peer_preference: (args) => {
+      window.__sovereign_test__._lastClearPreference = args;
+      return true;
+    },
+    mesh_list_peer_preferences: () => [],
     get_config: () => ({
       embedding_model: null,
       chat_model: null,

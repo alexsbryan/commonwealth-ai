@@ -5,6 +5,7 @@ use tokio::sync::RwLock;
 
 use sovereign_core::oicp::{
     self, cold_start_weight, effective_affinity, load_penalty, locality_bonus,
+    throughput_factor, throughput_factor_source, BenchmarkResult,
     InferenceRequirements, NodeLocality, NodeObservations, ProviderManifest,
     ShardingPrivacy,
 };
@@ -38,6 +39,15 @@ pub struct BackendEntry {
     /// `Far`. Set once at construction based on how the backend was
     /// registered; not currently re-evaluated at runtime.
     pub locality: NodeLocality,
+    /// Baseline-model throughput benchmark for this backend. Populated
+    /// for local backends after the daemon's startup probe; `None`
+    /// for remote (OpenAI-compatible) backends and for backends whose
+    /// benchmark hasn't completed yet. When `None`, the scheduler
+    /// falls back to observation-driven throughput scoring (which is
+    /// also `None` until [`THROUGHPUT_OBSERVATION_THRESHOLD`] samples
+    /// accumulate); the scoring multiplier degrades to neutral 1.0
+    /// without it.
+    pub benchmark: Arc<RwLock<Option<BenchmarkResult>>>,
 }
 
 impl BackendEntry {
@@ -52,6 +62,7 @@ impl BackendEntry {
             inference_availability: 1.0,
             observations: Arc::new(RwLock::new(NodeObservations::default())),
             locality: NodeLocality::Local,
+            benchmark: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -74,6 +85,7 @@ impl BackendEntry {
             // the backend is on the same LAN can reassign to `Near`
             // after construction.
             locality: NodeLocality::Far,
+            benchmark: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -248,7 +260,7 @@ impl BackendSelector for CapabilityAwareSelector {
                 None => continue,
             };
 
-            let Some((claim_score, claim_affinity)) =
+            let Some((claim_score, claim_affinity, model_size_gb)) =
                 best_score_for_manifest(manifest, requirements)
             else {
                 continue;
@@ -264,6 +276,24 @@ impl BackendSelector for CapabilityAwareSelector {
             let load = load_penalty(&obs);
             let locality = locality_bonus(backend.locality);
             let cold_start = cold_start_weight(obs.samples);
+
+            let benchmark_guard = backend.benchmark.read().await;
+            let bench_ref = benchmark_guard.as_ref();
+            let candidate_size = model_size_gb.unwrap_or(0.0);
+            let throughput =
+                throughput_factor(&obs, candidate_size, bench_ref);
+            tracing::debug!(
+                backend = %backend.name,
+                idx,
+                factor = throughput,
+                source = throughput_factor_source(&obs, bench_ref),
+                obs_samples = obs.samples,
+                obs_tg_tok_s = obs.tg_tok_s_ewma,
+                candidate_size_gb = candidate_size,
+                "oicp_select: throughput_factor"
+            );
+            drop(benchmark_guard);
+
             let availability = backend.inference_availability.clamp(0.20, 1.0);
 
             let weighted = claim_score
@@ -271,6 +301,7 @@ impl BackendSelector for CapabilityAwareSelector {
                 * load
                 * locality
                 * cold_start
+                * throughput
                 * availability;
             if weighted > best_score {
                 best_score = weighted;
@@ -285,14 +316,21 @@ impl BackendSelector for CapabilityAwareSelector {
     }
 }
 
-/// Best (claim_score, claim_affinity) pair across all available
-/// (model, claim) pairs in a manifest. `None` when no pair can
-/// serve the request (hard gate failure or wrong specialization).
+/// Best (claim_score, claim_affinity, model_size_gb) triple across
+/// all available (model, claim) pairs in a manifest. `None` when no
+/// pair can serve the request (hard gate failure or wrong
+/// specialization).
+///
+/// `model_size_gb` is the winning model's advertised size, used by
+/// [`throughput_factor`] to extrapolate from a baseline benchmark.
+/// Some manifests (older peers, locally-built minimal manifests)
+/// don't carry size; those return `None` and the throughput layer
+/// falls through to observation-only scoring.
 fn best_score_for_manifest(
     manifest: &ProviderManifest,
     requirements: &InferenceRequirements,
-) -> Option<(f32, f32)> {
-    let mut best: Option<(f32, f32)> = None;
+) -> Option<(f32, f32, Option<f32>)> {
+    let mut best: Option<(f32, f32, Option<f32>)> = None;
     for model in manifest.models.iter().filter(|m| m.status.available) {
         for claim in &model.claims {
             let Some(score) =
@@ -301,9 +339,12 @@ fn best_score_for_manifest(
                 continue;
             };
             let claim_affinity = claim.effective_affinity();
+            let candidate = (score, claim_affinity, model.size_gb);
             best = Some(match best {
-                Some((best_score, _)) if best_score >= score => best.unwrap(),
-                _ => (score, claim_affinity),
+                Some((best_score, _, _)) if best_score >= score => {
+                    best.unwrap()
+                }
+                _ => candidate,
             });
         }
     }

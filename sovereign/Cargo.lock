@@ -8550,6 +8550,8 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "commonwealth-core",
+ "commonwealth-state",
  "corpus-engine",
  "dirs 6.0.0",
  "futures",

@@ -461,6 +461,36 @@ impl EmbeddedDaemon {
         matches!(*self.state.read().await, DaemonState::Running { .. })
     }
 
+    /// This daemon's `NodeId`, if known. Returns `None` before the
+    /// daemon has finished its create_mesh / join_mesh handshake;
+    /// callers that depend on the value (e.g.
+    /// `MeshInferenceProvider::get_peer_manifest` stamping
+    /// `X-Node-Id` for peer-preference matching) skip the
+    /// dependent behaviour gracefully when this is `None`.
+    pub async fn self_node_id(&self) -> Option<NodeId> {
+        match &*self.state.read().await {
+            DaemonState::Running { app_state, .. } => {
+                Some(app_state.self_node_id())
+            }
+            _ => None,
+        }
+    }
+
+    /// Clone the running `AppState` for callers that need access
+    /// to `peer_preferences`, `contribution_emitter`, or other
+    /// in-process daemon state. Returns `None` when the daemon
+    /// has not yet started (no mesh created/joined).
+    ///
+    /// `AppState` is `Clone` over an `Arc<AppStateInner>`, so this
+    /// is cheap and the returned handle survives any subsequent
+    /// state transitions.
+    pub async fn app_state(&self) -> Option<commonwealth_api::state::AppState> {
+        match &*self.state.read().await {
+            DaemonState::Running { app_state, .. } => Some(app_state.clone()),
+            _ => None,
+        }
+    }
+
     /// Where mesh state + setup are persisted. Needed by the HTTP
     /// mesh API's rotate handler, which talks to `persist::rotate_join_key`
     /// directly rather than going through a daemon method.
@@ -957,6 +987,7 @@ impl EmbeddedDaemon {
                     })
                     .collect(),
                 system_ram_gb: m.capabilities.hardware.system_ram_gb,
+                benchmark: m.capabilities.benchmark.clone(),
             })
             .collect()
     }
@@ -1443,6 +1474,14 @@ pub struct PeerInferenceEndpoint {
     /// up-front. Proper per-model OICP matching is the Stage 2.1
     /// follow-up.
     pub system_ram_gb: u32,
+    /// Peer's gossiped baseline-model benchmark. Feeds the
+    /// throughput-extrapolation path in [`oicp::throughput_factor`]
+    /// when we score the peer's manifest. `None` when the peer is
+    /// running an older daemon (no benchmark field) or hasn't
+    /// completed its startup probe yet — in either case the
+    /// scheduler falls back to observation-only throughput scoring,
+    /// which degrades to neutral 1.0 below the sample threshold.
+    pub benchmark: Option<sovereign_core::oicp::BenchmarkResult>,
 }
 
 /// One reachable address the founder can paste into the `?relay=…`

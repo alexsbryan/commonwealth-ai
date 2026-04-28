@@ -1,3 +1,4 @@
+pub mod benchmark;
 pub mod embedded;
 pub mod gguf_validator;
 pub mod hardware;

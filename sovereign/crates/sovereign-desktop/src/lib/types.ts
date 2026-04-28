@@ -467,6 +467,41 @@ export interface MeshDiagnostics {
   daemon_running: boolean;
 }
 
+// ─── Mesh Health: dimensional contributions + peer preferences ──
+
+export interface CorpusHostingDto {
+  corpus_id: string;
+  corpus_name: string;
+  size_gb: number;
+  queries_served: number;
+  is_sole_host: boolean;
+}
+
+export interface NodeContributionsDto {
+  node_id: string;
+  window_days: number;
+  inference_served_requests: number;
+  inference_served_tokens: number;
+  inference_served_wall_seconds: number;
+  inference_consumed_requests: number;
+  inference_consumed_tokens: number;
+  corpora_hosted: CorpusHostingDto[];
+  bytes_served: number;
+  bytes_received: number;
+}
+
+export interface PeerPreferenceDto {
+  node_id: string;
+  /** Multiplier in (0.0, 1.0] applied to every claim affinity in
+   *  the manifest served to the corresponding peer. Constructor
+   *  rejects values outside this range — `1.0` means no
+   *  adjustment, lower values reduce affinity, never above 1.0
+   *  (no preferential lanes). */
+  multiplier: number;
+  reason: string | null;
+  set_at: number;
+}
+
 /** A reachable network address for the founder's machine, surfaced
  *  in the invite-card relay picker so they can hand a remote-friendly
  *  link to people who can't reach them via mDNS (cross-Wi-Fi,

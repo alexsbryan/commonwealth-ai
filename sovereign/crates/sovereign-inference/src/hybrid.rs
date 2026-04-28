@@ -141,6 +141,7 @@ impl InferenceProvider for HybridProvider {
                     inference_availability: e.inference_availability,
                     observations: Arc::clone(&e.observations),
                     locality: e.locality,
+                    benchmark: Arc::clone(&e.benchmark),
                 })
                 .collect();
 
