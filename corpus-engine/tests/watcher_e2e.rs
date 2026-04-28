@@ -120,11 +120,16 @@ pub struct Node { pub id: String }
         });
         // `recipes_dir` is irrelevant for this test — the ingest path
         // uses a recipe we synthesize directly via a TOML file.
-        Arc::new(CorpusEngine::new(
-            self.data_dir.join("_recipes"),
-            self.data_dir.clone(),
-            embed,
-        ))
+        // `with_embedding_model` is a hard precondition of `ingest()`
+        // (see `engine/ingest.rs` for the rationale).
+        Arc::new(
+            CorpusEngine::new(
+                self.data_dir.join("_recipes"),
+                self.data_dir.clone(),
+                embed,
+            )
+            .with_embedding_model("test-mock"),
+        )
     }
 
     /// Synthesize a code recipe pointing at `root` and run ingest.

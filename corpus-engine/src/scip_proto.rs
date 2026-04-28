@@ -289,10 +289,16 @@ pub enum TextEncoding {
     Utf16 = 2,
 }
 
-/// Symbol roles as a bitmask. We only care about Definition.
+/// SCIP `SymbolRole` bitmask. Only `DEFINITION` is currently
+/// consumed; the other bits are kept as on-the-wire spec
+/// documentation so a contributor reading occurrence flags
+/// doesn't have to chase down the upstream proto. Per
+/// ARCH_PRINCIPLES §6, this is the boundary where wire-format
+/// constants legitimately belong in source as data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SymbolRole;
 
+#[allow(dead_code)]
 impl SymbolRole {
     pub const DEFINITION: i32 = 0x1;
     pub const IMPORT: i32 = 0x2;
