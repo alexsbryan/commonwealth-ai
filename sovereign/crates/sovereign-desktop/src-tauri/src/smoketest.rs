@@ -37,20 +37,20 @@ pub enum SmokeResult {
     Ok,
     /// Child died from a signal (SIGSEGV most likely on the
     /// kernel-pipeline-nil bugs we're guarding against). The
-    /// `i32` is the signal number on Unix. Treat as "this combo
+    /// `signal` is the Unix signal number. Treat as "this combo
     /// crashes — fall back to a safer config".
-    Crashed(i32),
+    Crashed { signal: i32 },
     /// Child exited non-zero through a Rust error path. The
     /// model fundamentally couldn't load (missing file, corrupt
     /// gguf, etc.) — CPU fallback won't help.
-    Failed(i32),
+    Failed { exit_code: i32 },
     /// Child didn't finish within the allowed budget. Parent
     /// killed it. Treat as "broken / hung" — fall back.
     Timeout,
     /// Couldn't spawn the child or read its status. Skip the
     /// smoketest and load in-process — don't gate the user's app
     /// on the meta-failure of our own infrastructure.
-    Skipped(String),
+    Skipped { reason: String },
 }
 
 impl SmokeResult {
@@ -59,7 +59,35 @@ impl SmokeResult {
     /// `Ok`, plain `Failed` (Rust error — won't help to retry),
     /// and `Skipped` (we don't know).
     pub fn suggests_cpu_fallback(&self) -> bool {
-        matches!(self, SmokeResult::Crashed(_) | SmokeResult::Timeout)
+        matches!(
+            self,
+            SmokeResult::Crashed { .. } | SmokeResult::Timeout
+        )
+    }
+}
+
+impl std::fmt::Display for SmokeResult {
+    /// Glassbox surface for `tracing::error!(outcome = %res, ...)`.
+    /// Surfaces the diagnostic payloads that `#[derive(Debug)]`
+    /// produces — but in a stable, parseable shape an operator can
+    /// grep. Per ARCH_PRINCIPLES §9.1, every non-obvious
+    /// fall-back decision (smoketest fail → CPU fallback) names
+    /// the *reason* in the log line so support requests don't
+    /// require digging into the hex dump.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SmokeResult::Ok => write!(f, "ok"),
+            SmokeResult::Crashed { signal } => {
+                write!(f, "crashed(signal={signal})")
+            }
+            SmokeResult::Failed { exit_code } => {
+                write!(f, "failed(exit_code={exit_code})")
+            }
+            SmokeResult::Timeout => write!(f, "timeout"),
+            SmokeResult::Skipped { reason } => {
+                write!(f, "skipped({reason})")
+            }
+        }
     }
 }
 
@@ -80,7 +108,7 @@ pub fn run_in_subprocess(
 
     let exe = match std::env::current_exe() {
         Ok(p) => p,
-        Err(e) => return SmokeResult::Skipped(format!("current_exe: {e}")),
+        Err(e) => return SmokeResult::Skipped { reason: format!("current_exe: {e}") },
     };
 
     let mut child = match Command::new(&exe)
@@ -96,7 +124,7 @@ pub fn run_in_subprocess(
         .spawn()
     {
         Ok(c) => c,
-        Err(e) => return SmokeResult::Skipped(format!("spawn: {e}")),
+        Err(e) => return SmokeResult::Skipped { reason: format!("spawn: {e}") },
     };
 
     let started = Instant::now();
@@ -110,13 +138,13 @@ pub fn run_in_subprocess(
                 {
                     use std::os::unix::process::ExitStatusExt;
                     if let Some(sig) = status.signal() {
-                        return SmokeResult::Crashed(sig);
+                        return SmokeResult::Crashed { signal: sig };
                     }
                 }
                 let code = status.code().unwrap_or(-1);
                 // Non-zero exit code without a signal: Rust-side
                 // failure, model load was rejected cleanly.
-                return SmokeResult::Failed(code);
+                return SmokeResult::Failed { exit_code: code };
             }
             Ok(None) => {
                 if started.elapsed() > timeout {
@@ -127,7 +155,7 @@ pub fn run_in_subprocess(
                 std::thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
-                return SmokeResult::Skipped(format!("wait: {e}"));
+                return SmokeResult::Skipped { reason: format!("wait: {e}") };
             }
         }
     }

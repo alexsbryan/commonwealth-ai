@@ -31,33 +31,6 @@ pub fn sovereign_indexes() -> PathBuf {
     sovereign_root().join("indexes")
 }
 
-/// Where `sovereign setup` deposits the three downloaded GGUFs.
-pub fn sovereign_models() -> PathBuf {
-    sovereign_root().join("models")
-}
-
-/// Daemon log directory. launchd/systemd redirect stdout + stderr
-/// here (see `contrib/launchd/com.sovereign.daemon.plist`).
-pub fn sovereign_logs() -> PathBuf {
-    sovereign_root().join("logs")
-}
-
-/// XDG-style config path: `~/.config/sovereign/config.toml` on Linux,
-/// `~/Library/Application Support/sovereign/config.toml` on macOS
-/// (whatever `dirs::config_dir()` resolves to). This is where
-/// `sovereign setup` writes `SetupConfig` and where `sovereign daemon
-/// run` reads it.
-pub fn sovereign_config_file() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| {
-            dirs::home_dir()
-                .map(|h| h.join(".config"))
-                .unwrap_or_else(|| PathBuf::from("."))
-        })
-        .join("sovereign")
-        .join("config.toml")
-}
-
 /// Where the embedded Commonwealth mesh persists its `mesh.json` —
 /// shared with `sovereign-desktop` so a mesh created from either
 /// surface is picked up by the other. Intentionally uses
@@ -89,23 +62,6 @@ mod tests {
         let idx = sovereign_indexes();
         assert!(idx.starts_with(&root), "{} !startsWith {}", idx.display(), root.display());
         assert!(idx.ends_with("indexes"));
-    }
-
-    #[test]
-    fn models_nested_under_root() {
-        assert!(sovereign_models().starts_with(sovereign_root()));
-        assert!(sovereign_models().ends_with("models"));
-    }
-
-    #[test]
-    fn logs_nested_under_root() {
-        assert!(sovereign_logs().starts_with(sovereign_root()));
-        assert!(sovereign_logs().ends_with("logs"));
-    }
-
-    #[test]
-    fn config_file_ends_with_config_toml() {
-        assert!(sovereign_config_file().ends_with("sovereign/config.toml"));
     }
 
     #[test]

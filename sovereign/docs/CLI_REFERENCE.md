@@ -74,7 +74,10 @@ Manage the local Commonwealth mesh.
 | `join <arg>` | Join an existing mesh (bare key, https url, or sovereign://) |
 | `rotate` | Generate a new shareable join key (invalidates previous) |
 | `status` | Show mesh members, hosted knowledge, loaded models |
-| `balance` | Show your contribution to the mesh |
+| `balance` | Render the dimensional contribution ledger (inference / knowledge / network, never collapsed) |
+| `peer-preference set <node> <multiplier>` | Privately offer reduced affinity to a peer (e.g. `0.5` or `50%`) |
+| `peer-preference list` | List current per-peer preferences |
+| `peer-preference clear <node>` | Restore full affinity to a peer |
 | `leave` | Leave the current mesh |
 
 ### `sovereign corpus`

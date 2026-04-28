@@ -1480,20 +1480,18 @@ impl Runtime {
         context: &ConversationContext,
         intent: &Intent,
     ) -> KnowledgeContext {
-        // Check if a document is attached. When present, retrieve chunks
-        // from that specific document rather than doing a general search.
-        // The prefix format is: [Document attached: filename]\n\n<actual question>
-        let (attached_source, query_text) = if let Some(rest) = message.strip_prefix("[Document attached: ") {
-            if let Some(end) = rest.find(']') {
-                let source = rest[..end].to_string();
-                let query = rest[end + 1..].trim().to_string();
-                (Some(source), if query.is_empty() { message.to_string() } else { query })
-            } else {
-                (None, message.to_string())
-            }
-        } else {
-            (None, message.to_string())
-        };
+        // Document-attached messages are detected by the
+        // `[Document attached: filename]` prefix. We only need to
+        // know whether one is attached — the actual document
+        // chunking has been moved to `DocumentOperationTool`
+        // (routed via ComplexTask), so the parsed-out filename and
+        // query text aren't consumed here. We still detect the
+        // prefix to short-circuit the embed/search path; without
+        // this, a stray document-attached message would burn an
+        // embed call producing useless context.
+        let attached_source: Option<String> = message
+            .strip_prefix("[Document attached: ")
+            .and_then(|rest| rest.find(']').map(|end| rest[..end].to_string()));
 
         let mut all_chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
         // corpus_id → human-readable peer name, used at the end to
@@ -3128,13 +3126,7 @@ impl Runtime {
                     "runtime: dispatching to handle_document_operation"
                 );
                 let result = self
-                    .handle_document_operation(
-                        &source,
-                        &user_query,
-                        message,
-                        conversation_id,
-                        &context,
-                    )
+                    .handle_document_operation(&source, &user_query, conversation_id)
                     .await;
                 tracing::info!(
                     success = result.is_ok(),
@@ -4048,9 +4040,7 @@ impl Runtime {
         &self,
         source_hint: &str,
         user_query: &str,
-        original_message: &str,
         conversation_id: &str,
-        context: &ConversationContext,
     ) -> Result<Response> {
         tracing::info!(source_hint = %source_hint, "runtime: document_operation — resolving source");
 

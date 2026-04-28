@@ -131,9 +131,7 @@ impl DocumentOperationTool {
             // Build requests for all batches in this group.
             let requests: Vec<CompletionRequest> = group
                 .iter()
-                .enumerate()
-                .map(|(i, batch)| {
-                    let batch_idx = group_idx * N_PARALLEL + i;
+                .map(|batch| {
                     let passage: String = batch
                         .iter()
                         .map(|c| c.content.as_str())
@@ -278,10 +276,16 @@ impl DocumentOperationTool {
         reduce_prompt: &str,
     ) -> Result<String> {
         let combined = fragments.join("\n\n---\n\n");
-        // Minimal prompt — no system message, no extra instructions.
+        // Weave the caller-supplied `reduce_prompt` into the
+        // intermediate-pass merge. Earlier this function hardcoded
+        // a generic "Merge these extracted notes" instruction and
+        // silently dropped `reduce_prompt`, which made the
+        // intermediate fan-in inconsistent with `reduce_final`
+        // (which DOES use the prompt). Identical shape to
+        // `reduce_final` modulo model choice + max_tokens.
         let prompt = format!(
-            "Merge these extracted notes. Deduplicate, organize, keep all details.\n\n\
-             {combined}"
+            "{reduce_prompt}\n\nFragments:\n{combined}\n\n\
+             Merge into one passage. Deduplicate, organize, keep all details."
         );
 
         let request = CompletionRequest {

@@ -167,19 +167,6 @@ impl ProjectTomlFile {
     /// Read the file and ensure `project.name` is non-empty. When the
     /// file is v1 (no `[project]` section, or `name = ""`), fall
     /// back to the parent directory name of `.sovereign/`'s parent
-    /// — that's the repo root.
-    ///
-    /// Used by callers that want a guaranteed-populated name without
-    /// triggering a write (e.g. the strategic digest reading
-    /// project.toml at splice time).
-    pub fn read_with_name_fallback(path: &Path) -> std::io::Result<Self> {
-        let mut file = Self::read(path)?;
-        if file.project.name.is_empty() {
-            file.project.name = infer_project_name(path);
-        }
-        Ok(file)
-    }
-
     pub fn write(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -311,52 +298,6 @@ mod tests {
         assert!(
             reloaded.observation.deps.iter().any(|d| d.name == "serde"),
             "deps survive round trip"
-        );
-    }
-
-    #[test]
-    fn v1_file_loads_via_read_with_empty_name_filled_from_parent_dir() {
-        // Synthesise a v1 file (no [project] section) and confirm
-        // read_with_name_fallback fills `name` from the parent dir
-        // of `.sovereign/`.
-        let tmp = tempdir().unwrap();
-        let repo_root = tmp.path().join("my-repo");
-        std::fs::create_dir_all(repo_root.join(".sovereign")).unwrap();
-        let toml_path = repo_root.join(".sovereign").join("project.toml");
-        std::fs::write(
-            &toml_path,
-            "schema_version = 1\n\n\
-             [observation]\n\
-             observed_at = 0\n\
-             has_git = false\n\
-             embed_model_available = false\n\n\
-             [lifecycle]\n\
-             founded = false\n\
-             charter_version = 0\n\
-             current_phase = 0\n",
-        )
-        .unwrap();
-
-        let file = ProjectTomlFile::read_with_name_fallback(&toml_path).unwrap();
-        assert_eq!(file.project.name, "my-repo");
-    }
-
-    #[test]
-    fn explicit_project_name_round_trips_through_write_and_read() {
-        let tmp = tempdir().unwrap();
-        let repo_root = tmp.path().join("some-other-name");
-        std::fs::create_dir_all(repo_root.join(".sovereign")).unwrap();
-        let toml_path = repo_root.join(".sovereign").join("project.toml");
-
-        let mut file = ProjectTomlFile::default();
-        file.schema_version = SCHEMA_VERSION;
-        file.project.name = "Sovereign".into();
-        file.write(&toml_path).unwrap();
-
-        let reloaded = ProjectTomlFile::read_with_name_fallback(&toml_path).unwrap();
-        assert_eq!(
-            reloaded.project.name, "Sovereign",
-            "explicit name wins over directory inference"
         );
     }
 

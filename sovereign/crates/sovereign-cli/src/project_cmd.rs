@@ -4967,9 +4967,12 @@ fn print_observation_report(
 
 // ─── Language detection ──────────────────────────────────────
 
+/// Local-to-`project_cmd` language detection struct. Distinct from
+/// `crate::observation::LanguageObservation` which carries the
+/// human-readable `display` form used by `print_observation_report`;
+/// here we only need the stable `id` to drive SCIP-tooling decisions.
 struct DetectedLanguage {
     id: &'static str,
-    display: String,
 }
 
 fn detect_languages(root: &Path) -> Vec<DetectedLanguage> {
@@ -4977,42 +4980,26 @@ fn detect_languages(root: &Path) -> Vec<DetectedLanguage> {
 
     // Rust: Cargo.toml
     if root.join("Cargo.toml").exists() {
-        let detail = detect_rust_detail(root);
-        found.push(DetectedLanguage {
-            id: "rust",
-            display: detail,
-        });
+        found.push(DetectedLanguage { id: "rust" });
     }
 
     // TypeScript/JavaScript: tsconfig.json or package.json
     if root.join("tsconfig.json").exists() || root.join("tsconfig.base.json").exists() {
-        found.push(DetectedLanguage {
-            id: "typescript",
-            display: "TypeScript".to_string(),
-        });
+        found.push(DetectedLanguage { id: "typescript" });
     } else if root.join("package.json").exists() {
         // Check if it's TS or JS.
         let is_ts = root.join("tsconfig.json").exists()
             || has_file_extension_recursive(root, "ts", 2);
         if is_ts {
-            found.push(DetectedLanguage {
-                id: "typescript",
-                display: "TypeScript".to_string(),
-            });
+            found.push(DetectedLanguage { id: "typescript" });
         } else {
-            found.push(DetectedLanguage {
-                id: "javascript",
-                display: "JavaScript".to_string(),
-            });
+            found.push(DetectedLanguage { id: "javascript" });
         }
     }
 
     // Go: go.mod
     if root.join("go.mod").exists() {
-        found.push(DetectedLanguage {
-            id: "go",
-            display: "Go".to_string(),
-        });
+        found.push(DetectedLanguage { id: "go" });
     }
 
     // Python: pyproject.toml, setup.py, or requirements.txt
@@ -5020,30 +5007,10 @@ fn detect_languages(root: &Path) -> Vec<DetectedLanguage> {
         || root.join("setup.py").exists()
         || root.join("requirements.txt").exists()
     {
-        found.push(DetectedLanguage {
-            id: "python",
-            display: "Python".to_string(),
-        });
+        found.push(DetectedLanguage { id: "python" });
     }
 
     found
-}
-
-/// Detect Rust workspace details from Cargo.toml.
-fn detect_rust_detail(root: &Path) -> String {
-    let cargo_toml = root.join("Cargo.toml");
-    if let Ok(content) = std::fs::read_to_string(&cargo_toml) {
-        if let Ok(parsed) = content.parse::<toml::Value>() {
-            if let Some(members) = parsed
-                .get("workspace")
-                .and_then(|w| w.get("members"))
-                .and_then(|m| m.as_array())
-            {
-                return format!("Rust workspace ({} crates)", members.len());
-            }
-        }
-    }
-    "Rust".to_string()
 }
 
 /// Check whether any file with the given extension exists within `max_depth`
@@ -5110,22 +5077,6 @@ fn find_repo_root() -> Option<PathBuf> {
     if output.status.success() {
         let s = String::from_utf8_lossy(&output.stdout);
         Some(PathBuf::from(s.trim()))
-    } else {
-        None
-    }
-}
-
-fn git_commit_count(root: &Path) -> Option<usize> {
-    let output = std::process::Command::new("git")
-        .args(["rev-list", "--count", "HEAD"])
-        .current_dir(root)
-        .output()
-        .ok()?;
-    if output.status.success() {
-        String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .parse()
-            .ok()
     } else {
         None
     }
@@ -6321,12 +6272,24 @@ fn remove_legacy_hook(repo_root: &Path) -> std::io::Result<bool> {
     Ok(true)
 }
 
-// ─── Git hooks ───────────────────────────────────────────────
-
-/// Marker line that identifies a Sovereign-managed hook block. Used to
-/// detect and upgrade prior-version hook installs in place.
+// ─── Git hooks (deprecated installer — kept for migration tests only) ──
+//
+// The post-commit hook installer used to be wired into `cmd_init`, but
+// freshness is now handled by the daemon's watcher (see `corpus-engine`
+// `update::watcher` and the daemon's reindex loop). The CLI still
+// recognizes `sovereign project install-hooks` as a deprecated
+// subcommand that prints a migration hint, but no production code path
+// installs a hook anymore.
+//
+// The installer + stripper functions below are retained because they
+// still pin the hook-block format invariants in tests
+// (`strip_prior_sovereign_block_*` etc.) — those tests run against a
+// fixed string corpus so a regression in the format could still trip a
+// real user with a legacy hook installed by an older binary.
+#[allow(dead_code)]
 const SOVEREIGN_HOOK_MARKER: &str = "# SOVEREIGN_HOOK_V3";
 
+#[allow(dead_code)]
 fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()> {
     let hook_path = root.join(".git/hooks/post-commit");
     let _ = corpus_id; // corpus_id resolved from project.json by refresh
@@ -6454,6 +6417,14 @@ command -v sovereign >/dev/null 2>&1 || exit 0
 /// can rewrite it without clobbering user-added content. The prior block
 /// starts at the `# Sovereign: refresh` comment and runs until the `fi`
 /// that closes the if/elif statement (or EOF, whichever comes first).
+///
+/// `dead_code` allowed because `install_post_commit_hook` (the only
+/// production caller) is itself deprecated; the function is still
+/// exercised by `strip_prior_sovereign_block_*` tests that pin the
+/// legacy-hook detection format so users running an old binary that
+/// installed a V1/V2 hook can still get it cleanly removed if they ever
+/// upgrade.
+#[allow(dead_code)]
 fn strip_prior_sovereign_block(existing: &str) -> String {
     let mut out = Vec::new();
     let mut inside = false;

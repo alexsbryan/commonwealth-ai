@@ -1679,7 +1679,6 @@ mod tests {
 
     fn minimal_obs() -> ProjectObservation {
         ProjectObservation {
-            repo_root: PathBuf::from("/tmp"),
             has_git: true,
             languages: vec![LanguageObservation {
                 id: "rust".into(),

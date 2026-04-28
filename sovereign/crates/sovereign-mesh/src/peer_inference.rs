@@ -110,6 +110,26 @@ pub trait PeerEndpointSource: Send + Sync {
     async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
         None
     }
+
+    /// Build a `LedgerEmission` for a peer-routed stream completion.
+    /// Default returns `None` — test stubs without a wired
+    /// `ContributionEmitter` skip the emission entirely. Production
+    /// `EmbeddedDaemon` returns `Some(...)` once the daemon has
+    /// joined a mesh and the AppState is available.
+    ///
+    /// Kept on the trait (rather than reaching into the embedded
+    /// daemon directly from `MeshInferenceProvider`) so the same
+    /// `PeerEndpointSource` abstraction the test harness uses also
+    /// covers the new wiring — no test changes needed.
+    #[doc(hidden)]
+    async fn ledger_emission_for(
+        &self,
+        _peer_node_id: &commonwealth_core::ids::NodeId,
+        _model_id: &str,
+        _peer_name: &str,
+    ) -> Option<LedgerEmission> {
+        None
+    }
 }
 
 #[async_trait]
@@ -120,6 +140,20 @@ impl PeerEndpointSource for EmbeddedDaemon {
 
     async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
         EmbeddedDaemon::self_node_id(self).await
+    }
+
+    async fn ledger_emission_for(
+        &self,
+        peer_node_id: &commonwealth_core::ids::NodeId,
+        model_id: &str,
+        _peer_name: &str,
+    ) -> Option<LedgerEmission> {
+        let app_state = self.app_state().await?;
+        Some(LedgerEmission {
+            from_node: peer_node_id.clone(),
+            model_id: model_id.to_string(),
+            emitter: app_state.inner.contribution_emitter.clone(),
+        })
     }
 }
 
@@ -749,21 +783,35 @@ impl InferenceProvider for MeshInferenceProvider {
                 peer_pick = %peer_cand.model_id,
                 "mesh-inference: routing complete_stream() to peer"
             );
+            // Resolve the local-side contribution emitter once per
+            // dispatch — the embedded daemon's AppState owns it,
+            // and we attach it to the stream wrapper so the Drop
+            // impl can fire `InferenceReceived` on completion.
+            // Falls through to None when the daemon hasn't joined
+            // a mesh yet; emission silently skips in that case.
+            let ledger_emission = self
+                .mesh
+                .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
+                .await;
             for url in &peer.base_urls {
                 let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
                 match rp.complete_stream(request).await {
                     Ok(stream) => {
                         let model_id =
                             format!("{} @ peer {}", peer_cand.model_id, peer.name);
-                        let observed: Pin<
-                            Box<dyn Stream<Item = Result<String>> + Send>,
-                        > = Box::pin(ThroughputObservedStream::new(
+                        let mut wrapper = ThroughputObservedStream::new(
                             stream,
                             ThroughputTarget::Peer {
                                 name: peer.name.clone(),
                                 map: Arc::clone(&self.peer_observations),
                             },
-                        ));
+                        );
+                        if let Some(em) = ledger_emission.clone() {
+                            wrapper = wrapper.with_ledger_emission(em);
+                        }
+                        let observed: Pin<
+                            Box<dyn Stream<Item = Result<String>> + Send>,
+                        > = Box::pin(wrapper);
                         return Ok((observed, model_id));
                     }
                     Err(e) => {
@@ -853,6 +901,25 @@ enum ThroughputTarget {
 ///   non-async context. The spawned task uses the same EWMA α as
 ///   the latency probe to stay consistent with the rest of the
 ///   observation pipeline.
+/// Optional ledger-event emission attached to the stream wrapper.
+/// When `Some`, the stream's `Drop` impl fires an
+/// `InferenceReceived` event on completion with `tokens_generated`
+/// equal to the chunk count. Local-served streams set this to
+/// `None` — the dimensional ledger is intra-mesh-only per spec
+/// §10, and a "received from self" event is meaningless.
+///
+/// `pub` because the [`PeerEndpointSource`] trait method
+/// `ledger_emission_for` returns `Option<LedgerEmission>` —
+/// implementors outside this module need to construct values of
+/// this type. Fields stay `pub(crate)` so the construction shape
+/// is still controlled.
+#[derive(Clone)]
+pub struct LedgerEmission {
+    pub(crate) from_node: commonwealth_core::ids::NodeId,
+    pub(crate) model_id: String,
+    pub(crate) emitter: commonwealth_state::ContributionEmitter,
+}
+
 struct ThroughputObservedStream {
     inner: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
     dispatched_at: Instant,
@@ -860,6 +927,7 @@ struct ThroughputObservedStream {
     chunk_count: u64,
     target: ThroughputTarget,
     completed: bool,
+    ledger_emission: Option<LedgerEmission>,
 }
 
 impl ThroughputObservedStream {
@@ -874,7 +942,13 @@ impl ThroughputObservedStream {
             chunk_count: 0,
             target,
             completed: false,
+            ledger_emission: None,
         }
+    }
+
+    fn with_ledger_emission(mut self, emission: LedgerEmission) -> Self {
+        self.ledger_emission = Some(emission);
+        self
     }
 }
 
@@ -909,6 +983,7 @@ impl Drop for ThroughputObservedStream {
         let first_chunk = self.first_chunk_at;
         let count = self.chunk_count;
         let target = self.target.clone();
+        let emission = self.ledger_emission.clone();
 
         // Skip recording if no first token ever arrived AND no
         // chunks were yielded. Pure-failure case — nothing to
@@ -944,6 +1019,24 @@ impl Drop for ThroughputObservedStream {
                         m.entry(name).or_insert_with(NodeObservations::default);
                     apply_throughput_observation(
                         entry, ttft_ms, tg_tok_s,
+                    );
+                }
+            }
+
+            // Emit `InferenceReceived` on the completion path —
+            // peer-routed streams that yielded any chunks count as
+            // a received inference. Spec §4.3 docs the symmetric
+            // pair (`InferenceServed` on peer, `InferenceReceived`
+            // here); the aggregator does NOT cross-pollinate, so
+            // we have to emit both halves explicitly.
+            if let Some(em) = emission {
+                if count > 0 {
+                    em.emitter.record(
+                        commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
+                            from_node: em.from_node,
+                            model_id: em.model_id,
+                            tokens_generated: count,
+                        },
                     );
                 }
             }

@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    PhaseCache, PhaseRunner, PipelinePhase, PipelineRegistry, RunOutputWriter, SeedStrategy,
+    PhaseCache, PhaseRunner, PipelineRegistry, RunOutputWriter, SeedStrategy,
 };
 
 use super::config::EnrichConfig;

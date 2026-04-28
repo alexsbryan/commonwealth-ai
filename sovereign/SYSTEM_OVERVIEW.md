@@ -894,6 +894,27 @@ per-node `NodeContributions` (separate `InferenceActivity` totals
 for served vs. consumed, plus `corpora_hosted` with `is_sole_host`
 and bytes_served/bytes_received).
 
+**Write sites — wired:**
+
+- `InferenceServed` — `routes_inference.rs::serve_local_non_stream`
+  + `serve_local_stream` (cross-mesh requests identified by
+  `X-Node-Id`).
+- `InferenceReceived` — sovereign-mesh
+  `peer_inference::ThroughputObservedStream::Drop` (peer-routed
+  streams that yielded ≥1 chunk).
+- `KnowledgeQueryServed` — `routes_internal::knowledge_search` (one
+  event per corpus that contributed chunks to the response).
+- `ShardTransferred` — `commonwealth-knowledge::ShardManager::stream_index`
+  on successful upload.
+- `StorageSnapshot` — hourly background task in
+  `commonwealth-daemon` (alongside `RetentionGc`) using
+  `commonwealth_state::contributions::run_storage_snapshot_loop`.
+
+`X-Node-Id` parsing is centralized in
+`commonwealth-api::headers::parse_x_node_id` so every handler
+stamps the same way. Local-origin requests (no header) skip
+emission per spec §10 — the dimensional ledger is intra-mesh-only.
+
 Storage lives in `commonwealth-state::ContributionEmitter`, which
 writes events into the existing gossip-replicated `MeshStore` under
 `app_id = "contributions"`. Every node aggregates the same event

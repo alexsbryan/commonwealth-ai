@@ -12,7 +12,7 @@
 //! goal-note resolver + a "currently in conversation" predicate.
 
 use crate::knowledge_view::timeline::{
-    AtosLink, AtosLinkKind, CharterStatus, InteractionTimeline, TimelineEntityKind,
+    AtosLinkKind, CharterStatus, InteractionTimeline, TimelineEntityKind,
 };
 use crate::knowledge_view::tokens::estimate_tokens;
 use crate::knowledge_view::view_kind::ViewKind;

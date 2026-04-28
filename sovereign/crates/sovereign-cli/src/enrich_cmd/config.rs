@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -156,22 +156,6 @@ impl EnrichConfig {
         paths::config_path(&self.corpus_id)
     }
 
-    pub fn source_path_abs(&self) -> &Path {
-        &self.source_path
-    }
-
-    /// Resolve the chat-model id to use for a given pipeline phase.
-    /// Returns the per-phase override from `chat_models` when present,
-    /// otherwise falls back to `chat_model`. Operators wire per-phase
-    /// model recruitment by editing `chat_models` in `config.json`.
-    pub fn resolve_chat_model(&self, phase_id: &str) -> &str {
-        self.chat_models
-            .as_ref()
-            .and_then(|map| map.get(phase_id))
-            .map(String::as_str)
-            .unwrap_or(self.chat_model.as_str())
-    }
-
     /// Snapshot of the operator's per-phase model overrides for
     /// downstream wiring. Returns an empty map when no overrides are
     /// configured. The snapshot is owned so callers can pass it to
@@ -231,30 +215,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_chat_model_falls_back_to_default_when_no_override() {
-        let cfg = sample_config();
-        // No chat_models map set → every phase returns the default.
-        assert_eq!(cfg.resolve_chat_model("phase1"), "chat-m");
-        assert_eq!(cfg.resolve_chat_model("phase8_configuration"), "chat-m");
-        assert_eq!(cfg.resolve_chat_model("anything-unknown"), "chat-m");
-    }
-
-    #[test]
-    fn resolve_chat_model_uses_per_phase_override() {
-        let mut overrides = BTreeMap::new();
-        overrides.insert("phase1".into(), "qwen-9b".into());
-        overrides.insert("phase8_configuration".into(), "qwopus-27b".into());
-        let cfg = EnrichConfig {
-            chat_models: Some(overrides),
-            ..sample_config()
-        };
-        assert_eq!(cfg.resolve_chat_model("phase1"), "qwen-9b");
-        assert_eq!(cfg.resolve_chat_model("phase8_configuration"), "qwopus-27b");
-        // Phase id missing from the map still falls back.
-        assert_eq!(cfg.resolve_chat_model("phase5"), "chat-m");
-    }
-
-    #[test]
     fn chat_models_by_phase_snapshot_is_empty_when_unset() {
         let cfg = sample_config();
         assert!(cfg.chat_models_by_phase_snapshot().is_empty());
@@ -288,7 +248,9 @@ mod tests {
         }"#;
         let cfg: EnrichConfig = serde_json::from_str(json).unwrap();
         assert!(cfg.chat_models.is_none());
-        assert_eq!(cfg.resolve_chat_model("phase1"), "c");
+        // The per-phase override map is empty for old configs —
+        // production callers fall through to `chat_model` themselves.
+        assert!(cfg.chat_models_by_phase_snapshot().is_empty());
     }
 
     #[test]

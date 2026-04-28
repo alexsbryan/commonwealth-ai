@@ -82,60 +82,6 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
-/// Build a chat-slot `LlamaContextParams` with the same flags
-/// `ModelSlot::load` uses (n_seq_max=1, n_batch=ctx, n_ubatch=512,
-/// host-thread counts, GPU offload). Factored out of the closure
-/// so the fresh-per-grammar-request path in
-/// `EmbeddedLlamaCpp::complete` and the slot-load path agree on
-/// their context settings — drift between them would mean
-/// grammar-enforced requests run on different params than chat
-/// requests, which would make perf comparisons mean less than they
-/// should.
-fn chat_ctx_params(context_size: u32, gpu: bool) -> LlamaContextParams {
-    let n_threads = llama_threads_for_host();
-    LlamaContextParams::default()
-        .with_n_ctx(NonZeroU32::new(context_size))
-        .with_n_seq_max(1)
-        .with_n_batch(context_size)
-        .with_n_ubatch(512)
-        .with_n_threads(n_threads as i32)
-        .with_n_threads_batch(n_threads as i32)
-        .with_offload_kqv(gpu)
-        .with_op_offload(gpu)
-}
-
-/// Build a fresh `LlamaContext` for a chat request that needs
-/// isolated state — currently grammar-enforced requests, where
-/// reusing the slot's long-lived ctx triggers
-/// `GGML_ASSERT(!stacks.empty())` at first apply on Vulkan. Tries
-/// GPU first; if context creation fails (overcommit, driver
-/// issue), falls back to CPU like `ModelSlot::load` does.
-fn build_chat_ctx<'a>(
-    backend: &'a Arc<LlamaBackend>,
-    model: &'a Arc<LlamaModel>,
-    context_size: u32,
-    n_gpu_layers: u32,
-) -> Result<llama_cpp_2::context::LlamaContext<'a>> {
-    let wants_gpu = cfg!(any(target_os = "macos", target_os = "linux")) && n_gpu_layers > 0;
-    let try_make = |gpu: bool| {
-        let params = chat_ctx_params(context_size, gpu);
-        model
-            .new_context(backend, params)
-            .map_err(|e| Error::Inference(format!("fresh chat ctx: {e}")))
-    };
-    if wants_gpu {
-        match try_make(true) {
-            Ok(ctx) => Ok(ctx),
-            Err(e) => {
-                tracing::warn!(error = %e, "fresh chat ctx GPU init failed, retrying on CPU");
-                try_make(false)
-            }
-        }
-    } else {
-        try_make(false)
-    }
-}
-
 impl ModelSlot {
     fn load(
         backend: &Arc<LlamaBackend>,

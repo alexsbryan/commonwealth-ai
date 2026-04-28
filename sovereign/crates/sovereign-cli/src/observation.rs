@@ -20,7 +20,7 @@
 //!   we ever need to hit a registry that's a separate seam (and
 //!   probably a `Gap` that flows through the honesty protocol).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use corpus_engine::scip_export;
 
@@ -28,7 +28,6 @@ use corpus_engine::scip_export;
 
 #[derive(Debug, Clone)]
 pub struct ProjectObservation {
-    pub repo_root: PathBuf,
     pub has_git: bool,
     pub languages: Vec<LanguageObservation>,
     pub deps: Vec<DetectedDependency>,
@@ -87,7 +86,6 @@ pub fn observe(repo_root: &Path) -> ProjectObservation {
     let deps = gather_deps(repo_root);
     let embed_model_available = embed_model_available();
     ProjectObservation {
-        repo_root: repo_root.to_path_buf(),
         has_git,
         languages,
         deps,

@@ -29,7 +29,7 @@ use corpus_engine::enrichment::atlas::{
     },
     edges::{Edge, EdgeId, EdgeProvenance, EdgeType},
     read_atlas_atoms, read_atlas_edges, read_tension_candidates, write_atlas_edges,
-    AtomEnvelope, ATLAS_DIRNAME,
+    ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::PipelineRegistry;
 

@@ -47,9 +47,14 @@ pub enum ConfigSource {
     /// The CLI has run setup. Reuse `SetupConfig.models.*` and skip
     /// the model-selection screens in the wizard.
     CliSetup(SetupConfig),
-    /// Desktop-only install pre-dating the shared config work. Keep
-    /// reading from `desktop.toml` exactly as before.
-    DesktopLegacy(DesktopConfig),
+    /// Desktop-only install pre-dating the shared config work. The
+    /// presence of this variant is what's load-bearing — the
+    /// concrete `DesktopConfig` is read at probe time only to decide
+    /// whether `setup_complete=true`, then discarded. The setup
+    /// wizard reads `DesktopConfig` directly from disk again when it
+    /// needs settings; threading the value through here adds no
+    /// information the wizard couldn't recompute.
+    DesktopLegacy,
     /// First launch on a clean machine. Run the full wizard.
     Fresh,
 }
@@ -83,7 +88,7 @@ impl From<&BootstrapMode> for BootstrapSnapshot {
                 desktop_setup_complete: false,
                 client_port: c.daemon.client_port,
             },
-            BootstrapMode::Local { source: ConfigSource::DesktopLegacy(_) } => Self {
+            BootstrapMode::Local { source: ConfigSource::DesktopLegacy } => Self {
                 daemon_running: false,
                 cli_config_present: false,
                 desktop_setup_complete: true,
@@ -123,7 +128,7 @@ pub async fn detect() -> BootstrapMode {
 
     let desktop = DesktopConfig::load();
     if desktop.setup_complete {
-        return BootstrapMode::Local { source: ConfigSource::DesktopLegacy(desktop) };
+        return BootstrapMode::Local { source: ConfigSource::DesktopLegacy };
     }
 
     BootstrapMode::Local { source: ConfigSource::Fresh }

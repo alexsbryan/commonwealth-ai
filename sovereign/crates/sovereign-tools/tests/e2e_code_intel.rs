@@ -74,11 +74,16 @@ impl Fixture {
         let embed: EmbedFn = Arc::new(|_text: &str| {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
         });
-        let engine = Arc::new(CorpusEngine::new(
-            data_dir.join("_recipes"),
-            data_dir.clone(),
-            embed,
-        ));
+        // `with_embedding_model` is a hard precondition of `ingest()`:
+        // the engine refuses to write `_corpus_meta.json` without a
+        // declared model name so downstream shard-compatibility checks
+        // never see a bogus label. The other corpus-engine fixtures
+        // (`parquet_ingest_e2e`, `ingest_failure_modes`) use the same
+        // `"test-mock"` stem; we follow the convention.
+        let engine = Arc::new(
+            CorpusEngine::new(data_dir.join("_recipes"), data_dir.clone(), embed)
+                .with_embedding_model("test-mock"),
+        );
 
         let recipe_dir = data_dir.join("_recipes");
         std::fs::create_dir_all(&recipe_dir).unwrap();
@@ -656,11 +661,12 @@ impl AuthFixture {
         let embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
         });
-        let engine = Arc::new(CorpusEngine::new(
-            data_dir.join("_recipes"),
-            data_dir.clone(),
-            embed,
-        ));
+        // See `Fixture::setup` for why this is required — the engine
+        // refuses to ingest without a declared embedding model name.
+        let engine = Arc::new(
+            CorpusEngine::new(data_dir.join("_recipes"), data_dir.clone(), embed)
+                .with_embedding_model("test-mock"),
+        );
 
         let recipe_dir = data_dir.join("_recipes");
         std::fs::create_dir_all(&recipe_dir).unwrap();

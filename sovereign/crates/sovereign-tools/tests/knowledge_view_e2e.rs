@@ -146,6 +146,7 @@ async fn boot_engine() -> (Arc<CorpusEngine>, TempDir, PathBuf) {
 
     let engine = Arc::new(
         CorpusEngine::new(recipes_dir, indexes_dir, stub_embed())
+            .with_embedding_model("test-mock")
             .with_inference_fn(stub_inference()),
     );
     (engine, tmp, db_path)
@@ -581,6 +582,7 @@ async fn cross_view_digest_surfaces_resonance_across_personal_and_conversational
 
     let engine = Arc::new(
         CorpusEngine::new(recipes_dir, indexes_dir, semantic_embed_stub())
+            .with_embedding_model("test-mock")
             .with_inference_fn(stub_inference()),
     );
 
@@ -675,6 +677,7 @@ async fn cross_view_digest_suppressed_under_local_only_skill() {
 
     let engine = Arc::new(
         CorpusEngine::new(recipes_dir, indexes_dir, semantic_embed_stub())
+            .with_embedding_model("test-mock")
             .with_inference_fn(stub_inference()),
     );
     let manager = Arc::new(

@@ -111,39 +111,6 @@ pub fn strip_quoting(input: &str) -> String {
     stripped.replace("\\ ", " ")
 }
 
-/// Pick a number in `1..=count` from the user. Returns `None` on EOF
-/// or invalid input after a bounded retry (3 attempts) to avoid
-/// infinite-loop footguns in CI contexts that accidentally pipe a
-/// non-TTY stdin.
-///
-/// An empty line returns `Some(1)` (the implicit "take the first /
-/// recommended option" shortcut shared across every picker in the
-/// CLI — lets users hit Enter to accept the curated default).
-pub fn pick_number(prompt: &str, count: usize) -> Option<usize> {
-    if count == 0 {
-        return None;
-    }
-    for _ in 0..3 {
-        eprint!("{prompt}");
-        io::stderr().flush().ok();
-        let mut line = String::new();
-        if io::stdin().lock().read_line(&mut line).unwrap_or(0) == 0 {
-            return None;
-        }
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            return Some(1);
-        }
-        if let Ok(n) = trimmed.parse::<usize>() {
-            if (1..=count).contains(&n) {
-                return Some(n);
-            }
-        }
-        eprintln!("  Enter a number 1..{count} or press enter for option 1.");
-    }
-    None
-}
-
 /// Whether stdin is attached to a terminal. Tests and CI run with a
 /// non-TTY stdin; callers should pre-check this before calling any
 /// prompt function that blocks, and fall back to non-interactive

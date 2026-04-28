@@ -12,7 +12,7 @@
 //! Output is plain text (Unicode bullet/check symbols), one section
 //! per phase. With `--phase <id>`, only that phase's section prints.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use corpus_engine::enrichment::atlas::analysis::configuration::ConfigurationsOutput;
 use corpus_engine::enrichment::atlas::analysis::gaps::{Gap, GapKind, GapsOutput};

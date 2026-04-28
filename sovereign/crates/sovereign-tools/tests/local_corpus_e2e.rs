@@ -58,11 +58,17 @@ async fn harness() -> Harness {
     let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
 
     let embed_calls = Arc::new(AtomicUsize::new(0));
-    let engine = Arc::new(CorpusEngine::new(
-        data_dir.join("recipes"),
-        data_dir.join("indexes"),
-        mock_embed_fn(embed_calls),
-    ));
+    let engine = Arc::new(
+        CorpusEngine::new(
+            data_dir.join("recipes"),
+            data_dir.join("indexes"),
+            mock_embed_fn(embed_calls),
+        )
+        // Required precondition of `ingest()` — declares the
+        // embedding-model label that lands in `_corpus_meta.json`.
+        // See `corpus-engine/src/engine/ingest.rs` for the rationale.
+        .with_embedding_model("test-mock"),
+    );
 
     let manager = LocalCorpusManager::init(
         engine,
@@ -395,11 +401,17 @@ async fn register_persists_across_manager_reload() -> SovResult<()> {
     // Simulate a relaunch by constructing a second manager over the
     // same data_dir.
     let store = h._store.clone();
-    let engine = Arc::new(CorpusEngine::new(
-        h.data_dir.join("recipes"),
-        h.data_dir.join("indexes"),
-        mock_embed_fn(Arc::new(AtomicUsize::new(0))),
-    ));
+    let engine = Arc::new(
+        CorpusEngine::new(
+            h.data_dir.join("recipes"),
+            h.data_dir.join("indexes"),
+            mock_embed_fn(Arc::new(AtomicUsize::new(0))),
+        )
+        // Same invariant as the first manager — see the docstring
+        // on `with_embedding_model`. Both managers must declare the
+        // same model so a relaunch sees a compatible label.
+        .with_embedding_model("test-mock"),
+    );
     let manager2 = LocalCorpusManager::init(
         engine,
         store as Arc<dyn sovereign_core::traits::StateStore>,

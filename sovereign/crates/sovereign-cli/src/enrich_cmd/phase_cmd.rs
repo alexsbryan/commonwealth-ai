@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    PhaseCache, PhaseRunner, PipelinePhase, PipelineRegistry, RunOutputWriter,
+    PhaseCache, PhaseRunner, PipelineRegistry, RunOutputWriter,
 };
 
 use super::config::EnrichConfig;
@@ -30,17 +30,6 @@ pub enum PhaseOp {
 }
 
 impl PhaseOp {
-    pub fn phase(&self) -> PipelinePhase {
-        match self {
-            Self::ClusterQuestions => PipelinePhase::QuestionClusters,
-            Self::NameConcerns => PipelinePhase::Concerns,
-            Self::ClusterChunks => PipelinePhase::ChunkClusters,
-            Self::ExtractPositions => PipelinePhase::Positions,
-            Self::DetectTensions => PipelinePhase::Tensions,
-            Self::DetectGaps => PipelinePhase::Gaps,
-        }
-    }
-
     /// Human label used in the `  running <label>…` banner.
     pub fn label(&self) -> &'static str {
         match self {

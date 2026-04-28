@@ -424,18 +424,6 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Legacy constructor — treated as `Local{Fresh}` (desktop-legacy
-    /// behaviour). Prefer `new_with_mode` so the Attach path is
-    /// exercised when a CLI-started daemon is already up.
-    pub fn new(approval: Arc<TauriApprovalChannel>) -> Self {
-        // Legacy constructor path — mint a placeholder routing sink
-        // from the approval channel's handle. Real callers should
-        // prefer `new_with_mode` which accepts an explicit sink.
-        Self::new_with_mode(approval, crate::bootstrap::BootstrapMode::Local {
-            source: crate::bootstrap::ConfigSource::Fresh,
-        })
-    }
-
     /// Construct `AppState` branching on the bootstrap mode probed at
     /// app start:
     ///
@@ -576,7 +564,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                         }
                         other if other.suggests_cpu_fallback() => {
                             tracing::error!(
-                                outcome = ?other,
+                                outcome = %other,
                                 "smoketest: GPU path crashed — falling back to CPU. \
                                  Set SOVEREIGN_FORCE_CPU_CHAT=0 to disable this guard."
                             );
@@ -589,7 +577,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                         }
                         other => {
                             tracing::warn!(
-                                outcome = ?other,
+                                outcome = %other,
                                 "smoketest: inconclusive — proceeding with GPU load. \
                                  The model may still load and run normally; this just \
                                  means we couldn't pre-confirm it."

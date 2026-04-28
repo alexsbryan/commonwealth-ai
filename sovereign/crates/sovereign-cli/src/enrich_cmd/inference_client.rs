@@ -16,7 +16,7 @@ use corpus_engine::enrichment::pipeline::{
 use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
 
-use crate::util::urls::{v1_models_url, v1_url, DEFAULT_CLIENT_PORT};
+use crate::util::urls::{v1_models_url, DEFAULT_CLIENT_PORT};
 
 /// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
 /// emitting up to 16k tokens of structured JSON can run 5–15 minutes
@@ -111,14 +111,6 @@ impl DaemonInferenceClient {
         self.chat_model.as_str()
     }
 
-    pub fn with_localhost(chat_model: impl Into<String>, embed_model: impl Into<String>) -> Result<Self> {
-        Self::new(
-            v1_url(DEFAULT_CLIENT_PORT).trim_end_matches("/v1").to_string(),
-            chat_model,
-            embed_model,
-        )
-    }
-
     /// Build a client from `EnrichConfig`, threading both the
     /// operator's `max_output_tokens` cap and per-phase chat-model
     /// overrides onto the result. Recommended construction path for
@@ -132,18 +124,6 @@ impl DaemonInferenceClient {
         )?
         .with_max_output_tokens(cfg.max_output_tokens)
         .with_chat_models_by_phase(cfg.chat_models_by_phase_snapshot()))
-    }
-
-    pub fn base_url(&self) -> &str {
-        &self.base_url
-    }
-
-    pub fn chat_model(&self) -> &str {
-        &self.chat_model
-    }
-
-    pub fn embed_model(&self) -> &str {
-        &self.embed_model
     }
 
     /// Call `/v1/chat/completions` with a single system + user
@@ -405,19 +385,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn client_builder_stores_fields() {
-        let c = DaemonInferenceClient::new(
-            "http://localhost:9741",
-            "qwen3-8b",
-            "qwen3-embedding-0.6b",
-        )
-        .unwrap();
-        assert_eq!(c.base_url(), "http://localhost:9741");
-        assert_eq!(c.chat_model(), "qwen3-8b");
-        assert_eq!(c.embed_model(), "qwen3-embedding-0.6b");
-    }
-
-    #[test]
     fn resolve_model_for_phase_falls_back_to_default_without_overrides() {
         let c =
             DaemonInferenceClient::new("http://localhost:9741", "qwopus-27b", "embed").unwrap();
@@ -443,13 +410,6 @@ mod tests {
         assert_eq!(c.resolve_model_for_phase(Some("phase5")), "default-model");
         // Untagged prompt → default.
         assert_eq!(c.resolve_model_for_phase(None), "default-model");
-    }
-
-    #[test]
-    fn with_localhost_strips_v1_suffix_from_base() {
-        let c = DaemonInferenceClient::with_localhost("x", "y").unwrap();
-        assert!(c.base_url().ends_with(":9741"));
-        assert!(!c.base_url().ends_with("/v1"));
     }
 
     #[tokio::test]

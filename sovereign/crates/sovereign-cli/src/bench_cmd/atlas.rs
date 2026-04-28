@@ -815,13 +815,6 @@ fn mean(iter: impl Iterator<Item = f64>) -> f64 {
 
 // ─── Misc ──────────────────────────────────────────────────────
 
-/// First `n` chars of `s`, char-boundary-safe (so we never slice
-/// through a multi-byte UTF-8 sequence — atlas content has plenty
-/// of accented Latin and non-ASCII transliterations like `al-Fârâbî`).
-fn head_of(s: &str, n: usize) -> String {
-    s.chars().take(n).collect()
-}
-
 fn chrono_format_now() -> String {
     // No chrono dep in this crate; format manually so the JSON is
     // self-describing without pulling another crate.
