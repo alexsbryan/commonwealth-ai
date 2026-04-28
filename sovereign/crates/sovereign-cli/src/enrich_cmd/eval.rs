@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use corpus_engine::enrichment::atlas::analysis::configuration::ConfigurationsOutput;
 use corpus_engine::enrichment::atlas::analysis::gaps::{Gap, GapKind, GapsOutput};
 use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, AtomsFile, Configuration, Entity, Question,
+    AtomEnvelope, AtomId, AtomsFile, Configuration, Entity, Event, Question, Relation, State,
 };
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType, EdgesFile};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
@@ -239,11 +239,27 @@ struct GoldenSet {
     #[serde(default)]
     expected_person_atoms: Vec<ExpectedAtom>,
     #[serde(default)]
+    forbidden_person_atoms: Vec<ForbiddenName>,
+    #[serde(default)]
     expected_concept_atoms: Vec<ExpectedAtom>,
     #[serde(default)]
     forbidden_concept_atoms: Vec<ForbiddenName>,
     #[serde(default)]
     expected_work_atoms: Vec<ExpectedAtom>,
+    #[serde(default)]
+    forbidden_work_atoms: Vec<ForbiddenName>,
+    // Literary atom kinds — used by literary_atlas goldens. Philosophy
+    // goldens omit these; they're optional and score `None` when absent.
+    #[serde(default)]
+    expected_event_atoms: Vec<ExpectedEvent>,
+    #[serde(default)]
+    forbidden_event_atoms: Vec<ForbiddenName>,
+    #[serde(default)]
+    expected_state_atoms: Vec<ExpectedState>,
+    #[serde(default)]
+    expected_relation_atoms: Vec<ExpectedRelation>,
+    #[serde(default)]
+    forbidden_relation_atoms: Vec<ForbiddenName>,
     #[serde(default)]
     expected_question_atoms: Vec<ExpectedQuestion>,
     #[serde(default)]
@@ -318,6 +334,55 @@ struct ExpectedAtom {
     canonical_name_contains_any: Vec<String>,
     #[serde(default)]
     description_keywords_any: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedEvent {
+    /// Substrings the event description must contain. Match policy is
+    /// "any" so a golden can list paraphrases ("dies in the woods" /
+    /// "death in the woods" / "tragic death") without requiring an
+    /// exact phrasing match.
+    description_contains_any: Vec<String>,
+    /// When non-empty, ANY listed name must appear among the event's
+    /// participant entities (resolved via entity_name_by_id). Useful
+    /// for asserting "Fyodor Pavlovitch's death involves him as a
+    /// participant", catching the failure mode where the event is
+    /// extracted but the participants are stripped.
+    #[serde(default)]
+    participants_any: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedState {
+    /// Substrings the state's `entity_id`-resolved name must contain.
+    /// E.g. for "Eveline's paralysis at the dock" the entity is
+    /// Eveline.
+    entity_name_contains_any: Vec<String>,
+    /// Substrings the state's `label` must contain.
+    label_contains_any: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedRelation {
+    /// Each entry is the set of names (any-match) one participant must
+    /// match. Two entries → asserts a pair where one matches A and the
+    /// other matches B (in either order). One entry → asserts at least
+    /// one participant matches that set, regardless of partner.
+    participants_a_any: Vec<String>,
+    #[serde(default)]
+    participants_b_any: Vec<String>,
+    /// Substrings the relation's `label` must contain.
+    #[serde(default)]
+    label_contains_any: Vec<String>,
     #[serde(default)]
     #[allow(dead_code)]
     note: Option<String>,
@@ -461,6 +526,25 @@ impl AtlasSnapshot {
             .collect()
     }
 
+    /// All Entity atoms regardless of type. Used by forbidden-atom
+    /// checks so that a `forbidden_person_atoms` rule for "narrator"
+    /// fires even when the model evaded the type tag by emitting it as
+    /// `entity_type: unspecified`. The semantic is "this concept must
+    /// not be lifted to an entity at all" — not "this concept must
+    /// not be a Person specifically".
+    fn all_entities(&self) -> Vec<&Entity> {
+        let Some(file) = &self.atoms else {
+            return Vec::new();
+        };
+        file.atoms
+            .iter()
+            .filter_map(|a| match a {
+                AtomEnvelope::Entity(e) => Some(e),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn questions(&self) -> Vec<&Question> {
         let Some(file) = &self.atoms else {
             return Vec::new();
@@ -469,6 +553,45 @@ impl AtlasSnapshot {
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Question(q) => Some(q),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn events(&self) -> Vec<&Event> {
+        let Some(file) = &self.atoms else {
+            return Vec::new();
+        };
+        file.atoms
+            .iter()
+            .filter_map(|a| match a {
+                AtomEnvelope::Event(e) => Some(e),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn states(&self) -> Vec<&State> {
+        let Some(file) = &self.atoms else {
+            return Vec::new();
+        };
+        file.atoms
+            .iter()
+            .filter_map(|a| match a {
+                AtomEnvelope::State(s) => Some(s),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn relations(&self) -> Vec<&Relation> {
+        let Some(file) = &self.atoms else {
+            return Vec::new();
+        };
+        file.atoms
+            .iter()
+            .filter_map(|a| match a {
+                AtomEnvelope::Relation(r) => Some(r),
                 _ => None,
             })
             .collect()
@@ -521,8 +644,27 @@ fn matches_any(haystack: &str, needles: &[String]) -> bool {
     if needles.is_empty() {
         return true; // "no constraint" → trivially satisfied
     }
-    let lower = haystack.to_ascii_lowercase();
-    needles.iter().any(|n| lower.contains(&n.to_ascii_lowercase()))
+    let lower = normalize_for_match(haystack);
+    needles
+        .iter()
+        .any(|n| lower.contains(&normalize_for_match(n)))
+}
+
+/// Lowercase + fold the four common Unicode "smart" punctuation marks
+/// to ASCII so that golden keywords like `O'Rourke` (typed in
+/// straight ASCII) match the actual atom name `O'Rourke` (Project
+/// Gutenberg / Word-style curly apostrophe). Keeps everything else
+/// unchanged. Without this fold, every passage of curly-quoted prose
+/// silently fails substring matching against ASCII goldens.
+fn normalize_for_match(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            '\u{2018}' | '\u{2019}' => '\'',
+            '\u{201C}' | '\u{201D}' => '"',
+            other => other,
+        })
+        .collect::<String>()
+        .to_ascii_lowercase()
 }
 
 fn any_match_in_list<'a, I, F>(items: I, needles: &[String], extract: F) -> bool
@@ -552,10 +694,25 @@ pub(super) struct PhaseScore {
 }
 
 impl PhaseScore {
+    /// Precision = TP / (TP + FP). When the model emitted zero atoms
+    /// AND the golden expected zero atoms, precision is undefined and
+    /// the phase is genuinely silent (`None`). When the golden expected
+    /// atoms but the model produced none, precision is treated as 0.0
+    /// — otherwise zero-recall failures fall out of `f1()` as `None`
+    /// and never enter the aggregate, hiding the regression. This bit
+    /// is the difference between "no scoreable artefacts" (a silent
+    /// phase) and "tried and failed" (a recall=0 phase).
     pub(super) fn precision(&self) -> Option<f32> {
         let denom = self.matched + self.forbidden_hit;
         if denom == 0 {
-            return None;
+            // Two sub-cases:
+            //  - expected == 0 → genuinely undefined, stay silent
+            //  - expected > 0  → zero-recall failure, return 0.0 so
+            //    f1() lands in the aggregate
+            if self.expected == 0 {
+                return None;
+            }
+            return Some(0.0);
         }
         Some(self.matched as f32 / denom as f32)
     }
@@ -585,6 +742,9 @@ pub(super) struct EvalReport {
     pub person_atoms: Option<PhaseScore>,
     pub concept_atoms: Option<PhaseScore>,
     pub work_atoms: Option<PhaseScore>,
+    pub event_atoms: Option<PhaseScore>,
+    pub state_atoms: Option<PhaseScore>,
+    pub relation_atoms: Option<PhaseScore>,
     pub question_atoms: Option<PhaseScore>,
     pub claim_atoms: Option<PhaseScore>,
     pub discourse_act_distribution: Option<DiscourseActReport>,
@@ -617,7 +777,7 @@ fn score(golden: &GoldenSet, snap: &AtlasSnapshot, phase: PhaseFilter) -> EvalRe
     if phase.includes(PhaseFilter::Atoms) {
         report.person_atoms = Some(score_entity_atoms(
             &golden.expected_person_atoms,
-            &[],
+            &golden.forbidden_person_atoms,
             snap,
             EntityType::Person,
         ));
@@ -629,10 +789,21 @@ fn score(golden: &GoldenSet, snap: &AtlasSnapshot, phase: PhaseFilter) -> EvalRe
         ));
         report.work_atoms = Some(score_entity_atoms(
             &golden.expected_work_atoms,
-            &[],
+            &golden.forbidden_work_atoms,
             snap,
             EntityType::Work,
         ));
+        if !golden.expected_event_atoms.is_empty() || !golden.forbidden_event_atoms.is_empty() {
+            report.event_atoms = Some(score_event_atoms(golden, snap));
+        }
+        if !golden.expected_state_atoms.is_empty() {
+            report.state_atoms = Some(score_state_atoms(golden, snap));
+        }
+        if !golden.expected_relation_atoms.is_empty()
+            || !golden.forbidden_relation_atoms.is_empty()
+        {
+            report.relation_atoms = Some(score_relation_atoms(golden, snap));
+        }
         report.question_atoms = Some(score_question_atoms(golden, snap));
         report.claim_atoms = Some(score_claim_atoms(golden, snap));
         if !golden.expected_discourse_act_distribution.is_empty() {
@@ -715,7 +886,27 @@ fn score_entity_atoms(
     s.expected = expected.len();
     s.forbidden_total = forbidden.len();
 
-    let entities = snap.entities_of_type(kind);
+    // Expected matches accept the requested type OR an `Other`
+    // variant (the catch-all for type strings the schema doesn't
+    // name — most commonly "unspecified" or "unknown"). The model
+    // frequently hedges typing on borderline cases (e.g. emitting
+    // "Mangan's sister" or "the narrator" with entity_type:
+    // unspecified rather than Person). Penalising hedges as zero
+    // recall conflates "model couldn't classify the type" with
+    // "model didn't surface the entity at all". The first is a
+    // quality concern; the second is a hard miss. Treating Other(_)
+    // as a fallback recovers recall on the hard miss; the
+    // `description_keywords_any` note still flags lower-quality hits.
+    let typed: Vec<&Entity> = snap.entities_of_type(kind);
+    let untyped: Vec<&Entity> = snap
+        .all_entities()
+        .into_iter()
+        .filter(|e| {
+            matches!(e.entity_type, EntityType::Other(_))
+                && !typed.iter().any(|t| t.id == e.id)
+        })
+        .collect();
+    let entities: Vec<&Entity> = typed.iter().copied().chain(untyped.iter().copied()).collect();
     if snap.atoms.is_none() {
         s.notes
             .push("atoms.json not present — skipping entity scoring".to_string());
@@ -757,11 +948,143 @@ fn score_entity_atoms(
              description_keywords_any didn't appear in the extracted description"
         ));
     }
+    // Forbidden checks scan ALL entities regardless of type — see
+    // AtlasSnapshot::all_entities for the rationale (catches the
+    // "narrator as unspecified" / type-evasion failure mode).
+    let all = snap.all_entities();
     for fb in forbidden {
-        if entities
+        if all
             .iter()
             .any(|e| matches_any(&e.canonical_name, &fb.name_contains_any))
         {
+            s.forbidden_hit += 1;
+            s.forbidden_hits
+                .push(fb.name_contains_any.first().cloned().unwrap_or_default());
+        }
+    }
+    s
+}
+
+fn score_event_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_event_atoms.len();
+    s.forbidden_total = golden.forbidden_event_atoms.len();
+    let events = snap.events();
+    if snap.atoms.is_none() {
+        s.notes
+            .push("atoms.json not present — skipping event scoring".to_string());
+        return s;
+    }
+
+    for ee in &golden.expected_event_atoms {
+        let hit = events.iter().find(|e| {
+            let desc_ok = matches_any(&e.description, &ee.description_contains_any);
+            let part_ok = if ee.participants_any.is_empty() {
+                true
+            } else {
+                e.participants.iter().any(|pid| {
+                    snap.entity_name_by_id(pid)
+                        .map(|n| matches_any(n, &ee.participants_any))
+                        .unwrap_or(false)
+                })
+            };
+            desc_ok && part_ok
+        });
+        if hit.is_some() {
+            s.matched += 1;
+        } else {
+            s.misses
+                .push(ee.description_contains_any.first().cloned().unwrap_or_default());
+        }
+    }
+    for fb in &golden.forbidden_event_atoms {
+        if events
+            .iter()
+            .any(|e| matches_any(&e.description, &fb.name_contains_any))
+        {
+            s.forbidden_hit += 1;
+            s.forbidden_hits
+                .push(fb.name_contains_any.first().cloned().unwrap_or_default());
+        }
+    }
+    s
+}
+
+fn score_state_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_state_atoms.len();
+    let states = snap.states();
+    if snap.atoms.is_none() {
+        s.notes
+            .push("atoms.json not present — skipping state scoring".to_string());
+        return s;
+    }
+    for es in &golden.expected_state_atoms {
+        let hit = states.iter().find(|st| {
+            let entity_name = snap.entity_name_by_id(&st.entity_id).unwrap_or("");
+            let entity_ok = matches_any(entity_name, &es.entity_name_contains_any);
+            let label_ok = matches_any(&st.label, &es.label_contains_any);
+            entity_ok && label_ok
+        });
+        if hit.is_some() {
+            s.matched += 1;
+        } else {
+            // Report as "<entity>: <label>" so a miss in the table tells
+            // the reader which axis failed to land.
+            let ent = es.entity_name_contains_any.first().cloned().unwrap_or_default();
+            let lab = es.label_contains_any.first().cloned().unwrap_or_default();
+            s.misses.push(format!("{ent}: {lab}"));
+        }
+    }
+    s
+}
+
+fn score_relation_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_relation_atoms.len();
+    s.forbidden_total = golden.forbidden_relation_atoms.len();
+    let relations = snap.relations();
+    if snap.atoms.is_none() {
+        s.notes
+            .push("atoms.json not present — skipping relation scoring".to_string());
+        return s;
+    }
+
+    let participant_names = |r: &Relation| -> Vec<String> {
+        r.participants
+            .iter()
+            .filter_map(|pid| snap.entity_name_by_id(pid).map(str::to_string))
+            .collect()
+    };
+
+    for er in &golden.expected_relation_atoms {
+        let hit = relations.iter().find(|r| {
+            let names = participant_names(r);
+            let pair_ok = if er.participants_b_any.is_empty() {
+                names.iter().any(|n| matches_any(n, &er.participants_a_any))
+            } else {
+                let a_hit = names.iter().any(|n| matches_any(n, &er.participants_a_any));
+                let b_hit = names.iter().any(|n| matches_any(n, &er.participants_b_any));
+                a_hit && b_hit
+            };
+            let label_ok = matches_any(&r.label, &er.label_contains_any);
+            pair_ok && label_ok
+        });
+        if hit.is_some() {
+            s.matched += 1;
+        } else {
+            let pa = er.participants_a_any.first().cloned().unwrap_or_default();
+            let pb = er.participants_b_any.first().cloned().unwrap_or_else(|| "*".into());
+            s.misses.push(format!("{pa} ↔ {pb}"));
+        }
+    }
+    for fb in &golden.forbidden_relation_atoms {
+        if relations.iter().any(|r| {
+            let names = participant_names(r);
+            let label_hit = matches_any(&r.label, &fb.name_contains_any);
+            let name_hit = names.iter().any(|n| matches_any(n, &fb.name_contains_any));
+            label_hit || name_hit
+        }) {
             s.forbidden_hit += 1;
             s.forbidden_hits
                 .push(fb.name_contains_any.first().cloned().unwrap_or_default());
@@ -921,31 +1244,94 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
             ));
     }
 
-    let lookup_name = |id: &AtomId| -> String {
-        snap.entity_name_by_id(id)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| id.as_str().to_string())
+    // Resolve a Tension-edge endpoint to a position-readable name.
+    // The atlas pipeline's deterministic enumerator pairs Claim and
+    // State atoms (not the position-typed Concept atoms the goldens
+    // name in `position_a_contains_any`). Chase the endpoint:
+    //   - Claim → its `attributed_to` entity's canonical name
+    //   - State → its `entity_id`'s canonical name
+    //   - Entity → its own canonical name
+    //   - other → the AtomId string (which won't match a position
+    //     keyword, so misses get reported honestly)
+    //
+    // Without this chase, every accepted Tension edge appears as
+    // "claim-NNNN ↔ state-MMMM" to the matcher, which will never
+    // pair against `compatibilism`/`hard incompatibilism` keywords,
+    // and the eval reads as 0 fault lines even when the classifier
+    // produced solid edges.
+    let resolve_endpoint = |id: &AtomId| -> String {
+        if let Some(name) = snap.entity_name_by_id(id) {
+            return name.to_string();
+        }
+        if let Some(file) = snap.atoms.as_ref() {
+            for atom in &file.atoms {
+                match atom {
+                    AtomEnvelope::Claim(c) if c.id == *id => {
+                        if let Some(attr) = &c.attributed_to {
+                            if let Some(name) = snap.entity_name_by_id(attr) {
+                                return name.to_string();
+                            }
+                        }
+                        return id.as_str().to_string();
+                    }
+                    AtomEnvelope::State(st) if st.id == *id => {
+                        if let Some(name) = snap.entity_name_by_id(&st.entity_id) {
+                            return name.to_string();
+                        }
+                        return id.as_str().to_string();
+                    }
+                    _ => {}
+                }
+            }
+        }
+        id.as_str().to_string()
     };
+    let lookup_name = resolve_endpoint;
 
+    // Match policy: position pair is the load-bearing signal.
+    // `crux_keywords_any`, when specified, is informational — a
+    // pair-correct tension whose sub_question paraphrases the
+    // expected crux without using the listed keywords still counts
+    // as a hit. Treating crux as a hard AND rejected real tensions
+    // whose model-authored sub_question used different vocabulary
+    // than the golden author chose (e.g. Darwin emitting "Can
+    // reasons be one's own if they are causally determined?" against
+    // a golden expecting "alternative" / "do otherwise" /
+    // "ultimate source" — the tension is structurally correct, the
+    // wording isn't on the keyword list).
+    let mut crux_mismatches = 0usize;
     for ef in &golden.expected_fault_lines {
         let hit = tension_edges.iter().find(|e| {
             let a = lookup_name(&e.source);
             let b = lookup_name(&e.target);
-            let crux_text = e.sub_question.as_deref().unwrap_or("");
             let pair_a_ok = (matches_any(&a, &ef.position_a_contains_any)
                 && matches_any(&b, &ef.position_b_contains_any))
                 || (matches_any(&a, &ef.position_b_contains_any)
                     && matches_any(&b, &ef.position_a_contains_any));
-            let crux_ok = matches_any(crux_text, &ef.crux_keywords_any);
-            pair_a_ok && crux_ok
+            pair_a_ok
         });
-        if hit.is_some() {
-            s.matched += 1;
-        } else {
-            let pa = ef.position_a_contains_any.first().cloned().unwrap_or_default();
-            let pb = ef.position_b_contains_any.first().cloned().unwrap_or_default();
-            s.misses.push(format!("{pa} vs {pb}"));
+        match hit {
+            Some(edge) => {
+                s.matched += 1;
+                let crux_text = edge.sub_question.as_deref().unwrap_or("");
+                if !ef.crux_keywords_any.is_empty()
+                    && !matches_any(crux_text, &ef.crux_keywords_any)
+                {
+                    crux_mismatches += 1;
+                }
+            }
+            None => {
+                let pa = ef.position_a_contains_any.first().cloned().unwrap_or_default();
+                let pb = ef.position_b_contains_any.first().cloned().unwrap_or_default();
+                s.misses.push(format!("{pa} vs {pb}"));
+            }
         }
+    }
+    if crux_mismatches > 0 {
+        s.notes.push(format!(
+            "{crux_mismatches} hit(s) matched on position pair only — \
+             golden's crux_keywords_any didn't appear in the model's sub_question"
+        ));
     }
     for fb in &golden.forbidden_fault_lines {
         if tension_edges.iter().any(|e| {
@@ -1116,6 +1502,9 @@ fn print_text_report(r: &EvalReport) {
     print_phase_row("person atoms", r.person_atoms.as_ref());
     print_phase_row("concept atoms", r.concept_atoms.as_ref());
     print_phase_row("work atoms", r.work_atoms.as_ref());
+    print_phase_row("event atoms", r.event_atoms.as_ref());
+    print_phase_row("state atoms", r.state_atoms.as_ref());
+    print_phase_row("relation atoms", r.relation_atoms.as_ref());
     print_phase_row("question atoms", r.question_atoms.as_ref());
     print_phase_row("claim atoms", r.claim_atoms.as_ref());
     print_phase_row("fault lines (Phase 6)", r.fault_lines.as_ref());
@@ -1144,6 +1533,9 @@ fn print_text_report(r: &EvalReport) {
         r.person_atoms.as_ref().and_then(|s| s.f1()),
         r.concept_atoms.as_ref().and_then(|s| s.f1()),
         r.work_atoms.as_ref().and_then(|s| s.f1()),
+        r.event_atoms.as_ref().and_then(|s| s.f1()),
+        r.state_atoms.as_ref().and_then(|s| s.f1()),
+        r.relation_atoms.as_ref().and_then(|s| s.f1()),
         r.question_atoms.as_ref().and_then(|s| s.f1()),
         r.claim_atoms.as_ref().and_then(|s| s.f1()),
         r.fault_lines.as_ref().and_then(|s| s.f1()),

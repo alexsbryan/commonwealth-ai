@@ -80,6 +80,14 @@ const BUILTINS: &[(&str, &str)] = &[
         "stoicism-mini",
         include_str!("stoicism-mini.toml"),
     ),
+    (
+        "bk-book-1",
+        include_str!("bk-book-1.toml"),
+    ),
+    (
+        "dubliners-3",
+        include_str!("dubliners-3.toml"),
+    ),
 ];
 
 /// Section-detection regex paired with the chapter materialiser. A
@@ -154,6 +162,28 @@ mod tests {
     #[test]
     fn stoicism_mini_parses() {
         load_builtin("stoicism-mini").expect("stoicism-mini.toml should parse");
+    }
+
+    #[test]
+    fn bk_book_1_parses() {
+        let t = load_builtin("bk-book-1").expect("bk-book-1.toml should parse");
+        assert_eq!(t.meta.pipeline_id, "literary_atlas");
+        assert_eq!(
+            t.chapters.len(),
+            5,
+            "bk-book-1 must have 5 chapters (Book I of Brothers Karamazov)"
+        );
+    }
+
+    #[test]
+    fn dubliners_3_parses() {
+        let t = load_builtin("dubliners-3").expect("dubliners-3.toml should parse");
+        assert_eq!(t.meta.pipeline_id, "literary_atlas");
+        assert_eq!(
+            t.chapters.len(),
+            3,
+            "dubliners-3 must have 3 stories (Sisters / Araby / Eveline)"
+        );
     }
 
     #[test]

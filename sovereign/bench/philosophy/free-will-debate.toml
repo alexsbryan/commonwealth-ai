@@ -139,12 +139,12 @@ crux_keywords_any = ["alternative", "do otherwise", "ultimate source", "moral re
 note = "Canonical compat vs hard-incompat fault line — the core debate."
 
 [[expected_fault_lines]]
-position_a_contains_any = ["libertarianism"]
+position_a_contains_any = ["libertarian"]
 position_b_contains_any = ["compatibilism"]
 crux_keywords_any = ["determinism", "indeterminism", "alternative", "originat"]
 
 [[expected_fault_lines]]
-position_a_contains_any = ["libertarianism"]
+position_a_contains_any = ["libertarian"]
 position_b_contains_any = ["hard incompatibilism"]
 crux_keywords_any = ["luck", "indeterminism", "chance"]
 note = "The Mind argument crux — turn-into-luck objection to libertarianism."

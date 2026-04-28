@@ -89,30 +89,36 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
         }
     };
 
-    // Partition atoms by kind. Only Claim + State drive entity-overlap
-    // candidates today; the other atom types pass through untouched.
+    // Partition atoms by kind. Claim + State drive entity-overlap
+    // candidates; entities feed the cross-position concept-overlap
+    // signal (claims attributed to different position concepts whose
+    // content mentions the same entity).
     let mut claims = Vec::new();
     let mut states = Vec::new();
+    let mut entities = Vec::new();
     for a in atoms.atoms {
         match a {
             AtomEnvelope::Claim(c) => claims.push(c),
             AtomEnvelope::State(s) => states.push(s),
+            AtomEnvelope::Entity(e) => entities.push(e),
             _ => {}
         }
     }
 
     println!(
-        "  loaded {} claim atom(s) + {} state atom(s) from atlas",
+        "  loaded {} claim atom(s) + {} state atom(s) + {} entity atom(s) from atlas",
         claims.len(),
         states.len(),
+        entities.len(),
     );
 
     let candidates = select_candidates(CandidateSelectionInput {
         claims: &claims,
         states: &states,
-        // Intra-cluster candidates not wired in Landing 3 — see
-        // module-level comment above.
+        // Intra-cluster candidates not wired here — see module-level
+        // comment in `tensions.rs`.
         claim_clusters: &[],
+        entities: &entities,
     });
 
     if candidates.is_empty() {

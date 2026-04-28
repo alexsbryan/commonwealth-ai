@@ -23,7 +23,7 @@
 
 use super::{
     atlas_configuration, atlas_gaps, atlas_phase_cmd, atlas_resolve, atlas_tensions,
-    config::EnrichConfig, extract, paths, schema_review, seed_cmd,
+    atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
 use corpus_engine::enrichment::pipeline::{
     BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
@@ -298,7 +298,21 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
             atlas_resolve::cmd_atlas_resolve(&[corpus.into(), "--phase".into(), "all".into()])
                 .await
         }
-        Step::Tensions => atlas_tensions::cmd_atlas_tensions(&[corpus.into()]).await,
+        Step::Tensions => {
+            // Phase 6 has two halves: deterministic candidate
+            // enumeration, then LLM classification of the candidates
+            // into Tension edges. The build flow runs both. The LLM
+            // half is gated on the pipeline opting in (atlas
+            // pipelines do; legacy pipelines don't), so non-atlas
+            // builds get a no-op second call. A non-zero exit from
+            // the deterministic half short-circuits — there are no
+            // candidates to classify if the enumerator failed.
+            let det = atlas_tensions::cmd_atlas_tensions(&[corpus.into()]).await;
+            if det != 0 {
+                return det;
+            }
+            atlas_tensions_classify::cmd_atlas_tensions_classify(&[corpus.into()]).await
+        }
         Step::Gaps => atlas_gaps::cmd_atlas_gaps(&[corpus.into()]).await,
         Step::Configure => {
             atlas_configuration::cmd_atlas_configuration(&[corpus.into()]).await

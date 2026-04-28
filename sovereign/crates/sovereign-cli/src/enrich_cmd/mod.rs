@@ -19,6 +19,7 @@ pub mod atlas_phase_cmd;
 pub mod atlas_query;
 pub mod atlas_resolve;
 pub mod atlas_tensions;
+pub mod atlas_tensions_classify;
 pub mod build;
 pub mod cascade;
 pub mod config;
@@ -97,6 +98,7 @@ const HELP: Help = Help {
                 ("name", "Phase 3: name each facet cluster."),
                 ("resolve", "Phase 3a/3b: resolve atoms + edges + trajectories from the sketches."),
                 ("tensions", "Phase 6 (deterministic): select tension candidates from the resolved atlas."),
+                ("tensions-classify", "Phase 6 (LLM): classify tension candidates and merge accepted ones into edges.json as Tension edges."),
                 ("gaps", "Phase 7 (deterministic): detect structural gaps (missing triggers, ungrounded claims, open questions)."),
                 ("configure", "Phase 8 (LLM, opt-in): 0-3 interpretive configurations over the atlas."),
             ],
@@ -169,6 +171,9 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         }
         "resolve" | "atlas-resolve" => atlas_resolve::cmd_atlas_resolve(rest).await,
         "tensions" | "atlas-tensions" => atlas_tensions::cmd_atlas_tensions(rest).await,
+        "tensions-classify" | "atlas-tensions-classify" => {
+            atlas_tensions_classify::cmd_atlas_tensions_classify(rest).await
+        }
         "gaps" | "atlas-gaps" => atlas_gaps::cmd_atlas_gaps(rest).await,
         "configure" | "atlas-configuration" => {
             atlas_configuration::cmd_atlas_configuration(rest).await

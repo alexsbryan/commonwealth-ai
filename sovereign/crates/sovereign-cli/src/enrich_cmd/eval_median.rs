@@ -308,6 +308,9 @@ struct AggregatedReport {
     person_atoms: PhaseSummary,
     concept_atoms: PhaseSummary,
     work_atoms: PhaseSummary,
+    event_atoms: PhaseSummary,
+    state_atoms: PhaseSummary,
+    relation_atoms: PhaseSummary,
     question_atoms: PhaseSummary,
     claim_atoms: PhaseSummary,
     fault_lines: PhaseSummary,
@@ -333,6 +336,9 @@ fn aggregate(runs: &[EvalReport]) -> AggregatedReport {
         push_phase(&mut a.person_atoms, r.person_atoms.as_ref());
         push_phase(&mut a.concept_atoms, r.concept_atoms.as_ref());
         push_phase(&mut a.work_atoms, r.work_atoms.as_ref());
+        push_phase(&mut a.event_atoms, r.event_atoms.as_ref());
+        push_phase(&mut a.state_atoms, r.state_atoms.as_ref());
+        push_phase(&mut a.relation_atoms, r.relation_atoms.as_ref());
         push_phase(&mut a.question_atoms, r.question_atoms.as_ref());
         push_phase(&mut a.claim_atoms, r.claim_atoms.as_ref());
         push_phase(&mut a.fault_lines, r.fault_lines.as_ref());
@@ -368,6 +374,9 @@ fn aggregate_f1(r: &EvalReport) -> Option<f32> {
         r.person_atoms.as_ref().and_then(|s| s.f1()),
         r.concept_atoms.as_ref().and_then(|s| s.f1()),
         r.work_atoms.as_ref().and_then(|s| s.f1()),
+        r.event_atoms.as_ref().and_then(|s| s.f1()),
+        r.state_atoms.as_ref().and_then(|s| s.f1()),
+        r.relation_atoms.as_ref().and_then(|s| s.f1()),
         r.question_atoms.as_ref().and_then(|s| s.f1()),
         r.claim_atoms.as_ref().and_then(|s| s.f1()),
         r.fault_lines.as_ref().and_then(|s| s.f1()),
@@ -460,6 +469,9 @@ fn print_text_report(a: &AggregatedReport, durations: &[Duration]) {
     print_phase_row("person atoms", &a.person_atoms);
     print_phase_row("concept atoms", &a.concept_atoms);
     print_phase_row("work atoms", &a.work_atoms);
+    print_phase_row("event atoms", &a.event_atoms);
+    print_phase_row("state atoms", &a.state_atoms);
+    print_phase_row("relation atoms", &a.relation_atoms);
     print_phase_row("question atoms", &a.question_atoms);
     print_phase_row("claim atoms", &a.claim_atoms);
     print_phase_row("fault lines (Phase 6)", &a.fault_lines);

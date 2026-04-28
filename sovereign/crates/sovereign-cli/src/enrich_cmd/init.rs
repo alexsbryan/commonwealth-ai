@@ -39,7 +39,7 @@ const HELP: Help = Help {
             ("--source <path>", "Absolute path to the plaintext source file. Required unless --from-template / --template-path is used."),
             (
                 "--from-template <name>",
-                "Materialise a built-in philosophy fixture into a synthesised source file under the corpus dir, then proceed normally. Pins pipeline=philosophy_atlas + min-section-body-words=20 unless overridden. Available names: free-will-debate, virtue-ethics-fragments, stoicism-mini.",
+                "Materialise a built-in fixture into a synthesised source file under the corpus dir, then proceed normally. Pins the template's pipeline_id + min-section-body-words=20 unless overridden. Available names: free-will-debate, virtue-ethics-fragments, stoicism-mini (philosophy); bk-book-1, dubliners-3 (literary).",
             ),
             (
                 "--template-path <path>",
