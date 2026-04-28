@@ -5,18 +5,30 @@
 // Two parallel regions:
 //
 //   turn:
-//     idle ──(SEND_START)──▶ streaming ──(MESSAGE_COMPLETE)──▶ idle
-//                │                  │
-//                │                  └──(MESSAGE_ERROR)──▶ idle (error tail
-//                │                                         appended to bubble)
+//     idle ──(SEND_INITIATED)──▶ preparing ──(SEND_START)──▶ streaming
+//                │                    │                          │
+//                │                    └──(SEND_FAILED)──▶ idle   │
+//                │                    │                          │
+//                │                    └──(MESSAGE_ERROR)─▶ idle  │
+//                │                                               │
+//                │              ┌──(MESSAGE_COMPLETE)──▶ idle ◀──┘
+//                │              └──(MESSAGE_ERROR)──▶ idle (error tail
+//                │                                          appended)
 //                │
 //                └──(ASSISTANT_MESSAGE_RECEIVED)──▶ idle (non-streaming
 //                                                  paths: askDocument,
 //                                                  searchWeb)
 //
-//     Both states also handle MESSAGE_REFINED, which rewrites a
-//     previously-completed assistant bubble in place (post-stream
-//     epistemic-humility refinement).
+//     The `preparing` substate exists so the user message + a loading
+//     indicator can render the moment the user clicks Send, not after
+//     `create_conversation` + `send_message_stream` have round-tripped.
+//     On a cold daemon those awaits can take seconds, and without a
+//     pre-stream visible state the chat looks frozen until the first
+//     chunk lands.
+//
+//     All three streaming-flavoured substates handle MESSAGE_REFINED,
+//     which rewrites a previously-completed assistant bubble in place
+//     (post-stream epistemic-humility refinement).
 //
 //   infoRequest:
 //     idle ──(INFO_REQUEST_ARRIVED)──▶ pending ──(CLEAR_INFO)──▶ idle
@@ -53,22 +65,35 @@ export type ChatEvent =
   // ─── Conversation lifecycle ─────────────────────────────────
   /** Called when switching conversations (or opening a new one). */
   | { type: "HYDRATE"; conversationId: string; messages: MessageEntry[] }
+  /** Bind a freshly-created conversation id to the current turn
+   *  WITHOUT wiping the message list. Used by `ensureConversation`
+   *  when the user has already optimistically pushed their message
+   *  (via SEND_INITIATED) and we just need to associate it with the
+   *  new conversation row. HYDRATE would clobber the in-flight user
+   *  bubble; this event preserves it. */
+  | { type: "CONVERSATION_BOUND"; conversationId: string }
   /** Explicit reset — clears messages and any in-flight state.
    *  Used when the user navigates away from all conversations. */
   | { type: "RESET" }
 
   // ─── User-initiated turn ────────────────────────────────────
-  /** Optimistically append the user's message and the assistant
-   *  placeholder before `sendMessageStream` resolves. Moves the
-   *  `turn` region into `streaming`. */
+  /** Fired the moment the user clicks Send — BEFORE awaiting
+   *  `create_conversation` / `send_message_stream`. Appends the user's
+   *  message and moves into `preparing` so the surface can render the
+   *  bubble + a loading indicator while the bridge calls round-trip. */
+  | { type: "SEND_INITIATED"; userMessage: MessageEntry }
+  /** Fired after `send_message_stream` resolves with a real
+   *  assistant message id. Appends the assistant placeholder and moves
+   *  into `streaming`. The user's message bubble was already appended
+   *  by `SEND_INITIATED`, so this event no longer carries it. */
   | {
       type: "SEND_START";
-      userMessage: MessageEntry;
       assistantMessageId: string;
     }
-  /** `sendMessageStream` threw. Tags the placeholder (if any) with
-   *  an error message and returns to `idle`. */
-  | { type: "SEND_FAILED"; assistantMessageId: string; error: string }
+  /** `sendMessageStream` (or `create_conversation`) threw before any
+   *  stream began. Appends a stand-alone "Error: ..." assistant
+   *  message and returns to `idle`. */
+  | { type: "SEND_FAILED"; error: string }
 
   // ─── Streaming Tauri events ─────────────────────────────────
   | { type: "MESSAGE_CHUNK"; messageId: string; text: string }
@@ -155,6 +180,11 @@ export const chatMachine = setup({
         pendingInfoRequest: () => null,
       }),
     },
+    CONVERSATION_BOUND: {
+      actions: assign({
+        conversationId: ({ event }) => event.conversationId,
+      }),
+    },
     RESET: {
       actions: assign({
         conversationId: () => null,
@@ -166,11 +196,17 @@ export const chatMachine = setup({
     MESSAGE_REFINED: {
       // Post-stream epistemic-humility refinement — see
       // `runtime.rs::run_post_stream_refinement`. The payload carries
-      // both conversation and message ids; ignore it if we've since
-      // navigated away (rare but possible under racy conversation
-      // switches).
+      // both conversation and message ids. Two guard clauses:
+      //   1. Drop if conversation has moved on (racy switch).
+      //   2. Drop if the message is STILL streaming. Refinement is a
+      //      post-stream concept; if the backend ever fires it before
+      //      MESSAGE_COMPLETE (chaos / protocol violation), accepting
+      //      it here would clobber partial content and subsequent
+      //      chunks would append to the refined text. Pinned by
+      //      tests/e2e/specs/chat-chaos.spec.ts.
       guard: ({ context, event }) =>
-        event.conversationId === context.conversationId,
+        event.conversationId === context.conversationId &&
+        event.messageId !== context.streamingMessageId,
       actions: assign(({ context, event }) => ({
         messages: updateMessageById(context.messages, event.messageId, (m) => {
           m.content = event.newContent;
@@ -193,14 +229,26 @@ export const chatMachine = setup({
       states: {
         idle: {
           on: {
+            SEND_INITIATED: {
+              target: "preparing",
+              actions: assign(({ context, event }) => ({
+                messages: produce(context.messages, (draft) => {
+                  draft.push(event.userMessage);
+                }),
+              })),
+            },
+          },
+        },
+        preparing: {
+          // Window between user-click and `send_message_stream`
+          // resolving. The user bubble is already on screen; we're
+          // waiting on the bridge to hand back an assistant message
+          // id before installing the placeholder.
+          on: {
             SEND_START: {
               target: "streaming",
               actions: assign(({ context, event }) => ({
                 messages: produce(context.messages, (draft) => {
-                  draft.push(event.userMessage);
-                  // Placeholder assistant bubble — chunks will stream
-                  // into its `content`. Same id the backend uses so
-                  // MESSAGE_CHUNK / MESSAGE_COMPLETE can find it.
                   draft.push({
                     id: event.assistantMessageId,
                     role: "assistant",
@@ -210,6 +258,59 @@ export const chatMachine = setup({
                 }),
                 streamingMessageId: event.assistantMessageId,
               })),
+            },
+            SEND_FAILED: {
+              // create_conversation / send_message_stream threw before
+              // any stream began. Append a stand-alone error bubble
+              // (the user message is already there) and bail to idle.
+              target: "idle",
+              actions: assign(({ context, event }) => ({
+                messages: produce(context.messages, (draft) => {
+                  draft.push({
+                    id: crypto.randomUUID(),
+                    role: "assistant",
+                    content: `Error: ${event.error}`,
+                    created_at: Math.floor(Date.now() / 1000),
+                  });
+                }),
+              })),
+            },
+            MESSAGE_ERROR: {
+              // Backend errored before SEND_START fired (rare but
+              // possible — daemon crash mid-handshake). Same recovery
+              // shape as SEND_FAILED.
+              target: "idle",
+              actions: assign(({ context, event }) => ({
+                messages: produce(context.messages, (draft) => {
+                  draft.push({
+                    id: crypto.randomUUID(),
+                    role: "assistant",
+                    content: `Error: ${event.error}`,
+                    created_at: Math.floor(Date.now() / 1000),
+                  });
+                }),
+              })),
+            },
+            // Conversation switch / reset while in `preparing` re-targets
+            // idle, mirroring the `streaming` substate. Without this the
+            // loading indicator would leak across conversations.
+            HYDRATE: {
+              target: "idle",
+              actions: assign({
+                conversationId: ({ event }) => event.conversationId,
+                messages: ({ event }) => event.messages,
+                streamingMessageId: () => null,
+                pendingInfoRequest: () => null,
+              }),
+            },
+            RESET: {
+              target: "idle",
+              actions: assign({
+                conversationId: () => null,
+                messages: () => [],
+                streamingMessageId: () => null,
+                pendingInfoRequest: () => null,
+              }),
             },
           },
         },
@@ -259,12 +360,6 @@ export const chatMachine = setup({
                   }),
                   streamingMessageId: null,
                 };
-              }),
-            },
-            SEND_FAILED: {
-              target: "idle",
-              actions: assign({
-                streamingMessageId: () => null,
               }),
             },
             REDIRECT_STARTED: {

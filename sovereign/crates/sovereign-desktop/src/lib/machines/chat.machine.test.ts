@@ -87,13 +87,39 @@ describe("chatMachine — conversation lifecycle", () => {
 });
 
 describe("chatMachine — streaming lifecycle", () => {
-  it("SEND_START appends user msg + placeholder, enters streaming", () => {
+  // Helper: dispatch the new two-step optimistic flow that ChatView
+  // uses. SEND_INITIATED appends the user bubble + enters `preparing`;
+  // SEND_START appends the assistant placeholder + enters `streaming`.
+  function startTurn(actor: ReturnType<typeof startActor>, opts?: {
+    userId?: string;
+    userContent?: string;
+    assistantId?: string;
+  }) {
+    const userId = opts?.userId ?? "u1";
+    const assistantId = opts?.assistantId ?? "a1";
+    actor.send({
+      type: "SEND_INITIATED",
+      userMessage: userMsg(userId, opts?.userContent ?? "hi"),
+    });
+    actor.send({ type: "SEND_START", assistantMessageId: assistantId });
+  }
+
+  it("SEND_INITIATED appends user msg, enters preparing", () => {
     const actor = startActor();
     actor.send({
-      type: "SEND_START",
+      type: "SEND_INITIATED",
       userMessage: userMsg("u1", "hi"),
-      assistantMessageId: "a1",
     });
+    const s = actor.getSnapshot();
+    expect(s.matches({ turn: "preparing" })).toBe(true);
+    expect(s.context.messages).toHaveLength(1);
+    expect(s.context.messages[0].id).toBe("u1");
+    expect(s.context.streamingMessageId).toBeNull();
+  });
+
+  it("SEND_START appends placeholder, enters streaming (after SEND_INITIATED)", () => {
+    const actor = startActor();
+    startTurn(actor);
     const s = actor.getSnapshot();
     expect(s.matches({ turn: "streaming" })).toBe(true);
     expect(s.context.messages).toHaveLength(2);
@@ -103,13 +129,46 @@ describe("chatMachine — streaming lifecycle", () => {
     expect(s.context.streamingMessageId).toBe("a1");
   });
 
-  it("MESSAGE_CHUNK appends to the matching placeholder (structural share)", () => {
+  it("SEND_FAILED in preparing appends an error bubble, returns to idle", () => {
+    // Lock-down for the cold-daemon flow: create_conversation or
+    // send_message_stream throw before any stream began. The user
+    // message stays; an "Error: ..." assistant bubble follows; FSM
+    // returns to idle so the user can retry.
     const actor = startActor();
     actor.send({
-      type: "SEND_START",
-      userMessage: userMsg("u1"),
-      assistantMessageId: "a1",
+      type: "SEND_INITIATED",
+      userMessage: userMsg("u1", "hi"),
     });
+    actor.send({ type: "SEND_FAILED", error: "daemon unavailable" });
+
+    const s = actor.getSnapshot();
+    expect(s.matches({ turn: "idle" })).toBe(true);
+    expect(s.context.messages).toHaveLength(2);
+    expect(s.context.messages[0].id).toBe("u1");
+    expect(s.context.messages[1].role).toBe("assistant");
+    expect(s.context.messages[1].content).toBe("Error: daemon unavailable");
+    expect(s.context.streamingMessageId).toBeNull();
+  });
+
+  it("MESSAGE_ERROR in preparing also recovers cleanly", () => {
+    // Edge case: backend errored mid-handshake (rare, but possible
+    // if the stream errors out before the start response lands). Same
+    // recovery shape as SEND_FAILED.
+    const actor = startActor();
+    actor.send({
+      type: "SEND_INITIATED",
+      userMessage: userMsg("u1"),
+    });
+    actor.send({ type: "MESSAGE_ERROR", error: "boom" });
+
+    const s = actor.getSnapshot();
+    expect(s.matches({ turn: "idle" })).toBe(true);
+    expect(s.context.messages[1].content).toBe("Error: boom");
+  });
+
+  it("MESSAGE_CHUNK appends to the matching placeholder (structural share)", () => {
+    const actor = startActor();
+    startTurn(actor);
 
     const before = actor.getSnapshot().context.messages;
     actor.send({ type: "MESSAGE_CHUNK", messageId: "a1", text: "first " });
@@ -125,22 +184,14 @@ describe("chatMachine — streaming lifecycle", () => {
 
   it("ignores MESSAGE_CHUNK for a non-current stream id", () => {
     const actor = startActor();
-    actor.send({
-      type: "SEND_START",
-      userMessage: userMsg("u1"),
-      assistantMessageId: "a1",
-    });
+    startTurn(actor);
     actor.send({ type: "MESSAGE_CHUNK", messageId: "other", text: "noise" });
     expect(actor.getSnapshot().context.messages[1].content).toBe("");
   });
 
   it("MESSAGE_COMPLETE attaches metadata (the provenance-bug regression)", () => {
     const actor = startActor();
-    actor.send({
-      type: "SEND_START",
-      userMessage: userMsg("u1"),
-      assistantMessageId: "a1",
-    });
+    startTurn(actor);
     actor.send({ type: "MESSAGE_CHUNK", messageId: "a1", text: "answer " });
     const before = actor.getSnapshot().context.messages;
 
@@ -171,11 +222,7 @@ describe("chatMachine — streaming lifecycle", () => {
     // bubble. The old ad-hoc code had this exact conditional;
     // preserving it is load-bearing.
     const actor = startActor();
-    actor.send({
-      type: "SEND_START",
-      userMessage: userMsg("u1"),
-      assistantMessageId: "a1",
-    });
+    startTurn(actor);
     actor.send({
       type: "MESSAGE_COMPLETE",
       messageId: "a1",
@@ -188,13 +235,9 @@ describe("chatMachine — streaming lifecycle", () => {
     );
   });
 
-  it("MESSAGE_ERROR appends the error to the streamed content", () => {
+  it("MESSAGE_ERROR in streaming appends the error to streamed content", () => {
     const actor = startActor();
-    actor.send({
-      type: "SEND_START",
-      userMessage: userMsg("u1"),
-      assistantMessageId: "a1",
-    });
+    startTurn(actor);
     actor.send({ type: "MESSAGE_CHUNK", messageId: "a1", text: "partial" });
     actor.send({ type: "MESSAGE_ERROR", error: "boom" });
 
@@ -203,21 +246,28 @@ describe("chatMachine — streaming lifecycle", () => {
     expect(s.context.messages[1].content).toBe("partial\n\nError: boom");
     expect(s.context.streamingMessageId).toBeNull();
   });
+});
 
-  it("SEND_FAILED clears streamingMessageId and returns to idle", () => {
+describe("chatMachine — conversation binding", () => {
+  it("CONVERSATION_BOUND sets conversationId without touching messages", () => {
+    // Lock-down: when ensureConversation creates a conversation
+    // mid-turn (after the user has already optimistically pushed
+    // their message via SEND_INITIATED), binding the new id MUST
+    // NOT wipe the in-flight bubble. HYDRATE would; CONVERSATION_BOUND
+    // is the surgical alternative.
     const actor = startActor();
     actor.send({
-      type: "SEND_START",
-      userMessage: userMsg("u1"),
-      assistantMessageId: "a1",
+      type: "SEND_INITIATED",
+      userMessage: userMsg("u1", "hi"),
     });
-    actor.send({
-      type: "SEND_FAILED",
-      assistantMessageId: "a1",
-      error: "network",
-    });
-    expect(actor.getSnapshot().matches({ turn: "idle" })).toBe(true);
-    expect(actor.getSnapshot().context.streamingMessageId).toBeNull();
+    actor.send({ type: "CONVERSATION_BOUND", conversationId: "conv-new" });
+
+    const s = actor.getSnapshot();
+    expect(s.context.conversationId).toBe("conv-new");
+    expect(s.context.messages).toHaveLength(1);
+    expect(s.context.messages[0].id).toBe("u1");
+    // Still in preparing — binding doesn't change turn region.
+    expect(s.matches({ turn: "preparing" })).toBe(true);
   });
 });
 
@@ -240,6 +290,50 @@ describe("chatMachine — post-stream refinement", () => {
     });
     expect(actor.getSnapshot().context.messages[1].content).toBe(
       "Refined with user-pasted source.",
+    );
+  });
+
+  it("ignores MESSAGE_REFINED for the currently-streaming message", () => {
+    // Chaos invariant: refinement is a post-stream concept. If the
+    // backend fires it for a message that's still streaming, accepting
+    // it would replace partial content with the refined version and
+    // subsequent chunks would append on top of that. Drop it.
+    const actor = startActor();
+    actor.send({
+      type: "HYDRATE",
+      conversationId: "c1",
+      messages: [],
+    });
+    actor.send({ type: "SEND_INITIATED", userMessage: userMsg("u1") });
+    actor.send({ type: "SEND_START", assistantMessageId: "a1" });
+    actor.send({ type: "MESSAGE_CHUNK", messageId: "a1", text: "partial " });
+
+    actor.send({
+      type: "MESSAGE_REFINED",
+      conversationId: "c1",
+      messageId: "a1",
+      newContent: "REFINED MID-STREAM",
+    });
+    // Still in streaming, content unchanged.
+    expect(actor.getSnapshot().context.messages[1].content).toBe("partial ");
+    expect(actor.getSnapshot().matches({ turn: "streaming" })).toBe(true);
+
+    // After completion, refinement IS accepted (the streaming guard
+    // now passes — streamingMessageId is null).
+    actor.send({
+      type: "MESSAGE_COMPLETE",
+      messageId: "a1",
+      fullText: "partial ",
+      pendingText: "",
+    });
+    actor.send({
+      type: "MESSAGE_REFINED",
+      conversationId: "c1",
+      messageId: "a1",
+      newContent: "REFINED POST-STREAM",
+    });
+    expect(actor.getSnapshot().context.messages[1].content).toBe(
+      "REFINED POST-STREAM",
     );
   });
 
@@ -307,10 +401,10 @@ describe("chatMachine — info-request parallel region", () => {
     // structurally impossible.
     const actor = startActor();
     actor.send({
-      type: "SEND_START",
+      type: "SEND_INITIATED",
       userMessage: userMsg("u1"),
-      assistantMessageId: "a1",
     });
+    actor.send({ type: "SEND_START", assistantMessageId: "a1" });
     actor.send({ type: "INFO_REQUEST_ARRIVED", payload: fakeInfoRequest() });
     actor.send({ type: "MESSAGE_CHUNK", messageId: "a1", text: "chunk" });
     actor.send({

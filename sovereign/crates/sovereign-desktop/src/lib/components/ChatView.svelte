@@ -192,11 +192,16 @@
   // no semantic state — only output-smoothing.
   let wordBuffer = new WordBufferedStream();
 
-  // Unified loading flag surfaced to the template. `streaming` covers
-  // the Tauri stream case; `docOpInFlight` covers non-streaming API
-  // calls. Either implies we're waiting on the backend.
+  // Unified loading flag surfaced to the template. Three contributors:
+  //   • `preparing` — between user click and `send_message_stream`
+  //     resolving (cold-daemon round-trip; without this the surface
+  //     looked frozen for seconds after a click)
+  //   • `streaming` — chunks flowing into the placeholder
+  //   • `docOpInFlight` — non-streaming API calls (askDocument, web)
   let isLoading = $derived(
-    $snapshot.matches({ turn: "streaming" }) || docOpInFlight,
+    $snapshot.matches({ turn: "preparing" }) ||
+      $snapshot.matches({ turn: "streaming" }) ||
+      docOpInFlight,
   );
 
   // Convenience snapshot accessors. Svelte 5 re-derives whenever
@@ -506,13 +511,13 @@
   }
 
   /** Ensure there's an active conversation before sending. Returns the
-   *  id. If none exists we create one, then hydrate the machine with
-   *  empty history + the new id so subsequent MESSAGE_* events have
-   *  somewhere to land. */
+   *  id. If none exists we create one and bind it to the current turn
+   *  via CONVERSATION_BOUND (which preserves any messages already on
+   *  screen — HYDRATE would wipe an optimistically-pushed user bubble). */
   async function ensureConversation(): Promise<string> {
     if (activeConversationId) return activeConversationId;
     const created = await createConversation();
-    send({ type: "HYDRATE", conversationId: created.id, messages: [] });
+    send({ type: "CONVERSATION_BOUND", conversationId: created.id });
     onConversationCreated?.(created.id);
     return created.id;
   }
@@ -580,22 +585,25 @@
       text = `[Document attached: ${attachment.source}]\n\n${text}`;
     }
 
-    const convoId = await ensureConversation();
-
     // ── Streaming path ──────────────────────────────────────
-    // SEND_START optimistically appends both the user message and the
-    // assistant placeholder so the bubble appears instantly. The
-    // machine stays in `sending` conceptually (we're in streaming
-    // with an empty placeholder) until the first chunk.
+    // SEND_INITIATED appends the user bubble and flips the FSM into
+    // `preparing` — `isLoading` goes true RIGHT NOW, before any
+    // bridge await. This is the lock-down for the "60s blank window"
+    // bug: if `create_conversation` or `send_message_stream` is slow
+    // (cold daemon, mesh handoff, etc.), the user still sees their
+    // message + the typing indicator immediately. SEND_START fires
+    // later with the real assistant message id.
     const userMsg: MessageEntry = {
       id: crypto.randomUUID(),
       role: "user",
       content: text,
       created_at: Math.floor(Date.now() / 1000),
     };
+    send({ type: "SEND_INITIATED", userMessage: userMsg });
     inputText = "";
     attachment = null;
     onClearTask();
+    scrollToBottom();
 
     try {
       // Antifragile-routing: flush the prior turn's narration log
@@ -612,37 +620,18 @@
         routingStore.send({ type: "DISMISS_CLARIFICATION" });
       }
 
+      const convoId = await ensureConversation();
       const started = await sendMessageStream(text, convoId);
       wordBuffer.reset();
-      send({
-        type: "SEND_START",
-        userMessage: userMsg,
-        assistantMessageId: started.message_id,
-      });
+      send({ type: "SEND_START", assistantMessageId: started.message_id });
       scrollToBottom();
       // Streaming continues via MESSAGE_CHUNK / MESSAGE_COMPLETE.
     } catch (e) {
-      // sendMessageStream itself errored — surface via a one-shot
-      // assistant message. No placeholder to clear; SEND_START never
-      // ran.
-      send({
-        type: "ASSISTANT_MESSAGE_RECEIVED",
-        message: {
-          id: crypto.randomUUID(),
-          role: "user",
-          content: text,
-          created_at: Math.floor(Date.now() / 1000),
-        },
-      });
-      send({
-        type: "ASSISTANT_MESSAGE_RECEIVED",
-        message: {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `Error: ${e}`,
-          created_at: Math.floor(Date.now() / 1000),
-        },
-      });
+      // create_conversation or send_message_stream threw before any
+      // stream began. SEND_FAILED appends a stand-alone error bubble
+      // and returns to idle — the user message we already pushed
+      // stays.
+      send({ type: "SEND_FAILED", error: String(e) });
       scrollToBottom();
     }
   }
@@ -675,19 +664,24 @@
     if (isLoading) return;
     const text = offer.follow_up_query;
     if (!text) return;
-    const convoId = await ensureConversation();
 
+    // Same optimistic-dispatch shape as handleSend: SEND_INITIATED
+    // before any bridge await so the user sees feedback instantly,
+    // SEND_START after the stream id resolves.
     const userMsg: MessageEntry = {
       id: crypto.randomUUID(),
       role: "user",
       content: text,
       created_at: Math.floor(Date.now() / 1000),
     };
+    send({ type: "SEND_INITIATED", userMessage: userMsg });
     onClearTask();
+    scrollToBottom();
 
     try {
       routingStore.send({ type: "CLEAR_NARRATION" });
 
+      const convoId = await ensureConversation();
       const tryResume =
         offer.session_ref && offer.intent_hint
           ? await resumeSession(
@@ -704,30 +698,13 @@
               return null;
             })
           : null;
-      const started =
-        tryResume ?? (await sendMessageStream(text, convoId));
+      const started = tryResume ?? (await sendMessageStream(text, convoId));
 
       wordBuffer.reset();
-      send({
-        type: "SEND_START",
-        userMessage: userMsg,
-        assistantMessageId: started.message_id,
-      });
+      send({ type: "SEND_START", assistantMessageId: started.message_id });
       scrollToBottom();
     } catch (e) {
-      send({
-        type: "ASSISTANT_MESSAGE_RECEIVED",
-        message: userMsg,
-      });
-      send({
-        type: "ASSISTANT_MESSAGE_RECEIVED",
-        message: {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `Error: ${e}`,
-          created_at: Math.floor(Date.now() / 1000),
-        },
-      });
+      send({ type: "SEND_FAILED", error: String(e) });
       scrollToBottom();
     }
   }

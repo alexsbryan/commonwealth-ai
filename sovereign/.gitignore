@@ -25,3 +25,8 @@ crates/sovereign-desktop/src-tauri/binaries/tessdata/
 # stay tracked; only the produced data files are ignored.
 bench/atlas_retrieval/chunks-*.jsonl
 bench/sep_atlas/logs/
+
+# Playwright artifacts (chat surface e2e tests).
+crates/sovereign-desktop/test-results/
+crates/sovereign-desktop/playwright-report/
+crates/sovereign-desktop/playwright/.cache/
