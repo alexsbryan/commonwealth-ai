@@ -140,6 +140,25 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/daemon/foreground_state",
             get(routes_internal::foreground_state),
         )
+        // Mesh-quiesce control. GET reports current state; POST flips
+        // it at runtime so an operator can stop participating in
+        // shared ingests on this node without a daemon restart. Used
+        // by the desktop's "Stop participating" affordance and the
+        // peer-pause workflow when foreground inference is being
+        // crushed by background ingest activity from another node.
+        .route(
+            "/internal/mesh/quiesce",
+            get(routes_internal::mesh_quiesce_get).post(routes_internal::mesh_quiesce_set),
+        )
+        // Per-batch ingest throttle. GET reports the current factor;
+        // POST sets it. `1.0` = full speed (default), `0.5` =
+        // duty-cycle 50% (sleep after each embed batch equal to its
+        // wall time). Use the pause route to fully stop a corpus —
+        // `0.0` is rejected here.
+        .route(
+            "/internal/ingest/budget",
+            get(routes_internal::ingest_budget_get).post(routes_internal::ingest_budget_set),
+        )
         .with_state(state)
 }
 

@@ -2494,6 +2494,97 @@ pub async fn foreground_state(
     })
 }
 
+#[derive(Debug, Serialize)]
+pub struct MeshQuiesceState {
+    /// True when the auto-collaborate loop is suppressed: this node
+    /// will not pull peer-assigned work and will not dispatch to
+    /// peers on this tick.
+    pub quiesced: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetMeshQuiesceRequest {
+    pub quiesced: bool,
+}
+
+/// `GET /internal/mesh/quiesce` — current quiesce state.
+pub async fn mesh_quiesce_get(State(state): State<AppState>) -> Json<MeshQuiesceState> {
+    Json(MeshQuiesceState {
+        quiesced: state.mesh_quiesced(),
+    })
+}
+
+/// `POST /internal/mesh/quiesce` — flip the quiesce flag at runtime.
+///
+/// `quiesced=true` stops new peer-pull dispatches and discoveries on
+/// the next tick; in-flight ingests already running keep going until
+/// they finish or the operator pauses them via
+/// `/internal/corpus/pause`. `quiesced=false` rejoins the
+/// collaborate loop. Idempotent — POSTing the same value twice is
+/// a no-op.
+pub async fn mesh_quiesce_set(
+    State(state): State<AppState>,
+    Json(req): Json<SetMeshQuiesceRequest>,
+) -> Json<MeshQuiesceState> {
+    let prev = state.mesh_quiesced();
+    state.set_mesh_quiesced(req.quiesced);
+    if prev != req.quiesced {
+        tracing::info!(
+            quiesced = req.quiesced,
+            "mesh_quiesce: flipped via /internal/mesh/quiesce"
+        );
+    }
+    Json(MeshQuiesceState {
+        quiesced: req.quiesced,
+    })
+}
+
+#[derive(Debug, Serialize)]
+pub struct IngestBudgetState {
+    /// Throttle factor in `(0.0, 1.0]`. `1.0` = full speed (no
+    /// post-batch sleep). `0.5` = duty-cycle 50% (sleep equal to
+    /// each batch's wall time, halving effective throughput).
+    pub throttle_factor: f32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetIngestBudgetRequest {
+    pub throttle_factor: f32,
+}
+
+/// `GET /internal/ingest/budget` — current per-batch throttle factor.
+pub async fn ingest_budget_get(State(state): State<AppState>) -> Json<IngestBudgetState> {
+    Json(IngestBudgetState {
+        throttle_factor: state.ingest_throttle_factor(),
+    })
+}
+
+/// `POST /internal/ingest/budget` — set the per-batch throttle factor.
+///
+/// Accepts `(0.0, 1.0]`. `0.0` is rejected (use `/internal/corpus/pause`
+/// to fully stop a corpus). Values >1.0 are clamped to 1.0. Returns
+/// the value actually applied so callers can confirm clamping.
+pub async fn ingest_budget_set(
+    State(state): State<AppState>,
+    Json(req): Json<SetIngestBudgetRequest>,
+) -> Result<Json<IngestBudgetState>, (StatusCode, Json<ErrorBody>)> {
+    match state.set_ingest_throttle_factor(req.throttle_factor) {
+        Ok(applied) => {
+            tracing::info!(
+                throttle_factor = applied,
+                "ingest_budget: throttle factor updated"
+            );
+            Ok(Json(IngestBudgetState {
+                throttle_factor: applied,
+            }))
+        }
+        Err(msg) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody { error: msg }),
+        )),
+    }
+}
+
 // ── Mesh join handshake ─────────────────────────────────────
 //
 // The founder (or any existing member) receives a POST from a

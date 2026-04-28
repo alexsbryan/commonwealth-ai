@@ -220,6 +220,27 @@ pub struct AppStateInner {
     /// startup; the desktop Settings tab can rewrite it at runtime
     /// without a daemon restart.
     pub yield_window_secs: std::sync::atomic::AtomicU64,
+
+    /// Mesh quiesce flag. When `true`, the auto-collaborate loop
+    /// (`sovereign-mesh::auto_ingest`) skips peer-pull discovery and
+    /// dispatch on every tick — this node neither pulls work assigned
+    /// by other coordinators nor dispatches its own queue to peers.
+    /// Initial value is set from the `SOVEREIGN_DISABLE_AUTO_COLLAB`
+    /// env var at boot (preserves the existing operator escape hatch);
+    /// `POST /internal/mesh/quiesce` flips it at runtime without
+    /// requiring a daemon restart. Reads on the hot path are a single
+    /// relaxed atomic load.
+    pub mesh_quiesced: std::sync::atomic::AtomicBool,
+
+    /// Per-batch ingest throttle. Encoded as fixed-point ‰ (parts
+    /// per thousand) so we can represent fractional levels without
+    /// floats. `1000` = full speed (no post-batch sleep — the legacy
+    /// behaviour and the default). `500` = duty-cycle 50% (sleep
+    /// after each batch equal to the batch's wall time, halving
+    /// effective throughput while leaving the GPU/CPU unblocked
+    /// in between). `0` is rejected by the setter — use the pause
+    /// route to fully stop a corpus.
+    pub ingest_throttle_milli: std::sync::atomic::AtomicU32,
 }
 
 impl AppState {
@@ -320,6 +341,14 @@ impl AppState {
                 // from config (`daemon.yield_to_foreground_secs`,
                 // default 60) before AppState is shared.
                 yield_window_secs: std::sync::atomic::AtomicU64::new(0),
+                // false = full peer collaboration. Daemon startup
+                // overrides this from `SOVEREIGN_DISABLE_AUTO_COLLAB`
+                // when set, preserving the env-var escape hatch.
+                mesh_quiesced: std::sync::atomic::AtomicBool::new(false),
+                // 1000 ‰ = full speed; ingest pipeline pays one atomic
+                // load per batch and otherwise behaves identically to
+                // the pre-throttle build.
+                ingest_throttle_milli: std::sync::atomic::AtomicU32::new(1000),
             }),
         }
     }
@@ -564,6 +593,54 @@ impl AppState {
         self.inner
             .foreground_last_active_ts
             .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Read the mesh-quiesce flag. `true` means the auto-collaborate
+    /// loop is suppressed: this node will not pull peer-assigned work
+    /// and will not dispatch to peers on this tick.
+    pub fn mesh_quiesced(&self) -> bool {
+        self.inner
+            .mesh_quiesced
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Flip the mesh-quiesce flag at runtime. Set to `true` when the
+    /// operator wants to stop participating in shared ingests
+    /// (foreground inference contention, focused work session).
+    /// Reset to `false` to rejoin the auto-collaborate loop.
+    pub fn set_mesh_quiesced(&self, quiesced: bool) {
+        self.inner
+            .mesh_quiesced
+            .store(quiesced, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Read the per-batch ingest throttle factor as a normalised
+    /// `f32` in `(0.0, 1.0]`. `1.0` = full speed (no post-batch
+    /// sleep). Clamped on read so callers can use the value
+    /// directly as a sleep multiplier.
+    pub fn ingest_throttle_factor(&self) -> f32 {
+        let raw = self
+            .inner
+            .ingest_throttle_milli
+            .load(std::sync::atomic::Ordering::Relaxed);
+        ((raw.max(1) as f32) / 1000.0).clamp(0.001, 1.0)
+    }
+
+    /// Set the throttle factor. Caller passes a value in `(0.0, 1.0]`;
+    /// `0.0` is rejected (use the pause route to fully stop) and
+    /// values >`1.0` are clamped. Returns the value actually stored.
+    pub fn set_ingest_throttle_factor(&self, factor: f32) -> Result<f32, String> {
+        if !factor.is_finite() || factor <= 0.0 {
+            return Err(
+                "throttle_factor must be > 0; use /internal/corpus/pause to fully stop".into(),
+            );
+        }
+        let clamped = factor.min(1.0);
+        let milli = (clamped * 1000.0).round().clamp(1.0, 1000.0) as u32;
+        self.inner
+            .ingest_throttle_milli
+            .store(milli, std::sync::atomic::Ordering::Relaxed);
+        Ok(milli as f32 / 1000.0)
     }
 
     /// Count online members.

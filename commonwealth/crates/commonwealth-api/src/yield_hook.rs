@@ -72,6 +72,14 @@ impl YieldHook for AppStateYieldHook {
         let elapsed = now.saturating_sub(last);
         elapsed >= 0 && (elapsed as u64) < window
     }
+
+    fn throttle_factor(&self) -> f32 {
+        let raw = self
+            .inner
+            .ingest_throttle_milli
+            .load(std::sync::atomic::Ordering::Relaxed);
+        ((raw.max(1) as f32) / 1000.0).clamp(0.001, 1.0)
+    }
 }
 
 #[cfg(test)]
@@ -142,5 +150,52 @@ mod tests {
         // window = 0 disables: helper returns None even after a
         // bump.
         assert!(app.seconds_until_foreground_idle().is_none());
+    }
+
+    // ─── Quiesce flag ─────────────────────────────────────────────
+
+    #[test]
+    fn mesh_quiesce_round_trips_through_setter() {
+        let app = test_app_state();
+        assert!(!app.mesh_quiesced(), "default = participate");
+        app.set_mesh_quiesced(true);
+        assert!(app.mesh_quiesced());
+        app.set_mesh_quiesced(false);
+        assert!(!app.mesh_quiesced());
+    }
+
+    // ─── Throttle factor ─────────────────────────────────────────
+
+    #[test]
+    fn ingest_throttle_default_is_full_speed() {
+        let app = test_app_state();
+        // Default = 1.0 (no throttle). YieldHook impl must agree.
+        assert!((app.ingest_throttle_factor() - 1.0).abs() < 1e-3);
+        let hook = AppStateYieldHook::new(app.inner.clone());
+        assert!((hook.throttle_factor() - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn ingest_throttle_setter_clamps_and_round_trips() {
+        let app = test_app_state();
+        // Half speed: round-trips cleanly through fixed-point ‰.
+        let applied = app.set_ingest_throttle_factor(0.5).unwrap();
+        assert!((applied - 0.5).abs() < 1e-3);
+        let hook = AppStateYieldHook::new(app.inner.clone());
+        assert!((hook.throttle_factor() - 0.5).abs() < 1e-3);
+
+        // >1.0 clamps to 1.0 (use pause to fully stop, not >100%).
+        let applied = app.set_ingest_throttle_factor(2.0).unwrap();
+        assert!((applied - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn ingest_throttle_rejects_zero_and_negative() {
+        let app = test_app_state();
+        assert!(app.set_ingest_throttle_factor(0.0).is_err());
+        assert!(app.set_ingest_throttle_factor(-0.5).is_err());
+        assert!(app.set_ingest_throttle_factor(f32::NAN).is_err());
+        // The reject path must not have written anything.
+        assert!((app.ingest_throttle_factor() - 1.0).abs() < 1e-3);
     }
 }
