@@ -17,6 +17,9 @@
 //!
 //! Reuses `Mesh::merge_from` for the actual last-writer-wins
 //! reconciliation. This module is just the network plumbing on top.
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use commonwealth_api::state::AppState;
@@ -28,6 +31,18 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::capabilities::build_local_capabilities;
+
+/// Per-peer cache of the last `SocketAddr` we successfully reached on.
+/// Reordered to the front of `addrs` on the next round so a peer
+/// whose first stored address is unreachable (e.g. a stale LAN IP
+/// shadowed by a working Tailscale address) doesn't burn
+/// `PEER_TIMEOUT` per cycle. Process-global because the gossip loop
+/// is a singleton; missing entries fall back to the legacy
+/// stored-order iteration. Cleared implicitly on daemon restart.
+fn last_working_address_cache() -> &'static Mutex<HashMap<NodeId, SocketAddr>> {
+    static CACHE: OnceLock<Mutex<HashMap<NodeId, SocketAddr>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 /// Default: send to at most this many peers per round. Small mesh
 /// sizes make higher fan-out pointless; bandwidth is negligible at
@@ -278,7 +293,28 @@ pub async fn run_one_round(
             debug!(peer = %peer_id, "gossip: no addresses on record, skipping");
             continue;
         }
-        for addr in &addrs {
+        // Reorder: the address that worked last round goes first. The
+        // common case is "Tailscale 100.x stable, LAN 192.168.x stale
+        // because the Mac is on a different subnet from RuggedFox" —
+        // without this hint, every round burns `PEER_TIMEOUT` (3s) on
+        // the dead LAN address before falling through to Tailscale.
+        // The cache is best-effort: a stored address that no longer
+        // works just slows down THIS round (then falls through to the
+        // rest), and the next success rewrites the cache.
+        let preferred: Option<SocketAddr> = last_working_address_cache()
+            .lock()
+            .ok()
+            .and_then(|c| c.get(&peer_id).copied());
+        let ordered_addrs: Vec<SocketAddr> = match preferred {
+            Some(p) if addrs.contains(&p) => {
+                let mut v = Vec::with_capacity(addrs.len());
+                v.push(p);
+                v.extend(addrs.iter().filter(|a| **a != p).copied());
+                v
+            }
+            _ => addrs.clone(),
+        };
+        for addr in &ordered_addrs {
             // Per-address timing so we can diagnose the Online↔Offline
             // flap (see todo `f152dfe7` #4). Each line is one address
             // attempt with elapsed ms and outcome, so offline decay can
@@ -294,6 +330,13 @@ pub async fn run_one_round(
                         reach_ms,
                         "gossip: reach ok"
                     );
+                    // Pin this address as the preferred starting
+                    // point for the next round's reorder. The lock is
+                    // uncontended (gossip is single-task), so this is
+                    // effectively a memory write.
+                    if let Ok(mut cache) = last_working_address_cache().lock() {
+                        cache.insert(peer_id, *addr);
+                    }
                     let mut mesh = app_state.inner.mesh.write().await;
                     let report = mesh.merge_from(self_id, &their_view);
                     if report.added > 0 {
@@ -337,7 +380,17 @@ pub async fn run_one_round(
                 }
                 Err(e) => {
                     let reach_ms = attempt_start.elapsed().as_millis() as u64;
-                    warn!(
+                    // Demoted to debug: a single failed address is
+                    // expected on multi-homed peers (e.g. a stale LAN
+                    // IP behind a working Tailscale address). The
+                    // address-cache reorder above means this typically
+                    // fires at most once per peer per process — after
+                    // that, the working address goes first and the
+                    // dead one is never tried again. If reachability
+                    // truly breaks, every attempt fails and the peer
+                    // decays to Offline via the `last_seen` threshold,
+                    // which logs at INFO from the decay path.
+                    debug!(
                         peer = %peer_id,
                         peer_addr = %addr,
                         reach_ms,
