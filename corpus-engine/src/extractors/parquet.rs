@@ -299,6 +299,7 @@ impl Iterator for ParquetIterator {
                     source_id,
                     metadata: None,
                     source_file: self.source_file.clone(),
+                    embed_text: None,
                 });
                 self.row_counter += 1;
             }

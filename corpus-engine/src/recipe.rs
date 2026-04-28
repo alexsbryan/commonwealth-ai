@@ -29,6 +29,10 @@ fn default_min_score() -> i32 {
     3
 }
 
+fn default_max_answers_per_question() -> usize {
+    5
+}
+
 fn default_title_column() -> String {
     "name".to_string()
 }
@@ -307,9 +311,23 @@ pub struct CorpusMeta {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AcquirerConfig {
+    /// Bulk-download one or more archives over HTTP with resume.
+    ///
+    /// Single-source recipes use `url = "..."`. Multi-source recipes
+    /// (e.g. the Stack Exchange knowledge layer pulling from several
+    /// per-site .7z archives) use `urls = ["...", "..."]`. The
+    /// downloader writes each archive under a per-corpus directory,
+    /// so the extractor receives a directory of archives rather than
+    /// a single file in the multi-source case.
+    ///
+    /// Exactly one of `url` / `urls` must be set; recipes that set
+    /// both fail to build.
     #[serde(rename = "bulk_download")]
     BulkDownload {
-        url: String,
+        #[serde(default)]
+        url: Option<String>,
+        #[serde(default)]
+        urls: Option<Vec<String>>,
         #[serde(default = "default_true")]
         resume: bool,
     },
@@ -370,6 +388,23 @@ pub enum AcquirerConfig {
 // ExtractorConfig
 // ---------------------------------------------------------------------------
 
+/// Extraction shape for the Stack Exchange XML extractor. See the
+/// `StackExchangeXml` variant of [`ExtractorConfig`] for the contract.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SeMode {
+    /// One `ExtractedDoc` per high-score answer with the question
+    /// inlined. The reference shape — pair with the `breadth` recipe.
+    #[default]
+    AnswerOnly,
+    /// One `ExtractedDoc` per question, grouping up to
+    /// `max_answers_per_question` top-scoring answers under a
+    /// structured "Approach 1 / Approach 2" body. The knowledge shape
+    /// — pair with the `passthrough` chunker and the `KnowledgeDensity`
+    /// filter.
+    QuestionWithAnswers,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ExtractorConfig {
@@ -382,10 +417,69 @@ pub enum ExtractorConfig {
         #[serde(default)]
         decompress: Option<String>,
     },
+    /// StackExchange XML data dump extractor.
+    ///
+    /// Supports two extraction shapes (`mode`):
+    ///
+    /// - [`SeMode::AnswerOnly`] (default — preserves the legacy
+    ///   placeholder behaviour): emit one `ExtractedDoc` per high-score
+    ///   answer with the question body inlined as `Q: … A (score N): …`.
+    ///   The single-answer reference shape — pair with the `breadth`
+    ///   recipe.
+    /// - [`SeMode::QuestionWithAnswers`]: group up to
+    ///   `max_answers_per_question` top-scoring answers under each
+    ///   question and emit one `ExtractedDoc` per question. The full
+    ///   thread becomes the FTS-indexed `content`; a synthesized
+    ///   breadth summary (question title + first sentence of each
+    ///   answer) is placed in `embed_text` so the vector embedding
+    ///   captures the trade-off space without overflowing the embed
+    ///   model's context window. Pair with the `passthrough` chunker.
+    ///
+    /// Knowledge-density signals (answer count, score, length, closed
+    /// status, tag list) are written to each grouped doc's `metadata`
+    /// so the [`KnowledgeDensity`](crate::filters::FilterConfig)
+    /// document filter can reject single-answer reference posts. Set
+    /// `apply_to` on the filter to scope the cut to specific
+    /// communities (e.g. `"stackoverflow.com"`) while letting smaller,
+    /// already knowledge-dense sites pass through.
     #[serde(rename = "stackexchange_xml")]
     StackExchangeXml {
+        /// Minimum answer score to include (applies in both modes).
+        /// Default 3 — community-validated answers, with one-line
+        /// "just google it" noise excluded.
         #[serde(default = "default_min_score")]
         min_score: i32,
+
+        /// Extraction mode. See `SeMode` for shape semantics.
+        #[serde(default)]
+        mode: SeMode,
+
+        /// In `QuestionWithAnswers` mode, cap answers grouped under
+        /// each question (sorted by score, ties broken by post id).
+        /// Past 5 answers, marginal trade-off coverage drops sharply
+        /// while the document grows past the embed context window.
+        #[serde(default = "default_max_answers_per_question")]
+        max_answers_per_question: usize,
+
+        /// Reject answers shorter than this many characters. Filters
+        /// out one-line code snippets and "+1 to the above" noise that
+        /// inflate scores without adding retrievable knowledge.
+        /// Default 0 (no length floor).
+        #[serde(default)]
+        min_answer_length: usize,
+
+        /// Skip questions whose `ClosedDate` attribute is non-empty
+        /// (Stack Overflow marks duplicates / off-topic / opinion-based
+        /// questions this way). Default true — closed posts are
+        /// systematically less knowledge-dense.
+        #[serde(default = "default_true")]
+        exclude_closed: bool,
+
+        /// Restrict to questions tagged with at least one of these
+        /// tags. `None` (default) means no tag filter. Tags are
+        /// matched case-insensitively.
+        #[serde(default)]
+        tag_filter: Option<Vec<String>>,
     },
     #[serde(rename = "jsonl")]
     Jsonl {
@@ -605,6 +699,9 @@ pub fn bundled_recipe_toml(id: &str) -> Option<&'static str> {
         "wikipedia" => Some(include_str!("../recipes/wikipedia/recipe.toml")),
         "wikipedia-simple" => Some(include_str!("../recipes/wikipedia-simple/recipe.toml")),
         "stackexchange" => Some(include_str!("../recipes/stackexchange/recipe.toml")),
+        "stackexchange-knowledge" => {
+            Some(include_str!("../recipes/stackexchange-knowledge/recipe.toml"))
+        }
         "openalex" => Some(include_str!("../recipes/openalex/recipe.toml")),
         "gutenberg" => Some(include_str!("../recipes/gutenberg/recipe.toml")),
         "sep" => Some(include_str!("../recipes/sep/recipe.toml")),
@@ -626,6 +723,7 @@ pub(crate) fn builtin_recipes() -> Vec<Recipe> {
         "wikipedia",
         "wikipedia-simple",
         "stackexchange",
+        "stackexchange-knowledge",
         "openalex",
         "gutenberg",
         "sep",
@@ -781,8 +879,9 @@ type = "paragraph"
         assert_eq!(recipe.corpus.mesh_sharing, true);
 
         match &recipe.acquire {
-            AcquirerConfig::BulkDownload { url, resume } => {
-                assert!(url.contains("wikimedia"));
+            AcquirerConfig::BulkDownload { url, urls, resume } => {
+                assert!(urls.is_none());
+                assert!(url.as_deref().unwrap().contains("wikimedia"));
                 assert!(*resume); // default
             }
             _ => panic!("expected BulkDownload"),
@@ -822,7 +921,7 @@ type = "paragraph"
     #[test]
     fn builtin_recipes_count() {
         let recipes = builtin_recipes();
-        assert_eq!(recipes.len(), 7);
+        assert_eq!(recipes.len(), 8);
     }
 
     #[test]
@@ -831,6 +930,7 @@ type = "paragraph"
             "wikipedia",
             "wikipedia-simple",
             "stackexchange",
+            "stackexchange-knowledge",
             "openalex",
             "gutenberg",
             "sep",
@@ -861,7 +961,9 @@ type = "paragraph"
 
         // Acquirer must be a bulk download from HuggingFace, not a web crawl.
         match &sep.acquire {
-            AcquirerConfig::BulkDownload { url, resume } => {
+            AcquirerConfig::BulkDownload { url, urls, resume } => {
+                assert!(urls.is_none(), "SEP recipe is single-source");
+                let url = url.as_deref().expect("SEP recipe sets `url`");
                 assert!(
                     url.contains("huggingface.co"),
                     "SEP source should be hosted on HuggingFace, got: {url}"
@@ -1035,6 +1137,7 @@ type = "paragraph"
 
         match &wp.acquire {
             AcquirerConfig::BulkDownload { url, .. } => {
+                let url = url.as_deref().expect("wikipedia recipe is single-source");
                 assert!(
                     url.contains("structured-wikipedia"),
                     "wikipedia recipe must download from structured-wikipedia"
@@ -1136,6 +1239,128 @@ type = "paragraph"
                 assert!(*structural_signals); // default
             }
             other => panic!("expected WikipediaStructured, got {other:?}"),
+        }
+    }
+
+    /// The knowledge layer recipe must wire together the
+    /// question-with-answers extractor, the knowledge-density filter
+    /// (scoped to Stack Overflow), the passthrough chunker (so the
+    /// embed_text override actually fires), and the engineering
+    /// enrichment domain. Drift on any of these silently degrades
+    /// retrieval shape — keep them pinned by test.
+    #[test]
+    fn stackexchange_knowledge_recipe_wires_the_full_pipeline() {
+        let recipes = builtin_recipes();
+        let r = recipes
+            .iter()
+            .find(|r| r.corpus.id == "stackexchange-knowledge")
+            .expect("recipe present");
+
+        // Multi-source bulk download from the IA mirror — Core scope
+        // is just the small charter sites for fast first install. SO
+        // Posts is opt-in via expand, not bundled by default.
+        match &r.acquire {
+            AcquirerConfig::BulkDownload { url, urls, .. } => {
+                assert!(url.is_none(), "knowledge recipe is multi-source");
+                let urls = urls.as_ref().expect("multi-source URLs");
+                assert!(urls.iter().any(|u| u.contains("softwareengineering")));
+                assert!(urls.iter().any(|u| u.contains("dba")));
+                assert!(
+                    !urls.iter().any(|u| u.contains("stackoverflow.com-Posts")),
+                    "Core scope must not bundle SO Posts (17 GB) — opt-in via expand"
+                );
+            }
+            other => panic!("expected BulkDownload, got {other:?}"),
+        }
+
+        // Question-with-answers extractor with sane density-aware defaults.
+        match &r.extract {
+            ExtractorConfig::StackExchangeXml {
+                mode,
+                max_answers_per_question,
+                exclude_closed,
+                ..
+            } => {
+                assert_eq!(*mode, SeMode::QuestionWithAnswers);
+                assert!(*max_answers_per_question >= 3);
+                assert!(*exclude_closed);
+            }
+            other => panic!("expected StackExchangeXml extractor, got {other:?}"),
+        }
+
+        // KnowledgeDensity filter scoped to SO only.
+        assert!(
+            !r.filters.is_empty(),
+            "knowledge recipe must declare a knowledge_density filter"
+        );
+        match &r.filters[0] {
+            crate::filters::FilterConfig::KnowledgeDensity(cfg) => {
+                assert!(cfg.min_substantive_answers >= 2);
+                let apply = cfg
+                    .apply_to
+                    .as_ref()
+                    .expect("apply_to should scope SO only");
+                assert!(apply.iter().any(|s| s == "stackoverflow.com"));
+            }
+            other => panic!("expected KnowledgeDensity filter, got {other:?}"),
+        }
+
+        // Passthrough chunker — required for embed_text override.
+        assert!(matches!(r.chunk, ChunkerConfig::Passthrough));
+
+        // Engineering enrichment domain declared (even if disabled).
+        let enrichment = r.enrichment.as_ref().expect("enrichment block declared");
+        assert_eq!(enrichment.domain.as_deref(), Some("engineering"));
+        assert!(!enrichment.enabled, "MVP keeps enrichment off until prompts land");
+    }
+
+    /// The breadth/reference recipe stays simple: HuggingFace parquet
+    /// source, no enrichment. Test guards against regressions where a
+    /// future change accidentally shapes it as a knowledge layer.
+    #[test]
+    fn stackexchange_breadth_recipe_is_reference_shape() {
+        let recipes = builtin_recipes();
+        let r = recipes
+            .iter()
+            .find(|r| r.corpus.id == "stackexchange")
+            .expect("recipe present");
+        assert!(matches!(r.acquire, AcquirerConfig::HuggingFaceDataset { .. }));
+        assert!(matches!(r.extract, ExtractorConfig::Parquet { .. }));
+        assert!(r.filters.is_empty(), "breadth layer takes the dataset as-is");
+        assert!(
+            r.enrichment.as_ref().map(|e| !e.enabled).unwrap_or(true),
+            "breadth layer must not enable enrichment"
+        );
+    }
+
+    /// Multi-source bulk_download must round-trip through TOML
+    /// without losing the URL list.
+    #[test]
+    fn bulk_download_multi_source_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "bulk_download"
+urls = ["https://a.example/dump.7z", "https://b.example/dump.7z"]
+
+[extract]
+type = "stackexchange_xml"
+
+[chunk]
+type = "passthrough"
+"#;
+        let recipe = Recipe::from_toml(toml_str).expect("parse");
+        match &recipe.acquire {
+            AcquirerConfig::BulkDownload { url, urls, resume } => {
+                assert!(url.is_none());
+                let urls = urls.as_ref().expect("urls present");
+                assert_eq!(urls.len(), 2);
+                assert!(*resume);
+            }
+            other => panic!("expected BulkDownload, got {other:?}"),
         }
     }
 

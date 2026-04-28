@@ -38,6 +38,14 @@ impl DomainRegistry {
         registry.register("multi", || {
             Arc::new(super::domains::multi::MultiDomain::wikipedia_default())
         });
+        // Stub for the Stack Exchange knowledge layer. Registered so
+        // recipes referencing it parse cleanly; prompt set is a
+        // follow-on. See `domains::engineering` for the planned
+        // epistemic vocabulary (Approach / Tradeoff / Context /
+        // Assumption).
+        registry.register("engineering", || {
+            Arc::new(super::domains::engineering::EngineeringDomain)
+        });
         // KnowledgeView domains — enrich SQLite-sourced corpora
         // (memories → personal, conversations → conversational).
         registry.register("personal", || {
@@ -82,6 +90,7 @@ mod tests {
             "legal",
             "community",
             "multi",
+            "engineering",
             "personal",
             "conversational",
             "institutional",

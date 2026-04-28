@@ -19,7 +19,7 @@ use std::sync::Arc;
 use crate::error::{Error, Result};
 use crate::filters::{
     assets, compute_signature, ComposeMode, DocumentFilter, FilterConfig, FilterPipeline,
-    PageviewRankFilter, TitleListFilter,
+    KnowledgeDensityFilter, PageviewRankFilter, TitleListFilter,
 };
 
 const BUNDLED_PREFIX: &str = "@bundled:";
@@ -49,6 +49,9 @@ pub fn build_filter_pipeline(
             }
             FilterConfig::TitleList { list_file } => {
                 Arc::new(load_title_list(list_file, recipe_root)?)
+            }
+            FilterConfig::KnowledgeDensity(cfg) => {
+                Arc::new(KnowledgeDensityFilter::new(cfg.clone()))
             }
         };
         children.push(child);
@@ -122,6 +125,7 @@ mod tests {
             source_id: title.into(),
             metadata: None,
             source_file: None,
+            embed_text: None,
         }
     }
 

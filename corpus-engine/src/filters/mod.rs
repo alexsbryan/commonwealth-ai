@@ -26,10 +26,12 @@ use sha2::{Digest, Sha256};
 use crate::extractors::ExtractedDoc;
 
 pub mod assets;
+pub mod knowledge_density;
 pub mod loader;
 pub mod pageview_rank;
 pub mod title_list;
 
+pub use knowledge_density::{KnowledgeDensityConfig, KnowledgeDensityFilter};
 pub use loader::build_filter_pipeline;
 pub use pageview_rank::PageviewRankFilter;
 pub use title_list::TitleListFilter;
@@ -89,6 +91,11 @@ pub enum FilterConfig {
         /// a path relative to the recipe override directory.
         list_file: String,
     },
+    /// Accept Stack Exchange grouped Q&A docs (one doc per question)
+    /// only when their answer set carries enough density to count as
+    /// a trade-off thread rather than a single-answer reference post.
+    /// See [`crate::filters::KnowledgeDensityConfig`] for fields.
+    KnowledgeDensity(KnowledgeDensityConfig),
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +290,7 @@ mod tests {
             source_id: title.to_string(),
             metadata: None,
             source_file: None,
+            embed_text: None,
         }
     }
 
@@ -303,6 +311,7 @@ mod tests {
             source_id: "id-42".into(),
             metadata: None,
             source_file: None,
+            embed_text: None,
         };
         assert_eq!(doc_title_for_filter(&d).as_deref(), Some("photosynthesis"));
     }

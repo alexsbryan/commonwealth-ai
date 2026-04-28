@@ -182,6 +182,7 @@ impl Iterator for JsonlIterator {
                 source_id: id,
                 metadata,
                 source_file: None,
+                embed_text: None,
             });
         }
     }
@@ -264,6 +265,7 @@ fn format_openalex_work(work: &OpenAlexWork) -> Option<ExtractedDoc> {
             "cited_by_count": cited_by,
         })),
         source_file: None,
+        embed_text: None,
     })
 }
 

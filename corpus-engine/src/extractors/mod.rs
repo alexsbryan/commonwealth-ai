@@ -26,6 +26,17 @@ pub struct ExtractedDoc {
     /// (HuggingFace parquet, JSONL splits) to enable per-file progress
     /// tracking and collaborative ingestion.  `None` for single-file sources.
     pub source_file: Option<String>,
+    /// Optional override for the text used to compute the chunk's vector
+    /// embedding. When `Some`, the ingest pipeline embeds this string
+    /// instead of `content` (FTS still indexes the full `content`). Only
+    /// honored when the configured chunker yields exactly one chunk for
+    /// the document — i.e. paired with `passthrough` chunking. Used by
+    /// the StackExchange `question_with_answers` mode to embed a
+    /// purpose-built breadth summary (question title + first sentence of
+    /// each answer) instead of the multi-thousand-token full thread,
+    /// which would silently truncate to the embedding model's context
+    /// window. `None` for the common case.
+    pub embed_text: Option<String>,
 }
 
 /// Trait for extracting documents from source data.

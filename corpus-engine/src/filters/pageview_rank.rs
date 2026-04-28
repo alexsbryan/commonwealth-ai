@@ -172,6 +172,7 @@ mod tests {
             source_id: title.into(),
             metadata: None,
             source_file: None,
+            embed_text: None,
         }
     }
 

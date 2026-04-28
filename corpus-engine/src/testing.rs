@@ -837,7 +837,11 @@ async fn acquire_for_test(
 /// Returns the display URL for the recipe's source.
 fn acquirer_source_url(recipe: &Recipe) -> String {
     match &recipe.acquire {
-        AcquirerConfig::BulkDownload { url, .. } => url.clone(),
+        AcquirerConfig::BulkDownload { url, urls, .. } => match (url, urls) {
+            (Some(u), _) => u.clone(),
+            (None, Some(us)) if !us.is_empty() => us.join(", "),
+            _ => "(no source URL)".into(),
+        },
         AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => match subset {
             Some(s) => format!("https://huggingface.co/datasets/{repo} (subset: {s})"),
             None => format!("https://huggingface.co/datasets/{repo}"),

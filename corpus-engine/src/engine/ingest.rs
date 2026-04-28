@@ -761,6 +761,16 @@ impl CorpusEngine {
             let cleaned_content = normalize_content(&doc.content);
             let text_chunks = chunker.chunk(&cleaned_content);
 
+            // `doc.embed_text` is honored only when the configured chunker
+            // yields exactly one chunk for this document — i.e. the
+            // extractor was paired with `passthrough`. The override is a
+            // doc-level summary; mapping it across multiple chunks would
+            // be ambiguous, so we silently fall through to per-chunk
+            // content embedding for multi-chunk extractors. See the
+            // `embed_text` doc on `ExtractedDoc` for context.
+            let single_chunk_embed_override =
+                if text_chunks.len() == 1 { doc.embed_text.as_deref() } else { None };
+
             for tc in text_chunks {
                 let content = if let Some(ref title) = doc.title {
                     if !tc.content.starts_with(title.as_str()) {
@@ -778,7 +788,10 @@ impl CorpusEngine {
                 // leave the JSON untouched and `code_meta_from_json`
                 // returns all-None → stored as Null columns.
                 let code = crate::index::code_meta_from_json(doc.metadata.as_ref());
-                pending_texts.push(content.clone());
+                let embed_input = single_chunk_embed_override
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| content.clone());
+                pending_texts.push(embed_input);
                 pending_chunks.push(InsertChunk {
                     content,
                     title: doc.title.clone(),
@@ -1282,8 +1295,23 @@ impl CorpusEngine {
         progress: &Option<ProgressCallback>,
     ) -> Result<PathBuf> {
         match &recipe.acquire {
-            AcquirerConfig::BulkDownload { url, resume } => {
-                let downloader = BulkDownloader::new(url, *resume);
+            AcquirerConfig::BulkDownload { url, urls, resume } => {
+                let downloader = match (url.as_deref(), urls.as_ref()) {
+                    (Some(u), None) => BulkDownloader::new(u, *resume),
+                    (None, Some(us)) if !us.is_empty() => {
+                        BulkDownloader::with_urls(us.clone(), *resume)
+                    }
+                    (Some(_), Some(_)) => {
+                        return Err(Error::Recipe(
+                            "bulk_download: set exactly one of `url` or `urls`, not both".into(),
+                        ))
+                    }
+                    _ => {
+                        return Err(Error::Recipe(
+                            "bulk_download: requires `url` or non-empty `urls`".into(),
+                        ))
+                    }
+                };
                 downloader
                     .download(download_dir, &recipe.corpus.id, progress)
                     .await
@@ -1329,9 +1357,21 @@ impl CorpusEngine {
                 skip_redirects: *skip_redirects,
                 decompress: decompress.clone(),
             }),
-            ExtractorConfig::StackExchangeXml { min_score } => {
+            ExtractorConfig::StackExchangeXml {
+                min_score,
+                mode,
+                max_answers_per_question,
+                min_answer_length,
+                exclude_closed,
+                tag_filter,
+            } => {
                 Box::new(extractors::xml::StackExchangeExtractor {
                     min_score: *min_score,
+                    mode: *mode,
+                    max_answers_per_question: *max_answers_per_question,
+                    min_answer_length: *min_answer_length,
+                    exclude_closed: *exclude_closed,
+                    tag_filter: tag_filter.clone(),
                 })
             }
             ExtractorConfig::Jsonl {

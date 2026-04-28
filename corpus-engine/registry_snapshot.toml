@@ -44,14 +44,26 @@ sha256 = ""
 
 [[recipes]]
 id = "stackexchange"
-name = "Stack Exchange"
-description = "Q&A archive across all Stack Exchange sites (scored answers only). Updated quarterly."
+name = "Stack Exchange Reference"
+description = "Single-canonical-answer Q&A for code-and-syntax reference lookup. Pre-composed question+answers from common-pile/stackexchange. Pair with `stackexchange-knowledge` for trade-off threads."
 license = "CC-BY-SA-4.0"
-size_compressed_gb = 85.0
+size_compressed_gb = 39.0
 size_indexed_gb = 120.0
 enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "stackexchange-knowledge"
+name = "Stack Exchange Knowledge"
+description = "Multi-answer Q&A where the community has validated several approaches — Software Engineering, DBA, Security, DevOps, Skeptics SE. Installs in ~5 min; expand to Stack Overflow's architecture subset in-place via Settings → Knowledge. Pairs with the engineering enrichment domain."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.15
+size_indexed_gb = 0.6
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange-knowledge/recipe.toml"
 sha256 = ""
 
 [[recipes]]

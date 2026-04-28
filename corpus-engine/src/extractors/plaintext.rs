@@ -87,6 +87,7 @@ fn process_text_file(
         source_id: slug(&title),
         metadata: None,
         source_file: None,
+        embed_text: None,
     }))
 }
 

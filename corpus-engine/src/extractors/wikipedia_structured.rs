@@ -346,6 +346,7 @@ impl WikipediaBatchIterator {
                         source_id: format!("{}-lead", slug(&title)),
                         metadata: serde_json::to_value(&meta).ok(),
                         source_file: None,
+                        embed_text: None,
                     });
                 }
             }
@@ -669,6 +670,7 @@ fn extract_sections_range(
                     ),
                     metadata: serde_json::to_value(&meta).ok(),
                     source_file: None,
+                    embed_text: None,
                 });
             }
         }

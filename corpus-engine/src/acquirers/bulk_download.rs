@@ -4,16 +4,23 @@ use crate::error::{Error, Result};
 use crate::progress::{IngestProgress, ProgressCallback};
 
 pub struct BulkDownloader {
-    pub url: String,
+    pub urls: Vec<String>,
     pub resume: bool,
 }
 
 impl BulkDownloader {
     pub fn new(url: &str, resume: bool) -> Self {
         Self {
-            url: url.to_string(),
+            urls: vec![url.to_string()],
             resume,
         }
+    }
+
+    /// Multi-source variant. Each URL downloads to its own file under
+    /// a per-corpus directory; the directory path is returned so the
+    /// extractor can iterate the bundle.
+    pub fn with_urls(urls: Vec<String>, resume: bool) -> Self {
+        Self { urls, resume }
     }
 
     pub async fn download(
@@ -22,9 +29,45 @@ impl BulkDownloader {
         corpus_id: &str,
         progress: &Option<ProgressCallback>,
     ) -> Result<PathBuf> {
+        if self.urls.is_empty() {
+            return Err(Error::Recipe(
+                "bulk_download requires at least one URL".into(),
+            ));
+        }
+        if self.urls.len() == 1 {
+            return self
+                .download_single(&self.urls[0], download_dir, corpus_id, progress)
+                .await;
+        }
+
+        // Multi-source path. Each URL downloads to a deterministic
+        // filename under a corpus-specific subdir. The subdir is
+        // what's returned: the StackExchange XML extractor (and
+        // others) walk the directory to find their inputs.
+        let bundle_dir = download_dir.join(corpus_id);
+        std::fs::create_dir_all(&bundle_dir)?;
+        for (idx, url) in self.urls.iter().enumerate() {
+            let filename = filename_for_url(url, idx);
+            let archive_id = filename
+                .rsplit_once('.')
+                .map(|(stem, _)| stem)
+                .unwrap_or(filename.as_str());
+            self.download_single(url, &bundle_dir, archive_id, progress)
+                .await?;
+        }
+        Ok(bundle_dir)
+    }
+
+    async fn download_single(
+        &self,
+        url: &str,
+        download_dir: &Path,
+        corpus_id: &str,
+        progress: &Option<ProgressCallback>,
+    ) -> Result<PathBuf> {
         std::fs::create_dir_all(download_dir)?;
 
-        let ext = extract_extension(&self.url);
+        let ext = extract_extension(url);
         let part_path = download_dir.join(format!("{corpus_id}.part"));
         let final_path = download_dir.join(format!("{corpus_id}.{ext}"));
 
@@ -58,7 +101,7 @@ impl BulkDownloader {
             .user_agent("CorpusEngine/0.1 (+https://sovereign.dev/corpus-engine)")
             .build()?;
 
-        let mut request = client.get(&self.url);
+        let mut request = client.get(url);
         if existing_len > 0 {
             request = request.header("Range", format!("bytes={existing_len}-"));
         }
@@ -162,6 +205,24 @@ fn extract_extension(url: &str) -> String {
             .next()
             .unwrap_or("dat")
             .to_string()
+    }
+}
+
+/// Filename for a multi-source archive entry. We sanitize the URL's
+/// trailing path segment so it can be used as the per-archive
+/// `corpus_id` passed to `download_single`. `idx` is a tiebreaker
+/// for URLs that share a basename.
+fn filename_for_url(url: &str, idx: usize) -> String {
+    let path = url.split('?').next().unwrap_or(url);
+    let raw = path.rsplit('/').next().unwrap_or("");
+    let safe: String = raw
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
+        .collect();
+    if safe.is_empty() {
+        format!("source-{idx}")
+    } else {
+        safe
     }
 }
 

@@ -112,6 +112,7 @@ impl Extractor for CsvExtractor {
                 source_id,
                 metadata: None,
                 source_file: None,
+                embed_text: None,
             }));
             row_counter += 1;
         }

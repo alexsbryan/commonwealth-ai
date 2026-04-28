@@ -52,6 +52,7 @@ mod synthetic {
             source_id: title.unwrap_or("").to_string(),
             metadata: None,
             source_file: None,
+            embed_text: None,
         }
     }
 }
