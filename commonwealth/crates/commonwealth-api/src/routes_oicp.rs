@@ -80,7 +80,7 @@ pub async fn capabilities(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Json<ProviderManifest> {
-    let requester = parse_x_node_id(&headers);
+    let requester = crate::headers::parse_x_node_id(&headers);
 
     // If we have a local inference service (Sovereign's
     // EmbeddedLlamaCpp), prefer its manifest — that's the one
@@ -189,25 +189,6 @@ pub async fn capabilities(
     Json(manifest)
 }
 
-/// Parse the `X-Node-Id` header into a `NodeId`. Tolerant: any
-/// missing/malformed header leaves the requester unidentified, in
-/// which case the manifest serves unmodified affinities — a normal
-/// non-mesh client (curl, integration test) is treated as a
-/// no-preference peer.
-fn parse_x_node_id(headers: &HeaderMap) -> Option<NodeId> {
-    let raw = headers.get("x-node-id").or_else(|| headers.get("X-Node-Id"))?;
-    let s = raw.to_str().ok()?;
-    if s.len() != 32 {
-        return None;
-    }
-    let mut bytes = [0u8; 16];
-    for (i, b) in bytes.iter_mut().enumerate() {
-        let pair = s.get(i * 2..i * 2 + 2)?;
-        *b = u8::from_str_radix(pair, 16).ok()?;
-    }
-    Some(NodeId::from_u128(u128::from_be_bytes(bytes)))
-}
-
 /// Apply any local-only peer preference for `requester` to the
 /// outbound manifest, multiplying every claim's `affinity` by the
 /// stored multiplier. No-op when the requester is unidentified or
@@ -302,31 +283,8 @@ mod tests {
         id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
     }
 
-    #[test]
-    fn parse_x_node_id_round_trips_32_hex_chars() {
-        let id = nid(0x42);
-        let hex = id_to_hex(&id);
-        let mut h = HeaderMap::new();
-        h.insert("x-node-id", hex.parse().unwrap());
-        assert_eq!(parse_x_node_id(&h), Some(id));
-    }
-
-    #[test]
-    fn parse_x_node_id_returns_none_for_missing_or_malformed() {
-        // Missing.
-        assert_eq!(parse_x_node_id(&HeaderMap::new()), None);
-        // Wrong length.
-        let mut h = HeaderMap::new();
-        h.insert("x-node-id", "abcd".parse().unwrap());
-        assert_eq!(parse_x_node_id(&h), None);
-        // Non-hex chars.
-        let mut h = HeaderMap::new();
-        h.insert(
-            "x-node-id",
-            "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".parse().unwrap(),
-        );
-        assert_eq!(parse_x_node_id(&h), None);
-    }
+    // Parser tests live alongside the parser itself in
+    // `crate::headers::tests` — DRY-out, no duplication.
 
     #[tokio::test]
     async fn apply_peer_preference_scales_all_claim_affinities() {

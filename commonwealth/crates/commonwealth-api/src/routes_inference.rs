@@ -119,7 +119,7 @@ pub async fn chat_completions(
             has_oicp = request.oicp.is_some(),
             "chat_completions: serving via local_inference"
         );
-        let requester = requester_node_id(&headers);
+        let requester = crate::headers::parse_x_node_id(&headers);
         let model_id = request.model.clone().unwrap_or_else(|| "local".into());
         if want_stream {
             return serve_local_stream(
@@ -743,26 +743,6 @@ async fn serve_local_stream(
     Sse::new(combined)
         .keep_alive(KeepAlive::default())
         .into_response()
-}
-
-/// Parse the `X-Node-Id` header into a `NodeId`. Returns `None`
-/// when the header is absent or malformed; ledger emission then
-/// skips this request as a local-origin call. The 32-hex-char
-/// form mirrors the wire encoding used by gossip and peer manifest
-/// fetches.
-fn requester_node_id(headers: &HeaderMap) -> Option<NodeId> {
-    let raw = headers.get("x-node-id").or_else(|| headers.get("X-Node-Id"))?;
-    let s = raw.to_str().ok()?;
-    let bytes = (0..s.len())
-        .step_by(2)
-        .filter_map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
-        .collect::<Vec<u8>>();
-    if bytes.len() != 16 {
-        return None;
-    }
-    let mut arr = [0u8; 16];
-    arr.copy_from_slice(&bytes);
-    Some(NodeId::from_u128(u128::from_be_bytes(arr)))
 }
 
 // ─── ATOS pipeline helpers ───────────────────────────────────────────────────

@@ -2070,8 +2070,14 @@ pub async fn index_transfer(
 /// wire format per peer.
 pub async fn knowledge_search(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
+    // Identify the requester so we can stamp this on emitted ledger
+    // events. Local-origin requests (no X-Node-Id) skip emission —
+    // the dimensional ledger is intra-mesh-only per the spec scope.
+    let requester = crate::headers::parse_x_node_id(&headers);
+
     let engine = match &state.inner.corpus_engine {
         Some(e) => e.clone(),
         None => {
@@ -2118,6 +2124,12 @@ pub async fn knowledge_search(
         .collect();
 
     let mut all_results: Vec<KnowledgeResult> = Vec::new();
+    // Per-corpus chunk counts: one ledger event per corpus this
+    // request actually returned chunks from. Emitted post-truncation
+    // so the count reflects what *the requester sees*, not the raw
+    // pre-merge size.
+    let mut per_corpus_chunks: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
     for corpus_id in &search_corpora {
         match engine.open_index_for_corpus(corpus_id).await {
             Ok(index) => {
@@ -2161,12 +2173,33 @@ pub async fn knowledge_search(
     });
     all_results.truncate(limit);
 
+    // Count returned chunks per corpus AFTER truncation — the
+    // ledger should reflect what we actually shipped to the
+    // requester, not what we ranked internally.
+    for r in &all_results {
+        *per_corpus_chunks.entry(r.corpus_id.clone()).or_insert(0) += 1;
+    }
+
     let hit_count = all_results.len();
     tracing::info!(
         corpora = ?search_corpora,
         hits = hit_count,
         "internal knowledge_search: served"
     );
+
+    // Emit one `KnowledgeQueryServed` per corpus that contributed
+    // chunks. Local-origin requests (requester==None) skip emission.
+    if let Some(for_node) = requester {
+        for (corpus_id, chunks) in per_corpus_chunks {
+            state.inner.contribution_emitter.record(
+                commonwealth_core::contributions::LedgerEventKind::KnowledgeQueryServed {
+                    for_node: for_node.clone(),
+                    corpus_id,
+                    chunks_returned: chunks,
+                },
+            );
+        }
+    }
 
     (
         StatusCode::OK,

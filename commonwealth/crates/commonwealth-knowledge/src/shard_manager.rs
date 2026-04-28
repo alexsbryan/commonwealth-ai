@@ -3,9 +3,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use corpus_engine::{ChunkRange, CorpusEngine, IndexInfo, ShardInfo};
+use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
-use commonwealth_state::MeshStore;
+use commonwealth_state::{ContributionEmitter, MeshStore};
 
 pub struct ShardManager {
     engine: Arc<CorpusEngine>,
@@ -348,10 +349,20 @@ impl ShardManager {
     /// Tars `<index_dir>/<corpus_id>/`, POSTs it to
     /// `POST {target_base_url}/internal/index/transfer`, and returns a
     /// receipt on success.
+    ///
+    /// `to_node` and `emitter` are optional so existing callers
+    /// without ledger context can keep calling the function. When
+    /// supplied, a `ShardTransferred` event is emitted on success
+    /// per the dimensional ledger spec — the sender owns the byte
+    /// count, and the recipient's `bytes_received` is inferred from
+    /// the same event during aggregation
+    /// (`commonwealth_core::contributions::aggregate`).
     pub async fn stream_index(
         &self,
         corpus_id: &str,
         target_base_url: &str,
+        to_node: Option<NodeId>,
+        emitter: Option<&ContributionEmitter>,
     ) -> anyhow::Result<TransferReceipt> {
         let index_path = self.engine.index_dir().join(corpus_id);
         if !index_path.exists() {
@@ -408,6 +419,19 @@ impl ShardManager {
             target = %target_base_url,
             "stream_index: shard transferred successfully"
         );
+
+        // Emit `ShardTransferred` on success when both the
+        // recipient id and an emitter are supplied. The aggregator
+        // also lands `bytes_received` on `to_node` from the same
+        // event, so a single emission produces both halves of the
+        // byte ledger (per `aggregate` in commonwealth-core).
+        if let (Some(to), Some(em)) = (to_node, emitter) {
+            em.record(LedgerEventKind::ShardTransferred {
+                to_node: to,
+                corpus_id: corpus_id.to_string(),
+                bytes: bytes_transferred,
+            });
+        }
 
         Ok(TransferReceipt {
             corpus_id: corpus_id.to_string(),

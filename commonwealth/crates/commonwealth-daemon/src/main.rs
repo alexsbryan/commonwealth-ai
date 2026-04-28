@@ -874,6 +874,50 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         );
         state.set_local_inference_capable(inference_capable);
 
+        // Hourly StorageSnapshot ledger emission. Runs alongside
+        // RetentionGc (same shutdown channel, same cadence). The
+        // walker closure pulls installed-and-mesh-shared corpora
+        // out of the engine; on the standalone daemon (no engine
+        // wired) it returns an empty list and the loop emits
+        // nothing — safe degradation.
+        let snapshot_emitter = state.inner.contribution_emitter.clone();
+        let snapshot_engine = state.inner.corpus_engine.clone();
+        let snapshot_shutdown = shutdown_tx.subscribe();
+        tokio::spawn(commonwealth_state::contributions::run_storage_snapshot_loop(
+            snapshot_emitter,
+            move || {
+                let engine = snapshot_engine.clone();
+                async move {
+                    let Some(engine) = engine else {
+                        return Vec::new();
+                    };
+                    let installed = match engine.installed_indexes().await {
+                        Ok(list) => list,
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                "storage_snapshot: installed_indexes failed"
+                            );
+                            return Vec::new();
+                        }
+                    };
+                    installed
+                        .into_iter()
+                        .filter(|i| i.mesh_sharing)
+                        .map(|i| {
+                            (
+                                i.corpus_id,
+                                i.index_size_bytes as f64 / 1e9,
+                            )
+                        })
+                        .collect()
+                }
+            },
+            commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL,
+            snapshot_shutdown,
+        ));
+        info!("StorageSnapshot loop started");
+
         // 7. Start both API servers.
         let client_addr: SocketAddr = format!("0.0.0.0:{api_port}").parse()?;
         let internal_addr: SocketAddr = format!("0.0.0.0:{internal_port}").parse()?;

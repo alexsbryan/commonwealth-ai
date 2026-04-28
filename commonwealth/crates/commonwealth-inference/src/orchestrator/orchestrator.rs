@@ -318,7 +318,19 @@ impl Orchestrator {
         }) {
             // Node is standby-only — stop all inference processes.
             info!("Node assigned Standby — stopping all inference processes");
-            self.stop_all().await;
+            // `apply_mesh_plan` is best-effort by design (per the
+            // docstring above): individual process failures are
+            // logged, never propagated. Surface the error at `warn`
+            // so the operator can grep `orchestrator: stop_all` for
+            // a stuck process — silently dropping the Result was
+            // hiding genuine "process refused to stop" cases from
+            // logs.
+            if let Err(e) = self.stop_all().await {
+                warn!(
+                    error = %e,
+                    "orchestrator: stop_all returned error during standby transition"
+                );
+            }
         }
 
         info!(

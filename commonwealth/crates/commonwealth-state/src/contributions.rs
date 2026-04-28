@@ -165,6 +165,54 @@ pub fn default_window_days() -> u32 {
     DEFAULT_WINDOW_DAYS
 }
 
+/// Default cadence for the hourly `StorageSnapshot` background
+/// task. Aligned with `RetentionGc::DEFAULT_INTERVAL` so a single
+/// daemon clock tick handles both rollups.
+pub const STORAGE_SNAPSHOT_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(3_600);
+
+/// Long-running background task that emits one `StorageSnapshot`
+/// event per [`STORAGE_SNAPSHOT_INTERVAL`] tick. Consumes a
+/// `walker` closure that produces the per-corpus `(id, size_gb)`
+/// pairs to record — keeps this module decoupled from
+/// `corpus-engine` (the daemon supplies the walker; the state
+/// crate doesn't pull in a knowledge dep).
+///
+/// Shuts down cleanly when `shutdown` flips to true.
+pub async fn run_storage_snapshot_loop<F, Fut>(
+    emitter: ContributionEmitter,
+    mut walker: F,
+    interval: std::time::Duration,
+    mut shutdown: tokio::sync::watch::Receiver<bool>,
+) where
+    F: FnMut() -> Fut + Send,
+    Fut: std::future::Future<Output = Vec<(String, f64)>> + Send,
+{
+    let mut ticker = tokio::time::interval(interval);
+    // The first tick fires immediately; we want a snapshot at boot
+    // AND every interval after, so this is the desired behavior.
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {
+                let corpora = walker().await;
+                if !corpora.is_empty() {
+                    emitter.record(LedgerEventKind::StorageSnapshot {
+                        corpora,
+                    });
+                }
+            }
+            _ = shutdown.changed() => {
+                if *shutdown.borrow() {
+                    tracing::info!(
+                        "storage_snapshot: shutdown requested — exiting"
+                    );
+                    return;
+                }
+            }
+        }
+    }
+}
+
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -298,6 +346,71 @@ mod tests {
         }
         let events = emitter.events().unwrap();
         assert_eq!(events.len(), 1000, "no events may collide on key");
+    }
+
+    #[tokio::test]
+    async fn storage_snapshot_loop_emits_on_first_tick() {
+        // Pinned cadence — first tick fires immediately when the
+        // tokio interval is created, so a snapshot lands at boot
+        // without waiting an hour. Pin this so a future tokio
+        // change doesn't silently shift the boot-time snapshot
+        // off the ledger.
+        let store = MeshStore::in_memory().unwrap();
+        let emitter = ContributionEmitter::new(store.clone(), nid(1));
+        let (shutdown_tx, shutdown_rx) =
+            tokio::sync::watch::channel(false);
+        let walker = || async {
+            vec![("wikipedia".to_string(), 12.5_f64)]
+        };
+        let handle = tokio::spawn(run_storage_snapshot_loop(
+            emitter.clone(),
+            walker,
+            std::time::Duration::from_secs(3_600),
+            shutdown_rx,
+        ));
+        // Real-time wait — first tick is immediate, so 50ms is
+        // generous. Pinned at 3600s interval so the second tick is
+        // an hour out (well after this test ends).
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let _ = shutdown_tx.send(true);
+        let _ = handle.await;
+
+        let events = emitter.events().unwrap();
+        assert!(
+            events.iter().any(|e| matches!(
+                &e.kind,
+                LedgerEventKind::StorageSnapshot { corpora }
+                    if corpora == &vec![("wikipedia".to_string(), 12.5)]
+            )),
+            "first tick must produce a StorageSnapshot, got {events:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn storage_snapshot_loop_skips_emission_when_walker_returns_empty() {
+        // Empty walker → no event. Lets a daemon without a corpus
+        // engine wired up (or with no mesh-shared corpora) start
+        // the loop unconditionally without polluting the ledger.
+        let store = MeshStore::in_memory().unwrap();
+        let emitter = ContributionEmitter::new(store.clone(), nid(1));
+        let (shutdown_tx, shutdown_rx) =
+            tokio::sync::watch::channel(false);
+        let walker = || async { Vec::<(String, f64)>::new() };
+        let handle = tokio::spawn(run_storage_snapshot_loop(
+            emitter.clone(),
+            walker,
+            std::time::Duration::from_secs(3_600),
+            shutdown_rx,
+        ));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let _ = shutdown_tx.send(true);
+        let _ = handle.await;
+
+        let events = emitter.events().unwrap();
+        assert!(
+            events.is_empty(),
+            "no events expected when walker returns empty, got {events:?}"
+        );
     }
 
     #[test]
