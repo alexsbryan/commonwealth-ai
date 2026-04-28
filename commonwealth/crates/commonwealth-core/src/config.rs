@@ -1,8 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use crate::ledger::FairnessPolicy;
-
 /// Per-node daemon configuration. Loaded from `~/.commonwealth/config.toml`.
+///
+/// `FairnessConfig` and `MeshPolicyConfig.fairness` were removed
+/// when the fairness machinery was replaced by the dimensional
+/// contribution ledger + private peer preferences (Mesh Health
+/// design). Old config files carrying a `[fairness]` table still
+/// deserialize cleanly because serde silently ignores unknown
+/// top-level keys with the default deny_unknown_fields off.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaemonConfig {
     pub node: NodeConfig,
@@ -12,8 +17,6 @@ pub struct DaemonConfig {
     pub inference: InferenceConfig,
     #[serde(default)]
     pub knowledge: KnowledgeConfig,
-    #[serde(default)]
-    pub fairness: FairnessConfig,
     #[serde(default)]
     pub network: NetworkConfig,
 }
@@ -81,12 +84,6 @@ fn default_min_relevance() -> f32 {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FairnessConfig {
-    #[serde(default)]
-    pub policy: FairnessPolicy,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NetworkConfig {
     pub vpn_interface: Option<String>,
 }
@@ -103,8 +100,6 @@ pub struct MeshConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeshPolicyConfig {
-    #[serde(default)]
-    pub fairness: FairnessPolicy,
     #[serde(default = "default_max_concurrent")]
     pub max_concurrent_requests: u32,
     #[serde(default = "default_redundancy")]
@@ -225,9 +220,6 @@ rpc_server = "/usr/local/bin/rpc-server"
 
 [knowledge]
 index_dir = "~/.commonwealth/indexes"
-
-[fairness]
-policy = { type = "transparent" }
 
 [network]
 vpn_interface = "wg0"

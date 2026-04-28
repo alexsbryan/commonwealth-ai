@@ -83,6 +83,38 @@ enum Commands {
         #[command(subcommand)]
         command: RecipeCommands,
     },
+    /// Manage per-peer affinity preferences (Ostrom sanctions).
+    ///
+    /// Lets the operator privately tell their daemon to advertise
+    /// reduced affinity to a specific peer — a local-only,
+    /// reversible adjustment that the manifest endpoint applies on
+    /// every fetch. Never gossiped, never visible to the
+    /// penalized peer as a distinct signal.
+    PeerPreference {
+        #[command(subcommand)]
+        command: PeerPreferenceCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum PeerPreferenceCommands {
+    /// Set a preference. Multiplier is `0.5` (=50%) or `50%`.
+    Set {
+        /// Peer node id (32-hex-char form) or name.
+        node: String,
+        /// Multiplier in `(0.0, 1.0]`. Accepts `0.5` or `50%`.
+        multiplier: String,
+        /// Optional local-only annotation.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// List all current preferences.
+    List,
+    /// Clear a peer's preference.
+    Clear {
+        /// Peer node id (32-hex-char form) or name.
+        node: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -236,6 +268,13 @@ fn main() -> Result<()> {
                 cmd_recipe_validate(&path, offline)
             }
         },
+        Commands::PeerPreference { command } => match command {
+            PeerPreferenceCommands::Set { node, multiplier, reason } => {
+                cmd_peer_preference_set(&node, &multiplier, reason.as_deref())
+            }
+            PeerPreferenceCommands::List => cmd_peer_preference_list(),
+            PeerPreferenceCommands::Clear { node } => cmd_peer_preference_clear(&node),
+        },
     }
 }
 
@@ -334,20 +373,218 @@ fn cmd_status(config: &Option<DaemonConfig>) -> Result<()> {
 }
 
 fn cmd_balance(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("(In production, this would read the contribution ledger and display balances.)");
-    println!();
-    println!("Contribution Balance (last 30 days)");
-    println!("{}", "─".repeat(60));
+    use commonwealth_state::{current_contributions, MeshStore};
+    use std::collections::HashMap;
+
+    let store_path = dirs_path().join("store.db");
+    let store = match MeshStore::open(&store_path) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("Contribution Ledger");
+            println!("{}", "─".repeat(60));
+            println!("(no store at {} — daemon hasn't run yet: {e})", store_path.display());
+            return Ok(());
+        }
+    };
+
+    let contribs = current_contributions(
+        &store,
+        &HashMap::new(),
+        commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
+    )
+    .with_context(|| "reading contribution ledger from store")?;
+
+    if contribs.is_empty() {
+        println!("Contribution Ledger (last 30 days)");
+        println!("{}", "─".repeat(72));
+        println!("(no events recorded yet)");
+        return Ok(());
+    }
+
+    println!("Contribution Ledger (last 30 days)");
+    println!("{}", "─".repeat(72));
     println!(
-        "{:<20} {:>10} {:>10} {:>12} {:>10}",
-        "Node", "Compute", "Storage", "Bandwidth", "Balance"
+        "{:<20} {:>22} {:>14} {:>12}",
+        "Node",
+        "Inference (s/r)",
+        "Knowledge",
+        "Network (s/r)"
     );
-    println!("{}", "─".repeat(60));
+    println!("{}", "─".repeat(72));
+    let mut entries: Vec<_> = contribs.iter().collect();
+    // Stable display ordering — sort by hex prefix of NodeId so two
+    // operators reading on different nodes see the same row order.
+    entries.sort_by_key(|(id, _)| {
+        id.as_bytes().to_vec()
+    });
+    for (node_id, c) in entries {
+        let node_label = short_node_id(node_id);
+        let served = c.inference_served.requests;
+        let received = c.inference_consumed.requests;
+        let corpora = c.corpora_hosted.len();
+        let queries: u64 = c.corpora_hosted.iter().map(|h| h.queries_served).sum();
+        let gb_served = c.bytes_served as f64 / 1e9;
+        let gb_received = c.bytes_received as f64 / 1e9;
+        println!(
+            "{:<20} {:>10} / {:<8} {:>3} corp/{:>4} q  {:>5.1} / {:>5.1} GB",
+            node_label,
+            served,
+            received,
+            corpora,
+            queries,
+            gb_served,
+            gb_received,
+        );
+        // Sole-host annotations, one per line under the row.
+        for hosting in &c.corpora_hosted {
+            if hosting.is_sole_host {
+                println!(
+                    "  {:<18} sole host of {} ({:.1} GB)",
+                    "",
+                    hosting.corpus_id,
+                    hosting.size_gb,
+                );
+            }
+        }
+    }
+    println!("{}", "─".repeat(72));
     println!(
-        "{:<20} {:>10} {:>10} {:>12} {:>10}",
-        "(no data)", "—", "—", "—", "—"
+        "(units are dimensional — compute time, storage, and bandwidth are not collapsed into a single score)"
     );
     Ok(())
+}
+
+/// 12-hex-char prefix for human-friendly display.
+fn short_node_id(id: &commonwealth_core::ids::NodeId) -> String {
+    id.as_bytes()
+        .iter()
+        .take(6)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+// ============================================================================
+// Peer-preference commands
+// ============================================================================
+
+fn cmd_peer_preference_set(
+    node: &str,
+    multiplier_arg: &str,
+    reason: Option<&str>,
+) -> Result<()> {
+    use commonwealth_state::{MeshStore, PeerPreference, PeerPreferenceStore};
+
+    let multiplier = parse_multiplier(multiplier_arg)?;
+    let pref = PeerPreference::new(multiplier, reason.map(|s| s.to_string()))
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let target = parse_peer_node_id(node)?;
+
+    let store = open_local_store()?;
+    let prefs = PeerPreferenceStore::new(store, fallback_self_id());
+    prefs
+        .set(&target, pref.clone())
+        .with_context(|| format!("setting preference for {node}"))?;
+    println!(
+        "set peer preference: {} → {:.0}%{}",
+        node,
+        multiplier * 100.0,
+        reason.map(|r| format!(" (reason: {r})")).unwrap_or_default()
+    );
+    let _ = prefs; // silence the unused-import lint when the binary is stripped
+    let _ = MeshStore::in_memory; // ditto
+    Ok(())
+}
+
+fn cmd_peer_preference_list() -> Result<()> {
+    use commonwealth_state::{PeerPreferenceStore};
+    let store = open_local_store()?;
+    let prefs = PeerPreferenceStore::new(store, fallback_self_id());
+    let entries = prefs.list().with_context(|| "listing peer preferences")?;
+    if entries.is_empty() {
+        println!("(no peer preferences set)");
+        return Ok(());
+    }
+    println!("{:<32} {:>10}  {}", "Peer node id", "Multiplier", "Reason");
+    println!("{}", "─".repeat(64));
+    for (id, pref) in entries {
+        let id_hex: String =
+            id.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
+        println!(
+            "{:<32} {:>9.0}%  {}",
+            id_hex,
+            pref.multiplier() * 100.0,
+            pref.reason().unwrap_or("—"),
+        );
+    }
+    Ok(())
+}
+
+fn cmd_peer_preference_clear(node: &str) -> Result<()> {
+    use commonwealth_state::PeerPreferenceStore;
+    let target = parse_peer_node_id(node)?;
+    let store = open_local_store()?;
+    let prefs = PeerPreferenceStore::new(store, fallback_self_id());
+    let removed = prefs
+        .clear(&target)
+        .with_context(|| format!("clearing preference for {node}"))?;
+    if removed {
+        println!("cleared preference for {node}");
+    } else {
+        println!("no preference to clear for {node}");
+    }
+    Ok(())
+}
+
+fn parse_multiplier(s: &str) -> Result<f64> {
+    let trimmed = s.trim();
+    let (number, divisor) = if let Some(stripped) = trimmed.strip_suffix('%') {
+        (stripped, 100.0_f64)
+    } else {
+        (trimmed, 1.0_f64)
+    };
+    let parsed: f64 = number.parse().with_context(|| {
+        format!("multiplier must be a decimal (0.5) or percentage (50%), got '{s}'")
+    })?;
+    Ok(parsed / divisor)
+}
+
+fn parse_peer_node_id(s: &str) -> Result<commonwealth_core::ids::NodeId> {
+    let trimmed = s.trim();
+    if trimmed.len() != 32 {
+        anyhow::bail!(
+            "expected 32-hex-char node id, got '{}' ({} chars). \
+             Use `commonwealth mesh members` to find peer ids.",
+            trimmed,
+            trimmed.len()
+        );
+    }
+    let mut bytes = [0u8; 16];
+    for (i, b) in bytes.iter_mut().enumerate() {
+        let pair = trimmed
+            .get(i * 2..i * 2 + 2)
+            .with_context(|| format!("invalid hex id '{trimmed}'"))?;
+        *b = u8::from_str_radix(pair, 16)
+            .with_context(|| format!("invalid hex id '{trimmed}'"))?;
+    }
+    Ok(commonwealth_core::ids::NodeId::from_u128(
+        u128::from_be_bytes(bytes),
+    ))
+}
+
+fn open_local_store() -> Result<commonwealth_state::MeshStore> {
+    let store_path = dirs_path().join("store.db");
+    commonwealth_state::MeshStore::open(&store_path).with_context(|| {
+        format!("opening local store at {}", store_path.display())
+    })
+}
+
+/// CLI subcommands operate on the local store directly without
+/// going through the running daemon. Without a daemon there's no
+/// authoritative `self_node_id`, but `PeerPreferenceStore::set`
+/// only uses it as the gossip-origin (and gossip is excluded for
+/// this namespace anyway). A zeroed sentinel is fine.
+fn fallback_self_id() -> commonwealth_core::ids::NodeId {
+    commonwealth_core::ids::NodeId::from_u128(0)
 }
 
 fn cmd_pause(_config: &Option<DaemonConfig>) -> Result<()> {

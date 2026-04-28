@@ -137,11 +137,20 @@ impl MeshStore {
         Ok(entries)
     }
 
-    /// Return all entries for gossip broadcast.
+    /// Return all entries for gossip broadcast. Filters out
+    /// `app_id` namespaces that are explicitly local-only — see
+    /// [`crate::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`]. The
+    /// exclusion is structural: a private operator preference
+    /// must never propagate to the peer it penalizes, and the
+    /// invariant is pinned by tests in the
+    /// `peer_preferences` module.
     pub fn all_entries_for_gossip(&self) -> Result<Vec<StoreEntry>> {
         let rows = self.backend.all_rows()?;
         let mut entries = Vec::with_capacity(rows.len());
         for row in rows {
+            if crate::peer_preferences::is_gossip_excluded(&row.app_id) {
+                continue;
+            }
             let origin = node_id_from_bytes(&row.origin)?;
             entries.push(StoreEntry {
                 app_id: row.app_id,
@@ -241,6 +250,41 @@ mod tests {
     fn get_missing_returns_none() {
         let store = MeshStore::in_memory().unwrap();
         assert!(store.get("myapp", "nope").unwrap().is_none());
+    }
+
+    /// Defence-in-depth pin for the peer-preferences privacy
+    /// invariant (ARCH_PRINCIPLES §7.2 + §7.4). The
+    /// `peer_preferences` namespace must NEVER appear in the
+    /// gossip-broadcast set, even when an entry has been written
+    /// to the store. A regression here would cause private
+    /// affinity adjustments to leak to the peer being penalized
+    /// — silently breaking the social-not-algorithmic sanction
+    /// property.
+    #[test]
+    fn all_entries_for_gossip_excludes_peer_preferences_namespace() {
+        let store = MeshStore::in_memory().unwrap();
+        // Write a peer preference and a normal entry.
+        store
+            .set(
+                "peer_preferences",
+                "deadbeef",
+                Bytes::from("private"),
+                node(1),
+            )
+            .unwrap();
+        store
+            .set("contributions", "ev1", Bytes::from("public"), node(1))
+            .unwrap();
+        let gossipable = store.all_entries_for_gossip().unwrap();
+        // Only the contributions entry survives the filter.
+        assert_eq!(gossipable.len(), 1);
+        assert_eq!(gossipable[0].app_id, "contributions");
+        // But direct read still works — the entry IS persisted, just
+        // not gossiped.
+        assert!(store
+            .get("peer_preferences", "deadbeef")
+            .unwrap()
+            .is_some());
     }
 
     #[test]

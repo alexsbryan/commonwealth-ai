@@ -34,6 +34,7 @@ fn idle_capable() -> NodeCapabilities {
         inference_capable: true,
         loaded_models: vec![],
         embed_model: None,
+        benchmark: None,
     }
 }
 
@@ -390,3 +391,100 @@ fn near_lan_peer_beats_far_internet_peer_at_equal_affinity() {
         "LAN peer must beat WAN peer at equal affinity"
     );
 }
+
+// -------------------------------------------------------------
+// Throughput scoring (spec §3)
+// -------------------------------------------------------------
+
+#[test]
+fn slow_peer_loses_to_fast_peer_under_throughput_scoring() {
+    // The pathology this whole feature is meant to prevent: a peer
+    // advertising a strong model on weak hardware (3 tok/s observed)
+    // must lose to a peer with a slightly lower-affinity claim but
+    // healthy throughput (25 tok/s observed). Without throughput
+    // scoring the higher-affinity peer wins purely on its claim.
+    let strong_claim = manifest(CapabilityClaim::new(
+        CapabilityHint::general(),
+        LatencyClass::Normal,
+        32_000,
+        4_000,
+        0.95,
+    ));
+    let modest_claim = manifest(CapabilityClaim::new(
+        CapabilityHint::general(),
+        LatencyClass::Normal,
+        32_000,
+        4_000,
+        0.80,
+    ));
+    let caps = idle_capable();
+    let slow_obs = NodeObservations {
+        samples: 100,
+        recent_failure_rate: 0.0,
+        tg_tok_s_ewma: 3.0,
+        ..Default::default()
+    };
+    let fast_obs = NodeObservations {
+        samples: 100,
+        recent_failure_rate: 0.0,
+        tg_tok_s_ewma: 25.0,
+        ..Default::default()
+    };
+    let candidates = vec![
+        BackendCandidate::new(&strong_claim)
+            .with_node_capabilities(&caps)
+            .with_observations(&slow_obs),
+        BackendCandidate::new(&modest_claim)
+            .with_node_capabilities(&caps)
+            .with_observations(&fast_obs),
+    ];
+    let r = req(CapabilityHint::general(), LatencyClass::Normal);
+    assert_eq!(
+        pick_slot_for_oicp(&candidates, &r),
+        Some(1),
+        "throughput floor must demote the 3 tok/s peer despite higher claim"
+    );
+}
+
+#[test]
+fn neutral_throughput_preserves_pre_throughput_routing_behavior() {
+    // Two peers with no observations and no benchmark — the
+    // throughput layer must return 1.0 (neutral) on both, leaving
+    // the rest of the composition unchanged. Higher-affinity peer
+    // wins, exactly as it did before this feature.
+    let strong = manifest(CapabilityClaim::new(
+        CapabilityHint::general(),
+        LatencyClass::Normal,
+        32_000,
+        4_000,
+        0.90,
+    ));
+    let modest = manifest(CapabilityClaim::new(
+        CapabilityHint::general(),
+        LatencyClass::Normal,
+        32_000,
+        4_000,
+        0.70,
+    ));
+    let caps = idle_capable();
+    // Past cold-start ramp but zero throughput data.
+    let obs = NodeObservations {
+        samples: COLD_START_SAMPLES,
+        ..Default::default()
+    };
+    let candidates = vec![
+        BackendCandidate::new(&strong)
+            .with_node_capabilities(&caps)
+            .with_observations(&obs),
+        BackendCandidate::new(&modest)
+            .with_node_capabilities(&caps)
+            .with_observations(&obs),
+    ];
+    let r = req(CapabilityHint::general(), LatencyClass::Normal);
+    assert_eq!(
+        pick_slot_for_oicp(&candidates, &r),
+        Some(0),
+        "without benchmark or observations the higher-affinity peer must win"
+    );
+}
+

@@ -122,7 +122,9 @@ impl SimulatedNodeBuilder {
             inference_capable: true,
             loaded_models: vec![],
 
-            embed_model: None,        };
+            embed_model: None,
+            benchmark: None,
+            };
 
         let member = MemberRecord {
             node_id,
@@ -227,7 +229,9 @@ impl SimulatedNode {
             inference_capable: true,
             loaded_models: vec![],
 
-            embed_model: None,        }
+            embed_model: None,
+            benchmark: None,
+            }
     }
 }
 

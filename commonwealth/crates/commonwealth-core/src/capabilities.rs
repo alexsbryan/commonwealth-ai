@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::knowledge::CorpusShardInfo;
-use crate::oicp::EmbedModelInfo;
+use crate::oicp::{BenchmarkResult, EmbedModelInfo};
 
 /// A node's full capability report — hardware profile plus current availability.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +51,20 @@ pub struct NodeCapabilities {
     /// filters upfront and logs the mismatch loudly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embed_model: Option<EmbedModelInfo>,
+
+    /// Throughput benchmark from this node's first-launch probe
+    /// (re-run when [`HardwareProfile`] changes). Lets remote
+    /// schedulers estimate how a *different* model would perform on
+    /// this hardware via the size-ratio extrapolation in
+    /// [`oicp_types::throughput_factor`]. `None` for older peers and
+    /// for nodes that haven't completed a benchmark — those receive
+    /// a neutral throughput factor in scoring (i.e. behave exactly
+    /// as they did before this field existed).
+    ///
+    /// Wire-tolerant: serde default ⇒ old peers' `MemberState`
+    /// payloads deserialize cleanly with `benchmark = None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub benchmark: Option<BenchmarkResult>,
 }
 
 fn default_inference_availability() -> f32 {
@@ -290,6 +304,7 @@ mod tests {
                 pooling: PoolingStrategy::Mean,
                 normalization: NormalizationStrategy::Application,
             }),
+            benchmark: None,
         };
         let json = serde_json::to_string(&caps).unwrap();
         let back: NodeCapabilities = serde_json::from_str(&json).unwrap();

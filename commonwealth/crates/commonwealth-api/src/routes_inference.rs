@@ -6,6 +6,7 @@ use axum::Json;
 use futures::StreamExt;
 use tracing::{debug, info, warn};
 
+use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_inference::oicp::{
@@ -13,6 +14,7 @@ use commonwealth_inference::oicp::{
     LatencyClass, ShardingPrivacy,
 };
 use std::collections::HashSet;
+use std::time::Instant;
 
 use crate::middleware::{
     MiddlewareError, MiddlewareSession, Pipeline, PipelineContext, ResponseView,
@@ -117,10 +119,26 @@ pub async fn chat_completions(
             has_oicp = request.oicp.is_some(),
             "chat_completions: serving via local_inference"
         );
+        let requester = requester_node_id(&headers);
+        let model_id = request.model.clone().unwrap_or_else(|| "local".into());
         if want_stream {
-            return serve_local_stream(service.clone(), request).await;
+            return serve_local_stream(
+                service.clone(),
+                request,
+                state.clone(),
+                requester,
+                model_id,
+            )
+            .await;
         } else {
-            return serve_local_non_stream(service.clone(), request).await;
+            return serve_local_non_stream(
+                service.clone(),
+                request,
+                state.clone(),
+                requester,
+                model_id,
+            )
+            .await;
         }
     }
 
@@ -565,9 +583,33 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
 async fn serve_local_non_stream(
     service: std::sync::Arc<dyn crate::state::LocalInferenceService>,
     request: ChatCompletionRequest,
+    state: AppState,
+    requester: Option<NodeId>,
+    model_id: String,
 ) -> Response {
+    let started = Instant::now();
     match service.chat_completion(request).await {
-        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
+        Ok(resp) => {
+            // Emit `InferenceServed` only when the request was
+            // attributed to a remote mesh peer via `X-Node-Id`. The
+            // ledger explicitly tracks intra-mesh activity (spec §10
+            // scope exclusion: cross-mesh / desktop-local requests
+            // do not accumulate dimensional contribution data).
+            if let Some(for_node) = requester {
+                let tokens =
+                    resp.usage.as_ref().map(|u| u.completion_tokens as u64).unwrap_or(0);
+                let wall_seconds = started.elapsed().as_secs_f64();
+                state.inner.contribution_emitter.record(
+                    LedgerEventKind::InferenceServed {
+                        for_node,
+                        model_id,
+                        tokens_generated: tokens,
+                        wall_seconds,
+                    },
+                );
+            }
+            (StatusCode::OK, Json(resp)).into_response()
+        }
         Err(e) => {
             warn!(error = %e, "chat_completions: local inference failed");
             (
@@ -588,6 +630,9 @@ async fn serve_local_non_stream(
 async fn serve_local_stream(
     service: std::sync::Arc<dyn crate::state::LocalInferenceService>,
     request: ChatCompletionRequest,
+    state: AppState,
+    requester: Option<NodeId>,
+    model_id_for_ledger: String,
 ) -> Response {
     // `id` / `created` are placeholders that would match the
     // non-streaming response — clients that care about stable ids
@@ -624,14 +669,21 @@ async fn serve_local_stream(
         }
     };
 
-    // Translate token chunks → SSE events in the OpenAI
-    // `chat.completion.chunk` shape. Per-frame allocation is fine:
-    // at a few kilobytes per chunk for a handful of chunks per
-    // second this is well inside what reqwest + axum handle.
+    // Per-stream counters for the InferenceServed ledger emission
+    // when the stream completes. Wrapping the underlying stream in
+    // a `scan` adapter keeps the count + start-time in scope until
+    // the stream closes, at which point the `done` future emits the
+    // ledger event in a tokio task.
+    let chunks_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let started = Instant::now();
+
     let id_for_stream = id.clone();
     let model_for_stream = model.clone();
+    let chunks_count_for_stream = chunks_count.clone();
     let sse_events = token_stream.map(move |item| match item {
         Ok(delta) => {
+            chunks_count_for_stream
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let chunk = serde_json::json!({
                 "id": id_for_stream,
                 "object": "chat.completion.chunk",
@@ -661,7 +713,29 @@ async fn serve_local_stream(
     // Append the OpenAI `[DONE]` sentinel so the consumer knows
     // the stream ended cleanly. `RemoteApiProvider::complete_stream`
     // explicitly breaks its loop on this marker.
+    //
+    // We piggy-back the `done` future to emit the `InferenceServed`
+    // ledger event for cross-mesh requests: token count is the
+    // chunk counter (each SSE frame ≈ one model token in the
+    // llama.cpp stream), wall_seconds is real elapsed since
+    // dispatch. Local-origin streams (no `X-Node-Id`) skip the
+    // emission, matching the non-streaming policy.
+    let chunks_for_done = chunks_count;
+    let state_for_done = state.inner.contribution_emitter.clone();
+    let requester_for_done = requester;
+    let model_for_done = model_id_for_ledger;
     let done = futures::stream::once(async move {
+        if let Some(for_node) = requester_for_done {
+            let tokens =
+                chunks_for_done.load(std::sync::atomic::Ordering::Relaxed);
+            let wall_seconds = started.elapsed().as_secs_f64();
+            state_for_done.record(LedgerEventKind::InferenceServed {
+                for_node,
+                model_id: model_for_done,
+                tokens_generated: tokens,
+                wall_seconds,
+            });
+        }
         Ok::<_, std::convert::Infallible>(Event::default().data("[DONE]"))
     });
     let combined = sse_events.chain(done);
@@ -669,6 +743,26 @@ async fn serve_local_stream(
     Sse::new(combined)
         .keep_alive(KeepAlive::default())
         .into_response()
+}
+
+/// Parse the `X-Node-Id` header into a `NodeId`. Returns `None`
+/// when the header is absent or malformed; ledger emission then
+/// skips this request as a local-origin call. The 32-hex-char
+/// form mirrors the wire encoding used by gossip and peer manifest
+/// fetches.
+fn requester_node_id(headers: &HeaderMap) -> Option<NodeId> {
+    let raw = headers.get("x-node-id").or_else(|| headers.get("X-Node-Id"))?;
+    let s = raw.to_str().ok()?;
+    let bytes = (0..s.len())
+        .step_by(2)
+        .filter_map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
+        .collect::<Vec<u8>>();
+    if bytes.len() != 16 {
+        return None;
+    }
+    let mut arr = [0u8; 16];
+    arr.copy_from_slice(&bytes);
+    Some(NodeId::from_u128(u128::from_be_bytes(arr)))
 }
 
 // ─── ATOS pipeline helpers ───────────────────────────────────────────────────

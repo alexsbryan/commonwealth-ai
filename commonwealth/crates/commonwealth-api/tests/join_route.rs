@@ -42,7 +42,9 @@ fn mesh_with_known_key() -> (AppState, String) {
         inference_capable: false,
         loaded_models: vec![],
 
-        embed_model: None,    };
+        embed_model: None,
+        benchmark: None,
+        };
 
     let founder = MemberRecord {
         node_id: founder_id,

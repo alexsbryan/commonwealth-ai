@@ -17,7 +17,7 @@ use commonwealth_inference::store_adapter::InferenceStateStore;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
 use commonwealth_knowledge::WorkQueueManager;
-use commonwealth_state::MeshStore;
+use commonwealth_state::{ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
 
@@ -241,6 +241,21 @@ pub struct AppStateInner {
     /// in between). `0` is rejected by the setter — use the pause
     /// route to fully stop a corpus.
     pub ingest_throttle_milli: std::sync::atomic::AtomicU32,
+
+    /// Dimensional contribution emitter. Each route handler records
+    /// `LedgerEvent`s through this on completion (per write site
+    /// listed in the Mesh Health design). Cheap to clone; emission
+    /// is `tokio::spawn`-friendly. The emitter holds its own handle
+    /// to `MeshStore` so it survives `AppState` clones and can be
+    /// passed into spawned tasks without lifetime gymnastics.
+    pub contribution_emitter: ContributionEmitter,
+
+    /// Per-peer preference store (Ostrom sanctions). Local-only,
+    /// never gossiped — see
+    /// `commonwealth_state::peer_preferences` for the structural
+    /// invariants. The manifest endpoint reads this on every
+    /// fetch to apply per-requester affinity multipliers.
+    pub peer_preferences: PeerPreferenceStore,
 }
 
 impl AppState {
@@ -284,6 +299,10 @@ impl AppState {
     ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let knowledge_store = KnowledgeStateStore::new(Arc::clone(&mesh_store), self_node_id);
+        let contribution_emitter =
+            ContributionEmitter::new((*mesh_store).clone(), self_node_id);
+        let peer_preferences =
+            PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
         // ATOS middleware registry with the M4 core four implementations
         // registered under their TOML ids. The wiring is intentionally
         // additive — operators deploying a stock Commonwealth daemon
@@ -349,6 +368,8 @@ impl AppState {
                 // load per batch and otherwise behaves identically to
                 // the pre-throttle build.
                 ingest_throttle_milli: std::sync::atomic::AtomicU32::new(1000),
+                contribution_emitter,
+                peer_preferences,
             }),
         }
     }

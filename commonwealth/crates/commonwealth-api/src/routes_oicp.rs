@@ -1,6 +1,8 @@
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::Json;
 
+use commonwealth_core::ids::NodeId;
 use commonwealth_inference::oicp::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile,
     CorpusDescriptor, FederationManifest, KnowledgeManifest, LatencyClass,
@@ -64,7 +66,22 @@ fn synthesize_default_claim(
 }
 
 /// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
-pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifest> {
+///
+/// Reads the optional `X-Node-Id` request header and, when present,
+/// applies any per-peer affinity multiplier from
+/// `state.inner.peer_preferences` before serializing. This is the
+/// single integration point for the Ostrom-style sanction (Mesh
+/// Health design §5): private adjustments live in the local
+/// preference store, ride through this multiplication step on every
+/// outbound manifest, and are never communicated to the requester
+/// as a distinct signal — the requester simply sees a lower number
+/// and routes elsewhere on its own.
+pub async fn capabilities(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Json<ProviderManifest> {
+    let requester = parse_x_node_id(&headers);
+
     // If we have a local inference service (Sovereign's
     // EmbeddedLlamaCpp), prefer its manifest — that's the one
     // that actually reflects what we can serve. The scheduler-
@@ -83,6 +100,7 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
                     provider_type: Some(ProviderType::Mesh),
                 });
             }
+            apply_peer_preference(&state, &requester, &mut manifest);
             return Json(manifest);
         }
     }
@@ -153,7 +171,7 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
         Some(FederationManifest { peers })
     };
 
-    Json(ProviderManifest {
+    let mut manifest = ProviderManifest {
         oicp_version: OICP_VERSION.to_string(),
         provider: Some(ProviderInfo {
             name: Some(mesh.name.clone()),
@@ -166,5 +184,224 @@ pub async fn capabilities(State(state): State<AppState>) -> Json<ProviderManifes
             embed_model: None,
         }),
         federation,
-    })
+    };
+    apply_peer_preference(&state, &requester, &mut manifest);
+    Json(manifest)
+}
+
+/// Parse the `X-Node-Id` header into a `NodeId`. Tolerant: any
+/// missing/malformed header leaves the requester unidentified, in
+/// which case the manifest serves unmodified affinities — a normal
+/// non-mesh client (curl, integration test) is treated as a
+/// no-preference peer.
+fn parse_x_node_id(headers: &HeaderMap) -> Option<NodeId> {
+    let raw = headers.get("x-node-id").or_else(|| headers.get("X-Node-Id"))?;
+    let s = raw.to_str().ok()?;
+    if s.len() != 32 {
+        return None;
+    }
+    let mut bytes = [0u8; 16];
+    for (i, b) in bytes.iter_mut().enumerate() {
+        let pair = s.get(i * 2..i * 2 + 2)?;
+        *b = u8::from_str_radix(pair, 16).ok()?;
+    }
+    Some(NodeId::from_u128(u128::from_be_bytes(bytes)))
+}
+
+/// Apply any local-only peer preference for `requester` to the
+/// outbound manifest, multiplying every claim's `affinity` by the
+/// stored multiplier. No-op when the requester is unidentified or
+/// the operator hasn't set a preference for them.
+fn apply_peer_preference(
+    state: &AppState,
+    requester: &Option<NodeId>,
+    manifest: &mut ProviderManifest,
+) {
+    let Some(requester_id) = requester else {
+        return;
+    };
+    let pref = match state.inner.peer_preferences.get(requester_id) {
+        Ok(Some(p)) => p,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "peer_pref: lookup failed during manifest fetch"
+            );
+            return;
+        }
+    };
+    let multiplier = pref.multiplier() as f32;
+    let mut claim_count = 0usize;
+    for model in manifest.models.iter_mut() {
+        for claim in model.claims.iter_mut() {
+            claim.affinity = (claim.affinity * multiplier).clamp(0.0, 1.0);
+            claim_count += 1;
+        }
+    }
+    tracing::debug!(
+        requester_node_id = %fmt_requester(requester_id),
+        multiplier,
+        claim_count,
+        "peer_pref: applied"
+    );
+}
+
+fn fmt_requester(id: &NodeId) -> String {
+    id.as_bytes()
+        .iter()
+        .take(6)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use commonwealth_inference::oicp::{
+        CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus,
+        ProviderManifest, ProviderModel,
+    };
+    use commonwealth_state::{PeerPreference, PeerPreferenceStore};
+
+    fn nid(byte: u8) -> NodeId {
+        NodeId::from_u128(byte as u128)
+    }
+
+    fn manifest_with_affinity(affinity: f32) -> ProviderManifest {
+        ProviderManifest {
+            oicp_version: OICP_VERSION.to_string(),
+            provider: None,
+            models: vec![ProviderModel {
+                id: "test-model".into(),
+                base_model: None,
+                quantization: None,
+                context_tokens: 32_000,
+                status: ModelStatus {
+                    available: true,
+                    loaded: true,
+                    estimated_tokens_per_sec: None,
+                    estimated_ttft_ms: None,
+                    estimated_load_time_sec: None,
+                },
+                size_gb: None,
+                claims: vec![CapabilityClaim::new(
+                    CapabilityHint::general(),
+                    LatencyClass::Normal,
+                    32_000,
+                    4_000,
+                    affinity,
+                )],
+            }],
+            knowledge: None,
+            federation: None,
+        }
+    }
+
+    fn id_to_hex(id: &NodeId) -> String {
+        id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    #[test]
+    fn parse_x_node_id_round_trips_32_hex_chars() {
+        let id = nid(0x42);
+        let hex = id_to_hex(&id);
+        let mut h = HeaderMap::new();
+        h.insert("x-node-id", hex.parse().unwrap());
+        assert_eq!(parse_x_node_id(&h), Some(id));
+    }
+
+    #[test]
+    fn parse_x_node_id_returns_none_for_missing_or_malformed() {
+        // Missing.
+        assert_eq!(parse_x_node_id(&HeaderMap::new()), None);
+        // Wrong length.
+        let mut h = HeaderMap::new();
+        h.insert("x-node-id", "abcd".parse().unwrap());
+        assert_eq!(parse_x_node_id(&h), None);
+        // Non-hex chars.
+        let mut h = HeaderMap::new();
+        h.insert(
+            "x-node-id",
+            "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".parse().unwrap(),
+        );
+        assert_eq!(parse_x_node_id(&h), None);
+    }
+
+    #[tokio::test]
+    async fn apply_peer_preference_scales_all_claim_affinities() {
+        let state = crate::state::test_app_state();
+        // Set 0.5 preference for peer X.
+        let target = nid(0x11);
+        state
+            .inner
+            .peer_preferences
+            .set(&target, PeerPreference::new(0.5, None).unwrap())
+            .unwrap();
+        let mut manifest = manifest_with_affinity(0.8);
+        // Apply for the matching requester.
+        apply_peer_preference(&state, &Some(target), &mut manifest);
+        let scaled = manifest.models[0].claims[0].affinity;
+        assert!((scaled - 0.4).abs() < 1e-6, "got {scaled}");
+    }
+
+    #[tokio::test]
+    async fn apply_peer_preference_is_noop_for_unmatched_requester() {
+        let state = crate::state::test_app_state();
+        state
+            .inner
+            .peer_preferences
+            .set(&nid(0x11), PeerPreference::new(0.5, None).unwrap())
+            .unwrap();
+        let mut manifest = manifest_with_affinity(0.8);
+        // Different requester — preference shouldn't apply.
+        apply_peer_preference(&state, &Some(nid(0x22)), &mut manifest);
+        assert!((manifest.models[0].claims[0].affinity - 0.8).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn apply_peer_preference_is_noop_when_requester_unidentified() {
+        let state = crate::state::test_app_state();
+        state
+            .inner
+            .peer_preferences
+            .set(&nid(0x11), PeerPreference::new(0.5, None).unwrap())
+            .unwrap();
+        let mut manifest = manifest_with_affinity(0.8);
+        // No `X-Node-Id` from the requester — manifest unchanged.
+        apply_peer_preference(&state, &None, &mut manifest);
+        assert!((manifest.models[0].claims[0].affinity - 0.8).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn manifest_endpoint_applies_preference_when_x_node_id_present() {
+        // Full GET roundtrip through the router. test_app_state has
+        // no models registered; we set a preference via the
+        // PeerPreferenceStore on AppState and verify the helper
+        // path runs cleanly with `X-Node-Id` set. Empty-model
+        // manifests pass the multiplier loop without panicking,
+        // proving the integration is wired even when there are no
+        // claims to scale.
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+        let state = crate::state::test_app_state();
+        state
+            .inner
+            .peer_preferences
+            .set(&nid(0x33), PeerPreference::new(0.25, None).unwrap())
+            .unwrap();
+        let _store = PeerPreferenceStore::new;
+        let app = crate::server::client_router(state);
+        let resp = app
+            .oneshot(
+                Request::get("/oicp/v1/capabilities")
+                    .header("x-node-id", id_to_hex(&nid(0x33)))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+    }
 }

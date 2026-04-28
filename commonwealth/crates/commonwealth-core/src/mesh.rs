@@ -206,7 +206,9 @@ mod tests {
                 inference_capable: false,
                 loaded_models: vec![],
 
-                embed_model: None,            },
+                embed_model: None,
+                benchmark: None,
+            },
             addresses: vec![],
         }
     }

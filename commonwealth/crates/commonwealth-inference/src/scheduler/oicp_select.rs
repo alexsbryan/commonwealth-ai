@@ -23,8 +23,9 @@ use commonwealth_core::capabilities::NodeCapabilities;
 
 use crate::oicp::{
     self, cold_start_weight, effective_affinity, load_penalty,
-    locality_bonus, InferenceRequirements, NodeLocality,
-    NodeObservations, ProviderManifest,
+    locality_bonus, throughput_factor, throughput_factor_source,
+    InferenceRequirements, NodeLocality, NodeObservations,
+    ProviderManifest,
 };
 
 /// A candidate backend entry for OICP-based selection.
@@ -82,16 +83,22 @@ impl<'a> BackendCandidate<'a> {
 
 /// Score the best (model, claim) pair in a manifest against a
 /// request via v0.3 claim-based ranking. Returns the raw claim
-/// score (protocol-level) plus the claim's self-reported affinity
-/// — the caller folds in observation / load / locality adjustments.
+/// score (protocol-level), the claim's self-reported affinity, and
+/// the size in GB of the winning model — the caller folds in
+/// observation / load / locality / throughput adjustments.
+///
+/// `model_size_gb` is `None` when the manifest doesn't advertise it
+/// (older peers, manifests assembled without size data); the
+/// scheduler falls through to the no-benchmark branch of
+/// [`oicp::throughput_factor`] in that case.
 ///
 /// Returns `None` when no claim in the manifest can serve the
 /// request.
 fn best_score_for_manifest(
     manifest: &ProviderManifest,
     req: &InferenceRequirements,
-) -> Option<(f32, f32)> {
-    let mut best: Option<(f32, f32)> = None;
+) -> Option<(f32, f32, Option<f32>)> {
+    let mut best: Option<(f32, f32, Option<f32>)> = None;
     for model in manifest.models.iter().filter(|m| m.status.available) {
         for claim in &model.claims {
             let Some(score) = oicp::score_claim_for_request(claim, req)
@@ -99,9 +106,12 @@ fn best_score_for_manifest(
                 continue;
             };
             let claim_affinity = claim.effective_affinity();
+            let candidate = (score, claim_affinity, model.size_gb);
             best = Some(match best {
-                Some((best_score, _)) if best_score >= score => best.unwrap(),
-                _ => (score, claim_affinity),
+                Some((best_score, _, _)) if best_score >= score => {
+                    best.unwrap()
+                }
+                _ => candidate,
             });
         }
     }
@@ -118,12 +128,20 @@ fn best_score_for_manifest(
 ///   × load_penalty                               // in-flight taper
 ///   × locality_bonus                             // LAN > WAN preference
 ///   × cold_start_weight                          // new-node ramp
+///   × throughput_factor                          // [0.3, 1.0], from observed tg_tok/s or benchmark estimate
 ///   × inference_availability (clamped 0.2–1.0)   // gossip signal
 /// ```
 ///
 /// A node with `inference_capable: false` is eliminated before
 /// scoring; a `None` `node_capabilities` is treated as capable and
 /// idle so non-mesh backends still route.
+///
+/// `throughput_factor` slots after `cold_start_weight` because it
+/// returns 1.0 (neutral) when neither observations nor a benchmark
+/// are present — a peer with no data is identical to the
+/// pre-throughput composition. New peers only become subject to
+/// throughput scoring once they advertise a benchmark or accumulate
+/// observation samples.
 ///
 /// Returns the index into `candidates` of the selected entry, or
 /// `None` if no candidate can serve the `requirements`.
@@ -142,7 +160,7 @@ pub fn pick_slot_for_oicp<'a>(
                 .unwrap_or(true)
         })
         .filter_map(|(idx, c)| {
-            let (claim_score, claim_affinity) =
+            let (claim_score, claim_affinity, model_size_gb) =
                 best_score_for_manifest(c.manifest, requirements)?;
 
             // Observed-health multiplier: effective / claimed.
@@ -161,6 +179,22 @@ pub fn pick_slot_for_oicp<'a>(
             let locality = locality_bonus(c.locality);
             let cold_start = cold_start_weight(obs.samples);
 
+            let baseline_benchmark =
+                c.node_capabilities.and_then(|nc| nc.benchmark.as_ref());
+            let candidate_size = model_size_gb.unwrap_or(0.0);
+            let throughput =
+                throughput_factor(obs, candidate_size, baseline_benchmark);
+            tracing::debug!(
+                idx,
+                factor = throughput,
+                source =
+                    throughput_factor_source(obs, baseline_benchmark),
+                obs_samples = obs.samples,
+                obs_tg_tok_s = obs.tg_tok_s_ewma,
+                candidate_size_gb = candidate_size,
+                "oicp_select: throughput_factor"
+            );
+
             let availability = c
                 .node_capabilities
                 .map(|nc| nc.inference_availability)
@@ -172,6 +206,7 @@ pub fn pick_slot_for_oicp<'a>(
                 * load
                 * locality
                 * cold_start
+                * throughput
                 * availability;
             Some((idx, weighted))
         })
@@ -210,6 +245,7 @@ mod tests {
             inference_capable: true,
             loaded_models: vec![],
             embed_model: None,
+            benchmark: None,
         }
     }
 

@@ -1,8 +1,13 @@
 //! MeshStore adapter for inference state.
 //!
-//! Serializes/deserializes `InferencePlan`, `ModelInfo`, `LedgerEntry`, and
+//! Serializes/deserializes `InferencePlan`, `ModelInfo`, and
 //! llama-server addresses into the distributed KV store so that state
 //! survives restarts and propagates to peers via gossip.
+//!
+//! The dimensional contribution ledger lives in
+//! `commonwealth_state::ContributionEmitter` and is no longer
+//! threaded through this adapter — see
+//! `commonwealth_core::contributions` for the new shape.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,7 +17,6 @@ use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_state::MeshStore;
 
 use crate::inference_plan::InferencePlan;
-use crate::ledger::LedgerEntry;
 use crate::model::ModelInfo;
 
 const APP_ID: &str = "inference";
@@ -113,24 +117,6 @@ impl InferenceStateStore {
                     .ok()
                     .map(|m| (e.origin, m))
             })
-            .collect()
-    }
-
-    // ── Ledger entries ──────────────────────────────────────────────
-
-    pub fn append_ledger_entry(&self, entry_id: &str, entry: &LedgerEntry) {
-        let key = format!("ledger:{entry_id}");
-        if let Ok(bytes) = serde_json::to_vec(entry) {
-            let _ = self.store.set(APP_ID, &key, Bytes::from(bytes), self.node_id);
-        }
-    }
-
-    pub fn list_ledger_entries(&self) -> Vec<LedgerEntry> {
-        self.store
-            .scan(APP_ID, "ledger:")
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|e| serde_json::from_slice::<LedgerEntry>(&e.value).ok())
             .collect()
     }
 

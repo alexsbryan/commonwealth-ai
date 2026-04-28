@@ -101,7 +101,9 @@ pub fn init_mesh_with_node_id(
             inference_capable: false,
             loaded_models: vec![],
 
-            embed_model: None,        },
+            embed_model: None,
+            benchmark: None,
+        },
         addresses,
     };
 
@@ -223,7 +225,9 @@ pub fn accept_join_with_proposed_id(
             inference_capable: false,
             loaded_models: vec![],
 
-            embed_model: None,        },
+            embed_model: None,
+            benchmark: None,
+        },
         addresses: new_node_addresses,
     };
 

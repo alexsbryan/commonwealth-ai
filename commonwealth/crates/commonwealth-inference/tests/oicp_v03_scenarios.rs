@@ -39,6 +39,7 @@ fn node_caps(availability: f32) -> NodeCapabilities {
         inference_capable: true,
         loaded_models: vec![],
         embed_model: None,
+        benchmark: None,
     }
 }
 
