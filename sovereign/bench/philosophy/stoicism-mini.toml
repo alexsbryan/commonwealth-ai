@@ -1,0 +1,148 @@
+# Golden set for the `stoicism-mini` template.
+
+[meta]
+template = "stoicism-mini"
+description = "Expected and forbidden outputs for the stoicism-mini template."
+
+# ── Phase 1 skeleton: positions ────────────────────────────────────
+
+[[expected_positions]]
+name_contains_any = ["stoicism", "stoic"]
+proponents_any = ["Zeno", "Chrysippus", "Epictetus", "Marcus Aurelius", "Seneca"]
+
+[[expected_positions]]
+name_contains_any = ["epicurean", "epicureanism"]
+proponents_any = ["Epicurus"]
+note = "Cited as a rival school in chapter 4 — should be extracted as a position there."
+
+# Anti-tests
+[[forbidden_positions]]
+name_contains_any = ["dichotomy of control"]
+reason = "Presented as a method (Epictetus' Enchiridion 1), not a philosophical position."
+
+[[forbidden_positions]]
+name_contains_any = ["preferred indifferents"]
+reason = "A technical concept within Stoicism, not a position contrasted with another."
+
+[[forbidden_positions]]
+name_contains_any = ["enchiridion", "meditations"]
+reason = "Source texts, not positions."
+
+# ── Phase 3a/3b atoms: persons ─────────────────────────────────────
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Zeno"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Chrysippus"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Epictetus"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Marcus Aurelius", "Marcus"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Seneca"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Epicurus"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Aristotle"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Cicero"]
+
+# ── Phase 3a/3b atoms: works ───────────────────────────────────────
+
+[[expected_work_atoms]]
+canonical_name_contains_any = ["Enchiridion"]
+
+[[expected_work_atoms]]
+canonical_name_contains_any = ["Meditations"]
+
+[[expected_work_atoms]]
+canonical_name_contains_any = ["On Duties", "De Officiis"]
+
+# ── Phase 3a/3b atoms: concepts ────────────────────────────────────
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["virtue"]
+description_keywords_any = ["good", "stoic", "only"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["preferred indifferent"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["logos"]
+description_keywords_any = ["reason", "cosmos", "providen"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["passion"]
+description_keywords_any = ["judgement", "false", "eradicab"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["ataraxia"]
+description_keywords_any = ["disturbance", "freedom"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["cosmopolitan", "cosmopolis"]
+description_keywords_any = ["polis", "community", "humanity", "cosmos"]
+
+# Anti-test: do not extract individual aphorisms as concept atoms.
+[[forbidden_concept_atoms]]
+canonical_name_contains_any = ["gem cannot be polished", "begin each day"]
+reason = "Aphorism contents, not concepts in the technical sense."
+
+# ── Phase 3a/3b atoms: claims ──────────────────────────────────────
+
+[[expected_claim_atoms]]
+content_contains_any = ["only virtue is good", "virtue alone"]
+attributed_proponent_contains_any = ["Stoic", "Zeno"]
+
+[[expected_claim_atoms]]
+content_contains_any = ["passions are judgements", "passions are false judgements"]
+
+# Discourse-act variety check: at least one Stoic claim should be
+# tagged as `enact` or `commit` or `warn`, not all as `assert`.
+[[expected_discourse_act_distribution]]
+required_acts_any = ["enact", "commit", "warn", "argue"]
+forbidden_uniform_act = "assert"
+note = "Stoic fragments mix exhortation, warning, and assertion. All-assert collapse signals classifier failure."
+
+# ── Phase 6 fault lines ────────────────────────────────────────────
+
+[[expected_fault_lines]]
+position_a_contains_any = ["stoic"]
+position_b_contains_any = ["epicurean"]
+crux_keywords_any = ["pleasure", "virtue", "goal", "ataraxia", "indifferent"]
+note = "Compressed into chapter 4; pipeline must extract despite minimal scaffolding."
+
+[[expected_fault_lines]]
+position_a_contains_any = ["stoic", "cosmopolitan"]
+position_b_contains_any = ["aristotelian", "polis"]
+crux_keywords_any = ["polis", "cosmos", "community", "particular", "humanity"]
+note = "One-paragraph contrast in chapter 5; tests minimal-scaffolding fault-line detection."
+
+# ── Phase 7 open questions ─────────────────────────────────────────
+
+[[expected_open_questions]]
+content_contains_any = ["grief", "passion", "loss", "loved"]
+note = "Whether the Stoic theory of grief is adequate — chapter 2 closes with this question."
+
+[[expected_open_questions]]
+content_contains_any = ["cosmopolitan", "particular", "duty", "obligation"]
+note = "Reconciling cosmopolitan loyalty with particular duties — chapter 5 closes with this."
+
+# ── Phase 3a/3b atoms: questions ───────────────────────────────────
+
+[[expected_question_atoms]]
+content_contains_any = ["good life", "live well", "agree with nature", "virtue", "happy"]
+note = "The framing question of the school."
+
+# Anti-test on Phase 8: do not produce a corpus configuration that
+# treats the dichotomy of control as the corpus's argumentative arc.
+[[forbidden_configurations]]
+label_contains_any = ["dichotomy of control"]
+reason = "Method for living, not the configuration this corpus argues for."

@@ -1,0 +1,166 @@
+# stoicism-mini — five chapters on classical Stoicism, alternating
+# between expository prose and primary-source-style fragments.
+# Stress-tests:
+#
+#   * **Fragments without explicit framing.** Chapter 3 is a series of
+#     short Marcus Aurelius / Epictetus / Seneca-style passages with
+#     no chapter-level introduction. The skeleton extractor must
+#     recognise these as illustrating a position already named, not
+#     as introducing new ones.
+#   * **Discourse-act ambiguity.** Stoic claims often blur the line
+#     between assertion ("only virtue is good"), exhortation ("attend
+#     to your governing faculty"), and warning ("do not be vexed by
+#     externals"). The Phase 3b discourse_act classifier must produce
+#     varied tags rather than collapsing all of them to "assert".
+#   * **Method vs metaphysics distinction.** The dichotomy of control
+#     is presented as a method, not a metaphysical thesis. The
+#     pipeline should not extract "the dichotomy of control" as a
+#     position about the structure of reality.
+#   * **Inferred fault line.** The Stoic / Epicurean tension on
+#     ataraxia is not stated as a contrast in any single chapter; it
+#     emerges from chapter 4's compressed comparison.
+#   * **Rival cosmopolitanism.** Chapter 5 frames Stoic
+#     cosmopolitanism against Aristotelian polis-ethics, but the
+#     contrast is one paragraph long; the pipeline must still extract
+#     the fault line.
+
+[meta]
+name = "stoicism-mini"
+description = "Five-chapter survey of classical Stoicism: doctrine, fragments, method, comparisons. Stress-tests fragment handling, discourse-act variety, method-vs-metaphysics distinction, and compressed fault lines."
+domain = "philosophy"
+pipeline_id = "philosophy_atlas"
+
+[[chapters]]
+title = "The Stoic system"
+body = """
+Stoicism is the Hellenistic philosophical school founded by Zeno of
+Citium around 300 BCE and developed across centuries by Cleanthes,
+Chrysippus, Panaetius, Posidonius, and the imperial Roman Stoics
+Epictetus, Seneca, and Marcus Aurelius. The school holds three
+distinctive doctrines that together define the Stoic position: only
+virtue is good, the cosmos is rationally ordered, and the goal of life
+is to live in agreement with nature.
+
+That virtue alone is good is the most counter-intuitive Stoic claim and
+the one most distinctive of the school. Wealth, health, reputation,
+even life itself are not goods on the strict Stoic accounting; they are
+preferred indifferents, things a wise person will pursue insofar as
+nature suggests but will not be disturbed by losing. The wise person
+who is tortured remains, in the technical Stoic sense, perfectly
+happy.
+
+That the cosmos is rationally ordered is the metaphysical claim
+underlying the rest. The Stoics identify reason with nature, with
+providence, and with God; the universe is a single living being whose
+governing principle is logos. Human reason is a fragment of cosmic
+reason, and the human task is to bring one's particular reasoning into
+agreement with the universal.
+"""
+
+[[chapters]]
+title = "Virtue and the passions"
+body = """
+The Stoic theory of the passions develops from the doctrine that only
+virtue is good. The passions — fear, grief, lust, immoderate joy — are
+not pre-rational urges that reason must master, on this account; they
+are themselves judgements, and specifically, false judgements. To
+fear an event is to judge that it is bad and to assent to that
+judgement. Since no event other than the failure of one's own virtue
+is genuinely bad, fear is always mistaken.
+
+The implication is that the passions are eradicable in principle, not
+merely manageable. The progress of the Stoic disciple is the gradual
+correction of the false judgements that constitute her passions, until
+what remains are only the eupatheiai — the steady, well-reasoned
+emotional states of the wise. Joy, well-reasoned wishing, and
+appropriate caution survive; grief, fear, and craving do not.
+
+The doctrine attracts the obvious objection that grieving a beloved is
+not a mistake but a recognition of value. The Stoic response is that
+the value lies in the loved person's virtue, which death cannot affect,
+and not in their continued presence, which was never properly the
+disciple's possession in the first place. Whether the response is
+adequate to the phenomenon is a question the school does not settle.
+"""
+
+[[chapters]]
+title = "Fragments"
+body = """
+Some things are up to us, and some things are not up to us. Up to us
+are opinion, impulse, desire, aversion — in short, what is our own
+doing. Not up to us are the body, possessions, reputation, public
+office — in short, what is not our own doing. (Epictetus, Enchiridion 1)
+
+Begin each day by saying to yourself: I will meet with the meddling, the
+ungrateful, the arrogant, the deceitful, the envious, the surly. They
+suffer thus from their ignorance of what is good and evil. (Marcus,
+Meditations II.1)
+
+Hasten then to your appointed end and, throwing away idle hopes, come
+to your own help, if you care at all for yourself, while it is still
+possible. (Marcus, Meditations III.14)
+
+It is not what happens to you, but how you react to it that matters.
+(Epictetus, attributed)
+
+A gem cannot be polished without friction, nor a man perfected without
+trials. (Seneca, attributed)
+
+Receive without conceit, release without struggle. (Marcus,
+Meditations VIII.33)
+"""
+
+[[chapters]]
+title = "Stoics and Epicureans"
+body = """
+The Hellenistic period offered two great rival schools, and a
+comparison between them illuminates both. Both Stoics and Epicureans
+held that philosophy's purpose is the achievement of ataraxia —
+freedom from disturbance — and both held that this is achieved by
+correcting the false beliefs that produce disturbance. The schools
+disagree about which beliefs are false.
+
+The Epicureans located the false beliefs in superstitions about the
+gods and in fears of death. Their corrective is naturalist: the gods
+do not interfere in human affairs, and death is the cessation of
+sensation and so cannot be experienced as an evil. With these
+corrections, the Epicurean takes pleasure — understood as the absence
+of bodily pain and mental distress — to be the natural goal.
+
+The Stoics rejected the Epicurean account of the goal as defective at
+the foundation. Pleasure, on the Stoic view, is at best a preferred
+indifferent and at worst a distraction; the goal is virtue, and
+ataraxia is a consequence rather than the aim. The two schools' shared
+commitment to ataraxia masks a fundamental disagreement about what
+ataraxia is for. The Stoics see the Epicurean as having mistaken a
+side effect of the philosophical life for its purpose; the
+Epicureans see the Stoic as having mistaken an austere discipline for
+its result.
+"""
+
+[[chapters]]
+title = "Cosmopolis"
+body = """
+The political philosophy of the Stoa is famously cosmopolitan: the
+true polis, on the Stoic account, is the cosmos as a whole, and the
+true citizenship is membership in the community of rational beings.
+Particular polities are accidents of birth and chance; one's deepest
+allegiance is owed to humanity as such, not to one's city or nation.
+
+The contrast with Aristotle is sharp. For Aristotle, the polis is the
+natural setting of human life, and a being severed from the polis is
+either a beast or a god, but not a flourishing human. The political
+animal is animal-because-political. The Stoics retain Aristotle's idea
+that humans are essentially rational and essentially social, but they
+extend the relevant community from the polis to the cosmos, and they
+make the political community accidental to the moral one.
+
+The cosmopolitan stance leaves a question the school does not fully
+work out: how should the Stoic disciple, whose deepest allegiance is
+to humanity, relate to the particular obligations that bind her to her
+city, her family, her friends? Stoic practical writings address the
+question in occasional form — Cicero's "On Duties" is the most
+sustained ancient treatment — but the principled reconciliation of
+cosmopolitan loyalty with particular duty remains unfinished business
+for the tradition.
+"""

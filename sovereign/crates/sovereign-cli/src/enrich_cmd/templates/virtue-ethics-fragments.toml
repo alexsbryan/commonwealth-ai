@@ -1,0 +1,177 @@
+# virtue-ethics-fragments — five short chapters in the voice of an
+# encyclopedia survey. Stress-tests:
+#
+#   * **Position naming with low signal.** "Situationism" and
+#     "sentimentalism" are named in the prose; "neo-Aristotelianism"
+#     and "care ethics" are introduced by description first and named
+#     only after the reader has been set up. The pipeline should still
+#     resolve them to consistent canonical names.
+#   * **Cross-historical alignment.** Aristotle's eudaimonia and
+#     MacIntyre's tradition-bound flourishing should not be merged
+#     into one position despite vocabulary overlap.
+#   * **Internal disagreement within a school.** MacIntyre and Foot are
+#     both grouped under neo-Aristotelianism but disagree about
+#     whether moral facts are mind-independent. The fault-line
+#     extractor should not treat their disagreement as a between-
+#     school crux.
+#   * **Empirical challenge as fault line.** Situationism's challenge
+#     to virtue ethics rests on social-psychology results, not on a
+#     normative position; the crux ("are stable character traits real?")
+#     bridges empirical and normative questions.
+#   * **Configuration target.** The five chapters together argue
+#     implicitly that contemporary virtue ethics is best understood
+#     against the situationist challenge. That is a configuration
+#     candidate, not a position any single chapter defends.
+
+[meta]
+name = "virtue-ethics-fragments"
+description = "Five-chapter survey of virtue ethics covering Aristotle, neo-Aristotelianism, sentimentalism, situationism, and care ethics. Tests low-signal position naming, cross-historical alignment, intra-school disagreement, and empirical fault lines."
+domain = "philosophy"
+pipeline_id = "philosophy_atlas"
+
+[[chapters]]
+title = "Aristotle's account"
+body = """
+For Aristotle, ethics is the study of how to live well — eudaimonia,
+usually translated as flourishing or fulfillment, though the Greek
+carries no precise English equivalent. Eudaimonia is not a feeling and
+not a momentary state; it is the activity of a complete life lived in
+accordance with the virtues. The virtues themselves are stable
+dispositions of character — not rules to be followed, not feelings to
+be cultivated in isolation, but settled habits that incline a person
+toward acting and feeling appropriately given the situation.
+
+Aristotle's account is teleological: each kind of thing has a
+characteristic activity, an ergon, that defines what its excellence
+consists in. The human ergon, on his account, is rational activity in
+accordance with reason. To live a fully human life is therefore to
+exercise the virtues of character (courage, temperance, justice,
+generosity) and the virtues of intellect (practical wisdom, theoretical
+wisdom) in a way that integrates both.
+
+Two features of the account matter for what follows. First,
+eudaimonia is not subjective: an agent can be mistaken about whether
+her own life is going well. Second, the virtues are acquired by
+habituation, in a community whose practices shape the developing
+agent. There is no path to virtue that runs around the polis.
+"""
+
+[[chapters]]
+title = "Neo-Aristotelian revivals"
+body = """
+Twentieth-century Anglophone moral philosophy revived virtue ethics
+after a long stretch in which deontology and consequentialism dominated
+the field. The two principal figures — Foot and MacIntyre — agree that
+something has gone wrong with modern moral theory, and they agree that
+recovering Aristotle's framework is part of the cure. They disagree
+sharply about what that recovery requires.
+
+Foot, in "Natural Goodness", argues that moral judgements share a
+logical form with judgements about the goodness of plants and animals.
+What it is for an oak to be a good oak, on her view, is fixed by the
+species' characteristic way of life. The same form of judgement
+applies, mutatis mutandis, to humans. The view is realist: there is a
+fact of the matter about which traits count as virtues, and the fact
+is not determined by what any community happens to value.
+
+MacIntyre, in "After Virtue", reaches a different conclusion from
+related premises. Moral concepts, he argues, derive their sense from
+the practices and traditions in which they were forged. Severed from
+those traditions, modern moral discourse has become a confused array
+of fragments. The recovery of virtue ethics requires the recovery of
+tradition-bound communities of practice; outside such a tradition, the
+word "virtue" floats free of its anchoring use.
+
+The internal tension is consequential. Foot's neo-Aristotelianism is
+a metaphysical realism; MacIntyre's is a hermeneutic
+traditionalism. They agree that the modern moral situation is bad and
+that Aristotle helps; they disagree about what an adequate diagnosis
+or cure looks like.
+"""
+
+[[chapters]]
+title = "Sentimentalist alternatives"
+body = """
+A different branch of virtue ethics traces its lineage to Hume rather
+than Aristotle. Sentimentalism holds that the virtues are character
+traits whose status as virtues is constituted by the appropriate
+sentimental response of suitably situated observers. To call a trait a
+virtue, on this account, is to express and to invite a particular
+pattern of approbation. Generosity is a virtue because it elicits a
+characteristic pattern of warm regard from those who witness it; cruelty
+is a vice because it elicits a characteristic pattern of disapproval.
+
+Slote's contemporary sentimentalism extends the framework explicitly
+to first-personal moral motivation. The morally good agent, on his
+view, acts from sentiments such as benevolent caring; her actions are
+right insofar as they manifest such sentiments. The framework does not
+require an Aristotelian metaphysics of human function; it does not
+need a teleological account of what humans are for. Its naturalism is
+psychological rather than biological.
+
+Sentimentalism shares with Aristotelianism the focus on character
+rather than on rules or outcomes. It diverges in what makes a trait a
+virtue: a settled habit of acting in accordance with a contested
+substantive ideal of human flourishing, on Aristotle's account; an
+appropriate object of warm-pattern regard, on Hume's. The contrast
+matters less in the easy cases than in the hard ones.
+"""
+
+[[chapters]]
+title = "The situationist challenge"
+body = """
+A challenge to all virtue-ethical accounts has emerged from social
+psychology. Beginning with the Milgram obedience studies and the
+Princeton Theological Seminary "Good Samaritan" experiments, and
+continuing through the literature on the fundamental attribution
+error, a body of evidence has accumulated that situational variables
+predict behaviour better than any putative trait. People in a hurry are
+much less likely to help a person in distress, regardless of their
+ostensible character; people in groups defer to perceived authority
+in ways that override their stated values.
+
+Harman and Doris have argued that this empirical literature undermines
+virtue ethics at its foundation. If the cross-situational stability
+that virtue ethics presupposes is empirically rare, then the moral
+psychology of the field is built on an empirical mistake. There may
+not be such things as virtues — at least not in the robust sense
+virtue ethics requires.
+
+The challenge, called situationism in the moral-philosophy
+literature, is empirical in form but normative in consequence. It does
+not propose a rival account of how to live; it argues that one rival
+must give up. Several responses have been mounted: that the
+experimental literature measures the wrong thing, that virtues are
+threshold rather than continuous traits, that the experiments still
+admit explanation in terms of practical wisdom rather than virtue
+defects. Whether the responses are adequate is contested.
+"""
+
+[[chapters]]
+title = "Care ethics"
+body = """
+Care ethics emerged from feminist moral philosophy in the 1980s, with
+Gilligan's "In a Different Voice" as its catalyzing text. The view —
+named for what it foregrounds rather than for any historical figure —
+holds that caring relationships, not impartial principles, constitute
+the basic moral phenomenon. To act well is to attend to the particular
+others in one's life with sensitivity to their actual situations,
+their needs, and their vulnerabilities. The abstraction-toward-rules
+characteristic of Kantian and consequentialist ethics, on this view,
+is a distortion of moral perception, not its perfection.
+
+Care ethics is sometimes classed as a form of virtue ethics on the
+grounds that it foregrounds character traits — sensitivity,
+attentiveness, responsiveness — rather than rules or outcomes. Others
+resist the classification, arguing that care is a relational
+phenomenon that the trait-talk of virtue ethics inevitably distorts by
+locating it in individual agents.
+
+Across the five frameworks surveyed here, a structural observation
+emerges: contemporary virtue ethics is shaped less by its agreements
+with ancient sources than by the challenges it must answer — the
+situationist challenge to stable character, the sentimentalist
+question of what grounds the virtue/vice distinction, the care-ethical
+critique of impartialism. The shape of the field is the shape of the
+debate, not of any single position within it.
+"""

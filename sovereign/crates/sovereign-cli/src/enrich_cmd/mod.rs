@@ -23,8 +23,11 @@ pub mod build;
 pub mod cascade;
 pub mod config;
 pub mod corpus_io;
+pub mod diagnose;
 pub mod diff;
 pub mod errors;
+pub mod eval;
+pub mod eval_median;
 pub mod exemplars;
 pub mod extract;
 pub mod inference_client;
@@ -40,6 +43,7 @@ pub mod sep_ingest;
 pub mod show;
 pub mod source_loader;
 pub mod status;
+pub mod templates;
 pub mod validate;
 
 use crate::util::help::{self, Help, HelpSection};
@@ -56,6 +60,11 @@ const HELP: Help = Help {
             &[
                 ("init", "Scaffold a new corpus's enrichment state."),
                 ("build", "One-shot: run every atlas phase for a corpus (seed → extract → cluster → name → resolve → tensions → gaps → configure → report)."),
+                ("eval", "Score the resolved atlas against a golden-set TOML; reports per-phase precision/recall/F1."),
+                (
+                    "eval-median",
+                    "Run reset → build → eval N times against an initialised corpus; reports min/median/max F1 per phase to separate signal from variance.",
+                ),
                 ("query", "Classify + traverse a natural-language question against the resolved atlas; print an assembled brief."),
                 ("report", "Print the §12 schema validation report for one corpus."),
                 ("review", "Compare N corpora; flag gaps present in ≥ 2 as schema-revision candidates."),
@@ -100,6 +109,10 @@ const HELP: Help = Help {
                 ("status", "Per-phase cache freshness table."),
                 ("show", "Formatted view of a cached phase output."),
                 (
+                    "diagnose",
+                    "Read-only inspection of the resolved philosophy atlas — atom counts, positions, fault lines, gaps, configurations.",
+                ),
+                (
                     "errors",
                     "Aggregate structured failures across every phase. Groups by kind, \
                      prints remediation + retry command per group.",
@@ -138,6 +151,8 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "init" => init::cmd_init(rest).await,
         "build" => build::cmd_build(rest).await,
         "sep-ingest" => sep_ingest::cmd_sep_ingest(rest).await,
+        "eval" => eval::cmd_eval(rest).await,
+        "eval-median" => eval_median::cmd_eval_median(rest).await,
         "query" | "atlas-query" => atlas_query::cmd_atlas_query(rest).await,
         "report" | "schema-report" => schema_review::cmd_schema_report(rest).await,
         "review" | "schema-review" => schema_review::cmd_schema_review(rest).await,
@@ -162,6 +177,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         // ── Utilities ─────────────────────────────────────────
         "status" => status::cmd_status(rest).await,
         "show" => show::cmd_show(rest).await,
+        "diagnose" => diagnose::cmd_diagnose(rest).await,
         "errors" => errors::cmd_errors(rest).await,
         "exemplars" => exemplars::cmd_exemplars(rest).await,
         "reset" => reset::cmd_reset(rest).await,

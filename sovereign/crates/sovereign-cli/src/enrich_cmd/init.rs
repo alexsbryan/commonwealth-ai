@@ -7,6 +7,12 @@
 //!   3. On `--dry-run`, print the `SectionReport` and exit 0.
 //!   4. Otherwise: write `chapters.json` + `config.json` + scaffold
 //!      the `exemplars/`, `cache/`, `runs/` directories.
+//!
+//! Tuning shortcut: `--from-template <name>` (or `--template-path
+//! <path>`) materialises a built-in philosophy fixture into a
+//! synthesised source file under the corpus dir and proceeds with the
+//! normal init flow. Used by the `enrich eval` harness to scaffold a
+//! reproducible corpus against which prompt iterations are scored.
 
 use std::fs;
 use std::path::PathBuf;
@@ -17,6 +23,7 @@ use corpus_engine::enrichment::pipeline::ChapterManifest;
 use super::config::{EnrichConfig, TocMarkers, CONFIG_SCHEMA_VERSION};
 use super::inference_client::{probe_daemon, resolve_default_models};
 use super::paths;
+use super::templates;
 use crate::util::help::{self, Help, HelpSection};
 use crate::util::prompts::confirm;
 use crate::util::urls::DEFAULT_CLIENT_PORT;
@@ -29,9 +36,17 @@ const HELP: Help = Help {
             "sovereign enrich init <corpus-id> --source <path> \\\n  [--chapter-regex <pat> | --toc [--toc-start <m>] [--toc-end <m>]] \\\n  [--min-section-body-words <n>] [--pipeline <id>] [--chat-model <id>] [--embed-model <id>] \\\n  [--dry-run] [--force]",
         ),
         HelpSection::Flags(&[
-            ("--source <path>", "Absolute path to the plaintext source file. Required."),
+            ("--source <path>", "Absolute path to the plaintext source file. Required unless --from-template / --template-path is used."),
+            (
+                "--from-template <name>",
+                "Materialise a built-in philosophy fixture into a synthesised source file under the corpus dir, then proceed normally. Pins pipeline=philosophy_atlas + min-section-body-words=20 unless overridden. Available names: free-will-debate, virtue-ethics-fragments, stoicism-mini.",
+            ),
+            (
+                "--template-path <path>",
+                "Same as --from-template but reads the TOML template from a user-supplied path. Useful for prompt-tuning iterations on hand-authored fixtures before promoting them into the built-in registry.",
+            ),
             ("--chapter-regex <pat>", "Override the default section-detector pattern."),
-            ("--pipeline <id>", "Pipeline id from the registry. Default: literary."),
+            ("--pipeline <id>", "Pipeline id from the registry. Default: literary (or template's pipeline_id when --from-template is used)."),
             ("--chat-model <id>", "Pin a chat model id. Default: auto-resolve from /v1/models."),
             ("--embed-model <id>", "Pin an embed model id. Default: auto-resolve from /v1/models."),
             (
@@ -74,6 +89,10 @@ const HELP: Help = Help {
                 "sovereign enrich init compatibilism --source compatibilism.md --pipeline philosophy_atlas",
                 "Philosophy-tuned atlas pipeline (same schema, argumentative-prose prompts).",
             ),
+            (
+                "sovereign enrich init fwd --from-template free-will-debate",
+                "Scaffold a corpus from the bundled `free-will-debate` philosophy fixture. The eval harness scores Gemma-4B output against bench/philosophy/free-will-debate.toml.",
+            ),
         ]),
         HelpSection::Notes(
             "Writes to ~/.sovereign/enrichment/<corpus>/ and ~/.sovereign/indexes/<corpus>/. \
@@ -98,6 +117,19 @@ pub async fn cmd_init(args: &[String]) -> i32 {
             return 2;
         }
     };
+
+    // If the operator passed --from-template / --template-path,
+    // materialise the template's prose into a file under the corpus
+    // dir and continue as if --source had pointed at that file.
+    // Template metadata supplies sensible defaults for pipeline,
+    // chapter regex, and section body floor — the operator can still
+    // override each one explicitly.
+    if parsed.from_template.is_some() || parsed.template_path.is_some() {
+        if let Err(e) = apply_template_to_parsed(&mut parsed) {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    }
 
     // Validate the pipeline id against the registry before doing
     // anything expensive. A typo here would otherwise only surface at
@@ -321,13 +353,25 @@ struct ParsedInit {
     source_path: PathBuf,
     chapter_regex: Option<String>,
     pipeline_id: String,
+    /// Tracks whether the operator explicitly chose a pipeline. When
+    /// `--from-template` is also passed, the template's pipeline_id
+    /// only wins if the operator did not override it. Avoids the
+    /// "default literary clobbers template's philosophy_atlas" bug.
+    pipeline_id_explicit: bool,
     chat_model: Option<String>,
     embed_model: Option<String>,
     min_section_body_words: usize,
+    min_section_body_words_explicit: bool,
     toc_markers: Option<TocMarkers>,
     max_output_tokens: u32,
     dry_run: bool,
     force: bool,
+    /// Built-in template name (e.g. `"free-will-debate"`).
+    /// Mutually exclusive with `template_path` and `source_path`.
+    from_template: Option<String>,
+    /// Path to a user-supplied template TOML file. Mutually exclusive
+    /// with `from_template` and `source_path`.
+    template_path: Option<PathBuf>,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
@@ -335,9 +379,11 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     let mut source: Option<PathBuf> = None;
     let mut chapter_regex: Option<String> = None;
     let mut pipeline_id = "literary".to_string();
+    let mut pipeline_id_explicit = false;
     let mut chat_model: Option<String> = None;
     let mut embed_model: Option<String> = None;
     let mut min_section_body_words: usize = 40;
+    let mut min_section_body_words_explicit = false;
     let mut toc: bool = false;
     let mut toc_start: Option<String> = None;
     let mut toc_end: Option<String> = None;
@@ -350,6 +396,8 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     let mut max_output_tokens: u32 = 16384;
     let mut dry_run = false;
     let mut force = false;
+    let mut from_template: Option<String> = None;
+    let mut template_path: Option<PathBuf> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -359,6 +407,21 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                 source = Some(PathBuf::from(
                     args.get(i + 1)
                         .ok_or("--source requires a path argument".to_string())?,
+                ));
+                i += 2;
+            }
+            "--from-template" => {
+                from_template = Some(
+                    args.get(i + 1)
+                        .ok_or("--from-template requires a name".to_string())?
+                        .clone(),
+                );
+                i += 2;
+            }
+            "--template-path" => {
+                template_path = Some(PathBuf::from(
+                    args.get(i + 1)
+                        .ok_or("--template-path requires a path".to_string())?,
                 ));
                 i += 2;
             }
@@ -375,6 +438,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                     .get(i + 1)
                     .ok_or("--pipeline requires a value".to_string())?
                     .clone();
+                pipeline_id_explicit = true;
                 i += 2;
             }
             "--chat-model" => {
@@ -400,6 +464,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                 min_section_body_words = raw.parse::<usize>().map_err(|e| {
                     format!("--min-section-body-words must be a non-negative integer: {e}")
                 })?;
+                min_section_body_words_explicit = true;
                 i += 2;
             }
             "--toc" => {
@@ -459,7 +524,23 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     }
 
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
-    let source_path = source.ok_or_else(|| "missing --source <path>".to_string())?;
+    if from_template.is_some() && template_path.is_some() {
+        return Err(
+            "--from-template and --template-path are mutually exclusive".to_string(),
+        );
+    }
+    let template_mode = from_template.is_some() || template_path.is_some();
+    if template_mode && source.is_some() {
+        return Err(
+            "--source cannot be combined with --from-template / --template-path".to_string(),
+        );
+    }
+    if !template_mode && source.is_none() {
+        return Err("missing --source <path>".to_string());
+    }
+    // Source path is `None` here in template mode; cmd_init resolves
+    // it to the materialised file under the corpus dir before reading.
+    let source_path = source.unwrap_or_else(|| PathBuf::new());
     let toc_markers = if toc {
         Some(TocMarkers {
             start: toc_start.unwrap_or_else(|| {
@@ -479,16 +560,26 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     };
     Ok(ParsedInit {
         corpus_id,
-        source_path: absolutise(source_path),
+        source_path: if template_mode {
+            // Filled in by cmd_init after the template is materialised
+            // to a file under the corpus dir.
+            PathBuf::new()
+        } else {
+            absolutise(source_path)
+        },
         chapter_regex,
         pipeline_id,
+        pipeline_id_explicit,
         chat_model,
         embed_model,
         min_section_body_words,
+        min_section_body_words_explicit,
         toc_markers,
         max_output_tokens,
         dry_run,
         force,
+        from_template,
+        template_path,
     })
 }
 
@@ -527,6 +618,55 @@ fn scaffold_dirs(corpus_id: &str) -> std::io::Result<()> {
     fs::create_dir_all(paths::exemplars_dir(corpus_id))?;
     fs::create_dir_all(paths::cache_dir(corpus_id))?;
     fs::create_dir_all(paths::runs_dir(corpus_id))?;
+    Ok(())
+}
+
+/// Resolve the template (built-in or path-supplied), materialise its
+/// chapters into a plaintext file under the corpus root, and patch
+/// the `ParsedInit` so the rest of `cmd_init` proceeds against that
+/// file. Template defaults — `pipeline_id`, `chapter_regex`,
+/// `min_section_body_words` — apply only when the operator did not
+/// override them explicitly on the command line.
+fn apply_template_to_parsed(parsed: &mut ParsedInit) -> Result<(), String> {
+    let template = if let Some(name) = &parsed.from_template {
+        templates::load_builtin(name)?
+    } else if let Some(path) = &parsed.template_path {
+        templates::load_from_path(path)?
+    } else {
+        unreachable!("apply_template_to_parsed called without a template source");
+    };
+
+    if template.chapters.is_empty() {
+        return Err(format!(
+            "template '{}' contains zero chapters — nothing to enrich",
+            template.meta.name
+        ));
+    }
+
+    let body = templates::materialise_to_plaintext(&template);
+
+    let corpus_root = paths::enrichment_root(&parsed.corpus_id);
+    fs::create_dir_all(&corpus_root)
+        .map_err(|e| format!("create corpus dir {}: {e}", corpus_root.display()))?;
+    let source_path = corpus_root.join("source.txt");
+    fs::write(&source_path, &body)
+        .map_err(|e| format!("write template source {}: {e}", source_path.display()))?;
+    parsed.source_path = source_path;
+
+    if !parsed.pipeline_id_explicit {
+        parsed.pipeline_id = template.meta.pipeline_id.clone();
+    }
+    if parsed.chapter_regex.is_none() {
+        parsed.chapter_regex = Some(templates::CHAPTER_REGEX.to_string());
+    }
+    if !parsed.min_section_body_words_explicit {
+        // Templates ship dense, compact chapters (~200-400 words).
+        // The default 40-word floor would still pass them, but a
+        // looser floor avoids surprising the operator if they
+        // hand-edit a chapter down later. 20 keeps the index/body
+        // guard meaningful without rejecting fragments.
+        parsed.min_section_body_words = 20;
+    }
     Ok(())
 }
 
@@ -629,5 +769,79 @@ mod tests {
         let err =
             parse_args(&["a".into(), "--source".into(), "/x".into(), "b".into()]).unwrap_err();
         assert!(err.contains("unexpected positional"));
+    }
+
+    #[test]
+    fn parse_args_accepts_from_template_without_source() {
+        let args: Vec<String> = ["fwd", "--from-template", "free-will-debate"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let p = parse_args(&args).unwrap();
+        assert_eq!(p.corpus_id, "fwd");
+        assert_eq!(p.from_template.as_deref(), Some("free-will-debate"));
+        assert!(p.template_path.is_none());
+        // source_path is filled in by cmd_init after materialisation.
+        assert_eq!(p.source_path, std::path::PathBuf::new());
+    }
+
+    #[test]
+    fn parse_args_rejects_template_with_source() {
+        let args: Vec<String> = [
+            "x",
+            "--from-template",
+            "free-will-debate",
+            "--source",
+            "/tmp/x.txt",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let err = parse_args(&args).unwrap_err();
+        assert!(err.contains("--source cannot be combined"), "err: {err}");
+    }
+
+    #[test]
+    fn parse_args_rejects_both_template_flags() {
+        let args: Vec<String> = [
+            "x",
+            "--from-template",
+            "free-will-debate",
+            "--template-path",
+            "/tmp/x.toml",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let err = parse_args(&args).unwrap_err();
+        assert!(err.contains("mutually exclusive"), "err: {err}");
+    }
+
+    #[test]
+    fn parse_args_tracks_explicit_pipeline_with_template() {
+        // Default — pipeline_id is "literary" but unmodified by the
+        // operator, so apply_template_to_parsed will overwrite with
+        // the template's pipeline_id.
+        let args: Vec<String> = ["x", "--from-template", "free-will-debate"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let p = parse_args(&args).unwrap();
+        assert!(!p.pipeline_id_explicit);
+
+        // With explicit override, the operator's choice wins.
+        let args: Vec<String> = [
+            "x",
+            "--from-template",
+            "free-will-debate",
+            "--pipeline",
+            "literary",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let p = parse_args(&args).unwrap();
+        assert!(p.pipeline_id_explicit);
+        assert_eq!(p.pipeline_id, "literary");
     }
 }
