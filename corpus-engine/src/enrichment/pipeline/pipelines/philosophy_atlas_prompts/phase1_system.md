@@ -30,15 +30,13 @@ to fill it.
 Philosophers, schools, concepts, works, distinctions, positions
 entering the frame for the first time.
 
-- `canonical_name` — reader-facing reference form (e.g. `"Frankfurt
-  cases"`, `"soft determinism"`, `"Kant"`). Use the form the
+- `canonical_name` — reader-facing reference form. Use the form the
   section itself uses.
-- `aliases` — other names the section uses (e.g. `["compatibilism",
-  "soft determinism"]`). Omit if none.
+- `aliases` — other names the section uses. Omit if none.
 - `entity_type` — one of `person` (philosopher, author), `concept`
-  (free will, supervenience), `institution` (Vienna Circle,
-  Stoicism), `work` (Tractatus, Critique of Pure Reason), `place`
-  (rare in philosophy — reserve for genuinely important sites).
+  (a named philosophical notion), `institution` (a school or
+  organisation), `work` (a cited text), `place` (rare in philosophy
+  — reserve for genuinely important sites).
 - `description` — one sentence drawn from this section. A routing
   aid for clustering, not an encyclopedia definition.
 - `anchor` — 3–8 word keyphrase from the text that introduces or
@@ -54,55 +52,22 @@ argument"` and skip the Person atom. Always lift the philosopher and
 the cited work as their own typed atoms even when the section's main
 subject is the view they hold.
 
-Examples (from common philosophy passages):
+Form (drawn from an area unrelated to whatever you are processing):
+a passage on *Sartre's account of bad faith* in *Being and
+Nothingness* yields three atoms — `Sartre` (person), *Being and
+Nothingness* (work), *bad faith* (concept) — never one collapsed
+"Sartre's view" Concept.
 
-- A passage discussing *Foot's "Natural Goodness"* produces:
-  `{canonical_name: "Foot", entity_type: "person"}`,
-  `{canonical_name: "Natural Goodness", entity_type: "work"}`, and
-  the substantive concept *natural goodness* if the passage develops
-  it. **Not** a single `{canonical_name: "Foot's view (Natural
-  Goodness)", entity_type: "concept"}` atom that collapses all three.
-- A passage on *MacIntyre's tradition-bound moral inquiry* produces:
-  `{canonical_name: "MacIntyre", entity_type: "person"}`,
-  `{canonical_name: "After Virtue", entity_type: "work"}` (if cited),
-  and `{canonical_name: "tradition-bound moral inquiry",
-  entity_type: "concept"}`.
-- A passage on *Marcus Aurelius's Meditations* produces both
-  `{canonical_name: "Marcus Aurelius", entity_type: "person"}` and
-  `{canonical_name: "Meditations", entity_type: "work"}`. The work
-  is a separate atom, not a property of the person.
+Surname lists ("A, B, C argued…") yield one Person atom per name.
 
-If a philosopher is cited only by surname in a list ("Hobbes, Locke,
-Hume argued..."), each surname is its own Person atom. Do not merge
-them into `"Hobbes and Hume"` or `"the classical compatibilists"` as
-a single atom.
-
-**Abstract philosophical concepts get their own Concept atoms even
-when discussed within a position.** A passage on compatibilism that
-develops *moral responsibility*, *free will*, *alternative
-possibilities*, or *Frankfurt cases* must extract each as its own
-`{entity_type: concept}` atom — they are the load-bearing
-philosophical vocabulary the field aligns on, not properties of the
-position that mentions them. The position is one atom; the
-underlying concepts it operates over are *additional* atoms, not
-folded into the position's description. Heuristic: if a downstream
-reader could ask *"What does this corpus say about X?"* and X is a
-named philosophical notion, X is a Concept atom.
-
-Examples of abstract concepts that should always be lifted when
-they appear:
-
-- *moral responsibility*, *free will*, *agency* (action-theory core)
-- *alternative possibilities*, *ability to do otherwise* (PAP family)
-- *determinism*, *indeterminism*, *causation* (metaphysics core)
-- *Frankfurt cases* (a named thought-experiment family — distinct
-  from Frankfurt the Person atom)
-- *moral luck*, *moral responsibility under luck* (ethics core)
-- *eudaimonia*, *virtue*, *practical wisdom*, *character trait*
-  (virtue-ethics core)
-
-Lift the concept the first time the section foregrounds it; don't
-re-extract it on every later mention.
+**Abstract philosophical concepts get their own Concept atoms.**
+Each load-bearing technical term named in the section is its own
+`{entity_type: concept}` atom — not folded into the position that
+mentions it. Heuristic: if a critic would italicise the term, it's
+a Concept atom. Form: *bad faith* (Sartre), *qualia* (philosophy of
+mind), *the categorical imperative* (Kant) — concepts drawn from
+areas unrelated to whatever you are processing. Lift on first
+mention; don't re-extract on every later mention.
 
 ### 2. `entities_developed`
 
@@ -131,9 +96,9 @@ philosophy flavors: `argued_against`, `extended`, `refined`,
 ### 4. `relations_developed`
 
 States a known relation occupies in this section. For example, the
-relation between Frankfurt's objection and the principle of alternate
-possibilities may take different stances across sections (defensive,
-decisive, overturned-by-a-counter-case).
+relation between a published objection and a position it targets may
+take different stances across sections (defensive, decisive,
+overturned-by-a-counter-case).
 
 - `participants` — same shape as `relations_introduced`.
 - `label` — the relational state as a phrase.
@@ -154,7 +119,7 @@ contrasts X and Y").
 ### 6. `claims`
 
 Knowledge-carrying acts the section performs. Attribute to a
-philosopher or position when the claim is placed in their mouth;
+philosopher OR a position when the claim is placed in their mouth;
 omit `attributed_to` when the claim is the article's own stance
 (narrator voice, consensus framing).
 
@@ -174,6 +139,14 @@ omit `attributed_to` when the claim is the article's own stance
   `retracted`, `attributed`.
 - `attributed_to` — entity name, or omit for article-voice claims.
 - `anchor` — 3–8 word keyphrase.
+
+**Prefer position over philosopher.** When a section presents the
+commitments of a *named position*, attribute its claims to the
+position (a Concept atom), not to a philosopher who holds it.
+Person attribution is correct only for genuinely biographical
+remarks. Form: "section presenting *existentialism*" → attribute
+claims to *existentialism*; "X said Y in a 1956 letter" → attribute
+to X.
 
 ### 7. `questions_raised` — **REQUIRED, ≥1 entry**
 
@@ -220,40 +193,52 @@ empty strings, or `"..."` / `"TODO"` placeholders.
 top-level fields are optional — omit entire keys you cannot populate
 with real content rather than returning empty arrays.
 
-## Shape example (from SEP "Compatibilism", illustrative)
+## Shape example (illustration only — drawn from a topic unrelated
+## to whatever section you are processing)
+
+The example below renders the *form* of a Phase 1 record using the
+SEP-style "Logical Positivism" entry. It cannot plausibly belong to
+the section you are given; match the *shape*, produce your own
+atoms from the text in the user message.
 
 ```json
 {
   "section_id": "intro",
   "entities_introduced": [
     {
-      "canonical_name": "Compatibilism",
-      "aliases": ["soft determinism"],
+      "canonical_name": "Logical positivism",
+      "aliases": ["logical empiricism"],
       "entity_type": "concept",
-      "description": "The thesis that free will and determinism are compatible.",
-      "anchor": "soft determinism, is the thesis"
+      "description": "An early 20th-century movement holding that meaningful statements are either analytic or empirically verifiable.",
+      "anchor": "early logical positivists held"
+    },
+    {
+      "canonical_name": "Vienna Circle",
+      "entity_type": "institution",
+      "description": "The interwar discussion group whose members developed and disseminated logical positivism.",
+      "anchor": "Vienna Circle members included"
     }
   ],
   "relations_introduced": [
     {
-      "participants": ["Compatibilism", "Hard determinism"],
-      "label": "opposing views on the compatibility of free will and determinism",
-      "anchor": "opponents of compatibilism"
+      "participants": ["Logical positivism", "Ordinary-language philosophy"],
+      "label": "successor movement that rejected the verification criterion as too strict",
+      "anchor": "later philosophers rejected verifiability"
     }
   ],
   "claims": [
     {
-      "content": "Freedom of will is compatible with causal determinism.",
+      "content": "Statements that cannot be empirically verified or analytically demonstrated are cognitively meaningless.",
       "discourse_act": "define",
       "epistemic_status": "attributed",
-      "attributed_to": "Compatibilism",
-      "anchor": "free will is compatible with"
+      "attributed_to": "Logical positivism",
+      "anchor": "cognitively meaningless"
     }
   ],
   "questions_raised": [
     {
-      "content": "Can agents be morally responsible in a deterministic universe?",
-      "anchor": "moral responsibility in a deterministic"
+      "content": "Can the verification criterion itself be empirically verified?",
+      "anchor": "self-application problem"
     }
   ]
 }

@@ -300,6 +300,53 @@ pub trait Pipeline: Send + Sync + 'static {
         ))
     }
 
+    // ── Phase 6 atlas classifier — opt-in per pipeline ────────────
+    //
+    // Distinct from `compose_phase6` (which is the v1 questions/
+    // positions/tensions pass). The atlas-pipeline Phase 6 has two
+    // halves: the deterministic candidate enumerator
+    // (`atlas::analysis::tensions::select_candidates`) and this LLM
+    // classifier that promotes accepted candidates to `Tension`
+    // edges on `edges.json`.
+
+    /// Whether this pipeline runs the Phase 6 atlas Tension
+    /// classifier. Default `false` — non-atlas pipelines don't
+    /// produce `tension_candidates.json` and have no candidates to
+    /// classify. Atlas pipelines (literary, philosophy) opt in.
+    fn runs_phase6_atlas_classifier(&self) -> bool {
+        false
+    }
+
+    /// Build the Phase 6 atlas classifier prompt for one resolved
+    /// candidate. Return `None` when the pipeline is not opted in;
+    /// the runner silently skips. Opted-in pipelines MUST override
+    /// this and return `Some(prompt)` per the schema in
+    /// `atlas::analysis::tension_classifier::phase6_classifier_response_schema`.
+    fn compose_phase6_atlas_classifier(
+        &self,
+        _content: &crate::enrichment::atlas::analysis::CandidateContent,
+    ) -> Option<ChatPrompt> {
+        None
+    }
+
+    /// Parse the Phase 6 atlas classifier response. Default delegates
+    /// to the shared parser in `analysis::tension_classifier` which
+    /// handles `<think>` blocks, code-fence stripping, and serde
+    /// shape validation. Pipelines may override to add domain-specific
+    /// post-processing (none today).
+    fn parse_phase6_atlas_classifier(
+        &self,
+        response: &str,
+    ) -> Result<crate::enrichment::atlas::analysis::Phase6Classification> {
+        crate::enrichment::atlas::analysis::parse_phase6_classifier_response(response).map_err(
+            |e| {
+                crate::error::Error::Serialization(format!(
+                    "phase 6 atlas classifier response parse failed: {e}"
+                ))
+            },
+        )
+    }
+
     // ── Selection tuning ──────────────────────────────────────
 
     /// How many exemplars to inject per call. Default 5 across all

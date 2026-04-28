@@ -25,7 +25,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::super::atoms::{AtomId, Claim, State};
+use super::super::atoms::{AtomId, Claim, Entity, State};
+use crate::enrichment::pipeline::atlas::EntityType;
 
 /// How a candidate pair was discovered. Carried through to the
 /// LLM classifier so it can weight intra-cluster pairs higher than
@@ -96,6 +97,15 @@ pub struct CandidateSelectionInput<'a> {
     /// State/entity-state clusters don't drive tension candidacy
     /// directly; they surface via state-vs-claim entity overlap.
     pub claim_clusters: &'a [(String, Vec<AtomId>)],
+    /// Entity atoms in the resolved atlas. Required by the
+    /// cross-position concept-overlap signal — the selector needs to
+    /// know which `attributed_to` ids point at concept atoms (which
+    /// in this domain stand in for "positions") and which point at
+    /// person atoms ("proponents"). Defaults to empty in legacy call
+    /// sites that haven't threaded entities yet; the cross-position
+    /// signal degrades to no-op rather than panicking.
+    #[allow(clippy::derivable_impls)]
+    pub entities: &'a [Entity],
 }
 
 /// Enumerate tension candidates across the three Landing 3 signals.
@@ -108,6 +118,7 @@ pub fn select_candidates(input: CandidateSelectionInput<'_>) -> Vec<TensionCandi
     out.extend(select_intra_cluster(input.claim_clusters));
     out.extend(select_entity_overlap_claim_claim(input.claims));
     out.extend(select_entity_overlap_claim_state(input.claims, input.states));
+    out.extend(select_concept_overlap_cross_position(input.claims, input.entities));
     // Dedup pairs across signal sources — prefer IntraCluster >
     // EntityOverlap when the same (a, b) appears under both tags,
     // since the cluster pre-filter is a stronger prior.
@@ -192,6 +203,207 @@ fn select_entity_overlap_claim_state(
                     shared_entity: Some(eid.clone()),
                 });
             }
+        }
+    }
+    out
+}
+
+/// Cross-position concept overlap. Pair every two claims attributed
+/// to *different* concept entities (positions) when both claim
+/// contents reference the *same* entity by canonical name.
+///
+/// Why this signal matters: the entity-overlap selectors above pair
+/// atoms that share an `attributed_to` or `entity_id`, which by
+/// construction surfaces *intra*-position tensions (two claims about
+/// Pereboom's hard incompatibilism). Cross-position tensions —
+/// compatibilism's view of moral responsibility vs hard
+/// incompatibilism's view of moral responsibility — never appear in
+/// that signal because the two claims have different attributions
+/// and the deterministic enumerator doesn't see what concepts the
+/// claim *content* engages.
+///
+/// The string-match heuristic is intentionally simple: scan each
+/// claim's content for the canonical name of every entity in the
+/// atlas; for each pair of claims with different position
+/// attributions whose mention sets intersect, surface a candidate.
+/// The shared entity becomes the candidate's `shared_entity`.
+///
+/// Filters:
+/// - Only consider claims whose `attributed_to` resolves to an
+///   `entity_type: concept` Entity. Person attributions (philosophers
+///   as proponents) are skipped — a tension between "claims attributed
+///   to Frankfurt" and "claims attributed to Pereboom" wouldn't
+///   address the structural-position question, only a biographical
+///   one.
+/// - Only consider mentions of entities whose canonical name has at
+///   least 4 characters AND is not the position itself. This filters
+///   acronyms and self-mentions (a compatibilism claim that says
+///   "compatibilism" doesn't tension itself).
+/// - When multiple shared entities exist, pick the one with the
+///   longest canonical name (a proxy for specificity). Stable for
+///   reproducibility.
+fn select_concept_overlap_cross_position(
+    claims: &[Claim],
+    entities: &[Entity],
+) -> Vec<TensionCandidate> {
+    if entities.is_empty() {
+        // No entity context wired in — degrade to no-op so legacy
+        // callers don't crash. The new signal is opt-in via the
+        // `entities` field on `CandidateSelectionInput`.
+        return Vec::new();
+    }
+    use std::collections::HashMap;
+    let entity_by_id: HashMap<&AtomId, &Entity> =
+        entities.iter().map(|e| (&e.id, e)).collect();
+
+    // Pre-filter the entity name index for matchable mentions.
+    // Names < 4 chars hit too often as substrings ("Mind", "X").
+    // For each surviving entity, also pre-compute the token list:
+    // contiguous alphabetic runs of length ≥ 5, then truncated to a
+    // 5-char *prefix* used for substring matching. The prefix trick
+    // catches morphological variants — claim text "morally
+    // responsible" stem-matches the canonical "moral responsibility"
+    // via token "respo" (prefix of "responsibility") found in
+    // "responsible". Length-5 tokens are stop-word-y ("there",
+    // "their"); we filter those by requiring ≥ 5 *alpha* chars AND
+    // the token to appear in at least one position name (which is
+    // discipline-specific by construction). Non-position concept
+    // entities pass any 5-char token through.
+    struct MatchableEntity<'a> {
+        entity: &'a Entity,
+        canonical_lower: String,
+        tokens: Vec<String>,
+    }
+    // Stop-word-y short tokens that match too often. The list is
+    // intentionally small; a longer stoplist would be a separate
+    // concern. These five all appear as ≥5-char alpha runs in
+    // common English prose and would over-fire if we stem-matched
+    // them.
+    const STOP_TOKENS: &[&str] = &[
+        "there", "their", "these", "those", "where", "which", "would", "could",
+        "about", "other", "after", "first", "every", "still", "ought",
+    ];
+    let is_stop = |t: &str| STOP_TOKENS.iter().any(|s| *s == t);
+    let matchable: Vec<MatchableEntity<'_>> = entities
+        .iter()
+        .filter(|e| e.canonical_name.trim().len() >= 4)
+        .map(|e| {
+            let canonical_lower = e.canonical_name.to_ascii_lowercase();
+            // Take alpha-only runs ≥ 5 chars, prefix-truncated to 5
+            // for stem-style substring matching, dropping stop tokens.
+            let tokens: Vec<String> = canonical_lower
+                .split(|ch: char| !ch.is_alphabetic())
+                .filter(|t| t.len() >= 5)
+                .map(|t| t[..5.min(t.len())].to_string())
+                .filter(|t| !is_stop(t))
+                .collect();
+            MatchableEntity {
+                entity: e,
+                canonical_lower,
+                tokens,
+            }
+        })
+        .collect();
+
+    // For each claim with a concept-typed attribution, build the set
+    // of entity ids whose canonical name appears in claim.content
+    // (case-insensitive substring) AND that aren't the claim's own
+    // position.
+    struct ClaimMeta<'a> {
+        claim: &'a Claim,
+        position: &'a AtomId,
+        mentions: std::collections::BTreeSet<&'a AtomId>,
+    }
+    let mut metas: Vec<ClaimMeta<'_>> = Vec::new();
+    for c in claims {
+        let Some(attr) = c.attributed_to.as_ref() else {
+            continue;
+        };
+        let Some(attr_entity) = entity_by_id.get(attr) else {
+            continue;
+        };
+        if attr_entity.entity_type != EntityType::Concept {
+            continue;
+        }
+        let lower_content = c.content.to_ascii_lowercase();
+        let mut mentions = std::collections::BTreeSet::new();
+        for m in &matchable {
+            // Two ways to match. Either:
+            //   (a) the canonical name appears verbatim as a
+            //       case-insensitive substring of the claim, OR
+            //   (b) any of the canonical name's qualifying tokens
+            //       (≥ 7 chars) appears as a substring.
+            // Case (b) catches morphological variants and catches
+            // claims that paraphrase the canonical phrase. The
+            // self-position case is allowed (we want to surface
+            // "claim attributed to A mentions A's name in context
+            // of position B").
+            let canonical_hit = lower_content.contains(&m.canonical_lower);
+            let token_hit = m
+                .tokens
+                .iter()
+                .any(|t| lower_content.contains(t.as_str()));
+            if canonical_hit || token_hit {
+                mentions.insert(&m.entity.id);
+            }
+        }
+        if mentions.is_empty() {
+            continue;
+        }
+        metas.push(ClaimMeta {
+            claim: c,
+            position: attr,
+            mentions,
+        });
+    }
+
+    // Pair every (i, j) where positions differ AND mention sets
+    // intersect. Stable order: outer loop preserves claim order from
+    // input.
+    let mut out = Vec::new();
+    for i in 0..metas.len() {
+        for j in (i + 1)..metas.len() {
+            if metas[i].position == metas[j].position {
+                continue;
+            }
+            // Intersection: pick the shared entity with the longest
+            // canonical name as the candidate's `shared_entity`.
+            // Skip mentions that are *either claim's own position* —
+            // those carry less interpretive weight than a third
+            // shared concept. We tolerate them as fallbacks if no
+            // third concept is shared.
+            let mut best_shared: Option<&AtomId> = None;
+            let mut best_len = 0usize;
+            let mut fallback_shared: Option<&AtomId> = None;
+            let mut fallback_len = 0usize;
+            for id in metas[i].mentions.intersection(&metas[j].mentions) {
+                let Some(e) = entity_by_id.get(id) else {
+                    continue;
+                };
+                let is_own_position =
+                    *id == metas[i].position || *id == metas[j].position;
+                let len = e.canonical_name.len();
+                if is_own_position {
+                    if len > fallback_len {
+                        fallback_len = len;
+                        fallback_shared = Some(*id);
+                    }
+                } else if len > best_len {
+                    best_len = len;
+                    best_shared = Some(*id);
+                }
+            }
+            let Some(shared) = best_shared.or(fallback_shared) else {
+                continue;
+            };
+            out.push(TensionCandidate {
+                id: String::new(),
+                source_atom: metas[i].claim.id.clone(),
+                target_atom: metas[j].claim.id.clone(),
+                discovery: CandidateSource::EntityOverlap,
+                cluster_id: None,
+                shared_entity: Some(shared.clone()),
+            });
         }
     }
     out
@@ -299,6 +511,7 @@ mod tests {
             claims: &[],
             states: &[],
             claim_clusters: &[cluster],
+            entities: &[],
         });
         // 3 claims → C(3,2) = 3 unique pairs.
         assert_eq!(out.len(), 3);
@@ -322,6 +535,7 @@ mod tests {
             claims: &claims,
             states: &[],
             claim_clusters: &[],
+            entities: &[],
         });
         // Exactly one pair: claim-0001 ↔ claim-0002.
         assert_eq!(out.len(), 1);
@@ -345,6 +559,7 @@ mod tests {
             claims: &claims,
             states: &states,
             claim_clusters: &[],
+            entities: &[],
         });
         assert_eq!(out.len(), 2);
         assert!(out.iter().all(|c| c.source_atom.as_str() == "claim-0001"));
@@ -372,6 +587,7 @@ mod tests {
             claims: &claims,
             states: &[],
             claim_clusters: &[cluster],
+            entities: &[],
         });
         assert_eq!(out.len(), 1);
         assert!(matches!(out[0].discovery, CandidateSource::IntraCluster));
@@ -384,8 +600,127 @@ mod tests {
             claims: &claims,
             states: &[],
             claim_clusters: &[],
+            entities: &[],
         });
         let ids: Vec<&str> = out.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(ids, vec!["cand-0001", "cand-0002", "cand-0003"]);
+    }
+
+    fn entity(id: u32, name: &str, kind: crate::enrichment::pipeline::atlas::EntityType) -> Entity {
+        Entity {
+            id: AtomId::from_raw(format!("entity-{id:04}")),
+            canonical_name: name.into(),
+            aliases: Vec::new(),
+            entity_type: kind,
+            first_appearance: ChunkRef::new("sec_0001", None),
+            description: format!("test entity {id}"),
+            salience: 1.0,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+        }
+    }
+
+    /// Two claims attributed to two different concept-typed entities,
+    /// whose contents both mention the canonical name of a third
+    /// entity (the shared concept). The cross-position selector must
+    /// pair them and tag the shared entity.
+    #[test]
+    fn cross_position_claims_sharing_a_concept_pair() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let entities = vec![
+            entity(1, "PositionAlpha", EntityType::Concept),
+            entity(2, "PositionBeta", EntityType::Concept),
+            entity(3, "thirdConcept", EntityType::Concept),
+        ];
+        let mut a = claim(1, Some(1));
+        a.content = "PositionAlpha holds that thirdConcept is grounded in causal history.".into();
+        let mut b = claim(2, Some(2));
+        b.content = "PositionBeta denies that thirdConcept is grounded; it floats free.".into();
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        // Should produce at least one cross-position candidate. The
+        // intra-position selectors don't fire because positions
+        // differ; the cross-position selector should fire on the
+        // shared mention of "thirdConcept".
+        assert_eq!(
+            out.len(),
+            1,
+            "expected exactly one cross-position candidate, got {out:?}"
+        );
+        let c = &out[0];
+        assert!(matches!(c.discovery, CandidateSource::EntityOverlap));
+        assert_eq!(
+            c.shared_entity.as_ref().map(|a| a.as_str()),
+            Some("entity-0003"),
+            "shared entity should be the third (longest-name) concept"
+        );
+    }
+
+    /// Claims attributed to the SAME position should not produce
+    /// cross-position candidates. The intra-position selector
+    /// already covers them.
+    #[test]
+    fn cross_position_same_position_does_not_pair() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let entities = vec![
+            entity(1, "SharedPosition", EntityType::Concept),
+            entity(3, "thirdConcept", EntityType::Concept),
+        ];
+        let mut a = claim(1, Some(1));
+        a.content = "SharedPosition argues thirdConcept matters.".into();
+        let mut b = claim(2, Some(1));
+        b.content = "SharedPosition denies thirdConcept matters.".into();
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        // Intra-position pairing fires (same `attributed_to`); the
+        // cross-position selector must NOT also fire.
+        let cross_count = out
+            .iter()
+            .filter(|c| {
+                c.shared_entity.as_ref().map(|s| s.as_str()) == Some("entity-0003")
+            })
+            .count();
+        assert_eq!(
+            cross_count, 0,
+            "cross-position selector should not pair same-position claims, got {out:?}"
+        );
+    }
+
+    /// Claims attributed to person entities (philosophers, not
+    /// positions) should not drive cross-position candidates. The
+    /// signal targets position-vs-position structural disagreement;
+    /// philosopher-vs-philosopher is biographical, not structural.
+    #[test]
+    fn cross_position_skips_person_attributions() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let entities = vec![
+            entity(1, "Aquinas", EntityType::Person),
+            entity(2, "Spinoza", EntityType::Person),
+            entity(3, "thirdConcept", EntityType::Concept),
+        ];
+        let mut a = claim(1, Some(1));
+        a.content = "Aquinas argues thirdConcept matters.".into();
+        let mut b = claim(2, Some(2));
+        b.content = "Spinoza denies thirdConcept matters.".into();
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        assert!(
+            out.is_empty(),
+            "person attributions should not yield cross-position candidates, got {out:?}"
+        );
     }
 }

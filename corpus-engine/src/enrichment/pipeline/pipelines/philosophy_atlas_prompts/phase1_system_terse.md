@@ -37,18 +37,30 @@ Schema (strict JSON, one object):
 
 `questions_raised` is **required** (≥1 entry). For an expository
 section that explains a single view rather than framing a debate,
-extract the implicit inquiry the section addresses — e.g. *"In what
-does flourishing consist?"* for an exposition of eudaimonia, *"How
-should one live in agreement with nature?"* for the Stoic system,
-*"What is X's account of Y?"* for any thinker's view. Phrase
-concretely; never leave this array empty.
+extract the implicit inquiry the section addresses — phrase it as a
+concrete question like *"What is X's account of Y?"*. Never leave
+this array empty.
 
 **Person + Work split:** When a section discusses *X's view* or *X's
 work*, lift the philosopher X as a `person` entity AND the cited
 work as a `work` entity AND the view as a `concept` entity if it has
 a distinct name — three atoms, not one collapsed `"X's view"`
-concept. A list like *"Hobbes, Locke, Hume argued..."* yields three
-separate Person atoms, not a merged one.
+concept. A list of philosophers cited only by surname (`"A, B, C
+argued..."`) yields one Person atom per name, not a merged one.
+
+**Abstract concepts get their own Concept atoms.** A load-bearing
+technical term named in passing must produce a Concept atom — its
+value is its recurrence across sections, which a critic discussing
+the text will track even when the section's own treatment is
+glancing. Match the form of examples like *bad faith* (Sartre),
+*language game* (Wittgenstein), *the categorical imperative* (Kant)
+— concepts drawn from areas unrelated to whatever section you are
+processing.
+
+**Claims `attributed_to` a position, not a philosopher.** When a
+section presents a named position, set `attributed_to` to the
+position (Concept atom). Use the philosopher only for biographical
+remarks not tied to a named position.
 
 Other top-level keys are optional — omit any you cannot populate.
 Never emit empty strings, `null`, `"..."`, or `"TODO"` placeholders.

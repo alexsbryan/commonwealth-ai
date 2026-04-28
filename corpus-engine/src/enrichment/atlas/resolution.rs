@@ -228,7 +228,25 @@ fn synthesize_entities_from_unresolved_event_participants(
                     id: new_id.clone(),
                     canonical_name: trimmed.to_string(),
                     aliases: Vec::new(),
-                    entity_type: EntityType::Other("unspecified".into()),
+                    // Default synthesised event-participant entities
+                    // to Person. Previously `Other("unspecified")`,
+                    // which:
+                    //  (a) evaded forbidden_person_atoms checks (the
+                    //      Narrator slipped through as "unspecified"),
+                    //  (b) failed expected_person_atoms recall (named
+                    //      characters like "Mangan's sister" /
+                    //      "Aunt" / "Harry" appeared only as event
+                    //      participants and were never extracted as
+                    //      Person atoms).
+                    // Most participants are people; the rare misclass
+                    // (a place misfiled as person) is preferable to
+                    // both failure modes above. Daemon's
+                    // grammar-constrained sampler is a known no-op
+                    // (sovereign-inference embedded.rs:3140), so
+                    // upstream schema enforcement won't fix this —
+                    // the synthesis default is the only place to
+                    // commit a type.
+                    entity_type: EntityType::Person,
                     first_appearance: ChunkRef::new(
                         section.section_id.clone(),
                         if sketch.anchor.is_empty() {
@@ -651,11 +669,16 @@ fn entity_sketches_from_developed<'a>(
     section.entities_developed.iter().map(|s| EntitySketch {
         canonical_name: s.entity_name.clone(),
         aliases: Vec::new(),
-        // Unknown at this point — the entity-state sketch doesn't
-        // carry a type. Phase 3a uses `Other("unspecified")` so the
-        // atom is still typed; a later pass can promote it when
-        // more evidence arrives.
-        entity_type: EntityType::Other("unspecified".into()),
+        // Same rationale as
+        // `synthesize_entities_from_unresolved_event_participants`:
+        // entity-state sketches don't carry a type; previously
+        // defaulted to Other("unspecified") which broke
+        // forbidden-rule scoring + expected-type recall. State atoms
+        // overwhelmingly attach to people (interior states), so
+        // Person is the right default. Misclassifications (a state
+        // attaching to a Place) are rare and recoverable; "narrator
+        // hedge" failures from Other(_) were systemic.
+        entity_type: EntityType::Person,
         description: String::new(),
         anchor: s.anchor.clone(),
     })

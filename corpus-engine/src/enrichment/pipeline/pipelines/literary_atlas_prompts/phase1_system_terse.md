@@ -34,6 +34,24 @@ Named things entering the frame for the first time.
 - `description` — one sentence drawn from this section.
 - `anchor` — 3–8 word keyphrase from the text.
 
+**Hard constraints on `entities_introduced`:**
+
+- A first-person narrator ("I saw…", "I had passed the house…") is
+  the *voice* of the section, not an entity in it. Do NOT emit
+  `canonical_name: "the narrator"` / `"the boy"` / `"narrator"` as a
+  Person atom. Symmetric: the *author* is not an entity of the work.
+- Single-mention named characters DO get Person atoms. Naming is the
+  threshold, not appearance count.
+- Cited works ARE Work atoms even when listed in passing. Three books
+  on a shelf yields three Work atoms.
+- Abstract concepts get their own Concept atoms even when they appear
+  briefly. The threshold: a critic writing about the passage would
+  italicise the word — it carries weight across sections beyond its
+  literal use here. Examples in form (from texts unrelated to what
+  you are processing): Hemingway's *grace under pressure*, James's
+  *the figure in the carpet*, Conrad's *the horror*. Match the
+  *form*, not the listed examples.
+
 ### 2. `entities_developed`
 
 Inner states an entity occupies here.

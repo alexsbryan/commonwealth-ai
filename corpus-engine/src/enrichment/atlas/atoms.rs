@@ -22,7 +22,7 @@ use crate::enrichment::pipeline::atlas::{
 /// self-describing (`"entity-001"`, `"event-042"`) and cheap to emit.
 /// Use the builder constructors rather than `from_raw` unless you're
 /// deserialising or writing adapters for another store.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct AtomId(String);
 
 impl AtomId {

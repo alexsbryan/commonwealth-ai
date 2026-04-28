@@ -54,6 +54,9 @@ const PHASE3_EVENT_NAMING: &str =
 const PHASE8_CONFIGURATION_SYSTEM: &str =
     include_str!("philosophy_atlas_prompts/phase8_configuration.md");
 
+const PHASE6_CLASSIFIER_SYSTEM: &str =
+    include_str!("philosophy_atlas_prompts/phase6_classifier_system.md");
+
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "philosophy_atlas";
 
@@ -445,6 +448,35 @@ impl Pipeline for PhilosophyAtlasPipeline {
         // schema is domain-agnostic. Only the prompt that produces
         // the response differs.
         self.inner.parse_phase8_configuration(response)
+    }
+
+    // ── Phase 6 atlas Tension classifier ─────────────────────────
+    //
+    // Reuses the literary classifier's user-body renderer + JSON
+    // schema; only the system preamble differs (philosophical voice
+    // vs literary voice).
+
+    fn runs_phase6_atlas_classifier(&self) -> bool {
+        true
+    }
+
+    fn compose_phase6_atlas_classifier(
+        &self,
+        content: &crate::enrichment::atlas::analysis::CandidateContent,
+    ) -> Option<ChatPrompt> {
+        // Compose the user body via the literary helper, then swap
+        // the system preamble for the philosophy variant. This keeps
+        // the user-message format identical across pipelines so
+        // exemplar caches and replay tooling see one shape.
+        let inner_prompt = self.inner.compose_phase6_atlas_classifier(content)?;
+        Some(
+            ChatPrompt::new(PHASE6_CLASSIFIER_SYSTEM, inner_prompt.user)
+                .with_response_schema(
+                    "phase6_classifier_response",
+                    crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
+                )
+                .with_phase_id("phase6_classifier"),
+        )
     }
 }
 

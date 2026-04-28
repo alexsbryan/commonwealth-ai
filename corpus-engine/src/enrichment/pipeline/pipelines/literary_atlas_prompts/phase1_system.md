@@ -38,6 +38,26 @@ time.
   establishes the entity. Not a 25-word quote; just enough to grep
   for.
 
+**Narrator / author ≠ entity.** A first-person narrator is the
+voice, not a Person atom. Do NOT emit `"the narrator"`, `"the boy"`,
+`"narrator"`, or the author. Test: if the section only says "I saw
+/ I felt / I heard" of the candidate, they're the narrator — no atom.
+Their events and states get recorded without a participant id, or
+attached to named characters they interact with.
+
+**Single-mention named characters get Person atoms.** Naming is the
+threshold, not on-page page-count.
+
+**Cited works are Work atoms.** A book on a shelf, a poem quoted in
+dialogue, a play named in allusion — each is its own Work atom.
+
+**Abstract concepts get their own Concept atoms.** A load-bearing
+literary term named even once is its own atom; if a critic would
+italicise the word, it's a Concept. Form: *grace under pressure*
+(Hemingway), *the figure in the carpet* (James), *the horror*
+(Conrad) — drawn from areas unrelated to whatever you are
+processing. Lift on first mention.
+
 ### 2. `entities_developed`
 
 Inner states an entity occupies or enters in this section.

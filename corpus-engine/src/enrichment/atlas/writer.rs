@@ -225,8 +225,9 @@ pub fn write_atlas_gaps(
 }
 
 /// Write the tension candidate list (Phase 6 deterministic half) to
-/// `atlas/tension_candidates.json`. Landing 4's LLM classifier will
-/// consume this and emit `Tension` edges on `atlas/edges.json`.
+/// `atlas/tension_candidates.json`. The Phase 6 LLM classifier
+/// (Landing 4) consumes this and emits `Tension` edges on
+/// `atlas/edges.json`.
 pub fn write_tension_candidates(
     atlas_dir: &Path,
     candidates: &super::analysis::tensions::TensionCandidatesOutput,
@@ -235,6 +236,22 @@ pub fn write_tension_candidates(
     let path = atlas_dir.join("tension_candidates.json");
     write_atomic(&path, candidates)?;
     Ok(path)
+}
+
+/// Read the tension candidate list back from disk. Companion to
+/// [`write_tension_candidates`]. Used by the Phase 6 LLM classifier
+/// to fan out per-candidate prompts.
+pub fn read_tension_candidates(
+    atlas_dir: &Path,
+) -> io::Result<super::analysis::tensions::TensionCandidatesOutput> {
+    let path = atlas_dir.join("tension_candidates.json");
+    let data = fs::read(&path)?;
+    serde_json::from_slice(&data).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("parse tension_candidates.json: {e}"),
+        )
+    })
 }
 
 /// Write a cross-corpus edges file to
@@ -303,6 +320,18 @@ pub fn read_atlas_edges(atlas_dir: &Path) -> io::Result<EdgesFile> {
     let data = fs::read(&path)?;
     serde_json::from_slice(&data)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse edges.json: {e}")))
+}
+
+/// Replace `atlas/edges.json` with the provided file. Used by Phase
+/// 6's LLM Tension classifier to merge new edges into the resolved
+/// atlas without re-running the entire write_atlas pipeline. Atomic:
+/// writes through a sibling `.tmp` + rename so a crash leaves the
+/// pre-existing file intact rather than truncated.
+pub fn write_atlas_edges(atlas_dir: &Path, edges: &EdgesFile) -> io::Result<PathBuf> {
+    fs::create_dir_all(atlas_dir)?;
+    let path = atlas_dir.join("edges.json");
+    write_atomic(&path, edges)?;
+    Ok(path)
 }
 
 /// Write a `serde_json::Serialize` value to `path` via a sibling

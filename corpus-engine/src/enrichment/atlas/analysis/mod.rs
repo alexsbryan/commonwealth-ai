@@ -23,6 +23,7 @@
 
 pub mod configuration;
 pub mod gaps;
+pub mod tension_classifier;
 pub mod tensions;
 
 pub use configuration::{
@@ -31,6 +32,11 @@ pub use configuration::{
     RelationSynopsis, TrajectorySynopsis,
 };
 pub use gaps::{detect_deterministic_gaps, Gap, GapKind, GapsOutput};
+pub use tension_classifier::{
+    classification_to_edge, parse_phase6_classifier_response,
+    phase6_classifier_response_schema, resolve_candidate_content, AtomIndex, AtomKind,
+    CandidateContent, Phase6Classification,
+};
 pub use tensions::{
     select_candidates, CandidateSource, TensionCandidate, TensionCandidatesOutput,
 };

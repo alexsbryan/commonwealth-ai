@@ -75,6 +75,14 @@ const PHASE1A_SEED_SYSTEM: &str =
 const PHASE8_CONFIGURATION_SYSTEM: &str =
     include_str!("literary_atlas_prompts/phase8_configuration.md");
 
+/// Phase 6 atlas Tension classifier preamble. The LLM reads one
+/// resolved candidate (a claim+state pair sharing an entity) and
+/// returns a verdict on whether they are in genuine structural
+/// tension. Yes-verdicts promote to `EdgeType::Tension` records on
+/// `edges.json` via `analysis::tension_classifier::classification_to_edge`.
+const PHASE6_CLASSIFIER_SYSTEM: &str =
+    include_str!("literary_atlas_prompts/phase6_classifier_system.md");
+
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "literary_atlas";
 
@@ -698,6 +706,26 @@ impl Pipeline for LiteraryAtlasPipeline {
         })?;
         Ok(raw.configurations)
     }
+
+    // ── Phase 6 atlas Tension classifier ─────────────────────────
+
+    fn runs_phase6_atlas_classifier(&self) -> bool {
+        true
+    }
+
+    fn compose_phase6_atlas_classifier(
+        &self,
+        content: &crate::enrichment::atlas::analysis::CandidateContent,
+    ) -> Option<ChatPrompt> {
+        Some(
+            ChatPrompt::new(PHASE6_CLASSIFIER_SYSTEM, render_phase6_classifier_user_body(content))
+                .with_response_schema(
+                    "phase6_classifier_response",
+                    crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
+                )
+                .with_phase_id("phase6_classifier"),
+        )
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -774,6 +802,50 @@ fn sanitize_phase1_object_arrays(value: &mut serde_json::Value) {
 /// block is rendered at the top of the user message. Chapter-level
 /// map calls use these to resolve pronouns and alias variants to
 /// stable forms, which is the whole point of Stage 1a.
+/// Render the Phase 6 classifier user body for one resolved
+/// candidate. The system prompt covers the rule set; the user body
+/// presents the two atoms verbatim with kind labels (Claim / State)
+/// and the shared-entity name when present.
+///
+/// Format is deliberately minimal — this is a per-candidate call
+/// dispatched many times per build (12 candidates for a 5-chapter
+/// novel section, scaling with claims × states × shared entities),
+/// so token efficiency matters more than narrative framing.
+fn render_phase6_classifier_user_body(
+    content: &crate::enrichment::atlas::analysis::CandidateContent,
+) -> String {
+    use crate::enrichment::atlas::analysis::AtomKind;
+    let kind_label = |k: AtomKind| match k {
+        AtomKind::Claim => "Claim",
+        AtomKind::State => "State",
+    };
+    let mut user = String::new();
+    user.push_str("# Candidate to classify\n\n");
+    if let Some(name) = content.shared_entity_name.as_deref() {
+        user.push_str(&format!("**Shared participant:** {name}\n\n"));
+    } else {
+        user.push_str("**Shared participant:** (not resolved by deterministic pass)\n\n");
+    }
+    user.push_str(&format!(
+        "**A — {} ({}):** {}\n\n",
+        kind_label(content.source_kind),
+        content.source_atom.as_str(),
+        content.source_text.trim()
+    ));
+    user.push_str(&format!(
+        "**B — {} ({}):** {}\n\n",
+        kind_label(content.target_kind),
+        content.target_atom.as_str(),
+        content.target_text.trim()
+    ));
+    user.push_str(
+        "Classify whether A and B are in genuine structural tension. \
+         Return one JSON object per the schema in the system message. \
+         No prose, no `<think>` block, no markdown fences. Begin with `{`.\n",
+    );
+    user
+}
+
 pub(super) fn render_phase1_user_body(
     chapter: &ChapterInput,
     exemplars: &[&Exemplar],
@@ -1011,13 +1083,42 @@ impl RawEntitySketch {
             debug!("literary_atlas: dropping entity sketch — canonical_name missing");
             return None;
         }
+        // Reject the type-evasion failure mode. The daemon's
+        // grammar-constrained sampler is a known no-op (see
+        // sovereign-inference/embedded.rs build_sampler comment), so
+        // schema-side `enum` constraints don't reach the model. The
+        // parser is the only place we can enforce "must commit to one
+        // of the 5 named variants" — without enforcement, models hedge
+        // borderline cases (the Narrator, an unnamed character, an
+        // abstract "the household") with entity_type:"unspecified",
+        // which evades both forbidden-rule scoring and expected-type
+        // recall. Dropping the atom rather than persisting it as
+        // Other(_) is the correct trade: a borderline case the model
+        // can't classify is not load-bearing and shouldn't pollute
+        // the atlas. If the model wants to emit such an atom, it has
+        // to commit to a typing.
+        let entity_type = match self.entity_type {
+            Some(EntityType::Other(s)) => {
+                debug!(
+                    "literary_atlas: dropping entity sketch '{name}' — \
+                     entity_type='{s}' is not one of the 5 named variants \
+                     (model hedged on typing)"
+                );
+                return None;
+            }
+            None => {
+                debug!(
+                    "literary_atlas: dropping entity sketch '{name}' — \
+                     entity_type missing (model didn't commit to a typing)"
+                );
+                return None;
+            }
+            Some(et) => et,
+        };
         Some(EntitySketch {
             canonical_name: name,
             aliases: vec_of_some(self.aliases),
-            entity_type: self.entity_type.unwrap_or_else(|| {
-                debug!("literary_atlas: defaulting entity_type to Other(\"unspecified\")");
-                EntityType::Other("unspecified".into())
-            }),
+            entity_type,
             description: self.description,
             anchor: self.anchor,
         })
@@ -1346,11 +1447,14 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "properties": {
         "canonical_name": { "type": "string" },
         "aliases": { "type": "array", "items": { "type": "string" } },
-        "entity_type": { "type": "string" },
+        "entity_type": {
+          "type": "string",
+          "enum": ["person", "concept", "institution", "work", "place", "initiative"]
+        },
         "description": { "type": "string" },
         "anchor": { "type": "string" }
       },
-      "required": ["canonical_name"]
+      "required": ["canonical_name", "entity_type"]
     },
     "entity_state_sketch": {
       "type": "object",
@@ -1736,7 +1840,18 @@ mod tests {
     }
 
     #[test]
-    fn parse_phase1_tolerates_unknown_entity_type_tag() {
+    fn parse_phase1_drops_unknown_entity_type_tag() {
+        // The daemon's grammar-constrained sampler is a known no-op
+        // (see sovereign-inference embedded.rs build_sampler comment),
+        // so unknown entity_type tags reach the parser. Models hedge
+        // borderline cases — "the narrator" gets typed as
+        // "unspecified", a personified force gets typed as "deity",
+        // an abstract group gets typed as "collective". Persisting
+        // these as Other(_) atoms pollutes downstream phases (the
+        // narrator becomes a forbidden_person hit; "deity" never
+        // matches expected_concept_atoms because no golden lists it).
+        // Drop the atom — if the model can't commit to one of the 5
+        // named types, the atom isn't load-bearing enough to keep.
         let p = LiteraryAtlasPipeline::new();
         let response = r#"{
           "section_id": "sec_0001",
@@ -1749,9 +1864,10 @@ mod tests {
         }"#;
         let parsed = p.parse_phase1(response).unwrap();
         let extraction = parsed.section_extraction.unwrap();
-        assert_eq!(
-            extraction.entities_introduced[0].entity_type,
-            EntityType::Other("deity".into())
+        assert!(
+            extraction.entities_introduced.is_empty(),
+            "entity with non-standard entity_type should be dropped, got: {:?}",
+            extraction.entities_introduced
         );
     }
 
