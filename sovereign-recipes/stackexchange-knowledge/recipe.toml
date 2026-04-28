@@ -1,0 +1,103 @@
+[corpus]
+id = "stackexchange-knowledge"
+name = "Stack Exchange Knowledge"
+description = """
+Knowledge-dense Q&A from the Stack Exchange network — the multi-answer threads where the community has \
+validated several approaches to a question. Default scope is the small charter-knowledge sites \
+(Software Engineering, DBA, Security, DevOps, Skeptics). Stack Overflow's architecture/design subset \
+can be added in-place via `expand_corpus` once the Core finishes — the 17 GB SO Posts archive is too \
+heavy for first install. \
+\
+Distinct from the `stackexchange` reference layer, which captures single-canonical-answer Q&A for code \
+lookup. This corpus is shaped for retrieval against architectural / trade-off questions where the \
+right answer is "here are three viable approaches and the conditions under which each dominates." \
+\
+Pairs with the `engineering` enrichment domain (Approach / Trade-off / Context / Assumption); enrichment \
+is currently OFF pending the prompt-set landing — keep `[enrichment]` enabled = false until then.\
+"""
+license = "CC-BY-SA-4.0"
+mesh_sharing = true
+size_compressed_gb = 0.15
+size_indexed_gb = 0.6
+
+# ─── Acquisition ─────────────────────────────────────────────────────
+# Internet Archive's Stack Exchange dump publishes one .7z per
+# community. The default scope pulls the small charter sites — sites
+# whose moderation environment *welcomes* trade-off questions by
+# charter, so the multi-answer / density signal is high. Total
+# compressed download is ~150 MB, which finishes in a few minutes on
+# a typical home connection and indexes in another 1–2 minutes.
+#
+# .7z extraction is automatic (corpus-engine bundles a 7z decoder).
+# Each archive lands under
+#   ~/.sovereign/downloads/<corpus_id>/<archive>.7z
+# and is decompressed once into a sibling directory whose name matches
+# the archive stem; the SE extractor walks that directory.
+#
+# To add Stack Overflow's architecture/design subset, run
+# `expand_corpus` from the Knowledge panel after the Core install
+# completes — the expand path appends the SO Posts archive (~17 GB
+# compressed, hours to ingest) without re-downloading the charter
+# sites already on disk.  See [update] below.
+[acquire]
+type = "bulk_download"
+urls = [
+  "https://archive.org/download/stackexchange/softwareengineering.stackexchange.com.7z",
+  "https://archive.org/download/stackexchange/dba.stackexchange.com.7z",
+  "https://archive.org/download/stackexchange/security.stackexchange.com.7z",
+  "https://archive.org/download/stackexchange/devops.stackexchange.com.7z",
+  "https://archive.org/download/stackexchange/skeptics.stackexchange.com.7z",
+]
+resume = true
+
+# ─── Extraction ──────────────────────────────────────────────────────
+# `question_with_answers` groups up to 5 top-scoring answers under each
+# question and emits one document per question — the unit of knowledge
+# is the answer-set, not the answer. Each grouped doc carries an
+# `embed_text` breadth summary (question title + first sentence of
+# each answer) so the vector embedding captures the trade-off space
+# without overflowing the embed model's 512-token context window.
+[extract]
+type = "stackexchange_xml"
+mode = "question_with_answers"
+min_score = 3
+max_answers_per_question = 5
+min_answer_length = 200
+exclude_closed = true
+
+# ─── Filtering ───────────────────────────────────────────────────────
+# Density cut, scoped to Stack Overflow only (smaller SE sites in this
+# bundle are knowledge-dense by charter — every passing question
+# should make it through). Three substantive answers (≥5 score, ≥500
+# chars each) is the floor for "this is a trade-off thread," not a
+# canonical-answer thread.
+[[filter]]
+type = "knowledge_density"
+min_substantive_answers = 3
+answer_score_threshold = 5
+min_answer_length = 500
+exclude_closed = true
+apply_to = ["stackoverflow.com"]
+
+# ─── Chunking ────────────────────────────────────────────────────────
+# Pair with `passthrough`: the extractor already emits one
+# already-grouped document per question. The single-chunk-per-doc
+# contract is also what activates the `embed_text` override in the
+# ingest loop — so the breadth summary actually drives the embedding.
+[chunk]
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+
+# ─── Enrichment ──────────────────────────────────────────────────────
+# Engineering domain: Approach / Trade-off / Context / Assumption. The
+# domain is registered (so this recipe parses cleanly), but the prompt
+# set is a follow-on pass. Keep enabled = false until those land —
+# turning it on today will panic via `todo!` in the domain stub.
+[enrichment]
+enabled = false
+type = "field_model"
+domain = "engineering"
+prompt_version = "0.1.0"

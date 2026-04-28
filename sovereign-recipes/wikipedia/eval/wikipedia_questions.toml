@@ -1,0 +1,403 @@
+# Wikipedia evaluation question bank — 20 challenging questions across
+# six categories. Used by `sovereign eval run` to measure retrieval and
+# (optionally) synthesis quality before/after enrichment changes.
+#
+# Schema (see `sovereign-cli/src/eval_cmd/bank.rs`):
+#   - `id`               stable identifier; used in run-output filenames + diffs
+#   - `category`         slice key for category-level rollups
+#   - `question`         the literal question we ask
+#   - `expected_facts`   substantive facts that should appear in retrieved
+#                        chunks (or, with --synth, in the synthesised answer).
+#                        Scoring is keyword-fuzzy — keep facts terse and
+#                        keyword-rich (proper nouns + dates + numbers).
+#   - `expected_sources` canonical Wikipedia article titles that should rank
+#                        in top-K retrieval. Match is case-insensitive and
+#                        underscore-folded by `corpus_engine::filters::normalize_title`.
+#   - `notes`            optional commentary for humans tuning the bank.
+#
+# Designing for breadth + difficulty:
+#   - Factual recall    — well-covered single article (3)
+#   - Multi-article synthesis — answer requires combining info across articles (4)
+#   - Causal / historical — "why did X lead to Y" (3)
+#   - Comparative       — comparing two figures / theories (3)
+#   - Boundary / coverage — probes edges of Vital Articles L5 (3)
+#   - Contested / atlas-relevant — multiple perspectives, fault-line territory (4)
+
+[bank]
+name = "wikipedia-core-v1"
+corpus = "wikipedia"
+description = "Initial 20-question bank focused on WWII, foundational physics, and contested 20th-century topics."
+
+# ─── Factual recall ─────────────────────────────────────────────
+
+[[questions]]
+id = "factual_einstein_1905"
+category = "factual_recall"
+question = "What were Einstein's four 1905 'Annus Mirabilis' papers about?"
+expected_facts = [
+    "photoelectric effect",
+    "Brownian motion",
+    "special relativity",
+    "mass-energy equivalence",
+    "1905",
+]
+expected_sources = [
+    "Albert Einstein",
+    "Annus Mirabilis papers",
+]
+
+[[questions]]
+id = "factual_yalta_leaders"
+category = "factual_recall"
+question = "Who were the three Allied leaders at the Yalta Conference?"
+expected_facts = [
+    "Franklin D. Roosevelt",
+    "Winston Churchill",
+    "Joseph Stalin",
+    "February 1945",
+]
+expected_sources = [
+    "Yalta Conference",
+]
+
+[[questions]]
+id = "factual_special_vs_general_relativity"
+category = "factual_recall"
+question = "What is the core difference between special relativity and general relativity?"
+expected_facts = [
+    "inertial frames",
+    "accelerated frames",
+    "gravity",
+    "spacetime curvature",
+    "1905",
+    "1915",
+]
+expected_sources = [
+    "Special relativity",
+    "General relativity",
+]
+
+# ─── Multi-article synthesis ────────────────────────────────────
+
+[[questions]]
+id = "synth_manhattan_emigre_physicists"
+category = "multi_article_synthesis"
+question = "How did the Manhattan Project draw on European physicists who fled Nazi Germany?"
+expected_facts = [
+    "Albert Einstein",
+    "Leo Szilard",
+    "Edward Teller",
+    "Enrico Fermi",
+    "Einstein-Szilard letter",
+    "Los Alamos",
+]
+expected_sources = [
+    "Manhattan Project",
+    "Albert Einstein",
+    "Leo Szilard",
+    "Enrico Fermi",
+]
+
+[[questions]]
+id = "synth_einstein_bohr_debate"
+category = "multi_article_synthesis"
+question = "What were the central scientific disagreements between Einstein and Bohr about quantum mechanics?"
+expected_facts = [
+    "Copenhagen interpretation",
+    "EPR paradox",
+    "hidden variables",
+    "Solvay Conference",
+    "God does not play dice",
+    "complementarity",
+]
+expected_sources = [
+    "Albert Einstein",
+    "Niels Bohr",
+    "Bohr-Einstein debates",
+    "Copenhagen interpretation",
+    "EPR paradox",
+]
+
+[[questions]]
+id = "synth_versailles_to_wwii"
+category = "multi_article_synthesis"
+question = "How did the Treaty of Versailles contribute to the conditions that led to World War II?"
+expected_facts = [
+    "war guilt clause",
+    "reparations",
+    "territorial losses",
+    "Weimar Republic",
+    "Adolf Hitler",
+    "rearmament",
+    "1919",
+]
+expected_sources = [
+    "Treaty of Versailles",
+    "Weimar Republic",
+    "Causes of World War II",
+    "Adolf Hitler",
+]
+
+[[questions]]
+id = "synth_radar_battle_of_britain"
+category = "multi_article_synthesis"
+question = "How did the development of radar shape the outcome of the Battle of Britain?"
+expected_facts = [
+    "Chain Home",
+    "early warning",
+    "Royal Air Force",
+    "Luftwaffe",
+    "Dowding system",
+    "1940",
+]
+expected_sources = [
+    "Radar",
+    "Battle of Britain",
+    "Chain Home",
+    "Hugh Dowding",
+]
+
+# ─── Causal / historical reasoning ──────────────────────────────
+
+[[questions]]
+id = "causal_barbarossa_failure"
+category = "causal_reasoning"
+question = "Why did Operation Barbarossa fail?"
+expected_facts = [
+    "Russian winter",
+    "overextended supply lines",
+    "Soviet industrial relocation",
+    "Battle of Moscow",
+    "underestimated Soviet manpower",
+    "1941",
+]
+expected_sources = [
+    "Operation Barbarossa",
+    "Battle of Moscow",
+    "Eastern Front (World War II)",
+]
+
+[[questions]]
+id = "causal_midway_consequences"
+category = "causal_reasoning"
+question = "What were the strategic consequences of the Battle of Midway for the Pacific War?"
+expected_facts = [
+    "four Japanese carriers",
+    "shift in initiative",
+    "code-breaking",
+    "Magic intelligence",
+    "June 1942",
+    "naval air power",
+]
+expected_sources = [
+    "Battle of Midway",
+    "Pacific War",
+]
+
+[[questions]]
+id = "causal_great_depression_to_fascism"
+category = "causal_reasoning"
+question = "How did the Great Depression contribute to the rise of fascism in Europe?"
+expected_facts = [
+    "mass unemployment",
+    "Weimar Republic",
+    "Adolf Hitler",
+    "Benito Mussolini",
+    "1929",
+    "loss of faith in liberal democracy",
+]
+expected_sources = [
+    "Great Depression",
+    "Rise of Adolf Hitler",
+    "Fascism",
+    "Weimar Republic",
+]
+
+# ─── Comparative ────────────────────────────────────────────────
+
+[[questions]]
+id = "compare_stalin_churchill_leadership"
+category = "comparative"
+question = "How did Stalin's and Churchill's wartime leadership styles differ?"
+expected_facts = [
+    "centralised command",
+    "purges",
+    "parliamentary accountability",
+    "rhetorical leadership",
+    "Stavka",
+    "war cabinet",
+]
+expected_sources = [
+    "Joseph Stalin",
+    "Winston Churchill",
+]
+
+[[questions]]
+id = "compare_einstein_newton_gravity"
+category = "comparative"
+question = "How do Einstein's and Newton's conceptions of gravity differ?"
+expected_facts = [
+    "action at a distance",
+    "spacetime curvature",
+    "inverse-square law",
+    "geodesic",
+    "equivalence principle",
+    "Mercury perihelion",
+]
+expected_sources = [
+    "Isaac Newton",
+    "Albert Einstein",
+    "General relativity",
+    "Newton's law of universal gravitation",
+]
+
+[[questions]]
+id = "compare_curie_meitner"
+category = "comparative"
+question = "Compare the scientific contributions of Marie Curie and Lise Meitner."
+expected_facts = [
+    "radioactivity",
+    "polonium",
+    "radium",
+    "nuclear fission",
+    "Otto Hahn",
+    "Nobel Prize",
+]
+expected_sources = [
+    "Marie Curie",
+    "Lise Meitner",
+    "Discovery of nuclear fission",
+]
+
+# ─── Boundary / coverage ────────────────────────────────────────
+
+[[questions]]
+id = "boundary_bletchley_park"
+category = "boundary_coverage"
+question = "What was the role of cryptanalysis at Bletchley Park during World War II?"
+expected_facts = [
+    "Enigma",
+    "Alan Turing",
+    "Ultra",
+    "Lorenz cipher",
+    "bombes",
+    "Government Code and Cypher School",
+]
+expected_sources = [
+    "Bletchley Park",
+    "Ultra",
+    "Alan Turing",
+    "Enigma machine",
+]
+
+[[questions]]
+id = "boundary_emmy_noether"
+category = "boundary_coverage"
+question = "Who was Emmy Noether and what is the significance of Noether's theorem?"
+expected_facts = [
+    "abstract algebra",
+    "ring theory",
+    "symmetry",
+    "conservation laws",
+    "Göttingen",
+    "1918",
+]
+expected_sources = [
+    "Emmy Noether",
+    "Noether's theorem",
+]
+notes = "Edge case — Noether is in Vital Articles L5 but mathematicians of her era are sparsely represented; tests how far the recall extends beyond highest-traffic subjects."
+
+[[questions]]
+id = "boundary_copenhagen_interpretation"
+category = "boundary_coverage"
+question = "What is the Copenhagen interpretation of quantum mechanics?"
+expected_facts = [
+    "wavefunction collapse",
+    "complementarity",
+    "Niels Bohr",
+    "Werner Heisenberg",
+    "measurement",
+    "no underlying reality independent of observation",
+]
+expected_sources = [
+    "Copenhagen interpretation",
+    "Niels Bohr",
+    "Werner Heisenberg",
+]
+
+# ─── Contested / atlas-relevant ─────────────────────────────────
+
+[[questions]]
+id = "contested_atomic_bombings_morality"
+category = "contested"
+question = "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?"
+expected_facts = [
+    "ended the war sooner",
+    "saved lives by avoiding invasion",
+    "civilian casualties",
+    "alternatives existed",
+    "demonstration",
+    "Soviet entry",
+]
+expected_sources = [
+    "Atomic bombings of Hiroshima and Nagasaki",
+    "Debate over the atomic bombings of Hiroshima and Nagasaki",
+]
+notes = "Atlas fault-line territory — should surface multiple positions, ideally with Wikipedia POV-flagged sections."
+
+[[questions]]
+id = "contested_strategic_bombing_war_crime"
+category = "contested"
+question = "Was the Allied strategic bombing of German cities a war crime?"
+expected_facts = [
+    "Dresden",
+    "Hamburg",
+    "civilian targets",
+    "international humanitarian law",
+    "area bombing",
+    "Arthur Harris",
+]
+expected_sources = [
+    "Strategic bombing during World War II",
+    "Bombing of Dresden",
+    "Bombing of Hamburg",
+]
+
+[[questions]]
+id = "contested_churchill_legacy"
+category = "contested"
+question = "How is Winston Churchill's legacy contested today?"
+expected_facts = [
+    "Bengal famine",
+    "imperial views",
+    "wartime leadership",
+    "anti-Soviet",
+    "racial views",
+    "memorial controversies",
+]
+expected_sources = [
+    "Winston Churchill",
+    "Legacy of Winston Churchill",
+    "Bengal famine of 1943",
+]
+
+[[questions]]
+id = "contested_quantum_determinism"
+category = "contested"
+question = "How did Heisenberg's uncertainty principle reshape philosophical debate about determinism?"
+expected_facts = [
+    "indeterminism",
+    "Laplace's demon",
+    "hidden variables",
+    "Bohr",
+    "Einstein",
+    "free will",
+]
+expected_sources = [
+    "Uncertainty principle",
+    "Determinism",
+    "Werner Heisenberg",
+    "Hidden-variable theory",
+]
+notes = "Bridges physics → philosophy → free will; tests cross-domain retrieval and whether atlas Question/Position atoms surface."
