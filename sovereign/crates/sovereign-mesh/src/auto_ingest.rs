@@ -707,13 +707,36 @@ async fn pull_loop(
 
         let (file_indices, article_range) = unit.to_ingest_args();
         let output_path = engine.partition_path(&corpus_id);
+        // Publish per-corpus progress into AppState so the
+        // desktop's `/internal/corpus/status` poller sees live
+        // chunk/doc counts. Without this, queue-mode runs leave
+        // `corpus_progress` empty and the desktop UI falls back
+        // to the on-disk inference path, which renders "Starting…"
+        // because unit-scoped runs don't update the partition-wide
+        // `committed_iter_pos`. The fallback string was technically
+        // honest ("we don't know the live state") but operationally
+        // misleading (the real ingest had ~1.5M chunks committed).
+        let progress_state = state.clone();
+        let progress_cid = corpus_id.clone();
+        let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
+            let progress_state = progress_state.clone();
+            let progress_cid = progress_cid.clone();
+            tokio::spawn(async move {
+                progress_state
+                    .inner
+                    .corpus_progress
+                    .write()
+                    .await
+                    .insert(progress_cid, p);
+            });
+        });
         let ingest_result = engine
             .ingest_with_overrides(
                 &recipe_id,
                 file_indices,
                 article_range,
                 &output_path,
-                None,
+                Some(progress_cb),
                 Some(unit_id),
             )
             .await;
