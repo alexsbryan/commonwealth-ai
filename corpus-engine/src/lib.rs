@@ -80,7 +80,8 @@ pub use filters::{
     DocumentFilter, FilterConfig, FilterPipeline, PageviewRankFilter, TitleListFilter,
 };
 pub use index::{
-    CorpusIndex, FilterOverride, InsertChunk, ScopeMeta, StoredChunk, StoredChunkWithMetadata,
+    read_provenance, set_provenance, CorpusIndex, CorpusProvenance, FilterOverride,
+    InsertChunk, ScopeMeta, StoredChunk, StoredChunkWithMetadata,
 };
 pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,

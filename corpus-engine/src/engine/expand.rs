@@ -224,7 +224,9 @@ impl CorpusEngine {
         progress: &Option<ProgressCallback>,
         already_indexed: Option<Arc<std::collections::HashSet<String>>>,
     ) -> Result<IngestResult> {
-        self.ingest_inner_with_skipset(recipe, index_path, progress, None, already_indexed)
+        // expand_corpus runs against an already-installed corpus on
+        // this node — by definition self-initiated, so peer_pulled = false.
+        self.ingest_inner_with_skipset(recipe, index_path, progress, None, already_indexed, false)
             .await
     }
 }

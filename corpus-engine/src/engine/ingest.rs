@@ -185,7 +185,7 @@ impl CorpusEngine {
         // stamping only happens for `ingest_with_overrides` callers that
         // explicitly thread a UnitId in.
         let result = self
-            .ingest_inner(&recipe, &index_path, &progress, None)
+            .ingest_inner(&recipe, &index_path, &progress, None, false)
             .await;
 
         // On successful completion of a new-flow ingest, attempt to
@@ -278,10 +278,11 @@ impl CorpusEngine {
         index_path: &Path,
         progress: &Option<ProgressCallback>,
         unit_id: Option<u32>,
+        peer_pulled: bool,
     ) -> Result<IngestResult> {
         // Default to no skipset; the expansion path uses
         // `ingest_inner_with_skipset` instead.
-        self.ingest_inner_with_skipset(recipe, index_path, progress, unit_id, None)
+        self.ingest_inner_with_skipset(recipe, index_path, progress, unit_id, None, peer_pulled)
             .await
     }
 
@@ -289,6 +290,14 @@ impl CorpusEngine {
     /// already-indexed `source_doc_id`s to skip. Used by
     /// `expand_corpus` to add only newly-accepted documents to an
     /// existing index without re-embedding the originals.
+    ///
+    /// `peer_pulled` — `true` when this run was initiated by a remote
+    /// coordinator's handoff (the peer-pull / static `ingest_partition`
+    /// paths). The flag is stamped onto the partition's
+    /// `_corpus_meta.json` as `provenance: PeerPulled` right after
+    /// the index handle is created, so a daemon-restart auto-resume
+    /// can skip work this node didn't initiate (the coordinator
+    /// re-issues the handoff if it still wants the work).
     pub(crate) async fn ingest_inner_with_skipset(
         &self,
         recipe: &Recipe,
@@ -296,6 +305,7 @@ impl CorpusEngine {
         progress: &Option<ProgressCallback>,
         unit_id: Option<u32>,
         already_indexed: Option<std::sync::Arc<std::collections::HashSet<String>>>,
+        peer_pulled: bool,
     ) -> Result<IngestResult> {
         let start = Instant::now();
 
@@ -419,6 +429,28 @@ impl CorpusEngine {
             )
             .await?
         };
+
+        // Stamp provenance immediately after the index handle (and
+        // therefore the meta file) exists. We do this before any
+        // long-running work so a daemon kill mid-ingest leaves the
+        // partition correctly tagged as `PeerPulled`, which auto-resume
+        // uses to skip re-firing peer-pulled work the local user
+        // didn't initiate. SelfInitiated is the default; only stamp
+        // explicitly when peer_pulled is true.
+        if peer_pulled {
+            if let Err(e) = crate::index::set_provenance(
+                index_path,
+                crate::index::CorpusProvenance::PeerPulled,
+            ) {
+                tracing::warn!(
+                    corpus = %recipe.corpus.id,
+                    path = %index_path.display(),
+                    error = %e,
+                    "ingest_inner: failed to stamp PeerPulled provenance — \
+                     auto-resume may re-fire this partition after a daemon restart"
+                );
+            }
+        }
 
         // Persist the active filter scope to `_corpus_meta.json` so the
         // UI can offer "Expand to full <corpus>" when this scope is
@@ -886,6 +918,24 @@ impl CorpusEngine {
                         rate = format!("{embed_rate:.1}/s"),
                         "Embed batch"
                     );
+
+                    // Per-batch throttle. Distinct from `should_yield`
+                    // (which fully pauses while chat is active): this
+                    // shares the machine over a 24h ingest by sleeping
+                    // a fraction of the wall time after each batch. At
+                    // factor 1.0 (default) the sleep is zero. At 0.5
+                    // we sleep `embed_ms` after each `embed_ms` of
+                    // work — duty cycle 50%.
+                    if let Some(hook) = self.yield_hook() {
+                        let factor = hook.throttle_factor().clamp(0.001, 1.0);
+                        if factor < 1.0 && embed_ms > 0 {
+                            let sleep_ms = ((embed_ms as f32) * (1.0 / factor - 1.0)) as u64;
+                            if sleep_ms > 0 {
+                                tokio::time::sleep(std::time::Duration::from_millis(sleep_ms))
+                                    .await;
+                            }
+                        }
+                    }
 
                     for (chunk, embedding) in pending_chunks.drain(..).zip(embeddings) {
                         index_buffer.push((chunk, embedding));
@@ -1592,7 +1642,11 @@ impl CorpusEngine {
             recipe.index.embedding_dimensions = probe.len();
         }
 
-        self.ingest_inner(&recipe, output_path, &progress, unit_id)
+        // `ingest_with_overrides` is the entrypoint for peer-pulled
+        // work — both the legacy `ingest_partition` route and the
+        // pull-loop. Stamp PeerPulled so a daemon-restart auto-resume
+        // can distinguish this from a self-initiated install.
+        self.ingest_inner(&recipe, output_path, &progress, unit_id, true)
             .await
     }
 }

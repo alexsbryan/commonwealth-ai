@@ -373,6 +373,16 @@ impl CorpusEngine {
             .join(format!("{corpus_id}-partition-{}", self.self_node_id))
     }
 
+    /// Path of the canonical (post-merge / single-node-finalised)
+    /// directory for `corpus_id`. Materialised by the finalise/merge
+    /// step from one or more partition dirs; reads (search, status)
+    /// land here once an ingest is fully committed. Symmetric to
+    /// [`Self::partition_path`] for callers that need to probe both
+    /// shapes (e.g. `auto_resume` reads provenance from each).
+    pub fn canonical_path(&self, corpus_id: &str) -> PathBuf {
+        self.index_dir.join(corpus_id)
+    }
+
     /// Declare the name of the embedding model backing the
     /// configured `EmbedFn`. Required before `ingest()` — the
     /// engine writes this string to `_corpus_meta.json.embedding_model`

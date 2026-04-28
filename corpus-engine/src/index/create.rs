@@ -220,6 +220,7 @@ impl CorpusIndex {
             committed_shard_set: None,
             scope: None,
             filter_override: None,
+            provenance: super::CorpusProvenance::default(),
         };
         write_meta(path, &meta)?;
 

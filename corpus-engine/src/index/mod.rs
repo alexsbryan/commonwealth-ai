@@ -303,6 +303,28 @@ struct IndexMeta {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     scope: Option<ScopeMeta>,
 
+    /// How this index came to exist on this node. `SelfInitiated`
+    /// means a user click or CLI on THIS machine started it
+    /// (canonical install or solo run). `PeerPulled` means a
+    /// coordinator on another machine handed work to us via the
+    /// pull-loop / corpus_collaborate path; the partition lives only
+    /// for the duration of the pull and merges back to the
+    /// coordinator's canonical when done.
+    ///
+    /// Used by `auto_resume::spawn_resume_in_progress_ingests` to
+    /// decide whether a daemon restart should re-fire the ingest:
+    /// SelfInitiated → yes (the user wants their install to keep
+    /// going), PeerPulled → no (the coordinator will re-issue the
+    /// handoff if it still wants the work; locally re-firing
+    /// competes with foreground inference and undoes the user's
+    /// `pause` from another machine).
+    ///
+    /// `#[serde(default)]` → SelfInitiated for any pre-provenance
+    /// meta on disk, preserving today's behaviour for existing
+    /// installs.
+    #[serde(default)]
+    provenance: CorpusProvenance,
+
     /// Filter pipeline override applied to this corpus, if any. Set by
     /// `expand_corpus` so a restart mid-expansion resumes with the
     /// correct scope (rather than the original recipe's narrower
@@ -310,6 +332,54 @@ struct IndexMeta {
     /// corpus until the expansion completes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     filter_override: Option<FilterOverride>,
+}
+
+/// Provenance of an on-disk index. See the `IndexMeta::provenance`
+/// field for full semantics; in short, `SelfInitiated` means "this
+/// node started the install" and `PeerPulled` means "a coordinator
+/// on another node handed us a partition." Auto-resume only re-fires
+/// SelfInitiated entries after a daemon restart.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CorpusProvenance {
+    /// User-driven install on this machine. Default for any meta
+    /// file written before this field existed (preserves the
+    /// legacy auto-resume contract for existing installs).
+    #[default]
+    SelfInitiated,
+    /// Partition assigned by a coordinator on another node via the
+    /// collaborate-pull path. Lives only for the duration of the
+    /// pull; merges to the coordinator's canonical on completion.
+    PeerPulled,
+}
+
+/// Read just the `provenance` field from an on-disk meta file.
+/// Returns the default (`SelfInitiated`) when the file is missing
+/// or malformed — auto-resume's contract is "if in doubt, resume."
+pub fn read_provenance(index_dir: &Path) -> CorpusProvenance {
+    let path = meta_path(index_dir);
+    let Ok(raw) = std::fs::read_to_string(&path) else {
+        return CorpusProvenance::default();
+    };
+    #[derive(serde::Deserialize)]
+    struct Probe {
+        #[serde(default)]
+        provenance: CorpusProvenance,
+    }
+    serde_json::from_str::<Probe>(&raw)
+        .map(|p| p.provenance)
+        .unwrap_or_default()
+}
+
+/// Stamp the `provenance` field onto an existing meta file. Used by
+/// pull-loops to mark a partition `PeerPulled` right after the
+/// partition's `_corpus_meta.json` is first created. Idempotent —
+/// repeated calls with the same value are no-ops on disk semantics.
+/// Errors when the meta file is missing or malformed.
+pub fn set_provenance(index_dir: &Path, provenance: CorpusProvenance) -> Result<()> {
+    let meta = read_meta(index_dir)?;
+    let updated = IndexMeta { provenance, ..meta };
+    write_meta(index_dir, &updated)
 }
 
 /// Snapshot of the filter pipeline that's currently in force.
@@ -995,6 +1065,69 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
+    }
+
+    // ─── Provenance round-trip ────────────────────────────────
+
+    #[tokio::test]
+    async fn fresh_index_is_self_initiated_by_default() {
+        let dir = tempdir().unwrap();
+        let _index = create_test_index(dir.path()).await;
+        let index_dir = dir.path().join("test-corpus");
+        // Newly-created indexes are SelfInitiated — preserves the
+        // legacy auto-resume contract for direct-install paths.
+        assert_eq!(read_provenance(&index_dir), CorpusProvenance::SelfInitiated);
+    }
+
+    #[tokio::test]
+    async fn set_provenance_round_trips_to_disk() {
+        let dir = tempdir().unwrap();
+        let _index = create_test_index(dir.path()).await;
+        let index_dir = dir.path().join("test-corpus");
+
+        set_provenance(&index_dir, CorpusProvenance::PeerPulled).expect("stamp");
+        assert_eq!(read_provenance(&index_dir), CorpusProvenance::PeerPulled);
+
+        // Idempotent flip back.
+        set_provenance(&index_dir, CorpusProvenance::SelfInitiated).expect("stamp back");
+        assert_eq!(read_provenance(&index_dir), CorpusProvenance::SelfInitiated);
+    }
+
+    #[test]
+    fn read_provenance_returns_default_for_missing_meta() {
+        let dir = tempdir().unwrap();
+        let nonexistent = dir.path().join("nope");
+        assert_eq!(
+            read_provenance(&nonexistent),
+            CorpusProvenance::SelfInitiated,
+            "auto-resume's contract: if in doubt, resume"
+        );
+    }
+
+    #[test]
+    fn read_provenance_handles_meta_without_provenance_field() {
+        // A pre-provenance meta on disk (older install) deserializes
+        // with the field's serde default = SelfInitiated. Auto-resume
+        // continues to re-fire those, which is the intended back-compat.
+        let dir = tempdir().unwrap();
+        let index_dir = dir.path().join("legacy");
+        std::fs::create_dir_all(&index_dir).unwrap();
+        let legacy_meta = serde_json::json!({
+            "corpus_id": "x",
+            "corpus_name": "X",
+            "embedding_model": "m",
+            "embedding_dimensions": 4,
+            "mesh_sharing": true,
+            "license": "MIT",
+            "created_at": 0,
+            "last_updated": 0,
+        });
+        std::fs::write(
+            index_dir.join("_corpus_meta.json"),
+            serde_json::to_string(&legacy_meta).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(read_provenance(&index_dir), CorpusProvenance::SelfInitiated);
     }
 
     #[tokio::test]
