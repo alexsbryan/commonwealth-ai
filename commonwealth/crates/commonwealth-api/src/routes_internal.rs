@@ -181,13 +181,33 @@ pub async fn corpus_collaborate(
                 .jsonl_source_shard_count(&req.corpus_id)
                 .unwrap_or(1);
             if shard_count > 1 {
-                let processed: std::collections::HashSet<usize> = engine
+                // Union LOCAL processed_shards (this peer's partition
+                // dirs on disk) with PEER processed_shards (every
+                // other peer's last-published view, gossiped via
+                // MeshStore by `auto_ingest::publish_local_processed_shards`).
+                // Without the peer-side union, dispatch queues units
+                // for shards that another peer has already finished —
+                // observed in the wild: 8 of 33 distinct shards
+                // processed twice on a two-peer Wikipedia ingest.
+                let mut processed: std::collections::HashSet<usize> = engine
                     .corpus_processed_shards(&req.corpus_id)
                     .into_iter()
                     .collect();
+                let peer_processed = commonwealth_state::union_processed_shards(
+                    &state.inner.mesh_store,
+                    &req.corpus_id,
+                );
+                processed.extend(peer_processed);
                 let remaining: Vec<usize> = (0..shard_count)
                     .filter(|i| !processed.contains(i))
                     .collect();
+                tracing::info!(
+                    corpus = %req.corpus_id,
+                    shard_count,
+                    processed_count = processed.len(),
+                    remaining_count = remaining.len(),
+                    "corpus_collaborate: queue-mode dispatch (peer-aware processed_shards)"
+                );
                 build_work_units_jsonl_sharded(remaining)
             } else {
                 let total_articles = jsonl_article_count.ok_or_else(|| {

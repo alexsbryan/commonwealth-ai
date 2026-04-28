@@ -7,6 +7,7 @@ pub mod contributions;
 pub mod error;
 pub mod gc;
 pub mod peer_preferences;
+pub mod processed_shards;
 pub mod store;
 
 pub use contributions::{
@@ -17,5 +18,8 @@ pub use gc::RetentionGc;
 pub use peer_preferences::{
     is_gossip_excluded, PeerPreference, PeerPreferenceStore,
     GOSSIP_EXCLUDED_APP_IDS, PEER_PREFERENCES_APP_ID,
+};
+pub use processed_shards::{
+    processed_shards_key, union_processed_shards, PROCESSED_SHARDS_APP_ID,
 };
 pub use store::{MeshStore, StoreEntry};
