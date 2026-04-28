@@ -22,6 +22,7 @@
     sep: "Stanford Encyclopedia of Philosophy",
     openalex: "OpenAlex",
     stackexchange: "Stack Exchange",
+    "stackexchange-knowledge": "Stack Exchange Knowledge",
     gutenberg: "Project Gutenberg",
     crs_reports: "CRS Reports",
   };
