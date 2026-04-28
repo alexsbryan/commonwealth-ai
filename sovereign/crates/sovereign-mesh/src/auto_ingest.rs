@@ -141,6 +141,28 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             .any(|id| !last_known_in_progress.contains(id));
         last_known_in_progress = in_progress.clone();
 
+        // Publish this node's per-corpus `processed_shards` into the
+        // gossip-replicated MeshStore so the coordinator can union
+        // every peer's progress when computing `remaining` in
+        // `corpus_collaborate`. Without this, each peer dispatches
+        // from its own local view (`engine.corpus_processed_shards`
+        // only walks LOCAL partition dirs) and queues redundant
+        // work that another peer already did. Observed in the wild:
+        // 8 of 33 distinct shards processed twice across a two-peer
+        // Wikipedia ingest because neither peer knew the other's
+        // progress until the merge step (which had its own bug
+        // and never ran).
+        //
+        // Key shape: `processed_shards:<corpus_id>:<self_node_id_hex>`.
+        // The `:<node_id>` suffix is load-bearing — without it, every
+        // peer writes the same key and LWW on the gossip layer keeps
+        // only the last-writer's entry. With it, each peer has its
+        // own gossip slot and the dispatch-side scan unions across
+        // them naturally. Publish runs every CHECK_INTERVAL; cheap
+        // (a small JSON read of the partition meta + a MeshStore
+        // write).
+        publish_local_processed_shards(&state, engine, self_id, &in_progress_vec).await;
+
         let should_check =
             first_iteration || new_peer_appeared || new_ingest_appeared;
         first_iteration = false;
@@ -374,6 +396,55 @@ async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
         }
     }
     false
+}
+
+async fn publish_local_processed_shards(
+    state: &AppState,
+    engine: &std::sync::Arc<corpus_engine::CorpusEngine>,
+    self_id: NodeId,
+    in_progress: &[String],
+) {
+    for corpus_id in in_progress {
+        let local: Vec<usize> = engine.corpus_processed_shards(corpus_id);
+        if local.is_empty() {
+            // Nothing to announce yet — skip rather than publish an
+            // empty array. Avoids the `last_writer = empty` LWW
+            // hazard if the publisher loses its meta file mid-run.
+            continue;
+        }
+        let key = commonwealth_state::processed_shards_key(corpus_id, self_id);
+        let payload = match serde_json::to_vec(&local) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "auto_ingest: serialize processed_shards failed"
+                );
+                continue;
+            }
+        };
+        if let Err(e) = state.inner.mesh_store.set(
+            commonwealth_state::PROCESSED_SHARDS_APP_ID,
+            &key,
+            payload.into(),
+            self_id,
+        ) {
+            tracing::warn!(
+                corpus = %corpus_id,
+                key = %key,
+                error = %e,
+                "auto_ingest: publish processed_shards failed"
+            );
+            continue;
+        }
+        tracing::debug!(
+            corpus = %corpus_id,
+            shard_count = local.len(),
+            key = %key,
+            "auto_ingest: published processed_shards"
+        );
+    }
 }
 
 async fn spawn_local_ingest(state: AppState, corpus_id: String) {
