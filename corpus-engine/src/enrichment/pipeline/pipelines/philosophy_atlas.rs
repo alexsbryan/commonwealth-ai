@@ -23,7 +23,8 @@ use super::super::exemplar_bank::Exemplar;
 use super::super::trait_def::Pipeline;
 use super::super::types::*;
 use super::literary_atlas::{
-    render_generic_phase3_exemplar, render_phase1_user_body, LiteraryAtlasPipeline,
+    phase1_section_extraction_schema, render_generic_phase3_exemplar,
+    render_phase1_user_body, LiteraryAtlasPipeline,
 };
 use crate::enrichment::domain::ClusteringConfig;
 use crate::error::Result;
@@ -128,7 +129,12 @@ impl Pipeline for PhilosophyAtlasPipeline {
             /*include_exemplars=*/ true,
             /*seed=*/ None,
         );
-        ChatPrompt::new(self.phase1_system(), user).with_phase_id("phase1")
+        ChatPrompt::new(self.phase1_system(), user)
+            .with_response_schema(
+                "phase1_section_extraction",
+                phase1_section_extraction_schema(),
+            )
+            .with_phase_id("phase1")
     }
 
     fn compose_phase1_terse(&self, chapter: &ChapterInput) -> Option<ChatPrompt> {
@@ -138,7 +144,14 @@ impl Pipeline for PhilosophyAtlasPipeline {
             /*include_exemplars=*/ false,
             /*seed=*/ None,
         );
-        Some(ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user).with_phase_id("phase1_terse"))
+        Some(
+            ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user)
+                .with_response_schema(
+                    "phase1_section_extraction",
+                    phase1_section_extraction_schema(),
+                )
+                .with_phase_id("phase1_terse"),
+        )
     }
 
     fn compose_phase1_with_seed(
@@ -153,7 +166,12 @@ impl Pipeline for PhilosophyAtlasPipeline {
             /*include_exemplars=*/ true,
             seed,
         );
-        ChatPrompt::new(self.phase1_system(), user).with_phase_id("phase1")
+        ChatPrompt::new(self.phase1_system(), user)
+            .with_response_schema(
+                "phase1_section_extraction",
+                phase1_section_extraction_schema(),
+            )
+            .with_phase_id("phase1")
     }
 
     fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {

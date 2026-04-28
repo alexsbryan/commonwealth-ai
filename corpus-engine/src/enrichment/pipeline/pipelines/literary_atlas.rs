@@ -1334,6 +1334,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
     },
     "questions_raised": {
       "type": "array",
+      "minItems": 1,
       "items": { "$ref": "#/$defs/question_sketch" }
     }
   },

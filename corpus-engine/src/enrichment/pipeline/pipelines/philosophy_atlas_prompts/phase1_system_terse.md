@@ -35,5 +35,20 @@ Schema (strict JSON, one object):
 }
 ```
 
-Omit any top-level key you cannot populate. Never emit empty
-strings, `null`, `"..."`, or `"TODO"` placeholders.
+`questions_raised` is **required** (≥1 entry). For an expository
+section that explains a single view rather than framing a debate,
+extract the implicit inquiry the section addresses — e.g. *"In what
+does flourishing consist?"* for an exposition of eudaimonia, *"How
+should one live in agreement with nature?"* for the Stoic system,
+*"What is X's account of Y?"* for any thinker's view. Phrase
+concretely; never leave this array empty.
+
+**Person + Work split:** When a section discusses *X's view* or *X's
+work*, lift the philosopher X as a `person` entity AND the cited
+work as a `work` entity AND the view as a `concept` entity if it has
+a distinct name — three atoms, not one collapsed `"X's view"`
+concept. A list like *"Hobbes, Locke, Hume argued..."* yields three
+separate Person atoms, not a merged one.
+
+Other top-level keys are optional — omit any you cannot populate.
+Never emit empty strings, `null`, `"..."`, or `"TODO"` placeholders.
