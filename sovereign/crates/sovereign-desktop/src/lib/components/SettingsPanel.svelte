@@ -1,6 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { detectBootstrap, getConfig, saveConfig } from "../api";
+  import {
+    detectBootstrap,
+    getConfig,
+    saveConfig,
+    getIngestBudget,
+    setIngestBudget,
+    getMeshQuiesced,
+    setMeshQuiesced,
+  } from "../api";
   import type {
     BootstrapSnapshot,
     DesktopConfig,
@@ -48,6 +56,15 @@
   let bootstrap = $state<BootstrapSnapshot | null>(null);
   let attachedToDaemon = $derived(bootstrap?.daemon_running === true);
 
+  // ── Ingest pressure controls ──────────────────────────────────
+  // Live values are read from the daemon and pushed back via
+  // `/internal/ingest/budget` and `/internal/mesh/quiesce`. They are
+  // NOT part of `config` (no Save needed) — the daemon is the source
+  // of truth and the slider applies on release.
+  let ingestThrottle = $state<number>(1.0);
+  let meshQuiesced = $state<boolean>(false);
+  let ingestStatusMessage = $state<string>("");
+
   onMount(async () => {
     try {
       config = await getConfig();
@@ -59,7 +76,57 @@
     } catch {
       bootstrap = null;
     }
+    try {
+      const budget = await getIngestBudget();
+      ingestThrottle = budget.throttle_factor;
+    } catch (e) {
+      console.warn("Failed to load ingest budget (daemon offline?):", e);
+    }
+    try {
+      const q = await getMeshQuiesced();
+      meshQuiesced = q.quiesced;
+    } catch (e) {
+      console.warn("Failed to load mesh quiesce state:", e);
+    }
   });
+
+  /// Discrete slider positions. Off (1.0) is full speed — the
+  /// daemon's default and what most users want when they're not
+  /// actively using the machine. The lower stops are for "share the
+  /// machine over a long ingest." Granularity beyond 4 stops is
+  /// noise; the GPU's batch latency on a real Wikipedia ingest
+  /// drives the practical floor.
+  const THROTTLE_PRESETS: Array<{ value: number; label: string; desc: string }> = [
+    { value: 1.00, label: "Off",    desc: "Full speed. The default — ingest uses every available cycle." },
+    { value: 0.75, label: "Light",  desc: "75% duty cycle. Barely noticeable; small headroom for other work." },
+    { value: 0.50, label: "Balanced", desc: "50% duty cycle. Ingest takes about twice as long; the machine stays usable." },
+    { value: 0.25, label: "Quiet",  desc: "25% duty cycle. Ingest runs slowly in the background while you do other things." },
+  ];
+
+  let throttlePreset = $derived.by(() => {
+    const exact = THROTTLE_PRESETS.find((p) => Math.abs(p.value - ingestThrottle) < 0.02);
+    return exact?.value ?? null;
+  });
+
+  async function applyThrottle(value: number) {
+    ingestStatusMessage = "";
+    try {
+      const result = await setIngestBudget(value);
+      ingestThrottle = result.throttle_factor;
+    } catch (e) {
+      ingestStatusMessage = `Could not update throttle: ${e}`;
+    }
+  }
+
+  async function applyQuiesce(value: boolean) {
+    ingestStatusMessage = "";
+    try {
+      const result = await setMeshQuiesced(value);
+      meshQuiesced = result.quiesced;
+    } catch (e) {
+      ingestStatusMessage = `Could not update mesh participation: ${e}`;
+    }
+  }
 
   function markDirty() {
     dirty = true;
@@ -526,6 +593,60 @@
                 </span>
               </label>
             </div>
+          {/if}
+
+          <!-- ── Ingest pressure ─────────────────────────────── -->
+          <p class="section-label">Ingest pressure</p>
+          <p class="slot-desc" style="margin-bottom: 12px;">
+            Long ingests (Wikipedia, Stack Exchange) can occupy the GPU for hours.
+            Use these controls to share the machine — distinct from the foreground-yield
+            window, which fully pauses ingest only while you're actively chatting.
+          </p>
+
+          <div class="param-card" style="margin-bottom: 16px;">
+            <p class="slot-desc" style="margin: 0 0 8px 0; color: var(--text-base);">Throttle</p>
+            <div class="preset-row" role="radiogroup" aria-label="Ingest throttle">
+              {#each THROTTLE_PRESETS as preset (preset.value)}
+                <button
+                  type="button"
+                  class="preset-btn"
+                  class:preset-btn--active={throttlePreset === preset.value}
+                  role="radio"
+                  aria-checked={throttlePreset === preset.value}
+                  onclick={() => applyThrottle(preset.value)}
+                >
+                  {preset.label}
+                </button>
+              {/each}
+            </div>
+            <p class="preset-desc" style="margin: 0;">
+              {THROTTLE_PRESETS.find((p) => p.value === throttlePreset)?.desc
+                ?? `Custom: ${(ingestThrottle * 100).toFixed(0)}% duty cycle.`}
+            </p>
+          </div>
+
+          <div class="param-card" style="margin-bottom: 16px;">
+            <label class="toggle-row">
+              <input
+                type="checkbox"
+                checked={meshQuiesced}
+                onchange={(e) => applyQuiesce((e.target as HTMLInputElement).checked)}
+              />
+              <span class="toggle-label">
+                <span class="toggle-title">Stop participating in shared ingests</span>
+                <span class="toggle-sub">
+                  When on, this node won't pull work from peer coordinators or dispatch its own queue.
+                  Local installs already in progress keep going — pause those individually below.
+                  Re-enable to rejoin the mesh without restarting the daemon.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          {#if ingestStatusMessage}
+            <p class="slot-desc" style="color: var(--color-error, #c44); margin-bottom: 12px;">
+              {ingestStatusMessage}
+            </p>
           {/if}
 
           <p class="section-label">Installed corpora</p>

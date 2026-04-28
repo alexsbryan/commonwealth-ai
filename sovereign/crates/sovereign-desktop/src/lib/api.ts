@@ -244,6 +244,41 @@ export async function pauseCorpus(corpusId: string): Promise<void> {
   return invoke("pause_corpus", { corpusId });
 }
 
+/// Per-batch ingest throttle. `throttle_factor` ∈ (0.0, 1.0]: 1.0 =
+/// full speed (the default), 0.5 ≈ duty-cycle 50% (sleep equal to
+/// each embed batch's wall time after it completes — halves
+/// effective throughput, leaves the GPU idle in between for chat /
+/// other work). 0.0 is rejected by the daemon — use `pauseCorpus`
+/// to fully stop a corpus.
+export interface IngestBudgetState {
+  throttle_factor: number;
+}
+
+export async function getIngestBudget(): Promise<IngestBudgetState> {
+  return invoke("get_ingest_budget");
+}
+
+export async function setIngestBudget(throttleFactor: number): Promise<IngestBudgetState> {
+  return invoke("set_ingest_budget", { throttleFactor });
+}
+
+/// Mesh-quiesce: when `true`, this node stops participating in
+/// shared ingests — neither pulls peer-assigned work nor dispatches
+/// its own queue to peers. Persists for the daemon's lifetime; flip
+/// back via the same call. The `SOVEREIGN_DISABLE_AUTO_COLLAB` env
+/// var seeds the same atomic at boot.
+export interface MeshQuiesceState {
+  quiesced: boolean;
+}
+
+export async function getMeshQuiesced(): Promise<MeshQuiesceState> {
+  return invoke("get_mesh_quiesced");
+}
+
+export async function setMeshQuiesced(quiesced: boolean): Promise<MeshQuiesceState> {
+  return invoke("set_mesh_quiesced", { quiesced });
+}
+
 export async function buildCorpusIndex(corpusId: string): Promise<void> {
   return invoke("build_corpus_index", { corpusId });
 }

@@ -35,22 +35,21 @@ const COOLDOWN: Duration = Duration::from_secs(30 * 60);
 /// called. That handler checks `active_ingests` itself and skips the
 /// local partition spawn while still dispatching work to the new peer.
 pub fn spawn_auto_collaborate_loop(state: AppState, daemon_port: u16) {
-    // Operator-toggleable kill switch. Used to quiesce peer-pull
-    // participation while running a single-node recovery (e.g. the
-    // shard-set-drift skipset path on canonical) without competing
-    // for the embed slot. Default off — peer collaboration runs
-    // normally. Set `SOVEREIGN_DISABLE_AUTO_COLLAB=1` and restart
-    // to disable; clear and restart to re-enable.
-    if std::env::var("SOVEREIGN_DISABLE_AUTO_COLLAB")
+    // Operator-toggleable kill switch. The env var seeds the
+    // runtime atomic on `AppState`; the loop itself reads the
+    // atomic on every tick so `POST /internal/mesh/quiesce` can
+    // flip participation without a daemon restart. Default off —
+    // peer collaboration runs normally.
+    let env_quiesce = std::env::var("SOVEREIGN_DISABLE_AUTO_COLLAB")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-    {
+        .unwrap_or(false);
+    if env_quiesce {
+        state.set_mesh_quiesced(true);
         tracing::warn!(
             "auto_ingest: SOVEREIGN_DISABLE_AUTO_COLLAB set — \
-             peer-pull loop will not start; this node won't enrol \
-             on remote handoffs and won't dispatch its own queue"
+             starting in quiesced mode; flip via POST /internal/mesh/quiesce \
+             to rejoin without a restart"
         );
-        return;
     }
     tokio::spawn(async move {
         auto_collaborate_loop(state, daemon_port).await;
@@ -78,6 +77,18 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
     );
 
     loop {
+        // Quiesce gate. When the operator has flipped the runtime
+        // flag (or the SOVEREIGN_DISABLE_AUTO_COLLAB env var seeded
+        // it at boot), skip both pull-discovery and dispatch. The
+        // tick still runs at CHECK_INTERVAL cadence so re-enabling
+        // takes effect within one loop iteration.
+        if state.mesh_quiesced() {
+            tracing::debug!("auto_ingest: mesh quiesced — skipping tick");
+            first_iteration = false;
+            tokio::time::sleep(CHECK_INTERVAL).await;
+            continue;
+        }
+
         let self_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
 
         let current_peers: HashSet<NodeId> = {

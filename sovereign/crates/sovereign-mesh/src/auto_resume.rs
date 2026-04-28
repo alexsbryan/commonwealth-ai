@@ -93,16 +93,34 @@ async fn resume_in_progress_ingests(state: AppState) {
     );
 
     for corpus_id in in_progress {
-        // No further filtering. `in_progress_ingestions` returns ONLY
-        // canonical paths and `<corpus>-partition-<self>/` — peer
-        // partitions are filtered out at the engine layer. So whatever
-        // we got here is by construction either:
-        //   (a) a solo install we own, in our own partition, or
-        //   (b) a coordinator role for a mesh-collaborate ingest also
-        //       in our own partition.
-        // Both want the same thing: re-spawn `spawn_corpus_install` so
-        // the engine resumes from `committed_iter_pos`.
+        // Provenance gate. `in_progress_ingestions` already filters
+        // out peer partitions for OTHER nodes; what's left is either:
+        //   (a) a self-initiated install on this machine — auto-resume.
+        //   (b) a `<corpus>-partition-<self>/` we wrote because a
+        //       coordinator on another node handed us a unit. Skipping
+        //       this case is the entire point of the provenance field:
+        //       the coordinator re-issues the handoff if it still wants
+        //       the work, and pulling on every restart competes with
+        //       foreground inference and undoes pause-from-another-node.
         //
+        // Probe both the canonical and partition-of-self meta files;
+        // PeerPulled on EITHER is enough to skip. (Solo runs flip the
+        // partition's flag because that's the active write target;
+        // a peer-pulled coordinator role would be on canonical.)
+        let canonical_provenance =
+            corpus_engine::read_provenance(&engine.canonical_path(&corpus_id));
+        let partition_provenance =
+            corpus_engine::read_provenance(&engine.partition_path(&corpus_id));
+        if canonical_provenance == corpus_engine::CorpusProvenance::PeerPulled
+            || partition_provenance == corpus_engine::CorpusProvenance::PeerPulled
+        {
+            tracing::info!(
+                corpus = %corpus_id,
+                "auto_resume: skipping peer-pulled partition — coordinator owns the schedule"
+            );
+            continue;
+        }
+
         // `spawn_corpus_install` is itself idempotent — it
         // short-circuits when the corpus_id is already in
         // `active_ingests`. So even if the desktop races us with its
@@ -115,7 +133,7 @@ async fn resume_in_progress_ingests(state: AppState) {
         if spawned {
             tracing::info!(
                 corpus = %corpus_id,
-                "auto_resume: resumed in-progress ingest after daemon restart"
+                "auto_resume: resumed self-initiated ingest after daemon restart"
             );
         } else {
             tracing::info!(

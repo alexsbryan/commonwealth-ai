@@ -3276,6 +3276,130 @@ pub async fn get_corpus_progress(
     Ok(map.get(&corpus_id).cloned())
 }
 
+// ─── Ingest budget + mesh quiesce ──────────────────────────────
+//
+// Both controls live behind `/internal/*` daemon endpoints; the
+// Settings panel pokes them to share the machine over long ingests
+// without forcing a restart.
+//
+//   - `throttle_factor` ∈ (0.0, 1.0]: 1.0 = full speed (default),
+//     0.5 ≈ duty-cycle 50% (sleep equal to embed wall time after
+//     each batch). Use the corpus pause route to fully stop a
+//     corpus — 0.0 is rejected by the daemon.
+//   - `mesh_quiesced` bool: when true, this node neither pulls
+//     peer-assigned work nor dispatches its own queue. The
+//     SOVEREIGN_DISABLE_AUTO_COLLAB env var seeds the same atomic
+//     at boot, so flipping at runtime via this command is reversible
+//     without a daemon restart.
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct IngestBudgetState {
+    pub throttle_factor: f32,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct MeshQuiesceState {
+    pub quiesced: bool,
+}
+
+#[tauri::command]
+pub async fn get_ingest_budget() -> Result<IngestBudgetState, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/ingest/budget");
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/ingest/budget: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/ingest/budget returned {status}: {body}"
+        ));
+    }
+    resp.json::<IngestBudgetState>()
+        .await
+        .map_err(|e| format!("decode /internal/ingest/budget: {e}"))
+}
+
+#[tauri::command]
+pub async fn set_ingest_budget(throttle_factor: f32) -> Result<IngestBudgetState, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/ingest/budget");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "throttle_factor": throttle_factor }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/ingest/budget: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/ingest/budget returned {status}: {body}"
+        ));
+    }
+    resp.json::<IngestBudgetState>()
+        .await
+        .map_err(|e| format!("decode /internal/ingest/budget: {e}"))
+}
+
+#[tauri::command]
+pub async fn get_mesh_quiesced() -> Result<MeshQuiesceState, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/mesh/quiesce");
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/mesh/quiesce: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/mesh/quiesce returned {status}: {body}"
+        ));
+    }
+    resp.json::<MeshQuiesceState>()
+        .await
+        .map_err(|e| format!("decode /internal/mesh/quiesce: {e}"))
+}
+
+#[tauri::command]
+pub async fn set_mesh_quiesced(quiesced: bool) -> Result<MeshQuiesceState, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/mesh/quiesce");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "quiesced": quiesced }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/mesh/quiesce: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/mesh/quiesce returned {status}: {body}"
+        ));
+    }
+    resp.json::<MeshQuiesceState>()
+        .await
+        .map_err(|e| format!("decode /internal/mesh/quiesce: {e}"))
+}
+
 /// Return health details for a single installed corpus (claim/relationship
 /// counts, article profiles flag). Loaded on demand so `list_corpora` stays
 /// fast — the frontend calls this only when the user expands the detail panel.
