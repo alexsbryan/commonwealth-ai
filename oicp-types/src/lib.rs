@@ -901,6 +901,21 @@ pub const LOCALITY_NEAR_BONUS: f32 = 1.05;
 /// Locality bonus: cross-internet peer (no bonus).
 pub const LOCALITY_FAR_BONUS: f32 = 1.0;
 
+/// Reference token-generation rate that maps to a throughput factor of
+/// `1.0` in [`throughput_factor`]. Anything at or above this rate is
+/// treated as fully responsive; lower rates scale linearly down toward
+/// the floor. 20 tok/s is the "good for interactive use" inflection
+/// point — below it conversation feels sluggish to a human.
+pub const THROUGHPUT_REFERENCE_TG_TOK_S: f32 = 20.0;
+
+/// Floor for [`throughput_factor`]: a node observed at very low
+/// throughput is still routable as a last resort. Without a floor a
+/// 3 tok/s peer would score `0.15×` and effectively never receive
+/// traffic, even when it is the only candidate that satisfies the
+/// hard gates. The floor preserves reachability while still tilting
+/// routing decisively toward faster peers.
+pub const THROUGHPUT_FLOOR: f32 = 0.3;
+
 /// Where a node sits relative to the scheduler making the routing
 /// decision. Derived from the scheduler's network topology — not
 /// advertised by the peer. Protocol-independent: every scheduler
@@ -945,7 +960,35 @@ pub struct NodeObservations {
     /// observation, and by [`cold_start_weight`] to ramp new
     /// peers in gradually.
     pub samples: u32,
+    /// EWMA (α=0.3) of time-to-first-token in milliseconds. Captures
+    /// dispatch + first-token latency, the human-perceived "did it
+    /// hear me" signal. Not directly used in throughput scoring but
+    /// surfaced to operators in diagnostics and the desktop members
+    /// panel. Zero until at least one streaming request has completed.
+    pub ttft_ewma_ms: f64,
+    /// EWMA (α=0.3) of observed token-generation rate in tokens per
+    /// second. Source of truth for [`throughput_factor`] when at
+    /// least [`THROUGHPUT_OBSERVATION_THRESHOLD`] samples have
+    /// accumulated; below the threshold the scheduler falls back to
+    /// the benchmark estimate. Zero before any streaming request has
+    /// completed.
+    pub tg_tok_s_ewma: f64,
 }
+
+/// Sample-count threshold above which observed token-generation rate
+/// becomes the source of truth for [`throughput_factor`]. Below this
+/// the benchmark estimate is used (or neutral 1.0 if neither is
+/// present). Same magnitude as [`COLD_START_SAMPLES`] so a peer that
+/// has earned full cold-start weight has also earned its observed
+/// throughput signal.
+pub const THROUGHPUT_OBSERVATION_THRESHOLD: u32 = 5;
+
+/// Smoothing factor for the throughput / TTFT EWMAs.
+/// Matches the latency-probe α at
+/// `commonwealth-discovery::latency_probe`. Surfaces thermal
+/// throttling within ~3–4 requests; lower α values would make the
+/// signal sluggish, higher would make it jittery.
+pub const THROUGHPUT_EWMA_ALPHA: f64 = 0.3;
 
 /// Blend a claim's self-reported `affinity` with observed node
 /// health.
@@ -1011,6 +1054,122 @@ pub fn cold_start_weight(samples: u32) -> f32 {
     }
     let progress = samples as f32 / COLD_START_SAMPLES as f32;
     COLD_START_MIN_WEIGHT + (1.0 - COLD_START_MIN_WEIGHT) * progress
+}
+
+/// A node's measured baseline-model throughput. Recorded once at
+/// daemon launch (and re-recorded when [`HardwareProfile`] changes)
+/// and gossiped via [`NodeCapabilities.benchmark`]. Lets remote
+/// schedulers estimate how a *different* model on the same hardware
+/// would perform without running it themselves.
+///
+/// Wire-tolerant: every field has a serde default so an older peer's
+/// `NodeCapabilities` payload (sans benchmark) deserializes cleanly
+/// and the resulting `Option<BenchmarkResult>` reads as `None`.
+///
+/// Surfaced to `tracing=debug` via the `bench: completed` event in
+/// the daemon startup path so an operator can verify the benchmark
+/// ran.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BenchmarkResult {
+    /// File-stem of the model that was benchmarked (e.g.
+    /// `"bonsai-8b-q1_0"`). Schedulers use this as an opaque token
+    /// for cache-invalidation only — they do not parse it.
+    pub baseline_model_id: String,
+    /// On-disk size in GB of the benchmarked model. The same number
+    /// `ProviderModel` advertises for the same model. Schedulers
+    /// scale `tg_tok_s` by `baseline_size_gb / candidate_size_gb`
+    /// when estimating throughput for a *different* model on this
+    /// hardware.
+    pub baseline_size_gb: f32,
+    /// Prompt-processing throughput in tokens per second over a
+    /// standardized prompt.
+    pub pp_tok_s: f32,
+    /// Token-generation throughput in tokens per second over a
+    /// standardized prompt.
+    pub tg_tok_s: f32,
+    /// Unix seconds the benchmark was measured. Operators use this
+    /// to spot a stale benchmark after hardware changes; schedulers
+    /// don't gate on it.
+    pub measured_at: u64,
+}
+
+/// Map an observed token-generation rate (or a benchmark-derived
+/// estimate) to a routing multiplier in
+/// `[THROUGHPUT_FLOOR, 1.0]`.
+///
+/// Source-of-truth ordering (spec §3.3):
+///
+/// 1. **Observed**: at least [`THROUGHPUT_OBSERVATION_THRESHOLD`]
+///    samples accumulated → use `obs.tg_tok_s_ewma`.
+/// 2. **Benchmark estimate**: the node has a [`BenchmarkResult`] →
+///    scale baseline `tg_tok_s` by `baseline_size_gb /
+///    candidate_size_gb` (smaller models on the same hardware run
+///    faster; larger models run slower).
+/// 3. **Neutral**: neither signal exists → return `1.0`.
+///
+/// Returning `1.0` for a zero-data peer is intentional — slotting
+/// the multiplier at the end of the composition chain means a peer
+/// with no benchmark and no observations behaves identically to the
+/// pre-throughput scoring world. This keeps the change wire-tolerant
+/// AND behaviour-tolerant: older peers and brand-new peers don't
+/// suddenly drop in score.
+pub fn throughput_factor(
+    obs: &NodeObservations,
+    candidate_size_gb: f32,
+    baseline_benchmark: Option<&BenchmarkResult>,
+) -> f32 {
+    let observed_tg_tok_s =
+        if obs.samples >= THROUGHPUT_OBSERVATION_THRESHOLD
+            && obs.tg_tok_s_ewma > 0.0
+        {
+            Some(obs.tg_tok_s_ewma as f32)
+        } else {
+            None
+        };
+
+    let estimated_tg_tok_s = match (observed_tg_tok_s, baseline_benchmark) {
+        (Some(rate), _) => rate,
+        (None, Some(bench)) => {
+            // Smaller models on the same hardware run faster. We
+            // scale linearly with model-size ratio, which is the
+            // simplest defensible heuristic without running an
+            // actual benchmark for the candidate. Real-world scaling
+            // is sub-linear (memory bandwidth dominates) but linear
+            // is good enough for *ranking*: it preserves order across
+            // candidate sizes.
+            let ratio = if candidate_size_gb > 0.0 {
+                bench.baseline_size_gb / candidate_size_gb
+            } else {
+                1.0
+            };
+            (bench.tg_tok_s * ratio).max(0.0)
+        }
+        (None, None) => return 1.0,
+    };
+
+    let factor = (estimated_tg_tok_s / THROUGHPUT_REFERENCE_TG_TOK_S)
+        .clamp(THROUGHPUT_FLOOR, 1.0);
+    factor
+}
+
+/// String label for a [`throughput_factor`] decision — `"observed"`,
+/// `"benchmark_estimate"`, or `"neutral"`. Pure helper for the
+/// `oicp_select: throughput_factor` glassbox tracing event so
+/// operators see *why* a given factor was chosen, not just the
+/// number.
+pub fn throughput_factor_source(
+    obs: &NodeObservations,
+    baseline_benchmark: Option<&BenchmarkResult>,
+) -> &'static str {
+    if obs.samples >= THROUGHPUT_OBSERVATION_THRESHOLD
+        && obs.tg_tok_s_ewma > 0.0
+    {
+        "observed"
+    } else if baseline_benchmark.is_some() {
+        "benchmark_estimate"
+    } else {
+        "neutral"
+    }
 }
 
 // -----------------------------------------------------------------
@@ -1614,6 +1773,8 @@ mod tests {
             p95_latency_ms: 0,
             recent_failure_rate: failures,
             samples,
+            ttft_ewma_ms: 0.0,
+            tg_tok_s_ewma: 0.0,
         }
     }
 
@@ -1779,6 +1940,142 @@ mod tests {
         assert!(
             mid > COLD_START_MIN_WEIGHT && mid < 1.0,
             "got {mid}"
+        );
+    }
+
+    // ───── v0.3 §3 — throughput scoring ────────────────────
+
+    fn obs_with_throughput(samples: u32, tg: f64) -> NodeObservations {
+        NodeObservations {
+            in_flight: 0,
+            p50_latency_ms: 0,
+            p95_latency_ms: 0,
+            recent_failure_rate: 0.0,
+            samples,
+            ttft_ewma_ms: 0.0,
+            tg_tok_s_ewma: tg,
+        }
+    }
+
+    fn benchmark(baseline_size_gb: f32, tg: f32) -> BenchmarkResult {
+        BenchmarkResult {
+            baseline_model_id: "bonsai-8b-q1_0".into(),
+            baseline_size_gb,
+            pp_tok_s: 100.0,
+            tg_tok_s: tg,
+            measured_at: 1_700_000_000,
+        }
+    }
+
+    #[test]
+    fn throughput_factor_neutral_without_data() {
+        let obs = obs_with_throughput(0, 0.0);
+        assert_eq!(
+            throughput_factor(&obs, 8.0, None),
+            1.0,
+            "no observations + no benchmark must be neutral 1.0"
+        );
+        assert_eq!(throughput_factor_source(&obs, None), "neutral");
+    }
+
+    #[test]
+    fn throughput_factor_floor_at_low_observed_rate() {
+        let obs = obs_with_throughput(100, 3.0);
+        assert!(
+            (throughput_factor(&obs, 8.0, None) - THROUGHPUT_FLOOR).abs()
+                < 1e-6,
+            "3 tok/s observed must clamp to floor"
+        );
+        assert_eq!(throughput_factor_source(&obs, None), "observed");
+    }
+
+    #[test]
+    fn throughput_factor_one_at_or_above_reference() {
+        let obs = obs_with_throughput(100, 25.0);
+        assert_eq!(
+            throughput_factor(&obs, 8.0, None),
+            1.0,
+            ">= reference rate must produce 1.0"
+        );
+    }
+
+    #[test]
+    fn throughput_factor_scales_linearly_in_band() {
+        // 10 tok/s observed → 10/20 = 0.5
+        let obs = obs_with_throughput(100, 10.0);
+        let f = throughput_factor(&obs, 8.0, None);
+        assert!((f - 0.5).abs() < 1e-6, "got {f}");
+    }
+
+    #[test]
+    fn throughput_factor_falls_back_to_benchmark_estimate_below_threshold() {
+        // Below sample threshold → ignore observation, use benchmark.
+        let obs = obs_with_throughput(2, 100.0); // huge observation but ignored
+        let bench = benchmark(8.0, 20.0);
+        // Same model size: ratio 1.0, estimated tg = 20 → factor 1.0.
+        let f = throughput_factor(&obs, 8.0, Some(&bench));
+        assert!((f - 1.0).abs() < 1e-6, "got {f}");
+        assert_eq!(
+            throughput_factor_source(&obs, Some(&bench)),
+            "benchmark_estimate"
+        );
+    }
+
+    #[test]
+    fn throughput_factor_extrapolates_by_size_ratio() {
+        // Baseline 8GB at 20 tok/s. Candidate 16GB → expected ~10 tok/s.
+        let bench = benchmark(8.0, 20.0);
+        let obs = obs_with_throughput(0, 0.0);
+        let f = throughput_factor(&obs, 16.0, Some(&bench));
+        // 10/20 = 0.5
+        assert!((f - 0.5).abs() < 1e-6, "got {f}");
+    }
+
+    #[test]
+    fn throughput_factor_observed_overrides_benchmark() {
+        // Past threshold, observed wins even when benchmark exists.
+        let obs = obs_with_throughput(100, 25.0); // saturates to 1.0
+        let bench = benchmark(8.0, 5.0); // would estimate 0.3
+        let f = throughput_factor(&obs, 8.0, Some(&bench));
+        assert_eq!(f, 1.0);
+    }
+
+    #[test]
+    fn throughput_factor_zero_size_is_safe() {
+        // Defensive: a candidate with size_gb==0 must not divide-by-zero.
+        let bench = benchmark(8.0, 20.0);
+        let obs = obs_with_throughput(0, 0.0);
+        let f = throughput_factor(&obs, 0.0, Some(&bench));
+        // ratio defaults to 1.0; estimated rate = 20 → factor 1.0.
+        assert!((f - 1.0).abs() < 1e-6, "got {f}");
+    }
+
+    #[test]
+    fn benchmark_result_is_serde_round_trip() {
+        let b = benchmark(8.0, 17.5);
+        let json = serde_json::to_string(&b).unwrap();
+        let back: BenchmarkResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, b);
+    }
+
+    #[test]
+    fn local_slow_peer_loses_to_remote_fast_peer_after_throughput() {
+        // Spec §3.3 composition stability: a local 0.72-affinity peer
+        // running at 3 tok/s must lose to a remote 0.78-affinity peer
+        // running at 25 tok/s, even after the locality bonus is
+        // applied. This pins that throughput_factor dominates the
+        // composition when one peer is genuinely slow.
+        let local_obs = obs_with_throughput(100, 3.0);
+        let remote_obs = obs_with_throughput(100, 25.0);
+        let local_score = 0.72_f32
+            * locality_bonus(NodeLocality::Local)
+            * throughput_factor(&local_obs, 8.0, None);
+        let remote_score = 0.78_f32
+            * locality_bonus(NodeLocality::Far)
+            * throughput_factor(&remote_obs, 8.0, None);
+        assert!(
+            remote_score > local_score,
+            "remote fast {remote_score} must beat local slow {local_score}"
         );
     }
 
