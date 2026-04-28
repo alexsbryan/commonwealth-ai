@@ -4,11 +4,22 @@
 
   interface Props {
     result: PreScanResult;
-    onConfirm: () => void;
+    /** Whether the desktop has a working OCR pipeline. When true, the
+     *  pre-scan panel offers a "Read them with OCR" button next to
+     *  scanned PDFs; when false, scanned PDFs are skipped silently as
+     *  before. Driven by `lcOcrAvailable()` at flow start. */
+    ocrAvailable: boolean;
+    /** Called when the user clicks Index. `useOcr` is `true` when the
+     *  user opted into OCR for scanned PDFs in this session. */
+    onConfirm: (useOcr: boolean) => void;
     onChooseAgain: () => void;
   }
 
-  let { result, onConfirm, onChooseAgain }: Props = $props();
+  let { result, ocrAvailable, onConfirm, onChooseAgain }: Props = $props();
+
+  /** OCR opt-in state — toggled by the inline button. Defaults to
+   *  false; the caller decides whether to persist it on confirm. */
+  let useOcr = $state(false);
 
   let allReadable = $derived(
     result.scanned_pdfs.length === 0 &&
@@ -17,8 +28,16 @@
       result.ignored_types === 0,
   );
 
+  let willOcr = $derived(
+    useOcr && ocrAvailable && result.scanned_pdfs.length > 0,
+  );
+
+  let willIndexCount = $derived(
+    result.readable.length + (willOcr ? result.scanned_pdfs.length : 0),
+  );
+
   let skipTotal = $derived(
-    result.scanned_pdfs.length +
+    (willOcr ? 0 : result.scanned_pdfs.length) +
       result.protected_pdfs.length +
       result.corrupt_files.length,
   );
@@ -68,7 +87,9 @@
       <p class="note">Large collection — indexing continues in the background.</p>
     {/if}
     <div class="actions">
-      <button class="lk-btn lk-btn--mark" onclick={onConfirm}>Index</button>
+      <button class="lk-btn lk-btn--mark" onclick={() => onConfirm(false)}>
+        Index
+      </button>
     </div>
   {:else}
     <header class="head">
@@ -82,9 +103,14 @@
       <section class="will-idx">
         <p class="lk-label will-label">Will be indexed</p>
         <p class="big">
-          <span class="lk-num">{result.readable.length}</span>
+          <span class="lk-num">{willIndexCount}</span>
           <span class="big-unit">documents</span>
         </p>
+        {#if willOcr}
+          <p class="ocr-note">
+            …including {result.scanned_pdfs.length} scanned PDFs read with OCR
+          </p>
+        {/if}
       </section>
 
       <section class="will-skip">
@@ -94,12 +120,25 @@
           <span class="big-unit">files</span>
         </p>
 
-        {#if result.scanned_pdfs.length > 0}
+        {#if result.scanned_pdfs.length > 0 && !willOcr}
           <div class="skip-group">
             <p class="skip-reason">
               {result.scanned_pdfs.length} scanned PDFs (no text layer)
             </p>
             <NamedFileList files={result.scanned_pdfs} showUpTo={2} />
+            {#if ocrAvailable}
+              <button
+                class="lk-btn lk-btn--quiet ocr-btn"
+                onclick={() => (useOcr = true)}
+              >
+                Read them with OCR
+              </button>
+              <p class="ocr-explainer">
+                OCR uses a small built-in engine to read scanned pages.
+                Slower than indexing typed PDFs — your other documents are
+                searchable as soon as they finish.
+              </p>
+            {/if}
           </div>
         {/if}
 
@@ -136,11 +175,22 @@
     {/if}
 
     <div class="actions">
+      {#if willOcr}
+        <button
+          class="lk-btn lk-btn--quiet"
+          onclick={() => (useOcr = false)}
+        >
+          Skip OCR
+        </button>
+      {/if}
       <button class="lk-btn lk-btn--quiet" onclick={onChooseAgain}>
         Pick different folder
       </button>
-      <button class="lk-btn lk-btn--mark" onclick={onConfirm}>
-        Index {result.readable.length} documents
+      <button
+        class="lk-btn lk-btn--mark"
+        onclick={() => onConfirm(willOcr)}
+      >
+        Index {willIndexCount} documents
       </button>
     </div>
   {/if}
@@ -255,5 +305,22 @@
     gap: 10px;
     justify-content: flex-end;
     margin-top: 20px;
+  }
+
+  .ocr-note {
+    margin: 6px 0 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-stamp-ink);
+    font-style: italic;
+  }
+  .ocr-btn {
+    margin-top: 10px;
+    align-self: flex-start;
+  }
+  .ocr-explainer {
+    margin: 8px 0 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    line-height: 1.4;
   }
 </style>

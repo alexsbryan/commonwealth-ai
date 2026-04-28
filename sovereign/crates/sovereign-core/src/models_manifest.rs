@@ -359,6 +359,7 @@ fn parse_family(s: &str) -> crate::model_family::ModelFamily {
         "Qwen35" => ModelFamily::Qwen35,
         "Qwen3Embedding" => ModelFamily::Qwen3Embedding,
         "Gemma3" => ModelFamily::Gemma3,
+        "Gemma4" => ModelFamily::Gemma4,
         "Llama3" => ModelFamily::Llama3,
         "Phi4" => ModelFamily::Phi4,
         "Phi4Reasoning" => ModelFamily::Phi4Reasoning,

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-v2-schema/main/src/tauri-conf.schema.json",
+  "_comment": "Release-only overlay for `tauri build`. Tauri merges this on top of `tauri.conf.json` when invoked with `--config src-tauri/tauri.release.conf.json`. Adds the externalBin + resources entries that would otherwise break `cargo check` in dev (Tauri's build script errors when an externalBin file doesn't exist on disk).",
+  "bundle": {
+    "externalBin": [
+      "binaries/tesseract"
+    ],
+    "resources": [
+      "binaries/tessdata/*",
+      "binaries/pdfium/*"
+    ]
+  }
+}

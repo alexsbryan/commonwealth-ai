@@ -35,6 +35,23 @@ const COOLDOWN: Duration = Duration::from_secs(30 * 60);
 /// called. That handler checks `active_ingests` itself and skips the
 /// local partition spawn while still dispatching work to the new peer.
 pub fn spawn_auto_collaborate_loop(state: AppState, daemon_port: u16) {
+    // Operator-toggleable kill switch. Used to quiesce peer-pull
+    // participation while running a single-node recovery (e.g. the
+    // shard-set-drift skipset path on canonical) without competing
+    // for the embed slot. Default off — peer collaboration runs
+    // normally. Set `SOVEREIGN_DISABLE_AUTO_COLLAB=1` and restart
+    // to disable; clear and restart to re-enable.
+    if std::env::var("SOVEREIGN_DISABLE_AUTO_COLLAB")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        tracing::warn!(
+            "auto_ingest: SOVEREIGN_DISABLE_AUTO_COLLAB set — \
+             peer-pull loop will not start; this node won't enrol \
+             on remote handoffs and won't dispatch its own queue"
+        );
+        return;
+    }
     tokio::spawn(async move {
         auto_collaborate_loop(state, daemon_port).await;
     });

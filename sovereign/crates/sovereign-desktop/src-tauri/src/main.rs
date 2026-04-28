@@ -7,9 +7,11 @@ mod insight_commands;
 mod local_corpus_commands;
 mod mesh_commands;
 mod routing_events;
+mod smoketest;
 mod state;
 mod tray;
 
+use std::process::ExitCode;
 use std::sync::Arc;
 
 use tauri::{Emitter, Manager};
@@ -18,7 +20,18 @@ use crate::approval::TauriApprovalChannel;
 use crate::state::AppState;
 
 #[cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-fn main() {
+fn main() -> ExitCode {
+    // Smoketest mode: when invoked with `--smoketest --model <gguf>
+    // [--gpu-layers N] [--ctx M]`, skip Tauri entirely and run a
+    // minimal load + 1-token decode, then exit. The parent desktop
+    // process spawns this mode in a subprocess to detect ggml
+    // backend crashes (e.g., the Gemma 4 Metal SIGSEGV) before
+    // loading models in the user-facing slot. See `smoketest.rs`.
+    let argv: Vec<String> = std::env::args().collect();
+    if let Some(code) = smoketest::detect_and_run(&argv) {
+        return code;
+    }
+
     // Default filter gives glass-box visibility into every inference path.
     // Set RUST_LOG to override (e.g. RUST_LOG=sovereign_core=debug for more detail).
     //
@@ -131,6 +144,28 @@ fn main() {
                             handle_clone.clone(),
                             Arc::clone(&state_clone),
                         );
+
+                        // Install OCR context if the manager came up
+                        // and the Tesseract sidecar is bundled. No-op
+                        // when not available — `lc_ocr_available`
+                        // tells the UI to hide the OCR offer.
+                        if let Some(mgr) = state_clone
+                            .local_corpus
+                            .read()
+                            .await
+                            .as_ref()
+                            .cloned()
+                        {
+                            // Default daemon URL — same one the
+                            // existing inference path uses.
+                            let daemon_url = "http://127.0.0.1:9741".to_string();
+                            local_corpus_commands::install_ocr_ctx_for_app(
+                                &handle_clone,
+                                &mgr,
+                                daemon_url,
+                            )
+                            .await;
+                        }
                     }
                     Err(e) => {
                         tracing::error!("Bootstrap failed: {e}");
@@ -210,6 +245,7 @@ fn main() {
             insight_commands::get_sink_status,
             insight_commands::explore_insights,
             local_corpus_commands::lc_validate_path,
+            local_corpus_commands::lc_ocr_available,
             local_corpus_commands::lc_pre_scan,
             local_corpus_commands::lc_ingest,
             local_corpus_commands::lc_list,
@@ -238,4 +274,5 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");
+    ExitCode::SUCCESS
 }

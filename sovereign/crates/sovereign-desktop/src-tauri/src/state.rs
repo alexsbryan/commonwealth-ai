@@ -198,7 +198,21 @@ fn default_enabled_tools() -> Vec<String> {
 }
 
 fn default_context_size() -> u32 {
-    2048
+    // 8192 ≈ 8K tokens — ample headroom for KnowledgeView Phase 2
+    // entity-extraction prompts (~1848 tokens each) plus a 2K
+    // generation budget without invoking the
+    // `max_tokens exceeded context headroom` clamp. Previously 2048,
+    // which silently truncated entity-extraction outputs to ~200
+    // tokens and degraded enrichment quality.
+    //
+    // Both fast and primary slots share this — the ~600-900 MB extra
+    // KV cache for a Qwen3.5-9B primary at 8K is comfortable on
+    // anything ≥ 16 GB unified memory. Asymmetry note:
+    // `sovereign-core::setup_config::default_context_size` returns
+    // 16384 for the daemon path; desktop is now closer but still
+    // conservative. Users on 64 GB+ machines can safely bump this
+    // higher via Settings.
+    8192
 }
 
 fn default_temperature() -> f32 {
@@ -283,6 +297,29 @@ impl DesktopConfig {
         } else {
             Self::default()
         };
+
+        // Migration: bump persisted context_size below the new default.
+        // Older configs were saved with context_size = 2048, which
+        // caused the `max_tokens exceeded context headroom` clamp on
+        // KnowledgeView Phase 2 entity extraction (1848-token prompts
+        // + 200-token output budget). 8192 fixes that without
+        // measurable memory impact on supported hardware. Config is
+        // re-saved so the migration is one-shot.
+        let migrated_default = default_context_size();
+        if config.context_size < migrated_default {
+            tracing::info!(
+                old = config.context_size,
+                new = migrated_default,
+                "config migration: bumping context_size to new default"
+            );
+            config.context_size = migrated_default;
+            if let Err(e) = config.save() {
+                tracing::warn!(
+                    "failed to persist context_size migration: {e} \
+                     (in-memory value still applied for this run)"
+                );
+            }
+        }
 
         // Friendly first-launch node name. Without this, anyone who
         // never opened the node-name input ends up identified by their
@@ -498,6 +535,70 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                      will be unavailable until you set Settings → Embedding model."
                 );
             }
+
+            // Crash-isolated smoke test: spawn ourselves with
+            // `--smoketest` and run a 1-token decode against the
+            // chat slot's GGUF before loading it in-process. If the
+            // child SIGSEGVs (e.g., Gemma 4 on Apple Metal in
+            // llama-cpp-2 0.1.145, where ggml's Metal kernel-pipeline
+            // lookup returns nil and gets dereferenced), set
+            // `SOVEREIGN_FORCE_CPU_CHAT=1` for THIS process and
+            // continue — the in-process load below will then
+            // configure the chat slot with `n_gpu_layers=0`.
+            //
+            // Skipped silently when `SOVEREIGN_FORCE_CPU_CHAT=1` is
+            // already set (the user has already chosen CPU) or when
+            // we can't determine GPU layers from hardware (no GPU
+            // configured anyway).
+            let env_force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+            if !env_force_cpu {
+                let smoke_gpu_layers = sovereign_inference::hardware::HardwareProfile::detect()
+                    .recommended_gpu_layers;
+                if smoke_gpu_layers > 0 {
+                    let smoke_ctx = config.context_size.min(2048);
+                    tracing::info!(
+                        model = %config.model_path.display(),
+                        gpu_layers = smoke_gpu_layers,
+                        n_ctx = smoke_ctx,
+                        "smoketest: probing GPU compatibility before in-process load"
+                    );
+                    let outcome = crate::smoketest::run_in_subprocess(
+                        &config.model_path,
+                        smoke_gpu_layers,
+                        smoke_ctx,
+                        std::time::Duration::from_secs(60),
+                    );
+                    match &outcome {
+                        crate::smoketest::SmokeResult::Ok => {
+                            tracing::info!("smoketest: GPU path ok — proceeding");
+                        }
+                        other if other.suggests_cpu_fallback() => {
+                            tracing::error!(
+                                outcome = ?other,
+                                "smoketest: GPU path crashed — falling back to CPU. \
+                                 Set SOVEREIGN_FORCE_CPU_CHAT=0 to disable this guard."
+                            );
+                            // SAFETY: bootstrap runs once, single
+                            // task, no concurrent env mutation.
+                            // SOVEREIGN_FORCE_CPU_CHAT is read by
+                            // sovereign-inference's chat-slot loader
+                            // immediately below.
+                            std::env::set_var("SOVEREIGN_FORCE_CPU_CHAT", "1");
+                        }
+                        other => {
+                            tracing::warn!(
+                                outcome = ?other,
+                                "smoketest: inconclusive — proceeding with GPU load. \
+                                 The model may still load and run normally; this just \
+                                 means we couldn't pre-confirm it."
+                            );
+                        }
+                    }
+                }
+            }
+
             let loaded = Arc::new(
                 EmbeddedLlamaCpp::load_full_with_families(
                     &config.model_path,
@@ -848,8 +949,20 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     // Background init — desktop launch must be snappy; see server
     // binary for rationale. Skipped entirely when KnowledgeView is
     // disabled via Settings.
+    //
+    // Defer the kickoff by 30 s so the fast slot stays free for the
+    // user's first interaction. Without the delay, enrichment Phase 2
+    // fans out parallel `complete()` calls on the fast slot at the
+    // same moment the user is opening the app to chat — first
+    // response queues behind background work and the model load /
+    // chat-template-application path competes with entity extraction
+    // for the slot mutex. 30 s is long enough that a user who opens
+    // the app to chat almost always lands their first turn before
+    // enrichment starts; short enough that "open app, walk away,
+    // come back in a minute" still has fresh landscape digests.
     if let Some(mgr) = knowledge_view_manager.as_ref() {
-        let _init_handle = Arc::clone(mgr).spawn_init();
+        let _init_handle = Arc::clone(mgr)
+            .spawn_init_after(std::time::Duration::from_secs(30));
     }
 
     // Hand the engine to the embedded Commonwealth daemon so that

@@ -5,6 +5,13 @@
 *node_modules
 dist*
 
+# Desktop OCR binaries — populated by scripts/fetch-desktop-binaries.sh.
+# Large blobs, per-target, not source. README at the path explains how
+# to repopulate. The README itself stays tracked.
+crates/sovereign-desktop/src-tauri/binaries/tesseract-*
+crates/sovereign-desktop/src-tauri/binaries/pdfium/
+crates/sovereign-desktop/src-tauri/binaries/tessdata/
+
 # Sovereign code intelligence
 .sovereign/project.json
 .sovereign/scip/

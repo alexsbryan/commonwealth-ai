@@ -142,7 +142,7 @@ async fn folder_register_prescan_ingest_search_roundtrip() -> SovResult<()> {
     assert!(scan.corrupt_files.is_empty());
 
     // Ingest.
-    let stats = h.manager.ingest(&id, None).await?;
+    let stats = h.manager.ingest(&id, None, None).await?;
     assert_eq!(stats.corpus_id, id);
     assert_eq!(stats.files_indexed, 3);
     assert!(
@@ -183,7 +183,7 @@ async fn empty_folder_returns_zero_indexed() -> SovResult<()> {
 
     let cfg = LocalCorpusConfig::document_folder(folder.clone(), "Empty".into());
     let id = h.manager.register(cfg).await?;
-    let stats = h.manager.ingest(&id, None).await?;
+    let stats = h.manager.ingest(&id, None, None).await?;
     assert_eq!(stats.files_indexed, 0);
     assert_eq!(stats.chunks_written, 0);
     Ok(())
@@ -230,7 +230,7 @@ async fn obsidian_vault_ingest_reads_markdown_and_strips_frontmatter() -> SovRes
     assert_eq!(scan.readable.len(), 3, "three .md notes should be readable");
     assert_eq!(scan.ignored_types, 1, ".svg should count as ignored");
 
-    let stats = h.manager.ingest(&id, None).await?;
+    let stats = h.manager.ingest(&id, None, None).await?;
     assert_eq!(stats.files_indexed, 3);
     assert!(stats.chunks_written >= 3);
     assert!(stats.runtime_failures.is_empty());

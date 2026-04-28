@@ -818,6 +818,18 @@ export type LocalCorpusProgress =
         current_file: string | null;
       };
     }
+  | {
+      /** Page-level progress within the OCR pipeline for a scanned
+       *  PDF. Emitted before each page is sent to the OCR engine. */
+      phase: "ocr_page";
+      data: {
+        file: string;
+        page: number;
+        total_pages: number;
+        file_idx: number;
+        file_total: number;
+      };
+    }
   | { phase: "clustering"; data: { stage: ClusterStage } }
   | { phase: "snapshotting"; data: { done: number; total: number } }
   | { phase: "writing"; data: { done: number; total: number } }

@@ -55,6 +55,21 @@ struct ModelSlot {
     /// first. `AtomicU64` so updates don't need a write lock on
     /// `ExtrasState`.
     last_used: std::sync::atomic::AtomicU64,
+    /// Per-slot inflight gate — single permit. The slot's
+    /// `Mutex<SlotContext>` already serialises generation, but the
+    /// gate is acquired BEFORE `spawn_blocking` so concurrent
+    /// callers don't each park a tokio blocking-pool thread (and
+    /// each clone an 8 KB prompt into the closure) waiting their
+    /// turn. With the gate, only one caller proceeds into the
+    /// blocking task; the rest queue cheaply at the async layer.
+    ///
+    /// Observed motivator: KnowledgeView Phase 2 entity extraction
+    /// fans out 4+ parallel `complete()` calls per chunk batch. All
+    /// 4 used to land in `blocking_lock` on the slot mutex with
+    /// 4 blocking threads held, while the user's first chat request
+    /// queued behind them. With the permit, the queue forms in the
+    /// async runtime, threads stay free.
+    inflight: Arc<tokio::sync::Semaphore>,
 }
 
 /// Current millis-since-epoch as `u64`. Saturates at 0 if the
@@ -128,7 +143,29 @@ impl ModelSlot {
         context_size: u32,
         n_gpu_layers: u32,
     ) -> Result<Self> {
-        let model_params = LlamaModelParams::default().with_n_gpu_layers(n_gpu_layers);
+        // Operator escape hatch: `SOVEREIGN_FORCE_CPU_CHAT=1` forces
+        // the chat slot fully onto CPU. The known-safe CPU config (per
+        // the embed-slot invariant note) is the combination of:
+        //   1. `n_gpu_layers = 0` on the model — weights stay in RAM.
+        //   2. `with_offload_kqv(false).with_op_offload(false)` on the
+        //      context — KV cache + ops also run on CPU.
+        // Earlier versions of this gate set only (2), which left the
+        // model weights on the GPU and still required Metal compute
+        // pipelines for matmul. That hybrid path is what causes
+        // `ggml_metal_encoder_set_pipeline` null-derefs to bypass the
+        // gate entirely. Both must be set.
+        //
+        // Use this when chat decodes are crashing in ggml's Metal /
+        // Vulkan backend on a particular quant/architecture combo and
+        // you want to confirm whether the fault is in the GPU path or
+        // upstream of it. Restart the desktop / daemon after setting.
+        let force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let effective_gpu_layers = if force_cpu { 0 } else { n_gpu_layers };
+
+        let model_params =
+            LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
 
         let model = LlamaModel::load_from_file(backend, model_path, &model_params)
             .map_err(|e| Error::Inference(format!("Failed to load model: {e}")))?;
@@ -160,8 +197,16 @@ impl ModelSlot {
         // fallback to CPU is what made the original embed regression
         // invisible. Always log the actual backend so operators can
         // spot a silent fallback.
-        let wants_gpu =
-            cfg!(any(target_os = "macos", target_os = "linux")) && n_gpu_layers > 0;
+        let wants_gpu = !force_cpu
+            && cfg!(any(target_os = "macos", target_os = "linux"))
+            && n_gpu_layers > 0;
+        if force_cpu {
+            tracing::warn!(
+                model_id = %model_id,
+                "SOVEREIGN_FORCE_CPU_CHAT set — chat slot loaded with n_gpu_layers=0; \
+                 model weights and ops stay on CPU"
+            );
+        }
         let build_ctx_params = |gpu: bool| {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
@@ -273,6 +318,7 @@ impl ModelSlot {
             model_id,
             size_bytes,
             last_used: std::sync::atomic::AtomicU64::new(now_millis()),
+            inflight: Arc::new(tokio::sync::Semaphore::new(1)),
         })
     }
 
@@ -1186,6 +1232,14 @@ pub struct EmbeddedLlamaCpp {
     /// requests, and dropped slots stay alive until their last
     /// in-flight request finishes (RAII via `Arc`).
     extras: Arc<std::sync::RwLock<ExtrasState>>,
+    /// Inflight gate for the lazy slot (Primary or Code). Single
+    /// permit. The fast / extras slots have their own per-slot
+    /// `inflight` semaphores on `ModelSlot`; the lazy path can't use
+    /// those since the slot is `None` until first use, so the
+    /// `EmbeddedLlamaCpp` owns a parallel semaphore that covers both
+    /// hot-swap and generation. See `ModelSlot::inflight` for the
+    /// rationale.
+    lazy_inflight: Arc<tokio::sync::Semaphore>,
 }
 
 /// Internal state for the operator-declared extras lineup. Held
@@ -1456,6 +1510,7 @@ impl EmbeddedLlamaCpp {
             fast_quirks,
             primary_quirks,
             extras: Arc::new(std::sync::RwLock::new(ExtrasState::new())),
+            lazy_inflight: Arc::new(tokio::sync::Semaphore::new(1)),
         })
     }
 
@@ -2131,6 +2186,15 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                      model_id"
                 )));
             };
+            // Acquire the slot's inflight permit BEFORE spawn_blocking
+            // so concurrent callers queue at the async layer, not in
+            // the blocking pool. See ModelSlot.inflight docs.
+            let _permit = slot
+                .inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("slot permit closed: {e}")))?;
             let request = request.clone();
             let slot_label_owned = slot_name.clone();
             let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
@@ -2207,6 +2271,16 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         };
 
         if let Some((target_path, quirks, slot_label)) = lazy_target {
+            // Throttle lazy-slot dispatch to 1 inflight at the async
+            // layer; otherwise concurrent callers stack up blocking
+            // threads waiting on `primary.blocking_lock()`. See the
+            // `lazy_inflight` field doc.
+            let _permit = self
+                .lazy_inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;
@@ -2304,6 +2378,18 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         } else {
             // Use fast slot.
             let slot = Arc::clone(&self.fast);
+            // Throttle fast-slot dispatch to 1 inflight at the async
+            // layer. Same rationale as the extras path. KV enrichment
+            // Phase 2 fans out 4+ parallel calls on this slot — without
+            // the gate they all park blocking-pool threads and clone
+            // 8 KB prompts; with it, only one proceeds and the rest
+            // queue cheaply as async tasks.
+            let _permit = slot
+                .inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("fast slot permit closed: {e}")))?;
             let request = request.clone();
             let quirks = self.fast_quirks.clone();
 
@@ -2391,8 +2477,16 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                      and dispatch — retry the request"
                 )));
             };
+            let _permit = slot
+                .inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("slot permit closed: {e}")))?;
             let slot_label_owned = slot_name.clone();
             tokio::task::spawn_blocking(move || {
+                // Hold the permit for the streaming task's lifetime.
+                let _permit = _permit;
                 let start = Instant::now();
                 slot.last_used
                     .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
@@ -2438,6 +2532,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         };
 
         if let Some((target_path, quirks, slot_label)) = lazy_target {
+            let _permit = self
+                .lazy_inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;
@@ -2446,6 +2546,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let loaded_path = Arc::clone(&self.primary_loaded_path);
 
             tokio::task::spawn_blocking(move || {
+                // Hold the permit for the streaming task's lifetime.
+                let _permit = _permit;
                 let start = Instant::now();
 
                 // Hot-swap check: if the lazy slot is holding a different
@@ -2504,8 +2606,16 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             });
         } else {
             let slot = Arc::clone(&self.fast);
+            let _permit = slot
+                .inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("fast slot permit closed: {e}")))?;
             let quirks = self.fast_quirks.clone();
             tokio::task::spawn_blocking(move || {
+                // Hold the permit for the streaming task's lifetime.
+                let _permit = _permit;
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
                 if let Err(e) =
@@ -2862,26 +2972,37 @@ fn format_prompt(
         }
     };
 
-    // Tier 1: built-in subset.
-    let mut messages = Vec::new();
-    if !system_with_thinking.is_empty() {
+    // Templates that use Jinja2 macros (`{%- macro ... -%}`),
+    // `{% set ... %}` blocks, conditional includes, or other
+    // constructs beyond the llama.cpp built-in parser's subset
+    // need to skip tier 1 entirely — `apply_chat_template` would
+    // return `FfiError(-1)` for every call, wasting work and
+    // logging noise. Gemma 3 / Gemma 4 / Llama 3.1+ templates all
+    // qualify. Detect once at the call site and route directly.
+    let needs_jinja = template_needs_jinja(&template);
+
+    // Tier 1: built-in subset (skipped for Jinja-only templates).
+    if !needs_jinja {
+        let mut messages = Vec::new();
+        if !system_with_thinking.is_empty() {
+            messages.push(
+                LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
+                    .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+            );
+        }
         messages.push(
-            LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
+            LlamaChatMessage::new("user".to_string(), request.prompt.clone())
                 .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
         );
-    }
-    messages.push(
-        LlamaChatMessage::new("user".to_string(), request.prompt.clone())
-            .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
-    );
-    match model.apply_chat_template(&template, &messages, true) {
-        Ok(formatted) => return Ok(formatted),
-        Err(e) => {
-            tracing::debug!(
-                model_id = %model_id,
-                error = ?e,
-                "apply_chat_template (built-in subset) failed; retrying via Jinja2 path"
-            );
+        match model.apply_chat_template(&template, &messages, true) {
+            Ok(formatted) => return Ok(formatted),
+            Err(e) => {
+                tracing::debug!(
+                    model_id = %model_id,
+                    error = ?e,
+                    "apply_chat_template (built-in subset) failed; retrying via Jinja2 path"
+                );
+            }
         }
     }
 
@@ -2913,21 +3034,55 @@ fn format_prompt(
         parse_tool_calls: false,
     };
     match model.apply_chat_template_oaicompat(&template, &params) {
-        Ok(result) => return Ok(result.prompt),
+        Ok(result) => {
+            tracing::trace!(
+                model_id = %model_id,
+                jinja_required = needs_jinja,
+                prompt_chars = result.prompt.len(),
+                "apply_chat_template_oaicompat (Jinja2) ok"
+            );
+            return Ok(result.prompt);
+        }
         Err(e) => {
             tracing::warn!(
                 model_id = %model_id,
                 error = ?e,
                 template_head = %template_head_for_log(&template),
-                "apply_chat_template_oaicompat (Jinja2) ALSO failed — both the built-in \
-                 parser and minja rejected the gguf's chat template. Falling back to \
-                 plain-text concat; model output may include hallucinated role markers."
+                "apply_chat_template_oaicompat (Jinja2) failed — minja rejected the \
+                 gguf's chat template. Falling back to plain-text concat; model output \
+                 may include hallucinated role markers."
             );
         }
     }
 
     // Tier 3: plain-text concat.
     Ok(plain_text_prompt(&system_with_thinking, &request.prompt))
+}
+
+/// Cheap heuristic for whether a chat template requires the full
+/// Jinja2 (minja) renderer rather than llama.cpp's built-in
+/// limited-subset parser. The built-in parser handles plain
+/// `{{ var }}` substitution, simple `{% if %} ... {% endif %}`
+/// blocks, and `{% for x in xs %}` loops — but trips on macros
+/// (`{%- macro ... -%}`), `{% set ... %}` blocks, and a few other
+/// constructs that the recent generation of model templates use.
+///
+/// We don't try to be exhaustive — any false negative just
+/// degrades back to the existing fall-through behaviour (tier-1
+/// returns FfiError, tier 2 takes over). The win here is a clean
+/// fast path for known-Jinja templates so we don't log a
+/// debug-level noise line on every chat call.
+fn template_needs_jinja(template: &llama_cpp_2::model::LlamaChatTemplate) -> bool {
+    let s = match template.to_str() {
+        Ok(s) => s,
+        Err(_) => return true, // non-utf8 — punt to the safer renderer
+    };
+    s.contains("{%- macro")
+        || s.contains("{% macro")
+        || s.contains("{%- set")
+        || s.contains("{% set")
+        || s.contains("{%- include")
+        || s.contains("{% include")
 }
 
 /// Final-fallback prompt when no chat-template path works. Just

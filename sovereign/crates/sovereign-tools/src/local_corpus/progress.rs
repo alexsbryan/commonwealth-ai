@@ -30,6 +30,19 @@ pub enum LocalCorpusProgress {
         current_file: String,
     },
 
+    /// One page within a scanned PDF that's currently being OCR'd.
+    /// Emitted by the OCR pipeline (`local_corpus::ocr::pipeline`)
+    /// before each page hits Tesseract. `file_idx` / `file_total`
+    /// count across the OCR queue, so the UI can show "Reading
+    /// scanned documents — `<file>`, page N of M (file 3 of 12)".
+    OcrPage {
+        file: String,
+        page: u32,
+        total_pages: u32,
+        file_idx: u32,
+        file_total: u32,
+    },
+
     /// The chunking / embedding / indexing phase — a straight
     /// passthrough of `corpus_engine::progress::IngestProgress`.
     Ingesting {

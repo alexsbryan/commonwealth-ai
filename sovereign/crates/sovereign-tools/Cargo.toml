@@ -30,6 +30,15 @@ lancedb = "0.27"
 arrow-array = "57"
 # Document parsing (RAG pipeline)
 pdf-extract = "0.7"
+# OCR pipeline for scanned PDFs in the folder-drop flow:
+#   pdfium-render rasterizes pages to images, the tesseract sidecar
+#   produces raw text, the daemon's fast slot cleans up via
+#   /v1/chat/completions. See `local_corpus::ocr` for the architecture.
+# pdfium-render binds to a runtime-loaded libpdfium.dylib; the desktop
+# bundles it as a Tauri resource and OcrCtx.pdfium_lib_path points at
+# it. `image_latest` matches the version of `image` we pull below.
+pdfium-render = { version = "0.9", features = ["thread_safe"] }
+image = "0.25"
 # Stable, cryptographic short-hash for deriving corpus IDs from a
 # canonicalised root path. Used by local_corpus::config and by the
 # splice-extension module's CHARTER.md drift detector (mirroring

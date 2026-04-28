@@ -478,9 +478,26 @@ export async function lcPreScan(
 }
 
 /** Begin ingestion for an already-registered corpus. Returns a job_id
- *  to subscribe to `local-corpus://progress/{job_id}` on. */
-export async function lcIngest(corpusId: string): Promise<string> {
-  return invoke("lc_ingest", { corpusId });
+ *  to subscribe to `local-corpus://progress/{job_id}` on. When
+ *  `withOcr` is `true`, scanned PDFs flagged by the pre-scan get
+ *  rasterized + OCR'd + cleaned up via the daemon's fast slot before
+ *  they're indexed. The flag persists in the corpus config so a
+ *  subsequent re-ingest behaves the same way without re-prompting. */
+export async function lcIngest(
+  corpusId: string,
+  withOcr?: boolean,
+): Promise<string> {
+  return invoke("lc_ingest", {
+    corpusId,
+    withOcr: withOcr ?? null,
+  });
+}
+
+/** Whether the desktop has a working OCR pipeline (Tesseract sidecar
+ *  resolved at boot). Drives the visibility of the "Read them with
+ *  OCR" affordance on the pre-scan panel. */
+export async function lcOcrAvailable(): Promise<boolean> {
+  return invoke("lc_ocr_available");
 }
 
 export async function lcList(): Promise<LocalCorpusConfig[]> {

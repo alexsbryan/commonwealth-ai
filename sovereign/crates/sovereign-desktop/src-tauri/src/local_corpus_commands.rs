@@ -18,6 +18,7 @@ use sovereign_tools::local_corpus::{
     clusterer::ClusterConfig,
     git::GitStatus,
     manager::{IncompleteJob, ProgressCallback},
+    ocr::OcrCtx,
     pre_scanner::PreScanResult,
     preview::VaultPreview,
     progress::LocalCorpusProgress,
@@ -65,6 +66,169 @@ async fn require_manager(
             "Local corpus manager not ready. Finish setup (model + embedding model) first."
                 .to_string()
         })
+}
+
+// ─── Command: lc_ocr_available ───────────────────────────────────────
+
+/// Whether the OCR pipeline is wired up for this build of the
+/// desktop app. Driven by the presence of a Tesseract sidecar that
+/// boot-time setup successfully resolved into the `LocalCorpusManager`.
+///
+/// The frontend hides the "Read them with OCR" affordance when this
+/// returns `false`, so users on a build without bundled binaries
+/// don't see a button that would error if clicked.
+#[tauri::command]
+pub async fn lc_ocr_available(
+    state: State<'_, Arc<AppState>>,
+) -> Result<bool, String> {
+    let manager = match state.local_corpus.read().await.as_ref().cloned() {
+        Some(m) => m,
+        None => return Ok(false),
+    };
+    Ok(manager.ocr_available().await)
+}
+
+/// Install an OCR runtime context onto the running
+/// `LocalCorpusManager`. Called once at desktop boot after the manager
+/// is up. Resolves the bundled Tesseract binary via predictable paths,
+/// points pdfium at the bundled dynamic library (if present), and
+/// points cleanup at the local daemon.
+///
+/// Resolution order for the Tesseract binary:
+///   1. `SOVEREIGN_TESSERACT_BIN` env var — escape hatch for dev.
+///   2. `<resource_dir>/binaries/tesseract[-<target_triple>][.exe]`
+///      — what `tauri.conf.json`'s `bundle.externalBin` produces.
+///   3. `<exe_dir>/tesseract` — what bundled apps land at next to the
+///      main binary.
+///   4. Skip — leaving OCR unavailable. `lc_ocr_available` reports
+///      this so the UI hides the offer entirely.
+///
+/// Failure is non-fatal: a build without bundled binaries simply
+/// degrades to "OCR not offered" rather than erroring on boot.
+pub async fn install_ocr_ctx_for_app(
+    app: &AppHandle,
+    manager: &Arc<LocalCorpusManager>,
+    daemon_base_url: String,
+) {
+    use tauri::Manager;
+
+    let tesseract_bin = match resolve_tesseract_path(app) {
+        Some(p) => p,
+        None => {
+            tracing::info!(
+                "OCR not available: tesseract sidecar not present in this build"
+            );
+            return;
+        }
+    };
+
+    let resource_dir = app.path().resource_dir().ok();
+
+    // tessdata directory — required. We probe the standard locations
+    // before giving up.
+    let tessdata_dir = match resolve_tessdata_dir(resource_dir.as_deref()) {
+        Some(p) => p,
+        None => {
+            tracing::warn!(
+                "OCR not available: tessdata/eng.traineddata missing — \
+                 expected under <resource_dir>/tessdata/ or alongside the tesseract binary"
+            );
+            return;
+        }
+    };
+
+    // pdfium dynamic library — optional. If we can locate it from
+    // the resource dir or alongside the binaries directory, we pin
+    // pdfium-render to it. Otherwise we fall back to its
+    // system-library probe (which will fail at OCR-time, surfacing
+    // a clear error to the user).
+    let pdfium_lib_path = resolve_pdfium_lib(resource_dir.as_deref());
+
+    let ctx = OcrCtx {
+        tesseract_bin,
+        tessdata_dir,
+        pdfium_lib_path,
+        daemon_base_url,
+        cleanup_model: "fast".into(),
+        dpi: 300,
+        tesseract_timeout_secs: 30,
+        cleanup_timeout_secs: 30,
+    };
+    tracing::info!(
+        tesseract = %ctx.tesseract_bin.display(),
+        tessdata = %ctx.tessdata_dir.display(),
+        pdfium = ?ctx.pdfium_lib_path,
+        "OCR context installed — folder drop will offer OCR for scanned PDFs"
+    );
+    manager.set_ocr_ctx(ctx).await;
+}
+
+fn resolve_tesseract_path(app: &AppHandle) -> Option<PathBuf> {
+    use tauri::Manager;
+
+    if let Ok(env_path) = std::env::var("SOVEREIGN_TESSERACT_BIN") {
+        let p = PathBuf::from(env_path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+
+    // Tauri externalBin layout: under `<resource_dir>/binaries/`
+    // Tauri may suffix the target triple — try the bare name and a
+    // couple of common triples before giving up.
+    let mut probes: Vec<PathBuf> = Vec::new();
+    if let Ok(rd) = app.path().resource_dir() {
+        let bins = rd.join("binaries");
+        probes.push(bins.join("tesseract"));
+        probes.push(bins.join("tesseract.exe"));
+        // Common triples the Tauri bundler emits for sidecars.
+        for triple in [
+            "aarch64-apple-darwin",
+            "x86_64-apple-darwin",
+            "x86_64-unknown-linux-gnu",
+            "x86_64-pc-windows-msvc",
+        ] {
+            probes.push(bins.join(format!("tesseract-{triple}")));
+            probes.push(bins.join(format!("tesseract-{triple}.exe")));
+        }
+        probes.push(rd.join("tesseract"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            probes.push(parent.join("tesseract"));
+            probes.push(parent.join("tesseract.exe"));
+        }
+    }
+    probes.into_iter().find(|p| p.exists())
+}
+
+fn resolve_tessdata_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
+    let mut probes: Vec<PathBuf> = Vec::new();
+    if let Ok(env_path) = std::env::var("SOVEREIGN_TESSDATA_DIR") {
+        probes.push(PathBuf::from(env_path));
+    }
+    if let Some(rd) = resource_dir {
+        probes.push(rd.join("tessdata"));
+        probes.push(rd.join("binaries").join("tessdata"));
+    }
+    probes
+        .into_iter()
+        .find(|p| p.join("eng.traineddata").exists())
+}
+
+fn resolve_pdfium_lib(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
+    let mut probes: Vec<PathBuf> = Vec::new();
+    if let Ok(env_path) = std::env::var("SOVEREIGN_PDFIUM_LIB") {
+        probes.push(PathBuf::from(env_path));
+    }
+    if let Some(rd) = resource_dir {
+        for lib in ["libpdfium.dylib", "pdfium.dll", "libpdfium.so"] {
+            probes.push(rd.join("pdfium").join(lib));
+            probes.push(rd.join("binaries").join("pdfium").join(lib));
+            probes.push(rd.join(lib));
+        }
+    }
+    probes.into_iter().find(|p| p.exists())
 }
 
 // ─── Command: lc_validate_path ───────────────────────────────────────
@@ -185,6 +349,7 @@ pub async fn lc_ingest(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
+    with_ocr: Option<bool>,
 ) -> Result<String, String> {
     let manager = require_manager(&state).await?;
     let job_id = new_job_id();
@@ -194,7 +359,10 @@ pub async fn lc_ingest(
     // panel off the emit channel; failure propagates via
     // `LocalCorpusProgress::Error`.
     tokio::spawn(async move {
-        match manager.ingest(&corpus_id, Some(progress.clone())).await {
+        match manager
+            .ingest(&corpus_id, with_ocr, Some(progress.clone()))
+            .await
+        {
             Ok(_stats) => {
                 // The manager already emits Complete; nothing to do
                 // here.

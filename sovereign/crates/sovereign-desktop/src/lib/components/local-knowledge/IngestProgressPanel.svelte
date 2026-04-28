@@ -14,6 +14,7 @@
     switch (progress.phase) {
       case "scanning":      return "Scanning";
       case "staging":       return "Reading documents";
+      case "ocr_page":      return "Reading scanned documents";
       case "ingesting":     return progress.data.phase_label;
       case "clustering":    return "Clustering";
       case "snapshotting":  return "Saving restore point";
@@ -49,6 +50,14 @@
       if (!total || total <= 0) return null;
       return done / total;
     }
+    if (progress.phase === "ocr_page") {
+      // Page-level fraction within the current file. Across-files
+      // fraction would need running totals we don't track today.
+      const total = progress.data.total_pages;
+      const done = progress.data.page;
+      if (!total || total <= 0) return null;
+      return done / total;
+    }
     return null;
   });
 
@@ -70,6 +79,14 @@
           done: Number(progress.data.done),
           total: Number(progress.data.total),
           file: progress.data.current_file ?? "",
+        };
+      case "ocr_page":
+        // The "counter" for OCR is "page N of M" within the current
+        // file, with the file name surfaced as `file`.
+        return {
+          done: progress.data.page,
+          total: progress.data.total_pages,
+          file: `${progress.data.file} — page ${progress.data.page} of ${progress.data.total_pages}`,
         };
       default:
         return { done: 0, total: 0, file: "" };

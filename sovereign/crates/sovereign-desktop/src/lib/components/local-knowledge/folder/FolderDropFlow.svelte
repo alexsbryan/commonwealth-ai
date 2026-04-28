@@ -9,6 +9,7 @@
     enrichInitForLocalCorpus,
     lcCancel,
     lcIngest,
+    lcOcrAvailable,
     lcPreScan,
   } from "../../../api";
   import type {
@@ -139,6 +140,27 @@
   let step: Step = $state({ kind: "select", initialPath: initialPath ?? undefined });
   let unlisten: UnlistenFn | null = null;
   let cancelling = $state(false);
+  /** Whether the desktop has a working OCR pipeline. Probed once at
+   *  flow start; passed into PreScanPanel so the OCR offer only
+   *  surfaces when accepting it would actually do something. */
+  let ocrAvailable = $state(false);
+
+  // Probe OCR availability once when the flow mounts. Failure is
+  // non-fatal — defaults to "not available" and the UI hides the
+  // affordance, exactly like a build without bundled binaries.
+  $effect(() => {
+    let cancelled = false;
+    void lcOcrAvailable()
+      .then((avail) => {
+        if (!cancelled) ocrAvailable = avail;
+      })
+      .catch(() => {
+        if (!cancelled) ocrAvailable = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   onDestroy(() => {
     if (unlisten) unlisten();
@@ -183,7 +205,7 @@
     }
   }
 
-  async function handleConfirmIngest() {
+  async function handleConfirmIngest(useOcr: boolean) {
     if (step.kind !== "confirm") return;
     const { corpusId, displayName } = step;
     step = {
@@ -192,12 +214,12 @@
       displayName,
       progress: null,
     };
-    await kickOffIngest(corpusId);
+    await kickOffIngest(corpusId, useOcr);
   }
 
-  async function kickOffIngest(corpusId: string) {
+  async function kickOffIngest(corpusId: string, useOcr = false) {
     try {
-      const jobId = await lcIngest(corpusId);
+      const jobId = await lcIngest(corpusId, useOcr);
       const channel = `local-corpus://progress/${jobId}`;
       unlisten = await listen<LocalCorpusProgress>(channel, (event) => {
         if (step.kind === "ingesting") {
@@ -420,6 +442,7 @@
   {:else if step.kind === "confirm"}
     <PreScanPanel
       result={step.result}
+      {ocrAvailable}
       onConfirm={handleConfirmIngest}
       onChooseAgain={handleChooseAgain}
     />

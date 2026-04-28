@@ -20,6 +20,11 @@ pub enum ModelFamily {
     Qwen35,
     Qwen3Embedding,
     Gemma3,
+    /// Gemma 4 (E2B / E4B / E27B). Same chat template family as
+    /// Gemma 3 — `{%- macro format_parameters() -%}` Jinja2
+    /// templates that require the minja renderer (tier-2 path in
+    /// `build_chat_prompt`). Sampling defaults match Gemma 3.
+    Gemma4,
     Llama3,
     Phi4,
     /// Always-on thinking, cannot be disabled.
@@ -149,6 +154,19 @@ impl ModelFamily {
             },
 
             ModelFamily::Gemma3 => ModelQuirks {
+                thinking: ThinkingControl::None,
+                default_temperature:      1.0,
+                default_top_k:            Some(64),
+                default_top_p:            0.95,
+                default_presence_penalty: 0.0,
+                embed: None,
+            },
+
+            // Gemma 4 inherits Gemma 3's quirks — same chat-template
+            // family (Jinja2 macros), same sampling defaults
+            // (Google's recommended decode params for instruct
+            // tuning didn't change between 3 and 4).
+            ModelFamily::Gemma4 => ModelQuirks {
                 thinking: ThinkingControl::None,
                 default_temperature:      1.0,
                 default_top_k:            Some(64),

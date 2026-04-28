@@ -25,6 +25,7 @@ use corpus_engine::{CorpusEngine, CorpusSpec, ScoredChunk};
 
 use super::config::{recipe_toml, LocalCorpusConfig};
 use super::extract_stage::{self, default_staging_path};
+use super::ocr::{OcrCtx, PageProgress, PageProgressCallback};
 use super::pre_scanner::{PreScanResult, PreScanner};
 use super::progress::{ExcerptChunk, LocalCorpusProgress, RuntimeFailure};
 
@@ -86,6 +87,13 @@ pub struct LocalCorpusManager {
     /// re-running the LLM labelling pass. Cleared on app restart —
     /// the user re-clicks "Organize" each session.
     cluster_results: RwLock<HashMap<String, super::clusterer::LabeledClusterResult>>,
+    /// Optional OCR runtime config (Tesseract sidecar path, daemon
+    /// URL, DPI, …). The desktop layer sets this at boot via
+    /// `set_ocr_ctx`; the CLI / tests run without it. When `None`,
+    /// any corpus with `ocr_pdfs = true` falls back to surfacing the
+    /// scanned PDFs as runtime failures rather than silently
+    /// dropping them.
+    ocr_ctx: RwLock<Option<OcrCtx>>,
 }
 
 impl LocalCorpusManager {
@@ -116,7 +124,23 @@ impl LocalCorpusManager {
             snapshot_root,
             corpora: RwLock::new(corpora),
             cluster_results: RwLock::new(HashMap::new()),
+            ocr_ctx: RwLock::new(None),
         })
+    }
+
+    /// Install an OCR runtime context. Called once at desktop boot
+    /// after the Tauri layer has resolved the bundled tesseract /
+    /// pdfium paths. Subsequent calls overwrite. Idempotent.
+    pub async fn set_ocr_ctx(&self, ctx: OcrCtx) {
+        *self.ocr_ctx.write().await = Some(ctx);
+    }
+
+    /// Whether an OCR context is installed. The desktop's
+    /// `lc_ocr_available` command surfaces this to the UI so the
+    /// "Read them with OCR" button only renders when we can actually
+    /// honour the click.
+    pub async fn ocr_available(&self) -> bool {
+        self.ocr_ctx.read().await.is_some()
     }
 
     /// The default snapshot root Obsidian write-back should use when a
@@ -201,20 +225,44 @@ impl LocalCorpusManager {
     ///   1. Pre-scan to find readable files (respecting the caller's
     ///      most recent decisions about scanned/protected PDFs).
     ///   2. Stage the text of each readable file into a JSONL file.
-    ///   3. Render a Recipe TOML for `corpus-engine` with the staged
+    ///   3. (Optional) When `with_ocr` is requested, append OCR'd
+    ///      content for scanned PDFs to the same JSONL using the
+    ///      installed `OcrCtx`. Page-level progress is bridged onto
+    ///      the same `progress` channel via `OcrPage` events.
+    ///   4. Render a Recipe TOML for `corpus-engine` with the staged
     ///      JSONL as the source.
-    ///   4. Delegate to `CorpusEngine::ingest`, bridging its
+    ///   5. Delegate to `CorpusEngine::ingest`, bridging its
     ///      `IngestProgress` into our `LocalCorpusProgress::Ingesting`.
-    ///   5. Return `IngestStats` — per-file runtime failures preserved.
+    ///   6. Return `IngestStats` — per-file runtime failures preserved.
+    ///
+    /// `with_ocr` is the one-shot user decision from the desktop's
+    /// pre-scan panel. `Some(true)` flips `config.ocr_pdfs` to true
+    /// and persists; `Some(false)` flips it off; `None` leaves the
+    /// stored flag alone (matches the CLI default and preserves the
+    /// per-corpus opt-in across re-ingest).
     pub async fn ingest(
         &self,
         id: &str,
+        with_ocr: Option<bool>,
         progress: Option<ProgressCallback>,
     ) -> Result<IngestStats> {
-        let config = self
+        let mut config = self
             .get(id)
             .await
             .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
+
+        if let Some(flag) = with_ocr {
+            if config.ocr_pdfs != flag {
+                config.ocr_pdfs = flag;
+                // Persist the updated flag so subsequent ingests pick
+                // up the same decision without re-prompting.
+                persist_config(&config_dir(&self.data_dir), &config)?;
+                self.corpora
+                    .write()
+                    .await
+                    .insert(config.id.clone(), config.clone());
+            }
+        }
 
         let progress = progress.unwrap_or_else(noop_progress);
 
@@ -272,7 +320,56 @@ impl LocalCorpusManager {
             .await
             .map_err(|e| Error::Execution(format!("stage task: {e}")))?
         };
-        let stage_result = stage_result.map_err(|e| Error::Execution(format!("stage io: {e}")))?;
+        let mut stage_result =
+            stage_result.map_err(|e| Error::Execution(format!("stage io: {e}")))?;
+
+        // Optional OCR pass: append extracted text from scanned PDFs
+        // to the same JSONL. Failures from this pass merge into the
+        // existing runtime_failures vector so the completion screen
+        // shows them alongside born-digital extraction failures.
+        if config.ocr_pdfs && !scan.scanned_pdfs.is_empty() {
+            let ocr_ctx = self.ocr_ctx.read().await.clone();
+            match ocr_ctx {
+                Some(ctx) => {
+                    let page_cb: PageProgressCallback = {
+                        let progress = progress.clone();
+                        Arc::new(move |pp: PageProgress| {
+                            progress(LocalCorpusProgress::OcrPage {
+                                file: pp.file_display_name,
+                                page: pp.current_page,
+                                total_pages: pp.total_pages,
+                                file_idx: pp.file_idx,
+                                file_total: pp.file_total,
+                            });
+                        })
+                    };
+                    let ocr_result = extract_stage::append_ocr_to_staging(
+                        &config,
+                        &scan.scanned_pdfs,
+                        &staging,
+                        &ctx,
+                        Some(page_cb),
+                    )
+                    .await
+                    .map_err(|e| Error::Execution(format!("ocr append io: {e}")))?;
+                    stage_result.staged += ocr_result.staged;
+                    stage_result.failures.extend(ocr_result.failures);
+                }
+                None => {
+                    // Caller asked for OCR but the runtime context
+                    // isn't installed (CLI without sidecar bundle, or
+                    // misconfigured desktop). Surface every scanned
+                    // PDF as a runtime failure so the user sees them
+                    // named individually on the completion screen.
+                    for meta in &scan.scanned_pdfs {
+                        stage_result.failures.push(RuntimeFailure {
+                            file: meta.clone(),
+                            reason: "OCR requested but engine is not installed".into(),
+                        });
+                    }
+                }
+            }
+        }
 
         if stage_result.staged == 0 {
             // Everything failed during extraction. Report to the UI
@@ -334,10 +431,12 @@ impl LocalCorpusManager {
             }
         };
 
-        // 6. Compose IngestStats.
+        // 6. Compose IngestStats. `stage_result.staged` covers both
+        // born-digital files and any OCR-recovered scanned PDFs.
+        let _ = readable_files; // retained for future per-source stats
         let stats = IngestStats {
             corpus_id: ingest_result.corpus_id.clone(),
-            files_indexed: readable_files.len() - stage_result.failures.len(),
+            files_indexed: stage_result.staged,
             chunks_written: ingest_result.chunks_created,
             runtime_failures: stage_result.failures,
             excerpt_chunks,

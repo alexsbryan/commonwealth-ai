@@ -121,6 +121,13 @@ pub struct LocalCorpusConfig {
     pub watcher: WatcherConfig,
     pub pre_scan: PreScanConfig,
     pub scope: CorpusScope,
+    /// Run OCR on PDFs that the pre-scanner classifies as
+    /// `ScannedNoText`. Default `false` — set by the desktop layer
+    /// when the user clicks "Read them with OCR" on the pre-scan
+    /// panel. The flag persists per-corpus so re-ingest after
+    /// adding more files behaves the same way without re-prompting.
+    #[serde(default)]
+    pub ocr_pdfs: bool,
 }
 
 /// Chunker choice. Mirrors `corpus_engine::recipe::ChunkerConfig` one
@@ -177,6 +184,7 @@ impl LocalCorpusConfig {
                 large_file_threshold_mb: 200,
             },
             scope: CorpusScope::Local,
+            ocr_pdfs: false,
         }
     }
 
@@ -224,6 +232,7 @@ impl LocalCorpusConfig {
                 large_file_threshold_mb: 200,
             },
             scope: CorpusScope::Local,
+            ocr_pdfs: false,
         }
     }
 }

@@ -19,13 +19,14 @@
 //! `id` and `title` are picked up by `JsonlExtractor`; everything else
 //! becomes chunk metadata (see `corpus-engine/src/extractors/json.rs`).
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use super::config::LocalCorpusConfig;
+use super::ocr::{OcrCtx, PageProgressCallback};
 use super::pre_scanner::FileMeta;
 use super::progress::RuntimeFailure;
 
@@ -258,6 +259,120 @@ pub fn default_staging_path(data_dir: &Path, corpus_id: &str) -> PathBuf {
     data_dir.join("local-corpus-staging").join(format!("{corpus_id}.jsonl"))
 }
 
+// ─── OCR stage ───────────────────────────────────────────────────────
+
+/// Append OCR'd content for scanned PDFs to an existing staging
+/// JSONL. Called AFTER `stage_blocking` has written the readable
+/// (born-digital) entries; the OCR pipeline is async because the
+/// cleanup pass talks to the daemon's `/v1/chat/completions`.
+///
+/// Per-file failures collect into `StageResult.failures` exactly as
+/// `stage_blocking` does — the manager merges both result vectors so
+/// the completion screen surfaces both kinds of error in one list.
+///
+/// `on_page_progress`, when provided, fires before each page is sent
+/// to Tesseract — used by the manager to bridge `OcrPage` events
+/// onto the local-corpus progress channel.
+pub async fn append_ocr_to_staging(
+    config: &LocalCorpusConfig,
+    files: &[FileMeta],
+    output_path: &Path,
+    ocr_ctx: &OcrCtx,
+    on_page_progress: Option<PageProgressCallback>,
+) -> std::io::Result<StageResult> {
+    let mut result = StageResult::default();
+    if files.is_empty() {
+        return Ok(result);
+    }
+
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Build the rasterizer once so the pdfium dynamic library is
+    // bound a single time across the OCR queue.
+    let rasterizer = match super::ocr::rasterize::PdfiumRasterizer::new(ocr_ctx) {
+        Ok(r) => r,
+        Err(e) => {
+            // Setup-level error — the entire OCR queue fails. Surface
+            // each scanned PDF as a runtime failure so the user sees
+            // them in the completion screen.
+            for meta in files {
+                result.failures.push(RuntimeFailure {
+                    file: meta.clone(),
+                    reason: format!("OCR engine setup failed: {e}"),
+                });
+            }
+            return Ok(result);
+        }
+    };
+
+    let file_total = files.len() as u32;
+
+    let mut file_handle = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(output_path)?;
+
+    for (idx, meta) in files.iter().enumerate() {
+        let file_idx = (idx as u32) + 1;
+        let res = super::ocr::pipeline::extract_pdf_with_rasterizer(
+            &rasterizer,
+            &meta.path,
+            ocr_ctx,
+            &meta.display_name,
+            file_idx,
+            file_total,
+            on_page_progress.clone(),
+        )
+        .await;
+
+        match res {
+            Ok(text) if !text.trim().is_empty() => {
+                let relative = meta
+                    .path
+                    .strip_prefix(&config.root_path)
+                    .unwrap_or(&meta.path)
+                    .to_string_lossy()
+                    .into_owned();
+                let source_id = source_id_for(&meta.path);
+                let line = StagedLine {
+                    id: &source_id,
+                    title: &meta.display_name,
+                    content: &text,
+                    source_path: &relative,
+                };
+                let json = serde_json::to_string(&line).map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::Other, format!("serialize: {e}"))
+                })?;
+                writeln!(file_handle, "{json}")?;
+                result.staged += 1;
+            }
+            Ok(_) => {
+                // Empty OCR output — no readable pages. Surface as a
+                // failure so the user knows the file was attempted.
+                result.failures.push(RuntimeFailure {
+                    file: meta.clone(),
+                    reason: "OCR produced no text".into(),
+                });
+            }
+            Err(reason) => {
+                result.failures.push(RuntimeFailure {
+                    file: meta.clone(),
+                    reason: format!("OCR failed: {reason}"),
+                });
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+// `extract_pdf_via_ocr` is re-exported for callers (sovereign-cli,
+// future tools) that want a one-shot OCR without touching the
+// staging machinery.
+pub use super::ocr::extract_pdf_via_ocr as ocr_extract_pdf;
+
 // ─── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -375,6 +490,67 @@ mod tests {
                 panic!("garbage bytes should not be classified as encrypted")
             }
             Ok(_) => panic!("garbage bytes should not parse"),
+        }
+    }
+
+    #[tokio::test]
+    async fn append_ocr_no_files_returns_empty_result() {
+        let dir = tempdir().unwrap();
+        let cfg = folder_cfg(dir.path());
+        let staging = dir.path().join("staged.jsonl");
+        std::fs::write(&staging, "").unwrap();
+        let ctx = super::super::ocr::OcrCtx::for_test(
+            std::path::PathBuf::from("/no/tesseract"),
+            std::path::PathBuf::from("/no/tessdata"),
+            "http://127.0.0.1:1".into(),
+        );
+        let res = append_ocr_to_staging(&cfg, &[], &staging, &ctx, None)
+            .await
+            .unwrap();
+        assert_eq!(res.staged, 0);
+        assert!(res.failures.is_empty());
+    }
+
+    #[tokio::test]
+    async fn append_ocr_setup_failure_marks_every_file() {
+        // OcrCtx points at a deliberately-broken pdfium path. Every
+        // queued scanned PDF must land in `failures` with a clear
+        // setup-error message — they must NOT silently disappear.
+        let dir = tempdir().unwrap();
+        let cfg = folder_cfg(dir.path());
+        let staging = dir.path().join("staged.jsonl");
+        std::fs::write(&staging, "").unwrap();
+        let mut ctx = super::super::ocr::OcrCtx::for_test(
+            std::path::PathBuf::from("/no/tesseract"),
+            std::path::PathBuf::from("/no/tessdata"),
+            "http://127.0.0.1:1".into(),
+        );
+        ctx.pdfium_lib_path = Some(std::path::PathBuf::from(
+            "/this/path/does/not/exist/libpdfium.dylib",
+        ));
+        let scanned = vec![
+            FileMeta {
+                path: dir.path().join("a.pdf"),
+                size_bytes: 0,
+                display_name: "a".into(),
+            },
+            FileMeta {
+                path: dir.path().join("b.pdf"),
+                size_bytes: 0,
+                display_name: "b".into(),
+            },
+        ];
+        let res = append_ocr_to_staging(&cfg, &scanned, &staging, &ctx, None)
+            .await
+            .unwrap();
+        assert_eq!(res.staged, 0);
+        assert_eq!(res.failures.len(), 2);
+        for failure in &res.failures {
+            assert!(
+                failure.reason.contains("OCR engine setup failed"),
+                "expected setup-failure message, got: {}",
+                failure.reason
+            );
         }
     }
 

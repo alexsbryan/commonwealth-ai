@@ -270,7 +270,38 @@ impl KnowledgeViewManager {
     /// blocked by first-run ingest, which can take tens of seconds on
     /// a populated SQLite DB.
     pub fn spawn_init(self: std::sync::Arc<Self>) -> tokio::task::JoinHandle<()> {
+        self.spawn_init_after(std::time::Duration::ZERO)
+    }
+
+    /// Variant of `spawn_init` that delays the actual ingest by
+    /// `delay` before kicking off. Used by the desktop bootstrap to
+    /// keep the fast slot free for the user's first interaction —
+    /// otherwise enrichment Phase 2 fans out parallel calls onto the
+    /// fast slot at the exact moment the user wants to chat.
+    ///
+    /// The delay is silent: the init log line still fires when the
+    /// real work starts, so operators can see when enrichment begins
+    /// rather than when it was queued. Use `Duration::ZERO` (the
+    /// `spawn_init` shortcut) for processes where delay is unwanted
+    /// (CLI / server cold-starts where there's no UI to protect).
+    ///
+    /// Cancellation: the `JoinHandle` aborts cleanly mid-sleep —
+    /// dropping it is the supported way to cancel a deferred init
+    /// when the process is shutting down before the timer fires.
+    /// Cooperative cancellation of the *running* enrichment is a
+    /// separate piece of work (see RELEASING.md / project notes).
+    pub fn spawn_init_after(
+        self: std::sync::Arc<Self>,
+        delay: std::time::Duration,
+    ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
+            if !delay.is_zero() {
+                tracing::info!(
+                    delay_secs = delay.as_secs(),
+                    "knowledge_view: deferring background init"
+                );
+                tokio::time::sleep(delay).await;
+            }
             tracing::info!("knowledge_view: starting background init");
             match self.init().await {
                 Ok(()) => tracing::info!("knowledge_view: init complete"),

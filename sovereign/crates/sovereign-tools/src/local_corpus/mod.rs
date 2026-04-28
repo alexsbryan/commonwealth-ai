@@ -30,6 +30,7 @@ pub mod frontmatter;
 pub mod git;
 pub mod humanise;
 pub mod manager;
+pub mod ocr;
 pub mod pre_scanner;
 pub mod preview;
 pub mod progress;
