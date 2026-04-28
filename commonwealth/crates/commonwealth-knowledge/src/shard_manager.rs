@@ -12,11 +12,60 @@ pub struct ShardManager {
     engine: Arc<CorpusEngine>,
     shard_dir: PathBuf,
     mesh_store: Arc<MeshStore>,
+    /// Optional emitter for `ShardTransferred` events on the merge
+    /// leader's pull path. Optional so existing call sites that
+    /// don't have a daemon-scoped emitter (legacy tests, ad-hoc
+    /// tooling) keep working unchanged. Missing emitter ⇒ no
+    /// ledger event ⇒ ledger silently underreports the transfer,
+    /// which is honest about the gap.
+    emitter: Option<ContributionEmitter>,
+    /// Optional handle on the daemon's `WorkQueueManager`. Required
+    /// for queue-mode `coordinate_merge` (legacy static-partition
+    /// handoffs carry the participating peer list inline; queue-mode
+    /// handoffs have an empty `partitions` and we have to read it
+    /// from `HandoffQueue.participating_peers`). Missing queue ⇒
+    /// queue-mode merges fall through with a clear log line and
+    /// nothing else, which is the safest behaviour for tests and
+    /// ad-hoc tooling that constructs a ShardManager without a
+    /// daemon attached.
+    work_queue: Option<Arc<crate::work_queue::WorkQueueManager>>,
 }
 
 impl ShardManager {
     pub fn new(engine: Arc<CorpusEngine>, shard_dir: PathBuf, mesh_store: Arc<MeshStore>) -> Self {
-        Self { engine, shard_dir, mesh_store }
+        Self {
+            engine,
+            shard_dir,
+            mesh_store,
+            emitter: None,
+            work_queue: None,
+        }
+    }
+
+    /// Attach a `ContributionEmitter` so successful peer-shard
+    /// pulls during `coordinate_merge` write `ShardTransferred`
+    /// events into the dimensional ledger. The emit is on behalf
+    /// of the peer (`from_node = peer.node_id`), so the aggregator
+    /// credits the actual sender's `bytes_served` rather than the
+    /// puller's. See
+    /// `commonwealth_core::contributions::aggregate` for the
+    /// pull-emission special case.
+    pub fn with_emitter(mut self, emitter: ContributionEmitter) -> Self {
+        self.emitter = Some(emitter);
+        self
+    }
+
+    /// Attach the daemon's `WorkQueueManager` so queue-mode
+    /// `coordinate_merge` can enumerate participating peers from
+    /// `HandoffQueue.participating_peers`. Without it, queue-mode
+    /// merges log a warning and become a no-op rather than
+    /// crashing — the legacy partition-list path is unaffected.
+    pub fn with_work_queue(
+        mut self,
+        work_queue: Arc<crate::work_queue::WorkQueueManager>,
+    ) -> Self {
+        self.work_queue = Some(work_queue);
+        self
     }
 
     // ---- Shard preparation and installation ----
@@ -120,14 +169,22 @@ impl ShardManager {
         }
     }
 
-    /// Run the merge coordination state machine for a completed partition.
+    /// Run the merge coordination state machine for a completed handoff.
     ///
-    /// Called by the `ingest_partition` handler when local ingestion finishes.
-    /// If this node is not the designated merge leader it returns early.
-    /// If it is the leader it waits for all partitions to complete (with
-    /// timeout), collects peer shards via HTTP transfer, and merges.
+    /// Two modes, distinguished by whether `handoff.partitions` is
+    /// populated:
     ///
-    /// Merge leader: the node with the lowest NodeId among all partitions.
+    /// * **Legacy static-partition** (non-empty `partitions`):
+    ///   marks this node's partition as Complete, polls peers' partition
+    ///   statuses, then fetches their shards. Merge leader is the lowest
+    ///   `NodeId` among all partitions.
+    /// * **Queue-mode** (empty `partitions`, `phase != legacy_open`):
+    ///   the coordinator's `WorkQueueManager` already sequenced the work
+    ///   and waited for every unit to terminate before triggering this
+    ///   call (see `corpus_complete_unit`'s phase-transition wiring).
+    ///   Participating peers come from `HandoffQueue.participating_peers`
+    ///   rather than the empty `partitions` list. Merge leader is set
+    ///   to the coordinator at handoff creation.
     pub async fn coordinate_merge(
         &self,
         handoff_id: HandoffId,
@@ -145,7 +202,60 @@ impl ShardManager {
             }
         };
 
-        // Mark this node's partition as Complete.
+        let queue_mode = handoff.is_queue_mode();
+
+        // In queue mode, synthesize partition entries from
+        // `HandoffQueue.participating_peers` so the rest of the
+        // function (which is partition-list-driven) just works. Mark
+        // every entry Complete since `corpus_complete_unit` only
+        // triggers this path when the queue's phase is Merging,
+        // which means every unit terminated.
+        if queue_mode {
+            let Some(work_queue) = &self.work_queue else {
+                tracing::warn!(
+                    handoff = %handoff_id,
+                    "coordinate_merge: queue-mode handoff but no WorkQueueManager attached — \
+                     skipping merge. Wire ShardManager::with_work_queue() at construction."
+                );
+                return Ok(None);
+            };
+            let Some(snapshot) = work_queue.snapshot(&handoff_id).await else {
+                tracing::warn!(
+                    handoff = %handoff_id,
+                    "coordinate_merge: queue-mode handoff but coordinator has no live queue \
+                     for it — was the daemon restarted mid-ingest?"
+                );
+                return Ok(None);
+            };
+            // The coordinator itself counts as a participant when its
+            // own partition dir exists on disk — `participating_peers`
+            // tracks only peers that pulled units (the coordinator
+            // ingests via its own pull loop, so it should be there
+            // too, but belt-and-braces).
+            let mut peers: std::collections::HashSet<NodeId> =
+                snapshot.participating_peers.clone();
+            peers.insert(local_node_id);
+            let synthesized: Vec<commonwealth_core::knowledge::IngestionPartition> = peers
+                .into_iter()
+                .map(|node_id| commonwealth_core::knowledge::IngestionPartition {
+                    node_id,
+                    file_indices: Vec::new(),
+                    article_range: None,
+                    status: PartitionStatus::Complete {
+                        completed_at: snapshot.last_mutation_ms,
+                    },
+                })
+                .collect();
+            tracing::info!(
+                handoff = %handoff_id,
+                peers = synthesized.len(),
+                "coordinate_merge: queue-mode — synthesized partitions from work queue"
+            );
+            handoff.partitions = synthesized;
+        }
+
+        // Mark this node's partition as Complete (legacy path; no-op
+        // for queue mode where every entry is already Complete).
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -182,31 +292,36 @@ impl ShardManager {
 
         tracing::info!(
             handoff = %handoff_id,
-            "coordinate_merge: we are the merge leader, waiting for all partitions"
+            queue_mode,
+            "coordinate_merge: we are the merge leader"
         );
 
-        // Poll until all partitions are complete or timeout.
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(MAX_WAIT_SECS);
-        loop {
-            let all_done = handoff.partitions.iter().all(|p| {
-                matches!(
-                    p.status,
-                    PartitionStatus::Complete { .. } | PartitionStatus::Failed { .. }
-                )
-            });
-            if all_done {
-                break;
-            }
-            if tokio::time::Instant::now() >= deadline {
-                tracing::warn!(
-                    handoff = %handoff_id,
-                    "coordinate_merge: timed out, merging with available shards"
-                );
-                break;
-            }
-            tokio::time::sleep(PARTITION_POLL_INTERVAL).await;
-            if let Some(h) = self.load_handoff(handoff_id) {
-                handoff = h;
+        // Poll until all partitions are complete or timeout. In
+        // queue mode this is a no-op — we already synthesized every
+        // entry as Complete.
+        if !queue_mode {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(MAX_WAIT_SECS);
+            loop {
+                let all_done = handoff.partitions.iter().all(|p| {
+                    matches!(
+                        p.status,
+                        PartitionStatus::Complete { .. } | PartitionStatus::Failed { .. }
+                    )
+                });
+                if all_done {
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    tracing::warn!(
+                        handoff = %handoff_id,
+                        "coordinate_merge: timed out, merging with available shards"
+                    );
+                    break;
+                }
+                tokio::time::sleep(PARTITION_POLL_INTERVAL).await;
+                if let Some(h) = self.load_handoff(handoff_id) {
+                    handoff = h;
+                }
             }
         }
 
@@ -259,8 +374,34 @@ impl ShardManager {
             let dest_dir = self.engine.index_dir()
                 .join(format!("{}-partition-{}", handoff.corpus_id, partition.node_id));
 
-            match self.fetch_remote_shard(&handoff.corpus_id, &base_url, &dest_dir).await {
-                Ok(()) => shard_dirs.push(dest_dir),
+            match self
+                .fetch_remote_shard(
+                    &handoff.corpus_id,
+                    &base_url,
+                    &dest_dir,
+                    local_node_id,
+                )
+                .await
+            {
+                Ok(bytes_received) => {
+                    // Successful transfer: emit `ShardTransferred`
+                    // on behalf of the peer that shipped the bytes.
+                    // Without this, the dimensional ledger would
+                    // never reflect any peer-to-peer activity during
+                    // collaborative ingest — only the merge leader
+                    // observes the transfer completing, so only the
+                    // merge leader can emit. See `aggregate` for
+                    // the pull-emission special case.
+                    if let Some(em) = &self.emitter {
+                        em.record(LedgerEventKind::ShardTransferred {
+                            from_node: partition.node_id,
+                            to_node: local_node_id,
+                            corpus_id: handoff.corpus_id.clone(),
+                            bytes: bytes_received,
+                        });
+                    }
+                    shard_dirs.push(dest_dir);
+                }
                 Err(e) => tracing::warn!(
                     node = %partition.node_id,
                     error = %e,
@@ -299,28 +440,47 @@ impl ShardManager {
     }
 
     /// Fetch a remote corpus partition shard via HTTP transfer.
+    /// Returns the number of bytes received on the wire (used as the
+    /// `bytes` field of the `ShardTransferred` ledger event the
+    /// caller emits on success).
+    ///
+    /// `local_node_id` is the merge-leader's id. It rides along on
+    /// the request as `X-Node-Id` so the serving daemon can attribute
+    /// the request to a specific recipient — useful for the peer's
+    /// side of mesh-health observability when we eventually serve
+    /// shards out of this route too.
     async fn fetch_remote_shard(
         &self,
         corpus_id: &str,
         base_url: &str,
         dest_dir: &Path,
-    ) -> anyhow::Result<()> {
-        let transfer_url = format!("{base_url}/internal/index/transfer");
+        local_node_id: NodeId,
+    ) -> anyhow::Result<u64> {
+        // GET /internal/index/serve, NOT POST /internal/index/transfer.
+        // The transfer endpoint reads the request body (upload
+        // semantics); the serve endpoint writes the response body
+        // (download semantics). Earlier versions of this function
+        // called POST /transfer with no body, which silently
+        // returned a JSON error and broke every queue-mode merge —
+        // see `routes_internal::index_serve` for the full story.
+        let serve_url = format!("{base_url}/internal/index/serve");
         let client = reqwest::Client::new();
         let resp = client
-            .post(&transfer_url)
+            .get(&serve_url)
             .header("X-Corpus-Id", corpus_id)
+            .header("X-Node-Id", local_node_id.to_string())
             .send()
             .await?;
 
         if !resp.status().is_success() {
             anyhow::bail!(
-                "index/transfer returned {} from {base_url}",
+                "index/serve returned {} from {base_url}",
                 resp.status()
             );
         }
 
         let bytes = resp.bytes().await?;
+        let bytes_received = bytes.len() as u64;
         std::fs::create_dir_all(dest_dir)?;
         let tarball_path = dest_dir.with_extension("tar");
         std::fs::write(&tarball_path, &bytes)?;
@@ -339,7 +499,7 @@ impl ShardManager {
             anyhow::bail!("tar extraction failed for shard from {base_url}");
         }
 
-        Ok(())
+        Ok(bytes_received)
     }
 
     // ---- T7: Index transfer sender ----
@@ -427,6 +587,7 @@ impl ShardManager {
         // byte ledger (per `aggregate` in commonwealth-core).
         if let (Some(to), Some(em)) = (to_node, emitter) {
             em.record(LedgerEventKind::ShardTransferred {
+                from_node: em.self_node_id(),
                 to_node: to,
                 corpus_id: corpus_id.to_string(),
                 bytes: bytes_transferred,

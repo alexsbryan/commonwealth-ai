@@ -850,11 +850,19 @@ pub async fn corpus_ingest_partition(
                     chunks = result.chunks_created,
                     "ingest_partition: complete — triggering merge check"
                 );
+                // Attach the daemon-scoped emitter so successful
+                // `fetch_remote_shard` calls write `ShardTransferred`
+                // events to the dimensional ledger. Without this, the
+                // merge step is invisible to peers (only the merge
+                // leader observes pull completion). The emit is
+                // attributed to the peer that shipped the bytes —
+                // see `aggregate` for the pull-emission convention.
                 let shard_mgr = ShardManager::new(
                     Arc::clone(&engine),
                     engine.index_dir().to_path_buf(),
                     mesh_store,
-                );
+                )
+                .with_emitter(state_clone.inner.contribution_emitter.clone());
                 match shard_mgr.coordinate_merge(handoff_id, local_node_id, &peer_urls).await {
                     Ok(Some(info)) => tracing::info!(
                         corpus = %corpus_id,
@@ -1029,11 +1037,22 @@ pub async fn corpus_heartbeat(
 /// (the reaper already requeued it; the peer's local output may
 /// overlap with another peer's work — the merge step dedupes by
 /// content_hash + unit_id).
+///
+/// **Phase-transition wiring:** when `complete_unit` returns
+/// `HandoffPhase::Merging`, this is the last unit landing on the
+/// coordinator — the queue is fully drained and ready to merge.
+/// `WorkQueueManager::complete_unit` left this wiring as "the actual
+/// transition to Merging wakes the merge task — that wiring lives in
+/// the caller" (see `work_queue.rs:354-355`); without it, queue-mode
+/// collaborative ingests stall here forever, with peers logging
+/// "deferring index build to merge leader" and the leader's daemon
+/// quietly forgetting to do it. Spawn `coordinate_merge` so the
+/// 200 returns immediately and the merge runs in the background.
 pub async fn corpus_complete_unit(
     State(state): State<AppState>,
     Json(req): Json<CompleteUnitRequest>,
 ) -> (StatusCode, Json<CompleteUnitResponse>) {
-    use commonwealth_core::knowledge::CompleteOutcome;
+    use commonwealth_core::knowledge::{CompleteOutcome, HandoffPhase};
     use commonwealth_knowledge::QueueError;
     let handoff_id = req.handoff_id;
     let peer_id = req.peer_id;
@@ -1063,6 +1082,9 @@ pub async fn corpus_complete_unit(
                 phase = ?phase,
                 "complete_unit: unit completed by peer"
             );
+            if matches!(phase, HandoffPhase::Merging) {
+                spawn_queue_merge(state.clone(), handoff_id);
+            }
             (
             StatusCode::OK,
             Json(CompleteUnitResponse::Ok { phase }),
@@ -1087,6 +1109,78 @@ pub async fn corpus_complete_unit(
             }),
         ),
     }
+}
+
+/// Spawn `ShardManager::coordinate_merge` in the background after a
+/// queue-mode handoff transitions to `Merging`. Runs on the
+/// coordinator's daemon (the merge leader for queue-mode handoffs;
+/// see `IngestionHandoff::new_queue` in routes_internal.rs:248
+/// where merge_leader is set to `self_id`). Errors are logged and
+/// swallowed — the response to `complete_unit` already returned 200,
+/// and the operator can retry by re-issuing collaborative ingest.
+fn spawn_queue_merge(
+    state: AppState,
+    handoff_id: commonwealth_core::ids::HandoffId,
+) {
+    tokio::spawn(async move {
+        let engine = match state.inner.corpus_engine.as_ref() {
+            Some(e) => Arc::clone(e),
+            None => {
+                tracing::warn!(
+                    handoff = %handoff_id,
+                    "complete_unit→merge: no corpus engine on coordinator — skipping merge"
+                );
+                return;
+            }
+        };
+        let mesh_store = Arc::clone(&state.inner.mesh_store);
+        let local_node_id = state
+            .inner
+            .self_node_id_swap
+            .load_full()
+            .as_ref()
+            .clone();
+        let peer_urls: Vec<(NodeId, String)> = {
+            let mesh = state.inner.mesh.read().await;
+            mesh.members
+                .values()
+                .filter(|m| m.node_id != local_node_id)
+                .filter_map(|m| {
+                    m.addresses
+                        .first()
+                        .map(|a| (m.node_id, format!("http://{}:9742", a.ip())))
+                })
+                .collect()
+        };
+
+        let shard_mgr = ShardManager::new(
+            Arc::clone(&engine),
+            engine.index_dir().to_path_buf(),
+            mesh_store,
+        )
+        .with_emitter(state.inner.contribution_emitter.clone())
+        .with_work_queue(Arc::clone(&state.inner.work_queue));
+
+        match shard_mgr
+            .coordinate_merge(handoff_id, local_node_id, &peer_urls)
+            .await
+        {
+            Ok(Some(info)) => tracing::info!(
+                handoff = %handoff_id,
+                chunks = info.chunk_count,
+                "complete_unit→merge: queue-mode merge complete"
+            ),
+            Ok(None) => tracing::info!(
+                handoff = %handoff_id,
+                "complete_unit→merge: not the merge leader (unexpected on coordinator) — no-op"
+            ),
+            Err(e) => tracing::error!(
+                handoff = %handoff_id,
+                error = %e,
+                "complete_unit→merge: queue-mode merge failed"
+            ),
+        }
+    });
 }
 
 // ── Pull-based queue request/response types ────────────────
@@ -1919,6 +2013,136 @@ pub async fn model_transfer(
     Json(_payload): Json<serde_json::Value>,
 ) -> StatusCode {
     StatusCode::NOT_IMPLEMENTED
+}
+
+/// GET /internal/index/serve — peer pulls our partition-of-self for a corpus.
+///
+/// Companion to `/internal/index/transfer`'s upload semantics: this
+/// endpoint is the *server* side of the merge-leader's pull. The
+/// caller specifies `X-Corpus-Id`; we tar the on-disk
+/// `<index_dir>/<corpus_id>-partition-<self_node_id>/` and stream
+/// the bytes back as the response body.
+///
+/// Why this is a distinct endpoint from `index_transfer`: that route
+/// reads the request body (upload), this route writes the response
+/// body (download). Trying to overload one POST endpoint with both
+/// directions is what produced the original silent-failure bug — the
+/// puller did POST-without-body, the server tried to read an empty
+/// body as a tarball, and `coordinate_merge` quietly degraded to
+/// "merge with available shards" (i.e. just our own partition).
+///
+/// Returns 404 when the partition dir doesn't exist (the peer
+/// hasn't ingested this corpus, or never participated in a queue
+/// for it). 503 when no corpus engine is wired (standalone mode).
+pub async fn index_serve(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<axum::response::Response, (StatusCode, Json<serde_json::Value>)> {
+    use axum::response::IntoResponse;
+
+    let corpus_id = match headers.get("X-Corpus-Id").and_then(|v| v.to_str().ok()) {
+        Some(id) => id.to_string(),
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "missing X-Corpus-Id header"})),
+            ));
+        }
+    };
+    let engine = match &state.inner.corpus_engine {
+        Some(e) => e.clone(),
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "no corpus engine on this node"})),
+            ));
+        }
+    };
+    let self_node_id = state
+        .inner
+        .self_node_id_swap
+        .load_full()
+        .as_ref()
+        .clone();
+    let partition_path = engine
+        .index_dir()
+        .join(format!("{corpus_id}-partition-{self_node_id}"));
+    if !partition_path.exists() {
+        // 404: nothing to serve. The puller logs and continues with
+        // whatever shards it does manage to fetch.
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!(
+                    "no partition-of-self for corpus '{corpus_id}' on this node"
+                ),
+            })),
+        ));
+    }
+    // Tar to a temp file, read into memory, return as octet-stream.
+    // For typical corpus partitions (10s of MB to a few GB) full-buffer
+    // is fine; if that ever changes we'd switch to a streaming body.
+    let tar_path = engine
+        .index_dir()
+        .join(format!(".{corpus_id}-partition-{self_node_id}.serve.tar"));
+    // Tar the *contents* of the partition dir (`.`), not the dir
+    // itself — the puller extracts straight into its
+    // `<corpus>-partition-<peer>/` dest dir, and a top-level
+    // wrapper would produce a nested
+    // `dest_dir/<corpus>-partition-<peer>/_corpus_meta.json`
+    // that `merge_partitions` doesn't recognize as a shard.
+    let tar_status = std::process::Command::new("tar")
+        .args([
+            "cf",
+            &tar_path.to_string_lossy(),
+            "-C",
+            &partition_path.to_string_lossy(),
+            ".",
+        ])
+        .status();
+    match tar_status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            let _ = std::fs::remove_file(&tar_path);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("tar exited with {s}")})),
+            ));
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&tar_path);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("tar spawn: {e}")})),
+            ));
+        }
+    }
+    let tar_bytes = match std::fs::read(&tar_path) {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = std::fs::remove_file(&tar_path);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("read tar: {e}")})),
+            ));
+        }
+    };
+    let _ = std::fs::remove_file(&tar_path);
+    let bytes_len = tar_bytes.len();
+    tracing::info!(
+        corpus = %corpus_id,
+        bytes = bytes_len,
+        "index_serve: tarred and returning partition-of-self"
+    );
+    Ok((
+        StatusCode::OK,
+        [
+            ("content-type", "application/octet-stream"),
+            ("x-bytes", &bytes_len.to_string()),
+        ],
+        tar_bytes,
+    )
+        .into_response())
 }
 
 /// POST /internal/index/transfer — peer-to-peer corpus index transfer.

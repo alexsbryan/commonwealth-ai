@@ -82,10 +82,21 @@ pub enum LedgerEventKind {
         corpus_id: String,
         chunks_returned: u32,
     },
-    /// Index/model shard transferred by this node to `to_node`.
+    /// One peer's index/model shard transferred to another. Both
+    /// the sender (`from_node`) and recipient (`to_node`) are
+    /// captured explicitly so the puller in a request-response
+    /// transfer can record the event on behalf of the peer that
+    /// actually shipped the bytes — see `ShardManager::coordinate_merge`,
+    /// where the merge leader pulls partitions from peers and is
+    /// the only side that observes the transfer completing.
+    ///
     /// `bytes` is the on-the-wire payload size (after any
-    /// compression).
+    /// compression). Aggregator buckets `bytes` onto
+    /// `from_node.bytes_served` and onto `to_node.bytes_received`,
+    /// regardless of which node actually emitted the event — see
+    /// `aggregate` for the special case.
     ShardTransferred {
+        from_node: NodeId,
         to_node: NodeId,
         corpus_id: String,
         bytes: u64,
@@ -222,20 +233,36 @@ pub fn aggregate(
                     }),
                 }
             }
-            LedgerEventKind::ShardTransferred { bytes, .. } => {
-                entry.bytes_served += bytes;
-                // The receiving node will emit no symmetric event;
-                // we infer `bytes_received` for the recipient from
-                // this same event so a single transmission produces
-                // both halves of the byte ledger.
-                let recipient = match &ev.kind {
-                    LedgerEventKind::ShardTransferred { to_node, .. } => {
-                        to_node.clone()
-                    }
-                    _ => unreachable!(),
-                };
+            LedgerEventKind::ShardTransferred {
+                from_node,
+                to_node,
+                bytes,
+                ..
+            } => {
+                // ShardTransferred is the one variant where `ev.node_id`
+                // (the EMITTER) is not necessarily the actor on either
+                // side: the merge-leader puller emits on behalf of the
+                // peer that shipped the bytes, since the peer never
+                // observes the transfer completing. Bucket bytes_served
+                // onto `from_node` and bytes_received onto `to_node`,
+                // ignoring the emitter for accounting purposes. The
+                // emitter is preserved in the event itself for
+                // provenance / debugging via tracing.
+                //
+                // The default `entry` we just opened above is keyed on
+                // `ev.node_id`. Replace that bookkeeping with the two
+                // explicit nodes from `kind`.
+                let _ = entry; // see comment above — emitter bucket unused
+                let sender_entry =
+                    by_node.entry(from_node.clone()).or_insert_with(|| {
+                        NodeContributions {
+                            window_days,
+                            ..Default::default()
+                        }
+                    });
+                sender_entry.bytes_served += bytes;
                 let recipient_entry =
-                    by_node.entry(recipient).or_insert_with(|| {
+                    by_node.entry(to_node.clone()).or_insert_with(|| {
                         NodeContributions {
                             window_days,
                             ..Default::default()
@@ -383,10 +410,15 @@ mod tests {
         let a = nid(1);
         let b = nid(2);
         let now = 1_000_000;
+        // Emitter (`a`) is also the sender — the legacy stream_index
+        // emission shape, where the sender's daemon records on its
+        // own behalf. The merge-leader pull case is exercised by
+        // `pull_emitted_shard_transfer_credits_actual_sender` below.
         let events = vec![ev(
             a.clone(),
             now - 10,
             LedgerEventKind::ShardTransferred {
+                from_node: a.clone(),
                 to_node: b.clone(),
                 corpus_id: "wikipedia".into(),
                 bytes: 5_000_000_000,
@@ -395,6 +427,34 @@ mod tests {
         let result = aggregate(&events, now, 86_400, &HashMap::new());
         assert_eq!(result[&a].bytes_served, 5_000_000_000);
         assert_eq!(result[&b].bytes_received, 5_000_000_000);
+    }
+
+    #[test]
+    fn pull_emitted_shard_transfer_credits_actual_sender() {
+        // The merge-leader pull case: emitter is `puller` (the
+        // recipient), the actual sender is `peer`. Aggregator must
+        // bucket bytes_served onto `peer` (the sender), not onto the
+        // emitter, and bytes_received onto `puller` (the recipient).
+        let peer = nid(1);
+        let puller = nid(2);
+        let now = 1_000_000;
+        let events = vec![ev(
+            puller.clone(),
+            now - 10,
+            LedgerEventKind::ShardTransferred {
+                from_node: peer.clone(),
+                to_node: puller.clone(),
+                corpus_id: "wikipedia".into(),
+                bytes: 1_500_000_000,
+            },
+        )];
+        let result = aggregate(&events, now, 86_400, &HashMap::new());
+        assert_eq!(result[&peer].bytes_served, 1_500_000_000);
+        assert_eq!(result[&puller].bytes_received, 1_500_000_000);
+        // The emitter's bytes_served is NOT incremented just because
+        // they wrote the event — the emitter's accounting is
+        // determined entirely by `from_node`.
+        assert_eq!(result[&puller].bytes_served, 0);
     }
 
     #[test]
@@ -521,6 +581,7 @@ mod tests {
                 a.clone(),
                 now - 20,
                 LedgerEventKind::ShardTransferred {
+                    from_node: a.clone(),
                     to_node: b.clone(),
                     corpus_id: "wikipedia".into(),
                     bytes: 1_000_000,

@@ -56,6 +56,14 @@ impl ContributionEmitter {
         }
     }
 
+    /// The node id this emitter writes events as. Useful when a
+    /// caller needs to populate fields like `ShardTransferred.from_node`
+    /// with the emitter's identity (the legacy push path) without
+    /// threading the id through separately.
+    pub fn self_node_id(&self) -> NodeId {
+        self.self_node_id.clone()
+    }
+
     /// Emit a single event. Persists to the local store with the
     /// emitter's node id as origin; the next gossip round
     /// propagates it to peers automatically. Errors are
@@ -262,12 +270,14 @@ fn emit_tracing_event(kind: &LedgerEventKind) {
             );
         }
         LedgerEventKind::ShardTransferred {
+            from_node,
             to_node,
             corpus_id,
             bytes,
         } => {
             tracing::debug!(
                 kind = "ShardTransferred",
+                from_node = %fmt_node(from_node),
                 to_node = %fmt_node(to_node),
                 corpus_id = %corpus_id,
                 bytes = bytes,
@@ -319,6 +329,7 @@ mod tests {
             wall_seconds: 2.5,
         });
         emitter.record(LedgerEventKind::ShardTransferred {
+            from_node: nid(7),
             to_node: nid(9),
             corpus_id: "wikipedia".into(),
             bytes: 5_000_000_000,

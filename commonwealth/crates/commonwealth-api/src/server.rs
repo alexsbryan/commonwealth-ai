@@ -65,6 +65,10 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::index_transfer),
         )
         .route(
+            "/internal/index/serve",
+            get(routes_internal::index_serve),
+        )
+        .route(
             "/internal/knowledge/search",
             post(routes_internal::knowledge_search),
         )
