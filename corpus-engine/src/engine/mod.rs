@@ -795,6 +795,73 @@ impl CorpusEngine {
         name.contains('.')
     }
 
+    /// Return corpus IDs that have one or more `<corpus>-partition-*/`
+    /// directories on disk but **no canonical `<corpus>/`**.
+    ///
+    /// This is the on-disk signature of a stranded ingest: the
+    /// per-peer partition writes happened (some shards merged into
+    /// per-node dirs) but the final `coordinate_merge` step that
+    /// produces the canonical never ran. Most often caused by the
+    /// in-memory `MeshStore` losing the handoff blob across a
+    /// daemon restart while the dispatcher's recovery path can no
+    /// longer find a peer that holds it. See
+    /// `commonwealth_api::auto_recover` for the recovery primitive
+    /// that consumes this.
+    ///
+    /// Excludes:
+    /// - Out-of-band directory names (containing `.`), same as
+    ///   `installed_indexes` and `in_progress_ingestions` to keep
+    ///   `_downloads/` and the like from polluting results.
+    /// - Underscore-prefixed names (`_downloads`, etc.).
+    /// - Any corpus whose canonical `<corpus>/_corpus_meta.json`
+    ///   exists — those are not stranded; the merge already finished.
+    ///
+    /// Returns sorted, deduped corpus IDs.
+    pub fn corpora_with_stranded_partitions(&self) -> Vec<String> {
+        let Ok(entries) = std::fs::read_dir(&self.index_dir) else {
+            return vec![];
+        };
+
+        // First pass: bucket every <something>-partition-* directory
+        // by the corpus_id (everything before the first
+        // `-partition-`).
+        let mut corpora_with_partitions: std::collections::BTreeSet<String> =
+            Default::default();
+        for entry in entries.flatten() {
+            let name_os = entry.file_name();
+            let Some(name) = name_os.to_str() else { continue };
+            if name.starts_with('_') {
+                continue;
+            }
+            if Self::is_out_of_band_index_name(name) {
+                continue;
+            }
+            // Match `<corpus>-partition-<anything>` shape.
+            let Some((corpus_id, _peer_suffix)) = name.split_once("-partition-") else {
+                continue;
+            };
+            // Must have a meta file to be a real partition.
+            if !entry.path().join("_corpus_meta.json").exists() {
+                continue;
+            }
+            corpora_with_partitions.insert(corpus_id.to_string());
+        }
+
+        // Second pass: drop any corpus whose canonical exists.
+        // (Canonical takes precedence — once it's there, the
+        // partition dirs are stale leftovers, not stranded work.)
+        corpora_with_partitions
+            .into_iter()
+            .filter(|corpus_id| {
+                !self
+                    .index_dir
+                    .join(corpus_id)
+                    .join("_corpus_meta.json")
+                    .exists()
+            })
+            .collect()
+    }
+
     /// Return corpus IDs where ingestion has started but not finished.
     ///
     /// Considers two on-disk shapes, both produced by the unified ingest
@@ -1966,6 +2033,73 @@ mod tests {
         assert!(b.get("wikipedia").is_some());
         b.cancel("wikipedia");
         assert!(flag.is_cancelled());
+    }
+
+    #[test]
+    fn corpora_with_stranded_partitions_finds_partitions_without_canonical() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        // Stranded: two partitions for wikipedia, no canonical.
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-aaaa")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia-partition-aaaa/_corpus_meta.json"),
+            r#"{}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-bbbb")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia-partition-bbbb/_corpus_meta.json"),
+            r#"{}"#,
+        )
+        .unwrap();
+
+        // Not stranded: SEP has canonical AND a partition (the
+        // partition is stale leftovers).
+        std::fs::create_dir_all(idx_dir.join("sep")).unwrap();
+        std::fs::write(idx_dir.join("sep/_corpus_meta.json"), r#"{}"#).unwrap();
+        std::fs::create_dir_all(idx_dir.join("sep-partition-aaaa")).unwrap();
+        std::fs::write(
+            idx_dir.join("sep-partition-aaaa/_corpus_meta.json"),
+            r#"{}"#,
+        )
+        .unwrap();
+
+        // Excluded: out-of-band names.
+        std::fs::create_dir_all(idx_dir.join("wikipedia.legacy-partition-aaaa")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia.legacy-partition-aaaa/_corpus_meta.json"),
+            r#"{}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(idx_dir.join("_downloads-partition-aaaa")).unwrap();
+        std::fs::write(
+            idx_dir.join("_downloads-partition-aaaa/_corpus_meta.json"),
+            r#"{}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        let stranded = engine.corpora_with_stranded_partitions();
+        assert_eq!(stranded, vec!["wikipedia"]);
+    }
+
+    #[test]
+    fn corpora_with_stranded_partitions_returns_empty_when_no_partitions() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        assert!(engine.corpora_with_stranded_partitions().is_empty());
+    }
+
+    #[test]
+    fn corpora_with_stranded_partitions_skips_partitions_without_meta() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        // Empty partition dir (no meta) — discovery should ignore.
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-aaaa")).unwrap();
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        assert!(engine.corpora_with_stranded_partitions().is_empty());
     }
 
     #[test]

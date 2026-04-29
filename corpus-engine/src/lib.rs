@@ -99,6 +99,9 @@ pub use testing::{
     FailedRecord, SampleChunk, TestOptions, TestQueryResult, TestReport,
     ValidationResult,
 };
+pub use sharding::{
+    merge_partitions_into_canonical, MergePhaseProgress, PartitionMergeReport,
+};
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, EmbedFn, IndexInfo,
