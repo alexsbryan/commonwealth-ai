@@ -196,6 +196,72 @@ fn print_usage() {
     crate::util::help::print(&HELP);
 }
 
+/// `sovereign nudge dismiss <id>` — record a nudge id in
+/// `~/.sovereign/dismissed_nudges.json` so the audit / status
+/// surfaces stop showing it. The id can be a family name (e.g.
+/// `recipe-publish`) to dismiss every variant, or a specific
+/// instance (e.g. `recipe-publish:sec-investigation`) to dismiss
+/// just that one.
+async fn run_nudge(args: &[String]) -> i32 {
+    if args.is_empty() {
+        eprintln!("Usage: sovereign nudge dismiss <id>");
+        eprintln!("Example: sovereign nudge dismiss recipe-publish");
+        return 2;
+    }
+    if matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        println!(
+            "Usage: sovereign nudge <subcommand> [args]\n\n\
+             Subcommands:\n\
+               dismiss <id>   Suppress a nudge id (family or specific instance).\n\n\
+             Examples:\n\
+               sovereign nudge dismiss recipe-publish\n\
+               sovereign nudge dismiss recipe-publish:sec-investigation\n"
+        );
+        return 0;
+    }
+    match args[0].as_str() {
+        "dismiss" => {
+            let Some(id) = args.get(1) else {
+                eprintln!("error: `nudge dismiss` requires a nudge id");
+                return 2;
+            };
+            match record_dismissed_nudge(id) {
+                Ok(_) => {
+                    println!("Dismissed nudge: `{id}`");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
+            }
+        }
+        other => {
+            eprintln!("Unknown nudge subcommand: {other}");
+            1
+        }
+    }
+}
+
+/// Append `id` to `~/.sovereign/dismissed_nudges.json`. Idempotent:
+/// re-dismissing an already-dismissed id is a no-op. The file is
+/// a flat JSON array of strings; created on first dismissal.
+fn record_dismissed_nudge(id: &str) -> std::io::Result<()> {
+    let root = crate::util::dirs::sovereign_root();
+    std::fs::create_dir_all(&root)?;
+    let path = root.join("dismissed_nudges.json");
+    let mut current: Vec<String> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    if !current.iter().any(|x| x == id) {
+        current.push(id.to_string());
+    }
+    let bytes = serde_json::to_vec_pretty(&current)?;
+    std::fs::write(&path, bytes)?;
+    Ok(())
+}
+
 fn parse_args() -> Option<Args> {
     let args: Vec<String> = std::env::args().collect();
     let mut model = None;
@@ -362,6 +428,10 @@ async fn main() {
             }
             "chat" => {
                 let code = chat_cmd::run_chat(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "nudge" => {
+                let code = run_nudge(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "doctor" => {
@@ -634,6 +704,19 @@ async fn main() {
         search_backend,
     )));
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
+
+    // Recipe-authoring tools — let the chat LLM run the
+    // author → validate → test → publish loop documented in the
+    // recipe-authoring platform plan. All five tools are
+    // allowlisted to ~/.sovereign/recipes/ via Permission::RecipeAuthoring,
+    // so the operator approves "this agent can iterate on recipes"
+    // once instead of granting blanket FileWrite.
+    tools.register(Box::new(sovereign_tools::RecipeReadTool::new()));
+    tools.register(Box::new(sovereign_tools::RecipeWriteTool::new()));
+    tools.register(Box::new(sovereign_tools::RecipeValidateTool::new()));
+    tools.register(Box::new(sovereign_tools::RecipeTestTool::new()));
+    tools.register(Box::new(sovereign_tools::RegistryBrowseTool));
+
     eprintln!("Tools: {} registered", tools.count());
 
     let approval = Arc::new(CliApprovalChannel::new(Arc::clone(&store)));

@@ -400,6 +400,14 @@ pub enum Permission {
     EmailWrite,
     CalendarRead,
     CalendarWrite,
+    /// Author / publish recipes — distinct from generic FileWrite
+    /// because the recipe-author tools are allowlisted to
+    /// `~/.sovereign/recipes/` and benefit from a single approval
+    /// gate covering the whole authoring loop. Carrying it as a
+    /// separate variant lets the approval policy say "yes, this
+    /// agent can iterate on recipes" without granting blanket
+    /// filesystem write.
+    RecipeAuthoring,
 }
 
 // ─── Trust ────────────────────────────────────────────────────

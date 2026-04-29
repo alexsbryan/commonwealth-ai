@@ -390,6 +390,133 @@ limit; UA `CorpusEngine/0.1 (+https://sovereign.dev/corpus-engine)`; crawl
 scope enforced against seed URL domain; download size warnings at 1.5×
 estimate.
 
+### 3.10 Recipe authoring platform
+
+The recipe schema is open: a domain expert (financial journalist, legal aid
+attorney, grad student) writes a TOML and the engine runs it. Five generic
+primitives turn the format into a platform; the matching agent tools let the
+local LLM author recipes too.
+
+**Generic acquisition + extraction**
+
+- **`http_api` acquirer** (`corpus-engine/src/acquirers/http_api/`) — URL
+  templating with `{name}` placeholders, four pagination strategies (offset /
+  cursor / next-URL / page-number), JSONPath document-URL follow with bounded
+  concurrency, token-bucket rate limit, custom headers / User-Agent.
+  `_progress.json` journal for resume.
+- **`[recipe.parameters]`** (`corpus-engine/src/recipe.rs`) —
+  String/Int/Date/List parameters with defaults and required flags.
+  `Recipe::resolve_parameters` validates user input; the resolved values
+  stamp on a transient `resolved_parameters` field and interpolate into
+  `[acquire]`. The CLI prompts; the desktop renders a form
+  (`corpus_get_recipe_parameters`).
+- **`html_sections` extractor** (`corpus-engine/src/extractors/html_sections.rs`)
+  — multi-regex section extraction with a `MissReport` sidecar
+  (`_section_misses.json`) so `recipe test` can show "section X missed in
+  filing Y; nearby text: …; suggestion: …" without re-running the regex.
+
+**Investigation enrichment pipeline**
+(`corpus-engine/src/enrichment/investigation/`)
+
+A typed-relationship graph runs as a parallel module to the atlas pipelines.
+Recipe-author declares `[[enrichment.entity_types]]` and
+`[[enrichment.relationship_types]]`; the LLM extract prompt is generated
+from that schema (LLGuidance JSON-grammar constrained). Three built-in
+graph-pattern detectors:
+
+- `circular_flow` — petgraph DiGraph + Tarjan SCC + DFS-based simple-cycle
+  enumeration with `min_entities` and edge-type filters.
+- `role_overlap` — same pair of entities holding two roles (`investor =
+  "investment.from"` AND `customer = "revenue.to"`).
+- `threshold` — numeric attribute against 5 comparison ops.
+
+Outputs land in `<index_dir>/<corpus>/investigation/{entities,
+relationships, pattern_findings}.json`. CLI shim:
+`sovereign enrich investigation build <id>` (extract → coalesce → detect)
+and `… show <id>` (render findings).
+
+**Lifecycle tooling** (`sovereign-cli/src/recipe_cmd.rs`)
+
+- `sovereign recipe validate <path>` — schema, regex compile,
+  URL-template placeholder cross-reference, `for_each` parameter resolution.
+- `sovereign recipe test <path> [--params k=v…] [--params-file <json>]` —
+  sample acquire / extract / chunk; section-miss reporting in the markdown
+  report.
+- `sovereign recipe publish <path> [--submit-pr]` — sha256 the TOML, write
+  to `~/.sovereign/recipes/registry.toml` + `~/.sovereign/recipes/<id>/recipe.toml`,
+  record a publish marker, print the upstream-PR template.
+- `sovereign recipe list` — bundled + local-merged registry with `(local)`
+  badge.
+
+**Agent-callable tools** (`sovereign-tools/src/recipe_author/`)
+
+Five Tool impls, each requiring `Permission::RecipeAuthoring`:
+
+- `RecipeReadTool`, `RecipeWriteTool` — allowlisted to
+  `~/.sovereign/recipes/`; refuse `..` traversal.
+- `RecipeValidateTool`, `RecipeTestTool` — wrap the same
+  `CorpusEngine::test_recipe` the CLI uses; return structured
+  `{passed, errors[], warnings[], section_misses[]}` so the LLM iterates
+  on `nearby_text` hints.
+- `RegistryBrowseTool` — bundled + local list with `is_local` per row.
+
+Registered in `sovereign-cli/src/main.rs:591`. Validation-only mode
+(`sample_size=0` + no `--params`) skips parameter resolution so the agent
+doesn't have to fabricate values just to run `validate`.
+
+**Desktop "Add Knowledge Source"**
+(`sovereign-desktop/src-tauri/src/recipe_commands.rs`)
+
+- `corpus_browse_registry()` → reuses `commands::list_corpora` (registry +
+  local merge, with installed status).
+- `corpus_import_recipe(toml_text)` → validates, writes to
+  `~/.sovereign/recipes/<id>/recipe.toml`, appends to local registry.
+  Returns `{success, errors[]}` so the import dialog can surface validation
+  failures inline (the recipe is NOT written when validation fails).
+- `corpus_get_recipe_parameters(corpus_id)` → declared `[parameters]` block
+  with kinds + defaults; drives the install-time form.
+- `corpus_install_with_parameters(request)` → POST to
+  `/internal/corpus/install` with the resolved parameter map. Daemon
+  validates synchronously and rejects mismatched / missing required values
+  with HTTP 4xx before spawning the ingest task.
+
+TS bindings: `sovereign-desktop/src/lib/api.ts` (`corpusImportRecipe`,
+`corpusGetRecipeParameters`, `corpusInstallWithParameters`).
+
+**Daemon side**
+(`commonwealth/crates/commonwealth-api/src/routes_internal.rs`)
+
+`POST /internal/corpus/install` accepts `{corpus_id, parameters}` (parameters
+default to `{}`). The daemon resolves the recipe (registry + bundled fallback +
+local merge), runs `Recipe::resolve_parameters` synchronously, stamps via
+`with_resolved_parameters`, and ingests via `CorpusSpec::Inline` so the
+http_api acquirer can interpolate `{name}` placeholders during acquisition.
+Mismatched parameters fail the install POST with a clear message instead of
+silently producing an empty corpus three minutes later.
+
+**Local registry merge**
+(`corpus-engine/src/registry.rs`)
+
+`RecipeRegistry::with_local_registry(path)` shadows upstream entries by id
+with values from `~/.sovereign/recipes/registry.toml`. Resolution order:
+local > live > bundled. `is_local_entry(id)` powers the `(local)` badge in
+both the CLI list view and the desktop "Add Knowledge Source" panel.
+
+**Publish nudge**
+(`sovereign-cli/src/project_cmd.rs::compose_publish_recipe_nudge`)
+
+`sovereign project audit` walks `~/.sovereign/indexes/*/investigation/
+pattern_findings.json` and emits a one-time markdown nudge per locally-authored
+recipe that produced findings but hasn't been published. Suppressed by
+`~/.sovereign/published_recipes.json` (written by `recipe publish`) and
+`~/.sovereign/dismissed_nudges.json` (written by
+`sovereign nudge dismiss <id>`). Family + per-recipe dismissal:
+
+```sh
+sovereign nudge dismiss recipe-publish                    # all
+sovereign nudge dismiss recipe-publish:sec-investigation  # one
+```
+
 ---
 
 ## 4. Sovereign — The Local Agent
@@ -1118,6 +1245,10 @@ Default ports:
 | Add a corpus filter                              | `corpus-engine/src/filters/` (impl `DocumentFilter`) + `recipe.rs::FilterConfig` + `filters/loader.rs` |
 | Bundle a generated data file in corpus-engine    | Place in `sovereign-recipes/<corpus>/data/`, append filename to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!(concat!(env!("OUT_DIR"), …))` in `filters/assets.rs` |
 | Write a recipe                                   | `sovereign-recipes/<id>/recipe.toml` then add an entry to `registry.toml` |
+| Author a recipe via the agent loop               | `sovereign-tools/src/recipe_author/` (5 tools, `Permission::RecipeAuthoring`); wired in `sovereign-cli/src/main.rs:591` |
+| Add an `http_api` recipe (REST source)           | See §3.10; example shape in `corpus-engine/src/recipe.rs` round-trip tests |
+| Add an investigation recipe                      | Declare `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]`; run via `sovereign enrich investigation build <id>` |
+| Surface findings in an audit                     | `sovereign-cli/src/project_cmd.rs::compose_publish_recipe_nudge` reads `<index>/investigation/pattern_findings.json` |
 | Write a skill                                    | `sovereign/skills/<id>/skill.toml`                                  |
 | Tune model selection per hardware                | `sovereign/models.toml`                                             |
 | Understand the SCIP call graph                   | `corpus-engine/src/scip_graph.rs` (schema, staleness, queries)      |

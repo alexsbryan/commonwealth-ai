@@ -32,6 +32,7 @@ pub mod eval_median;
 pub mod exemplars;
 pub mod extract;
 pub mod inference_client;
+pub mod investigation;
 pub mod init;
 pub mod paths;
 pub mod phase_cmd;
@@ -178,6 +179,9 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "configure" | "atlas-configuration" => {
             atlas_configuration::cmd_atlas_configuration(rest).await
         }
+
+        // ── Investigation pipeline (typed-relationship graph + pattern detectors) ──
+        "investigation" => investigation::cmd_investigation(rest).await,
 
         // ── Utilities ─────────────────────────────────────────
         "status" => status::cmd_status(rest).await,

@@ -6,6 +6,7 @@ mod friendly_names;
 mod insight_commands;
 mod local_corpus_commands;
 mod mesh_commands;
+mod recipe_commands;
 mod routing_events;
 mod smoketest;
 mod state;
@@ -253,6 +254,9 @@ fn main() -> ExitCode {
             commands::retry_enrichment_failures,
             commands::recipe_validate,
             commands::recipe_test,
+            recipe_commands::corpus_import_recipe,
+            recipe_commands::corpus_get_recipe_parameters,
+            recipe_commands::corpus_install_with_parameters,
             mesh_commands::mesh_create,
             mesh_commands::mesh_join,
             mesh_commands::mesh_preview_join_link,

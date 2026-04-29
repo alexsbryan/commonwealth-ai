@@ -20,6 +20,7 @@ pub mod local_corpus;
 pub mod manifest;
 pub mod mcp;
 pub mod rag;
+pub mod recipe_author;
 pub mod search;
 pub mod shell;
 pub mod web;
@@ -53,4 +54,8 @@ pub use code::DesignSignalsExtractTool;
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
+pub use recipe_author::{
+    RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteTool,
+    RegistryBrowseTool,
+};
 pub use sovereign_core;

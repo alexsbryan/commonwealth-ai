@@ -339,14 +339,216 @@ async fn cmd_corpus_list() -> i32 {
     0
 }
 
+/// `sovereign corpus install <id> [--params name=value,...] [--param key=value]...`
+///
+/// Submits an install request to the running daemon's
+/// `/internal/corpus/install` endpoint. The daemon owns the actual
+/// ingest task — this CLI command is a thin client so the install
+/// runs in the background and the user can disconnect / re-attach
+/// via `sovereign corpus status`.
+///
+/// Recipe parameters: when the recipe declares a
+/// `[recipe.parameters]` block (e.g. `sec-filings` asking for an
+/// entity list), supply values via either:
+///
+/// - `--params entities=NVDA,MSFT,GOOGL --params start_date=2022-01-01`
+///   (each `--params` flag carries one comma-joined `key=value`)
+/// - `--param entities=NVDA,MSFT --param start_date=2022-01-01`
+///   (singular form, easier to remember; semantically identical)
+/// - `--params-file <path>` for a JSON file containing the full
+///   parameter map — handy for SEC investigations with dozens of
+///   CIK numbers.
 async fn cmd_corpus_install(args: &[String]) -> i32 {
-    let Some(id) = args.first() else {
-        eprintln!("Missing corpus ID");
-        eprintln!("Usage: sovereign corpus install <id>");
+    let mut positional: Vec<String> = Vec::new();
+    let mut params: std::collections::BTreeMap<String, serde_json::Value> =
+        std::collections::BTreeMap::new();
+    let mut params_file: Option<PathBuf> = None;
+
+    let mut iter = args.iter();
+    while let Some(a) = iter.next() {
+        match a.as_str() {
+            "--params" | "--param" => {
+                let Some(spec) = iter.next() else {
+                    eprintln!("{a} requires a `key=value` argument");
+                    return 1;
+                };
+                if let Err(e) = parse_param_spec(spec, &mut params) {
+                    eprintln!("Invalid {a}: {e}");
+                    return 1;
+                }
+            }
+            "--params-file" => {
+                let Some(p) = iter.next() else {
+                    eprintln!("--params-file requires a path argument");
+                    return 1;
+                };
+                params_file = Some(PathBuf::from(p));
+            }
+            "--help" | "-h" => {
+                println!(
+                    "Usage: sovereign corpus install <id> [--params k=v[,k=v...]] \
+                     [--params-file <path>]\n\n\
+                     Submits an install request to the running daemon. Recipe \
+                     parameters declared in the recipe's `[recipe.parameters]` block \
+                     are validated by the daemon before ingest spawns; missing \
+                     required parameters fail the request synchronously."
+                );
+                return 0;
+            }
+            other if !other.starts_with('-') => positional.push(other.to_string()),
+            other => {
+                eprintln!("Unknown flag: {other}");
+                return 1;
+            }
+        }
+    }
+
+    let Some(id) = positional.first() else {
+        eprintln!("Missing corpus ID. Usage: sovereign corpus install <id> [--params …]");
         return 1;
     };
-    println!("(corpus install '{id}' — requires wiring to CorpusEngine)");
-    0
+
+    if let Some(path) = params_file {
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to read --params-file {}: {e}", path.display());
+                return 1;
+            }
+        };
+        let from_file: std::collections::BTreeMap<String, serde_json::Value> =
+            match serde_json::from_str(&raw) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!(
+                        "--params-file {} is not a JSON object of parameters: {e}",
+                        path.display()
+                    );
+                    return 1;
+                }
+            };
+        for (k, v) in from_file {
+            params.entry(k).or_insert(v);
+        }
+    }
+
+    let url = "http://127.0.0.1:9742/internal/corpus/install";
+    let body = serde_json::json!({
+        "corpus_id": id,
+        "parameters": params,
+    });
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
+        }
+    };
+    match client.post(url).json(&body).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            // The endpoint is fire-and-forget; surface the success
+            // shape so users know the daemon picked it up.
+            let body_text = resp.text().await.unwrap_or_default();
+            println!("Install requested: {id}");
+            if !body_text.is_empty() {
+                println!("{body_text}");
+            }
+            println!("Watch progress: sovereign corpus status");
+            0
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            eprintln!("Daemon rejected install ({status}): {body}");
+            1
+        }
+        Err(e) => {
+            eprintln!(
+                "Failed to contact daemon at {url}: {e}\n\n\
+                 Is `sovereign daemon` running? Try: sovereign daemon status"
+            );
+            1
+        }
+    }
+}
+
+/// Parse a single `--params` / `--param` value into the running
+/// parameter map. Accepts:
+///
+/// - `key=value` — single string value
+/// - `key=v1,v2,v3` — list of strings (comma-separated)
+/// - `key=` — empty value (rare but useful for clearing a default)
+///
+/// The daemon does the type coercion (strings → ints / dates per
+/// the recipe's declared `ParameterKind`), so the CLI just shapes
+/// the JSON.
+fn parse_param_spec(
+    spec: &str,
+    out: &mut std::collections::BTreeMap<String, serde_json::Value>,
+) -> std::result::Result<(), String> {
+    let (key, value) = spec
+        .split_once('=')
+        .ok_or_else(|| format!("expected `key=value`, got `{spec}`"))?;
+    let key = key.trim();
+    if key.is_empty() {
+        return Err("empty parameter name".into());
+    }
+    let value = if value.contains(',') {
+        let items: Vec<serde_json::Value> = value
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .map(serde_json::Value::String)
+            .collect();
+        serde_json::Value::Array(items)
+    } else {
+        serde_json::Value::String(value.trim().to_string())
+    };
+    out.insert(key.to_string(), value);
+    Ok(())
+}
+
+#[cfg(test)]
+mod install_tests {
+    use super::*;
+
+    #[test]
+    fn parse_param_spec_string() {
+        let mut params = std::collections::BTreeMap::new();
+        parse_param_spec("start_date=2022-01-01", &mut params).unwrap();
+        assert_eq!(
+            params.get("start_date"),
+            Some(&serde_json::Value::String("2022-01-01".into()))
+        );
+    }
+
+    #[test]
+    fn parse_param_spec_list() {
+        let mut params = std::collections::BTreeMap::new();
+        parse_param_spec("entities=NVDA,MSFT,GOOGL", &mut params).unwrap();
+        match params.get("entities") {
+            Some(serde_json::Value::Array(arr)) => {
+                assert_eq!(arr.len(), 3);
+                assert_eq!(arr[0], serde_json::Value::String("NVDA".into()));
+            }
+            other => panic!("expected Array, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_param_spec_rejects_missing_equals() {
+        let mut params = std::collections::BTreeMap::new();
+        assert!(parse_param_spec("entities", &mut params).is_err());
+    }
+
+    #[test]
+    fn parse_param_spec_rejects_empty_key() {
+        let mut params = std::collections::BTreeMap::new();
+        assert!(parse_param_spec("=NVDA", &mut params).is_err());
+    }
 }
 
 async fn cmd_corpus_remove(args: &[String]) -> i32 {

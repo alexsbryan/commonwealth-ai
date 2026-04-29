@@ -438,6 +438,70 @@ export async function recipeTest(
   return invoke("recipe_test", { recipePath, sampleSize, offline });
 }
 
+// ─── Recipe authoring ("Add Knowledge Source") ─────────────
+
+/** Result of an `Import recipe` paste/drop. When `success` is
+ *  false, the recipe was NOT written and `errors` carries the
+ *  validator's complaints — render them inline in the import
+ *  dialog. */
+export type ImportRecipeResult = {
+  success: boolean;
+  corpus_id: string;
+  recipe_path: string;
+  errors: string[];
+  warnings: string[];
+};
+
+/** One declared `[parameters.<name>]` block from a recipe. Drives
+ *  the install-time form: `kind` selects the input control, `default`
+ *  pre-populates it, `required` flags it for validation. */
+export type RecipeParameter = {
+  name: string;
+  kind: "string" | "int" | "date" | "list";
+  description: string;
+  required: boolean;
+  default: unknown | null;
+};
+
+export type RecipeParameterSchema = {
+  corpus_id: string;
+  parameters: RecipeParameter[];
+};
+
+/** Import a recipe from a TOML string (paste or file drop). The
+ *  desktop validates it and, on success, writes it under
+ *  `~/.sovereign/recipes/<corpus_id>/recipe.toml` plus a registry
+ *  entry. The next `listCorpora()` round-trip surfaces it as a
+ *  local entry the user can install. */
+export async function corpusImportRecipe(
+  tomlText: string,
+): Promise<ImportRecipeResult> {
+  return invoke("corpus_import_recipe", { tomlText });
+}
+
+/** Read a recipe's `[parameters]` block so the UI can render an
+ *  install-time form. Works for any recipe the registry can
+ *  resolve — bundled, live, or locally-imported. */
+export async function corpusGetRecipeParameters(
+  corpusId: string,
+): Promise<RecipeParameterSchema> {
+  return invoke("corpus_get_recipe_parameters", { corpusId });
+}
+
+/** Same as `installCorpus`, but threads recipe parameters through
+ *  to the daemon. Use for parameterized recipes (SEC EDGAR entity
+ *  list, date ranges, etc.) — pass an empty `parameters` map for
+ *  recipes that declare no parameters. Progress streams on the
+ *  shared `corpus-progress` event. */
+export async function corpusInstallWithParameters(
+  corpusId: string,
+  parameters: Record<string, string | number | string[]>,
+): Promise<void> {
+  return invoke("corpus_install_with_parameters", {
+    request: { corpus_id: corpusId, parameters },
+  });
+}
+
 // ─── Insights ──────────────────────────────────────────────
 
 export async function clipInsight(

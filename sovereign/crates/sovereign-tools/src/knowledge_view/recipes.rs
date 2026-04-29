@@ -74,12 +74,17 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
             clustering: None,
             alignment: None,
             fault_lines: None,
+            entity_types: Vec::new(),
+            relationship_types: Vec::new(),
+            patterns: Vec::new(),
         }),
         update: None,
         prebuilt: None,
         catalog: None,
         filters: Vec::new(),
         filter_mode: Default::default(),
+        parameters: Default::default(),
+        resolved_parameters: Default::default(),
     }
 }
 
@@ -151,12 +156,17 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
             clustering: None,
             alignment: None,
             fault_lines: None,
+            entity_types: Vec::new(),
+            relationship_types: Vec::new(),
+            patterns: Vec::new(),
         }),
         update: None,
         prebuilt: None,
         catalog: None,
         filters: Vec::new(),
         filter_mode: Default::default(),
+        parameters: Default::default(),
+        resolved_parameters: Default::default(),
     }
 }
 
@@ -252,12 +262,17 @@ pub fn conversation_history_recipe(
             clustering: None,
             alignment: None,
             fault_lines: None,
+            entity_types: Vec::new(),
+            relationship_types: Vec::new(),
+            patterns: Vec::new(),
         }),
         update: None,
         prebuilt: None,
         catalog: None,
         filters: Vec::new(),
         filter_mode: Default::default(),
+        parameters: Default::default(),
+        resolved_parameters: Default::default(),
     }
 }
 
