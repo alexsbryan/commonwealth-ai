@@ -1057,6 +1057,7 @@ fn cmd_recipe_test(
         output: Some(output.clone()),
         offline,
         verbose,
+        parameters: Default::default(),
     };
 
     let rt = tokio::runtime::Builder::new_current_thread()

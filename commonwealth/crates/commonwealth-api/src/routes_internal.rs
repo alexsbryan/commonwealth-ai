@@ -1289,7 +1289,9 @@ pub async fn corpus_install(
             }),
         ));
     }
-    let spawned = spawn_corpus_install(state, req.corpus_id.clone()).await;
+    let spawned =
+        spawn_corpus_install_with_parameters(state, req.corpus_id.clone(), req.parameters)
+            .await;
     Ok(Json(InstallResponse {
         corpus_id: req.corpus_id,
         spawned,
@@ -1592,6 +1594,29 @@ pub struct ExpandRequest {
 }
 
 pub async fn spawn_corpus_install(state: AppState, corpus_id: String) -> bool {
+    spawn_corpus_install_with_parameters(state, corpus_id, std::collections::BTreeMap::new())
+        .await
+}
+
+/// Like [`spawn_corpus_install`] but also threads recipe parameters
+/// (the values the CLI / desktop prompts the user for, validated
+/// against `[recipe.parameters]`). When `parameters` is empty, this
+/// behaves exactly like the legacy `spawn_corpus_install`.
+///
+/// When non-empty, the recipe is fetched up front, its parameter
+/// schema validated via [`Recipe::resolve_parameters`], and the
+/// stamped recipe is passed to `engine.ingest` via
+/// [`CorpusSpec::Inline`] so the runtime carries the resolved values
+/// into `http_api` URL/body interpolation. Mismatched / missing
+/// parameters surface as a synchronous failure here, *before* the
+/// background task spawns — so the desktop sees a 4xx response on
+/// the install POST instead of a silent "ingest failed" three
+/// minutes later.
+pub async fn spawn_corpus_install_with_parameters(
+    state: AppState,
+    corpus_id: String,
+    parameters: std::collections::BTreeMap<String, serde_json::Value>,
+) -> bool {
     let Some(engine) = state.inner.corpus_engine.clone() else {
         tracing::warn!(
             corpus = %corpus_id,
@@ -1611,6 +1636,55 @@ pub async fn spawn_corpus_install(state: AppState, corpus_id: String) -> bool {
         }
         active.insert(corpus_id.clone());
     }
+
+    // Resolve the recipe + apply parameters BEFORE spawning the
+    // background task so a parameter mismatch surfaces as a
+    // synchronous failure instead of a silent crash later.
+    let recipe = match engine.registry().fetch_recipe(&corpus_id).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(
+                corpus = %corpus_id,
+                error = %e,
+                "spawn_corpus_install: recipe fetch failed"
+            );
+            // Roll back the active_ingests insert so a subsequent
+            // retry isn't blocked.
+            state.inner.active_ingests.write().await.remove(&corpus_id);
+            return false;
+        }
+    };
+
+    // Convert the JSON parameter map into TOML values so the
+    // recipe's resolve_parameters can validate them against the
+    // declared schema. JSON arrays of strings become TOML arrays;
+    // JSON strings stay strings. We don't try to be clever: the
+    // CLI / desktop already shaped the input.
+    let toml_params = match json_params_to_toml(&parameters) {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(
+                corpus = %corpus_id,
+                error = %e,
+                "spawn_corpus_install: parameter coercion failed"
+            );
+            state.inner.active_ingests.write().await.remove(&corpus_id);
+            return false;
+        }
+    };
+    let resolved = match recipe.resolve_parameters(&toml_params) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(
+                corpus = %corpus_id,
+                error = %e,
+                "spawn_corpus_install: parameter validation failed"
+            );
+            state.inner.active_ingests.write().await.remove(&corpus_id);
+            return false;
+        }
+    };
+    let recipe = recipe.with_resolved_parameters(resolved);
 
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();
@@ -1638,7 +1712,7 @@ pub async fn spawn_corpus_install(state: AppState, corpus_id: String) -> bool {
                 });
             });
 
-        let spec = corpus_engine::CorpusSpec::Builtin(corpus_id_for_task.clone());
+        let spec = corpus_engine::CorpusSpec::Inline(Box::new(recipe));
         let result = engine.ingest(&spec, Some(progress_cb)).await;
 
         state_for_task
@@ -1683,6 +1757,69 @@ pub async fn spawn_corpus_install(state: AppState, corpus_id: String) -> bool {
 #[derive(Debug, Deserialize)]
 pub struct InstallRequest {
     pub corpus_id: String,
+    /// Recipe-parameter values supplied by the user at install time.
+    /// Validated against the recipe's `[recipe.parameters]` schema
+    /// before the ingest task spawns, so a missing required param
+    /// fails the request rather than silently producing an empty
+    /// corpus. JSON shape: `{"name": value, ...}` where value can
+    /// be a string, integer, or string array.
+    #[serde(default)]
+    pub parameters: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+/// Convert a JSON parameter map (the API's wire format) into a TOML
+/// parameter map, which is what
+/// [`Recipe::resolve_parameters`](corpus_engine::Recipe::resolve_parameters)
+/// expects. JSON strings → TOML strings, JSON integers → TOML ints,
+/// JSON arrays of strings → TOML arrays. Anything else fails with a
+/// helpful error.
+fn json_params_to_toml(
+    params: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> std::result::Result<std::collections::BTreeMap<String, toml::Value>, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for (k, v) in params {
+        let toml_value = match v {
+            serde_json::Value::String(s) => toml::Value::String(s.clone()),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    toml::Value::Integer(i)
+                } else if let Some(f) = n.as_f64() {
+                    toml::Value::Float(f)
+                } else {
+                    return Err(format!(
+                        "parameter `{k}` is a non-finite number"
+                    ));
+                }
+            }
+            serde_json::Value::Bool(b) => toml::Value::Boolean(*b),
+            serde_json::Value::Array(arr) => {
+                let mut items = Vec::with_capacity(arr.len());
+                for item in arr {
+                    match item {
+                        serde_json::Value::String(s) => {
+                            items.push(toml::Value::String(s.clone()))
+                        }
+                        other => {
+                            return Err(format!(
+                                "parameter `{k}` array entries must be strings, \
+                                 got: {other:?}"
+                            ))
+                        }
+                    }
+                }
+                toml::Value::Array(items)
+            }
+            serde_json::Value::Null => continue,
+            serde_json::Value::Object(_) => {
+                return Err(format!(
+                    "parameter `{k}` is a JSON object — only string, int, \
+                     bool, and string array values are supported"
+                ));
+            }
+        };
+        out.insert(k.clone(), toml_value);
+    }
+    Ok(out)
 }
 
 #[derive(Debug, Serialize)]

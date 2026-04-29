@@ -26,6 +26,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Used by `spawn_corpus_install_with_parameters` to bridge the API's
+# JSON wire format into the TOML values that
+# `Recipe::resolve_parameters` validates against the recipe's
+# declared `[recipe.parameters]` schema.
+toml = { workspace = true }
 thiserror = { workspace = true }
 bytes = { workspace = true }
 hex = "0.4"
