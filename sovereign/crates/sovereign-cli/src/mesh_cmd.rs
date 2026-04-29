@@ -4,7 +4,7 @@
 //! or database — they manage the embedded Commonwealth daemon and corpus
 //! indexes.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, ReconstructionMethod};
@@ -148,7 +148,7 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Subcommands(&[
             ("list",                      "List installed and available corpora"),
             ("install <id>",              "Install a corpus (e.g. 'wikipedia')"),
-            ("remove <id>",               "Remove an installed corpus"),
+            ("remove <id>",               "Remove canonical + partitions (or --canonical-only / --partitions-only)"),
             ("status",                    "Show shard status for all corpora"),
             ("diag <id>",                 "Audit an installed corpus: distinct-article count vs. recipe filter"),
             ("dedupe <id>",               "One-shot rescue: collapse duplicate-content rows from a resume-rewind ingest"),
@@ -557,13 +557,264 @@ mod install_tests {
     }
 }
 
+/// Remove an installed corpus's on-disk index directories.
+///
+/// Two surfaces, gated by flags:
+/// - Canonical `<corpus>/` (the merged, query-served index)
+/// - Partition `<corpus>-partition-*/` (per-peer partial indexes,
+///   produced during collaborative ingest; left in place by
+///   merge-partitions for verification)
+///
+/// Default: removes BOTH (canonical + every partition). Operators
+/// who want surgical cleanup (e.g. wipe a partial canonical but
+/// keep partitions so the embed-side dedup gate still protects on
+/// re-ingest) pass `--canonical-only` or `--partitions-only`.
+///
+/// No daemon coordination — POSIX rm-rf works even with open file
+/// handles (LanceDB will see ENOENT on its next operation, and the
+/// daemon's installed_indexes() rescans on its tick). If the daemon
+/// is actively writing to the corpus, the WARN at the end of remove
+/// suggests stopping it first; we don't gate on it because most
+/// remove uses are post-hoc cleanups where the daemon is idle.
 async fn cmd_corpus_remove(args: &[String]) -> i32 {
-    let Some(id) = args.first() else {
-        eprintln!("Missing corpus ID");
+    let mut corpus_id: Option<String> = None;
+    let mut yes = false;
+    let mut canonical_only = false;
+    let mut partitions_only = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--yes" | "-y" => yes = true,
+            "--canonical-only" => canonical_only = true,
+            "--partitions-only" => partitions_only = true,
+            "--help" | "-h" => {
+                println!(
+                    "Usage: sovereign corpus remove <corpus_id> [--canonical-only|--partitions-only] [--yes]\n\n\
+                     Delete on-disk index directories for a corpus.\n\n\
+                     Default: removes BOTH the canonical (<index_dir>/<corpus>/) and \
+                     every partition (<index_dir>/<corpus>-partition-*/).\n\n\
+                     --canonical-only   Remove only the canonical. Use after a partial-coverage \
+                     merge produced an incomplete canonical that you want to discard while \
+                     keeping the partition data for re-ingest.\n\
+                     --partitions-only  Remove every partition. Use to reclaim disk after a \
+                     successful merge has produced canonical and you no longer need the \
+                     per-peer partial indexes for forensics.\n\
+                     --yes / -y         Skip confirmation prompt.\n\n\
+                     Stop the daemon first (`sovereign daemon stop`) if it's actively writing \
+                     to the corpus — POSIX will let rm-rf succeed with open handles, but the \
+                     daemon will surface ENOENT errors until it rescans."
+                );
+                return 0;
+            }
+            other if !other.starts_with('-') => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(other.to_string());
+                }
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                return 1;
+            }
+        }
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("Missing corpus ID. Usage: sovereign corpus remove <corpus_id> [--canonical-only|--partitions-only] [--yes]");
         return 1;
     };
-    println!("(corpus remove '{id}' — requires wiring to CorpusEngine)");
+
+    if canonical_only && partitions_only {
+        eprintln!("--canonical-only and --partitions-only are mutually exclusive (default removes both).");
+        return 1;
+    }
+
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|cfg| cfg.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        });
+    let index_dir = data_dir.join("indexes");
+
+    // Discover what's actually on disk for this corpus.
+    let canonical_path = index_dir.join(&corpus_id);
+    let canonical_exists = canonical_path.join("_corpus_meta.json").exists();
+
+    let prefix = format!("{corpus_id}-partition-");
+    let mut partition_paths: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&index_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name_str) = name.to_str() else { continue };
+            if !name_str.starts_with(&prefix) {
+                continue;
+            }
+            partition_paths.push(entry.path());
+        }
+    }
+    partition_paths.sort();
+
+    // Resolve which set of paths actually gets removed based on
+    // flag combination. Partitions-only skips canonical even if it
+    // exists; canonical-only skips partitions even if they exist.
+    let remove_canonical = !partitions_only && canonical_exists;
+    let remove_partitions = !canonical_only && !partition_paths.is_empty();
+
+    if !remove_canonical && !remove_partitions {
+        if canonical_only && !canonical_exists {
+            eprintln!(
+                "No canonical at {} (and --canonical-only specified — nothing to do).",
+                canonical_path.display()
+            );
+        } else if partitions_only && partition_paths.is_empty() {
+            eprintln!(
+                "No partitions matching {}/{}-partition-*/ (and --partitions-only specified — nothing to do).",
+                index_dir.display(),
+                corpus_id
+            );
+        } else {
+            eprintln!(
+                "No on-disk artefacts found for corpus '{}' under {} — nothing to remove.",
+                corpus_id,
+                index_dir.display()
+            );
+        }
+        return 0;
+    }
+
+    // Show what will be removed + sizes so the operator can sanity-
+    // check before confirming.
+    println!("Corpus '{corpus_id}' — remove plan:");
+    println!();
+    let mut total_bytes: u64 = 0;
+    if remove_canonical {
+        let bytes = dir_size_bytes(&canonical_path);
+        total_bytes += bytes;
+        println!(
+            "  CANONICAL  {}  ({})",
+            canonical_path.display(),
+            human_bytes(bytes)
+        );
+    } else if canonical_exists {
+        println!(
+            "  CANONICAL  {}  (skipped — --partitions-only)",
+            canonical_path.display()
+        );
+    }
+    if remove_partitions {
+        for path in &partition_paths {
+            let bytes = dir_size_bytes(path);
+            total_bytes += bytes;
+            println!("  PARTITION  {}  ({})", path.display(), human_bytes(bytes));
+        }
+    } else if !partition_paths.is_empty() {
+        for path in &partition_paths {
+            println!(
+                "  PARTITION  {}  (skipped — --canonical-only)",
+                path.display()
+            );
+        }
+    }
+    println!();
+    println!("  total reclaim:  {}", human_bytes(total_bytes));
+
+    if !yes {
+        eprint!("\nProceed with removal? [y/N] ");
+        use std::io::BufRead;
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        if stdin.lock().read_line(&mut line).is_err() {
+            eprintln!("aborted (could not read stdin)");
+            return 1;
+        }
+        let answer = line.trim().to_lowercase();
+        if answer != "y" && answer != "yes" {
+            println!("aborted.");
+            return 0;
+        }
+    }
+
+    let mut failures: Vec<(PathBuf, std::io::Error)> = Vec::new();
+    if remove_canonical {
+        if let Err(e) = std::fs::remove_dir_all(&canonical_path) {
+            failures.push((canonical_path.clone(), e));
+        } else {
+            println!("  ✓ removed {}", canonical_path.display());
+        }
+    }
+    if remove_partitions {
+        for path in &partition_paths {
+            if let Err(e) = std::fs::remove_dir_all(path) {
+                failures.push((path.clone(), e));
+            } else {
+                println!("  ✓ removed {}", path.display());
+            }
+        }
+    }
+
+    if !failures.is_empty() {
+        eprintln!();
+        eprintln!("Some removals failed:");
+        for (path, err) in &failures {
+            eprintln!("  ✗ {} — {}", path.display(), err);
+        }
+        eprintln!();
+        eprintln!(
+            "Most often this means the daemon is holding LanceDB file locks. \
+             Stop it (`sovereign daemon stop`) and re-run."
+        );
+        return 1;
+    }
+
+    println!();
+    println!(
+        "✓ corpus remove complete ({} reclaimed).",
+        human_bytes(total_bytes)
+    );
+    println!(
+        "Note: the daemon's installed_indexes() rescans on its next tick — \
+         hosted_corpora gossip will drop '{corpus_id}' shortly."
+    );
     0
+}
+
+/// Recursive directory size in bytes. Returns 0 on any I/O error so a
+/// failed stat doesn't abort the remove plan summary — we'd rather
+/// show "0 B" than refuse to render the plan.
+fn dir_size_bytes(path: &Path) -> u64 {
+    let mut total = 0u64;
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return 0;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        let Ok(meta) = entry.metadata() else { continue };
+        if meta.is_dir() {
+            total = total.saturating_add(dir_size_bytes(&p));
+        } else {
+            total = total.saturating_add(meta.len());
+        }
+    }
+    total
+}
+
+/// Render a byte count as a human-readable size (KiB/MiB/GiB).
+/// Used in the remove plan summary so operators see "5.2 GiB" instead
+/// of `5582813696`.
+fn human_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{} {}", bytes, UNITS[unit])
+    } else {
+        format!("{:.2} {}", size, UNITS[unit])
+    }
 }
 
 async fn cmd_corpus_status() -> i32 {
