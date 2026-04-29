@@ -80,6 +80,32 @@ pub enum RecoveryOutcome {
     /// should fall back to the original behaviour (e.g. emit the
     /// dispatcher's WARN).
     InCooldown,
+    /// Local partitions don't cover every shard the recipe expects.
+    /// Producing a canonical from this state would silently advertise
+    /// the corpus as complete while missing content from the
+    /// uncovered shards. Skip the merge entirely; a peer with fuller
+    /// coverage (mirroring more partitions locally) will produce the
+    /// canonical, and gossip will pick it up here on the next tick.
+    ///
+    /// Discovered in the wild: RuggedFox completed a 17-shard ingest
+    /// while another peer completed a 31-shard ingest. Each peer
+    /// mirrored a stub of the other (meta exists, chunks were never
+    /// actually pulled). RuggedFox's auto_recover merged its real
+    /// partition with the stub, producing a 17/38-shard canonical
+    /// that nevertheless advertised `hosted_corpora={"wikipedia"}`.
+    /// Query routing then started returning results that silently
+    /// omitted 21 shards of content. The fix: refuse to merge when
+    /// coverage is incomplete; the peer with full coverage produces
+    /// the canonical instead.
+    ///
+    /// This variant does NOT stamp the cooldown — re-evaluation on
+    /// the next 30s tick is cheap, and bailing fast lets recovery
+    /// fire as soon as a peer-pull lands missing shards locally.
+    IncompleteCoverage {
+        covered: usize,
+        total: usize,
+        missing: Vec<usize>,
+    },
     /// Recovery merge produced a built canonical with the supplied
     /// chunk count and shard coverage.
     Recovered {
@@ -117,8 +143,16 @@ pub async fn try_recover_stranded_partitions(
     }
 
     // Discovery: any `<corpus>-partition-*/` with a meta file?
+    // Walk every partition meta to compute (a) partition count and
+    // (b) the union of `processed_shards` + max `total_shards`
+    // across all of them. The union → coverage check below decides
+    // whether merging here would produce a complete or partial
+    // canonical.
     let prefix = format!("{corpus_id}-partition-");
-    let mut partition_count = 0;
+    let mut partition_count = 0usize;
+    let mut shard_union: std::collections::BTreeSet<usize> =
+        std::collections::BTreeSet::new();
+    let mut total_shards: Option<usize> = None;
     if let Ok(entries) = std::fs::read_dir(index_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name();
@@ -128,13 +162,68 @@ pub async fn try_recover_stranded_partitions(
             if !name_str.starts_with(&prefix) {
                 continue;
             }
-            if entry.path().join("_corpus_meta.json").exists() {
-                partition_count += 1;
+            let meta_path = entry.path().join("_corpus_meta.json");
+            if !meta_path.exists() {
+                continue;
+            }
+            partition_count += 1;
+            // Read processed_shards + total_shards out of the meta
+            // JSON directly — cheaper than opening a CorpusIndex
+            // handle just for these fields, and discovery-time
+            // failure modes (corrupt JSON) are recoverable.
+            let raw = std::fs::read_to_string(&meta_path).unwrap_or_default();
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(arr) = v["processed_shards"].as_array() {
+                    for s in arr.iter().filter_map(|x| x.as_u64()) {
+                        shard_union.insert(s as usize);
+                    }
+                }
+                if let Some(n) = v["total_shards"].as_u64() {
+                    let n = n as usize;
+                    total_shards = Some(total_shards.map_or(n, |m| m.max(n)));
+                }
             }
         }
     }
     if partition_count == 0 {
         return RecoveryOutcome::NotEnoughPartitions;
+    }
+
+    // Coverage gate. If the recipe stamped `total_shards` on any
+    // partition AND our local union doesn't cover all shards, refuse
+    // to merge. Producing a 17/38 canonical that advertises as
+    // complete is worse than no canonical at all — query routing
+    // would silently miss the uncovered shards' content.
+    //
+    // No cooldown stamp on this path — it's a precondition failure
+    // that re-resolves quickly when a peer-pull fills missing
+    // shards locally; bailing fast and re-checking next tick is
+    // exactly what we want.
+    if let Some(n) = total_shards {
+        if shard_union.len() < n {
+            let missing: Vec<usize> =
+                (0..n).filter(|s| !shard_union.contains(s)).collect();
+            tracing::warn!(
+                corpus = %corpus_id,
+                covered = shard_union.len(),
+                total = n,
+                missing = ?missing,
+                "auto_recover: refusing to merge — local partitions cover only {} \
+                 of {} shards. Waiting for a peer with fuller coverage to \
+                 produce canonical (or for missing shards to land locally \
+                 via collaborate-pull). Manual override available via \
+                 `sovereign corpus merge-partitions {}` (CLI confirms partial \
+                 coverage explicitly).",
+                shard_union.len(),
+                n,
+                corpus_id,
+            );
+            return RecoveryOutcome::IncompleteCoverage {
+                covered: shard_union.len(),
+                total: n,
+                missing,
+            };
+        }
     }
 
     // Cooldown gate. Skip if a recent attempt fired (success or
@@ -270,6 +359,127 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let outcome = try_recover_stranded_partitions(dir.path(), "absent").await;
         assert!(matches!(outcome, RecoveryOutcome::NotEnoughPartitions));
+    }
+
+    #[tokio::test]
+    async fn refuses_merge_when_local_partitions_dont_cover_all_shards() {
+        // Reproduces the RuggedFox scenario: two partition dirs
+        // exist locally, one is real (claims processed_shards [0,
+        // 1, 2]), the other is a stub (no chunks, empty
+        // processed_shards). Recipe-stamped total_shards = 5.
+        // Local union covers 3 of 5 — auto_recover must refuse to
+        // merge.
+        let dir = tempfile::tempdir().unwrap();
+        let p1 = dir.path().join("foo-partition-real");
+        let p2 = dir.path().join("foo-partition-stub");
+        std::fs::create_dir_all(&p1).unwrap();
+        std::fs::create_dir_all(&p2).unwrap();
+        std::fs::write(
+            p1.join("_corpus_meta.json"),
+            r#"{"processed_shards":[0,1,2],"total_shards":5}"#,
+        )
+        .unwrap();
+        // Stub partition: no processed_shards stamped, total_shards
+        // either matches or is absent. We test with both stamped
+        // values matching to confirm the union is what gates.
+        std::fs::write(
+            p2.join("_corpus_meta.json"),
+            r#"{"processed_shards":[],"total_shards":5}"#,
+        )
+        .unwrap();
+
+        let outcome = try_recover_stranded_partitions(dir.path(), "foo").await;
+        match outcome {
+            RecoveryOutcome::IncompleteCoverage {
+                covered,
+                total,
+                missing,
+            } => {
+                assert_eq!(covered, 3);
+                assert_eq!(total, 5);
+                assert_eq!(missing, vec![3usize, 4]);
+            }
+            other => panic!("expected IncompleteCoverage; got {:?}", other),
+        }
+
+        // Critical: no canonical was produced.
+        assert!(!dir.path().join("foo").exists());
+
+        // Cooldown was NOT stamped on this path — a follow-up call
+        // should re-evaluate (and bail again, since the on-disk
+        // state is unchanged).
+        let outcome2 = try_recover_stranded_partitions(dir.path(), "foo").await;
+        assert!(
+            matches!(outcome2, RecoveryOutcome::IncompleteCoverage { .. }),
+            "second call should re-evaluate, not be cooldown-blocked; got {:?}",
+            outcome2
+        );
+    }
+
+    #[tokio::test]
+    async fn proceeds_when_total_shards_unstamped() {
+        // Older partitions written before the `total_shards` field
+        // landed don't have it stamped. The coverage gate must NOT
+        // trip on those — we have no signal to know whether
+        // coverage is partial or complete, so fall through to the
+        // merge attempt (which has its own embedding-model and
+        // dimension preflights).
+        let dir = tempfile::tempdir().unwrap();
+        let p1 = dir.path().join("foo-partition-aaaa");
+        std::fs::create_dir_all(&p1).unwrap();
+        std::fs::write(
+            p1.join("_corpus_meta.json"),
+            r#"{"processed_shards":[0,1]}"#,
+        )
+        .unwrap();
+
+        // Reach the merge attempt — will fail because the meta is
+        // junk for actual merge purposes (no embedding model, no
+        // chunks table). What matters is we did NOT short-circuit
+        // with IncompleteCoverage.
+        let unique_corpus = format!("foo_{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_micros());
+        // Re-create with the unique corpus prefix to avoid cooldown
+        // collision with other tests.
+        let p1u = dir.path().join(format!("{unique_corpus}-partition-aaaa"));
+        std::fs::create_dir_all(&p1u).unwrap();
+        std::fs::write(
+            p1u.join("_corpus_meta.json"),
+            r#"{"processed_shards":[0,1]}"#,
+        )
+        .unwrap();
+
+        let outcome = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
+        assert!(
+            !matches!(outcome, RecoveryOutcome::IncompleteCoverage { .. }),
+            "must NOT short-circuit with IncompleteCoverage when total_shards is absent; got {:?}",
+            outcome
+        );
+    }
+
+    #[tokio::test]
+    async fn proceeds_when_local_coverage_is_complete() {
+        // Recipe says total_shards=3 and our local partitions
+        // cover [0,1,2]. The coverage gate must pass; subsequent
+        // failure (junk meta for merge purposes) is fine — we just
+        // need to confirm IncompleteCoverage didn't fire.
+        let dir = tempfile::tempdir().unwrap();
+        let unique_corpus = format!("complete_{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_micros());
+        let p1 = dir.path().join(format!("{unique_corpus}-partition-aaaa"));
+        std::fs::create_dir_all(&p1).unwrap();
+        std::fs::write(
+            p1.join("_corpus_meta.json"),
+            r#"{"processed_shards":[0,1,2],"total_shards":3}"#,
+        )
+        .unwrap();
+
+        let outcome = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
+        assert!(
+            !matches!(outcome, RecoveryOutcome::IncompleteCoverage { .. }),
+            "complete local coverage must not trigger IncompleteCoverage; got {:?}",
+            outcome
+        );
     }
 
     #[tokio::test]

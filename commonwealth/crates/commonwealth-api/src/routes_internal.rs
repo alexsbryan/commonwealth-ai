@@ -356,6 +356,28 @@ pub async fn corpus_collaborate(
                             req.corpus_id,
                         );
                     }
+                    crate::auto_recover::RecoveryOutcome::IncompleteCoverage {
+                        covered,
+                        total,
+                        missing,
+                    } => {
+                        // auto_recover already logged a detailed WARN
+                        // with the missing-shard list; here we just note
+                        // that the collaborate dispatcher gave up too.
+                        // No retry — the next collaborate request or
+                        // auto_ingest tick will re-check, and recovery
+                        // fires the moment local coverage becomes
+                        // complete.
+                        tracing::info!(
+                            corpus = %req.corpus_id,
+                            covered,
+                            total,
+                            missing_count = missing.len(),
+                            "corpus_collaborate: stranded-partition recovery skipped \
+                             (incomplete local coverage); peer with full coverage \
+                             will produce canonical"
+                        );
+                    }
                 }
             }
 
