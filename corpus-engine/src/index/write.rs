@@ -14,7 +14,7 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 use crate::error::{Error, Result};
 
 use super::{
-    CorpusIndex, InsertChunk, EmbeddedChunk, StoredChunk,
+    CorpusIndex, DedupeReport, InsertChunk, EmbeddedChunk, StoredChunk,
     corpus_schema, read_meta, write_meta, now_unix,
 };
 
@@ -161,6 +161,235 @@ impl CorpusIndex {
             .await
             .map_err(|e| Error::Database(format!("delete_chunks_by_source_doc: {e}")))?;
         Ok(())
+    }
+
+    /// Stream the `content_hash` column and count distinct values.
+    ///
+    /// Diagnostic helper: a chunk's `content_hash` is set at extract
+    /// time (blake3 over the chunk's text). If the embed/index
+    /// pipeline re-processed the same chunk twice — say a resume
+    /// after partial failure that rewound the cursor past already-
+    /// written rows — the content_hash collides. Comparing distinct
+    /// vs total tells you exactly how many duplicates landed.
+    ///
+    /// Returns `(distinct_count, total_with_hash, total_chunks)`.
+    /// `total_with_hash` is the count of rows where `content_hash`
+    /// is non-null (older indexes from before the field was
+    /// populated will have nulls); the difference between
+    /// `total_with_hash` and `total_chunks` is the count of legacy /
+    /// hashless rows.
+    ///
+    /// Memory cost: this materializes every distinct hash in a
+    /// HashSet. For a 4.3M-chunk corpus that's ~650MB transient
+    /// allocation — acceptable on a 64GB laptop but not free, so
+    /// only run from a `--check-duplicates`-style opt-in path.
+    pub async fn count_distinct_content_hashes(&self) -> Result<(u64, u64, u64)> {
+        use futures::TryStreamExt;
+        let total_chunks = self.chunk_count().await?;
+        let batches: Vec<arrow_array::RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "content_hash".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("count_distinct_content_hashes query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("count_distinct_content_hashes collect: {e}")))?;
+
+        let mut distinct = std::collections::HashSet::new();
+        let mut with_hash: u64 = 0;
+        for batch in &batches {
+            let arr = batch
+                .column_by_name("content_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| {
+                    Error::Serialization("missing content_hash column".into())
+                })?;
+            for i in 0..batch.num_rows() {
+                if !arr.is_null(i) {
+                    with_hash += 1;
+                    distinct.insert(arr.value(i).to_string());
+                }
+            }
+        }
+        Ok((distinct.len() as u64, with_hash, total_chunks))
+    }
+
+    /// Stream the `content_hash` column and load into an in-memory
+    /// HashSet — the seen-set used by the embed-side dedup gate at
+    /// ingest startup. A resumed ingest queries this once, then
+    /// each subsequent chunk's `content_hash` is checked against the
+    /// set before being scheduled for embedding.
+    ///
+    /// Memory cost mirrors `count_distinct_content_hashes` (~150
+    /// bytes per entry; ~225 MB at 1.5M unique hashes). For corpora
+    /// where this is too much, the caller should fall back to
+    /// per-batch `only_if` filter probes (cheap individually,
+    /// expensive in aggregate). For the wikipedia-scale corpora
+    /// driving this work, the up-front HashSet is the right shape.
+    pub async fn list_indexed_content_hashes(
+        &self,
+    ) -> Result<std::collections::HashSet<String>> {
+        let batches: Vec<arrow_array::RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "content_hash".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("list_indexed_content_hashes query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("list_indexed_content_hashes collect: {e}")))?;
+
+        let mut out = std::collections::HashSet::new();
+        for batch in &batches {
+            let arr = batch
+                .column_by_name("content_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| {
+                    Error::Serialization("missing content_hash column".into())
+                })?;
+            for i in 0..batch.num_rows() {
+                if !arr.is_null(i) {
+                    out.insert(arr.value(i).to_string());
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Collapse duplicate-content rows: for every group of rows
+    /// sharing the same `content_hash`, keep one (the row with the
+    /// smallest `id`) and delete the rest.
+    ///
+    /// This is the rescue pass for the resume-cursor-rewind bug
+    /// that landed up to 65% duplicate chunks in the wild — a one-
+    /// shot dedupe followed by a normal `build_indexes()` run
+    /// produces a correct index without re-embedding anything.
+    /// Hashless rows (older corpora that pre-date `content_hash`
+    /// population) are left untouched: we have no signal to dedup
+    /// them and the safe move is to preserve them.
+    ///
+    /// Returns a [`DedupeReport`] so the caller can report
+    /// before/after counts. The vector + FTS indexes remain valid
+    /// after this call (Lance handles index consistency on `.delete()`),
+    /// but if you ran this BEFORE the indexes were ever built,
+    /// follow up with `build_indexes()` so they train on the
+    /// deduped row set.
+    ///
+    /// Deletes are issued in chunks of `DELETE_BATCH` ids so the
+    /// SQL predicate string stays bounded. With 2.8M victims that
+    /// works out to ~280 round trips at 10k each — well under a
+    /// minute on local LanceDB.
+    pub async fn dedupe_by_content_hash(&self) -> Result<DedupeReport> {
+        const DELETE_BATCH: usize = 10_000;
+
+        let rows_before = self.chunk_count().await?;
+
+        // Streamed scan: (id, content_hash). We don't need any
+        // other columns — keeping the query narrow keeps memory
+        // bounded to id + hash, not full chunk payloads.
+        let batches: Vec<arrow_array::RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "id".to_string(),
+                "content_hash".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("dedupe scan query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("dedupe scan collect: {e}")))?;
+
+        // Map each content_hash to the minimum id we've seen.
+        // Anyone with a higher id for the same hash is a duplicate
+        // and goes onto the deletion list.
+        let mut winners: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+        let mut victims: Vec<i64> = Vec::new();
+        let mut hashless: u64 = 0;
+
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let hashes = batch
+                .column_by_name("content_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| {
+                    Error::Serialization("missing content_hash column".into())
+                })?;
+            for i in 0..batch.num_rows() {
+                let id = ids.value(i);
+                if hashes.is_null(i) {
+                    hashless += 1;
+                    continue;
+                }
+                let h = hashes.value(i);
+                match winners.get(h) {
+                    Some(&existing) if existing <= id => {
+                        // Existing winner is older or same; this
+                        // row is the duplicate.
+                        victims.push(id);
+                    }
+                    _ => {
+                        // No prior, or this row pre-dates the
+                        // current winner. Promote this and demote
+                        // the prior winner (if any) to victim.
+                        if let Some(prior) = winners.insert(h.to_string(), id) {
+                            victims.push(prior);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Surface the early-exit case: nothing to do.
+        if victims.is_empty() {
+            return Ok(DedupeReport {
+                rows_before,
+                rows_after: rows_before,
+                duplicates_deleted: 0,
+                unique_hashes_kept: winners.len() as u64,
+                hashless_rows_preserved: hashless,
+            });
+        }
+
+        // Issue batched DELETE WHERE id IN (...) calls. Lance's
+        // predicate parser handles thousands of ids per call but
+        // we cap at DELETE_BATCH to keep individual round trips
+        // small and progress observable.
+        let mut deleted: u64 = 0;
+        for chunk in victims.chunks(DELETE_BATCH) {
+            let id_list = chunk
+                .iter()
+                .map(|id| id.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let predicate = format!("id IN ({id_list})");
+            self.table
+                .delete(&predicate)
+                .await
+                .map_err(|e| Error::Database(format!("dedupe delete batch: {e}")))?;
+            deleted += chunk.len() as u64;
+        }
+
+        let rows_after = self.chunk_count().await?;
+        Ok(DedupeReport {
+            rows_before,
+            rows_after,
+            duplicates_deleted: deleted,
+            unique_hashes_kept: winners.len() as u64,
+            hashless_rows_preserved: hashless,
+        })
     }
 
     /// Return the set of distinct `source_doc_id` values currently in

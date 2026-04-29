@@ -210,6 +210,7 @@ impl CorpusIndex {
             vector_index_built: false,
             content_fts_built: false,
             title_fts_built: false,
+            chunks_deduped: false,
             chunks_expected: None,
             resume_from: None,
             enrichment_enabled: false,
@@ -217,6 +218,7 @@ impl CorpusIndex {
             source_version: None,
             update_manifest_url: None,
             processed_shards: Vec::new(),
+            total_shards: None,
             committed_shard_set: None,
             scope: None,
             filter_override: None,
@@ -612,6 +614,53 @@ impl CorpusIndex {
         write_meta(dir, &meta)
     }
 
+    /// Stamp the total number of source shards the extractor will
+    /// process for this corpus. Idempotent: writing the same value
+    /// is a no-op; writing a different value replaces (the
+    /// extractor knows the real count once it inspects the source
+    /// archive, so we trust the caller here).
+    ///
+    /// Called once at extract start by sharded extractors. Diag
+    /// reads it via `total_shards()` to compute missing-shard
+    /// coverage that doesn't undercount trailing-missing shards.
+    pub fn set_total_shards(&self, total: usize) -> Result<()> {
+        let dir = Path::new(self.db.uri());
+        let mut meta = read_meta(dir)?;
+        meta.total_shards = Some(total);
+        write_meta(dir, &meta)
+    }
+
+    /// Read the total-shards field. `None` for non-sharded corpora
+    /// and for legacy indexes that pre-date the field; in that case
+    /// callers should fall back to the `max(processed_shards)+1`
+    /// heuristic with an explicit "trailing shards may be missing"
+    /// caveat.
+    pub fn total_shards(&self) -> Option<usize> {
+        let dir = Path::new(self.db.uri());
+        read_meta(dir).ok().and_then(|m| m.total_shards)
+    }
+
+    /// Persist that the pre-build dedupe pass has run for this
+    /// index. Read by `build_indexes()` to avoid a second
+    /// (no-op) full table scan on resume.
+    pub fn mark_chunks_deduped(&self) -> Result<()> {
+        let dir = Path::new(self.db.uri());
+        let mut meta = read_meta(dir)?;
+        meta.chunks_deduped = true;
+        write_meta(dir, &meta)
+    }
+
+    /// Whether the dedupe pass has been recorded as complete for
+    /// this index. False for legacy indexes that pre-date the
+    /// `chunks_deduped` field; those will dedupe on their next
+    /// `build_indexes()` call (no-op if already clean).
+    pub fn is_chunks_deduped(&self) -> bool {
+        let dir = Path::new(self.db.uri());
+        read_meta(dir)
+            .map(|m| m.chunks_deduped)
+            .unwrap_or(false)
+    }
+
     /// Build vector + FTS indexes for efficient search.
     /// Should be called after all data is inserted.
     ///
@@ -632,6 +681,50 @@ impl CorpusIndex {
 
         let dir = Path::new(self.db.uri()).to_path_buf();
         let id = &self.corpus_id;
+
+        // (0/3) Pre-build dedupe pass. The resume-cursor-rewind
+        // bug seen in the wild leaves up to ~65% duplicate-content
+        // rows; vector training over duplicates wastes time AND
+        // poisons retrieval (top-k saturates with near-identical
+        // chunks). Running dedupe BEFORE training fixes both.
+        //
+        // Idempotent: a clean index produces a no-op DedupeReport
+        // and the cost is one bounded table scan. We still flag
+        // the run as complete via `chunks_deduped` so a resume
+        // (e.g. process killed between dedupe and vector build)
+        // doesn't re-scan.
+        if !self.is_chunks_deduped() {
+            eprintln!("[{id}] Pre-build dedupe pass (0/3)...");
+            match self.dedupe_by_content_hash().await {
+                Ok(report) => {
+                    if report.changed() {
+                        let pct = report.dup_fraction() * 100.0;
+                        eprintln!(
+                            "[{id}] Dedupe collapsed {} duplicate rows ({pct:.2}% \
+                             of hashed) — {} unique chunks remain",
+                            report.duplicates_deleted, report.rows_after,
+                        );
+                    } else {
+                        eprintln!("[{id}] Dedupe: no duplicates found ({} rows)", report.rows_after);
+                    }
+                    if report.hashless_rows_preserved > 0 {
+                        eprintln!(
+                            "[{id}] Dedupe preserved {} legacy hashless rows \
+                             (no content_hash to compare)",
+                            report.hashless_rows_preserved
+                        );
+                    }
+                    let _ = self.mark_chunks_deduped();
+                }
+                Err(e) => {
+                    // Don't abort the build — dedupe is a polish
+                    // pass, not load-bearing. Log + continue.
+                    eprintln!("[{id}] Warning: dedupe scan failed ({e}); proceeding with build");
+                }
+            }
+        } else {
+            eprintln!("[{id}] Dedupe already recorded — skipping (0/3)");
+        }
 
         // (1/3) IVF-PQ vector index.
         let vector_done = read_meta(&dir).map(|m| m.vector_index_built).unwrap_or(false);

@@ -81,8 +81,8 @@ pub use filters::{
     DocumentFilter, FilterConfig, FilterPipeline, PageviewRankFilter, TitleListFilter,
 };
 pub use index::{
-    read_provenance, set_provenance, CorpusIndex, CorpusProvenance, FilterOverride,
-    InsertChunk, ScopeMeta, StoredChunk, StoredChunkWithMetadata,
+    read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
+    FilterOverride, InsertChunk, ScopeMeta, StoredChunk, StoredChunkWithMetadata,
 };
 pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,
@@ -129,7 +129,7 @@ pub use update::lint_watcher::LintWatcher;
 pub use update::project_index_watcher::ProjectIndexWatcher;
 
 #[cfg(feature = "treesitter")]
-pub use notes::{NoteRow, NoteScope, NoteStore, ScopeFilter, ToolCallLogRow};
+pub use notes::{NoteRow, NoteScope, NoteSource, NoteStore, ScopeFilter, ToolCallLogRow};
 #[cfg(feature = "treesitter")]
 pub use project_docs::{DocResult, ProjectDocsStore, find_markdown_files};
 #[cfg(feature = "treesitter")]

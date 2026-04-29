@@ -885,6 +885,25 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
         );
     }
 
+    // ── investigation patterns: surface reserved variants ─────────────
+    // CustomSql is reserved but not yet implemented; recipes that
+    // declare it parse fine and the pattern detector emits a
+    // placeholder finding, but the recipe author should know up
+    // front that the SQL won't actually run yet.
+    if let Some(enr) = recipe.enrichment.as_ref() {
+        for pattern in &enr.patterns {
+            if let crate::recipe::PatternDecl::CustomSql { name, .. } = pattern {
+                warnings.push(format!(
+                    "pattern `{name}` uses `type = \"custom_sql\"` which is \
+                     reserved for a future engine version. The shape parses \
+                     today and the detector emits a placeholder finding, but \
+                     the SQL will NOT execute until the sandboxed-rusqlite \
+                     runtime ships. Track this in SYSTEM_OVERVIEW.md §3.10."
+                ));
+            }
+        }
+    }
+
     let source_present = !matches!(
         &recipe.acquire,
         AcquirerConfig::LocalFile { path } if path.is_empty()

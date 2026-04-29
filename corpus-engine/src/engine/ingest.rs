@@ -470,6 +470,41 @@ impl CorpusEngine {
             .await?
         };
 
+        // Stamp the canonical shard count for sharded extractors.
+        // Without this field, `corpus diag` can only infer total
+        // shards as `max(processed_shards) + 1`, which silently
+        // undercounts when the trailing shards never started — the
+        // exact case that masked shard 37 missing in the wild
+        // wikipedia ingest. Stamping at extract start (when we know
+        // the canonical count from the source archive) makes the
+        // diag answer authoritative.
+        //
+        // Currently scoped to WikipediaJsonl since that's the only
+        // multi-shard extractor today; trivial to extend when more
+        // arrive.
+        if let ExtractorConfig::WikipediaJsonl { .. } = recipe.extract {
+            match crate::engine::canonical_jsonl_shard_entries(&source_path) {
+                Ok(canonical) => {
+                    if let Err(e) = index.set_total_shards(canonical.len()) {
+                        tracing::warn!(
+                            corpus = %recipe.corpus.id,
+                            error = %e,
+                            "ingest: failed to stamp total_shards — \
+                             diag will fall back to the max+1 heuristic"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = %recipe.corpus.id,
+                        error = %e,
+                        "ingest: could not enumerate canonical shards — \
+                         total_shards left unstamped"
+                    );
+                }
+            }
+        }
+
         // Stamp the recipe's `kind` and `parent_corpus_id` onto the
         // freshly-created meta file. Both fields are absent on legacy
         // indexes (and on indexes whose recipe didn't set them);
@@ -695,6 +730,59 @@ impl CorpusEngine {
         let mut index_buffer: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
         let mut embed_timer = Instant::now();
 
+        // ── Embed-side dedup gate ───────────────────────────────
+        //
+        // The resume-cursor-rewind bug surfaced in the wild left
+        // up to ~65% duplicate-content rows in some indexes.
+        // Embedding is the dominant cost (~30-40 chunks/sec on
+        // qwen-embedding-0.6b on M-class), so re-embedding content
+        // we already wrote is the most expensive way to make this
+        // mistake. The fix: load every existing chunk's
+        // `content_hash` into a HashSet at startup; before pushing
+        // a new chunk into the embed queue, skip if its hash is
+        // already in the set.
+        //
+        // Why a HashSet rather than per-chunk DB lookups: a single
+        // table scan is cheap (~seconds at 4M rows), where 4M
+        // individual `only_if(content_hash = '…')` queries would
+        // dominate runtime. The memory cost is bounded:
+        // `1.5M unique hashes × ~150 bytes/entry ≈ 225 MB`. For a
+        // first-time ingest the set starts empty and grows lazily
+        // as chunks are emitted in this run — caps the same-content
+        // dupes that show up within a single shard.
+        //
+        // We populate the set ONCE at startup and add to it inline
+        // as new chunks are emitted (before they're embedded). This
+        // means within-batch duplicates are also caught — a section
+        // that appears identically in two source docs gets embedded
+        // exactly once.
+        let mut seen_hashes: std::collections::HashSet<String> = match index
+            .list_indexed_content_hashes()
+            .await
+        {
+            Ok(set) => {
+                if !set.is_empty() {
+                    eprintln!(
+                        "[{}] Embed-side dedup gate: {} existing content_hashes loaded — \
+                         resume will skip already-embedded chunks",
+                        recipe.corpus.id,
+                        set.len()
+                    );
+                }
+                set
+            }
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %recipe.corpus.id,
+                    error = %e,
+                    "ingest: failed to seed embed-side dedup gate; \
+                     proceeding with empty seen-set (resume may re-embed already-written rows)"
+                );
+                std::collections::HashSet::new()
+            }
+        };
+        let mut dedup_skipped: u64 = 0;
+
         let use_batch_embed = self.batch_embed.is_some();
         // Always log the pipeline config so resume runs also confirm which
         // embed_batch_size is active — important when per-machine tuning
@@ -875,6 +963,18 @@ impl CorpusEngine {
                 };
 
                 let content_hash = blake3_hex(&content);
+                // Embed-side dedup gate. If we already have a row
+                // with this content_hash (from a prior run, or from
+                // earlier in this run), skip re-embedding. This is
+                // the load-bearing mitigation for the resume-cursor
+                // bug — without it, a second ingest pass over the
+                // same source data re-embeds everything and
+                // compounds the duplicate count.
+                if seen_hashes.contains(&content_hash) {
+                    dedup_skipped += 1;
+                    continue;
+                }
+                seen_hashes.insert(content_hash.clone());
                 // Promote code-intelligence metadata from the extractor's
                 // metadata JSON into typed columns. Non-code extractors
                 // leave the JSON untouched and `code_meta_from_json`
@@ -1372,6 +1472,18 @@ impl CorpusEngine {
             duration_secs / 60,
             duration_secs % 60,
         );
+        if dedup_skipped > 0 {
+            // Surface the gate's effect so operators can verify the
+            // resume-cursor mitigation is doing real work. A
+            // non-zero count means we avoided embedding chunks
+            // whose content_hash was already in the index — the
+            // exact failure mode that blew up the original
+            // wikipedia ingest.
+            eprintln!(
+                "[{}] Embed-side dedup gate skipped {} chunks (already-embedded content)",
+                recipe.corpus.id, dedup_skipped
+            );
+        }
 
         if let Some(ref cb) = progress {
             cb(IngestProgress::Complete {

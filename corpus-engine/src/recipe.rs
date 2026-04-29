@@ -1,3 +1,49 @@
+//! Recipe schema — declarative TOML for `acquire → extract → chunk
+//! → embed → index` pipelines, plus optional `[parameters]`,
+//! `[catalog]`, `[enrichment]` blocks.
+//!
+//! ## Schema back-compatibility policy
+//!
+//! Recipes are user-authored data that lives outside this repo
+//! (community registry, local user authoring, sample TOMLs in old
+//! tutorials). A recipe written six months ago must still load
+//! without ceremony. The reader enforces that by convention:
+//!
+//! 1. **Every new field carries `#[serde(default)]`** (or a typed
+//!    default like `default_true`). Old TOMLs without the field
+//!    parse to a sensible value. Removing a default — even on an
+//!    optional-looking field — breaks every published recipe.
+//! 2. **Renamed fields keep the old name as an alias** via
+//!    `#[serde(alias = "old-name")]`. Drop the alias only after a
+//!    full schema-version bump cycle.
+//! 3. **Removed enum variants get a deprecation arm** in
+//!    [`translate_parse_error`] that produces a tailored "use
+//!    `<replacement>`" error instead of a generic "unknown
+//!    variant". `api_paginated` → `http_api` is the canonical
+//!    example.
+//! 4. **`[corpus] schema_version`** is bumped only when readers
+//!    must opt in to interpret the recipe (e.g. a new acquirer
+//!    older engines can't run safely). Pure additions do NOT
+//!    require a bump. The reader refuses recipes declaring a
+//!    `schema_version > MAX_SCHEMA_VERSION` so a future-recipe
+//!    loaded by an old engine fails loudly. See
+//!    [`MAX_SCHEMA_VERSION`].
+//! 5. **Reserved variants** — when a feature is *coming* but not
+//!    yet implemented (e.g. the SQL escape hatch
+//!    [`PatternDecl::CustomSql`]), reserve its variant in the
+//!    schema NOW. The reserved shape parses cleanly, the runtime
+//!    emits a visible placeholder (warning + finding row, never
+//!    silent skip), and the validator flags it so the recipe
+//!    author knows it's not fully wired. Recipes authored
+//!    against the future shape don't need a migration when the
+//!    runtime lands.
+//!
+//! `corpus-engine/tests/recipe_back_compat.rs` pins canonical
+//! TOML shapes from each schema-version boundary and asserts they
+//! still parse. Adding a regression fixture there is the standard
+//! cost of a schema change; without it, future field additions
+//! risk silently breaking old recipes.
+
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -458,6 +504,27 @@ pub enum PatternDecl {
         threshold: f64,
         #[serde(default = "default_comparison")]
         comparison: Comparison,
+    },
+    /// **Reserved — not yet implemented.** Recipe authors can
+    /// declare `type = "custom_sql"` today; the runtime parses
+    /// it cleanly and the validator surfaces a warning so the
+    /// author knows it won't run yet. The future implementation
+    /// will execute `query` on a read-only SQLite connection
+    /// materialised from the relationship graph, with
+    /// `set_authorizer` rejecting `ATTACH` / `PRAGMA` /
+    /// `load_extension`, a 5-second statement timeout, and
+    /// single-statement enforcement. See SYSTEM_OVERVIEW.md §3.10
+    /// for the back-compat rationale: reserving the shape now lets
+    /// us land the SQL escape hatch later without forcing a
+    /// schema migration on recipes already in the wild.
+    CustomSql {
+        name: String,
+        #[serde(default)]
+        description: String,
+        /// SQL query against `entities` / `relationships` /
+        /// `pattern_findings` tables. Validation is parse-only
+        /// today; execution arrives in a follow-up PR.
+        query: String,
     },
 }
 
@@ -1271,10 +1338,43 @@ impl Default for IndexConfig {
 // Recipe parsing
 // ---------------------------------------------------------------------------
 
+/// Highest recipe `schema_version` this build of `corpus-engine`
+/// understands. The reader refuses recipes with a `[corpus]
+/// schema_version > MAX_SCHEMA_VERSION` so a recipe authored
+/// against a newer engine surfaces as a clear "upgrade your
+/// corpus-engine" error instead of silently parsing with missing
+/// fields the recipe author expected to be honoured.
+///
+/// Bump this only when a NEW field requires reader cooperation
+/// (e.g. a new acquirer that older engines can't run safely). Pure
+/// additions — fields with `#[serde(default)]` — do NOT require a
+/// bump because old engines tolerate them and new engines treat
+/// missing values as default. See `tests/recipe_back_compat.rs`
+/// for the back-compat policy in full.
+pub const MAX_SCHEMA_VERSION: u32 = 1;
+
 impl Recipe {
     /// Parse a `Recipe` from a TOML string.
+    ///
+    /// Two layers of back-compat guard:
+    ///
+    /// 1. Schema-version cap — refuse recipes declaring a future
+    ///    `schema_version` so the loader fails loudly instead of
+    ///    silently dropping fields the recipe author expected
+    ///    the engine to honour.
+    /// 2. Deprecation-aware error messages — recipes referencing
+    ///    removed acquirer/extractor variants (e.g. the never-
+    ///    implemented `api_paginated` from before PR1) get a
+    ///    tailored "use `<replacement>` instead" message instead
+    ///    of a generic `unknown variant` parse error.
     pub fn from_toml(toml_str: &str) -> Result<Self> {
-        toml::from_str(toml_str).map_err(|e| Error::Recipe(e.to_string()))
+        match toml::from_str::<Self>(toml_str) {
+            Ok(recipe) => {
+                check_schema_version(recipe.corpus.schema_version)?;
+                Ok(recipe)
+            }
+            Err(e) => Err(translate_parse_error(e)),
+        }
     }
 
     /// Load a `Recipe` from a `.toml` file on disk.
@@ -1415,6 +1515,51 @@ fn parameter_value_from_toml(
             "parameter `{name}` expected {kind:?}, got TOML value: {other:?}"
         ))),
     }
+}
+
+/// Refuse recipes whose declared `schema_version` is higher than
+/// the engine knows. See [`MAX_SCHEMA_VERSION`].
+fn check_schema_version(v: u32) -> Result<()> {
+    if v > MAX_SCHEMA_VERSION {
+        return Err(Error::Recipe(format!(
+            "recipe declares schema_version = {v} but this engine \
+             supports schema_version <= {MAX_SCHEMA_VERSION}. \
+             The recipe was authored against a newer engine; \
+             upgrade `corpus-engine` to load it."
+        )));
+    }
+    Ok(())
+}
+
+/// Translate a serde TOML parse error into something actionable
+/// for known-deprecated variant names. Falls through to the raw
+/// serde message for unrecognised shapes.
+///
+/// Each entry pairs a removed/renamed variant string with the
+/// replacement it should migrate to. When the parse error mentions
+/// the deprecated string, we prepend a clear "use `<replacement>`"
+/// nudge so the user doesn't have to reverse-engineer the rename
+/// from a generic "unknown variant" message.
+fn translate_parse_error(e: toml::de::Error) -> Error {
+    const DEPRECATIONS: &[(&str, &str, &str)] = &[
+        // (deprecated_name, replacement, since)
+        (
+            "api_paginated",
+            "http_api",
+            "PR1 — recipe-authoring platform",
+        ),
+    ];
+    let raw = e.to_string();
+    for (old, new, since) in DEPRECATIONS {
+        if raw.contains(old) {
+            return Error::Recipe(format!(
+                "recipe references the removed acquirer/extractor type \
+                 `{old}`. Migrate to `{new}` (replaced in {since}). \
+                 See SYSTEM_OVERVIEW.md §3.10. Underlying parse error: {raw}"
+            ));
+        }
+    }
+    Error::Recipe(raw)
 }
 
 /// Lexical ISO-8601 calendar-date check (`YYYY-MM-DD`). We don't

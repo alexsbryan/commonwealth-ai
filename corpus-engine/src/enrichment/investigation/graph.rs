@@ -125,6 +125,13 @@ pub enum PatternKind {
     CircularFlow,
     RoleOverlap,
     Threshold,
+    /// Reserved for the future SQL escape hatch — see
+    /// [`crate::recipe::PatternDecl::CustomSql`]. The runtime
+    /// emits a `pattern_findings.json` row with this kind + an
+    /// "unimplemented" attribute so the recipe author can see
+    /// the pattern was declared but not yet executable, rather
+    /// than silently disappearing.
+    CustomSql,
 }
 
 /// On-disk graph: the three JSON files that the pipeline writes

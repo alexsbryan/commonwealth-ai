@@ -105,6 +105,46 @@ pub struct StoredChunkWithMetadata {
     pub metadata_raw: Option<String>,
 }
 
+/// Counts produced by [`CorpusIndex::dedupe_by_content_hash`]. The
+/// caller logs/displays these so the operator can see how much of
+/// their compute was duplicate work.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DedupeReport {
+    /// Total rows in the table before the dedupe pass.
+    pub rows_before: u64,
+    /// Total rows in the table after the dedupe pass.
+    pub rows_after: u64,
+    /// Number of rows deleted because their `content_hash` was a
+    /// duplicate of a row with a smaller `id`.
+    pub duplicates_deleted: u64,
+    /// Number of distinct content_hashes preserved (= number of
+    /// "winning" rows kept). Plus any hashless rows, this is the
+    /// post-dedupe row count.
+    pub unique_hashes_kept: u64,
+    /// Rows where `content_hash` was null. Pre-existing legacy
+    /// rows from before the field was populated. Left untouched
+    /// because we have no signal to dedup them safely.
+    pub hashless_rows_preserved: u64,
+}
+
+impl DedupeReport {
+    /// Convenience: did the pass actually delete anything?
+    pub fn changed(&self) -> bool {
+        self.duplicates_deleted > 0
+    }
+
+    /// Duplication rate as a fraction in [0.0, 1.0). Returns 0.0
+    /// when the table was empty or had no hashed rows.
+    pub fn dup_fraction(&self) -> f64 {
+        let hashed = self.unique_hashes_kept + self.duplicates_deleted;
+        if hashed == 0 {
+            0.0
+        } else {
+            self.duplicates_deleted as f64 / hashed as f64
+        }
+    }
+}
+
 // ─── CorpusIndex ───────────────────────────────────────────
 
 /// A single corpus index backed by LanceDB.
@@ -253,6 +293,15 @@ struct IndexMeta {
     #[serde(default)]
     title_fts_built: bool,
 
+    /// Set once `dedupe_by_content_hash()` has run successfully on
+    /// this index. Used by `build_indexes()` to skip re-running the
+    /// pre-build dedupe pass on a resume — it's idempotent (a clean
+    /// index dedups to a no-op) but the table scan is wasted I/O on
+    /// every resume. Indexes that pre-date this field default to
+    /// `false` and will be deduped exactly once on their next build.
+    #[serde(default)]
+    chunks_deduped: bool,
+
     // ── Health-check fields ──────────────────────────────────
     /// Expected total chunks, written at ingest start.
     #[serde(default)]
@@ -291,6 +340,17 @@ struct IndexMeta {
     /// multi-shard ZIP.
     #[serde(default)]
     processed_shards: Vec<usize>,
+
+    /// Total number of source shards the extractor expects for this
+    /// corpus. Stamped at ingest start by the sharded extractor (e.g.
+    /// the Wikipedia JSONL extractor counts ZIP entries) so a later
+    /// `corpus diag` can compute "missing shards" correctly even
+    /// when the trailing shards never started — the
+    /// `processed_shards` list alone undercounts because it can't
+    /// see beyond max(processed). `None` for non-sharded corpora and
+    /// for legacy indexes that pre-date this field.
+    #[serde(default)]
+    total_shards: Option<usize>,
 
     /// Active filter scope, if any. Records what subset of the source
     /// the index covers — e.g. Wikipedia Core's "top 100K by pageview
@@ -864,6 +924,170 @@ mod tests {
         idx.insert_batch(&sample_chunks()).await.unwrap();
 
         assert_eq!(idx.chunk_count().await.unwrap(), 4);
+    }
+
+    /// Build an InsertChunk with explicit content + content_hash so
+    /// dedupe tests can synthesize the duplication scenarios that
+    /// the real ingest pipeline produced.
+    fn chunk_with_hash(content: &str, hash: &str) -> (InsertChunk, Vec<f32>) {
+        (
+            InsertChunk {
+                content: content.into(),
+                title: None,
+                url: None,
+                metadata: None,
+                content_hash: Some(hash.into()),
+                source_doc_id: None,
+                source_file: None,
+                code: InsertCodeMeta::default(),
+                unit_id: None,
+            },
+            make_embedding(&[1.0, 0.0, 0.0, 0.0]),
+        )
+    }
+
+    /// Three rows with the same content_hash — all but the lowest
+    /// id (which the writer assigns sequentially) must be deleted,
+    /// leaving exactly one row.
+    #[tokio::test]
+    async fn dedupe_collapses_identical_content_hashes() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        // Same hash → we expect rows_after = 1 (id=0 wins).
+        idx.insert_batch(&[
+            chunk_with_hash("alpha", "h-alpha"),
+            chunk_with_hash("alpha", "h-alpha"),
+            chunk_with_hash("alpha", "h-alpha"),
+        ])
+        .await
+        .unwrap();
+        assert_eq!(idx.chunk_count().await.unwrap(), 3);
+
+        let report = idx.dedupe_by_content_hash().await.unwrap();
+        assert_eq!(report.rows_before, 3);
+        assert_eq!(report.rows_after, 1);
+        assert_eq!(report.duplicates_deleted, 2);
+        assert_eq!(report.unique_hashes_kept, 1);
+        assert_eq!(report.hashless_rows_preserved, 0);
+        assert!(report.changed());
+        assert!((report.dup_fraction() - 2.0 / 3.0).abs() < 1e-9);
+        assert_eq!(idx.chunk_count().await.unwrap(), 1);
+    }
+
+    /// Hashless rows (legacy data) must not be deleted — we have no
+    /// signal to dedup them and the safe move is to preserve.
+    #[tokio::test]
+    async fn dedupe_preserves_hashless_rows() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        // Mix: two duplicated hashed rows + two hashless legacy rows.
+        idx.insert_batch(&sample_chunks()).await.unwrap(); // 4 hashless
+        idx.insert_batch(&[
+            chunk_with_hash("dup", "h-dup"),
+            chunk_with_hash("dup", "h-dup"),
+        ])
+        .await
+        .unwrap();
+        assert_eq!(idx.chunk_count().await.unwrap(), 6);
+
+        let report = idx.dedupe_by_content_hash().await.unwrap();
+        assert_eq!(report.rows_before, 6);
+        assert_eq!(report.rows_after, 5);
+        assert_eq!(report.duplicates_deleted, 1);
+        assert_eq!(report.unique_hashes_kept, 1);
+        assert_eq!(report.hashless_rows_preserved, 4);
+        assert_eq!(idx.chunk_count().await.unwrap(), 5);
+    }
+
+    /// A clean index — every row has a unique content_hash — should
+    /// no-op cleanly. The DedupeReport reports zero changes.
+    #[tokio::test]
+    async fn dedupe_is_a_noop_on_clean_index() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        idx.insert_batch(&[
+            chunk_with_hash("a", "h-a"),
+            chunk_with_hash("b", "h-b"),
+            chunk_with_hash("c", "h-c"),
+        ])
+        .await
+        .unwrap();
+
+        let report = idx.dedupe_by_content_hash().await.unwrap();
+        assert_eq!(report.rows_before, 3);
+        assert_eq!(report.rows_after, 3);
+        assert_eq!(report.duplicates_deleted, 0);
+        assert_eq!(report.unique_hashes_kept, 3);
+        assert!(!report.changed());
+        assert_eq!(report.dup_fraction(), 0.0);
+    }
+
+    /// build_indexes() must run the pre-build dedupe pass on first
+    /// call, collapsing duplicate-content rows BEFORE the vector
+    /// index trains on them. On the second call (resume), the
+    /// `chunks_deduped` checkpoint short-circuits the scan so we
+    /// don't pay for a no-op pass every time.
+    #[tokio::test]
+    async fn build_indexes_runs_dedupe_prelude_then_skips_on_resume() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        idx.insert_batch(&[
+            chunk_with_hash("dup", "h-dup"),
+            chunk_with_hash("dup", "h-dup"),
+            chunk_with_hash("uniq", "h-uniq"),
+        ])
+        .await
+        .unwrap();
+        assert_eq!(idx.chunk_count().await.unwrap(), 3);
+        assert!(!idx.is_chunks_deduped());
+
+        // First build: should dedupe (3 → 2) and mark deduped.
+        idx.build_indexes(false, false, None).await.unwrap();
+        assert_eq!(idx.chunk_count().await.unwrap(), 2);
+        assert!(idx.is_chunks_deduped());
+
+        // Inject a fresh duplicate AFTER the marker is set. A second
+        // build_indexes() must NOT re-run dedupe — that's the whole
+        // point of the checkpoint, and skipping it is what keeps
+        // resumes cheap.
+        idx.insert_batch(&[chunk_with_hash("dup", "h-dup")])
+            .await
+            .unwrap();
+        assert_eq!(idx.chunk_count().await.unwrap(), 3);
+
+        idx.build_indexes(false, false, None).await.unwrap();
+        // Still 3 — dedupe was skipped because chunks_deduped=true.
+        // (A future "force re-dedupe" path would clear the flag
+        // first; the default resume case is just to skip.)
+        assert_eq!(idx.chunk_count().await.unwrap(), 3);
+    }
+
+    /// `list_indexed_content_hashes` returns the deduped set so
+    /// embed-side gating works against an honest seed even when the
+    /// index itself has duplicates.
+    #[tokio::test]
+    async fn list_content_hashes_dedupes_in_set() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        idx.insert_batch(&[
+            chunk_with_hash("x", "h-x"),
+            chunk_with_hash("x", "h-x"), // duplicate
+            chunk_with_hash("y", "h-y"),
+            chunk_with_hash("z", "h-z"),
+        ])
+        .await
+        .unwrap();
+
+        let hashes = idx.list_indexed_content_hashes().await.unwrap();
+        assert_eq!(hashes.len(), 3);
+        assert!(hashes.contains("h-x"));
+        assert!(hashes.contains("h-y"));
+        assert!(hashes.contains("h-z"));
     }
 
     #[tokio::test]

@@ -774,6 +774,27 @@ impl CorpusEngine {
         Ok(Some(estimated))
     }
 
+    /// Out-of-band directories under `<index_dir>/` are user-managed
+    /// snapshots, manual backups, or staging artifacts that happen to
+    /// share the indexes parent. We never treat them as live corpora.
+    ///
+    /// Convention: corpus IDs in the wild are alphanumeric + hyphens
+    /// only (`wikipedia-simple`, `sep-compatibilism`,
+    /// `sovereign-recipes`). A `.` in a directory name is the
+    /// unambiguous opt-out marker — anything matching gets quietly
+    /// skipped by both `installed_indexes()` and
+    /// `in_progress_ingestions()`. That stops auto-resume from
+    /// repeatedly trying to fetch a registry recipe for the rogue
+    /// directory and spamming WARN lines.
+    ///
+    /// Existing internal directories already use a `_` prefix to
+    /// signal "skip this" (`_downloads`, `_corpus_meta.json`); the
+    /// `.`-rule is a parallel out-of-band marker for user-facing
+    /// artifacts where leading-underscore would feel hidden.
+    fn is_out_of_band_index_name(name: &str) -> bool {
+        name.contains('.')
+    }
+
     /// Return corpus IDs where ingestion has started but not finished.
     ///
     /// Considers two on-disk shapes, both produced by the unified ingest
@@ -807,6 +828,9 @@ impl CorpusEngine {
             let name_os = entry.file_name();
             let Some(name) = name_os.to_str() else { continue };
             if name.starts_with('_') {
+                continue;
+            }
+            if Self::is_out_of_band_index_name(name) {
                 continue;
             }
 
@@ -922,6 +946,9 @@ impl CorpusEngine {
             if name.starts_with('_') {
                 continue;
             }
+            if Self::is_out_of_band_index_name(name) {
+                continue;
+            }
             // Check for _corpus_meta.json to identify valid indexes.
             if !path.join("_corpus_meta.json").exists() {
                 continue;
@@ -975,6 +1002,13 @@ impl CorpusEngine {
             }
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
             if name.starts_with('_') {
+                continue;
+            }
+            if Self::is_out_of_band_index_name(name) {
+                report.push_str(&format!(
+                    "\n--- {name} ---\n  out-of-band directory (name contains '.') — \
+                     skipped by installed_indexes() and in_progress_ingestions().\n"
+                ));
                 continue;
             }
 
@@ -2018,6 +2052,112 @@ mod tests {
         .with_self_node_id("nodeA");
 
         assert_eq!(engine.in_progress_ingestions(), vec!["wikipedia".to_string()]);
+    }
+
+    /// `wikipedia.legacy-backup`-style directories — manual snapshots
+    /// users park inside `~/.sovereign/indexes/` for safekeeping —
+    /// must never be returned by `in_progress_ingestions()`. Before
+    /// the `is_out_of_band_index_name` filter, `auto_resume` would
+    /// pick them up and spam the daemon log every restart with a
+    /// recipe-not-found WARN for each.
+    #[test]
+    fn in_progress_ingestions_skips_dotted_backup_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        // Real in-progress ingest — should be picked up.
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":1000}"#,
+        )
+        .unwrap();
+        // User backup — has a valid-looking meta but the directory
+        // name contains `.`, marking it out-of-band.
+        std::fs::create_dir_all(idx_dir.join("wikipedia.legacy-backup")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia.legacy-backup/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":945747}"#,
+        )
+        .unwrap();
+        // Another flavor: `.bak` suffix.
+        std::fs::create_dir_all(idx_dir.join("sep.bak")).unwrap();
+        std::fs::write(
+            idx_dir.join("sep.bak/_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"committed_iter_pos":42}"#,
+        )
+        .unwrap();
+
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+
+        assert_eq!(engine.in_progress_ingestions(), vec!["wikipedia".to_string()]);
+    }
+
+    /// Same opt-out applies to `installed_indexes()` so the legacy
+    /// backup doesn't surface in `/v1/models`-style listings either.
+    #[tokio::test]
+    async fn installed_indexes_skips_dotted_backup_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+
+        // A genuine completed index alongside a dotted backup.
+        let real = idx_dir.join("sep");
+        CorpusIndex::create(&real, "sep", "SEP", "test-model", 4, true, "MIT")
+            .await
+            .unwrap();
+        // Mark complete so installed_indexes picks it up.
+        std::fs::write(
+            real.join("_corpus_meta.json"),
+            r#"{"corpus_id":"sep","corpus_name":"SEP","embedding_model":"test-model",
+                 "embedding_dimensions":4,"mesh_sharing":true,"license":"MIT",
+                 "created_at":0,"last_updated":0,"schema_version":3,"is_shard":false,
+                 "ingestion_in_progress":false,"indexes_built":true,
+                 "vector_index_built":true,"content_fts_built":true,
+                 "title_fts_built":true,"committed_iter_pos":0,
+                 "committed_shard_set":[]}"#,
+        )
+        .unwrap();
+
+        // Dotted backup — should be silently skipped.
+        let backup = idx_dir.join("sep.legacy-backup");
+        std::fs::create_dir_all(&backup).unwrap();
+        std::fs::write(
+            backup.join("_corpus_meta.json"),
+            r#"{"corpus_id":"sep","corpus_name":"SEP backup","embedding_model":"test-model",
+                 "embedding_dimensions":4,"mesh_sharing":true,"license":"MIT",
+                 "created_at":0,"last_updated":0,"schema_version":3,"is_shard":false,
+                 "ingestion_in_progress":false,"indexes_built":true,
+                 "vector_index_built":true,"content_fts_built":true,
+                 "title_fts_built":true,"committed_iter_pos":0,
+                 "committed_shard_set":[]}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            idx_dir,
+            mock_embed_fn(),
+        );
+        let listed = engine.installed_indexes().await.unwrap();
+        let names: Vec<&str> = listed.iter().map(|i| i.corpus_id.as_str()).collect();
+        assert!(names.contains(&"sep"), "real index missing: {names:?}");
+        // Backup never appears, even though its meta names corpus_id="sep".
+        // (We can't distinguish by corpus_id since the user copied it from
+        // the real index — the directory-name rule is the only signal.)
+        assert_eq!(listed.len(), 1, "backup leaked through: {names:?}");
+    }
+
+    #[test]
+    fn is_out_of_band_marks_dotted_names() {
+        assert!(CorpusEngine::is_out_of_band_index_name("wikipedia.legacy-backup"));
+        assert!(CorpusEngine::is_out_of_band_index_name("sep.bak"));
+        assert!(CorpusEngine::is_out_of_band_index_name("foo.snapshot"));
+        // Real corpus IDs use only alphanumeric + hyphens / underscores.
+        assert!(!CorpusEngine::is_out_of_band_index_name("wikipedia"));
+        assert!(!CorpusEngine::is_out_of_band_index_name("sep-compatibilism"));
+        assert!(!CorpusEngine::is_out_of_band_index_name("brothers_karamazov"));
+        assert!(!CorpusEngine::is_out_of_band_index_name("wikipedia-partition-nodeA"));
     }
 
     // ── remove_corpus_everything ──────────────────────────────────────

@@ -74,6 +74,42 @@ pub fn detect_all(
                 *comparison,
                 relationships,
             ),
+            PatternDecl::CustomSql {
+                name,
+                description: _,
+                query,
+            } => {
+                // Reserved — not yet implemented. The runtime
+                // emits a placeholder finding so the recipe
+                // author can see the pattern was declared but
+                // skipped, with the actual SQL preserved for
+                // when the executor lands.
+                tracing::warn!(
+                    pattern = %name,
+                    "PatternDecl::CustomSql is reserved but not yet \
+                     implemented; skipping. The future executor will run \
+                     this query on a read-only SQLite materialisation of \
+                     the relationship graph."
+                );
+                let mut attributes = serde_json::Map::new();
+                attributes.insert(
+                    "status".into(),
+                    serde_json::Value::String(
+                        "reserved_not_yet_implemented".into(),
+                    ),
+                );
+                attributes.insert(
+                    "query".into(),
+                    serde_json::Value::String(query.clone()),
+                );
+                vec![PatternFinding {
+                    pattern_name: name.clone(),
+                    pattern_type: PatternKind::CustomSql,
+                    entity_ids: Vec::new(),
+                    relationship_ids: Vec::new(),
+                    attributes,
+                }]
+            }
         };
         out.extend(findings);
     }

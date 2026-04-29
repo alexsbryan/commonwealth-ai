@@ -71,6 +71,69 @@ impl NoteScope {
     }
 }
 
+/// Provenance dimension for notes (audit-hardening v6 schema).
+///
+/// `Agent` is the highest-confidence source — the agent explicitly
+/// called the `note` tool. The other four record automated sources
+/// the audit assembly ranks lower:
+///
+/// - `Committed` — harvested from a git commit message by the daemon
+///   reindexer's git HEAD poll.
+/// - `Extracted` — produced by an LLM pass over the session diff at
+///   audit-assembly time.
+/// - `Inferred` — regex-mined from agent response text in the
+///   conversation transcript.
+/// - `Observed` — derived from a tool-call pattern match (e.g.
+///   `blast` → file write counts as "investigated impact before
+///   modifying").
+///
+/// The audit floor is non-empty when at least one of these fires,
+/// even if the agent never wrote an explicit note.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteSource {
+    Agent,
+    Committed,
+    Extracted,
+    Inferred,
+    Observed,
+}
+
+impl NoteSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Agent => "agent",
+            Self::Committed => "committed",
+            Self::Extracted => "extracted",
+            Self::Inferred => "inferred",
+            Self::Observed => "observed",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "agent" => Some(Self::Agent),
+            "committed" => Some(Self::Committed),
+            "extracted" => Some(Self::Extracted),
+            "inferred" => Some(Self::Inferred),
+            "observed" => Some(Self::Observed),
+            _ => None,
+        }
+    }
+
+    /// Audit-display priority. Higher number = higher priority.
+    /// Used to sort decisions so agent-written notes appear above
+    /// extracted/inferred/observed ones at the same date.
+    pub fn priority(self) -> u8 {
+        match self {
+            Self::Agent => 4,
+            Self::Committed => 3,
+            Self::Extracted => 2,
+            Self::Inferred => 1,
+            Self::Observed => 0,
+        }
+    }
+}
+
 /// A single note row returned from [`NoteStore::read_notes`].
 #[derive(Debug, Clone)]
 pub struct NoteRow {
@@ -103,6 +166,23 @@ pub struct NoteRow {
     /// `None` when the note has no relational anchor (e.g. classic
     /// `decision` / `invariant` kinds).
     pub related_entity: Option<String>,
+    /// Provenance of the note. One of:
+    /// - `"agent"`     — explicit `note` tool call by an agent (highest signal).
+    /// - `"committed"` — harvested from a git commit message.
+    /// - `"extracted"` — extracted by an LLM pass over the session diff.
+    /// - `"inferred"`  — regex-mined from agent response text.
+    /// - `"observed"`  — derived from a tool-call pattern match.
+    ///
+    /// Pre-v6 rows default to `"agent"`. CHECK enforcement is at the
+    /// application layer (in [`NoteStore::write_note_with_source`])
+    /// rather than via a SQL constraint, so adding a new source is a
+    /// one-line code change rather than a schema migration.
+    pub source: String,
+    /// Note id this note reverses. `None` for first-time decisions.
+    /// Audit assembly uses this to render `↳ REVERSED` lines under the
+    /// original decision. The referenced row is left intact — only the
+    /// audit display treats this as a reversal.
+    pub supersedes: Option<String>,
 }
 
 /// Retrieval filter for scope/feature combinations.
@@ -233,6 +313,20 @@ impl NoteStore {
             })?;
         }
 
+        // v5 → v6: Audit-hardening provenance fields. Two new columns
+        // (`source`, `supersedes`) supporting the four extraction
+        // streams (agent / committed / extracted / inferred / observed)
+        // and decision-reversal display. Plain ADD COLUMN — no CHECK
+        // constraint changes, so no rename-recreate.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 6 {
+            conn.execute_batch(MIGRATION_V6).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v6: {e}")))
+            })?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -286,19 +380,21 @@ impl NoteStore {
     }
 
     /// Persist a note with all of: explicit scope, optional feature
-    /// id, and an optional `related_entity` anchor.
+    /// id, and an optional `related_entity` anchor. The note is
+    /// tagged `source = 'agent'` (the highest-confidence source).
     ///
-    /// This is the full-fat write path. The `related_entity` field
-    /// is a free-text entity name — typically a Person /
-    /// Organization name for `commitment` / `follow_up` kinds, an
-    /// Initiative name for `goal`. It's not validated against the
-    /// entity graph here (the graph is rebuilt each enrichment
-    /// cycle, so a hard FK would be a write-time race); the
-    /// Relational / Strategic digests match it at query time.
+    /// This is a back-compat wrapper over [`write_note_with_source`];
+    /// new call sites that have a non-agent provenance (commit
+    /// harvester, diff extractor, response miner, pattern matcher)
+    /// should call `write_note_with_source` directly.
     ///
-    /// `related_entity = None` is the existing pre-v5 behaviour and
-    /// what every caller that doesn't know about the relational
-    /// schema gets via [`write_note_scoped`].
+    /// The `related_entity` field is a free-text entity name —
+    /// typically a Person / Organization name for `commitment` /
+    /// `follow_up` kinds, an Initiative name for `goal`. It's not
+    /// validated against the entity graph here (the graph is rebuilt
+    /// each enrichment cycle, so a hard FK would be a write-time
+    /// race); the Relational / Strategic digests match it at query
+    /// time. `related_entity = None` matches the pre-v5 behaviour.
     #[allow(clippy::too_many_arguments)]
     pub async fn write_note_with_relation(
         &self,
@@ -311,9 +407,59 @@ impl NoteStore {
         feature_id: Option<&str>,
         related_entity: Option<&str>,
     ) -> Result<String> {
+        self.write_note_with_source(
+            kind,
+            content,
+            symbols,
+            files,
+            session_id,
+            scope,
+            feature_id,
+            related_entity,
+            NoteSource::Agent,
+            None,
+        )
+        .await
+    }
+
+    /// Full-fat write path with explicit provenance.
+    ///
+    /// `source` records where the note came from — agent (explicit
+    /// `note` tool call), committed (commit-message harvest),
+    /// extracted (LLM pass over session diff), inferred (regex over
+    /// agent response text), or observed (tool-call pattern match).
+    /// The audit assembly orders by source priority
+    /// (agent > committed > extracted > inferred > observed) and
+    /// renders attribution.
+    ///
+    /// `supersedes` carries the note id this note reverses, when
+    /// applicable. NULL for first-time decisions. The audit display
+    /// renders a `↳ REVERSED` line under the original on a match.
+    ///
+    /// CHECK enforcement on `source` is at the API layer (the
+    /// [`NoteSource`] enum is the source of truth) rather than via
+    /// SQL constraint — adding a new source becomes a one-line code
+    /// change rather than a schema migration.
+    ///
+    /// Invariant: `scope == Feature` requires `feature_id.is_some()`;
+    /// violators return [`Error::InvalidInput`].
+    #[allow(clippy::too_many_arguments)]
+    pub async fn write_note_with_source(
+        &self,
+        kind: &str,
+        content: &str,
+        symbols: Vec<String>,
+        files: Vec<String>,
+        session_id: &str,
+        scope: NoteScope,
+        feature_id: Option<&str>,
+        related_entity: Option<&str>,
+        source: NoteSource,
+        supersedes: Option<&str>,
+    ) -> Result<String> {
         if scope == NoteScope::Feature && feature_id.is_none() {
             return Err(Error::InvalidInput(
-                "write_note_with_relation: scope='feature' requires feature_id".into(),
+                "write_note_with_source: scope='feature' requires feature_id".into(),
             ));
         }
         let id = uuid::Uuid::new_v4().to_string();
@@ -323,9 +469,12 @@ impl NoteStore {
 
         let conn = self.conn.lock().await;
         conn.execute(
-            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, scope, feature_id, related_entity)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10)",
-            params![id, kind, content, symbols_json, files_json, session_id, now, scope.as_str(), feature_id, related_entity],
+            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, scope, feature_id, related_entity, source, supersedes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                id, kind, content, symbols_json, files_json, session_id, now,
+                scope.as_str(), feature_id, related_entity, source.as_str(), supersedes
+            ],
         )
         .map_err(sqlite_err)?;
         bump_notes_version(&conn)?;
@@ -460,7 +609,8 @@ impl NoteStore {
             .query_row(
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
-                        scope, feature_id, promoted_from, related_entity
+                        scope, feature_id, promoted_from, related_entity,
+                        source, supersedes
                  FROM notes WHERE id = ?",
                 params![id],
                 map_note_row,
@@ -605,7 +755,8 @@ impl NoteStore {
                     )
                     SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                            n.created_at, n.tool_name, n.retired_at, n.retired_by,
-                           n.scope, n.feature_id, n.promoted_from, n.related_entity
+                           n.scope, n.feature_id, n.promoted_from, n.related_entity,
+                           n.source, n.supersedes
                     FROM notes n
                     JOIN ranked r ON r.rowid = n.rowid
                     WHERE 1=1 {retired_clause}
@@ -622,7 +773,8 @@ impl NoteStore {
                 let sql = format!(
                     "SELECT id, kind, content, symbols, files, session_id,
                             created_at, tool_name, retired_at, retired_by,
-                            scope, feature_id, promoted_from, related_entity
+                            scope, feature_id, promoted_from, related_entity,
+                            source, supersedes
                      FROM notes
                      WHERE 1=1 {retired_clause}
                      ORDER BY created_at DESC
@@ -677,7 +829,8 @@ impl NoteStore {
         let sql = format!(
             "SELECT id, kind, content, symbols, files, session_id,
                     created_at, tool_name, retired_at, retired_by,
-                    scope, feature_id, promoted_from, related_entity
+                    scope, feature_id, promoted_from, related_entity,
+                    source, supersedes
              FROM notes
              WHERE kind = 'reflection'
                AND created_at >= ?
@@ -724,7 +877,8 @@ impl NoteStore {
             .prepare(
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
-                        scope, feature_id, promoted_from, related_entity
+                        scope, feature_id, promoted_from, related_entity,
+                        source, supersedes
                  FROM notes
                  WHERE related_entity = ?1
                    AND retired_at IS NULL
@@ -824,7 +978,8 @@ impl NoteStore {
             .prepare(
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
-                        scope, feature_id, promoted_from, related_entity
+                        scope, feature_id, promoted_from, related_entity,
+                        source, supersedes
                  FROM notes
                  WHERE kind = 'todo' AND retired_at IS NULL
                  ORDER BY created_at DESC
@@ -1162,6 +1317,50 @@ PRAGMA user_version = 5;
 COMMIT;
 ";
 
+// ─── Schema migration v5 → v6 (Audit hardening: source + supersedes) ──────────
+
+/// Applied to databases at `user_version = 5`. Adds two columns
+/// supporting the audit-hardening workstream:
+///
+/// 1. `source TEXT NOT NULL DEFAULT 'agent'` — provenance dimension.
+///    Values: `'agent'` (explicit `note` tool call), `'committed'`
+///    (harvested from a git commit message), `'extracted'` (LLM pass
+///    over session diff), `'inferred'` (regex-mined from agent
+///    response text), `'observed'` (tool-call pattern match). CHECK
+///    is enforced at the API layer (in `write_note_with_source`)
+///    rather than via SQL constraint — adding a new source becomes a
+///    one-line code change rather than a rename-recreate migration.
+///
+/// 2. `supersedes TEXT` — note id (in same table) that this note
+///    reverses. NULL when the note doesn't reverse anything. The
+///    referenced row is left intact; only the audit display treats
+///    this as a reversal (`↳ REVERSED` line under the original).
+///
+/// `session_id` is already present on the v5 schema (line 1097), so
+/// no third column is added.
+///
+/// New columns are added via plain `ALTER TABLE ADD COLUMN` — no
+/// CHECK constraint changes here, so the rename-recreate dance the
+/// prior migrations needed is avoided. Two new partial indexes:
+/// `(source, created_at DESC)` for audit-assembly queries that order
+/// by source priority, and `supersedes` for the reversal-display
+/// lookup. Idempotent: gated by `PRAGMA user_version < 6`.
+const MIGRATION_V6: &str = "
+BEGIN;
+
+ALTER TABLE notes ADD COLUMN source TEXT NOT NULL DEFAULT 'agent';
+ALTER TABLE notes ADD COLUMN supersedes TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_notes_source_created
+    ON notes(source, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_supersedes
+    ON notes(supersedes) WHERE supersedes IS NOT NULL;
+
+PRAGMA user_version = 6;
+
+COMMIT;
+";
+
 // ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
 //     postmortem_pointer, redteam_finding) ─────────────────────────────────
 
@@ -1453,6 +1652,8 @@ fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
         feature_id: row.get(11)?,
         promoted_from: row.get(12)?,
         related_entity: row.get(13)?,
+        source: row.get(14)?,
+        supersedes: row.get(15)?,
     })
 }
 
@@ -2446,5 +2647,223 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM note_digest_cache", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    // ── v5 → v6 migration (audit-hardening: source + supersedes) ──────────
+
+    /// Build a v5 database by hand and confirm the v6 migration adds the
+    /// two new columns + indexes without losing any rows. Pre-existing
+    /// rows must default to `source = 'agent'` so the audit assembly
+    /// continues to render them as the highest-priority source.
+    #[tokio::test]
+    async fn migrates_v5_to_v6_preserving_existing_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Build a v5 database manually: copy the schema we know v5 ends
+        // with (no source/supersedes columns, kind CHECK admits the v5
+        // set), insert one row, set user_version = 5.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE notes (
+                     id            TEXT    PRIMARY KEY,
+                     kind          TEXT    NOT NULL CHECK(kind IN (
+                         'decision','attempt','invariant','todo','reflection',
+                         'uncertainty','postmortem_pointer','redteam_finding',
+                         'deviation','commitment','follow_up','goal'
+                     )),
+                     content       TEXT    NOT NULL,
+                     symbols       TEXT    NOT NULL DEFAULT '[]',
+                     files         TEXT    NOT NULL DEFAULT '[]',
+                     session_id    TEXT    NOT NULL,
+                     created_at    INTEGER NOT NULL,
+                     updated_at    INTEGER NOT NULL,
+                     tool_name     TEXT,
+                     retired_at    INTEGER,
+                     retired_by    TEXT,
+                     scope         TEXT    NOT NULL DEFAULT 'global'
+                                   CHECK(scope IN ('global','feature','session')),
+                     feature_id    TEXT,
+                     promoted_from TEXT,
+                     related_entity TEXT
+                 );
+                 CREATE VIRTUAL TABLE notes_fts USING fts5(
+                     content, kind, content='notes', content_rowid='rowid'
+                 );
+                 CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+                     INSERT INTO notes_fts(rowid, content, kind)
+                         VALUES (new.rowid, new.content, new.kind);
+                 END;
+                 CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+                     INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+                         VALUES ('delete', old.rowid, old.content, old.kind);
+                 END;
+                 CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+                     INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+                         VALUES ('delete', old.rowid, old.content, old.kind);
+                     INSERT INTO notes_fts(rowid, content, kind)
+                         VALUES (new.rowid, new.content, new.kind);
+                 END;
+                 CREATE TABLE meta_counters (key TEXT PRIMARY KEY, val INTEGER NOT NULL);
+                 INSERT INTO meta_counters(key, val) VALUES ('notes_version', 0);
+                 CREATE TABLE note_digest_cache (
+                     scope_hash    TEXT    PRIMARY KEY,
+                     digest_text   TEXT    NOT NULL,
+                     notes_version INTEGER NOT NULL,
+                     created_at    INTEGER NOT NULL
+                 );
+                 CREATE TABLE tool_call_log (
+                     id         TEXT    PRIMARY KEY,
+                     session_id TEXT    NOT NULL,
+                     tool_name  TEXT    NOT NULL,
+                     outcome    TEXT    NOT NULL,
+                     called_at  INTEGER NOT NULL
+                 );
+                 INSERT INTO notes (
+                     id, kind, content, session_id, created_at, updated_at,
+                     scope
+                 ) VALUES (
+                     'pre-v6-row', 'decision', 'before migration',
+                     'sess-1', 1000, 1000, 'global'
+                 );
+                 PRAGMA user_version = 5;
+                 COMMIT;",
+            )
+            .unwrap();
+        }
+
+        // Now open through NoteStore — should run V6 and add columns.
+        let store = NoteStore::open(&db_path).unwrap();
+
+        // Pre-existing row gets source='agent', supersedes=NULL.
+        let row = store
+            .read_note_by_id("pre-v6-row")
+            .await
+            .unwrap()
+            .expect("row preserved across v5→v6 migration");
+        assert_eq!(row.kind, "decision");
+        assert_eq!(row.content, "before migration");
+        assert_eq!(row.source, "agent", "default source for pre-v6 rows");
+        assert_eq!(row.supersedes, None, "no supersedes default");
+
+        // user_version is now 6.
+        let conn = Connection::open(&db_path).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 6);
+
+        // The two new indexes exist.
+        let has_source_idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master \
+                 WHERE type='index' AND name='idx_notes_source_created'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has_source_idx, 1);
+
+        let has_supersedes_idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master \
+                 WHERE type='index' AND name='idx_notes_supersedes'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has_supersedes_idx, 1);
+    }
+
+    /// New writes via `write_note_with_source` carry their explicit
+    /// source through to the read path. Each of the five sources
+    /// round-trips intact.
+    #[tokio::test]
+    async fn write_note_with_source_round_trips_each_source() {
+        let store = make_store().await;
+
+        for src in [
+            NoteSource::Agent,
+            NoteSource::Committed,
+            NoteSource::Extracted,
+            NoteSource::Inferred,
+            NoteSource::Observed,
+        ] {
+            let id = store
+                .write_note_with_source(
+                    "decision",
+                    &format!("from {}", src.as_str()),
+                    vec![],
+                    vec![],
+                    "sess-source",
+                    NoteScope::Global,
+                    None,
+                    None,
+                    src,
+                    None,
+                )
+                .await
+                .unwrap();
+            let row = store.read_note_by_id(&id).await.unwrap().unwrap();
+            assert_eq!(row.source, src.as_str());
+            assert_eq!(row.supersedes, None);
+        }
+    }
+
+    /// `write_note_with_source` carries `supersedes` through, and the
+    /// referenced original row is left untouched (the reversal is a
+    /// display-time concept).
+    #[tokio::test]
+    async fn supersedes_threads_through_writes_without_mutating_original() {
+        let store = make_store().await;
+        let original = store
+            .write_note(
+                "decision",
+                "BTreeMap for ordered iteration",
+                vec![],
+                vec![],
+                "sess-rev",
+            )
+            .await
+            .unwrap();
+
+        let reversal = store
+            .write_note_with_source(
+                "decision",
+                "HashMap — ordered iteration not actually needed",
+                vec![],
+                vec![],
+                "sess-rev",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Extracted,
+                Some(&original),
+            )
+            .await
+            .unwrap();
+
+        let original_row = store.read_note_by_id(&original).await.unwrap().unwrap();
+        let reversal_row = store.read_note_by_id(&reversal).await.unwrap().unwrap();
+
+        // Original is preserved verbatim — only the reversal carries
+        // the link.
+        assert_eq!(original_row.content, "BTreeMap for ordered iteration");
+        assert_eq!(original_row.supersedes, None);
+        assert_eq!(original_row.source, "agent");
+        assert_eq!(reversal_row.supersedes.as_deref(), Some(original.as_str()));
+        assert_eq!(reversal_row.source, "extracted");
+    }
+
+    /// `NoteSource::priority` orders the five sources from highest
+    /// to lowest. The audit assembly relies on this order.
+    #[test]
+    fn note_source_priority_order_is_stable() {
+        assert!(NoteSource::Agent.priority() > NoteSource::Committed.priority());
+        assert!(NoteSource::Committed.priority() > NoteSource::Extracted.priority());
+        assert!(NoteSource::Extracted.priority() > NoteSource::Inferred.priority());
+        assert!(NoteSource::Inferred.priority() > NoteSource::Observed.priority());
     }
 }
