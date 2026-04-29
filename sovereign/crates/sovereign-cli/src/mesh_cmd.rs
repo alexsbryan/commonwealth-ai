@@ -65,6 +65,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "diag" => cmd_corpus_diag(&args[1..]).await,
         "dedupe" => cmd_corpus_dedupe(&args[1..]).await,
         "repair" => cmd_corpus_repair(&args[1..]).await,
+        "merge-partitions" => cmd_corpus_merge_partitions(&args[1..]).await,
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
         "catalog" => crate::corpus_catalog_cmd::run_catalog(&args[1..]).await,
@@ -152,6 +153,7 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("diag <id>",                 "Audit an installed corpus: distinct-article count vs. recipe filter"),
             ("dedupe <id>",               "One-shot rescue: collapse duplicate-content rows from a resume-rewind ingest"),
             ("repair <id>",               "Reset a 'completed' partition with missing shards back to in-progress so resume picks it up"),
+            ("merge-partitions <id>",     "Merge all <id>-partition-*/ dirs into canonical <id>/ (one-shot rescue when peer-merge handoff was lost)"),
             ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
             ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
         ]),
@@ -1392,6 +1394,459 @@ async fn cmd_corpus_repair(args: &[String]) -> i32 {
     println!("  - The daemon's auto-resume loop will pick this up on its next tick.");
     println!("  - Or run `sovereign corpus install {corpus_id}` to kick off resume now.");
     println!("  - Either path will skip already-embedded content_hashes via the embed-side dedup gate.");
+    0
+}
+
+/// Merge every `<corpus>-partition-*/` directory on this node into a
+/// canonical `<corpus>/` index.
+///
+/// One-shot rescue for the stranded-partition case the daemon's
+/// `corpus_collaborate` recovery path can't reach: the in-memory
+/// MeshStore wipes handoff blobs on every daemon restart, so a
+/// queue-mode ingest that finished its dispatch phase but never
+/// finalised the merge ends up in a deadlock — every partition is on
+/// disk, every shard is "claimed" across the union, but no canonical
+/// exists and there's nothing to re-fire from.
+///
+/// What this does:
+///  1. Discover all `<corpus>-partition-*/` directories under
+///     `<data_dir>/indexes/`.
+///  2. Preflight: every partition must agree on embedding model + dim.
+///     (`merge_shards` errors otherwise; we check up front for a
+///     nicer message.)
+///  3. Refuse if `<corpus>/` already exists with data — never clobber.
+///  4. y/N gate (or `--yes`).
+///  5. Run `corpus_engine::sharding::merge_shards()` — content_hash +
+///     (unit_id, source_doc_id) dedup during merge.
+///  6. Stamp scope + total_shards + union'd processed_shards on the
+///     canonical meta (merge_shards writes a fresh default meta, so
+///     these need restoring from input partitions).
+///  7. `build_indexes(true, true)` — IVF-PQ vector index + Tantivy FTS
+///     on the merged chunks.
+///  8. `mark_indexes_built()` + `mark_ingestion_complete()`.
+///  9. Optional `--remove-partitions` deletes the partition dirs after
+///     successful merge.
+async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
+    let mut corpus_id: Option<String> = None;
+    let mut yes = false;
+    let mut remove_partitions = false;
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--yes" | "-y" => yes = true,
+            "--remove-partitions" => remove_partitions = true,
+            "--help" | "-h" => {
+                println!(
+                    "Usage: sovereign corpus merge-partitions <corpus_id> [--yes] [--remove-partitions]\n\n\
+                     Merge every <corpus>-partition-*/ dir on this node into \
+                     a canonical <corpus>/ index, deduping by content_hash + \
+                     (unit_id, source_doc_id) during merge. Builds vector + \
+                     FTS indexes on the canonical and marks ingestion complete.\n\n\
+                     Use this when:\n\
+                     - The daemon logs `corpus_collaborate: queue drained but \
+                     no canonical index and no local handoff found`\n\
+                     - Multiple <corpus>-partition-*/ dirs exist on disk but \
+                     no canonical <corpus>/ does\n\
+                     - Auto-resume fires but the dispatcher returns \
+                     `corpus already complete — cooling down` while the data \
+                     is actually split across partitions\n\n\
+                     --remove-partitions  Delete each <corpus>-partition-*/ \
+                     dir AFTER the merge succeeds. Off by default — verify \
+                     the canonical index serves queries first.\n\n\
+                     Stop the daemon (sovereign daemon stop) before running \
+                     this if it's currently writing to any of the partitions \
+                     (LanceDB locks are per-directory, but a peer-pulled \
+                     partition can still be receiving writes from gossip)."
+                );
+                return 0;
+            }
+            other if !other.starts_with('-') => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(other.to_string());
+                }
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                return 1;
+            }
+        }
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("Missing corpus ID. Usage: sovereign corpus merge-partitions <corpus_id>");
+        return 1;
+    };
+
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|cfg| cfg.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        });
+    let index_dir = data_dir.join("indexes");
+    let canonical_path = index_dir.join(&corpus_id);
+
+    // Refuse to clobber an existing canonical. If the user genuinely
+    // wants to rebuild from partitions, they can `corpus remove` the
+    // canonical first.
+    if canonical_path.join("_corpus_meta.json").exists() {
+        eprintln!(
+            "Canonical index already exists at {}.\n\
+             merge-partitions never clobbers existing canonical data. If you \
+             want to rebuild from the partition dirs, remove the canonical \
+             first:\n  sovereign corpus remove {corpus_id}",
+            canonical_path.display()
+        );
+        return 1;
+    }
+
+    // Discover every <corpus>-partition-*/ directory. Self-partition,
+    // peer-partition, doesn't matter — we own the chunks once they're
+    // on local disk, and merge_shards dedupes by content_hash so
+    // overlap between partitions is collapsed automatically.
+    let prefix = format!("{corpus_id}-partition-");
+    let mut partitions: Vec<(PathBuf, String)> = Vec::new();
+    match std::fs::read_dir(&index_dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                let name = entry.file_name();
+                let Some(name_str) = name.to_str() else {
+                    continue;
+                };
+                let Some(suffix) = name_str.strip_prefix(&prefix) else {
+                    continue;
+                };
+                if !path.join("_corpus_meta.json").exists() {
+                    continue;
+                }
+                partitions.push((path, suffix.to_string()));
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to scan {}: {e}", index_dir.display());
+            return 1;
+        }
+    }
+    partitions.sort_by(|a, b| a.1.cmp(&b.1));
+
+    if partitions.is_empty() {
+        eprintln!(
+            "No partitions found at {}/{}-partition-* — nothing to merge.",
+            index_dir.display(),
+            corpus_id
+        );
+        return 1;
+    }
+
+    // Discovery summary: chunk counts, processed_shards, embedding
+    // model. Open each partition once and reuse the handle through
+    // the preflight checks.
+    println!(
+        "Found {} partition(s) for '{}':",
+        partitions.len(),
+        corpus_id
+    );
+    println!();
+
+    struct PartitionSummary {
+        path: PathBuf,
+        embedding_model: String,
+        embedding_dimensions: usize,
+        total_shards: Option<usize>,
+    }
+
+    let mut summaries: Vec<PartitionSummary> = Vec::new();
+    let mut union_processed: std::collections::BTreeSet<u64> =
+        std::collections::BTreeSet::new();
+    let mut total_chunks_input: u64 = 0;
+
+    for (path, label) in &partitions {
+        let idx = match corpus_engine::CorpusIndex::open(path).await {
+            Ok(i) => i,
+            Err(e) => {
+                eprintln!("Failed to open partition {}: {e}", path.display());
+                return 1;
+            }
+        };
+        let info = match idx.info().await {
+            Ok(i) => i,
+            Err(e) => {
+                eprintln!("Failed to read partition info {}: {e}", path.display());
+                return 1;
+            }
+        };
+        let processed: Vec<u64> = idx
+            .processed_shards()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|n| n as u64)
+            .collect();
+        for s in &processed {
+            union_processed.insert(*s);
+        }
+        // Read total_shards + scope directly from the meta JSON since
+        // they're not exposed via IndexInfo. Falls back to None on any
+        // parse error — fine, we'll just not stamp them on canonical.
+        let raw = std::fs::read_to_string(path.join("_corpus_meta.json"))
+            .unwrap_or_default();
+        let meta_v: serde_json::Value =
+            serde_json::from_str(&raw).unwrap_or(serde_json::Value::Null);
+        let total_shards = meta_v["total_shards"].as_u64().map(|n| n as usize);
+
+        total_chunks_input += info.chunk_count;
+        println!(
+            "  partition-{}: {} chunks, {}/{} shards processed{}",
+            label,
+            info.chunk_count,
+            processed.len(),
+            total_shards
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "?".to_string()),
+            if let Some(missing_shards) = total_shards.map(|n| {
+                (0..n as u64)
+                    .filter(|s| !processed.iter().any(|p| p == s))
+                    .collect::<Vec<_>>()
+            }) {
+                if missing_shards.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (missing: {missing_shards:?})")
+                }
+            } else {
+                String::new()
+            }
+        );
+
+        summaries.push(PartitionSummary {
+            path: path.clone(),
+            embedding_model: info.embedding_model,
+            embedding_dimensions: info.embedding_dimensions,
+            total_shards,
+        });
+    }
+
+    // Preflight: validate embedding model + dim across every
+    // partition. Mirrors merge_shards's logic exactly:
+    //   - Empty embedding_model is a wildcard (peer-pull copy bug
+    //     left it blank in the meta; chunks themselves are valid).
+    //   - Two distinct non-empty values error out.
+    //   - Dims compared strictly.
+    //   - At least one non-empty model required (the canonical
+    //     gets stamped with the resolved model so future query
+    //     paths can pick the right embed function).
+    // Doing the check here gives a clearer message before the
+    // merge starts spending I/O.
+    let first = &summaries[0];
+    let mut resolved_model: String = first.embedding_model.clone();
+    for s in summaries.iter().skip(1) {
+        match (resolved_model.is_empty(), s.embedding_model.is_empty()) {
+            (true, false) => {
+                resolved_model = s.embedding_model.clone();
+            }
+            (false, false) if s.embedding_model != resolved_model => {
+                eprintln!(
+                    "\nEmbedding model mismatch — refusing to merge:\n  \
+                     {} uses '{}'\n  resolved model so far is '{}'",
+                    s.path.display(),
+                    s.embedding_model,
+                    resolved_model,
+                );
+                return 1;
+            }
+            _ => {}
+        }
+        if s.embedding_dimensions != first.embedding_dimensions {
+            eprintln!(
+                "\nEmbedding dimension mismatch — refusing to merge:\n  \
+                 {} = {}\n  {} = {}",
+                first.path.display(),
+                first.embedding_dimensions,
+                s.path.display(),
+                s.embedding_dimensions,
+            );
+            return 1;
+        }
+    }
+    if resolved_model.is_empty() {
+        eprintln!(
+            "\nEvery partition has an empty embedding_model — cannot stamp \
+             the canonical meta with a usable model. Aborting."
+        );
+        return 1;
+    }
+    let blank_inputs: Vec<&PathBuf> = summaries
+        .iter()
+        .filter(|s| s.embedding_model.is_empty())
+        .map(|s| &s.path)
+        .collect();
+    if !blank_inputs.is_empty() {
+        println!();
+        println!(
+            "WARN: {} partition(s) have an empty embedding_model in their \
+             meta. This is the peer-pull stamp bug — chunks themselves are \
+             valid (the peer's actual embedder produced them). The merged \
+             canonical will be stamped with '{}' (resolved from the other \
+             partitions).",
+            blank_inputs.len(),
+            resolved_model,
+        );
+        for p in blank_inputs {
+            println!("  - {}", p.display());
+        }
+    }
+
+    // Resolve the canonical total_shards for the output meta. Priority:
+    //   1. Highest total_shards stamped on any input partition (if any
+    //      partition was extracted post-stamping, it's authoritative).
+    //   2. max(union(processed_shards)) + 1 fallback.
+    let total_shards_canonical: Option<usize> = summaries
+        .iter()
+        .filter_map(|s| s.total_shards)
+        .max()
+        .or_else(|| union_processed.iter().max().map(|m| (*m + 1) as usize));
+
+    println!();
+    println!("Merge plan:");
+    println!("  embedding model:  {} ({}d)", resolved_model, first.embedding_dimensions);
+    println!("  total chunks in:  {total_chunks_input} (across {} partitions; will dedup during merge)", summaries.len());
+    println!(
+        "  processed shards: {} of {}{}",
+        union_processed.len(),
+        total_shards_canonical
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "?".to_string()),
+        match total_shards_canonical {
+            Some(n) => {
+                let missing: Vec<u64> = (0..n as u64)
+                    .filter(|s| !union_processed.contains(s))
+                    .collect();
+                if missing.is_empty() {
+                    " (FULL COVERAGE — safe to merge)".to_string()
+                } else {
+                    format!(" (still missing: {missing:?} — merge will produce a partial index)")
+                }
+            }
+            None => String::new(),
+        }
+    );
+    println!("  output:           {}", canonical_path.display());
+    if remove_partitions {
+        println!("  cleanup:          DELETE all {} partition dir(s) after merge succeeds", summaries.len());
+    } else {
+        println!("  cleanup:          partitions left in place (re-run with --remove-partitions to delete)");
+    }
+
+    if !yes {
+        eprint!(
+            "\nProceed? [y/N] "
+        );
+        use std::io::BufRead;
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        if stdin.lock().read_line(&mut line).is_err() {
+            eprintln!("aborted (could not read stdin)");
+            return 1;
+        }
+        let answer = line.trim().to_lowercase();
+        if answer != "y" && answer != "yes" {
+            println!("aborted.");
+            return 0;
+        }
+    }
+
+    // Hand off to the shared recovery primitive. CLI prints
+    // human-readable progress at each phase boundary; the daemon's
+    // auto-recover loop calls the same function with a tracing-only
+    // progress callback. Keeping the merge logic in one place stops
+    // the two paths from drifting.
+    let merge_start = std::time::Instant::now();
+    let progress_cb: std::sync::Arc<
+        dyn Fn(corpus_engine::MergePhaseProgress) + Send + Sync,
+    > = std::sync::Arc::new(|phase| match phase {
+        corpus_engine::MergePhaseProgress::DiscoveryComplete { partition_count } => {
+            eprintln!("\n[1/3] Merging {partition_count} partition(s) (chunk copy + dedup pass)…");
+        }
+        corpus_engine::MergePhaseProgress::MergeComplete {
+            chunks_merged,
+            chunks_deduped,
+        } => {
+            eprintln!(
+                "  merged {chunks_merged} chunks ({chunks_deduped} duplicates collapsed during merge)"
+            );
+            eprintln!("\n[2/3] Stamping canonical metadata (scope, processed_shards, total_shards, provenance)…");
+        }
+        corpus_engine::MergePhaseProgress::MetaStamped => {
+            eprintln!("  ✓");
+            eprintln!("\n[3/3] Building search indexes (IVF-PQ + FTS)…");
+            eprintln!(
+                "  this is the slow phase; on Wikipedia-scale data it can take 30+ minutes"
+            );
+        }
+        corpus_engine::MergePhaseProgress::BuildSubPhase { done, total } => {
+            if total > 0 {
+                eprintln!("  build progress: {done}/{total}");
+            }
+        }
+        corpus_engine::MergePhaseProgress::Complete => {
+            eprintln!("  ✓ canonical marked complete");
+        }
+    });
+
+    let report = match corpus_engine::merge_partitions_into_canonical(
+        &index_dir,
+        &corpus_id,
+        Some(progress_cb),
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("\nmerge_partitions_into_canonical failed: {e}");
+            eprintln!("Canonical (if partial) is at {}.", canonical_path.display());
+            eprintln!(
+                "You can retry with: sovereign corpus install {corpus_id}  \
+                 (resume picks up the partial state)"
+            );
+            return 1;
+        }
+    };
+
+    // ── Optional cleanup ──────────────────────────────────────────
+    if remove_partitions {
+        println!("\nRemoving partition directories…");
+        for path in &report.partition_paths {
+            match std::fs::remove_dir_all(path) {
+                Ok(_) => println!("  removed {}", path.display()),
+                Err(e) => eprintln!("  WARN: failed to remove {}: {e}", path.display()),
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "✓ merge-partitions complete in {:.1}s.",
+        merge_start.elapsed().as_secs_f64(),
+    );
+    println!("  canonical:        {}", report.canonical_path.display());
+    println!("  chunks:           {} (input {}, deduped during merge {})", report.chunks_merged, report.chunks_input, report.chunks_input.saturating_sub(report.chunks_merged));
+    println!(
+        "  shards covered:   {} of {}",
+        report.shard_union.len(),
+        report
+            .total_shards
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "?".to_string()),
+    );
+    println!("  embedding model:  {} ({}d)", report.embedding_model, report.embedding_dimensions);
+    println!();
+    println!("Next: the daemon's installed_indexes() picks up the canonical on its next tick.");
+    println!("Verify with: sovereign corpus diag {corpus_id}");
     0
 }
 

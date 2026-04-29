@@ -134,6 +134,59 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // within CHECK_INTERVAL.
         discover_and_spawn_pull_loops(state.clone(), self_id, daemon_port).await;
 
+        // ── Stranded-partition recovery (proactive) ──────────────
+        //
+        // Detect corpora with `<corpus>-partition-*/` dirs on disk
+        // but no canonical, and try to merge them into a canonical
+        // ourselves. The deadlock this catches: the queue-mode
+        // ingest's handoff blob lives in the in-memory MeshStore,
+        // which is wiped on every daemon restart; if no peer in
+        // the mesh still gossips the blob when we come back up,
+        // the dispatcher's existing recovery path
+        // (`find_local_handoff_for_corpus → spawn_queue_merge`) has
+        // nothing to fire from. Without a proactive merge, the
+        // corpus stays stranded indefinitely even though every
+        // shard's chunks are present locally across the partition
+        // dirs.
+        //
+        // This scan fires every CHECK_INTERVAL (30s) but the
+        // recovery primitive itself enforces a 5-minute per-corpus
+        // cooldown, so a long-running merge isn't relaunched.
+        // `try_recover_stranded_partitions` short-circuits cheaply
+        // when nothing to do (no partitions / canonical exists).
+        let stranded = engine.corpora_with_stranded_partitions();
+        for corpus_id in &stranded {
+            let outcome = commonwealth_api::auto_recover::try_recover_stranded_partitions(
+                engine.index_dir(),
+                corpus_id,
+            )
+            .await;
+            match outcome {
+                commonwealth_api::auto_recover::RecoveryOutcome::Recovered { chunks, shards_covered } => {
+                    tracing::info!(
+                        corpus = %corpus_id,
+                        chunks,
+                        shards_covered,
+                        "auto_ingest: proactive stranded-partition recovery SUCCEEDED — \
+                         canonical now exists; gossip will re-advertise"
+                    );
+                }
+                commonwealth_api::auto_recover::RecoveryOutcome::Failed(err) => {
+                    tracing::warn!(
+                        corpus = %corpus_id,
+                        recovery_error = %err,
+                        "auto_ingest: proactive stranded-partition recovery FAILED — \
+                         operator can run `sovereign corpus merge-partitions {}` manually",
+                        corpus_id,
+                    );
+                }
+                _ => {
+                    // AlreadyHasCanonical / NotEnoughPartitions /
+                    // InCooldown — quiet on the happy paths.
+                }
+            }
+        }
+
         let in_progress_vec: Vec<String> = engine.in_progress_ingestions();
         let in_progress: HashSet<String> = in_progress_vec.iter().cloned().collect();
         let new_ingest_appeared = in_progress
