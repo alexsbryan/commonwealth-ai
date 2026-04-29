@@ -35,9 +35,24 @@ use crate::openai_types::ChatCompletionRequest;
 /// Tool names that trigger the approval gate. When any of these
 /// appears in the request's `tool_choice` or `tools` array AND the
 /// feature is unapproved, the request is rejected pre-inference.
+///
+/// Includes both the canonical (renamed) ids and their legacy
+/// aliases so the gate fires regardless of which spelling the
+/// agent advertises. The MCP `tools/list` advertises both during
+/// the alias period, so an agent that cached the old `tools/list`
+/// will still send `write_note` in its tools array — we must
+/// recognise it.
+///
+/// Phase 6 trims this list down once the retired entries
+/// (`provision_feature`, `archive_feature`, `record_atos_event`,
+/// `write_redteam_finding`) are removed from the registry.
 const WRITE_INTENT_TOOLS: &[&str] = &[
+    // Canonical (renamed) ids.
+    "note",
+    // Legacy aliases — kept while `tools/list` advertises them.
     "write_note",
     "promote_note",
+    // Retired but still registered until Phase 6.
     "provision_feature",
     "archive_feature",
     "record_atos_event",

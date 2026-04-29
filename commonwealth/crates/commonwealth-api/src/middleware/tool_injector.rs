@@ -162,13 +162,18 @@ mod tests {
 
     #[tokio::test]
     async fn injects_all_atos_tools_when_absent() {
+        // Phase 2 of the CLI refactor renamed `read_notes` →
+        // `notes` and `write_note` → `note` at the descriptor
+        // layer. The injector pulls names from
+        // `sovereign_tools::manifest::atos_critical_descriptors`,
+        // so it advertises the canonical (renamed) ids.
         let inj = ToolInjector::new();
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         inj.process(&mut req, &mut session, &ctx()).await.unwrap();
         let tools = req.tools.unwrap();
-        assert!(tools.iter().any(|t| t.function.name == "read_notes"));
-        assert!(tools.iter().any(|t| t.function.name == "write_note"));
+        assert!(tools.iter().any(|t| t.function.name == "notes"));
+        assert!(tools.iter().any(|t| t.function.name == "note"));
         assert!(tools.iter().any(|t| t.function.name == "read_note_digest"));
         assert!(tools.iter().any(|t| t.function.name == "read_note_by_id"));
         assert!(tools.iter().any(|t| t.function.name == "write_redteam_finding"));
@@ -176,12 +181,16 @@ mod tests {
 
     #[tokio::test]
     async fn client_registered_tool_wins_on_name_collision() {
+        // Probes the canonical id (`note`) since that's what the
+        // injector advertises post-rename. A client that pre-
+        // registered a tool with the same name keeps its
+        // description.
         let inj = ToolInjector::new();
         let mut req = minimal_request();
         req.tools = Some(vec![ToolDefinition {
             kind: "function".into(),
             function: ToolFunction {
-                name: "write_note".into(),
+                name: "note".into(),
                 description: Some("client override".into()),
                 parameters: json!({"type":"object","properties":{"custom":{"type":"string"}}}),
             },
@@ -189,7 +198,7 @@ mod tests {
         let mut session = MiddlewareSession::default();
         inj.process(&mut req, &mut session, &ctx()).await.unwrap();
         let tools = req.tools.unwrap();
-        let wn = tools.iter().find(|t| t.function.name == "write_note").unwrap();
+        let wn = tools.iter().find(|t| t.function.name == "note").unwrap();
         assert_eq!(wn.function.description.as_deref(), Some("client override"));
     }
 

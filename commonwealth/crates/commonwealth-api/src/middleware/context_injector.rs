@@ -611,9 +611,12 @@ mod tests {
             "CLI catalog header missing from preamble"
         );
         // Sample tool from the manifest — regresses if the manifest
-        // integration stops pulling descriptors.
+        // integration stops pulling descriptors. Phase 2 of the CLI
+        // refactor renamed `symbol_lookup` → `symbols` at the
+        // descriptor layer, so the canonical id is what the
+        // catalog renders.
         assert!(
-            content.contains("symbol_lookup"),
+            content.contains("symbols"),
             "expected a code-intel tool id in the catalog"
         );
         // Grouping tag from the catalog layout.

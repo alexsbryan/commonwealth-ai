@@ -6442,6 +6442,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "sovereign-atos",
  "sovereign-core",
  "tempfile",
  "thiserror 2.0.18",
