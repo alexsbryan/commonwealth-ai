@@ -1397,6 +1397,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reset_for_resume_flips_built_flags_and_in_progress() {
+        // After a "completed" run, repair must put the meta back into a
+        // shape that auto-resume / install will treat as work-needed.
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        let index_dir = dir.path().join("test-corpus");
+
+        // Simulate a completed run: all built, ingestion not in progress.
+        idx.mark_indexes_built().expect("mark_indexes_built");
+        idx.mark_vector_index_built().expect("mark_vector");
+        // content_fts_built/title_fts_built default false in our fixture;
+        // for a faithful "completed" simulation, write them on directly.
+        {
+            let mut meta = read_meta(&index_dir).unwrap();
+            meta.content_fts_built = true;
+            meta.title_fts_built = true;
+            meta.ingestion_in_progress = false;
+            write_meta(&index_dir, &meta).unwrap();
+        }
+        let pre = read_meta(&index_dir).unwrap();
+        assert!(pre.indexes_built && pre.vector_index_built);
+        assert!(pre.content_fts_built && pre.title_fts_built);
+        assert!(!pre.ingestion_in_progress);
+
+        idx.reset_for_resume().expect("reset_for_resume");
+
+        let post = read_meta(&index_dir).unwrap();
+        assert!(!post.indexes_built);
+        assert!(!post.vector_index_built);
+        assert!(!post.content_fts_built);
+        assert!(!post.title_fts_built);
+        assert!(post.ingestion_in_progress);
+    }
+
+    #[tokio::test]
+    async fn reset_for_drift_recovery_is_alias_for_reset_for_resume() {
+        // Legacy callers should see identical on-disk effects.
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        let index_dir = dir.path().join("test-corpus");
+
+        idx.mark_indexes_built().unwrap();
+        idx.reset_for_drift_recovery().expect("reset");
+        let meta = read_meta(&index_dir).unwrap();
+        assert!(!meta.indexes_built);
+        assert!(meta.ingestion_in_progress);
+    }
+
+    #[tokio::test]
     async fn fetch_chunks_by_title_unknown_title_returns_empty() {
         let dir = tempdir().unwrap();
         let idx = create_test_index(dir.path()).await;

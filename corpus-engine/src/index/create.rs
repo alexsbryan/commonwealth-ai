@@ -543,17 +543,28 @@ impl CorpusIndex {
             .unwrap_or(false)
     }
 
-    /// Persist that search indexes have been successfully built.
-    /// Clear the per-phase index-built flags. Called by the drift
-    /// recovery path so the post-embed build phase actually rebuilds
-    /// IVF-PQ + FTS over the union of existing + newly-embedded
-    /// chunks. Without this, `indexes_are_built()` would short-circuit
-    /// the build and leave the recovery chunks unsearchable.
+    /// Reset the meta flags so a subsequent `ingest()` treats this
+    /// index as actively in-progress and rebuilds search indexes.
     ///
-    /// Also flips `ingestion_in_progress` back to true so the install
-    /// state machine treats the corpus as actively re-ingesting until
-    /// `mark_ingestion_complete` runs at the end of the recovery pass.
-    pub fn reset_for_drift_recovery(&self) -> Result<()> {
+    /// Concretely: clears `indexes_built`, `vector_index_built`,
+    /// `content_fts_built`, `title_fts_built`, and flips
+    /// `ingestion_in_progress` back to `true`. Leaves committed data
+    /// (chunks, processed_shards, committed_iter_pos) untouched, so
+    /// resume will skip already-processed work.
+    ///
+    /// Two callers today:
+    /// - Drift recovery: post-embed build phase needs to rebuild
+    ///   IVF-PQ + FTS over the union of existing + newly-embedded
+    ///   chunks. Without this reset, `indexes_are_built()` would
+    ///   short-circuit the build and leave recovery chunks
+    ///   unsearchable.
+    /// - `corpus repair` CLI: a partition that completed with
+    ///   missing shards (e.g. resume-cursor-rewind bug) is
+    ///   marked done. Repair flips state back to in-progress so
+    ///   auto-resume / install picks it up. The embed-side dedup
+    ///   gate makes this safe — already-embedded content_hashes
+    ///   are skipped on the next pass.
+    pub fn reset_for_resume(&self) -> Result<()> {
         let index_dir = std::path::Path::new(self.db.uri());
         let mut meta = read_meta(index_dir)?;
         meta.indexes_built = false;
@@ -562,6 +573,12 @@ impl CorpusIndex {
         meta.title_fts_built = false;
         meta.ingestion_in_progress = true;
         write_meta(index_dir, &meta)
+    }
+
+    /// Legacy alias for `reset_for_resume`. Drift-recovery callers
+    /// use this name; the body is identical.
+    pub fn reset_for_drift_recovery(&self) -> Result<()> {
+        self.reset_for_resume()
     }
 
     pub fn mark_indexes_built(&self) -> Result<()> {
