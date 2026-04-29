@@ -50,6 +50,9 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
             size_compressed_gb: 0.0,
             size_indexed_gb: 0.0,
             schema_version: 1,
+            kind: Default::default(),
+            on_demand: false,
+            parent_corpus_id: None,
         },
         acquire: AcquirerConfig::Custom {
             kind: "sqlite".into(),
@@ -74,6 +77,7 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
         }),
         update: None,
         prebuilt: None,
+        catalog: None,
         filters: Vec::new(),
         filter_mode: Default::default(),
     }
@@ -123,6 +127,9 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
             size_compressed_gb: 0.0,
             size_indexed_gb: 0.0,
             schema_version: 1,
+            kind: Default::default(),
+            on_demand: false,
+            parent_corpus_id: None,
         },
         acquire: AcquirerConfig::Custom {
             kind: "sqlite".into(),
@@ -147,6 +154,7 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
         }),
         update: None,
         prebuilt: None,
+        catalog: None,
         filters: Vec::new(),
         filter_mode: Default::default(),
     }
@@ -217,6 +225,9 @@ pub fn conversation_history_recipe(
             size_compressed_gb: 0.0,
             size_indexed_gb: 0.0,
             schema_version: 1,
+            kind: Default::default(),
+            on_demand: false,
+            parent_corpus_id: None,
         },
         acquire: AcquirerConfig::Custom {
             kind: "sqlite".into(),
@@ -244,6 +255,7 @@ pub fn conversation_history_recipe(
         }),
         update: None,
         prebuilt: None,
+        catalog: None,
         filters: Vec::new(),
         filter_mode: Default::default(),
     }

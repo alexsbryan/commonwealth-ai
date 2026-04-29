@@ -65,6 +65,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "diag" => cmd_corpus_diag(&args[1..]).await,
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
+        "catalog" => crate::corpus_catalog_cmd::run_catalog(&args[1..]).await,
         other => {
             eprintln!("Unknown corpus subcommand: {other}");
             crate::util::help::print(&HELP_CORPUS);

@@ -1,4 +1,6 @@
 pub mod calendar;
+pub mod catalog;
+pub mod catalog_ingest;
 pub mod code;
 pub mod compute;
 pub mod corpus;

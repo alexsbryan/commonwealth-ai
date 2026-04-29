@@ -145,7 +145,30 @@ Anti-fabrication guardrails:\n\
   worse than an honest 'I don't know' — it poisons the user's mental \
   model of what's real. If the phrase the user used (e.g. a specific \
   project name, person, API) is not something you can speak to with \
-  concrete factual confidence, say so plainly.";
+  concrete factual confidence, say so plainly.\n\
+\n\
+CATALOG-AWARE SOURCES — works the system has metadata for but has \
+NOT read in detail.\n\
+A retrieval block prefixed with `CATALOG:` lists works whose \
+metadata (title, author, era, subjects) is indexed but whose full \
+text has not been ingested. Treat them as a separate evidence \
+tier, distinct from RETRIEVED and PARAMETRIC:\n\
+- Use catalog metadata to orient the user about what the work is \
+  (author, year, subject area, themes).\n\
+- State explicitly that you have not read the full text yet.\n\
+- Do NOT invent passages, quotes, plot details, character motivations, \
+  thematic readings, or scholarly framings beyond what the catalog \
+  metadata supplies. If the user asks for close-reading detail, say \
+  you don't have it from a close reading.\n\
+- If the catalog hits are clearly relevant to the question, end the \
+  reply with a one-sentence ingest offer — name the work and the \
+  rough time estimate. Format: \"Want me to read [Title] in depth? \
+  It would take about N minutes.\" If multiple are relevant, name \
+  the single most central one rather than listing all.\n\
+- A catalog hit tagged ALREADY INGESTED → <corpus_id> means the work \
+  has already been read on a prior turn — quote and synthesise from \
+  the per-work corpus's full-text passages instead of offering to \
+  ingest again.";
 
 /// Thinking directive — orients `<think>` toward substantive reasoning.
 ///
@@ -621,16 +644,36 @@ fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&str>) -> &'a 
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// grouped by provenance tier (corpus vs web) and staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
+    format_scored_chunks_with_kinds(chunks, max_chars, None)
+}
+
+/// Like [`format_scored_chunks`], but if a `kinds` map is supplied,
+/// chunks from `Catalog` corpora are routed into a separate
+/// "CATALOG-AWARE SOURCES" section that the synthesis prompt
+/// (`KNOWLEDGE_SYNTHESIS_SYSTEM`) knows how to handle (orient from
+/// metadata, do not invent, end with ingest offer).
+fn format_scored_chunks_with_kinds(
+    chunks: &[corpus_engine::ScoredChunk],
+    max_chars: usize,
+    kinds: Option<&std::collections::HashMap<String, corpus_engine::CorpusKind>>,
+) -> String {
     let mut corpus_parts = Vec::new();
     let mut web_parts = Vec::new();
+    let mut catalog_parts = Vec::new();
     let mut total = 0;
 
     for c in chunks {
+        let is_catalog = matches!(
+            kinds.and_then(|m| m.get(&c.corpus_id)),
+            Some(corpus_engine::CorpusKind::Catalog)
+        );
         let body = strip_leading_title_duplicate(&c.content, c.title.as_deref());
         let content = truncate_chunk_content(body);
         let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
 
-        let (label, bucket) = if c.url.is_some() {
+        let (label, bucket) = if is_catalog {
+            (format!("[Catalog: {title}]"), &mut catalog_parts)
+        } else if c.url.is_some() {
             (format!("[Web: {title}]"), &mut web_parts)
         } else {
             (format!("[Source: {title}]"), &mut corpus_parts)
@@ -652,6 +695,12 @@ fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize)
         sections.push(format!(
             "## From knowledge base\n\n{}",
             corpus_parts.join("\n\n---\n\n")
+        ));
+    }
+    if !catalog_parts.is_empty() {
+        sections.push(format!(
+            "## CATALOG-AWARE SOURCES (metadata only — full text NOT yet ingested)\n\n{}",
+            catalog_parts.join("\n\n---\n\n")
         ));
     }
     if !web_parts.is_empty() {
@@ -1184,20 +1233,29 @@ impl Runtime {
             tracing::info!(count = indexes.len(), "{label}: found corpus indexes");
         }
 
-        // Filter 1 — drop Code corpora. Code indexes (produced by
-        // `sovereign code index`) are served by the dedicated
-        // symbol_lookup / code_search MCP tools; pulling them into
-        // chat retrieval lets BM25 keyword overlap on tokens like
-        // `main`, `argument`, or `democracy` drown out the actual
-        // knowledge corpus for the turn. Keeping them completely
-        // out of chat search is the default the user signed up for;
-        // an explicit "search my code too" affordance can re-enable
-        // them later with a scoped flag.
+        // Filter 1 — drop Code corpora; keep Knowledge + Catalog.
+        //
+        // Code indexes (produced by `sovereign code index`) are served
+        // by the dedicated symbol_lookup / code_search MCP tools;
+        // pulling them into chat retrieval lets BM25 keyword overlap
+        // on tokens like `main`, `argument`, or `democracy` drown out
+        // the actual knowledge corpus for the turn.
+        //
+        // Catalog corpora are kept — they're the primary signal for
+        // "system knows of this work but hasn't read it yet." The
+        // synthesis prompt has a CATALOG-AWARE section that tells
+        // the model how to handle them (no confabulation, end with
+        // an ingest offer). `format_scored_chunks` buckets them
+        // into a separate evidence tier downstream.
         let total_indexes = indexes.len();
         let indexes: Vec<_> = indexes
             .into_iter()
             .filter(|info| {
-                if matches!(info.kind, corpus_engine::CorpusKind::Knowledge) {
+                if matches!(
+                    info.kind,
+                    corpus_engine::CorpusKind::Knowledge
+                        | corpus_engine::CorpusKind::Catalog
+                ) {
                     true
                 } else {
                     tracing::debug!(
@@ -3787,7 +3845,29 @@ impl Runtime {
         // 4d. Build prompt. Retrieved content first, question last —
         // keeps the model from reasoning purely from training weights
         // during its <think> phase (when Primary path is taken).
-        let doc_context = format_scored_chunks(&chunks, knowledge_char_budget);
+        //
+        // Build a `corpus_id → CorpusKind` map so catalog hits route
+        // into a separate evidence tier — the synthesis prompt
+        // (`KNOWLEDGE_SYNTHESIS_SYSTEM`) has dedicated guidance for
+        // them. Best-effort: if `installed_indexes()` errors we fall
+        // back to no-kinds formatting (pre-catalog behaviour).
+        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
+            if let Some(engine) = &self.corpus_engine {
+                engine
+                    .installed_indexes()
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|info| (info.corpus_id, info.kind))
+                    .collect()
+            } else {
+                Default::default()
+            };
+        let doc_context = format_scored_chunks_with_kinds(
+            &chunks,
+            knowledge_char_budget,
+            Some(&kinds),
+        );
         let corpus_display = context.installed_corpora_display();
         let prompt = format!(
             "RETRIEVED FROM {corpus_display}:\n\n{doc_context}\n\n\

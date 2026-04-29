@@ -11,6 +11,7 @@ mod design_onboarding;
 mod design_session;
 mod enrich_cmd;
 mod eval_cmd;
+mod corpus_catalog_cmd;
 mod doc_fetcher;
 mod doctor_cmd;
 mod found;
