@@ -180,6 +180,16 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                         corpus_id,
                     );
                 }
+                commonwealth_api::auto_recover::RecoveryOutcome::IncompleteCoverage {
+                    ..
+                } => {
+                    // auto_recover already logged the detailed WARN
+                    // with covered/total/missing. Stay quiet here so
+                    // the 30s tick doesn't spam logs while we wait
+                    // for the peer with full coverage to produce
+                    // the canonical (or for the missing shards to
+                    // land locally via collaborate-pull).
+                }
                 _ => {
                     // AlreadyHasCanonical / NotEnoughPartitions /
                     // InCooldown — quiet on the happy paths.
