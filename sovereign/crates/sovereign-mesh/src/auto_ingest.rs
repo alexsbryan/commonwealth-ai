@@ -478,10 +478,20 @@ async fn spawn_local_ingest(state: AppState, corpus_id: String) {
 /// in commonwealth_core::knowledge::LEASE_MS (5 minutes → 100s heartbeat).
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(100);
 
-/// How many consecutive 5xx responses to `next_unit` we tolerate before
-/// giving up on a handoff. Protects against the case where the coordinator
-/// crashed and can't serve the queue.
-const MAX_NEXT_UNIT_5XX: u32 = 5;
+/// How many consecutive `next_unit` failures we tolerate before giving up
+/// on a handoff. Counts both 5xx responses (coordinator alive but broken)
+/// and connection errors (coordinator unreachable, port changed, stuck
+/// reqwest pool). Without counting connection errors, a coordinator
+/// restart that leaves the old port unresponsive produces an immortal
+/// pull_loop that retries every 15s forever — observed in the wild as
+/// 1700+ retries over 7 hours, blocking re-discovery of the same
+/// handoff_id from gossip and (because the mesh_store entry survives in
+/// gossip and gets re-implanted into the coordinator's store on reconnect)
+/// allowing two ingests to run on the same partition once the queue
+/// reopens. Breaking out lets the next auto_ingest tick respawn with a
+/// fresh `reqwest::Client`, which also recovers from any stuck connection
+/// pool state.
+const MAX_NEXT_UNIT_FAILURES: u32 = 5;
 
 /// Scan gossip for open pull-based handoffs and spawn pull loops for any
 /// the local node is eligible to pull from. Called every auto_ingest tick.
@@ -635,7 +645,7 @@ async fn pull_loop(
     let handoff_id = handoff.handoff_id;
     let corpus_id = handoff.corpus_id.clone();
     let recipe_id = handoff.recipe_id.clone();
-    let mut consecutive_5xx = 0u32;
+    let mut consecutive_failures = 0u32;
 
     tracing::info!(
         handoff = %handoff_id,
@@ -658,8 +668,19 @@ async fn pull_loop(
         {
             Ok(r) => r,
             Err(e) => {
+                consecutive_failures += 1;
+                if consecutive_failures >= MAX_NEXT_UNIT_FAILURES {
+                    tracing::warn!(
+                        handoff = %handoff_id,
+                        consecutive_failures,
+                        error = %e,
+                        "pull_loop: too many next_unit connection failures — giving up"
+                    );
+                    break;
+                }
                 tracing::warn!(
                     handoff = %handoff_id,
+                    consecutive_failures,
                     error = %e,
                     "pull_loop: next_unit request failed — retrying"
                 );
@@ -703,11 +724,11 @@ async fn pull_loop(
             break;
         }
         if status.is_server_error() {
-            consecutive_5xx += 1;
-            if consecutive_5xx >= MAX_NEXT_UNIT_5XX {
+            consecutive_failures += 1;
+            if consecutive_failures >= MAX_NEXT_UNIT_FAILURES {
                 tracing::warn!(
                     handoff = %handoff_id,
-                    consecutive_5xx,
+                    consecutive_failures,
                     "pull_loop: too many 5xx responses — giving up"
                 );
                 break;
@@ -715,7 +736,7 @@ async fn pull_loop(
             tokio::time::sleep(Duration::from_secs(5)).await;
             continue;
         }
-        consecutive_5xx = 0;
+        consecutive_failures = 0;
 
         // Parse the leased payload. We use a minimal inline struct here
         // rather than importing the handler's response enum — deserialize
