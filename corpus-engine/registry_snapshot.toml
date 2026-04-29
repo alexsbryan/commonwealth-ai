@@ -80,14 +80,26 @@ sha256 = ""
 
 [[recipes]]
 id = "gutenberg"
-name = "Project Gutenberg"
-description = "61,000 English-language public domain books from the manu/project_gutenberg HuggingFace dataset."
+name = "Project Gutenberg Catalog"
+description = "Catalog of 70K+ public-domain works (~50 MB indexed). Lets the system know *of* every Gutenberg book; on-demand single-work ingest pairs with `gutenberg-work` so any work can be fully read on request."
 license = "Public Domain"
-size_compressed_gb = 9.0
-size_indexed_gb = 25.0
+size_compressed_gb = 0.05
+size_indexed_gb = 0.3
 enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "gutenberg-work"
+name = "Project Gutenberg — Single Work"
+description = "On-demand single-work ingest. Triggered by the `gutenberg` catalog when the user accepts an ingest offer. Never installed directly."
+license = "Public Domain"
+size_compressed_gb = 0.002
+size_indexed_gb = 0.05
+enrichment_enabled = true
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg-work/recipe.toml"
 sha256 = ""
 
 [[recipes]]

@@ -352,10 +352,10 @@ mod tests {
     fn bundled_snapshot_parses() {
         let registry = RecipeRegistry::from_bundled(None);
         let entries = registry.list_entries();
-        // 8 entries: 7 single-layer recipes + the new
-        // `stackexchange-knowledge` paired with `stackexchange`
-        // (reference layer).
-        assert_eq!(entries.len(), 8, "snapshot should have 8 entries");
+        // 9 entries after the catalog-corpus rollout adds
+        // `gutenberg-work` (the on-demand single-work content
+        // recipe paired with the `gutenberg` catalog).
+        assert_eq!(entries.len(), 9, "snapshot should have 9 entries");
     }
 
     #[test]
@@ -395,15 +395,17 @@ mod tests {
     fn catalog_returns_all_entries() {
         let registry = RecipeRegistry::from_bundled(None);
         let catalog = registry.catalog();
-        // 7 → 8 with the addition of `stackexchange-knowledge` (the
-        // multi-answer trade-off layer paired with the existing
-        // `stackexchange` reference layer).
-        assert_eq!(catalog.len(), 8);
+        // 8 → 9 with the addition of `gutenberg-work` (the on-demand
+        // single-work content recipe paired with the `gutenberg`
+        // catalog corpus).
+        assert_eq!(catalog.len(), 9);
         assert!(catalog.iter().any(|c| c.id == "wikipedia"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia-simple"));
         assert!(catalog.iter().any(|c| c.id == "sep"));
         assert!(catalog.iter().any(|c| c.id == "stackexchange"));
         assert!(catalog.iter().any(|c| c.id == "stackexchange-knowledge"));
+        assert!(catalog.iter().any(|c| c.id == "gutenberg"));
+        assert!(catalog.iter().any(|c| c.id == "gutenberg-work"));
     }
 
     /// Every snapshot entry must have a compile-time bundled TOML so

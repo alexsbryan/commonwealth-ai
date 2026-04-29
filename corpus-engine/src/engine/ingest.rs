@@ -44,7 +44,29 @@ impl CorpusEngine {
         corpus: &CorpusSpec,
         progress: Option<ProgressCallback>,
     ) -> Result<IngestResult> {
+        // ── Pre-flight: refuse on-demand recipes resolved by id. ───
+        //
+        // On-demand recipes (e.g. `gutenberg-work`) are templates —
+        // their TOML carries placeholder `[corpus] id` / acquire URL.
+        // The catalog ingest service is responsible for cloning the
+        // recipe, patching it, and handing it through
+        // `CorpusSpec::Inline`. A direct `CorpusEngine::ingest(
+        // CorpusSpec::Builtin("gutenberg-work"))` would otherwise
+        // happily blast the placeholder URL into a real corpus dir.
+        // We do this BEFORE the embed/disk pre-flights so the guard
+        // fires consistently — even on engines without an embedder
+        // configured.
         let mut recipe = self.resolve_recipe(corpus).await?;
+        if recipe.corpus.on_demand && !matches!(corpus, CorpusSpec::Inline(_)) {
+            return Err(Error::InvalidInput(format!(
+                "recipe `{}` is marked on_demand=true and must be \
+                 ingested via CorpusSpec::Inline with corpus.id, \
+                 acquire URL, and parent_corpus_id all overridden. \
+                 Use CatalogIngestService instead of calling \
+                 ingest() directly.",
+                recipe.corpus.id,
+            )));
+        }
 
         // Ensure parent directory exists so `_downloads` and the
         // per-corpus index dir can be created underneath.
@@ -429,6 +451,26 @@ impl CorpusEngine {
             )
             .await?
         };
+
+        // Stamp the recipe's `kind` and `parent_corpus_id` onto the
+        // freshly-created meta file. Both fields are absent on legacy
+        // indexes (and on indexes whose recipe didn't set them);
+        // `info()` falls back to source_path-based kind derivation
+        // and a None parent for those, so this is purely additive.
+        // Logged-but-non-fatal: `kind` only affects search-time
+        // partitioning, never correctness of the chunks themselves.
+        if let Err(e) = index.set_kind_and_parent(
+            Some(recipe.corpus.kind),
+            recipe.corpus.parent_corpus_id.as_deref(),
+        ) {
+            tracing::warn!(
+                corpus = %recipe.corpus.id,
+                path = %index_path.display(),
+                error = %e,
+                "ingest_inner: failed to stamp kind / parent_corpus_id — \
+                 search-time partitioning will fall back to defaults"
+            );
+        }
 
         // Stamp provenance immediately after the index handle (and
         // therefore the meta file) exists. We do this before any
@@ -1335,6 +1377,7 @@ impl CorpusEngine {
         match corpus {
             CorpusSpec::Builtin(id) => self.registry.fetch_recipe(id).await,
             CorpusSpec::RecipePath(path) => Recipe::from_file(path),
+            CorpusSpec::Inline(recipe) => Ok((**recipe).clone()),
         }
     }
 
@@ -1452,6 +1495,9 @@ impl CorpusEngine {
                 title_column: title_column.clone(),
                 delimiter: delimiter.map(|c| c as u8),
             }),
+            ExtractorConfig::GutenbergCatalog {} => {
+                Box::new(extractors::gutenberg_catalog::GutenbergCatalogExtractor)
+            }
             ExtractorConfig::Parquet {
                 content_column,
                 label_column,

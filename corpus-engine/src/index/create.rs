@@ -221,6 +221,8 @@ impl CorpusIndex {
             scope: None,
             filter_override: None,
             provenance: super::CorpusProvenance::default(),
+            kind: None,
+            parent_corpus_id: None,
         };
         write_meta(path, &meta)?;
 

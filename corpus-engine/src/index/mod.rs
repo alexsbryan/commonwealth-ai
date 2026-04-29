@@ -332,6 +332,19 @@ struct IndexMeta {
     /// corpus until the expansion completes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     filter_override: Option<FilterOverride>,
+
+    /// Explicit kind. When `None`, `info()` derives kind from
+    /// `source_path` (Some → Code, None → Knowledge) for back-compat
+    /// with indexes written before this field existed. New ingests
+    /// always stamp the explicit kind from `Recipe::corpus.kind`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kind: Option<crate::types::CorpusKind>,
+
+    /// Parent corpus id for per-work corpora produced by an on-demand
+    /// catalog ingest. See `IndexInfo::parent_corpus_id`. `None` for
+    /// stand-alone corpora.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent_corpus_id: Option<String>,
 }
 
 /// Provenance of an on-disk index. See the `IndexMeta::provenance`
@@ -561,11 +574,16 @@ impl CorpusIndex {
         // That makes it the authoritative signal for "is this a
         // code corpus?" without needing a schema migration on
         // already-written `_corpus_meta.json` files.
-        let kind = if meta.source_path.is_some() {
-            crate::types::CorpusKind::Code
-        } else {
-            crate::types::CorpusKind::Knowledge
-        };
+        // Prefer the explicit `kind` written at ingest time. Fall back
+        // to source_path-based derivation for indexes written before
+        // the field existed (Some → Code, None → Knowledge).
+        let kind = meta.kind.unwrap_or_else(|| {
+            if meta.source_path.is_some() {
+                crate::types::CorpusKind::Code
+            } else {
+                crate::types::CorpusKind::Knowledge
+            }
+        });
         Ok(IndexInfo {
             corpus_id: meta.corpus_id,
             corpus_name: meta.corpus_name,
@@ -580,6 +598,7 @@ impl CorpusIndex {
             query_sharing,
             is_shard: meta.is_shard,
             chunk_range,
+            parent_corpus_id: meta.parent_corpus_id,
             chunks_expected: meta.chunks_expected,
             resume_from: meta.resume_from,
             enrichment_enabled: meta.enrichment_enabled,
@@ -661,6 +680,29 @@ impl CorpusIndex {
     pub fn source_path(&self) -> Option<PathBuf> {
         let index_dir = Path::new(self.db.uri());
         read_meta(index_dir).ok().and_then(|m| m.source_path.map(PathBuf::from))
+    }
+
+    /// Stamp the corpus kind + parent (catalog) corpus id onto the
+    /// on-disk meta. Called by the ingest pipeline immediately after
+    /// `create_or_resume_with_sharing` so that `info()` reports the
+    /// correct kind and the search layer can partition catalog hits.
+    /// Both args are optional — passing `None` for either leaves the
+    /// existing value unchanged. Errors when meta is missing or
+    /// malformed.
+    pub fn set_kind_and_parent(
+        &self,
+        kind: Option<crate::types::CorpusKind>,
+        parent_corpus_id: Option<&str>,
+    ) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        if let Some(k) = kind {
+            meta.kind = Some(k);
+        }
+        if let Some(p) = parent_corpus_id {
+            meta.parent_corpus_id = Some(p.to_string());
+        }
+        write_meta(index_dir, &meta)
     }
 
     /// The corpus ID this index belongs to.

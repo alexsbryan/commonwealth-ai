@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::filters::{ComposeMode, FilterConfig};
+use crate::types::CorpusKind;
 
 // ---------------------------------------------------------------------------
 // Default helpers
@@ -117,6 +118,14 @@ pub struct Recipe {
     /// by downloading a pre-built LanceDB archive from HuggingFace.
     #[serde(default)]
     pub prebuilt: Option<PrebuiltConfig>,
+
+    /// Optional catalog-corpus configuration. When present, this
+    /// recipe is a *catalog* of works and pairs with a templated
+    /// content recipe (referenced by `content_recipe`) used for
+    /// on-demand single-work ingest. See [`CatalogConfig`] and
+    /// `Recipe.corpus.kind = Catalog`.
+    #[serde(default)]
+    pub catalog: Option<CatalogConfig>,
 
     /// Document-level filters that scope the corpus by accepting or
     /// rejecting individual `ExtractedDoc`s before chunking. The
@@ -302,6 +311,80 @@ pub struct CorpusMeta {
     /// Increment when making breaking changes to the TOML schema.
     #[serde(default = "default_schema_version")]
     pub schema_version: u32,
+
+    /// What kind of content this corpus holds. Defaults to
+    /// `Knowledge`. Catalog corpora hold one chunk per work
+    /// (metadata only) and pair with a `[catalog]` block at the
+    /// recipe top level. Code corpora are produced by `sovereign
+    /// code index`. See [`crate::types::CorpusKind`].
+    #[serde(default)]
+    pub kind: CorpusKind,
+
+    /// Marks a recipe as "templated, never directly ingested." On-demand
+    /// recipes (e.g. `gutenberg-work`) are stamped from a catalog
+    /// entry at runtime via
+    /// [`crate::types::CorpusSpec::Inline`]. The plain
+    /// [`crate::engine::CorpusEngine::ingest`] path refuses to run
+    /// an `on_demand = true` recipe whose `[corpus] id` has not been
+    /// overridden, so a misclick can't blast 70K Gutenberg books
+    /// into the corpus dir.
+    #[serde(default)]
+    pub on_demand: bool,
+
+    /// Parent corpus id, set on per-work corpora produced by an
+    /// on-demand catalog ingest (e.g. `gutenberg-2701` carries
+    /// `parent_corpus_id = "gutenberg"`). Stamped onto the on-disk
+    /// `IndexMeta` so search consumers can group per-work corpora
+    /// under their catalog and suppress repeated ingest offers for
+    /// works already read. Always `None` in TOML files on disk;
+    /// populated only via [`crate::types::CorpusSpec::Inline`].
+    #[serde(default)]
+    pub parent_corpus_id: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// CatalogConfig — recipe-level "this is a catalog of works" block
+// ---------------------------------------------------------------------------
+
+/// Pairs with `CorpusMeta::kind = Catalog`. Tells the on-demand
+/// ingest service how to take a catalog entry and produce a fully
+/// ingested per-work corpus from it. See `gutenberg/recipe.toml`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalogConfig {
+    /// Field name on the catalog `ExtractedDoc` (or its metadata
+    /// blob) that uniquely identifies a work. Used by the on-demand
+    /// flow to substitute into `download_url_template` and to derive
+    /// the per-work corpus id (`<catalog_id>-<work_id>`).
+    pub id_field: String,
+
+    /// URL template with a `{id}` placeholder, e.g.
+    /// `"https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"`.
+    /// Resolved at on-demand ingest time and injected as the sole
+    /// `[acquire] url` of the content recipe.
+    pub download_url_template: String,
+
+    /// Recipe id of the content recipe used to perform the
+    /// per-work ingest, e.g. `"gutenberg-work"`. Must be `on_demand =
+    /// true` and live in the registry.
+    pub content_recipe: String,
+
+    /// Optional name of a metadata column carrying an estimated
+    /// word count (used to compute an ingest-time estimate the UI
+    /// can show).
+    #[serde(default)]
+    pub estimated_words_field: Option<String>,
+
+    /// Throughput estimate for the ingest stage, in words per
+    /// minute. Combined with `estimated_words` to produce the
+    /// "this will take ~N minutes" surface. Default 8000 wpm
+    /// (conservative for an M-class machine on the embed slot).
+    #[serde(default)]
+    pub ingest_estimate_wpm: Option<u32>,
+
+    /// Throughput estimate for the enrichment stage, in words per
+    /// minute. Default 500 wpm.
+    #[serde(default)]
+    pub enrich_estimate_wpm: Option<u32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -507,6 +590,13 @@ pub enum ExtractorConfig {
         #[serde(default)]
         delimiter: Option<char>,
     },
+    /// Project Gutenberg catalog CSV (`pg_catalog.csv`). Emits one
+    /// `ExtractedDoc` per `Text` work, with content = catalog
+    /// metadata block and `embed_text` = a vector-friendly summary.
+    /// Pair with `chunker = "passthrough"` and a `[catalog]` block.
+    /// See [`crate::extractors::gutenberg_catalog`].
+    #[serde(rename = "gutenberg_catalog")]
+    GutenbergCatalog {},
     #[serde(rename = "parquet")]
     Parquet {
         content_column: String,
@@ -704,6 +794,7 @@ pub fn bundled_recipe_toml(id: &str) -> Option<&'static str> {
         }
         "openalex" => Some(include_str!("../recipes/openalex/recipe.toml")),
         "gutenberg" => Some(include_str!("../recipes/gutenberg/recipe.toml")),
+        "gutenberg-work" => Some(include_str!("../recipes/gutenberg-work/recipe.toml")),
         "sep" => Some(include_str!("../recipes/sep/recipe.toml")),
         "crs_reports" => Some(include_str!("../recipes/crs_reports/recipe.toml")),
         _ => None,
@@ -753,6 +844,94 @@ mod tests {
         assert_eq!(parsed.corpus.id, recipe.corpus.id);
         assert_eq!(parsed.corpus.name, recipe.corpus.name);
         assert_eq!(parsed.corpus.mesh_sharing, recipe.corpus.mesh_sharing);
+    }
+
+    #[test]
+    fn catalog_recipe_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "gutenberg"
+name = "Project Gutenberg Catalog"
+license = "Public Domain"
+kind = "catalog"
+mesh_sharing = true
+
+[acquire]
+type = "bulk_download"
+url = "https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv.gz"
+
+[extract]
+type = "gutenberg_catalog"
+
+[chunk]
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+
+[catalog]
+id_field = "gutenberg_id"
+download_url_template = "https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"
+content_recipe = "gutenberg-work"
+ingest_estimate_wpm = 8000
+enrich_estimate_wpm = 500
+"#;
+        let r = Recipe::from_toml(toml_str).expect("catalog recipe must parse");
+        assert_eq!(r.corpus.kind, crate::types::CorpusKind::Catalog);
+        assert!(!r.corpus.on_demand);
+        assert!(matches!(
+            r.extract,
+            ExtractorConfig::GutenbergCatalog {}
+        ));
+        let cat = r.catalog.expect("[catalog] block parsed");
+        assert_eq!(cat.id_field, "gutenberg_id");
+        assert_eq!(cat.content_recipe, "gutenberg-work");
+        assert!(cat
+            .download_url_template
+            .contains("{id}"));
+        assert_eq!(cat.ingest_estimate_wpm, Some(8000));
+    }
+
+    #[test]
+    fn on_demand_recipe_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "gutenberg-work"
+name = "Project Gutenberg — Single Work"
+license = "Public Domain"
+on_demand = true
+mesh_sharing = true
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/PLACEHOLDER"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+max_chars = 2048
+"#;
+        let r = Recipe::from_toml(toml_str).expect("on-demand recipe must parse");
+        assert!(r.corpus.on_demand);
+        assert_eq!(r.corpus.kind, crate::types::CorpusKind::Knowledge);
+    }
+
+    #[test]
+    fn bundled_gutenberg_recipes_parse() {
+        // Both the catalog (`gutenberg`) and on-demand work
+        // (`gutenberg-work`) recipes must always be loadable from the
+        // bundled snapshot — the on-demand ingest path resolves them
+        // by id at runtime.
+        for id in &["gutenberg", "gutenberg-work"] {
+            let toml = bundled_recipe_toml(id)
+                .unwrap_or_else(|| panic!("bundled recipe `{id}` is missing"));
+            let r = Recipe::from_toml(toml)
+                .unwrap_or_else(|e| panic!("bundled recipe `{id}` parse error: {e}"));
+            assert_eq!(r.corpus.id, *id);
+        }
     }
 
     #[test]
@@ -1071,25 +1250,35 @@ type = "paragraph"
     }
 
     #[test]
-    fn gutenberg_recipe_uses_huggingface_dataset_acquirer() {
+    fn gutenberg_recipe_is_a_catalog() {
+        // Updated for the catalog-corpus paradigm: `gutenberg`
+        // is now the metadata catalog (one chunk per work) and
+        // pairs with the on-demand `gutenberg-work` content
+        // recipe. The previous all-of-Gutenberg HuggingFace
+        // parquet ingest is retired — see
+        // `let-s-build-out-the-majestic-neumann.md` plan file.
         let recipes = builtin_recipes();
         let gut = recipes
             .iter()
             .find(|r| r.corpus.id == "gutenberg")
             .expect("gutenberg recipe must exist");
+        assert_eq!(gut.corpus.kind, crate::types::CorpusKind::Catalog);
         match &gut.acquire {
-            AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => {
-                assert_eq!(repo, "manu/project_gutenberg");
-                assert_eq!(subset.as_deref(), Some("en"));
+            AcquirerConfig::BulkDownload { url, .. } => {
+                let u = url.as_deref().unwrap_or("");
+                assert!(
+                    u.contains("pg_catalog.csv"),
+                    "expected pg_catalog.csv URL, got {u:?}"
+                );
             }
-            other => panic!("expected HuggingFaceDataset, got {other:?}"),
+            other => panic!("expected BulkDownload, got {other:?}"),
         }
         match &gut.extract {
-            ExtractorConfig::Parquet { content_column, .. } => {
-                assert_eq!(content_column, "text");
-            }
-            other => panic!("expected Parquet extractor, got {other:?}"),
+            ExtractorConfig::GutenbergCatalog {} => {}
+            other => panic!("expected GutenbergCatalog extractor, got {other:?}"),
         }
+        let cat = gut.catalog.as_ref().expect("[catalog] block required");
+        assert_eq!(cat.content_recipe, "gutenberg-work");
     }
 
     #[test]

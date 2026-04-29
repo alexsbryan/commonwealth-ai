@@ -110,6 +110,15 @@ pub enum CorpusKind {
     /// typed for symbol-lookup and SCIP-style traversal rather than
     /// prose retrieval.
     Code,
+    /// Catalog of works the system is *aware of* but has not read in
+    /// detail. One chunk per work; the chunk text is the work's
+    /// metadata (title, author, subjects, year, …) — not its full
+    /// text. Catalog hits trigger an on-demand ingest of the
+    /// corresponding content recipe (see `CorpusMeta::on_demand` and
+    /// `Recipe::catalog`). Search consumers should partition catalog
+    /// hits from full-text hits and surface them to the user as an
+    /// "I know of this, want me to read it?" offer.
+    Catalog,
 }
 
 // ─── Index Info ─────────────────────────────────────────
@@ -163,6 +172,14 @@ pub struct IndexInfo {
     /// any external caller that constructs `IndexInfo` by hand.
     #[serde(default)]
     pub kind: CorpusKind,
+    /// For per-work corpora produced by an on-demand catalog ingest
+    /// (e.g. `gutenberg-2701`), the id of the catalog corpus they were
+    /// ingested from (e.g. `gutenberg`). Lets the UI group per-work
+    /// indexes under their parent and lets retrieval suppress catalog
+    /// offers for works that have already been read. `None` for
+    /// stand-alone corpora.
+    #[serde(default)]
+    pub parent_corpus_id: Option<String>,
     /// Whether the IVF-PQ vector index has been built for this corpus.
     /// Mirrors `IndexMeta.vector_index_built` from
     /// `_corpus_meta.json` — exposed here so desktop callers don't
@@ -215,10 +232,19 @@ pub struct BuiltinCorpus {
 
 // ─── Corpus Spec ────────────────────────────────────────
 
-/// What to ingest: either a builtin corpus by ID or a recipe path.
+/// What to ingest: either a builtin corpus by ID, a recipe path, or
+/// an in-memory recipe.
+///
+/// `Inline` is used by the on-demand catalog flow: the
+/// [`crate::catalog::CatalogIngestService`] resolves a content
+/// recipe (`gutenberg-work`), patches its `[corpus] id`, the acquire
+/// URL, and the parent corpus id, then hands the mutated recipe to
+/// `CorpusEngine::ingest()` without writing a per-work TOML to
+/// disk.
 #[derive(Debug, Clone)]
 pub enum CorpusSpec {
     Builtin(String),
     RecipePath(PathBuf),
+    Inline(Box<crate::recipe::Recipe>),
 }
 

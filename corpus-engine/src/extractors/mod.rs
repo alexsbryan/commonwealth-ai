@@ -2,6 +2,7 @@ pub mod json;
 pub mod xml;
 pub mod html;
 pub mod csv;
+pub mod gutenberg_catalog;
 pub mod parquet;
 pub mod plaintext;
 pub mod wikipedia_structured;
