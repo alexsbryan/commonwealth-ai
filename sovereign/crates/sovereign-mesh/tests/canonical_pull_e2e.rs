@@ -141,8 +141,9 @@ async fn canonical_pull_round_trip_via_internal_router() {
     let client_dir = tempdir().unwrap();
     let client_index_dir = client_dir.path().to_path_buf();
 
+    let candidates = vec![peer_url.clone()];
     let report = pull_canonical_from_peer(
-        &peer_url,
+        &candidates,
         "wiki-mini",
         &client_index_dir,
         Some(&expected_fp),
@@ -181,8 +182,9 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
     // Caller passes a wrong fingerprint — the pull must fail with
     // `FingerprintMismatch` BEFORE any rename, and the destination
     // must remain absent.
+    let candidates = vec![peer_url];
     let r = pull_canonical_from_peer(
-        &peer_url,
+        &candidates,
         "wiki-mini",
         &client_index_dir,
         Some("0".repeat(64).as_str()),
@@ -195,6 +197,47 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
     assert!(
         !client_index_dir.join("wiki-mini").exists(),
         "destination must not exist after rejected pull"
+    );
+}
+
+/// Verifies the address-fallthrough fix: when a peer publishes
+/// multiple addresses and the FIRST one is unreachable (e.g. a
+/// LAN IP that doesn't route from the puller's network), the
+/// pull tries the next URL until one succeeds. This is the
+/// regression test for the RuggedFox case where Alex's MacBook
+/// gossiped `[192.168.1.6, 100.104.36.28-tailscale, ipv6]` and
+/// my first cut picked the LAN address that wasn't reachable
+/// from the puller's network.
+#[tokio::test]
+async fn canonical_pull_falls_through_on_unreachable_first_url() {
+    let server_dir = tempdir().unwrap();
+    let server_index_dir = server_dir.path().to_path_buf();
+    let expected_fp =
+        create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
+
+    let state = app_state_with_engine(&server_index_dir).await;
+    let addr = spawn_router(state).await;
+    let working_url = format!("http://127.0.0.1:{}", addr.port());
+
+    // RFC 5737 reserved test-net address; nothing routable lives
+    // here. The connect attempt should refuse / time out fast and
+    // the pull should advance to the second (working) URL.
+    let dead_url = "http://192.0.2.1:9742".to_string();
+
+    let candidates = vec![dead_url, working_url.clone()];
+    let report = pull_canonical_from_peer(
+        &candidates,
+        "wiki-mini",
+        tempdir().unwrap().path(),
+        Some(&expected_fp),
+    )
+    .await
+    .expect("pull should succeed via fallthrough");
+
+    assert_eq!(report.fingerprint, expected_fp);
+    assert_eq!(
+        report.peer_url, working_url,
+        "report.peer_url must reflect the URL that actually worked"
     );
 }
 
@@ -211,8 +254,9 @@ async fn canonical_pull_returns_404_when_corpus_absent() {
     let client_dir = tempdir().unwrap();
     let client_index_dir = client_dir.path().to_path_buf();
 
+    let candidates = vec![peer_url];
     let r = pull_canonical_from_peer(
-        &peer_url,
+        &candidates,
         "missing-corpus",
         &client_index_dir,
         None,

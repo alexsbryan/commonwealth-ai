@@ -169,14 +169,14 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             {
                 tracing::info!(
                     corpus = %corpus_id,
-                    peer_url = %lead.peer_url,
+                    candidate_urls = ?lead.candidate_urls,
                     fingerprint = %&lead.fingerprint[..lead.fingerprint.len().min(12)],
                     coverage_ratio = ?lead.coverage_ratio,
                     chunk_count = lead.chunk_count,
                     "auto_ingest: peer has healthier canonical — attempting pull"
                 );
                 match crate::canonical_pull::pull_canonical_from_peer(
-                    &lead.peer_url,
+                    &lead.candidate_urls,
                     corpus_id,
                     engine.index_dir(),
                     Some(&lead.fingerprint),
@@ -186,7 +186,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     Ok(report) => {
                         tracing::info!(
                             corpus = %corpus_id,
-                            peer = %lead.peer_url,
+                            peer = %report.peer_url,
                             bytes_uncompressed = report.bytes_uncompressed,
                             "auto_ingest: pulled canonical from peer — local merge skipped"
                         );
@@ -196,16 +196,36 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                         continue;
                     }
                     Err(e) => {
+                        // Connection-level failures (all peer
+                        // addresses unreachable) are TRANSIENT —
+                        // we WILL retry next tick. Falling through
+                        // to local merge here is what produced the
+                        // 17/38 partial canonical bug RuggedFox
+                        // hit: even when our partition meta lacks
+                        // total_shards (so the IncompleteCoverage
+                        // gate skips), we KNOW from gossip that a
+                        // peer has healthier coverage. Producing a
+                        // partial canonical ourselves and then re-
+                        // advertising it on gossip pollutes the
+                        // mesh's canonical-sync convergence — every
+                        // peer ends up with a different "complete"
+                        // canonical and they fight forever.
+                        //
+                        // Defer to the next tick; the gossip layer
+                        // is publishing reachability and the next
+                        // attempt will likely find an address that
+                        // works. The operator can manually run
+                        // `sovereign corpus merge-partitions <id>`
+                        // if they want to force a partial merge.
                         tracing::warn!(
                             corpus = %corpus_id,
-                            peer = %lead.peer_url,
                             error = %e,
-                            "auto_ingest: peer pull failed — falling through to local merge"
+                            "auto_ingest: peer pull failed — deferring local merge \
+                             (peer advertises healthier canonical; will retry next tick). \
+                             Override with `sovereign corpus merge-partitions {}`.",
+                            corpus_id,
                         );
-                        // Fall through: maybe local merge can
-                        // produce a partial-but-useful canonical,
-                        // or the IncompleteCoverage gate will surface
-                        // a clearer error.
+                        continue;
                     }
                 }
             }
@@ -1098,9 +1118,16 @@ fn spawn_heartbeat(
 /// extracted from their gossiped `hosted_corpora`. Returned by
 /// [`find_best_peer_canonical`] when a peer's canonical is judged
 /// healthier than what local merge would produce.
+///
+/// `candidate_urls` is the full set of base URLs published by the
+/// peer (LAN, Tailscale CGNAT, IPv6 ULA — whatever they announced).
+/// The pull function tries each in turn until one succeeds, so we
+/// remain reachable across mixed network topologies. Empty list
+/// means the peer's gossip carried no addresses, which is a
+/// degenerate case the caller should skip.
 #[derive(Debug, Clone)]
 pub(crate) struct PeerCanonicalLead {
-    pub peer_url: String,
+    pub candidate_urls: Vec<String>,
     pub fingerprint: String,
     pub coverage_ratio: Option<f64>,
     pub chunk_count: u64,
@@ -1160,19 +1187,34 @@ async fn find_best_peer_canonical(
             if fp.is_empty() {
                 continue;
             }
-            // Build a peer URL from the first reachable address.
-            // The mesh API listens on port 9742; addresses may be
-            // host:port already (gossip records the published
-            // bind), but safety: rewrite the port if the gossiped
-            // address is on the client port (9741). The internal
-            // canonical-stream endpoint lives on the internal port.
-            let Some(addr) = member.addresses.first() else {
+            // Build the full candidate-URL list from every published
+            // address. Whatever ports gossip recorded are ignored —
+            // the canonical-stream endpoint lives on the internal
+            // mesh port (9742) regardless of how the peer happens
+            // to bind its client port. The pull function tries each
+            // in turn so a topology change (peer roams off LAN onto
+            // Tailscale, etc.) doesn't strand the request on a
+            // dead address.
+            //
+            // IPv6 addresses must be bracketed in URLs.
+            let candidate_urls: Vec<String> = member
+                .addresses
+                .iter()
+                .map(|addr| {
+                    let ip = addr.ip();
+                    if ip.is_ipv6() {
+                        format!("http://[{ip}]:9742")
+                    } else {
+                        format!("http://{ip}:9742")
+                    }
+                })
+                .collect();
+            if candidate_urls.is_empty() {
                 continue;
-            };
-            let peer_url = format!("http://{}:9742", addr.ip());
+            }
 
             let candidate = PeerCanonicalLead {
-                peer_url,
+                candidate_urls,
                 fingerprint: fp.to_string(),
                 coverage_ratio: shard_info.coverage_ratio(),
                 chunk_count: shard_info.chunk_count,

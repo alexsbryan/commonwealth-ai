@@ -1750,8 +1750,13 @@ async fn cmd_corpus_pull(args: &[String]) -> i32 {
     println!();
 
     let started = std::time::Instant::now();
+    // CLI path is single-target — the operator gave us one URL.
+    // Wrap in a single-element slice so the function signature
+    // (which loops over candidates for the auto-pull path) sees
+    // exactly the one address the user wants to try.
+    let candidates = vec![peer_url.clone()];
     match sovereign_mesh::canonical_pull::pull_canonical_from_peer(
-        &peer_url,
+        &candidates,
         &corpus_id,
         &index_dir,
         expected_fingerprint.as_deref(),

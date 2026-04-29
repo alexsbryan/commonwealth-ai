@@ -51,6 +51,10 @@ use corpus_engine::index::CorpusIndex;
 #[derive(Debug, Clone)]
 pub struct CanonicalPullReport {
     pub corpus_id: String,
+    /// The URL we ultimately succeeded on (some peers publish
+    /// multiple addresses — LAN, Tailscale, IPv6 — and we try each
+    /// in turn). Useful for log analysis when one address path is
+    /// systematically broken.
     pub peer_url: String,
     pub fingerprint: String,
     pub bytes_uncompressed: u64,
@@ -87,9 +91,23 @@ pub enum PullError {
     Engine(String),
 }
 
-/// Pull `corpus_id` from `peer_url` and place the canonical at
-/// `<index_dir>/<corpus_id>/`. `peer_url` is the BASE — e.g.
-/// `http://100.104.36.28:9742`. We append the route below.
+/// Pull `corpus_id` from one of `peer_urls` and place the canonical
+/// at `<index_dir>/<corpus_id>/`. Each URL is the BASE — e.g.
+/// `http://100.104.36.28:9742`. Tries each URL in turn, falling
+/// through on connection failure (`reqwest::Error::is_connect()` or
+/// timeout); HTTP-level errors (404, 403) abort early without
+/// trying the next URL since they reflect server policy, not
+/// reachability. Returns the first URL that successfully opens a
+/// response.
+///
+/// **Why a list, not a single URL.** Peers gossip multiple
+/// addresses (LAN IP, Tailscale CGNAT, IPv6 ULA). The "right" one
+/// depends on the network topology between the puller and the
+/// pusher; a fresh-boot node on a VPN can't reach the LAN address,
+/// while a same-LAN node may not have Tailscale. Picking just one
+/// up-front means systematic pull failures whenever the topology
+/// changes. Trying all in turn is cheap (each attempt is bounded
+/// by `connect_timeout`) and converges to the working address.
 ///
 /// The `expected_fingerprint` argument is the value the caller
 /// learned from gossip; if `None`, we accept whatever the peer
@@ -100,11 +118,16 @@ pub enum PullError {
 /// Returns a `CanonicalPullReport` on success. On failure, the
 /// temp dir is removed and no canonical is created.
 pub async fn pull_canonical_from_peer(
-    peer_url: &str,
+    peer_urls: &[String],
     corpus_id: &str,
     index_dir: &Path,
     expected_fingerprint: Option<&str>,
 ) -> Result<CanonicalPullReport, PullError> {
+    if peer_urls.is_empty() {
+        return Err(PullError::Transport(
+            "no peer addresses supplied".to_string(),
+        ));
+    }
     let canonical_path = index_dir.join(corpus_id);
     if canonical_path.exists() {
         return Err(PullError::DestinationExists(canonical_path));
@@ -128,39 +151,87 @@ pub async fn pull_canonical_from_peer(
         )));
     }
 
-    let url = format!(
-        "{}/internal/corpus/canonical/{}",
-        peer_url.trim_end_matches('/'),
-        corpus_id
-    );
-    tracing::info!(
-        corpus_id,
-        peer = peer_url,
-        url = %url,
-        temp = %temp_path.display(),
-        "canonical_pull: starting"
-    );
-
     let client = reqwest::Client::builder()
         // No timeout on the body stream — Wikipedia canonical pulls
         // can take many minutes on a slow link. The connect timeout
         // is what catches dead peers fast.
-        .connect_timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| PullError::Transport(format!("client build: {e}")))?;
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| PullError::Transport(format!("send: {e}")))?;
-    let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_else(|_| "<unreadable>".to_string());
-        return Err(PullError::PeerHttpError {
-            status: status.as_u16(),
-            body,
-        });
+
+    // Try each candidate peer URL in turn until one yields a
+    // successful HTTP response. Connection-level failures (refused,
+    // timeout, no route) advance to the next URL. HTTP-level errors
+    // (404, 403, 500) are server-side policy and abort immediately
+    // — trying another address won't change the answer.
+    let mut chosen_url: Option<String> = None;
+    let mut chosen_resp: Option<reqwest::Response> = None;
+    let mut last_transport_error: Option<String> = None;
+    for base in peer_urls {
+        let url = format!(
+            "{}/internal/corpus/canonical/{}",
+            base.trim_end_matches('/'),
+            corpus_id
+        );
+        tracing::info!(
+            corpus_id,
+            peer = base,
+            url = %url,
+            temp = %temp_path.display(),
+            "canonical_pull: attempting"
+        );
+        match client.get(&url).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() {
+                    chosen_url = Some(base.clone());
+                    chosen_resp = Some(resp);
+                    break;
+                }
+                // HTTP-level error — surface to caller without
+                // trying the next URL. Same corpus, same server
+                // policy.
+                let body = resp
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<unreadable>".to_string());
+                return Err(PullError::PeerHttpError {
+                    status: status.as_u16(),
+                    body,
+                });
+            }
+            Err(e) => {
+                // Connection-level failure: refused, timeout, no
+                // route, DNS fail. Move on to the next URL.
+                tracing::info!(
+                    corpus_id,
+                    peer = base,
+                    error = %e,
+                    "canonical_pull: address unreachable, trying next"
+                );
+                last_transport_error =
+                    Some(format!("{base}: {e}"));
+                continue;
+            }
+        }
     }
+
+    let (peer_url, resp) = match (chosen_url, chosen_resp) {
+        (Some(u), Some(r)) => (u, r),
+        _ => {
+            return Err(PullError::Transport(format!(
+                "all {} peer addresses unreachable; last: {}",
+                peer_urls.len(),
+                last_transport_error.unwrap_or_else(|| "n/a".to_string())
+            )));
+        }
+    };
+
+    tracing::info!(
+        corpus_id,
+        peer = %peer_url,
+        "canonical_pull: connection established, streaming body"
+    );
 
     let advertised_fp = resp
         .headers()
@@ -242,7 +313,7 @@ pub async fn pull_canonical_from_peer(
 
     Ok(CanonicalPullReport {
         corpus_id: corpus_id.to_string(),
-        peer_url: peer_url.to_string(),
+        peer_url,
         fingerprint: advertised_fp,
         bytes_uncompressed,
         canonical_path,
