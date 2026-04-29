@@ -253,6 +253,50 @@ pub async fn corpus_collaborate(
         };
 
         if units.is_empty() {
+            // "No remaining units" splits into two very different
+            // states:
+            //
+            //   (a) the corpus is fully merged — the canonical
+            //       `<corpus>/` index exists. Nothing to do; 409.
+            //
+            //   (b) every shard has been ingested into per-peer
+            //       partitions, but the merge step never ran (typical
+            //       cause: the coordinator restarted between the last
+            //       `complete_unit` and `coordinate_merge` finishing —
+            //       `WorkQueueManager` is in-memory, so the
+            //       `complete_unit → Merging → spawn_queue_merge`
+            //       trigger is gone forever). Without recovery here,
+            //       both peers idle indefinitely with `auto_ingest:
+            //       corpus already complete — cooling down`. Look up
+            //       the existing handoff blob (still in `mesh_store`
+            //       via gossip) and re-fire the merge so the corpus
+            //       actually finishes.
+            let canonical_exists = engine
+                .canonical_path(&req.corpus_id)
+                .join("_corpus_meta.json")
+                .exists();
+
+            if !canonical_exists {
+                if let Some(existing) =
+                    find_local_handoff_for_corpus(&state, &req.corpus_id, self_id)
+                {
+                    tracing::info!(
+                        corpus = %req.corpus_id,
+                        handoff = %existing.handoff_id,
+                        "corpus_collaborate: drained queue with no canonical index — \
+                         re-firing merge"
+                    );
+                    spawn_queue_merge(state.clone(), existing.handoff_id);
+                    return Ok(Json(existing));
+                }
+                tracing::warn!(
+                    corpus = %req.corpus_id,
+                    "corpus_collaborate: queue drained but no canonical index and no \
+                     local handoff found — peer must re-trigger from a node that holds \
+                     the handoff blob"
+                );
+            }
+
             return Err((
                 StatusCode::CONFLICT,
                 Json(ErrorBody {
@@ -1129,6 +1173,54 @@ pub async fn corpus_complete_unit(
             }),
         ),
     }
+}
+
+/// Find the local node's most recent queue-mode `IngestionHandoff`
+/// blob for `corpus_id` in mesh_store, restricted to ones where this
+/// node is the `merge_leader`.
+///
+/// Used by `corpus_collaborate` to recover a stranded queue after a
+/// coordinator restart wiped its in-memory `WorkQueueManager`. The
+/// blob itself survives because gossip's mesh_store replication
+/// re-implants it from peers (`gossip.rs:406-494`), so the handoff_id
+/// + merge_leader are still discoverable; only the live queue state
+/// (units, leases, phase) is gone.
+///
+/// Returns `None` if no matching handoff exists or if every candidate
+/// names a different node as merge leader (in which case the actual
+/// leader is responsible for re-firing the merge, not us).
+fn find_local_handoff_for_corpus(
+    state: &AppState,
+    corpus_id: &str,
+    self_id: NodeId,
+) -> Option<IngestionHandoff> {
+    let entries = state
+        .inner
+        .mesh_store
+        .scan("corpus-engine", "handoff:")
+        .ok()?;
+    let mut best: Option<IngestionHandoff> = None;
+    for entry in entries {
+        let Ok(handoff): std::result::Result<IngestionHandoff, _> =
+            serde_json::from_slice(&entry.value)
+        else {
+            continue;
+        };
+        if handoff.corpus_id != corpus_id {
+            continue;
+        }
+        if handoff.merge_leader != Some(self_id) {
+            continue;
+        }
+        // Prefer the most-recently-updated handoff if there are
+        // somehow several (e.g. a previous collaborate dispatch left
+        // a stale blob alongside a fresher one).
+        match &best {
+            Some(b) if b.updated_at >= handoff.updated_at => {}
+            _ => best = Some(handoff),
+        }
+    }
+    best
 }
 
 /// Spawn `ShardManager::coordinate_merge` in the background after a

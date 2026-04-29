@@ -211,29 +211,62 @@ impl ShardManager {
         // triggers this path when the queue's phase is Merging,
         // which means every unit terminated.
         if queue_mode {
-            let Some(work_queue) = &self.work_queue else {
+            // Resolve participating peers. Preferred source: the live
+            // `WorkQueueManager` snapshot, which is updated as peers
+            // lease/complete units. Fallback when the snapshot is
+            // missing (queue-mode handoff that outlived a coordinator
+            // restart): the gossiped `processed_shards:<corpus>:<peer>`
+            // entries in `MeshStore`. Each peer that has actually done
+            // work for this corpus publishes a non-empty list under
+            // its own slot, so the union of `entry.origin`s across
+            // every non-empty entry is the participating-peers set.
+            // Without this fallback, restart-mid-Merging silently
+            // strands the corpus in "ingestion done, never merged"
+            // and the operator has no recovery path short of
+            // re-running ingest from scratch.
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+
+            let (participating, completed_at, source) = match self.work_queue.as_ref() {
+                Some(wq) => match wq.snapshot(&handoff_id).await {
+                    Some(snap) => {
+                        (snap.participating_peers.clone(), snap.last_mutation_ms, "work queue")
+                    }
+                    None => (
+                        participating_peers_from_gossip(
+                            &self.mesh_store,
+                            &handoff.corpus_id,
+                        ),
+                        now_ms,
+                        "gossip fallback (live queue missing — coordinator restart?)",
+                    ),
+                },
+                None => (
+                    participating_peers_from_gossip(&self.mesh_store, &handoff.corpus_id),
+                    now_ms,
+                    "gossip fallback (no work queue attached)",
+                ),
+            };
+
+            if participating.is_empty() {
                 tracing::warn!(
                     handoff = %handoff_id,
-                    "coordinate_merge: queue-mode handoff but no WorkQueueManager attached — \
-                     skipping merge. Wire ShardManager::with_work_queue() at construction."
+                    corpus = %handoff.corpus_id,
+                    source,
+                    "coordinate_merge: queue-mode handoff with no resolvable participants — \
+                     skipping merge"
                 );
                 return Ok(None);
-            };
-            let Some(snapshot) = work_queue.snapshot(&handoff_id).await else {
-                tracing::warn!(
-                    handoff = %handoff_id,
-                    "coordinate_merge: queue-mode handoff but coordinator has no live queue \
-                     for it — was the daemon restarted mid-ingest?"
-                );
-                return Ok(None);
-            };
+            }
+
             // The coordinator itself counts as a participant when its
             // own partition dir exists on disk — `participating_peers`
             // tracks only peers that pulled units (the coordinator
             // ingests via its own pull loop, so it should be there
             // too, but belt-and-braces).
-            let mut peers: std::collections::HashSet<NodeId> =
-                snapshot.participating_peers.clone();
+            let mut peers = participating;
             peers.insert(local_node_id);
             let synthesized: Vec<commonwealth_core::knowledge::IngestionPartition> = peers
                 .into_iter()
@@ -242,14 +275,15 @@ impl ShardManager {
                     file_indices: Vec::new(),
                     article_range: None,
                     status: PartitionStatus::Complete {
-                        completed_at: snapshot.last_mutation_ms,
+                        completed_at,
                     },
                 })
                 .collect();
             tracing::info!(
                 handoff = %handoff_id,
                 peers = synthesized.len(),
-                "coordinate_merge: queue-mode — synthesized partitions from work queue"
+                source,
+                "coordinate_merge: queue-mode — synthesized partitions"
             );
             handoff.partitions = synthesized;
         }
@@ -600,6 +634,42 @@ impl ShardManager {
         })
     }
 } // end impl ShardManager
+
+/// Recover the set of peers that did work on `corpus_id` by scanning
+/// the gossiped `processed_shards:<corpus>:<peer>` blobs. Each peer
+/// publishes a non-empty list under its own slot only after doing real
+/// ingest work, so the set of `entry.origin`s with non-empty payloads
+/// is the participating-peers set.
+///
+/// Used by [`ShardManager::coordinate_merge`]'s queue-mode fallback
+/// when the live `WorkQueueManager` snapshot is gone (typical case:
+/// coordinator restart between "last unit completed" and "merge
+/// finished"). Empty set means no peer has published — the corpus
+/// hasn't actually been ingested anywhere visible to gossip and the
+/// caller should bail rather than try to merge nothing.
+fn participating_peers_from_gossip(
+    mesh_store: &MeshStore,
+    corpus_id: &str,
+) -> std::collections::HashSet<NodeId> {
+    let prefix = format!("processed_shards:{corpus_id}:");
+    let entries = match mesh_store.scan(commonwealth_state::PROCESSED_SHARDS_APP_ID, &prefix) {
+        Ok(e) => e,
+        Err(_) => return std::collections::HashSet::new(),
+    };
+    let mut peers = std::collections::HashSet::new();
+    for entry in entries {
+        // Skip empty arrays — a peer that publishes `[]` hasn't
+        // actually contributed work; counting it would synthesize a
+        // bogus participant whose remote shard fetch will then fail.
+        let nonempty = serde_json::from_slice::<Vec<usize>>(&entry.value)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false);
+        if nonempty {
+            peers.insert(entry.origin);
+        }
+    }
+    peers
+}
 
 pub struct PreparedShard {
     pub target_node: NodeId,
