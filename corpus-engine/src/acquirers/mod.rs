@@ -1,4 +1,5 @@
 pub mod bulk_download;
+pub mod http_api;
 pub mod huggingface;
 pub mod local_file;
 

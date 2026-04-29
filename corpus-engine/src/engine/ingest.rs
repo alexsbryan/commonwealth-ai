@@ -7,6 +7,7 @@ use std::time::Instant;
 use chrono::Utc;
 
 use crate::acquirers::bulk_download::BulkDownloader;
+use crate::acquirers::http_api::HttpApiAcquirer;
 use crate::acquirers::huggingface::HuggingFaceDatasetAcquirer;
 use crate::acquirers::local_file::LocalFileAcquirer;
 use crate::chunkers::{self, Chunker};
@@ -1423,8 +1424,33 @@ impl CorpusEngine {
             AcquirerConfig::WebCrawl { .. } => {
                 Err(Error::Recipe("Web crawl acquirer not yet implemented".into()))
             }
-            AcquirerConfig::ApiPaginated { .. } => {
-                Err(Error::Recipe("API paginated acquirer not yet implemented".into()))
+            AcquirerConfig::HttpApi {
+                base_url,
+                requests,
+                pagination,
+                follow,
+                rate_limit_per_second,
+                user_agent,
+                headers,
+            } => {
+                // The acquirer reads parameters off the recipe's
+                // runtime-only `resolved_parameters` field, populated
+                // by the CLI / desktop install path before ingest.
+                // For installs through paths that don't (yet) thread
+                // parameters, the field defaults to empty — recipes
+                // that genuinely require parameters will fail in
+                // `for_each_bindings` with a clear message.
+                let acq = HttpApiAcquirer::new(
+                    base_url.clone(),
+                    requests.clone(),
+                    pagination.clone(),
+                    follow.clone(),
+                    *rate_limit_per_second,
+                    user_agent.clone(),
+                    headers.clone(),
+                    recipe.resolved_parameters.clone(),
+                )?;
+                acq.acquire(download_dir, &recipe.corpus.id, progress).await
             }
             AcquirerConfig::Custom { kind, params } => {
                 let _ = progress; // Custom acquirers do not emit progress; see CustomAcquirerFn docs.
@@ -1486,6 +1512,27 @@ impl CorpusEngine {
                 title_selector: title_selector.clone(),
                 label: String::new(),
             }),
+            ExtractorConfig::HtmlSections {
+                sections,
+                fallback,
+                title_selector: _title_selector,
+            } => {
+                // Recipe-level regex validation happens up front in
+                // `sovereign recipe validate` (Phase 4a); reaching
+                // this arm with a bad regex means the recipe was
+                // installed without validation. Panic with the
+                // section name so the operator sees the actual
+                // pattern that's broken.
+                Box::new(
+                    extractors::html_sections::HtmlSectionsExtractor::new(
+                        sections,
+                        fallback.clone(),
+                    )
+                    .unwrap_or_else(|e| {
+                        panic!("html_sections recipe failed to construct: {e}")
+                    }),
+                )
+            }
             ExtractorConfig::Csv {
                 content_column,
                 title_column,

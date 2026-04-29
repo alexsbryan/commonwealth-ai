@@ -96,6 +96,12 @@ pub struct RecipeRegistry {
     snapshot: RegistrySnapshot,
     /// Live snapshot fetched from GitHub — replaces snapshot entries when present.
     live: Option<RegistrySnapshot>,
+    /// User-published recipes from
+    /// `~/.sovereign/recipes/registry.toml`. Loaded on demand by
+    /// [`Self::with_local_registry`]; entries here win over both
+    /// `live` and `snapshot` because the user explicitly chose them.
+    /// Used to resolve recipes published via `sovereign recipe publish`.
+    local: Option<RegistrySnapshot>,
     /// Directory checked first for recipe TOMLs (local overrides and install cache).
     overrides_dir: Option<PathBuf>,
 }
@@ -109,7 +115,63 @@ impl RecipeRegistry {
     pub fn from_bundled(overrides_dir: Option<PathBuf>) -> Self {
         let snapshot = toml::from_str(BUNDLED_SNAPSHOT)
             .expect("bundled registry_snapshot.toml failed to parse");
-        Self { snapshot, live: None, overrides_dir }
+        Self {
+            snapshot,
+            live: None,
+            local: None,
+            overrides_dir,
+        }
+    }
+
+    /// Merge a user-published local registry (`registry.toml` in
+    /// `~/.sovereign/recipes/`). Local entries win by `id` over
+    /// both `live` and `snapshot`, so `sovereign recipe publish`
+    /// can shadow an upstream recipe with a user's iteration of it
+    /// without forcing them to push to GitHub first.
+    ///
+    /// Silently no-ops if `path` doesn't exist or fails to parse —
+    /// a malformed local registry shouldn't take down the whole CLI.
+    /// The ingest path will fall through to the bundled fallback as
+    /// usual.
+    pub fn with_local_registry(mut self, path: &Path) -> Self {
+        if !path.is_file() {
+            return self;
+        }
+        match std::fs::read_to_string(path) {
+            Ok(text) => match toml::from_str::<RegistrySnapshot>(&text) {
+                Ok(local) => {
+                    tracing::debug!(
+                        path = %path.display(),
+                        entries = local.entries.len(),
+                        "loaded local registry"
+                    );
+                    self.local = Some(local);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        path = %path.display(),
+                        "Failed to parse local registry: {e} — ignoring"
+                    );
+                }
+            },
+            Err(e) => {
+                tracing::debug!(
+                    path = %path.display(),
+                    "Failed to read local registry: {e} — ignoring"
+                );
+            }
+        }
+        self
+    }
+
+    /// Default location of the user-published local registry:
+    /// `~/.sovereign/recipes/registry.toml`. Returns `None` when
+    /// the home directory cannot be resolved (rare; CI containers
+    /// should set HOME).
+    pub fn default_local_recipes_dir() -> Option<PathBuf> {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .map(|h| h.join(".sovereign").join("recipes"))
     }
 
     /// Attempt a background refresh from the live registry URL.
@@ -157,21 +219,46 @@ impl RecipeRegistry {
 
     /// List all known registry entries.
     ///
-    /// Live entries (from a background refresh) take precedence over
-    /// bundled entries. Entries are deduplicated by `id` — live wins.
+    /// Precedence: `local` > `live` > `snapshot`. Entries are
+    /// deduplicated by `id` — the higher-precedence layer wins.
+    /// Local entries are surfaced so `sovereign recipe list` can
+    /// show the user's published recipes alongside the upstream
+    /// catalog.
     pub fn list_entries(&self) -> Vec<&RegistryEntry> {
-        if let Some(live) = &self.live {
-            // Live overrides bundled for matching IDs.
-            let mut out: Vec<&RegistryEntry> = live.entries.iter().collect();
-            for entry in &self.snapshot.entries {
-                if !out.iter().any(|e| e.id == entry.id) {
-                    out.push(entry);
+        let mut out: Vec<&RegistryEntry> = Vec::new();
+        let mut seen: std::collections::BTreeSet<String> = Default::default();
+
+        if let Some(local) = &self.local {
+            for e in &local.entries {
+                if seen.insert(e.id.clone()) {
+                    out.push(e);
                 }
             }
-            out
-        } else {
-            self.snapshot.entries.iter().collect()
         }
+        if let Some(live) = &self.live {
+            for e in &live.entries {
+                if seen.insert(e.id.clone()) {
+                    out.push(e);
+                }
+            }
+        }
+        for e in &self.snapshot.entries {
+            if seen.insert(e.id.clone()) {
+                out.push(e);
+            }
+        }
+        out
+    }
+
+    /// Return true when `id` came from the local user registry
+    /// (vs. live / bundled). Used by `recipe list` to render a
+    /// "(local)" tag and by the audit-time publish nudge to
+    /// distinguish user-authored recipes.
+    pub fn is_local_entry(&self, id: &str) -> bool {
+        self.local
+            .as_ref()
+            .map(|l| l.entries.iter().any(|e| e.id == id))
+            .unwrap_or(false)
     }
 
     /// Return the catalog as `BuiltinCorpus` structs (no network required).
@@ -193,8 +280,15 @@ impl RecipeRegistry {
     }
 
     /// Return the registry entry for `id`, if known.
+    ///
+    /// Precedence: `local` > `live` > `snapshot`. Local entries
+    /// shadow upstream entries with the same id.
     pub fn find_entry(&self, id: &str) -> Option<&RegistryEntry> {
-        // Prefer live over bundled.
+        if let Some(local) = &self.local {
+            if let Some(e) = local.entries.iter().find(|e| e.id == id) {
+                return Some(e);
+            }
+        }
         if let Some(live) = &self.live {
             if let Some(e) = live.entries.iter().find(|e| e.id == id) {
                 return Some(e);
@@ -366,6 +460,64 @@ mod tests {
             assert!(!entry.name.is_empty(), "entry name must not be empty");
             assert!(!entry.toml_url.is_empty(), "entry toml_url must not be empty");
         }
+    }
+
+    /// User-published recipes from a local registry shadow upstream
+    /// entries by id and surface in `list_entries()` with
+    /// `is_local_entry() == true`.
+    #[test]
+    fn local_registry_overrides_bundled_by_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let local_path = dir.path().join("registry.toml");
+        let local_toml = r#"
+schema_version = 1
+generated_at = "2026-04-28T00:00:00Z"
+registry_url = ""
+
+[[recipes]]
+id = "wikipedia"
+name = "Wikipedia (Local Override)"
+toml_url = "file://wikipedia/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "sec-investigation"
+name = "SEC Filings — AI Investigation"
+toml_url = "file://sec-investigation/recipe.toml"
+sha256 = ""
+"#;
+        std::fs::write(&local_path, local_toml).unwrap();
+
+        let registry =
+            RecipeRegistry::from_bundled(None).with_local_registry(&local_path);
+
+        // Local override wins on id
+        let wiki = registry.find_entry("wikipedia").expect("wikipedia present");
+        assert_eq!(wiki.name, "Wikipedia (Local Override)");
+        assert!(registry.is_local_entry("wikipedia"));
+
+        // Brand-new local recipe surfaces too
+        let sec = registry
+            .find_entry("sec-investigation")
+            .expect("sec-investigation present");
+        assert_eq!(sec.name, "SEC Filings — AI Investigation");
+        assert!(registry.is_local_entry("sec-investigation"));
+
+        // Bundled-only recipe still listed
+        let stack = registry.find_entry("stackexchange");
+        assert!(stack.is_some());
+        assert!(!registry.is_local_entry("stackexchange"));
+    }
+
+    #[test]
+    fn missing_local_registry_is_silent() {
+        let dir = tempfile::tempdir().unwrap();
+        let nonexistent = dir.path().join("does-not-exist.toml");
+        let registry =
+            RecipeRegistry::from_bundled(None).with_local_registry(&nonexistent);
+        // Same number of entries as the bundled-only registry.
+        assert!(registry.list_entries().len() >= 1);
+        assert!(!registry.is_local_entry("wikipedia"));
     }
 
     #[test]

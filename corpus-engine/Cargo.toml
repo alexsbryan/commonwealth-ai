@@ -45,6 +45,12 @@ scraper = "0.20"
 # JSON
 jsonpath-rust = "0.7"
 
+# Directed-multigraph cycle detection — used by the investigation
+# enrichment pipeline's `circular_flow` pattern detector. Pinned at
+# 0.6 (current stable as of 2026-04). Default features include the
+# graph algorithms we need (Tarjan SCC + simple cycle enumeration).
+petgraph = "0.6"
+
 # Data formats
 parquet = "57"
 csv = "1.3"
@@ -141,6 +147,9 @@ treesitter = [
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
 tempfile = "3"
+# In-process HTTP fake for the http_api acquirer e2e tests. Pinned
+# at 0.6 (current stable as of 2026-04). Used only in tests.
+wiremock = "0.6"
 # Encoder side is `compress` — only needed in tests, so pulled in
 # additively here to keep the library binary lean.
 sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2", "util", "compress"] }

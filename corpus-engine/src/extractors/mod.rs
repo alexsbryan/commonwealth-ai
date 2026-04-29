@@ -1,6 +1,7 @@
 pub mod json;
 pub mod xml;
 pub mod html;
+pub mod html_sections;
 pub mod csv;
 pub mod gutenberg_catalog;
 pub mod parquet;

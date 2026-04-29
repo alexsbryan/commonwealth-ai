@@ -107,7 +107,9 @@ fn process_html_file(label: &str, path: &Path) -> Result<Option<ExtractedDoc>> {
 }
 
 /// Recursively collect .html/.htm files from a directory.
-fn collect_html_files(dir: &Path) -> Result<Vec<PathBuf>> {
+/// Pub(crate) so the section-aware extractor can share the same
+/// directory walk + sort.
+pub(crate) fn collect_html_files(dir: &Path) -> Result<Vec<PathBuf>> {
     if dir.is_file() {
         return Ok(vec![dir.to_path_buf()]);
     }

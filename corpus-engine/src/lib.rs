@@ -73,6 +73,7 @@ pub use enrichment::{
     Domain, EnrichmentProgress, FieldModelEngine, FieldModelStats, FieldSkeleton,
     reprocess_skeleton_failures,
 };
+pub use extractors::html_sections::MissReport as SectionMissReport;
 pub use extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
 pub use error::{Error, Result};
 pub use filters::{
@@ -87,7 +88,11 @@ pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,
     SourceFileManifest, SourceFileRecord, SourceFileStatus,
 };
-pub use recipe::{EnrichmentConfig, PrebuiltConfig, Recipe};
+pub use recipe::{
+    Comparison, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig, HttpMethod,
+    PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl,
+    PrebuiltConfig, Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters,
+};
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use testing::{
     AcquisitionResult, ChunkingResult, CorpusEstimate, ExtractionResult,

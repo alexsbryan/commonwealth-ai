@@ -40,6 +40,12 @@ pub struct TestOptions {
     pub offline: bool,
     /// Print per-record extraction outcome to stderr.
     pub verbose: bool,
+    /// User-supplied parameter values, validated against the
+    /// recipe's `[recipe.parameters]` schema before acquisition.
+    /// Empty for recipes without parameters; the test harness
+    /// reports "missing required parameter" the same way the
+    /// production install path does.
+    pub parameters: std::collections::BTreeMap<String, toml::Value>,
 }
 
 impl Default for TestOptions {
@@ -51,6 +57,7 @@ impl Default for TestOptions {
             output: None,
             offline: false,
             verbose: false,
+            parameters: std::collections::BTreeMap::new(),
         }
     }
 }
@@ -79,6 +86,14 @@ pub struct TestReport {
     pub corpus_estimate: Option<CorpusEstimate>,
     /// Whether the embed + search phase was requested.
     pub embed_enabled: bool,
+    /// Per-section misses surfaced by the `html_sections` extractor.
+    /// Populated after extraction by reading
+    /// `<source-dir>/_section_misses.json` if it exists. Empty for
+    /// recipes that don't use the section-aware extractor or whose
+    /// section regexes all matched. The markdown report renders
+    /// these under "Section misses" with a "Suggestion" hint so the
+    /// recipe author can iterate on the regex.
+    pub section_misses: Vec<crate::extractors::html_sections::MissReport>,
 }
 
 impl TestReport {
@@ -212,6 +227,30 @@ impl TestReport {
             md.push_str("*Skipped*\n");
         }
         md.push('\n');
+
+        // ── Section misses (html_sections only) ────────────────────────────
+        if !self.section_misses.is_empty() {
+            md.push_str("### Section misses\n\n");
+            md.push_str(
+                "These section regexes did not match the sample. The recipe \
+                 author's likely next step is to anchor on the actual heading \
+                 the document uses (shown in **nearby text** below).\n\n",
+            );
+            md.push_str("| File | Section | Nearby text (200 chars) |\n|---|---|---|\n");
+            for miss in &self.section_misses {
+                let nearby = miss
+                    .nearby_text
+                    .as_deref()
+                    .unwrap_or("(empty)")
+                    .replace('\n', " ")
+                    .replace('|', "\\|");
+                md.push_str(&format!(
+                    "| `{}` | `{}` | {} |\n",
+                    miss.file, miss.section, nearby,
+                ));
+            }
+            md.push('\n');
+        }
 
         // ── Chunking ────────────────────────────────────────────────────────
         md.push_str("## Chunking\n\n");
@@ -391,7 +430,53 @@ pub(crate) async fn run_test(
     options: &TestOptions,
 ) -> Result<TestReport> {
     // ── Phase 1: Parse ───────────────────────────────────────────────────────
-    let recipe = Recipe::from_file(recipe_path)?;
+    let mut recipe = Recipe::from_file(recipe_path)?;
+
+    // ── Phase 1b: Resolve parameters (test harness path) ─────────────────────
+    // Mirrors the production install flow: validate user-supplied
+    // parameter values against the recipe's `[recipe.parameters]`
+    // schema before any acquisition runs. Missing required values
+    // surface as a validation error so the recipe author sees the
+    // full picture in the markdown report.
+    //
+    // Skipped in validation-only mode (`sample_size == 0`) when no
+    // params were supplied: the recipe author is asking "does the
+    // schema look right?" — not "would these specific values
+    // resolve?". The validate-only path should never require the
+    // LLM to fabricate parameter values just to pass.
+    let skip_param_resolution =
+        options.sample_size == 0 && options.parameters.is_empty();
+    if !skip_param_resolution
+        && (!recipe.parameters.is_empty() || !options.parameters.is_empty())
+    {
+        match recipe.resolve_parameters(&options.parameters) {
+            Ok(resolved) => {
+                recipe = recipe.with_resolved_parameters(resolved);
+            }
+            Err(e) => {
+                let mut validation = validate_recipe(&recipe, options.offline).await;
+                validation
+                    .errors
+                    .push(format!("Parameter resolution failed: {e}"));
+                return Ok(TestReport {
+                    recipe_id: recipe.corpus.id.clone(),
+                    recipe_name: recipe.corpus.name.clone(),
+                    recipe_path: recipe_path.to_path_buf(),
+                    tested_at: rfc3339_now(),
+                    engine_version: env!("CARGO_PKG_VERSION").to_string(),
+                    validation,
+                    acquisition: None,
+                    extraction: None,
+                    chunking: None,
+                    sample_chunks: Vec::new(),
+                    test_queries: Vec::new(),
+                    corpus_estimate: None,
+                    embed_enabled: options.embed,
+                    section_misses: Vec::new(),
+                });
+            }
+        }
+    }
 
     // ── Phase 2: Validate ────────────────────────────────────────────────────
     let validation = validate_recipe(&recipe, options.offline).await;
@@ -410,6 +495,7 @@ pub(crate) async fn run_test(
         test_queries: Vec::new(),
         corpus_estimate: None,
         embed_enabled: options.embed,
+        section_misses: Vec::new(),
     };
 
     // Validation-only mode: stop here.
@@ -515,6 +601,29 @@ pub(crate) async fn run_test(
 
     if let Some(ref mut acq) = report.acquisition {
         acq.records_fetched = attempted;
+    }
+
+    // Slurp the html_sections miss sidecar if the extractor wrote
+    // one. Empty / missing file means no misses to report.
+    let misses_candidates = [
+        source_path.join("_section_misses.json"),
+        source_path
+            .parent()
+            .map(|p| p.join("_section_misses.json"))
+            .unwrap_or_default(),
+    ];
+    for candidate in &misses_candidates {
+        if candidate.is_file() {
+            if let Ok(raw) = std::fs::read_to_string(candidate) {
+                if let Ok(parsed) = serde_json::from_str::<
+                    Vec<crate::extractors::html_sections::MissReport>,
+                >(&raw)
+                {
+                    report.section_misses = parsed;
+                    break;
+                }
+            }
+        }
     }
 
     if docs.is_empty() {
@@ -750,6 +859,32 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
         warnings.push("`corpus.license` is empty — add a SPDX identifier (e.g. `CC-BY-SA-4.0`)".into());
     }
 
+    // ── html_sections regex compilation + section breadth heuristic ───
+    if let crate::recipe::ExtractorConfig::HtmlSections {
+        sections,
+        fallback: _,
+        title_selector: _,
+    } = &recipe.extract
+    {
+        validate_html_sections(sections, &mut errors, &mut warnings);
+    }
+
+    // ── http_api: URL-template lint vs declared parameters ────────────
+    if let crate::recipe::AcquirerConfig::HttpApi {
+        requests,
+        headers,
+        ..
+    } = &recipe.acquire
+    {
+        validate_http_api_templates(
+            requests,
+            headers.as_ref(),
+            &recipe.parameters,
+            &mut errors,
+            &mut warnings,
+        );
+    }
+
     let source_present = !matches!(
         &recipe.acquire,
         AcquirerConfig::LocalFile { path } if path.is_empty()
@@ -773,6 +908,142 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
         source_present,
         format_known,
         source_reachable,
+    }
+}
+
+/// Compile every regex in an `html_sections` extractor and surface
+/// failures as recipe errors. Also flags broad / ungrounded patterns
+/// (no anchors, very short, generic English words) as warnings —
+/// the recipe author can ignore those, but they mostly indicate
+/// something the test harness will catch as a false-positive match.
+fn validate_html_sections(
+    sections: &[crate::recipe::SectionRule],
+    errors: &mut Vec<String>,
+    warnings: &mut Vec<String>,
+) {
+    if sections.is_empty() {
+        errors.push(
+            "html_sections extractor declared but `[[extract.sections]]` is empty"
+                .into(),
+        );
+        return;
+    }
+    for s in sections {
+        if let Err(e) = regex::Regex::new(&s.start_pattern) {
+            errors.push(format!(
+                "section `{}`: invalid start_pattern `{}`: {e}",
+                s.name, s.start_pattern
+            ));
+        }
+        if let Err(e) = regex::Regex::new(&s.end_pattern) {
+            errors.push(format!(
+                "section `{}`: invalid end_pattern `{}`: {e}",
+                s.name, s.end_pattern
+            ));
+        }
+        // Heuristic: a literal-only pattern shorter than 4 chars is
+        // almost certainly going to false-positive. Flag once.
+        if s.start_pattern.chars().count() < 4 {
+            warnings.push(format!(
+                "section `{}`: start_pattern `{}` is very short — \
+                 likely matches false positives. Anchor with `^` or \
+                 a heading marker.",
+                s.name, s.start_pattern
+            ));
+        }
+    }
+}
+
+/// Walk every `{name}` placeholder in the http_api templates and
+/// confirm it references either `base_url` (the acquirer's special
+/// reserved name) or a parameter declared in `[recipe.parameters]`.
+/// Mis-spelled placeholders silently break ingest, so catching them
+/// at validation time is one of the highest-leverage checks the
+/// schema-aware validator can do.
+fn validate_http_api_templates(
+    requests: &[crate::recipe::RequestTemplate],
+    headers: Option<&std::collections::BTreeMap<String, String>>,
+    parameters: &std::collections::BTreeMap<String, crate::recipe::ParameterSpec>,
+    errors: &mut Vec<String>,
+    warnings: &mut Vec<String>,
+) {
+    use std::sync::OnceLock;
+    static PLACEHOLDER: OnceLock<regex::Regex> = OnceLock::new();
+    let re = PLACEHOLDER.get_or_init(|| {
+        regex::Regex::new(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}").unwrap()
+    });
+
+    let known: std::collections::HashSet<String> = parameters
+        .keys()
+        .cloned()
+        .chain(std::iter::once("base_url".to_string()))
+        .collect();
+
+    let mut undeclared: std::collections::BTreeSet<String> = Default::default();
+
+    for (idx, req) in requests.iter().enumerate() {
+        // for_each names must reference declared parameters
+        for name in &req.for_each {
+            if !parameters.contains_key(name) {
+                errors.push(format!(
+                    "request[{idx}].for_each references undeclared parameter `{name}` \
+                     — declared: [{}]",
+                    parameters
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        }
+        for cap in re.captures_iter(&req.url) {
+            let name = cap[1].to_string();
+            if !known.contains(&name) {
+                undeclared.insert(name);
+            }
+        }
+        if let Some(body) = &req.body {
+            for cap in re.captures_iter(body) {
+                let name = cap[1].to_string();
+                if !known.contains(&name) {
+                    undeclared.insert(name);
+                }
+            }
+        }
+    }
+    if let Some(h) = headers {
+        for (k, v) in h {
+            for cap in re.captures_iter(v) {
+                let name = cap[1].to_string();
+                if !known.contains(&name) {
+                    undeclared.insert(name.clone());
+                }
+            }
+            // Header names with placeholders are not supported.
+            if re.is_match(k) {
+                warnings.push(format!(
+                    "header name `{k}` contains `{{name}}` — header names are \
+                     not interpolated; only header *values* are"
+                ));
+            }
+        }
+    }
+
+    if !undeclared.is_empty() {
+        let names: Vec<String> = undeclared
+            .iter()
+            .map(|n| format!("{{{n}}}"))
+            .collect();
+        errors.push(format!(
+            "http_api templates reference undeclared placeholder(s): {} — \
+             declared parameters: [{}]",
+            names.join(", "),
+            parameters
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
 }
 
@@ -849,7 +1120,24 @@ fn acquirer_source_url(recipe: &Recipe) -> String {
         AcquirerConfig::WebCrawl { seed_urls, .. } => {
             seed_urls.first().cloned().unwrap_or_else(|| "(no seed URL)".into())
         }
-        AcquirerConfig::ApiPaginated { base_url, .. } => base_url.clone(),
+        AcquirerConfig::HttpApi {
+            base_url,
+            requests,
+            ..
+        } => {
+            // Prefer the base_url for surfacing in test reports; fall
+            // back to the first request's URL template (which may
+            // still contain unresolved `{name}` placeholders — that's
+            // fine for diagnostics, the resolver runs later).
+            if !base_url.is_empty() {
+                base_url.clone()
+            } else {
+                requests
+                    .first()
+                    .map(|r| r.url.clone())
+                    .unwrap_or_else(|| "(no http_api URL)".into())
+            }
+        }
         AcquirerConfig::LocalFile { path } => format!("file://{path}"),
         AcquirerConfig::Custom { kind, .. } => format!("custom:{kind}"),
     }
@@ -961,4 +1249,226 @@ fn unix_to_date_parts(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
 
 fn is_leap(year: u64) -> bool {
     (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Minimal recipe TOML factory for validate-only tests. Uses
+    /// `bulk_download` so we don't accidentally exercise other
+    /// validators; the field-of-interest is plugged in by the test.
+    fn parse_recipe(extra: &str) -> Recipe {
+        let toml = format!(
+            r#"
+[corpus]
+id = "demo"
+name = "demo"
+license = "Apache-2.0"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+
+{extra}
+"#
+        );
+        Recipe::from_toml(&toml).expect("recipe parses")
+    }
+
+    #[tokio::test]
+    async fn validate_flags_invalid_html_sections_regex() {
+        let toml = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "html_sections"
+
+[[extract.sections]]
+name = "md_and_a"
+description = "Management Discussion & Analysis"
+start_pattern = "(((unbalanced"
+end_pattern = "(?i)item\\s+8"
+
+[chunk]
+type = "sentence"
+"#;
+        let recipe = Recipe::from_toml(toml).unwrap();
+        let result = validate_recipe(&recipe, true).await;
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("md_and_a") && e.contains("invalid start_pattern")),
+            "expected invalid-regex error, got {:?}",
+            result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_warns_on_short_pattern() {
+        let toml = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "html_sections"
+
+[[extract.sections]]
+name = "x"
+description = "x"
+start_pattern = "Hi"
+end_pattern = "Bye"
+
+[chunk]
+type = "sentence"
+"#;
+        let recipe = Recipe::from_toml(toml).unwrap();
+        let result = validate_recipe(&recipe, true).await;
+        assert!(
+            result.warnings.iter().any(|w| w.contains("very short")),
+            "expected very-short warning, got {:?}",
+            result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_flags_undeclared_placeholders_in_http_api() {
+        let toml = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[parameters.entity]
+type = "list"
+required = true
+
+[acquire]
+type = "http_api"
+base_url = "https://api.example.com"
+
+[[acquire.requests]]
+url = "{base_url}?q={entity}&category={category}"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#;
+        let recipe = Recipe::from_toml(toml).unwrap();
+        let result = validate_recipe(&recipe, true).await;
+        // {entity} is declared, {category} is not. Only {category} should error.
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("{category}") && !e.contains("{entity}")),
+            "expected undeclared `{{category}}` error, got {:?}",
+            result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_flags_for_each_pointing_at_undeclared_param() {
+        let toml = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[parameters.entity]
+type = "list"
+required = true
+
+[acquire]
+type = "http_api"
+base_url = "https://api.example.com"
+
+[[acquire.requests]]
+url = "{base_url}?q={entity}"
+for_each = ["entity", "form_type"]
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#;
+        let recipe = Recipe::from_toml(toml).unwrap();
+        let result = validate_recipe(&recipe, true).await;
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("for_each") && e.contains("form_type")),
+            "expected for_each-undeclared error, got {:?}",
+            result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_passes_clean_http_api_recipe() {
+        let toml = r#"
+[corpus]
+id = "demo"
+name = "demo"
+license = "MIT"
+
+[parameters.entity]
+type = "list"
+required = true
+
+[parameters.start_date]
+type = "date"
+default = "2022-01-01"
+
+[acquire]
+type = "http_api"
+base_url = "https://api.example.com"
+
+[[acquire.requests]]
+url = "{base_url}/search?q={entity}&from={start_date}"
+for_each = ["entity"]
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#;
+        let recipe = Recipe::from_toml(toml).unwrap();
+        let result = validate_recipe(&recipe, true).await;
+        assert!(
+            result.errors.is_empty(),
+            "clean recipe should validate, got errors: {:?}",
+            result.errors
+        );
+    }
+
+    /// Minimal smoke test to confirm the helper still produces a
+    /// usable Recipe. Mostly exists so the `parse_recipe` helper
+    /// stays warning-free if specific tests above are commented out
+    /// during local iteration.
+    #[tokio::test]
+    async fn parse_recipe_helper_works() {
+        let r = parse_recipe("");
+        assert_eq!(r.corpus.id, "demo");
+    }
 }

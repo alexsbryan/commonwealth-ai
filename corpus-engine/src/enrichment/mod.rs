@@ -15,6 +15,7 @@ pub mod entity_extraction;
 pub mod fault_lines;
 pub mod field_engine;
 pub mod filter;
+pub mod investigation;
 pub mod open_questions;
 pub mod pipeline;
 pub mod sep;
