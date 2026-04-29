@@ -274,7 +274,7 @@ impl ModelSlot {
         ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
         request: &CompletionRequest,
         quirks: &ModelQuirks,
-    ) -> Result<(String, usize)> {
+    ) -> Result<(String, usize, usize)> {
         // Clear KV cache before each new inference sequence.
         // `clear_kv_cache()` is also called at the end of a successful run, but
         // if a prior call failed mid-decode the cache is left dirty. Pre-clearing
@@ -387,8 +387,7 @@ impl ModelSlot {
         }
 
         ctx.clear_kv_cache();
-        let total_tokens = tokens.len() + n_generated;
-        Ok((output, total_tokens))
+        Ok((output, tokens.len(), n_generated))
     }
 
     fn generate_stream_sync(
@@ -1925,6 +1924,43 @@ impl EmbeddedLlamaCpp {
             let guard = self.extras.read().ok()?;
             guard.by_model_id.get(mid).cloned()
         });
+
+        // Named-slot match. The fast / primary / code slots are
+        // configured at startup, so they don't appear in the extras
+        // index — but a client can still address them by model_id
+        // (the GGUF file stem) via the OpenAI `model` field. Without
+        // this check, such a request would fall through to OICP-based
+        // slot picking, which defaults to `Slow → Primary` and
+        // silently routes the user to a different model than they
+        // asked for.
+        if extras_match.is_none() {
+            if let Some(mid) = request.model_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                if mid == self.fast.model_id {
+                    return SlotTarget::Fast;
+                }
+                if let Some(pid) = self
+                    .primary_path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .and_then(|s| s.to_str())
+                {
+                    if mid == pid {
+                        return SlotTarget::Primary;
+                    }
+                }
+                if let Some(cid) = self
+                    .code_path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .and_then(|s| s.to_str())
+                {
+                    if mid == cid {
+                        return SlotTarget::Code;
+                    }
+                }
+            }
+        }
+
         pick_slot(
             request,
             self.primary_path.is_some(),
@@ -2156,7 +2192,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
                 }));
-                let (text, tokens_used) = match result {
+                let (text, prompt_tokens, completion_tokens) = match result {
                     Ok(Ok(r)) => r,
                     Ok(Err(e)) => {
                         tracing::warn!(slot = %slot_label_owned, error = %e, "inference error");
@@ -2177,7 +2213,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let latency_ms = start.elapsed().as_millis() as u64;
                 Ok(CompletionResponse {
                     text,
-                    tokens_used,
+                    tokens_used: prompt_tokens + completion_tokens,
+                    prompt_tokens,
                     model_id: slot.model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
@@ -2274,7 +2311,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
                 }));
 
-                let (text, tokens_used) = match result {
+                let (text, prompt_tokens, completion_tokens) = match result {
                     Ok(Ok(r)) => r,
                     Ok(Err(e)) => {
                         tracing::warn!(slot = slot_label, error = %e, "inference error");
@@ -2295,7 +2332,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 Ok((CompletionResponse {
                     text,
-                    tokens_used,
+                    tokens_used: prompt_tokens + completion_tokens,
+                    prompt_tokens,
                     // `slot` may have been dropped on the fresh-ctx
                     // path; use the model_id cloned before the
                     // branch.
@@ -2348,7 +2386,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
                 }));
 
-                let (text, tokens_used) = match result {
+                let (text, prompt_tokens, completion_tokens) = match result {
                     Ok(Ok(r)) => r,
                     Ok(Err(e)) => {
                         tracing::warn!(slot = "fast", error = %e, "inference error");
@@ -2367,7 +2405,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 Ok(CompletionResponse {
                     text,
-                    tokens_used,
+                    tokens_used: prompt_tokens + completion_tokens,
+                    prompt_tokens,
                     model_id: slot.model_id.clone(),
                     latency_ms,
                     oicp_meta: None,

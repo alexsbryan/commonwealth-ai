@@ -208,7 +208,17 @@ impl CompletionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionResponse {
     pub text: String,
+    /// Total tokens (prompt + completion). Kept as the historical
+    /// "single number" telemetry stat. For the OpenAI Usage split,
+    /// callers use `prompt_tokens` and derive completion as
+    /// `tokens_used - prompt_tokens`.
     pub tokens_used: usize,
+    /// Number of tokens in the formatted prompt (chat template +
+    /// user content). Defaults to 0 for providers that don't track
+    /// the split — the adapter then falls back to `tokens_used` in
+    /// the legacy single-number form.
+    #[serde(default)]
+    pub prompt_tokens: usize,
     pub model_id: String,
     pub latency_ms: u64,
     /// OICP metadata from the provider, if available.

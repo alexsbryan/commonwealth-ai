@@ -159,6 +159,7 @@ impl InferenceProvider for SummaryMockInference {
         Ok(CompletionResponse {
             text,
             tokens_used: 20,
+            prompt_tokens: 0,
             model_id: "mock".to_string(),
             latency_ms: 1,
             oicp_meta: None,

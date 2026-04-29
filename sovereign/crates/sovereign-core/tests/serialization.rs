@@ -213,6 +213,7 @@ fn completion_response_as_bool() {
     let yes = CompletionResponse {
         text: "yes".to_string(),
         tokens_used: 1,
+        prompt_tokens: 0,
         model_id: "test".to_string(),
         latency_ms: 10,
         oicp_meta: None,
@@ -222,6 +223,7 @@ fn completion_response_as_bool() {
     let no = CompletionResponse {
         text: "no".to_string(),
         tokens_used: 1,
+        prompt_tokens: 0,
         model_id: "test".to_string(),
         latency_ms: 10,
         oicp_meta: None,

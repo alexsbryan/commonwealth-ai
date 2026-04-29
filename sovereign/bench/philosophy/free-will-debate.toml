@@ -18,44 +18,13 @@
 template = "free-will-debate"
 description = "Expected and forbidden outputs for the free-will-debate template, evaluated against the resolved atlas."
 
-# ── Phase 1 skeleton: positions ────────────────────────────────────
+# ── Phase 1 positions: removed (v1-pipeline legacy artifact) ───────
 #
-# Stanford-style positions extracted from the introductory passages.
-# Each named position must appear in at least one position record;
-# epistemic_status and proponents are scored independently.
-
-[[expected_positions]]
-name_contains_any = ["compatibilism"]
-epistemic_status = "majority"
-proponents_any = ["Frankfurt", "Hume", "Hobbes", "Fischer", "Wolf"]
-
-[[expected_positions]]
-name_contains_any = ["hard determinism"]
-epistemic_status = "minority"
-proponents_any = ["d'Holbach", "Spinoza"]
-
-[[expected_positions]]
-name_contains_any = ["libertarianism"]
-epistemic_status = "minority"
-proponents_any = ["Kane", "O'Connor", "Chisholm"]
-
-[[expected_positions]]
-name_contains_any = ["hard incompatibilism"]
-epistemic_status = "minority"
-proponents_any = ["Pereboom"]
-
-# Anti-tests: positions the extractor must NOT produce.
-[[forbidden_positions]]
-name_contains_any = ["frozen-soul", "frozen soul"]
-reason = "Frozen-soul is a thought experiment dramatising libertarian intuition, not a position."
-
-[[forbidden_positions]]
-name_contains_any = ["strawson 1962", "freedom and resentment"]
-reason = "Strawson's 1962 paper is mentioned as biographical context, not as a position the chapter defends."
-
-[[forbidden_positions]]
-name_contains_any = ["political freedom", "freedom of speech", "freedom from coercion"]
-reason = "Chapter 1 explicitly disclaims political freedom as not the topic."
+# The v2 atlas surfaces named positions as concept-typed Entity atoms
+# with claims attributed to them; the dynamic query path traverses
+# atoms+edges to assemble position briefs at read time. There is no
+# pre-baked field_skeleton.json to score against. Concept-atom and
+# claim-attribution scoring below cover the same ground.
 
 # ── Phase 3a/3b atoms: persons (philosophers cited) ────────────────
 

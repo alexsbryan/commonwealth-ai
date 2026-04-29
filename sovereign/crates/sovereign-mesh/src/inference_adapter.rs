@@ -404,14 +404,10 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                 finish_reason: Some(finish_reason),
             }],
             usage: Some(Usage {
-                // Sovereign's `CompletionResponse.tokens_used`
-                // conflates prompt + completion in a single number.
-                // Report it as `total_tokens` and leave the split
-                // unknown rather than lie — OpenAI clients tolerate
-                // either prompt+completion set or total_tokens
-                // alone.
-                prompt_tokens: 0,
-                completion_tokens: resp.tokens_used as u32,
+                prompt_tokens: resp.prompt_tokens as u32,
+                completion_tokens: resp
+                    .tokens_used
+                    .saturating_sub(resp.prompt_tokens) as u32,
                 total_tokens: resp.tokens_used as u32,
             }),
         })

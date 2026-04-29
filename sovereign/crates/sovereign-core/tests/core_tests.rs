@@ -37,6 +37,7 @@ impl InferenceProvider for MockInference {
         Ok(CompletionResponse {
             text: self.response_text.clone(),
             tokens_used: 10,
+            prompt_tokens: 0,
             model_id: "mock".to_string(),
             latency_ms: 1,
             oicp_meta: None,
@@ -707,6 +708,7 @@ impl InferenceProvider for SequencedMockInference {
         Ok(CompletionResponse {
             text,
             tokens_used: 10,
+            prompt_tokens: 0,
             model_id: "mock-seq".to_string(),
             latency_ms: 1,
             oicp_meta: None,

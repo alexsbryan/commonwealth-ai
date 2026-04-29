@@ -56,6 +56,7 @@ impl InferenceProvider for DeterministicInference {
         Ok(CompletionResponse {
             text,
             tokens_used: 10,
+            prompt_tokens: 0,
             model_id: "deterministic".to_string(),
             latency_ms: 1,
             oicp_meta: None,

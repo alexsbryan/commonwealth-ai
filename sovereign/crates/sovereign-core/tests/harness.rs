@@ -120,6 +120,7 @@ impl InferenceProvider for DeterministicInference {
         Ok(CompletionResponse {
             text,
             tokens_used: 10,
+            prompt_tokens: 0,
             model_id: "deterministic".to_string(),
             latency_ms: 1,
             oicp_meta: None,
@@ -168,6 +169,7 @@ impl InferenceProvider for AlwaysSearchInference {
         Ok(CompletionResponse {
             text,
             tokens_used: 5,
+            prompt_tokens: 0,
             model_id: "always-search".to_string(),
             latency_ms: 1,
             oicp_meta: None,
@@ -444,6 +446,7 @@ impl InferenceProvider for ScriptableInference {
                 GapScript::NoGap => Ok(CompletionResponse {
                     text: r#"{"has_gap": false}"#.to_string(),
                     tokens_used: 5,
+                    prompt_tokens: 0,
                     model_id: "scriptable-gap".to_string(),
                     latency_ms: 1,
                     oicp_meta: None,
@@ -456,6 +459,7 @@ impl InferenceProvider for ScriptableInference {
                     Ok(CompletionResponse {
                         text: body,
                         tokens_used: 20,
+                        prompt_tokens: 0,
                         model_id: "scriptable-gap".to_string(),
                         latency_ms: 1,
                         oicp_meta: None,
@@ -473,6 +477,7 @@ impl InferenceProvider for ScriptableInference {
                 RefineScript::Text(t) => Ok(CompletionResponse {
                     text: t.clone(),
                     tokens_used: 15,
+                    prompt_tokens: 0,
                     model_id: "scriptable-refine".to_string(),
                     latency_ms: 1,
                     oicp_meta: None,

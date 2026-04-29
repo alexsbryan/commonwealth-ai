@@ -4,36 +4,12 @@
 template = "virtue-ethics-fragments"
 description = "Expected and forbidden outputs for the virtue-ethics-fragments template."
 
-# ── Phase 1 skeleton: positions ────────────────────────────────────
-
-[[expected_positions]]
-name_contains_any = ["aristotelian", "aristotle"]
-proponents_any = ["Aristotle"]
-
-[[expected_positions]]
-name_contains_any = ["neo-aristotelian", "neoaristotelian"]
-proponents_any = ["Foot", "MacIntyre"]
-
-[[expected_positions]]
-name_contains_any = ["sentimentalism", "sentimentalist"]
-proponents_any = ["Hume", "Slote"]
-
-[[expected_positions]]
-name_contains_any = ["situationism", "situationist"]
-proponents_any = ["Harman", "Doris"]
-
-[[expected_positions]]
-name_contains_any = ["care ethics", "care ethic"]
-proponents_any = ["Gilligan"]
-
-# Anti-tests
-[[forbidden_positions]]
-name_contains_any = ["good samaritan", "milgram"]
-reason = "Cited as empirical evidence underlying situationism, not as positions."
-
-[[forbidden_positions]]
-name_contains_any = ["foot's view", "foot position", "macintyre's view", "macintyre position"]
-reason = "Foot and MacIntyre belong under neo-Aristotelianism; do not split the school by author."
+# ── Phase 1 positions: removed (v1-pipeline legacy artifact) ───────
+#
+# v2 atlas surfaces named positions as concept-typed Entity atoms with
+# claims attributed to them; the dynamic query path traverses
+# atoms+edges to assemble position briefs at read time. Concept-atom
+# and claim-attribution scoring below cover the same ground.
 
 # ── Phase 3a/3b atoms: persons ─────────────────────────────────────
 

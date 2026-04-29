@@ -130,6 +130,8 @@ struct ChatMessage {
 struct UsageInfo {
     #[serde(default)]
     total_tokens: usize,
+    #[serde(default)]
+    prompt_tokens: usize,
 }
 
 // ─── SSE Streaming Types ─────────────────────────────────────
@@ -188,10 +190,10 @@ impl InferenceProvider for RemoteApiProvider {
             .and_then(|c| c.message.content.clone())
             .unwrap_or_default();
 
-        let tokens_used = chat_response
+        let (tokens_used, prompt_tokens) = chat_response
             .usage
-            .map(|u| u.total_tokens)
-            .unwrap_or(0);
+            .map(|u| (u.total_tokens, u.prompt_tokens))
+            .unwrap_or((0, 0));
 
         let model_id = chat_response
             .model
@@ -200,6 +202,7 @@ impl InferenceProvider for RemoteApiProvider {
         Ok(CompletionResponse {
             text,
             tokens_used,
+            prompt_tokens,
             model_id,
             latency_ms: start.elapsed().as_millis() as u64,
             oicp_meta: chat_response.oicp,

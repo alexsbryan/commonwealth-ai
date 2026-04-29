@@ -229,6 +229,7 @@ mod tests {
             Ok(CompletionResponse {
                 text: self.response.clone(),
                 tokens_used: 5,
+                prompt_tokens: 0,
                 model_id: "mock".to_string(),
                 latency_ms: 10,
                 oicp_meta: None,

@@ -4,29 +4,12 @@
 template = "stoicism-mini"
 description = "Expected and forbidden outputs for the stoicism-mini template."
 
-# ── Phase 1 skeleton: positions ────────────────────────────────────
-
-[[expected_positions]]
-name_contains_any = ["stoicism", "stoic"]
-proponents_any = ["Zeno", "Chrysippus", "Epictetus", "Marcus Aurelius", "Seneca"]
-
-[[expected_positions]]
-name_contains_any = ["epicurean", "epicureanism"]
-proponents_any = ["Epicurus"]
-note = "Cited as a rival school in chapter 4 — should be extracted as a position there."
-
-# Anti-tests
-[[forbidden_positions]]
-name_contains_any = ["dichotomy of control"]
-reason = "Presented as a method (Epictetus' Enchiridion 1), not a philosophical position."
-
-[[forbidden_positions]]
-name_contains_any = ["preferred indifferents"]
-reason = "A technical concept within Stoicism, not a position contrasted with another."
-
-[[forbidden_positions]]
-name_contains_any = ["enchiridion", "meditations"]
-reason = "Source texts, not positions."
+# ── Phase 1 positions: removed (v1-pipeline legacy artifact) ───────
+#
+# v2 atlas surfaces named positions as concept-typed Entity atoms with
+# claims attributed to them; the dynamic query path traverses
+# atoms+edges to assemble position briefs at read time. Concept-atom
+# and claim-attribution scoring below cover the same ground.
 
 # ── Phase 3a/3b atoms: persons ─────────────────────────────────────
 
