@@ -22,6 +22,7 @@ mod doctor_cmd;
 mod found;
 mod honesty;
 mod init;
+mod install_service_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
 mod milestone_cmd;
@@ -443,6 +444,14 @@ async fn main() {
             }
             "stop" => {
                 let code = stop_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "install-service" => {
+                // Phase 4: explicit service registration. Pre-Phase-4
+                // this happened implicitly inside `sovereign setup`;
+                // splitting it lets users run the daemon foreground
+                // first and register only when they're ready.
+                let code = install_service_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "refresh" => {

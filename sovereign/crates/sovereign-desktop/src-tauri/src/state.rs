@@ -967,6 +967,17 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         mesh.set_corpus_engine(Arc::clone(&corpus_engine)).await;
     }
 
+    // Lazy-stamp canonical fingerprints for any installed canonicals
+    // that don't yet carry one. Mirrors the daemon-mode bootstrap so
+    // a Local/CliSetup desktop install gets the same legacy-corpus
+    // upgrade pass. Spawned so it doesn't block startup.
+    {
+        let engine_for_stamp = Arc::clone(&corpus_engine);
+        tokio::spawn(async move {
+            engine_for_stamp.lazy_stamp_legacy_fingerprints().await;
+        });
+    }
+
     // Also hand over our RAW `InferenceProvider` (the
     // `EmbeddedLlamaCpp`, NOT the mesh-wrapped one) so when a peer
     // POSTs `/v1/chat/completions` to our `:9741`, we serve it from

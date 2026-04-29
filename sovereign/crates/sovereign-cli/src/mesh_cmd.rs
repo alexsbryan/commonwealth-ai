@@ -66,6 +66,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "dedupe" => cmd_corpus_dedupe(&args[1..]).await,
         "repair" => cmd_corpus_repair(&args[1..]).await,
         "merge-partitions" => cmd_corpus_merge_partitions(&args[1..]).await,
+        "pull" => cmd_corpus_pull(&args[1..]).await,
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
         "catalog" => crate::corpus_catalog_cmd::run_catalog(&args[1..]).await,
@@ -154,6 +155,7 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("dedupe <id>",               "One-shot rescue: collapse duplicate-content rows from a resume-rewind ingest"),
             ("repair <id>",               "Reset a 'completed' partition with missing shards back to in-progress so resume picks it up"),
             ("merge-partitions <id>",     "Merge all <id>-partition-*/ dirs into canonical <id>/ (one-shot rescue when peer-merge handoff was lost)"),
+            ("pull <id>",                 "Stream a peer's canonical index over the mesh (use when local is missing or smaller than peer's)"),
             ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
             ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
         ]),
@@ -1646,6 +1648,140 @@ async fn cmd_corpus_repair(args: &[String]) -> i32 {
     println!("  - Or run `sovereign corpus install {corpus_id}` to kick off resume now.");
     println!("  - Either path will skip already-embedded content_hashes via the embed-side dedup gate.");
     0
+}
+
+/// `sovereign corpus pull <id> [--from <peer-url>] [--expected-fingerprint <hex>]`
+///
+/// Stream a peer's canonical index over HTTP, validate the
+/// content fingerprint, and atomically rename it into place at
+/// `<index_dir>/<id>/`. Refuses if a canonical already exists at
+/// the destination — the user must explicitly remove it first
+/// (`sovereign corpus remove <id> --canonical-only --yes`).
+///
+/// `--from <peer-url>` supplies the peer's mesh API base URL
+/// (e.g. `http://100.104.36.28:9742`). Required for v1 — peer
+/// auto-discovery from gossip lands in the auto_recover follow-
+/// up commit. `--expected-fingerprint <hex>` adds a pre-flight
+/// validation: the puller refuses if the peer's advertised
+/// fingerprint doesn't match the expected value (used by the
+/// auto-recover path to pin the source it chose from gossip).
+///
+/// On success, reports throughput + the fingerprint that's now
+/// stamped on the local canonical. The on-disk meta carries the
+/// original peer's fingerprint verbatim; the next daemon round
+/// will pick the canonical up via `installed_indexes()` and
+/// publish it onto our own gossip slot.
+async fn cmd_corpus_pull(args: &[String]) -> i32 {
+    let mut corpus_id: Option<String> = None;
+    let mut peer_url: Option<String> = None;
+    let mut expected_fingerprint: Option<String> = None;
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--from" => {
+                let Some(val) = iter.next() else {
+                    eprintln!("--from requires a peer URL (e.g. http://100.104.36.28:9742)");
+                    return 1;
+                };
+                peer_url = Some(val.clone());
+            }
+            "--expected-fingerprint" => {
+                let Some(val) = iter.next() else {
+                    eprintln!("--expected-fingerprint requires a hex value");
+                    return 1;
+                };
+                expected_fingerprint = Some(val.clone());
+            }
+            "--help" | "-h" => {
+                println!(
+                    "Usage: sovereign corpus pull <corpus_id> --from <peer-url> \
+                     [--expected-fingerprint <hex>]\n\n\
+                     Stream a peer's canonical index over the mesh and atomically \
+                     install it locally.\n\n\
+                     Refuses when a canonical already exists at \
+                     <data_dir>/indexes/<corpus_id>/. Run \
+                     `sovereign corpus remove <id> --canonical-only --yes` first.\n\n\
+                     The peer URL is the mesh API base (port 9742). The \
+                     X-Canonical-Fingerprint header on the response is \
+                     validated against --expected-fingerprint (if given) AND \
+                     against the recomputed fingerprint of the unpacked \
+                     canonical. A mismatch wipes the temp dir and errors out \
+                     — no partial canonical is left behind."
+                );
+                return 0;
+            }
+            other if !other.starts_with('-') => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(other.to_string());
+                }
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                return 1;
+            }
+        }
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("Missing corpus ID. Usage: sovereign corpus pull <corpus_id> --from <peer-url>");
+        return 1;
+    };
+    let Some(peer_url) = peer_url else {
+        eprintln!(
+            "Missing --from <peer-url>. Auto-discovery from gossip is a \
+             follow-up commit; for now pass the peer's mesh API URL \
+             explicitly (e.g. http://100.104.36.28:9742)."
+        );
+        return 1;
+    };
+
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|cfg| cfg.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        });
+    let index_dir = data_dir.join("indexes");
+
+    println!("Pulling canonical for '{corpus_id}' from {peer_url}…");
+    println!("(streaming tar.zst → unpack → fingerprint validate → atomic rename)");
+    println!();
+
+    let started = std::time::Instant::now();
+    match sovereign_mesh::canonical_pull::pull_canonical_from_peer(
+        &peer_url,
+        &corpus_id,
+        &index_dir,
+        expected_fingerprint.as_deref(),
+    )
+    .await
+    {
+        Ok(report) => {
+            let elapsed = started.elapsed();
+            let mb_per_sec = if elapsed.as_secs_f64() > 0.0 {
+                (report.bytes_uncompressed as f64 / elapsed.as_secs_f64()) / 1_048_576.0
+            } else {
+                0.0
+            };
+            println!("✓ pulled {corpus_id}");
+            println!("  fingerprint:        {}", report.fingerprint);
+            println!("  uncompressed bytes: {}", human_bytes(report.bytes_uncompressed));
+            println!(
+                "  elapsed:            {}m{}s ({:.1} MB/s uncompressed)",
+                elapsed.as_secs() / 60,
+                elapsed.as_secs() % 60,
+                mb_per_sec,
+            );
+            println!("  canonical at:       {}", report.canonical_path.display());
+            0
+        }
+        Err(e) => {
+            eprintln!("✗ pull failed: {e}");
+            1
+        }
+    }
 }
 
 /// Merge every `<corpus>-partition-*/` directory on this node into a

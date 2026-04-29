@@ -156,6 +156,60 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // when nothing to do (no partitions / canonical exists).
         let stranded = engine.corpora_with_stranded_partitions();
         for corpus_id in &stranded {
+            // Phase 6 canonical-sync: before falling through to a
+            // local merge (which may produce an incomplete canonical
+            // when this node's partitions don't cover every shard),
+            // scan gossip for a peer advertising a canonical with
+            // BETTER coverage. If found, pull from that peer instead
+            // of merging locally. Avoids the case where two peers
+            // each have a partial canonical and both keep merging
+            // their partial state forever.
+            if let Some(lead) =
+                find_best_peer_canonical(&state, corpus_id).await
+            {
+                tracing::info!(
+                    corpus = %corpus_id,
+                    peer_url = %lead.peer_url,
+                    fingerprint = %&lead.fingerprint[..lead.fingerprint.len().min(12)],
+                    coverage_ratio = ?lead.coverage_ratio,
+                    chunk_count = lead.chunk_count,
+                    "auto_ingest: peer has healthier canonical — attempting pull"
+                );
+                match crate::canonical_pull::pull_canonical_from_peer(
+                    &lead.peer_url,
+                    corpus_id,
+                    engine.index_dir(),
+                    Some(&lead.fingerprint),
+                )
+                .await
+                {
+                    Ok(report) => {
+                        tracing::info!(
+                            corpus = %corpus_id,
+                            peer = %lead.peer_url,
+                            bytes_uncompressed = report.bytes_uncompressed,
+                            "auto_ingest: pulled canonical from peer — local merge skipped"
+                        );
+                        // Skip the local-merge path; the canonical
+                        // is in place. Next tick of the loop will
+                        // re-publish gossip naturally.
+                        continue;
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            corpus = %corpus_id,
+                            peer = %lead.peer_url,
+                            error = %e,
+                            "auto_ingest: peer pull failed — falling through to local merge"
+                        );
+                        // Fall through: maybe local merge can
+                        // produce a partial-but-useful canonical,
+                        // or the IncompleteCoverage gate will surface
+                        // a clearer error.
+                    }
+                }
+            }
+
             let outcome = commonwealth_api::auto_recover::try_recover_stranded_partitions(
                 engine.index_dir(),
                 corpus_id,
@@ -1036,4 +1090,117 @@ fn spawn_heartbeat(
             }
         }
     })
+}
+
+// ─── Phase 6 canonical-sync: peer-pull preference helper ────────
+
+/// Information about a peer's canonical for a given corpus_id,
+/// extracted from their gossiped `hosted_corpora`. Returned by
+/// [`find_best_peer_canonical`] when a peer's canonical is judged
+/// healthier than what local merge would produce.
+#[derive(Debug, Clone)]
+pub(crate) struct PeerCanonicalLead {
+    pub peer_url: String,
+    pub fingerprint: String,
+    pub coverage_ratio: Option<f64>,
+    pub chunk_count: u64,
+}
+
+/// Walk gossipped peers and return the most attractive canonical
+/// for `corpus_id`, if any.
+///
+/// "Attractive" = has a `canonical_fingerprint` (so we can validate
+/// the pull) AND ranks better than local on whichever heuristic
+/// applies:
+///   - **Sharded corpora**: highest `coverage_ratio` (processed /
+///     total). Robust to legitimate corpus updates that shrink the
+///     chunk set. Ties broken by chunk_count.
+///   - **Non-sharded**: highest chunk_count. Coarse but fine for
+///     the corpora that don't ship a shard manifest.
+///
+/// Returns `None` when no peer advertises a fingerprint for this
+/// corpus, or when no peer beats whatever local could produce.
+/// "What local could produce" is computed by `corpora_with_stranded_partitions`'s
+/// caller — this function is invoked only for stranded corpora,
+/// so any peer canonical is by definition better than the (zero)
+/// local canonical. The ranking is among PEERS, picking the best
+/// remote source.
+async fn find_best_peer_canonical(
+    state: &commonwealth_api::state::AppState,
+    corpus_id: &str,
+) -> Option<PeerCanonicalLead> {
+    let mesh = state.inner.mesh.read().await;
+    let self_id = state.self_node_id();
+    let mut best: Option<PeerCanonicalLead> = None;
+    for member in mesh.members.values() {
+        // Skip ourselves — gossip echoes our own capability report.
+        if member.node_id == self_id {
+            continue;
+        }
+        // Skip offline peers — even if they advertised hosted_corpora
+        // recently, the pull will time out. The mesh's status field
+        // is updated by gossip-driven liveness probes.
+        if !matches!(
+            member.status,
+            commonwealth_core::mesh::NodeStatus::Online
+                | commonwealth_core::mesh::NodeStatus::Busy
+        ) {
+            continue;
+        }
+        for shard_info in &member.capabilities.hosted_corpora {
+            if shard_info.corpus_id != corpus_id {
+                continue;
+            }
+            let Some(fp) = shard_info.canonical_fingerprint.as_deref() else {
+                // Peer hosts the corpus but didn't stamp a
+                // fingerprint yet (legacy install pre-Phase-6).
+                // Skip: we can't validate the pull without one.
+                continue;
+            };
+            if fp.is_empty() {
+                continue;
+            }
+            // Build a peer URL from the first reachable address.
+            // The mesh API listens on port 9742; addresses may be
+            // host:port already (gossip records the published
+            // bind), but safety: rewrite the port if the gossiped
+            // address is on the client port (9741). The internal
+            // canonical-stream endpoint lives on the internal port.
+            let Some(addr) = member.addresses.first() else {
+                continue;
+            };
+            let peer_url = format!("http://{}:9742", addr.ip());
+
+            let candidate = PeerCanonicalLead {
+                peer_url,
+                fingerprint: fp.to_string(),
+                coverage_ratio: shard_info.coverage_ratio(),
+                chunk_count: shard_info.chunk_count,
+            };
+
+            // Compare to current best. Coverage ratio wins when
+            // both candidates have it; chunk_count is the
+            // tiebreaker / fallback.
+            best = Some(match best {
+                None => candidate,
+                Some(prev) => {
+                    let prev_better = match (
+                        prev.coverage_ratio,
+                        candidate.coverage_ratio,
+                    ) {
+                        (Some(p), Some(c)) => p >= c,
+                        (Some(_), None) => true,
+                        (None, Some(_)) => false,
+                        (None, None) => prev.chunk_count >= candidate.chunk_count,
+                    };
+                    if prev_better {
+                        prev
+                    } else {
+                        candidate
+                    }
+                }
+            });
+        }
+    }
+    best
 }

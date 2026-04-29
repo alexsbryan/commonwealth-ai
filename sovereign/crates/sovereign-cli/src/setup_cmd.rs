@@ -22,7 +22,36 @@ use crate::service_install;
 use crate::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 
 pub async fn run_setup(args: &[String]) -> i32 {
-    let opts = match parse_args(args) {
+    // Phase 4: `sovereign setup` is now a wizard-only shim. The
+    // service-install + opencode + doctor steps that used to run
+    // here moved out — service registration is now `sovereign
+    // install-service`, and the daemon-first-boot path
+    // (`sovereign daemon`) inlines the wizard automatically.
+    //
+    // We detect whether this invocation came in via the new
+    // `daemon --setup-only` path (which prepends `--wizard-only`)
+    // or from a direct `sovereign setup` user invocation. Direct
+    // invocations get a one-time banner so the user knows where
+    // service registration moved.
+    let invoked_via_daemon_path = args.iter().any(|a| a == "--wizard-only");
+    let mut effective_args: Vec<String> = args.iter().cloned().collect();
+    if !invoked_via_daemon_path {
+        crate::util::deprecation::announce(
+            "sovereign setup",
+            "sovereign daemon --setup-only",
+        );
+        // The legacy `sovereign setup` is now wizard-only. Force the
+        // flag on so `finish_with_paths` short-circuits before the
+        // service-install branch — that branch belongs to
+        // `sovereign install-service` now. Keeping the alias semantics
+        // means scripts that called `sovereign setup` still get a
+        // working config; they just have to follow up with
+        // `sovereign install-service` if they want the service
+        // manager to keep the daemon alive across reboots.
+        effective_args.push("--wizard-only".to_string());
+    }
+
+    let opts = match parse_args(&effective_args) {
         Ok(o) => o,
         Err(msg) => {
             eprintln!("error: {msg}");
@@ -217,6 +246,15 @@ struct Opts {
     data_dir: Option<PathBuf>,
     repair: bool,
     help: bool,
+    /// Phase 4: if true, run only the hardware-detect → model-pick →
+    /// config-write portion of the wizard. Skip service install,
+    /// opencode config, doctor, and the daemon health probe. The
+    /// daemon's first-boot path sets this so the wizard can run
+    /// inline before `run_daemon` continues to load models and bind
+    /// `:9741`. The legacy `sovereign setup` command also runs in
+    /// this mode and points the user at `sovereign install-service`
+    /// for service registration.
+    wizard_only: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Opts, String> {
@@ -226,6 +264,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
         data_dir: None,
         repair: false,
         help: false,
+        wizard_only: false,
     };
     let mut i = 0;
     while i < args.len() {
@@ -233,6 +272,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
             "--reset" => opts.reset = true,
             "--yes" | "-y" => opts.yes = true,
             "--repair" => opts.repair = true,
+            "--wizard-only" => opts.wizard_only = true,
             "--data-dir" => {
                 i += 1;
                 opts.data_dir = Some(PathBuf::from(
@@ -249,21 +289,25 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign setup",
-    summary: "First-run onboarding: detect hardware, download models, start the daemon.",
+    summary:
+        "First-run onboarding wizard: detect hardware, download models, write config. \
+         Now an alias for `sovereign daemon --setup-only`.",
     sections: &[
         crate::util::help::HelpSection::Usage(
             "sovereign setup [--yes] [--reset] [--data-dir <path>]",
         ),
         crate::util::help::HelpSection::Flags(&[
             ("--yes, -y",       "Non-interactive; accept recommended choices"),
-            ("--reset",         "Wipe config and re-run (uninstalls service first)"),
+            ("--reset",         "Wipe config and re-run (uninstalls service first if present)"),
             ("--data-dir <p>",  "Override the default data root (~/.sovereign)"),
             ("--help, -h",      "Show this message"),
         ]),
         crate::util::help::HelpSection::Notes(
             "Writes config to the XDG config dir (macOS: ~/Library/Application Support/sovereign/,\n\
-             Linux: ~/.config/sovereign/). Registers the daemon with launchd/systemd so it\n\
-             survives logout. Re-run with --reset to wipe and reconfigure.",
+             Linux: ~/.config/sovereign/). Phase 4 split: this command no longer registers a\n\
+             system service. To register the daemon with launchd/systemd so it survives logout,\n\
+             run `sovereign install-service` after the wizard completes. To start the daemon\n\
+             once without registering it, run `sovereign daemon`.",
         ),
     ],
 };
@@ -880,6 +924,22 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     };
     println!("    \u{2713} Wrote {}", config_path.display());
 
+    // Phase 4: when invoked from `sovereign daemon` first-boot or
+    // `sovereign daemon --setup-only`, we stop here. The daemon's
+    // own startup loads models from this freshly-written config; a
+    // service-manager registration would just compete with us for
+    // `:9741`. The legacy `sovereign setup` runs in this mode too —
+    // service install moved to the explicit `sovereign install-service`.
+    if opts.wizard_only {
+        println!();
+        println!("  \u{2713} Wizard complete.");
+        println!();
+        println!("  Next steps:");
+        println!("    sovereign daemon              # start the daemon (foreground)");
+        println!("    sovereign install-service     # register as a launchd/systemd service");
+        return 0;
+    }
+
     // ── Install service ──────────────────────────────────────────
     let bin_path = match std::env::current_exe() {
         Ok(p) => p,
@@ -1372,6 +1432,30 @@ mod tests {
         assert!(opts.reset);
         assert!(opts.yes);
         assert_eq!(opts.data_dir.as_deref(), Some(Path::new("/tmp/sv")));
+    }
+
+    /// Phase 4: `--wizard-only` is the internal flag that
+    /// `daemon_cmd::run_setup_only` uses to suppress the
+    /// service-install / opencode / doctor steps. It also gets
+    /// auto-injected by the legacy `sovereign setup` shim so
+    /// direct invocations of the old name still hit the wizard
+    /// path.
+    #[test]
+    fn parse_args_recognizes_wizard_only_flag() {
+        let opts = parse_args(&s(&["--wizard-only"])).unwrap();
+        assert!(opts.wizard_only);
+        assert!(!opts.reset);
+        assert!(!opts.yes);
+    }
+
+    /// Default Opts still has `wizard_only=false` so we don't
+    /// accidentally short-circuit the legacy `sovereign setup` flow
+    /// in scripts that rebuilt against this binary without changing
+    /// their invocation.
+    #[test]
+    fn parse_args_defaults_wizard_only_off() {
+        let opts = parse_args(&s(&[])).unwrap();
+        assert!(!opts.wizard_only);
     }
 
     #[test]

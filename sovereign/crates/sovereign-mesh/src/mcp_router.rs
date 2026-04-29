@@ -86,15 +86,41 @@ fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
 // standalone `sovereign serve` HTTP module agree on exactly the
 // same surface. See that module for the full contract; this file
 // just imports the helpers.
-use sovereign_tools::mcp_surface::{is_mcp_exposed, render_tools_list, resolve_alias};
+use sovereign_tools::mcp_surface::{is_mcp_exposed, render_tools_list_gated, resolve_alias};
+
+/// Phase 5 feature-root extension. When set, `tools/list` calls
+/// [`render_tools_list_gated`] with this path so spec-gated tools
+/// (`spec`, `drift`) only appear when `.sovereign/features/*/spec.md`
+/// or `ARCHITECTURE.md` exists. `None` (the daemon's default) means
+/// the gate is off and every exposed tool ships unconditionally —
+/// preserving Phase 4 behaviour while we work out per-request gate
+/// resolution for the embedded daemon path.
+#[derive(Clone)]
+pub struct FeatureRoot(pub Option<std::sync::Arc<std::path::PathBuf>>);
+
+impl FeatureRoot {
+    /// Construct from an optional path. The double-Arc layer lets us
+    /// stuff this into an axum Extension cheaply (one shared Arc,
+    /// not a new allocation per request).
+    pub fn new(path: Option<std::path::PathBuf>) -> Self {
+        Self(path.map(std::sync::Arc::new))
+    }
+}
 
 /// Build the MCP router. Mounts `/mcp`, `/mcp/message`, and `/mcp/stats`
 /// with shared per-session state (tool registry, note store, session id,
-/// call counter).
+/// call counter, feature_root).
+///
+/// Phase 5: callers pass `feature_root = Some(dir)` to enable the
+/// spec-presence gate. The standalone `sovereign serve` does this
+/// with the cwd it was launched from. The embedded daemon currently
+/// passes `None` so its `tools/list` matches Phase 4 behaviour; a
+/// per-request gate via the project registry can wire in later.
 pub fn mcp_router(
     tools: Arc<ToolRegistry>,
     logger: Arc<NoteStore>,
     session_id: String,
+    feature_root: FeatureRoot,
 ) -> Router {
     // Shared per-session call counter. Every REFLECT_HINT_INTERVAL tool
     // calls we append a brief reminder to write a session_reflection.
@@ -117,6 +143,7 @@ pub fn mcp_router(
         .layer(Extension(logger))
         .layer(Extension(Arc::new(session_id)))
         .layer(Extension(call_counter))
+        .layer(Extension(feature_root))
         .layer(CorsLayer::permissive())
 }
 
@@ -177,6 +204,7 @@ async fn mcp_handle(
     Extension(logger): Extension<Arc<NoteStore>>,
     Extension(session_id): Extension<Arc<String>>,
     Extension(call_counter): Extension<Arc<AtomicU64>>,
+    Extension(feature_root): Extension<FeatureRoot>,
     Json(req): Json<JsonRpcRequest>,
 ) -> axum::response::Response {
     if !is_localhost(&peer) {
@@ -188,7 +216,7 @@ async fn mcp_handle(
             .into_response();
     }
 
-    match dispatch(req, tools, logger, session_id, call_counter).await {
+    match dispatch(req, tools, logger, session_id, call_counter, feature_root).await {
         Some(response) => (StatusCode::OK, Json(response)).into_response(),
         None => StatusCode::NO_CONTENT.into_response(),
     }
@@ -204,6 +232,7 @@ async fn dispatch(
     logger: Arc<NoteStore>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
+    feature_root: FeatureRoot,
 ) -> Option<JsonRpcResponse> {
     // Notifications: no id → no response. We still want to accept the
     // method (e.g. `notifications/initialized`) so the client doesn't see
@@ -227,7 +256,13 @@ async fn dispatch(
         }
         "tools/list" => {
             let descriptors = tools.descriptors();
-            let tool_list = render_tools_list(&descriptors);
+            // Phase 5: feature_root.0 is `Some(Arc<PathBuf>)` for
+            // spec-gated callers (standalone serve), `None` for the
+            // daemon's pass-through. The cache amortises stat-storms.
+            let tool_list = render_tools_list_gated(
+                &descriptors,
+                feature_root.0.as_deref().map(|p| p.as_path()),
+            );
             JsonRpcResponse::ok(id, serde_json::json!({ "tools": tool_list }))
         }
         "tools/call" => handle_tool_call(id, req.params, tools, logger, session_id, call_counter).await,

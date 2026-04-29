@@ -1218,10 +1218,17 @@ impl EmbeddedDaemon {
             let mut client_router =
                 commonwealth_api::server::client_router(app_state_clone.clone());
             if let Some(m) = mcp_mount {
+                // Phase 5: daemon path leaves the spec-presence gate
+                // off (`FeatureRoot::new(None)`) so `tools/list`
+                // continues to advertise every exposed tool. Per-
+                // request gating via the registered project root is a
+                // follow-up — the embedded daemon serves many projects
+                // and we don't yet plumb per-request feature_root.
                 client_router = client_router.merge(mcp_router::mcp_router(
                     m.tools,
                     m.notes,
                     m.session_id,
+                    mcp_router::FeatureRoot::new(None),
                 ));
             }
             if let Some(mesh_http_router) = mesh_http {
@@ -1450,19 +1457,28 @@ impl EmbeddedDaemon {
 fn takeover_standalone_serve_if_present() {
     let Some(home) = dirs::home_dir() else { return };
     let pid_path = home.join(".sovereign").join("server.pid");
-    let Ok(contents) = std::fs::read_to_string(&pid_path) else {
+    takeover_serve_at(&pid_path);
+}
+
+/// Takeover, parameterized over the pid-pointer path. Split from the
+/// HOME-resolving wrapper above so unit tests can exercise the
+/// stale-pid / malformed-pid / self-pid branches against a tempdir
+/// without mutating `$HOME` (which would race across cargo's
+/// threaded test runner).
+fn takeover_serve_at(pid_path: &Path) {
+    let Ok(contents) = std::fs::read_to_string(pid_path) else {
         return; // No file is the common case: clean boot, no prior init.
     };
     let Ok(pid) = contents.trim().parse::<i32>() else {
         warn!(path = %pid_path.display(), "takeover: malformed pid file");
-        let _ = std::fs::remove_file(&pid_path);
+        let _ = std::fs::remove_file(pid_path);
         return;
     };
     if pid == std::process::id() as i32 {
         // We somehow inherited our own pid file (shouldn't happen
         // in production, but possible in tests where the same
         // binary writes the pointer and then becomes the daemon).
-        let _ = std::fs::remove_file(&pid_path);
+        let _ = std::fs::remove_file(pid_path);
         return;
     }
     let killed = std::process::Command::new("/bin/kill")
@@ -1482,7 +1498,7 @@ fn takeover_standalone_serve_if_present() {
     } else {
         info!(pid, "daemon: stale serve pid file (process gone) — cleared");
     }
-    let _ = std::fs::remove_file(&pid_path);
+    let _ = std::fs::remove_file(pid_path);
 }
 
 /// daemon answers the endpoint with an empty list — misleading for
@@ -1982,6 +1998,72 @@ mod tests {
             models2.len(),
             3,
             "re-registering same config must upsert, not duplicate"
+        );
+    }
+}
+
+#[cfg(test)]
+mod takeover_tests {
+    //! Unit tests for `takeover_serve_at` — Phase 3 daemon-takeover of
+    //! the standalone `sovereign serve --background` process. We
+    //! exercise the deterministic branches (no file, malformed pid,
+    //! self-pid) here. The real-process SIGTERM branch needs a child
+    //! to kill, which lives in the manual lifecycle verification per
+    //! the Phase 3 plan.
+
+    use super::*;
+
+    #[test]
+    fn missing_pid_file_is_a_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server.pid");
+        // No file exists — function must return without panicking
+        // and without creating the file.
+        takeover_serve_at(&path);
+        assert!(!path.exists(), "takeover must not create the pid file");
+    }
+
+    #[test]
+    fn malformed_pid_file_is_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server.pid");
+        std::fs::write(&path, "not-a-number\n").unwrap();
+        takeover_serve_at(&path);
+        assert!(
+            !path.exists(),
+            "malformed pid file must be removed so a future bind can rewrite it"
+        );
+    }
+
+    #[test]
+    fn self_pid_is_cleared_without_signal() {
+        // The self-pid branch defends against the daemon being
+        // launched in a context where it inherited its own pid file
+        // (test harness, in-process spawn). The function must remove
+        // the file and not attempt to SIGTERM ourselves.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server.pid");
+        let me = std::process::id() as i32;
+        std::fs::write(&path, format!("{me}\n")).unwrap();
+        takeover_serve_at(&path);
+        assert!(!path.exists(), "self-pid file must be removed");
+        // If the function had SIGTERM'd us, the test process would be
+        // dead — reaching this assertion proves the self-skip works.
+    }
+
+    #[test]
+    fn stale_pid_file_for_dead_process_is_cleared() {
+        // A pid that's almost certainly not a live process. We use
+        // 999_999, which is well above macOS's default pid_max and
+        // Linux's default 32_768. /bin/kill returns non-zero, the
+        // function logs "stale" and removes the file.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server.pid");
+        std::fs::write(&path, "999999\n").unwrap();
+        takeover_serve_at(&path);
+        assert!(
+            !path.exists(),
+            "stale pid file must be removed so the daemon can write a new one"
         );
     }
 }

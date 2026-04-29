@@ -2984,7 +2984,20 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // calls from the same sovereign project serve invocation.
     let mcp_session_id = format!("serve-{}", uuid::Uuid::new_v4());
 
-    let app = sovereign_mesh::mcp_router::mcp_router(tools, Arc::clone(&notes_store), mcp_session_id);
+    // Phase 5: standalone `sovereign serve` always knows its project
+    // root (resolved above as `repo_root`). Pass it as the
+    // FeatureRoot so `tools/list` consults
+    // `.sovereign/features/*/spec.md` and only advertises the
+    // spec-gated tools (`spec`, `drift`) when a spec exists. Cache
+    // is process-global so repeated `tools/list` calls amortise the
+    // stat against a 1-second TTL.
+    let feature_root = sovereign_mesh::mcp_router::FeatureRoot::new(Some(repo_root.clone()));
+    let app = sovereign_mesh::mcp_router::mcp_router(
+        tools,
+        Arc::clone(&notes_store),
+        mcp_session_id,
+        feature_root,
+    );
 
     let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
         Ok(l) => l,

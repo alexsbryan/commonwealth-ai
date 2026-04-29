@@ -179,6 +179,8 @@ crates/
     ├── admin_http.rs mesh_http.rs mcp_router.rs project_http.rs
     ├── loopback_guard.rs     #   Loopback-only middleware on admin / mcp / mesh routers
     ├── auto_ingest.rs reindexer.rs supervised_task.rs
+    ├── auto_resume.rs        #   Re-spawn in-progress ingests on daemon restart
+    ├── canonical_pull.rs     #   Pull a peer's canonical index over the mesh
     └── projects.rs types.rs
 
 skills/                       # 8 skills: research-analyst, epistemic-research, codebase-navigator,

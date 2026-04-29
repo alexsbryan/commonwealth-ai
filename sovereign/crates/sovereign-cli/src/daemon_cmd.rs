@@ -18,6 +18,7 @@
 //! 6. Block on `tokio::signal::ctrl_c()` so the service manager
 //!    controls lifecycle.
 
+use std::io::IsTerminal as _;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -32,7 +33,19 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_mesh::admin_http::ProviderFactory;
 
 /// Entry point routed from `main.rs` when the user invokes
-/// `sovereign daemon run`. Any other `daemon` subcommand prints usage.
+/// `sovereign daemon` or one of its subcommands.
+///
+/// Phase 4 dispatch order:
+/// - `sovereign daemon`             → bare invocation falls through to `run`,
+///                                    which inlines the setup wizard on
+///                                    first boot if no config exists.
+/// - `sovereign daemon run [flags]` → unchanged; the OS-service entry point.
+/// - `sovereign daemon --flag ...`  → bare flags (e.g. `--setup-only`)
+///                                    route to `run` so users can type
+///                                    `sovereign daemon --setup-only` without
+///                                    the explicit `run` token.
+/// - `sovereign daemon <known>`     → start/stop/restart/reload/status as
+///                                    before.
 pub async fn run(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP);
@@ -45,39 +58,114 @@ pub async fn run(args: &[String]) -> i32 {
         Some("restart") => restart_daemon().await,
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
+        Some(flag) if flag.starts_with("--") => {
+            // Bare flags like `sovereign daemon --setup-only` route
+            // straight to run_daemon — the user means "start the
+            // daemon (or its first-boot wizard) with these flags."
+            run_daemon(args).await
+        }
         Some(other) => {
             eprintln!("error: unknown daemon subcommand '{other}'");
             crate::util::help::print(&HELP);
             1
         }
         None => {
-            // Bare `sovereign daemon` — user probably wanted help.
-            crate::util::help::print(&HELP);
-            1
+            // Bare `sovereign daemon` — Phase 4 routes this to
+            // run_daemon so first-time users get a working daemon
+            // without hunting for the magic `run` keyword. launchd
+            // and systemd unit files keep using `daemon run`
+            // explicitly; both paths land in the same place.
+            run_daemon(&[]).await
         }
     }
 }
 
+/// Public entry for `sovereign setup` (Phase 4 shim). Runs only the
+/// wizard portion (hardware detect → model pick → config write); does
+/// NOT register a service or load models. The setup_cmd module's
+/// `run_setup` calls into this so both `sovereign setup` and
+/// `sovereign daemon --setup-only` share one code path.
+pub async fn run_setup_only(args: &[String]) -> i32 {
+    let mut forwarded = vec!["--wizard-only".to_string()];
+    forwarded.extend(args.iter().cloned());
+    crate::setup_cmd::run_setup(&forwarded).await
+}
+
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign daemon",
-    summary: "Long-running service managed by launchd (macOS) or systemd (Linux).",
+    summary: "Long-running OICP server with managed inference + MCP tools.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign daemon <subcommand>"),
+        crate::util::help::HelpSection::Usage(
+            "sovereign daemon [--setup-only] | sovereign daemon <subcommand>",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            ("--setup-only", "Run the first-boot wizard (hardware detect + model pick + config) and exit without binding the listener."),
+        ]),
         crate::util::help::HelpSection::Subcommands(&[
-            ("run",     "Run in the foreground; exits on SIGINT/SIGTERM. Normally the OS service manager invokes this, not you."),
-            ("start",   "Start the daemon in the background (detached child + PID file at ~/.sovereign/daemon.pid). Waits for readiness. Use on dev boxes where you haven't registered a launchd/systemd service."),
+            ("(bare)",  "Run the daemon in the foreground. On first boot inlines the setup wizard; subsequent runs just load config and start. Equivalent to `daemon run`."),
+            ("run",     "Same as bare — kept for explicit invocation by launchd / systemd unit files."),
+            ("start",   "Start the daemon in the background (detached child + PID file at ~/.sovereign/daemon.pid). Waits for readiness."),
             ("status",  "Report whether the daemon is running and answering on :9741."),
             ("stop",    "Stop the daemon cleanly (SIGTERM). Uses the PID file from `start` when present; otherwise falls back to launchctl / systemctl."),
-            ("reload",  "Apply config changes without a restart (POST /v1/admin/reload). Use this after editing model paths in ~/.config/sovereign/config.toml."),
-            ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests. Use when a model/port/data_dir change requires a full rebind or the daemon is wedged."),
+            ("reload",  "Apply config changes without a restart (POST /v1/admin/reload)."),
+            ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests."),
         ]),
         crate::util::help::HelpSection::Notes(
-            "Logs: ~/.sovereign/logs/daemon.log. The daemon was registered by `sovereign setup`.",
+            "Logs: ~/.sovereign/logs/daemon.log. To register as a launchd/systemd service, run `sovereign install-service`.",
         ),
     ],
 };
 
-async fn run_daemon(_args: &[String]) -> i32 {
+async fn run_daemon(args: &[String]) -> i32 {
+    // ── Phase 4 flag parsing ──────────────────────────────────────
+    //
+    // `--setup-only` runs the wizard and exits without binding the
+    // listener. Useful for users who want to configure the host now
+    // and start the daemon manually later. Other flags pass through
+    // to the daemon-start path; unrecognised flags are tolerated for
+    // forward-compatibility (the daemon doesn't accept tunables on
+    // the command line, only via the config file).
+    let setup_only = args.iter().any(|a| a == "--setup-only");
+
+    // ── Phase 4 first-boot wizard ─────────────────────────────────
+    //
+    // Pre-Phase-4 the daemon refused to start with a "run sovereign
+    // setup first" hint. Now we inline the wizard so a user typing
+    // `sovereign daemon` on a fresh box gets a working setup. The
+    // wizard prompts for model selection, so it requires a TTY: a
+    // launchd-spawned daemon with no config will fall through to
+    // the same hint as before, since `is_terminal()` returns false
+    // in that environment.
+    if !sovereign_core::setup_config::SetupConfig::exists() {
+        if !std::io::stdin().is_terminal() {
+            eprintln!("error: no config at {}", SetupConfig::default_path().display());
+            eprintln!(
+                "hint: launchd/systemd can't run the interactive wizard. \
+                 Run `sovereign daemon --setup-only` from a terminal first."
+            );
+            return 1;
+        }
+        // Forward `--setup-only` and unknown flags to the wizard so
+        // users can pass `--yes` / `--data-dir` directly: `sovereign
+        // daemon --setup-only --yes`.
+        let wizard_args: Vec<String> = args
+            .iter()
+            .filter(|a| a.as_str() != "--setup-only")
+            .cloned()
+            .collect();
+        let code = run_setup_only(&wizard_args).await;
+        if code != 0 {
+            return code;
+        }
+        // After a successful wizard the config file exists; load below.
+    }
+
+    if setup_only {
+        // Wizard already ran above (or config existed and the wizard
+        // was a no-op). Either way, return without booting the daemon.
+        return 0;
+    }
+
     // ── Log rotation ──────────────────────────────────────────────
     //
     // launchd holds the FDs on `daemon.log` / `daemon.err` (set via
@@ -113,7 +201,9 @@ async fn run_daemon(_args: &[String]) -> i32 {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: {e}");
-            eprintln!("hint: run `sovereign setup` first.");
+            eprintln!(
+                "hint: run `sovereign daemon --setup-only` to (re-)create the config."
+            );
             return 1;
         }
     };
@@ -338,6 +428,20 @@ async fn run_daemon(_args: &[String]) -> i32 {
     // wikipedia/etc. ingests. See engine block above for the
     // diagnostic story.
     daemon.set_corpus_engine(Arc::clone(&engine)).await;
+
+    // Lazy-stamp canonical fingerprints for any installed
+    // canonicals that don't yet carry one (legacy ingests pre-
+    // dating the canonical-sync surface). One BLAKE3 over the
+    // content_hash list per corpus; idempotent. Fired in the
+    // background so daemon startup doesn't block on it. See
+    // `corpus_engine::CorpusEngine::lazy_stamp_legacy_fingerprints`
+    // for the contract.
+    {
+        let engine_for_stamp = Arc::clone(&engine);
+        tokio::spawn(async move {
+            engine_for_stamp.lazy_stamp_legacy_fingerprints().await;
+        });
+    }
 
     // Publish this node's embed model fingerprint so peers can filter
     // us in/out of collaborative ingestion.

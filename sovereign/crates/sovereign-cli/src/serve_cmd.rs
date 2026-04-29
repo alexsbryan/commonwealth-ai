@@ -166,19 +166,19 @@ async fn spawn_background(forwarded: &[String]) -> Result<(), String> {
     write_pid(&project_pid_path, pid)?;
     write_pid(&home_pid_path, pid)?;
 
-    // Confirm the child is reachable. Five 200ms attempts (~1s) is
-    // plenty for the listener to bind on a warm machine; cold paths
-    // (first index discovery) take longer, but we don't need to
-    // gate on tools/list reachability — `:9741/mcp/stats` returns
-    // 200 as soon as axum starts.
-    let alive_url = "http://127.0.0.1:9741/mcp/stats";
+    // Confirm the child is reachable. Five-second budget (25×200ms)
+    // is plenty for axum to bind on a warm machine. Honour any
+    // `--port <n>` the user forwarded so the probe doesn't poll a
+    // different port than the child is binding.
+    let probe_port = port_from_args(forwarded).unwrap_or(9741);
+    let alive_url = format!("http://127.0.0.1:{probe_port}/mcp/stats");
     let mut up = false;
     for _ in 0..25 {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         if !process_alive(pid) {
             break;
         }
-        if reachable(alive_url).await {
+        if reachable(&alive_url).await {
             up = true;
             break;
         }
@@ -194,10 +194,22 @@ async fn spawn_background(forwarded: &[String]) -> Result<(), String> {
     }
 
     eprintln!();
-    eprintln!("  MCP server: http://localhost:9741/mcp (pid {pid})");
+    eprintln!("  MCP server: http://localhost:{probe_port}/mcp (pid {pid})");
     eprintln!("  Log: {}", log_path.display());
     eprintln!("  Stop: sovereign stop");
     Ok(())
+}
+
+/// Pull `--port <n>` out of forwarded argv. Returns `None` for the
+/// default-port case (no flag, or malformed value).
+fn port_from_args(args: &[String]) -> Option<u16> {
+    let mut iter = args.iter();
+    while let Some(a) = iter.next() {
+        if a == "--port" {
+            return iter.next().and_then(|s| s.parse().ok());
+        }
+    }
+    None
 }
 
 #[cfg(unix)]
@@ -331,6 +343,26 @@ mod tests {
         let (mode, args) = parse_mode(&argv);
         assert_eq!(mode, Mode::Background);
         assert_eq!(args, vec!["--port".to_string(), "9741".to_string()]);
+    }
+
+    #[test]
+    fn port_from_args_extracts_explicit_port() {
+        let argv = vec!["--port".to_string(), "9999".to_string()];
+        assert_eq!(port_from_args(&argv), Some(9999));
+    }
+
+    #[test]
+    fn port_from_args_returns_none_when_unset() {
+        let argv: Vec<String> = vec![];
+        assert_eq!(port_from_args(&argv), None);
+        let argv = vec!["--data-dir".to_string(), "/tmp/x".to_string()];
+        assert_eq!(port_from_args(&argv), None);
+    }
+
+    #[test]
+    fn port_from_args_returns_none_for_malformed_value() {
+        let argv = vec!["--port".to_string(), "not-a-number".to_string()];
+        assert_eq!(port_from_args(&argv), None);
     }
 
     #[test]

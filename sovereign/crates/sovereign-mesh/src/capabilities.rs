@@ -115,6 +115,15 @@ async fn build_hosted_corpora(engine: &CorpusEngine) -> Vec<CorpusShardInfo> {
                 }),
                 is_replica: idx.is_shard && idx.chunk_range.is_some(),
                 last_updated: idx.last_updated,
+                // Phase 6 canonical-sync surface: chunk_count,
+                // canonical_fingerprint, total_shards, processed_shards.
+                // Peers compute coverage_ratio() on this struct to
+                // decide which canonical to pull when several mirror
+                // the same corpus.
+                chunk_count: idx.chunk_count,
+                canonical_fingerprint: idx.canonical_fingerprint,
+                total_shards: idx.total_shards,
+                processed_shards: idx.processed_shards,
             })
             .collect(),
         Err(e) => {

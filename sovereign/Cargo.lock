@@ -1134,10 +1134,13 @@ dependencies = [
  "sovereign-atos",
  "sovereign-core",
  "sovereign-tools",
+ "tar",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
  "tracing",
+ "zstd",
 ]
 
 [[package]]
@@ -1418,6 +1421,7 @@ dependencies = [
  "sevenz-rust2",
  "sha2 0.10.9",
  "streaming-iterator",
+ "tar",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -1435,6 +1439,7 @@ dependencies = [
  "walkdir",
  "which",
  "zip",
+ "zstd",
 ]
 
 [[package]]
@@ -8653,6 +8658,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "tower-http",
  "tracing",
  "uuid",
@@ -9232,6 +9238,17 @@ name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+
+[[package]]
+name = "tar"
+version = "0.4.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22692a6476a21fa75fdfc11d452fda482af402c008cdbaf3476414e122040973"
+dependencies = [
+ "filetime",
+ "libc",
+ "xattr",
+]
 
 [[package]]
 name = "target-lexicon"
@@ -11561,6 +11578,16 @@ dependencies = [
  "libc",
  "once_cell",
  "pkg-config",
+]
+
+[[package]]
+name = "xattr"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
+dependencies = [
+ "libc",
+ "rustix 1.1.4",
 ]
 
 [[package]]
