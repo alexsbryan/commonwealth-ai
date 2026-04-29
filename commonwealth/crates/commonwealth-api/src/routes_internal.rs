@@ -289,12 +289,74 @@ pub async fn corpus_collaborate(
                     spawn_queue_merge(state.clone(), existing.handoff_id);
                     return Ok(Json(existing));
                 }
-                tracing::warn!(
-                    corpus = %req.corpus_id,
-                    "corpus_collaborate: queue drained but no canonical index and no \
-                     local handoff found — peer must re-trigger from a node that holds \
-                     the handoff blob"
-                );
+                // No live handoff blob to re-fire from. The MeshStore
+                // is in-memory on the daemon (see `daemon::start_daemon`)
+                // so any stranded handoff was wiped on restart, and
+                // gossip can't help if no peer still holds it. Try
+                // local on-disk recovery: if `<corpus>-partition-*/`
+                // dirs exist locally, merge them into a canonical
+                // ourselves. See `auto_recover` for the cooldown +
+                // discovery details. Cheap when nothing to do
+                // (deterministic short-circuits before the cooldown).
+                let outcome = crate::auto_recover::try_recover_stranded_partitions(
+                    engine.index_dir(),
+                    &req.corpus_id,
+                )
+                .await;
+                match outcome {
+                    crate::auto_recover::RecoveryOutcome::Recovered { chunks, shards_covered } => {
+                        tracing::info!(
+                            corpus = %req.corpus_id,
+                            chunks,
+                            shards_covered,
+                            "corpus_collaborate: stranded-partition recovery merge \
+                             SUCCEEDED — canonical now exists; gossip will re-advertise"
+                        );
+                        return Err((
+                            StatusCode::CONFLICT,
+                            Json(ErrorBody {
+                                error: format!(
+                                    "corpus '{}' was stranded across partitions; recovery merged them \
+                                     into a canonical with {chunks} chunks ({shards_covered} shards). \
+                                     Future requests will pick up the canonical.",
+                                    req.corpus_id
+                                ),
+                            }),
+                        ));
+                    }
+                    crate::auto_recover::RecoveryOutcome::AlreadyHasCanonical => {
+                        // Race: another request raced ahead and built
+                        // canonical between our `canonical_exists` check
+                        // and the recovery call. Fall through to the
+                        // 409 — installed_indexes() picks up the
+                        // canonical on the next dispatcher tick.
+                    }
+                    crate::auto_recover::RecoveryOutcome::NotEnoughPartitions => {
+                        tracing::warn!(
+                            corpus = %req.corpus_id,
+                            "corpus_collaborate: queue drained but no canonical index and no \
+                             local handoff found, AND no <corpus>-partition-*/ dirs to merge — \
+                             peer must re-trigger from a node that holds the handoff blob"
+                        );
+                    }
+                    crate::auto_recover::RecoveryOutcome::InCooldown => {
+                        tracing::info!(
+                            corpus = %req.corpus_id,
+                            "corpus_collaborate: stranded-partition recovery in cooldown — \
+                             a recent attempt is still healing or just failed; not retrying yet"
+                        );
+                    }
+                    crate::auto_recover::RecoveryOutcome::Failed(err) => {
+                        tracing::warn!(
+                            corpus = %req.corpus_id,
+                            recovery_error = %err,
+                            "corpus_collaborate: queue drained, no handoff found, AND \
+                             stranded-partition recovery failed — manual intervention \
+                             required (e.g. sovereign corpus merge-partitions {})",
+                            req.corpus_id,
+                        );
+                    }
+                }
             }
 
             return Err((

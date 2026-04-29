@@ -1,3 +1,4 @@
+pub mod auto_recover;
 pub mod headers;
 pub mod middleware;
 pub mod openai_types;
