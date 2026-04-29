@@ -23,6 +23,7 @@
 
 pub mod configuration;
 pub mod gaps;
+pub mod holistic_classifier;
 pub mod tension_classifier;
 pub mod tensions;
 
@@ -32,6 +33,9 @@ pub use configuration::{
     RelationSynopsis, TrajectorySynopsis,
 };
 pub use gaps::{detect_deterministic_gaps, Gap, GapKind, GapsOutput};
+pub use holistic_classifier::{
+    parse_holistic_response, render_holistic_user_body, HolisticTension,
+};
 pub use tension_classifier::{
     classification_to_edge, parse_phase6_classifier_response,
     phase6_classifier_response_schema, resolve_candidate_content, AtomIndex, AtomKind,

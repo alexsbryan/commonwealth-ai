@@ -18,13 +18,16 @@
 //! the parsers that are schema-driven rather than domain-tuned)
 //! delegates to the identical implementation.
 
-use super::super::atlas::{SeedEntities, SeedEntity, SeedStrategy};
+use super::super::atlas::{
+    EntitySketch, SectionExtraction, SeedEntities, SeedEntity, SeedStrategy,
+};
 use super::super::exemplar_bank::Exemplar;
 use super::super::trait_def::Pipeline;
 use super::super::types::*;
 use super::literary_atlas::{
-    phase1_section_extraction_schema, render_generic_phase3_exemplar,
-    render_phase1_user_body, LiteraryAtlasPipeline,
+    parse_phase1b_coverage_response, phase1_section_extraction_schema,
+    render_generic_phase3_exemplar, render_phase1_user_body,
+    render_phase1b_user_body, LiteraryAtlasPipeline,
 };
 use crate::enrichment::domain::ClusteringConfig;
 use crate::error::Result;
@@ -40,6 +43,12 @@ const PHASE1_ATLAS_SYSTEM_TERSE: &str =
 const PHASE1A_SEED_SYSTEM: &str =
     include_str!("philosophy_atlas_prompts/phase1a_seed_system.md");
 
+const PHASE1B_ENTITY_COVERAGE: &str =
+    include_str!("philosophy_atlas_prompts/phase1b_entity_coverage.md");
+
+const PHASE1B_CONCEPT_COVERAGE: &str =
+    include_str!("philosophy_atlas_prompts/phase1b_concept_coverage.md");
+
 const PHASE3_QUESTION_NAMING: &str =
     include_str!("philosophy_atlas_prompts/phase3_question_naming.md");
 const PHASE3_CLAIM_NAMING: &str =
@@ -54,8 +63,8 @@ const PHASE3_EVENT_NAMING: &str =
 const PHASE8_CONFIGURATION_SYSTEM: &str =
     include_str!("philosophy_atlas_prompts/phase8_configuration.md");
 
-const PHASE6_CLASSIFIER_SYSTEM: &str =
-    include_str!("philosophy_atlas_prompts/phase6_classifier_system.md");
+const PHASE6_HOLISTIC_SYSTEM: &str =
+    include_str!("philosophy_atlas_prompts/phase6_holistic_system.md");
 
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "philosophy_atlas";
@@ -155,6 +164,42 @@ impl Pipeline for PhilosophyAtlasPipeline {
                 )
                 .with_phase_id("phase1_terse"),
         )
+    }
+
+    // ── Phase 1b coverage check ────────────────────────────────
+    //
+    // Reuses the literary_atlas user-body renderer and parser; the
+    // only domain-specific bits are the system preamble strings.
+
+    fn compose_phase1b_entity_coverage(
+        &self,
+        chapter: &ChapterInput,
+        existing: &SectionExtraction,
+    ) -> Option<ChatPrompt> {
+        let user = render_phase1b_user_body(chapter, existing);
+        Some(
+            ChatPrompt::new(PHASE1B_ENTITY_COVERAGE, user)
+                .with_phase_id("phase1b_entity"),
+        )
+    }
+
+    fn compose_phase1b_concept_coverage(
+        &self,
+        chapter: &ChapterInput,
+        existing: &SectionExtraction,
+    ) -> Option<ChatPrompt> {
+        let user = render_phase1b_user_body(chapter, existing);
+        Some(
+            ChatPrompt::new(PHASE1B_CONCEPT_COVERAGE, user)
+                .with_phase_id("phase1b_concept"),
+        )
+    }
+
+    fn parse_phase1b_coverage(
+        &self,
+        response: &str,
+    ) -> Result<Vec<EntitySketch>> {
+        parse_phase1b_coverage_response(response)
     }
 
     fn compose_phase1_with_seed(
@@ -452,30 +497,33 @@ impl Pipeline for PhilosophyAtlasPipeline {
 
     // ── Phase 6 atlas Tension classifier ─────────────────────────
     //
-    // Reuses the literary classifier's user-body renderer + JSON
-    // schema; only the system preamble differs (philosophical voice
-    // vs literary voice).
+    // Philosophy uses the *holistic* fault-line classifier (one call
+    // per corpus) instead of the per-pair classifier. Per-pair was
+    // empirically rejecting every cross-position candidate on
+    // philosophy benches (0/81 acceptance on stoic): a fault line
+    // between two whole positions is not visible in any single
+    // claim-pair slice the per-pair frame considers. The holistic
+    // call sees all positions and identifies between-position fault
+    // lines as a unit. Literary keeps per-pair (literary tensions
+    // are typically within-character — stated-vs-enacted — which the
+    // per-pair frame fits well).
 
     fn runs_phase6_atlas_classifier(&self) -> bool {
+        false
+    }
+
+    fn runs_phase6_holistic(&self) -> bool {
         true
     }
 
-    fn compose_phase6_atlas_classifier(
+    fn compose_phase6_holistic(
         &self,
-        content: &crate::enrichment::atlas::analysis::CandidateContent,
+        atoms: &crate::enrichment::atlas::atoms::AtomsFile,
     ) -> Option<ChatPrompt> {
-        // Compose the user body via the literary helper, then swap
-        // the system preamble for the philosophy variant. This keeps
-        // the user-message format identical across pipelines so
-        // exemplar caches and replay tooling see one shape.
-        let inner_prompt = self.inner.compose_phase6_atlas_classifier(content)?;
+        let user_body = crate::enrichment::atlas::analysis::render_holistic_user_body(atoms);
         Some(
-            ChatPrompt::new(PHASE6_CLASSIFIER_SYSTEM, inner_prompt.user)
-                .with_response_schema(
-                    "phase6_classifier_response",
-                    crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
-                )
-                .with_phase_id("phase6_classifier"),
+            ChatPrompt::new(PHASE6_HOLISTIC_SYSTEM, user_body)
+                .with_phase_id("phase6_holistic"),
         )
     }
 }

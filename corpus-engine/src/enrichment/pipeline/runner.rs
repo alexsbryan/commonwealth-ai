@@ -644,6 +644,23 @@ impl PhaseRunner {
             let mut section_extraction = parsed.section_extraction;
             if let Some(ref mut sx) = section_extraction {
                 sx.section_id = chapter.chapter_id.clone();
+                // Phase 1b coverage check — opt-in audit pass that
+                // asks the model "what did you miss?" against its
+                // own extraction. Best-effort: a chat or parse
+                // failure logs a warning and the chapter proceeds
+                // with its original Phase 1 atoms unchanged. Skipped
+                // on retry runs because the original failure is the
+                // signal we care about — adding a coverage pass on
+                // top of a retry obscures whether the retry recovered.
+                if retry_mode.is_none() {
+                    run_phase1b_coverage(
+                        self.pipeline.as_ref(),
+                        chapter,
+                        sx,
+                        &self.chat,
+                    )
+                    .await;
+                }
             }
             extracted.push(ExtractedQuestion {
                 chapter_id: chapter.chapter_id.clone(),
@@ -1642,6 +1659,74 @@ fn merge_phase1_into_cache(
     existing.written_at = now_rfc3339();
     cache.write(PipelinePhase::Questions, &existing)?;
     Ok(merged > 0)
+}
+
+/// Run the optional Phase 1b coverage check for one chapter and
+/// merge any newly-surfaced entities into `sx.entities_introduced`.
+///
+/// Best-effort: if the pipeline doesn't opt in (returns `None` from
+/// either compose method), or if any chat / parse step fails, we
+/// log and proceed — the chapter keeps its original Phase 1 atoms.
+/// Dedup is a case-insensitive canonical-name match against the
+/// existing list, so a coverage-pass repeat of an atom the first
+/// pass already lifted is silently dropped.
+async fn run_phase1b_coverage(
+    pipeline: &dyn Pipeline,
+    chapter: &ChapterInput,
+    sx: &mut SectionExtraction,
+    chat: &ChatCompletionFn,
+) {
+    use std::collections::HashSet;
+    let mut seen: HashSet<String> = sx
+        .entities_introduced
+        .iter()
+        .map(|e| e.canonical_name.trim().to_lowercase())
+        .collect();
+    let mut new_total: usize = 0;
+    let prompts = [
+        ("entity", pipeline.compose_phase1b_entity_coverage(chapter, sx)),
+        ("concept", pipeline.compose_phase1b_concept_coverage(chapter, sx)),
+    ];
+    for (label, maybe_prompt) in prompts {
+        let Some(prompt) = maybe_prompt else { continue };
+        let response = match (chat)(&prompt).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(
+                    chapter = %chapter.chapter_id,
+                    pass = %label,
+                    "phase 1b coverage chat failed: {e}"
+                );
+                continue;
+            }
+        };
+        let atoms = match pipeline.parse_phase1b_coverage(&response) {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(
+                    chapter = %chapter.chapter_id,
+                    pass = %label,
+                    "phase 1b coverage parse failed: {e}"
+                );
+                continue;
+            }
+        };
+        for atom in atoms {
+            let key = atom.canonical_name.trim().to_lowercase();
+            if key.is_empty() || seen.contains(&key) {
+                continue;
+            }
+            seen.insert(key);
+            sx.entities_introduced.push(atom);
+            new_total += 1;
+        }
+    }
+    if new_total > 0 {
+        tracing::debug!(
+            chapter = %chapter.chapter_id,
+            "phase 1b coverage added {new_total} entity sketch(es)"
+        );
+    }
 }
 
 #[cfg(test)]

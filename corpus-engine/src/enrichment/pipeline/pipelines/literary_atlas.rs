@@ -41,6 +41,12 @@ use tracing::debug;
 const PHASE1_ATLAS_SYSTEM: &str =
     include_str!("literary_atlas_prompts/phase1_system.md");
 
+const PHASE1B_ENTITY_COVERAGE: &str =
+    include_str!("literary_atlas_prompts/phase1b_entity_coverage.md");
+
+const PHASE1B_CONCEPT_COVERAGE: &str =
+    include_str!("literary_atlas_prompts/phase1b_concept_coverage.md");
+
 /// Terse Phase 1 preamble used when a default run failed with
 /// `PhaseFailureKind::ThinkTruncated`. The asset drops the shape
 /// example and prepends a "no reasoning trace" directive so the
@@ -193,6 +199,39 @@ impl Pipeline for LiteraryAtlasPipeline {
                 )
                 .with_phase_id("phase1_terse"),
         )
+    }
+
+    // ── Phase 1b coverage check ────────────────────────────────
+
+    fn compose_phase1b_entity_coverage(
+        &self,
+        chapter: &ChapterInput,
+        existing: &SectionExtraction,
+    ) -> Option<ChatPrompt> {
+        let user = render_phase1b_user_body(chapter, existing);
+        Some(
+            ChatPrompt::new(PHASE1B_ENTITY_COVERAGE, user)
+                .with_phase_id("phase1b_entity"),
+        )
+    }
+
+    fn compose_phase1b_concept_coverage(
+        &self,
+        chapter: &ChapterInput,
+        existing: &SectionExtraction,
+    ) -> Option<ChatPrompt> {
+        let user = render_phase1b_user_body(chapter, existing);
+        Some(
+            ChatPrompt::new(PHASE1B_CONCEPT_COVERAGE, user)
+                .with_phase_id("phase1b_concept"),
+        )
+    }
+
+    fn parse_phase1b_coverage(
+        &self,
+        response: &str,
+    ) -> Result<Vec<EntitySketch>> {
+        parse_phase1b_coverage_response(response)
     }
 
     // ── Stage 1a — seed extraction ─────────────────────────────
@@ -992,6 +1031,134 @@ fn scrub_placeholder_strings(e: &mut SectionExtraction) {
     }
 }
 
+// ── Phase 1b coverage check (shared helpers) ────────────────
+//
+// Both literary_atlas and philosophy_atlas dispatch the same two
+// coverage prompts (entity + concept) and parse the same response
+// shape into `EntitySketch` entries. The user-body renderer and
+// parser live here so philosophy can reuse them through the
+// `pub(super)` re-export in the module hierarchy.
+
+/// Build the user message for a Phase 1b audit. Lists what the
+/// extractor already produced so the model's job is constrained
+/// to NEW atoms.
+pub(super) fn render_phase1b_user_body(
+    chapter: &ChapterInput,
+    existing: &SectionExtraction,
+) -> String {
+    let mut user = String::new();
+    user.push_str("# Section\n\n");
+    user.push_str(&format!("**Title:** {}\n\n", chapter.title));
+    user.push_str("**Body:**\n\n");
+    user.push_str(&chapter.text);
+    user.push_str("\n\n# What the extractor already produced\n\n");
+    user.push_str("**Entities:**\n");
+    if existing.entities_introduced.is_empty() {
+        user.push_str("  (none)\n");
+    } else {
+        for e in &existing.entities_introduced {
+            user.push_str(&format!(
+                "  - {:?}: {}\n",
+                e.entity_type, e.canonical_name
+            ));
+        }
+    }
+    user.push_str(&format!(
+        "\n**Other counts:** {} event(s), {} state(s), {} relation(s), \
+         {} claim(s), {} question(s).\n\n",
+        existing.events.len(),
+        existing.entities_developed.len()
+            + existing.relations_developed.len(),
+        existing.relations_introduced.len(),
+        existing.claims.len(),
+        existing.questions_raised.len(),
+    ));
+    user.push_str(
+        "# Your task\n\nList only what was missed. Return JSON per \
+         the schema in the system message.\n",
+    );
+    user
+}
+
+/// Parse a Phase 1b response into `EntitySketch` entries. Accepts
+/// either response shape — `missed_entities` (entity-coverage prompt)
+/// or `missed_concepts` (concept-coverage prompt) — and treats the
+/// concept variant as `entity_type: concept`. Drops entries with an
+/// empty canonical name; passes the rest through with sensible
+/// fallbacks.
+pub(super) fn parse_phase1b_coverage_response(
+    response: &str,
+) -> Result<Vec<EntitySketch>> {
+    let cleaned = prepare_phase_json(response, "phase 1b (coverage)")?;
+
+    #[derive(Deserialize, Default)]
+    #[serde(default)]
+    struct Raw {
+        #[serde(deserialize_with = "null_or_empty_vec")]
+        missed_entities: Vec<Option<RawCoverageEntity>>,
+        #[serde(deserialize_with = "null_or_empty_vec")]
+        missed_concepts: Vec<Option<RawCoverageConcept>>,
+    }
+    #[derive(Deserialize, Default)]
+    #[serde(default)]
+    struct RawCoverageEntity {
+        canonical_name: String,
+        entity_type: Option<EntityType>,
+        description: String,
+        anchor: String,
+    }
+    #[derive(Deserialize, Default)]
+    #[serde(default)]
+    struct RawCoverageConcept {
+        canonical_name: String,
+        description: String,
+        anchor: String,
+    }
+
+    let raw: Raw = serde_json::from_str(&cleaned).map_err(|e| {
+        Error::Serialization(format!(
+            "phase 1b (coverage) response is not valid JSON: {e}"
+        ))
+    })?;
+
+    let mut out: Vec<EntitySketch> = Vec::new();
+    for item in raw.missed_entities.into_iter().flatten() {
+        let name = item.canonical_name.trim().to_string();
+        if name.is_empty() {
+            continue;
+        }
+        // A missing entity_type or one the schema can't classify
+        // (Other(_)) is treated as a soft drop — the resolver
+        // would discard it anyway. Better to skip here than to
+        // pollute the section with un-typeable atoms.
+        let entity_type = match item.entity_type {
+            Some(EntityType::Other(_)) | None => continue,
+            Some(et) => et,
+        };
+        out.push(EntitySketch {
+            canonical_name: name,
+            aliases: Vec::new(),
+            entity_type,
+            description: item.description.trim().to_string(),
+            anchor: item.anchor.trim().to_string(),
+        });
+    }
+    for item in raw.missed_concepts.into_iter().flatten() {
+        let name = item.canonical_name.trim().to_string();
+        if name.is_empty() {
+            continue;
+        }
+        out.push(EntitySketch {
+            canonical_name: name,
+            aliases: Vec::new(),
+            entity_type: EntityType::Concept,
+            description: item.description.trim().to_string(),
+            anchor: item.anchor.trim().to_string(),
+        });
+    }
+    Ok(out)
+}
+
 // ── Lenient deserialisation layer ────────────────────────────
 //
 // Models drift on schema compliance: a claim drops a required field,
@@ -1011,16 +1178,39 @@ fn vec_of_some<T>(v: Vec<Option<T>>) -> Vec<T> {
     v.into_iter().flatten().collect()
 }
 
+/// Accept `null` as the empty value for a `Vec<…>` field. Models routinely
+/// emit `"aliases": null` (rather than omitting the key) for a missing
+/// optional sequence, and serde's default deserializer rejects null with
+/// `invalid type: null, expected a sequence`. This helper unwraps such
+/// values to `Vec::new()` so a single null-instead-of-omit doesn't kill
+/// the whole section parse.
+fn null_or_empty_vec<'de, D, T>(d: D) -> std::result::Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    use serde::Deserialize;
+    let opt: Option<Vec<T>> = Option::deserialize(d)?;
+    std::result::Result::Ok(opt.unwrap_or_default())
+}
+
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct RawSectionExtraction {
     section_id: String,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     entities_introduced: Vec<Option<RawEntitySketch>>,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     entities_developed: Vec<Option<RawEntityStateSketch>>,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     relations_introduced: Vec<Option<RawRelationSketch>>,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     relations_developed: Vec<Option<RawRelationStateSketch>>,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     events: Vec<Option<RawEventSketch>>,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     claims: Vec<Option<RawClaimSketch>>,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     questions_raised: Vec<Option<RawQuestionSketch>>,
 }
 
@@ -1070,6 +1260,7 @@ impl RawSectionExtraction {
 #[serde(default)]
 struct RawEntitySketch {
     canonical_name: String,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     aliases: Vec<Option<String>>,
     entity_type: Option<EntityType>,
     description: String,
@@ -1192,6 +1383,7 @@ impl RawEntityStateSketch {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct RawRelationSketch {
+    #[serde(deserialize_with = "null_or_empty_vec")]
     participants: Vec<Option<String>>,
     label: String,
     anchor: String,
@@ -1220,6 +1412,7 @@ impl RawRelationSketch {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct RawRelationStateSketch {
+    #[serde(deserialize_with = "null_or_empty_vec")]
     participants: Vec<Option<String>>,
     label: String,
     anchor: String,
@@ -1249,6 +1442,7 @@ impl RawRelationStateSketch {
 #[serde(default)]
 struct RawEventSketch {
     description: String,
+    #[serde(deserialize_with = "null_or_empty_vec")]
     participants: Vec<Option<String>>,
     anchor: String,
 }

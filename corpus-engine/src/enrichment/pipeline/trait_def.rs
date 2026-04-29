@@ -23,7 +23,9 @@
 //! - `parse_phaseN(response)` — validates the model's JSON output
 //!   against the expected schema.
 
-use super::atlas::{SeedEntities, SeedEntity, SeedStrategy};
+use super::atlas::{
+    EntitySketch, SectionExtraction, SeedEntities, SeedEntity, SeedStrategy,
+};
 use super::exemplar_bank::Exemplar;
 use super::types::*;
 use crate::enrichment::domain::ClusteringConfig;
@@ -165,6 +167,63 @@ pub trait Pipeline: Send + Sync + 'static {
         _chapter: &ChapterInput,
     ) -> Option<ChatPrompt> {
         None
+    }
+
+    // ── Phase 1b — coverage check (opt-in, recall booster) ─────
+    //
+    // After Phase 1 succeeds for a chapter, the runner can issue a
+    // second-pass audit prompt that asks the model "what did you
+    // miss?" against its own extraction. The pattern is split into
+    // two narrow prompts — one for missed entities (persons, works,
+    // institutions, places), one for missed thematic concepts —
+    // because a single broad audit underperforms a focused one
+    // (validated against dubliners-test, +24.9 F1).
+    //
+    // A pipeline opts in by returning `Some(prompt)` from the
+    // compose methods. The runner treats Phase 1b as best-effort:
+    // a chat or parse failure logs a warning and the chapter
+    // proceeds with its original Phase 1 atoms unchanged.
+
+    /// Compose the entity-coverage audit prompt for one chapter.
+    /// Receives the chapter and the just-completed Phase 1 extraction
+    /// so the prompt can list "what was already lifted" (the model's
+    /// job is to surface only NEW atoms). Default returns `None` —
+    /// pipelines that don't want a coverage pass run Phase 1 alone.
+    fn compose_phase1b_entity_coverage(
+        &self,
+        _chapter: &ChapterInput,
+        _existing: &SectionExtraction,
+    ) -> Option<ChatPrompt> {
+        None
+    }
+
+    /// Compose the concept-coverage audit prompt for one chapter.
+    /// Same shape as the entity variant but narrowed to abstract /
+    /// thematic terms — the failure mode the broad entity audit
+    /// underperformed on. Default `None`.
+    fn compose_phase1b_concept_coverage(
+        &self,
+        _chapter: &ChapterInput,
+        _existing: &SectionExtraction,
+    ) -> Option<ChatPrompt> {
+        None
+    }
+
+    /// Parse a Phase 1b response into additional `EntitySketch`
+    /// entries the runner will append to the chapter's
+    /// `entities_introduced` (deduping by canonical name).
+    /// Default `Err` so a pipeline that composes a coverage prompt
+    /// without parsing it surfaces a clear contract error.
+    fn parse_phase1b_coverage(
+        &self,
+        _response: &str,
+    ) -> Result<Vec<EntitySketch>> {
+        Err(crate::error::Error::Serialization(
+            "pipeline does not implement parse_phase1b_coverage — \
+             override it alongside compose_phase1b_*_coverage, or \
+             leave both compose methods returning None"
+                .into(),
+        ))
     }
 
     /// Compose a Phase 3 naming prompt for an atlas cluster of a
@@ -345,6 +404,53 @@ pub trait Pipeline: Send + Sync + 'static {
                 ))
             },
         )
+    }
+
+    // ── Phase 6 *holistic* classifier — opt-in alternative to per-pair ──
+    //
+    // The per-pair classifier asks "is THIS pair of atoms in tension?",
+    // which is the wrong unit of analysis for *between-position* fault
+    // lines (a property of two whole positions, not of any single
+    // claim pair). The holistic classifier asks the model to read the
+    // corpus's positions and surface the fault lines naturalistically
+    // — one chat turn, all positions in scope. Pipelines opt in via
+    // `runs_phase6_holistic` and override compose / parse.
+    //
+    // The runner uses *either* per-pair *or* holistic, not both, on
+    // the assumption that a pipeline's domain has one right unit of
+    // tension. Philosophy opts into holistic; literary keeps per-pair
+    // (literary tensions are typically within-character —
+    // stated-vs-enacted — and the per-pair frame fits).
+
+    /// Whether this pipeline runs the Phase 6 *holistic* classifier
+    /// (a single corpus-level pass) instead of the per-pair one.
+    /// Default `false`.
+    fn runs_phase6_holistic(&self) -> bool {
+        false
+    }
+
+    /// Build the holistic Phase 6 prompt. Sees the entire resolved
+    /// atom inventory. Returns `None` for pipelines that don't opt
+    /// into holistic. Opted-in pipelines must override and return
+    /// `Some(prompt)` whose response will be parsed by
+    /// `parse_phase6_holistic`.
+    fn compose_phase6_holistic(
+        &self,
+        _atoms: &crate::enrichment::atlas::atoms::AtomsFile,
+    ) -> Option<ChatPrompt> {
+        None
+    }
+
+    /// Parse the holistic-classifier response. Default delegates to
+    /// `analysis::holistic_classifier::parse_holistic_response`,
+    /// which handles chain-of-thought preamble + trailing JSON,
+    /// `<think>` blocks, and the `fault_lines` / `tensions` key
+    /// alias.
+    fn parse_phase6_holistic(
+        &self,
+        response: &str,
+    ) -> Result<Vec<crate::enrichment::atlas::analysis::HolisticTension>> {
+        crate::enrichment::atlas::analysis::parse_holistic_response(response)
     }
 
     // ── Selection tuning ──────────────────────────────────────

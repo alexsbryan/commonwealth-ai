@@ -146,10 +146,11 @@ populate with real content rather than returning empty arrays.
 
 ## Shape example
 
-Illustration only. It uses Jane Austen's *Pride and Prejudice* so
-the content cannot plausibly belong to whatever chapter you are
-given. Match the *shape*; produce your own atoms from the actual
-text in the user message.
+Illustration only. It mixes Austen's *Pride and Prejudice* with
+Camus's *L'Étranger* and Cervantes's *Don Quixote* so no single
+chapter could plausibly carry these atoms. Match the *shape* — note
+the mix of person, concept, and work entity types — and produce
+your own atoms from the actual text in the user message.
 
 ```json
 {
@@ -160,6 +161,18 @@ text in the user message.
       "entity_type": "person",
       "description": "Excitable matriarch whose project is marrying her daughters advantageously.",
       "anchor": "a single man of good fortune"
+    },
+    {
+      "canonical_name": "the absurd",
+      "entity_type": "concept",
+      "description": "The condition of confronting a silent, indifferent universe — the section's load-bearing term.",
+      "anchor": "Maman died today"
+    },
+    {
+      "canonical_name": "Amadis of Gaul",
+      "entity_type": "work",
+      "description": "Chivalric romance Don Quixote cites as the model for his self-fashioning.",
+      "anchor": "in the manner of Amadis"
     }
   ],
   "relations_introduced": [
