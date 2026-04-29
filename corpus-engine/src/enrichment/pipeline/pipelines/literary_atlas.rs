@@ -1115,6 +1115,22 @@ impl RawEntitySketch {
             }
             Some(et) => et,
         };
+        // Retype obvious -ism/-ethics names from person → concept.
+        // Models occasionally mark school names that appear repeatedly
+        // ("virtue ethics", "situationism") as Person when no explicit
+        // introduction line establishes them. The `-ism`/`-ianism`/
+        // `ethics` suffix is structurally unambiguous in our corpora —
+        // no real proper names take these endings in the texts we
+        // process — so the retype is conservative and reverses a known
+        // failure mode without affecting concept-typed entries the
+        // model already got right.
+        let entity_type = if matches!(entity_type, EntityType::Person)
+            && is_position_suffix(&name)
+        {
+            EntityType::Concept
+        } else {
+            entity_type
+        };
         Some(EntitySketch {
             canonical_name: name,
             aliases: vec_of_some(self.aliases),
@@ -1123,6 +1139,27 @@ impl RawEntitySketch {
             anchor: self.anchor,
         })
     }
+}
+
+fn is_position_suffix(name: &str) -> bool {
+    let lc = name.trim().to_lowercase();
+    // Singular -ism / -ianism (compatibilism, deontology …no, that's
+    // -ology), -ology (deontology, epistemology, theology), and the
+    // " ethics" / "-ethics" patterns. Plural forms catch model-emitted
+    // group names: "Epicureans", "Aristotelians", "Stoicists", and
+    // misspellings like "Aristotleians". We deliberately do NOT match
+    // singular `-ist`, `-ian`, or `-ean`: real proper names use those
+    // endings ("Christian", "Sebastian", "Epstein") and a singular
+    // misclassification is far rarer than a plural-school one.
+    lc.ends_with("ism")
+        || lc.ends_with("ianism")
+        || lc.ends_with("ology")
+        || lc.ends_with("ologies")
+        || lc.ends_with(" ethics")
+        || lc.ends_with("-ethics")
+        || lc.ends_with("ians")
+        || lc.ends_with("eans")
+        || lc.ends_with("ists")
 }
 
 #[derive(Deserialize, Default)]
@@ -1869,6 +1906,57 @@ mod tests {
             "entity with non-standard entity_type should be dropped, got: {:?}",
             extraction.entities_introduced
         );
+    }
+
+    #[test]
+    fn parse_phase1_retypes_school_names_from_person_to_concept() {
+        // Models occasionally type school names that appear repeatedly
+        // ("virtue ethics", "situationism", "Neo-Aristotelianism") as
+        // Person — they read as agents in dialectical prose. Retype
+        // them on parse so the cross-position tension enumerator can
+        // pair them as concepts.
+        let p = LiteraryAtlasPipeline::new();
+        let response = r#"{
+          "section_id": "sec_0001",
+          "entities_introduced": [
+            {"canonical_name": "virtue ethics", "entity_type": "person",
+             "description": "A school", "anchor": "virtue ethics"},
+            {"canonical_name": "situationism", "entity_type": "person",
+             "description": "Another school", "anchor": "situationism"},
+            {"canonical_name": "Neo-Aristotelianism", "entity_type": "person",
+             "description": "Third school", "anchor": "Neo-Aristotelianism"},
+            {"canonical_name": "deontology", "entity_type": "person",
+             "description": "Field of ethics", "anchor": "deontology"},
+            {"canonical_name": "Epicureans", "entity_type": "person",
+             "description": "Plural school name", "anchor": "Epicureans"},
+            {"canonical_name": "Neo-Aristotleians", "entity_type": "person",
+             "description": "Plural with typo", "anchor": "Neo-Aristotleians"},
+            {"canonical_name": "Aristotle", "entity_type": "person",
+             "description": "Real philosopher", "anchor": "Aristotle"},
+            {"canonical_name": "Christian", "entity_type": "person",
+             "description": "A real first name (negative test)", "anchor": "Christian"}
+          ],
+          "questions_raised": [{"content": "What is virtue?", "anchor": "virtue"}]
+        }"#;
+        let parsed = p.parse_phase1(response).unwrap();
+        let ents = parsed.section_extraction.unwrap().entities_introduced;
+        let by_name: std::collections::HashMap<_, _> = ents
+            .iter()
+            .map(|e| (e.canonical_name.clone(), e.entity_type.clone()))
+            .collect();
+        assert_eq!(by_name.get("virtue ethics"), Some(&EntityType::Concept));
+        assert_eq!(by_name.get("situationism"), Some(&EntityType::Concept));
+        assert_eq!(
+            by_name.get("Neo-Aristotelianism"),
+            Some(&EntityType::Concept)
+        );
+        assert_eq!(by_name.get("deontology"), Some(&EntityType::Concept));
+        assert_eq!(by_name.get("Epicureans"), Some(&EntityType::Concept));
+        assert_eq!(by_name.get("Neo-Aristotleians"), Some(&EntityType::Concept));
+        assert_eq!(by_name.get("Aristotle"), Some(&EntityType::Person));
+        // Negative test: a singular -ian name that's a real first name
+        // should be left as Person.
+        assert_eq!(by_name.get("Christian"), Some(&EntityType::Person));
     }
 
     #[test]

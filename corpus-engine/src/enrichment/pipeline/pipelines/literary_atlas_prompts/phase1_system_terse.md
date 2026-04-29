@@ -44,13 +44,13 @@ Named things entering the frame for the first time.
   threshold, not appearance count.
 - Cited works ARE Work atoms even when listed in passing. Three books
   on a shelf yields three Work atoms.
-- Abstract concepts get their own Concept atoms even when they appear
-  briefly. The threshold: a critic writing about the passage would
-  italicise the word — it carries weight across sections beyond its
-  literal use here. Examples in form (from texts unrelated to what
-  you are processing): Hemingway's *grace under pressure*, James's
-  *the figure in the carpet*, Conrad's *the horror*. Match the
-  *form*, not the listed examples.
+- Abstract concepts get their own Concept atoms — generously. Lift
+  any named theme, motif, named condition, or load-bearing literary
+  term the section uses. Italics aren't required; recurrence isn't
+  required; a term that names a *thing the work is about* counts.
+  Form: Hemingway's *grace under pressure*, James's *the figure in
+  the carpet*, Conrad's *the horror* — drawn from texts unrelated to
+  what you are processing. **When in doubt, lift it.**
 
 ### 2. `entities_developed`
 
@@ -89,7 +89,10 @@ grounds claims. Not mood.
 ### 6. `claims`
 
 Knowledge-carrying acts the text performs. Attribute to a character
-when in their mouth/mind; omit `attributed_to` for text-level claims.
+whenever the content states their commitment, even when the
+narrator's voice carries it ("Alyosha believes that…" attributes to
+Alyosha). Reserve omission for true text-level structural argument
+that doesn't pin a commitment on a named character.
 
 - `content` — the claim in propositional form.
 - `discourse_act` — `argue` | `assert` | `enact` | `hypothesize` |

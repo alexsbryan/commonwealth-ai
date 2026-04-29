@@ -40,6 +40,12 @@ pub enum CandidateSource {
     /// Both atoms share an entity attribution (claim-claim) or
     /// bind to the same entity (claim-state).
     EntityOverlap,
+    /// Both claims are attributed to *different* positions but their
+    /// evidence lands in the same Phase-1 section. Two positions
+    /// discussed in the same chapter are by construction in dialogue
+    /// — this signal catches structural disagreement that doesn't
+    /// surface via shared entity mentions in claim content.
+    ChunkCooccurrence,
     /// Nearest-neighbour match via embedding cosine. Reserved —
     /// not produced by Landing 3's deterministic pass.
     EmbeddingTopK,
@@ -119,6 +125,7 @@ pub fn select_candidates(input: CandidateSelectionInput<'_>) -> Vec<TensionCandi
     out.extend(select_entity_overlap_claim_claim(input.claims));
     out.extend(select_entity_overlap_claim_state(input.claims, input.states));
     out.extend(select_concept_overlap_cross_position(input.claims, input.entities));
+    out.extend(select_chunk_cooccurrence_cross_position(input.claims, input.entities));
     // Dedup pairs across signal sources — prefer IntraCluster >
     // EntityOverlap when the same (a, b) appears under both tags,
     // since the cluster pre-filter is a stronger prior.
@@ -290,11 +297,13 @@ fn select_concept_overlap_cross_position(
         .map(|e| {
             let canonical_lower = e.canonical_name.to_ascii_lowercase();
             // Take alpha-only runs ≥ 5 chars, prefix-truncated to 5
-            // for stem-style substring matching, dropping stop tokens.
+            // *characters* (not bytes — Russian patronymics in BK
+            // arrive as mixed Latin/Cyrillic and a byte slice lands
+            // mid-codepoint), dropping stop tokens.
             let tokens: Vec<String> = canonical_lower
                 .split(|ch: char| !ch.is_alphabetic())
-                .filter(|t| t.len() >= 5)
-                .map(|t| t[..5.min(t.len())].to_string())
+                .filter(|t| t.chars().count() >= 5)
+                .map(|t| t.chars().take(5).collect::<String>())
                 .filter(|t| !is_stop(t))
                 .collect();
             MatchableEntity {
@@ -305,13 +314,58 @@ fn select_concept_overlap_cross_position(
         })
         .collect();
 
-    // For each claim with a concept-typed attribution, build the set
-    // of entity ids whose canonical name appears in claim.content
-    // (case-insensitive substring) AND that aren't the claim's own
-    // position.
+    // For each claim, resolve its attribution into a set of "position
+    // concepts" (Concept entities the claim should pair against). A
+    // claim attributed directly to a Concept resolves to that Concept.
+    // A claim attributed to a Person resolves to any Concept whose
+    // description mentions the Person's canonical name — this bridges
+    // the common Phase 1 attribution pattern where the philosopher gets
+    // the credit ("Aristotle holds…") rather than the position they
+    // founded ("aristotelianism holds…"). Without this bridge, the
+    // cross-position selector misses the dialectical core of texts
+    // like virtue-ethics-fragments.
+    let resolve_positions = |attr: &AtomId| -> Vec<&AtomId> {
+        let Some(attr_entity) = entity_by_id.get(attr) else {
+            return Vec::new();
+        };
+        match attr_entity.entity_type {
+            EntityType::Concept => vec![&attr_entity.id],
+            EntityType::Person => {
+                // Match concept-description mentions on either the
+                // full canonical name OR any individual name token of
+                // length ≥ 4. Phase 1 typically writes "Foot's view"
+                // or "MacIntyre argues..." inside concept descriptions
+                // — full names like "Philippa Foot" wouldn't match,
+                // but the surname token "foot" does.
+                let canonical_lower = attr_entity.canonical_name.to_ascii_lowercase();
+                let mut needles: Vec<String> = vec![canonical_lower.clone()];
+                for token in canonical_lower
+                    .split(|ch: char| !ch.is_alphabetic())
+                    .filter(|t| t.len() >= 4)
+                {
+                    needles.push(token.to_string());
+                }
+                needles.retain(|n| !n.trim().is_empty());
+                if needles.is_empty() {
+                    return Vec::new();
+                }
+                entities
+                    .iter()
+                    .filter(|e| e.entity_type == EntityType::Concept)
+                    .filter(|e| {
+                        let desc = e.description.to_ascii_lowercase();
+                        needles.iter().any(|n| desc.contains(n))
+                    })
+                    .map(|e| &e.id)
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    };
+
     struct ClaimMeta<'a> {
         claim: &'a Claim,
-        position: &'a AtomId,
+        positions: Vec<&'a AtomId>,
         mentions: std::collections::BTreeSet<&'a AtomId>,
     }
     let mut metas: Vec<ClaimMeta<'_>> = Vec::new();
@@ -319,10 +373,8 @@ fn select_concept_overlap_cross_position(
         let Some(attr) = c.attributed_to.as_ref() else {
             continue;
         };
-        let Some(attr_entity) = entity_by_id.get(attr) else {
-            continue;
-        };
-        if attr_entity.entity_type != EntityType::Concept {
+        let positions = resolve_positions(attr);
+        if positions.is_empty() {
             continue;
         }
         let lower_content = c.content.to_ascii_lowercase();
@@ -352,18 +404,30 @@ fn select_concept_overlap_cross_position(
         }
         metas.push(ClaimMeta {
             claim: c,
-            position: attr,
+            positions,
             mentions,
         });
     }
 
-    // Pair every (i, j) where positions differ AND mention sets
-    // intersect. Stable order: outer loop preserves claim order from
-    // input.
+    // Pair every (i, j) where the two claims' position sets are
+    // disjoint AND mention sets intersect. A position is "shared" if
+    // it appears in both claims' resolved-positions list — those are
+    // intra-position pairs already covered by the entity-overlap
+    // selector and we skip them here. Stable order: outer loop
+    // preserves claim order from input.
     let mut out = Vec::new();
+    let mut emitted_pairs: std::collections::HashSet<(usize, usize)> =
+        std::collections::HashSet::new();
     for i in 0..metas.len() {
         for j in (i + 1)..metas.len() {
-            if metas[i].position == metas[j].position {
+            let pos_i: std::collections::BTreeSet<&AtomId> =
+                metas[i].positions.iter().copied().collect();
+            let pos_j: std::collections::BTreeSet<&AtomId> =
+                metas[j].positions.iter().copied().collect();
+            if !pos_i.is_disjoint(&pos_j) {
+                continue;
+            }
+            if !emitted_pairs.insert((i, j)) {
                 continue;
             }
             // Intersection: pick the shared entity with the longest
@@ -380,8 +444,7 @@ fn select_concept_overlap_cross_position(
                 let Some(e) = entity_by_id.get(id) else {
                     continue;
                 };
-                let is_own_position =
-                    *id == metas[i].position || *id == metas[j].position;
+                let is_own_position = pos_i.contains(id) || pos_j.contains(id);
                 let len = e.canonical_name.len();
                 if is_own_position {
                     if len > fallback_len {
@@ -409,6 +472,139 @@ fn select_concept_overlap_cross_position(
     out
 }
 
+/// Resolve a claim's `attributed_to` atom id into the set of "position
+/// concepts" it represents. A Concept attribution resolves to itself.
+/// A Person attribution bridges to any Concept whose description
+/// mentions the person — full canonical name OR any name token of
+/// length ≥ 4 (so "Foot" in a Concept's description bridges
+/// "Philippa Foot" attributions). Anything else returns empty.
+fn resolve_positions_for_attribution<'a>(
+    attr: &AtomId,
+    entities: &'a [Entity],
+    entity_by_id: &std::collections::HashMap<&'a AtomId, &'a Entity>,
+) -> Vec<&'a AtomId> {
+    let Some(attr_entity) = entity_by_id.get(attr) else {
+        return Vec::new();
+    };
+    match attr_entity.entity_type {
+        EntityType::Concept => vec![&attr_entity.id],
+        EntityType::Person => {
+            let canonical_lower = attr_entity.canonical_name.to_ascii_lowercase();
+            let mut needles: Vec<String> = vec![canonical_lower.clone()];
+            for token in canonical_lower
+                .split(|ch: char| !ch.is_alphabetic())
+                .filter(|t| t.len() >= 4)
+            {
+                needles.push(token.to_string());
+            }
+            needles.retain(|n| !n.trim().is_empty());
+            if needles.is_empty() {
+                return Vec::new();
+            }
+            entities
+                .iter()
+                .filter(|e| e.entity_type == EntityType::Concept)
+                .filter(|e| {
+                    let desc = e.description.to_ascii_lowercase();
+                    needles.iter().any(|n| desc.contains(n))
+                })
+                .map(|e| &e.id)
+                .collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Chunk co-occurrence cross-position signal.
+///
+/// Pair every two claims attributed to *different* positions whose
+/// evidence lands in at least one shared Phase-1 section. The
+/// rationale: two positions discussed in the same section are by
+/// construction in dialectical conversation. Where the
+/// `concept-overlap` selector requires both claims to mention a
+/// shared third concept by name, this selector only requires
+/// section-level co-occurrence — catching structural disagreements
+/// the model phrases without naming a common anchor (Stoics talk
+/// about virtue, Epicureans talk about pleasure; both in the same
+/// chapter on Hellenistic ethics).
+///
+/// Filter discipline (matches `select_concept_overlap_cross_position`):
+/// - Both claims must be attributed.
+/// - Each attribution resolves through `resolve_positions_for_attribution`
+///   into a non-empty set of position Concepts (Person attributions
+///   bridge via concept descriptions).
+/// - The two claims' position sets must be *disjoint* — if any
+///   position is shared, the claims describe the same school's
+///   commitments and aren't a cross-position candidate.
+///
+/// This signal will overlap with `concept-overlap`. The dedup pass
+/// downstream prefers `EntityOverlap` over `ChunkCooccurrence`, so
+/// a pair surfaced by both keeps the more specific provenance.
+fn select_chunk_cooccurrence_cross_position(
+    claims: &[Claim],
+    entities: &[Entity],
+) -> Vec<TensionCandidate> {
+    if entities.is_empty() {
+        return Vec::new();
+    }
+    use std::collections::{BTreeSet, HashMap};
+    let entity_by_id: HashMap<&AtomId, &Entity> =
+        entities.iter().map(|e| (&e.id, e)).collect();
+
+    struct ClaimMeta<'a> {
+        claim: &'a Claim,
+        positions: Vec<&'a AtomId>,
+        sections: BTreeSet<&'a str>,
+    }
+    let metas: Vec<ClaimMeta<'_>> = claims
+        .iter()
+        .filter_map(|c| {
+            let attr = c.attributed_to.as_ref()?;
+            let positions =
+                resolve_positions_for_attribution(attr, entities, &entity_by_id);
+            if positions.is_empty() {
+                return None;
+            }
+            let sections: BTreeSet<&str> = c
+                .evidence
+                .iter()
+                .map(|e| e.chunk_id.as_str())
+                .collect();
+            if sections.is_empty() {
+                return None;
+            }
+            Some(ClaimMeta {
+                claim: c,
+                positions,
+                sections,
+            })
+        })
+        .collect();
+
+    let mut out = Vec::new();
+    for i in 0..metas.len() {
+        for j in (i + 1)..metas.len() {
+            let pi: BTreeSet<&AtomId> = metas[i].positions.iter().copied().collect();
+            let pj: BTreeSet<&AtomId> = metas[j].positions.iter().copied().collect();
+            if !pi.is_disjoint(&pj) {
+                continue;
+            }
+            if metas[i].sections.is_disjoint(&metas[j].sections) {
+                continue;
+            }
+            out.push(TensionCandidate {
+                id: String::new(),
+                source_atom: metas[i].claim.id.clone(),
+                target_atom: metas[j].claim.id.clone(),
+                discovery: CandidateSource::ChunkCooccurrence,
+                cluster_id: None,
+                shared_entity: None,
+            });
+        }
+    }
+    out
+}
+
 /// Canonical key for a candidate pair, ignoring source ordering.
 /// Lets us collapse the same (a, b) discovered via multiple signals
 /// into one record while preserving the stronger provenance.
@@ -426,7 +622,8 @@ fn source_rank(s: CandidateSource) -> u8 {
     match s {
         CandidateSource::IntraCluster => 0,
         CandidateSource::EntityOverlap => 1,
-        CandidateSource::EmbeddingTopK => 2,
+        CandidateSource::ChunkCooccurrence => 2,
+        CandidateSource::EmbeddingTopK => 3,
     }
 }
 
@@ -696,12 +893,12 @@ mod tests {
         );
     }
 
-    /// Claims attributed to person entities (philosophers, not
-    /// positions) should not drive cross-position candidates. The
-    /// signal targets position-vs-position structural disagreement;
-    /// philosopher-vs-philosopher is biographical, not structural.
+    /// Claims attributed to person entities should NOT yield
+    /// cross-position candidates when no concept entity bridges the
+    /// philosophers — i.e. when neither person appears in any
+    /// concept's description, the bridge has nothing to lean on.
     #[test]
-    fn cross_position_skips_person_attributions() {
+    fn cross_position_skips_person_attributions_without_bridge() {
         use crate::enrichment::pipeline::atlas::EntityType;
         let entities = vec![
             entity(1, "Aquinas", EntityType::Person),
@@ -720,7 +917,260 @@ mod tests {
         });
         assert!(
             out.is_empty(),
-            "person attributions should not yield cross-position candidates, got {out:?}"
+            "person attributions with no concept-description bridge should not yield candidates, got {out:?}"
         );
+    }
+
+    /// Person→Position bridge: a claim attributed to a Person whose
+    /// name appears in a Concept's description resolves to that
+    /// Concept for cross-position purposes. Pairs the claim against
+    /// claims attributed to *other* concepts when their content
+    /// shares a mention.
+    #[test]
+    fn cross_position_bridges_person_via_concept_description() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let mut aristotelianism = entity(1, "aristotelianism", EntityType::Concept);
+        aristotelianism.description =
+            "The position founded by Aristotle, centered on virtue and eudaimonia.".into();
+        let mut situationism = entity(2, "situationism", EntityType::Concept);
+        situationism.description =
+            "A skeptical position about character, advanced by Doris and Harman.".into();
+        let entities = vec![
+            aristotelianism,
+            situationism,
+            entity(3, "Aristotle", EntityType::Person),
+            entity(4, "virtue", EntityType::Concept),
+        ];
+        let mut a = claim(1, Some(3));
+        a.content = "Aristotle argues that virtue is the foundation of flourishing.".into();
+        let mut b = claim(2, Some(2));
+        b.content = "Situationism denies that virtue is a stable trait.".into();
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        let cross: Vec<_> = out
+            .iter()
+            .filter(|c| matches!(c.discovery, CandidateSource::EntityOverlap))
+            .filter(|c| {
+                c.source_atom.as_str() == "claim-0001"
+                    && c.target_atom.as_str() == "claim-0002"
+            })
+            .collect();
+        assert_eq!(
+            cross.len(),
+            1,
+            "expected one cross-position candidate via Person→Concept bridge, got {out:?}"
+        );
+    }
+
+    /// Bridge via surname: when the Person canonical_name is full
+    /// ("Philippa Foot") but the concept description references only
+    /// the surname ("Foot's view"), the bridge must still fire.
+    #[test]
+    fn cross_position_bridges_person_via_surname_token() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let mut realism = entity(1, "metaphysical realism", EntityType::Concept);
+        realism.description =
+            "The label for Foot's neo-Aristotelism, holding objective virtue facts.".into();
+        let mut sentimentalism = entity(2, "sentimentalism", EntityType::Concept);
+        sentimentalism.description =
+            "A branch of virtue ethics holding virtues are sentiment-based traits.".into();
+        let entities = vec![
+            realism,
+            sentimentalism,
+            entity(3, "Philippa Foot", EntityType::Person),
+            entity(4, "virtue", EntityType::Concept),
+        ];
+        let mut a = claim(1, Some(3));
+        a.content = "Philippa Foot grounds virtue in natural human function.".into();
+        let mut b = claim(2, Some(2));
+        b.content = "Sentimentalism takes virtue as a sentiment-driven trait.".into();
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        let cross: Vec<_> = out
+            .iter()
+            .filter(|c| {
+                c.source_atom.as_str() == "claim-0001"
+                    && c.target_atom.as_str() == "claim-0002"
+            })
+            .collect();
+        assert_eq!(
+            cross.len(),
+            1,
+            "surname-token bridge should fire when concept desc references 'Foot'"
+        );
+    }
+
+    /// Two claims attributed to different concept-typed positions whose
+    /// evidence lands in the same section get a chunk-co-occurrence
+    /// candidate even when their content shares no entity mentions.
+    /// This is the core motivating case from stoic-test (Stoics talk
+    /// about virtue, Epicureans talk about pleasure — same chapter,
+    /// no shared anchor in content).
+    #[test]
+    fn chunk_cooccurrence_pairs_cross_position_claims_in_same_section() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let entities = vec![
+            entity(1, "Stoicism", EntityType::Concept),
+            entity(2, "Epicureans", EntityType::Concept),
+        ];
+        let mut a = claim(1, Some(1));
+        a.content = "Only virtue is good.".into();
+        a.evidence = vec![ChunkRef::new("sec_0004", None)];
+        let mut b = claim(2, Some(2));
+        b.content = "Pleasure is the absence of bodily pain.".into();
+        b.evidence = vec![ChunkRef::new("sec_0004", None)];
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        let cooc: Vec<_> = out
+            .iter()
+            .filter(|c| matches!(c.discovery, CandidateSource::ChunkCooccurrence))
+            .collect();
+        assert_eq!(
+            cooc.len(),
+            1,
+            "expected one chunk-cooccurrence candidate, got {out:?}"
+        );
+    }
+
+    /// Same section, same position → no candidate. The selector
+    /// targets cross-position structural disagreement, not
+    /// intra-position elaboration.
+    #[test]
+    fn chunk_cooccurrence_skips_same_position_pairs() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let entities = vec![entity(1, "Stoicism", EntityType::Concept)];
+        let mut a = claim(1, Some(1));
+        a.evidence = vec![ChunkRef::new("sec_0001", None)];
+        let mut b = claim(2, Some(1));
+        b.evidence = vec![ChunkRef::new("sec_0001", None)];
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        let cooc: Vec<_> = out
+            .iter()
+            .filter(|c| matches!(c.discovery, CandidateSource::ChunkCooccurrence))
+            .collect();
+        assert!(
+            cooc.is_empty(),
+            "same-position pairs should not produce chunk-cooccurrence candidates"
+        );
+    }
+
+    /// Different positions in different sections → no candidate.
+    /// The dialectical signal is co-occurrence; if the corpus didn't
+    /// place them in the same section, we don't pair them here.
+    #[test]
+    fn chunk_cooccurrence_skips_disjoint_sections() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let entities = vec![
+            entity(1, "Stoicism", EntityType::Concept),
+            entity(2, "Epicureans", EntityType::Concept),
+        ];
+        let mut a = claim(1, Some(1));
+        a.evidence = vec![ChunkRef::new("sec_0001", None)];
+        let mut b = claim(2, Some(2));
+        b.evidence = vec![ChunkRef::new("sec_0007", None)];
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        let cooc: Vec<_> = out
+            .iter()
+            .filter(|c| matches!(c.discovery, CandidateSource::ChunkCooccurrence))
+            .collect();
+        assert!(cooc.is_empty(), "disjoint sections should not pair");
+    }
+
+    /// Person→Concept bridge applies here too. A Person attribution
+    /// whose surname appears in a Concept's description bridges to
+    /// that Concept, allowing chunk-cooccurrence pairing across
+    /// philosopher-attributed and position-attributed claims in the
+    /// same section.
+    #[test]
+    fn chunk_cooccurrence_bridges_person_via_concept_description() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let mut realism = entity(1, "metaphysical realism", EntityType::Concept);
+        realism.description =
+            "The label for Foot's neo-Aristotelism, holding objective virtue facts.".into();
+        let entities = vec![
+            realism,
+            entity(2, "situationism", EntityType::Concept),
+            entity(3, "Philippa Foot", EntityType::Person),
+        ];
+        let mut a = claim(1, Some(3));
+        a.evidence = vec![ChunkRef::new("sec_0002", None)];
+        let mut b = claim(2, Some(2));
+        b.evidence = vec![ChunkRef::new("sec_0002", None)];
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        let cooc: Vec<_> = out
+            .iter()
+            .filter(|c| matches!(c.discovery, CandidateSource::ChunkCooccurrence))
+            .collect();
+        assert_eq!(
+            cooc.len(),
+            1,
+            "Person→Concept bridge should propagate into chunk-cooccurrence selector"
+        );
+    }
+
+    /// Dedup: when the same pair fires both EntityOverlap and
+    /// ChunkCooccurrence, the dedup pass keeps the EntityOverlap
+    /// provenance (more specific signal). The pair appears once in
+    /// the final list.
+    #[test]
+    fn chunk_cooccurrence_yields_to_entity_overlap_in_dedup() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        let entities = vec![
+            entity(1, "PositionAlpha", EntityType::Concept),
+            entity(2, "PositionBeta", EntityType::Concept),
+            entity(3, "thirdConcept", EntityType::Concept),
+        ];
+        let mut a = claim(1, Some(1));
+        a.content = "PositionAlpha argues thirdConcept matters.".into();
+        a.evidence = vec![ChunkRef::new("sec_0001", None)];
+        let mut b = claim(2, Some(2));
+        b.content = "PositionBeta denies thirdConcept matters.".into();
+        b.evidence = vec![ChunkRef::new("sec_0001", None)];
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        // Exactly one candidate for this pair, EntityOverlap wins.
+        let pair_cands: Vec<_> = out
+            .iter()
+            .filter(|c| {
+                c.source_atom.as_str() == "claim-0001"
+                    && c.target_atom.as_str() == "claim-0002"
+            })
+            .collect();
+        assert_eq!(pair_cands.len(), 1);
+        assert!(matches!(
+            pair_cands[0].discovery,
+            CandidateSource::EntityOverlap
+        ));
     }
 }

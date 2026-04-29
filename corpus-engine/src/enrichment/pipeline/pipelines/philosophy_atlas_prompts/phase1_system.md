@@ -63,11 +63,20 @@ Surname lists ("A, B, C argued…") yield one Person atom per name.
 **Abstract philosophical concepts get their own Concept atoms.**
 Each load-bearing technical term named in the section is its own
 `{entity_type: concept}` atom — not folded into the position that
-mentions it. Heuristic: if a critic would italicise the term, it's
-a Concept atom. Form: *bad faith* (Sartre), *qualia* (philosophy of
-mind), *the categorical imperative* (Kant) — concepts drawn from
-areas unrelated to whatever you are processing. Lift on first
-mention; don't re-extract on every later mention.
+mentions it. The bar is generous: lift any named concept the section
+*uses* in argument — the named goods, the named values, the named
+methods, the named distinctions, the named ends. You don't need
+italics or rare appearance; an operative concept that recurs across
+arguments is exactly the kind we want as its own atom. Form: *bad
+faith* (Sartre), *qualia* (philosophy of mind), *the categorical
+imperative* (Kant) — concepts drawn from areas unrelated to whatever
+you are processing. Lift on first mention; don't re-extract on every
+later mention. **When in doubt, lift it.**
+
+**Schools and isms are concepts, not persons.** A name ending in
+*-ism*, *-ianism*, or *...ethics* is a position the field navigates,
+not an agent acting in it. Type it `concept`. The philosopher who
+holds it is a separate Person atom.
 
 ### 2. `entities_developed`
 
@@ -118,10 +127,16 @@ contrasts X and Y").
 
 ### 6. `claims`
 
-Knowledge-carrying acts the section performs. Attribute to a
-philosopher OR a position when the claim is placed in their mouth;
-omit `attributed_to` when the claim is the article's own stance
-(narrator voice, consensus framing).
+Knowledge-carrying acts the section performs. **Attribute whenever
+the claim's content names a position or philosopher whose commitment
+it states — even when the section's voice carries it.** "Compatibilism
+asserts that X" attributes to *Compatibilism*. "Hume held that Y"
+attributes to *Hume*. Reserve `attributed_to: omit` for true
+article-voice statements that don't pin a commitment on any named
+entity ("the debate brackets aside political freedom"). Attribution
+is the join key downstream phases use to surface cross-position
+disagreement — a claim that names a position but lacks attribution
+is invisible to the dialectic.
 
 - `content` — the claim in propositional form. Not the argument
   that carries it.

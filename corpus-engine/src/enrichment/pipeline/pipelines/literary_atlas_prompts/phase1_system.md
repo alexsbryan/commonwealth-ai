@@ -51,12 +51,15 @@ threshold, not on-page page-count.
 **Cited works are Work atoms.** A book on a shelf, a poem quoted in
 dialogue, a play named in allusion — each is its own Work atom.
 
-**Abstract concepts get their own Concept atoms.** A load-bearing
-literary term named even once is its own atom; if a critic would
-italicise the word, it's a Concept. Form: *grace under pressure*
-(Hemingway), *the figure in the carpet* (James), *the horror*
-(Conrad) — drawn from areas unrelated to whatever you are
-processing. Lift on first mention.
+**Abstract concepts get their own Concept atoms — generously.**
+Lift any named theme, motif, named condition, or load-bearing
+literary term the section uses. Italics aren't required; recurrence
+isn't required; a term that names a *thing the work is about* counts.
+Form: *grace under pressure* (Hemingway), *the figure in the carpet*
+(James), *the horror* (Conrad) — drawn from areas unrelated to
+whatever you are processing. Lift on first mention. **When in doubt,
+lift it** — abstract atoms are the anchors downstream phases use to
+join claims across sections.
 
 ### 2. `entities_developed`
 
@@ -99,9 +102,12 @@ creates or dissolves relationships, grounds a claim.
 ### 6. `claims`
 
 Knowledge-carrying acts the text performs. Attribute to a character
-when the claim is placed in their mouth or mind; omit
-`attributed_to` when the claim is made by the text itself (narrator,
-structural argument).
+when the content states their commitment — even when the narrator's
+voice carries it. "Alyosha believes that..." attributes to Alyosha
+even though no quotation marks frame it. Reserve `attributed_to:
+omit` for true text-level structural argument that doesn't pin a
+commitment on a named character. Attribution is the join key
+downstream phases use to surface character-vs-character tension.
 
 - `content` — the claim in propositional form. Not the event that
   carries it.

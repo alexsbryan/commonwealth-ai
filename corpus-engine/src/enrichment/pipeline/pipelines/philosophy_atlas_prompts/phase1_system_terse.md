@@ -48,19 +48,26 @@ a distinct name — three atoms, not one collapsed `"X's view"`
 concept. A list of philosophers cited only by surname (`"A, B, C
 argued..."`) yields one Person atom per name, not a merged one.
 
-**Abstract concepts get their own Concept atoms.** A load-bearing
-technical term named in passing must produce a Concept atom — its
-value is its recurrence across sections, which a critic discussing
-the text will track even when the section's own treatment is
-glancing. Match the form of examples like *bad faith* (Sartre),
-*language game* (Wittgenstein), *the categorical imperative* (Kant)
-— concepts drawn from areas unrelated to whatever section you are
-processing.
+**Abstract concepts get their own Concept atoms — generously.**
+Lift any named concept the section *uses* in argument: the named
+goods, named values, named methods, named distinctions, named ends.
+You don't need italics or rarity. Operative concepts that recur
+across arguments are exactly the atoms we want. Form: *bad faith*
+(Sartre), *language game* (Wittgenstein), *the categorical imperative*
+(Kant) — drawn from unrelated areas. **When in doubt, lift it.**
 
-**Claims `attributed_to` a position, not a philosopher.** When a
-section presents a named position, set `attributed_to` to the
-position (Concept atom). Use the philosopher only for biographical
-remarks not tied to a named position.
+**Schools and isms are concepts, not persons.** Names ending in
+*-ism*, *-ianism*, or *...ethics* are positions the field navigates;
+type them `concept`, not `person`.
+
+**Attribute claims even in narrator voice.** When the content names
+a position or philosopher whose commitment it states ("Compatibilism
+asserts X", "Hume held Y"), set `attributed_to` to that entity even
+though the section's voice carries it. Prefer the position (Concept)
+over the philosopher (Person) when both apply. Reserve omission for
+true article-voice statements that don't pin a commitment on a named
+entity. Attribution is the join key downstream — claims that name a
+position but lack attribution are invisible to the dialectic.
 
 Other top-level keys are optional — omit any you cannot populate.
 Never emit empty strings, `null`, `"..."`, or `"TODO"` placeholders.
