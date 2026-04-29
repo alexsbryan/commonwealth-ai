@@ -15,12 +15,27 @@
 //! exactly the existing behaviour.
 //!
 //! Per ARCH_PRINCIPLES §3.2, this is the seam where a shared
-//! registry-setup helper will eventually live (tracked in §12
-//! Roadmap alongside the tool_injector middleware manifest drift).
-//! For now the code is duplicated with project_cmd; the TODO below
-//! flags the extraction.
-// TODO(phase-3.5): extract to `sovereign-cli/src/tool_registry_setup.rs`
-// shared with `project_cmd::cmd_serve` + `commonwealth-api::tool_injector`.
+//! registry-setup helper will eventually live. The
+//! highest-divergence-risk piece — the MCP allowlist + alias map
+//! — was centralised into [`sovereign_tools::mcp_surface`] in the
+//! Phase 2 refactor, so the daemon's `mcp_router` and the
+//! standalone `routes_mcp` server now agree on exactly the same
+//! exposed surface without a manual sync.
+//!
+//! What remains duplicated: the tool construction calls below
+//! (`tools.register(Box::new(...))` for each tool) are mirrored in
+//! `project_cmd::cmd_serve`. Both paths build the same
+//! `ToolRegistry` shape; if either grows new tools without the
+//! other, descriptors drift. Extracting that into a shared
+//! `sovereign-tools::registry_builder` is tracked as a follow-up
+//! — it requires moving the path-resolution helpers
+//! (`find_sovereign_dir` / `default_data_dir`) and the SCIP
+//! merged-graph loader into a neutral module first.
+// TODO(post-phase-2): extract the per-tool registration calls
+// below into `sovereign-tools::registry_builder::register_canonical_tools(deps)`
+// and have both `cmd_serve` and this module call it with their
+// own opened stores. Blocked on moving `load_merged_graph` /
+// `find_sovereign_dir` to a neutral location.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -146,6 +161,15 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
         Arc::clone(&lint_store),
     )));
+    // `build` — single-call lint-status + top-error view. Wraps
+    // the same lint store as `lint_status`; the agent sees one
+    // canonical tool while the legacy ids stay reachable during
+    // the alias window.
+    {
+        let tool = sovereign_tools::BuildTool::new(Arc::clone(&lint_store))
+            .with_watcher_active(Arc::clone(&watcher_active_flag));
+        tools.register(Box::new(tool));
+    }
     {
         let tool = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
             .with_watcher_active(Arc::clone(&watcher_active_flag));
@@ -200,6 +224,22 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(
         sovereign_tools::CheckDocPathsTool::new().with_project_root(repo_root.clone()),
     ));
+
+    // `spec` — single-call active-spec + ARCHITECTURE.md +
+    // CHARTER.md reader. Wraps the same docs store as
+    // `project_context` so future Phase 5 polish can fold in
+    // search-style related-doc excerpts without another
+    // registration site.
+    {
+        let mut tool = sovereign_tools::SpecTool::new();
+        if let Some(ref ds) = docs_store {
+            tool = tool.with_docs(Arc::clone(ds));
+        }
+        tools.register(Box::new(tool));
+    }
+    // `drift` — calls `sovereign_atos::approval::detect_drift`
+    // for every feature directory. Stateless; no store needed.
+    tools.register(Box::new(sovereign_tools::DriftTool::new()));
 
     Ok(ToolsEnv { registry: tools })
 }

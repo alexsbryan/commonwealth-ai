@@ -18,7 +18,7 @@ use super::stores::open_orchestrator;
 
 // ─── status ──────────────────────────────────────────────────────────────────
 
-pub(super) async fn cmd_status(args: &[String]) -> i32 {
+pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     let (positional, _flags) = split_args(args);
     let orc = match open_orchestrator() {
         Ok(o) => o,
@@ -87,7 +87,7 @@ pub(super) async fn cmd_status(args: &[String]) -> i32 {
 
 // ─── promote ─────────────────────────────────────────────────────────────────
 
-pub(super) async fn cmd_promote(args: &[String]) -> i32 {
+pub(crate) async fn cmd_promote(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(note_id) = positional.first().cloned() else {
         eprintln!("promote: missing <note-id>");
@@ -145,7 +145,7 @@ pub(super) async fn cmd_promote(args: &[String]) -> i32 {
 
 // ─── report ──────────────────────────────────────────────────────────────────
 
-pub(super) async fn cmd_report(args: &[String]) -> i32 {
+pub(crate) async fn cmd_report(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("report: missing <feature-id>");

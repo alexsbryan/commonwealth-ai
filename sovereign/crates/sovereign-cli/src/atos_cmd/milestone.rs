@@ -27,7 +27,7 @@ use super::stores::open_orchestrator;
 
 // ─── start-milestone ─────────────────────────────────────────────────────────
 
-pub(super) async fn cmd_start_milestone(args: &[String]) -> i32 {
+pub(crate) async fn cmd_start_milestone(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(id) = positional.first().cloned() else {
         eprintln!("start-milestone: missing <id>");
@@ -182,7 +182,7 @@ pub(super) async fn cmd_start_milestone(args: &[String]) -> i32 {
 
 // ─── end-milestone ───────────────────────────────────────────────────────────
 
-pub(super) async fn cmd_end_milestone(args: &[String]) -> i32 {
+pub(crate) async fn cmd_end_milestone(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(id) = positional.first().cloned() else {
         eprintln!("end-milestone: missing <id>");
@@ -453,7 +453,7 @@ fn spawn_auto_redteam(feature_id: &str, milestone_id: &str, ordinal: i64) {
 /// `sovereign atos next [<feature-id>]` — the seamless-handoff entry
 /// point. Finds the next unfinished milestone, prints a summary, asks
 /// for driver confirmation, and spawns.
-pub(super) async fn cmd_next(args: &[String]) -> i32 {
+pub(crate) async fn cmd_next(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let auto_yes = flags.iter().any(|(k, _)| k == "yes" || k == "y");
     let driver_flag = get_flag(&flags, "--driver");

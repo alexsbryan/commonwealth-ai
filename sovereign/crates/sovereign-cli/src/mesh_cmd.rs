@@ -63,6 +63,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "remove" => cmd_corpus_remove(&args[1..]).await,
         "status" => cmd_corpus_status().await,
         "diag" => cmd_corpus_diag(&args[1..]).await,
+        "dedupe" => cmd_corpus_dedupe(&args[1..]).await,
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
         "catalog" => crate::corpus_catalog_cmd::run_catalog(&args[1..]).await,
@@ -148,6 +149,7 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("remove <id>",               "Remove an installed corpus"),
             ("status",                    "Show shard status for all corpora"),
             ("diag <id>",                 "Audit an installed corpus: distinct-article count vs. recipe filter"),
+            ("dedupe <id>",               "One-shot rescue: collapse duplicate-content rows from a resume-rewind ingest"),
             ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
             ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
         ]),
@@ -583,6 +585,8 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
     let mut corpus_id: Option<String> = None;
     let mut titles_file: Option<PathBuf> = None;
     let mut sample_size: usize = 10;
+    let mut check_duplicates = false;
+    let mut total_shards_override: Option<usize> = None;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -609,13 +613,37 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
                     return 1;
                 }
             }
+            "--check-duplicates" => check_duplicates = true,
+            "--total-shards" => {
+                if let Some(n) = iter.next() {
+                    match n.parse::<usize>() {
+                        Ok(v) => total_shards_override = Some(v),
+                        Err(_) => {
+                            eprintln!("--total-shards requires a non-negative integer");
+                            return 1;
+                        }
+                    }
+                } else {
+                    eprintln!("--total-shards requires an integer argument");
+                    return 1;
+                }
+            }
             "--help" | "-h" => {
                 println!(
                     "Usage: sovereign corpus diag <corpus_id> \
-                     [--titles-file <path>] [--sample <n>]\n\n\
+                     [--titles-file <path>] [--sample <n>] [--check-duplicates] \
+                     [--total-shards <n>]\n\n\
                      Audit a corpus index against its filter title list. \
                      For wikipedia, --titles-file defaults to the bundled \
-                     Vital Articles Level 5 list."
+                     Vital Articles Level 5 list.\n\n\
+                     --check-duplicates scans every chunk's content_hash to \
+                     detect re-embedding (wasted work if a resume rewound \
+                     past already-written rows). ~650MB transient RAM for a \
+                     4M-chunk corpus.\n\n\
+                     --total-shards overrides the meta-stored / inferred \
+                     shard count when computing the missing-shards list. \
+                     Useful for legacy indexes that pre-date the \
+                     total_shards meta field."
                 );
                 return 0;
             }
@@ -650,17 +678,63 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
                 .join(".sovereign")
         });
     let index_dir = data_dir.join("indexes");
-    let index_path = index_dir.join(&corpus_id);
 
-    if !index_path.exists() {
+    // Resolve where this corpus actually lives. Three shapes are
+    // valid in the wild:
+    //
+    // 1. **Canonical** — `<index_dir>/<corpus_id>/`. Produced by
+    //    `coordinate_merge` after a queue-mode ingest finishes; this
+    //    is the form peers fan-out queries to.
+    // 2. **Self-partition** — `<index_dir>/<corpus_id>-partition-<self>/`.
+    //    Active during ingest, and also the *terminal* state when a
+    //    solo-node ingest never advances to merge (e.g. wikipedia
+    //    here: 31/38 shards processed, indexes built, but no merge
+    //    yet because the merge step waits on all-units-complete).
+    // 3. **Peer-partition** — `<index_dir>/<corpus_id>-partition-<peer>/`.
+    //    Foreign data the local node should not introspect.
+    //
+    // For diag we accept (1) and (2) via the file-system scan;
+    // (3) is excluded by the `partition-<self>` suffix match. If
+    // both exist we prefer canonical because it represents the
+    // merged final state.
+    let canonical_path = index_dir.join(&corpus_id);
+    let (index_path, surface_label) = if canonical_path.exists() {
+        (canonical_path, "canonical".to_string())
+    } else if let Some((partition_path, node_id_label)) =
+        find_self_partition(&index_dir, &corpus_id)
+    {
         eprintln!(
-            "Index not found at {}. Has this corpus been installed?",
-            index_path.display()
+            "  note: canonical `{corpus_id}/` is absent — diag is reading the self-partition\n  \
+             at `{}/`. The partition contains everything ingested so far on this node;\n  \
+             merging it into the canonical path is what peers (and `mesh_corpus.installed`)\n  \
+             ultimately consume.\n",
+            partition_path.display()
+        );
+        (partition_path, format!("partition-{node_id_label}"))
+    } else {
+        eprintln!(
+            "Index not found at {} (and no self-partition either).\n  \
+             Has this corpus been installed?",
+            canonical_path.display()
         );
         return 1;
+    };
+
+    println!("Opening index at {} ({}) …", index_path.display(), surface_label);
+
+    // If we're reading a partition, surface the processed-shards gap
+    // up front. The whole point of diag is to answer "is this corpus
+    // complete?" — the partition's `_corpus_meta.json` already tracks
+    // this so we don't have to wait for the title-list comparison
+    // below to discover an obvious gap.
+    if surface_label.starts_with("partition-") {
+        if let Some(shard_summary) =
+            processed_shards_summary(&index_path, total_shards_override)
+        {
+            println!("  shard coverage: {shard_summary}");
+        }
     }
 
-    println!("Opening index at {} …", index_path.display());
     let index = match corpus_engine::CorpusIndex::open(&index_path).await {
         Ok(i) => i,
         Err(e) => {
@@ -680,12 +754,14 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
             return 1;
         }
     };
-    println!("  distinct articles in index: {}", indexed_ids.len());
 
-    // Map each source_doc_id (URL) → normalized title for comparison
-    // against the filter list. Wikipedia URLs decode via
-    // `wiki_title_from_url`; for non-Wikipedia corpora the URL itself
-    // is treated as the title — same fallback as the filter uses.
+    // The Wikipedia extractor emits one ExtractedDoc per article
+    // SECTION, not per article. So distinct source_doc_id URLs count
+    // sections (and section URLs may include `#fragment` suffixes
+    // from the streaming chunker). Strip the URL down to a normalized
+    // article title so the comparison against `vital_articles_l5` is
+    // honest — and report both numbers so an operator can spot the
+    // distinction.
     let mut indexed_titles: std::collections::HashSet<String> =
         std::collections::HashSet::with_capacity(indexed_ids.len());
     for id in &indexed_ids {
@@ -693,6 +769,66 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
             .unwrap_or_else(|| id.clone());
         indexed_titles.insert(corpus_engine::filters::normalize_title(&title));
     }
+    println!(
+        "  distinct source_doc_id URLs (sections + fragments): {}",
+        indexed_ids.len()
+    );
+    println!(
+        "  distinct articles after url→title normalize:        {}",
+        indexed_titles.len()
+    );
+    if !indexed_ids.is_empty() && !indexed_titles.is_empty() {
+        let ratio = indexed_ids.len() as f64 / indexed_titles.len() as f64;
+        println!(
+            "  avg sections per article: {ratio:.1} \
+             (Wikipedia-typical: 5–20, anomalously high suggests duplicate ingest)"
+        );
+    }
+    if chunk_count > 0 && !indexed_ids.is_empty() {
+        let cps = chunk_count as f64 / indexed_ids.len() as f64;
+        println!(
+            "  avg chunks per section:   {cps:.2} \
+             (paragraph-chunked at 1024 chars; expect 1–10)"
+        );
+    }
+
+    if check_duplicates {
+        println!("Counting distinct content_hashes (this scans every chunk row)…");
+        match index.count_distinct_content_hashes().await {
+            Ok((distinct, with_hash, total)) => {
+                println!("  total chunks:             {total}");
+                println!("  with content_hash set:    {with_hash}");
+                println!("  distinct content_hashes:  {distinct}");
+                let hashless = total.saturating_sub(with_hash);
+                if hashless > 0 {
+                    println!(
+                        "  hashless (legacy) rows:   {hashless} \
+                         (predates content_hash population; cannot dedup-check these)"
+                    );
+                }
+                if with_hash > 0 {
+                    let dup = with_hash.saturating_sub(distinct);
+                    if dup == 0 {
+                        println!(
+                            "  ✓ no duplicate chunks detected — embed-once invariant holds \
+                             across the {with_hash} hashed rows."
+                        );
+                    } else {
+                        let pct = dup as f64 / with_hash as f64 * 100.0;
+                        println!(
+                            "  ⚠ {dup} duplicate chunk rows ({pct:.2}% of hashed rows) — \
+                             some chunks were embedded more than once. Likely cause: \
+                             resume rewound the cursor past already-written rows."
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("  failed to count distinct content_hashes: {e}");
+            }
+        }
+    }
+
 
     // Decide which title list to compare against. For wikipedia we
     // default to the bundled VITAL_ARTICLES_L5; --titles-file overrides.
@@ -796,6 +932,171 @@ fn load_title_set(bytes: &[u8]) -> std::collections::HashSet<String> {
         out.insert(corpus_engine::filters::normalize_title(line));
     }
     out
+}
+
+/// `sovereign corpus dedupe <corpus_id> [--yes]`
+///
+/// Run the one-shot rescue pass on an installed corpus: collapse
+/// duplicate-content rows (same `content_hash`) so the index reflects
+/// actual unique work. The cause this exists for: a resume-cursor-
+/// rewind bug that re-embedded already-written content during a
+/// long-running ingest, leaving up to ~65% of chunks as exact
+/// duplicates of older rows. Reclaims disk and unblocks the
+/// subsequent `build_indexes()` (which now runs a dedupe prelude
+/// automatically — this command exists for partitions that already
+/// completed their build over duplicated data, before the auto-dedup
+/// landed).
+///
+/// Resolves both canonical and self-partition paths (mirrors
+/// `corpus diag`'s resolution). Prints before/after counts and
+/// duplication rate. `--yes` skips the y/N confirmation; default is
+/// to confirm because the operation deletes rows.
+async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
+    let mut corpus_id: Option<String> = None;
+    let mut yes = false;
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--yes" | "-y" => yes = true,
+            "--help" | "-h" => {
+                println!(
+                    "Usage: sovereign corpus dedupe <corpus_id> [--yes]\n\n\
+                     Collapse duplicate-content rows in an installed corpus. \
+                     Detected via the chunk's content_hash. Hashless legacy \
+                     rows are preserved (no signal to compare). Resolves \
+                     both canonical (<index_dir>/<corpus>/) and self-\
+                     partition (<index_dir>/<corpus>-partition-<self>/) \
+                     paths."
+                );
+                return 0;
+            }
+            other if !other.starts_with('-') => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(other.to_string());
+                }
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                return 1;
+            }
+        }
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("Missing corpus ID. Usage: sovereign corpus dedupe <corpus_id>");
+        return 1;
+    };
+
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|cfg| cfg.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        });
+    let index_dir = data_dir.join("indexes");
+
+    // Same resolution as diag — canonical first, then self-partition.
+    let canonical_path = index_dir.join(&corpus_id);
+    let (index_path, surface_label) = if canonical_path.exists() {
+        (canonical_path, "canonical".to_string())
+    } else if let Some((partition_path, node_id_label)) =
+        find_self_partition(&index_dir, &corpus_id)
+    {
+        (partition_path, format!("partition-{node_id_label}"))
+    } else {
+        eprintln!(
+            "Index not found at {} (and no self-partition either).",
+            canonical_path.display()
+        );
+        return 1;
+    };
+
+    println!("Opening index at {} ({})…", index_path.display(), surface_label);
+    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("Failed to open corpus index: {e}");
+            return 1;
+        }
+    };
+
+    // Show the user what we're about to do BEFORE the destructive
+    // call. The count_distinct_content_hashes scan is the same one
+    // dedupe runs internally, but cheap enough to repeat — the
+    // delete pass is the load-bearing part.
+    println!("Scanning content_hashes (full table read)…");
+    let (distinct, with_hash, total) = match index.count_distinct_content_hashes().await {
+        Ok(triple) => triple,
+        Err(e) => {
+            eprintln!("Failed to count content_hashes: {e}");
+            return 1;
+        }
+    };
+    let dup_rows = with_hash.saturating_sub(distinct);
+    let dup_pct = if with_hash > 0 {
+        dup_rows as f64 / with_hash as f64 * 100.0
+    } else {
+        0.0
+    };
+    println!("  total chunks:             {total}");
+    println!("  with content_hash set:    {with_hash}");
+    println!("  distinct content_hashes:  {distinct}");
+    println!("  duplicates to delete:     {dup_rows} ({dup_pct:.2}% of hashed)");
+
+    if dup_rows == 0 {
+        println!("\n✓ Nothing to do — index already deduped.");
+        return 0;
+    }
+
+    if !yes {
+        eprint!(
+            "\nAbout to delete {dup_rows} duplicate row(s) from {}.\n\
+             Existing chunk_ids will be preserved for the surviving (lowest-id) \
+             row in each group. Vector + FTS indexes remain valid.\n\
+             Proceed? [y/N] ",
+            index_path.display()
+        );
+        use std::io::BufRead;
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        if stdin.lock().read_line(&mut line).is_err() {
+            eprintln!("aborted (could not read stdin)");
+            return 1;
+        }
+        let answer = line.trim().to_lowercase();
+        if answer != "y" && answer != "yes" {
+            println!("aborted.");
+            return 0;
+        }
+    }
+
+    println!("\nRunning dedupe…");
+    match index.dedupe_by_content_hash().await {
+        Ok(report) => {
+            println!("  rows before:              {}", report.rows_before);
+            println!("  rows after:               {}", report.rows_after);
+            println!("  duplicates deleted:       {}", report.duplicates_deleted);
+            println!(
+                "  unique hashes preserved:  {}",
+                report.unique_hashes_kept
+            );
+            println!(
+                "  hashless rows preserved:  {}",
+                report.hashless_rows_preserved
+            );
+            println!(
+                "\n✓ Dedupe complete ({:.2}% duplication eliminated).",
+                report.dup_fraction() * 100.0
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!("Dedupe failed: {e}");
+            1
+        }
+    }
 }
 
 async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
@@ -1091,6 +1392,136 @@ async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
 }
 
 // ── Helpers ──────────────────────────────────────────────
+
+/// Locate `<index_dir>/<corpus_id>-partition-<self>/` when canonical
+/// is absent. Returns the path and the truncated node-id label for
+/// human-friendly logging.
+///
+/// We don't have direct access to the daemon's `self_node_id` from
+/// the CLI (the cli is decoupled from any live mesh state — it can
+/// run before the daemon does), so the "self" partition is
+/// identified positively: scan the indexes dir for any directory
+/// matching `<corpus_id>-partition-<NODE_HEX>` and prefer the one
+/// where `_corpus_meta.json.indexes_built == true`. That's a
+/// pragmatic stand-in for "the partition this machine actually
+/// finished writing to" — peer-pulled partitions for OTHER nodes
+/// have `indexes_built: false` until coordinate_merge promotes
+/// them, so we don't accidentally read a peer's partial download.
+fn find_self_partition(
+    index_dir: &std::path::Path,
+    corpus_id: &str,
+) -> Option<(PathBuf, String)> {
+    let prefix = format!("{corpus_id}-partition-");
+    let mut best: Option<(PathBuf, String, bool)> = None;
+    let entries = std::fs::read_dir(index_dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else { continue };
+        let Some(suffix) = name_str.strip_prefix(&prefix) else { continue };
+        let meta_path = path.join("_corpus_meta.json");
+        let Ok(content) = std::fs::read_to_string(&meta_path) else {
+            continue;
+        };
+        let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) else {
+            continue;
+        };
+        let built = meta["indexes_built"].as_bool().unwrap_or(false);
+        // Prefer a built partition; if none built, fall back to any.
+        match &best {
+            Some((_, _, prior_built)) if *prior_built && !built => continue,
+            _ => {
+                best = Some((path, suffix.to_string(), built));
+            }
+        }
+    }
+    best.map(|(path, label, _)| (path, label))
+}
+
+/// Read the `processed_shards` array out of a partition's
+/// `_corpus_meta.json` and produce a one-line summary.
+///
+/// Total-shard resolution priority:
+/// 1. `--total-shards N` override (caller-supplied).
+/// 2. `total_shards` field in `_corpus_meta.json` (stamped by the
+///    extractor at ingest start; authoritative when present).
+/// 3. `max(processed_shards) + 1` heuristic (legacy fallback;
+///    silently undercounts trailing-missing shards — surface that
+///    caveat in the output so operators don't trust it blindly).
+///
+/// Returns `None` only when there's no `processed_shards` array at
+/// all (older schema or non-sharded corpus).
+fn processed_shards_summary(
+    index_path: &std::path::Path,
+    total_override: Option<usize>,
+) -> Option<String> {
+    let meta = std::fs::read_to_string(index_path.join("_corpus_meta.json")).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&meta).ok()?;
+    let processed: Vec<u64> = v["processed_shards"]
+        .as_array()?
+        .iter()
+        .filter_map(|x| x.as_u64())
+        .collect();
+    if processed.is_empty() && total_override.is_none() {
+        return Some(
+            "processed_shards present but empty (no shards finalized)".to_string(),
+        );
+    }
+    let max_idx = processed.iter().copied().max().unwrap_or(0);
+    let processed_set: std::collections::HashSet<u64> =
+        processed.iter().copied().collect();
+
+    // Resolve total shards via the priority chain.
+    let total_meta = v["total_shards"].as_u64().map(|n| n as usize);
+    let (total_inferred, total_source) = match (total_override, total_meta) {
+        (Some(n), _) => (n, "--total-shards override"),
+        (None, Some(n)) => (n, "stamped at extract start"),
+        (None, None) => ((max_idx + 1) as usize, "inferred from max(processed)+1"),
+    };
+
+    let total = total_inferred as u64;
+    let missing: Vec<u64> = (0..total)
+        .filter(|i| !processed_set.contains(i))
+        .collect();
+
+    let trailing_caveat = matches!(
+        total_source,
+        "inferred from max(processed)+1"
+    );
+
+    if missing.is_empty() {
+        Some(format!(
+            "{} of {} shards processed (source: {total_source}; none missing)",
+            processed.len(),
+            total,
+        ))
+    } else {
+        let preview: Vec<String> =
+            missing.iter().take(8).map(|n| n.to_string()).collect();
+        let suffix = if missing.len() > 8 {
+            format!(" + {} more", missing.len() - 8)
+        } else {
+            String::new()
+        };
+        let caveat = if trailing_caveat {
+            " (heuristic; trailing shards beyond max_idx may also be missing — \
+             check daemon.log for `assigned … real shards` or pass --total-shards N)"
+        } else {
+            ""
+        };
+        Some(format!(
+            "{} of {} shards processed (source: {total_source}); \
+             missing: [{}]{}{caveat}",
+            processed.len(),
+            total,
+            preview.join(", "),
+            suffix,
+        ))
+    }
+}
 
 fn hostname() -> Option<String> {
     // `HOSTNAME` / `COMPUTERNAME` env vars aren't reliably set in

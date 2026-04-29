@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine::FeatureStore;
 
-pub(super) async fn cmd_doctor(_args: &[String]) -> i32 {
+pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
     let mut report = DoctorReport::default();
     let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 

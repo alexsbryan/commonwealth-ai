@@ -51,18 +51,52 @@ pub async fn run_project(args: &[String]) -> i32 {
         return 0;
     }
 
+    // Every leaf below is also reachable as a top-level `sovereign
+    // <leaf>` after the namespace collapse. The shims here keep the
+    // old `project <leaf>` working — they print a one-time banner
+    // and forward to the same handler the new top-level arm uses,
+    // so behaviour is identical modulo the banner. Suppress with
+    // SOVEREIGN_QUIET_DEPRECATIONS=1.
+    use crate::util::deprecation::announce;
     match args[0].as_str() {
-        "init" => cmd_init(&args[1..]).await,
-        "design" => cmd_design(&args[1..]).await,
-        "plan" => cmd_plan(&args[1..]).await,
-        "charter" => cmd_charter(&args[1..]).await,
+        "init" => {
+            announce("sovereign project init", "sovereign init");
+            cmd_init(&args[1..]).await
+        }
+        "design" => {
+            announce("sovereign project design", "sovereign design");
+            cmd_design(&args[1..]).await
+        }
+        "plan" => {
+            announce("sovereign project plan", "sovereign plan");
+            cmd_plan(&args[1..]).await
+        }
+        "charter" => {
+            announce("sovereign project charter", "sovereign charter");
+            cmd_charter(&args[1..]).await
+        }
         "found" => cmd_found(&args[1..]).await,
-        "amend" => cmd_amend(&args[1..]).await,
+        "amend" => {
+            announce("sovereign project amend", "sovereign amend");
+            cmd_amend(&args[1..]).await
+        }
         "phase" => cmd_phase(&args[1..]).await,
-        "audit" => cmd_audit(&args[1..]).await,
-        "status" => cmd_status(&args[1..]).await,
-        "refresh" => cmd_refresh(&args[1..]).await,
-        "serve" => cmd_serve(&args[1..]).await,
+        "audit" => {
+            announce("sovereign project audit", "sovereign audit");
+            cmd_audit(&args[1..]).await
+        }
+        "status" => {
+            announce("sovereign project status", "sovereign status");
+            cmd_status(&args[1..]).await
+        }
+        "refresh" => {
+            announce("sovereign project refresh", "sovereign refresh");
+            cmd_refresh(&args[1..]).await
+        }
+        "serve" => {
+            announce("sovereign project serve", "sovereign serve");
+            cmd_serve(&args[1..]).await
+        }
         "install-hooks" => cmd_install_hooks(&args[1..]).await,
         "register" => cmd_register(&args[1..]).await,
         "unregister" => cmd_unregister(&args[1..]).await,
@@ -375,7 +409,7 @@ async fn fetch_commonwealth_models(commonwealth_url: &str) -> Vec<String> {
 
 // ─── Init ────────────────────────────────────────────────────
 
-async fn cmd_init(args: &[String]) -> i32 {
+pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP_INIT);
         return 0;
@@ -1209,7 +1243,7 @@ vector = false
 //
 // Most of the work lives in `crate::design_session`; `cmd_design`
 // parses args, resolves the repo root + project id, and hands off.
-async fn cmd_design(args: &[String]) -> i32 {
+pub(crate) async fn cmd_design(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP_DESIGN);
         return 0;
@@ -1290,7 +1324,7 @@ async fn cmd_design(args: &[String]) -> i32 {
 // repo root, and upserts plan_items rows into .sovereign/plan.db.
 // Composition lives in `crate::plan_composer` (pure); this handler
 // does the IO, ordering, and indexing.
-async fn cmd_plan(args: &[String]) -> i32 {
+pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP_PLAN);
         return 0;
@@ -1603,7 +1637,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
 // stay wired up. (The plan's longer-term repo-root-move is a
 // separate migration that affects amend + drift detection and
 // hasn't landed yet.)
-async fn cmd_charter(args: &[String]) -> i32 {
+pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP_CHARTER);
         return 0;
@@ -1710,7 +1744,7 @@ async fn cmd_charter(args: &[String]) -> i32 {
 
 // ─── Status ──────────────────────────────────────────────────
 
-async fn cmd_status(args: &[String]) -> i32 {
+pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP_STATUS);
         return 0;
@@ -1898,7 +1932,7 @@ async fn cmd_status(args: &[String]) -> i32 {
 
 // ─── Refresh ─────────────────────────────────────────────────
 
-async fn cmd_refresh(args: &[String]) -> i32 {
+pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP_REFRESH);
         return 0;
@@ -2413,7 +2447,7 @@ fn reset_scip_db(db_path: &Path) -> std::io::Result<()> {
 
 // ─── Serve ───────────────────────────────────────────────────
 
-async fn cmd_serve(args: &[String]) -> i32 {
+pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP_SERVE);
         return 0;
@@ -3807,7 +3841,7 @@ async fn cmd_found(args: &[String]) -> i32 {
 // lifecycle.current_phase, write a decision note. The artifact
 // trail closes the "was Phase N actually verified?" gap.
 
-async fn cmd_phase(args: &[String]) -> i32 {
+pub(crate) async fn cmd_phase(args: &[String]) -> i32 {
     let Some(sub) = args.first().cloned() else {
         eprintln!("phase: missing subcommand (status | pass)");
         return 2;
@@ -3832,7 +3866,7 @@ async fn cmd_phase(args: &[String]) -> i32 {
     }
 }
 
-async fn cmd_phase_status(_args: &[String]) -> i32 {
+pub(crate) async fn cmd_phase_status(_args: &[String]) -> i32 {
     let (repo_root, project_toml, _) = match load_phase_context() {
         Ok(c) => c,
         Err(code) => return code,
@@ -3881,7 +3915,7 @@ async fn cmd_phase_status(_args: &[String]) -> i32 {
     0
 }
 
-async fn cmd_phase_pass(args: &[String]) -> i32 {
+pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
     let (repo_root, mut project_toml, project_toml_path) = match load_phase_context() {
         Ok(c) => c,
         Err(code) => return code,
@@ -4128,7 +4162,7 @@ fn already_passed(repo_root: &Path, ordinal: u32) -> bool {
 // so it can be piped to a file, a PR description, or a GitHub
 // issue.
 
-async fn cmd_audit(args: &[String]) -> i32 {
+pub(crate) async fn cmd_audit(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("sovereign project audit");
         println!();
@@ -4619,7 +4653,7 @@ fn relative(path: &Path, base: &Path) -> String {
 /// 5. On approve: write CHARTER.md, bump `charter_version`,
 ///    update `charter_hash`, persist a decision note with the full
 ///    Q&A so readers six weeks later can find "why".
-async fn cmd_amend(args: &[String]) -> i32 {
+pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("sovereign project amend [design|charter]");
         println!();
@@ -5191,7 +5225,7 @@ fn has_ext_inner(dir: &Path, ext: &str, depth: usize, max_depth: usize) -> bool 
 
 /// Walk upward from `start` looking for the first directory that contains a
 /// `.sovereign/` subdirectory. Returns the `.sovereign/` path if found.
-fn find_sovereign_dir(start: &Path) -> Option<PathBuf> {
+pub(crate) fn find_sovereign_dir(start: &Path) -> Option<PathBuf> {
     let mut current = start.to_path_buf();
     loop {
         let candidate = current.join(".sovereign");
@@ -5205,7 +5239,7 @@ fn find_sovereign_dir(start: &Path) -> Option<PathBuf> {
     }
 }
 
-fn find_repo_root() -> Option<PathBuf> {
+pub(crate) fn find_repo_root() -> Option<PathBuf> {
     let output = std::process::Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .output()
@@ -5990,7 +6024,7 @@ async fn cmd_install_hooks(args: &[String]) -> i32 {
 /// by design, so we never talk to a remote host.
 const DAEMON_BASE: &str = "http://127.0.0.1:9741";
 
-async fn cmd_register(args: &[String]) -> i32 {
+pub(crate) async fn cmd_register(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         print_simple_help(
             "sovereign project register",
@@ -6053,7 +6087,7 @@ async fn cmd_register(args: &[String]) -> i32 {
     }
 }
 
-async fn cmd_unregister(args: &[String]) -> i32 {
+pub(crate) async fn cmd_unregister(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         print_simple_help(
             "sovereign project unregister",
@@ -6085,7 +6119,7 @@ async fn cmd_unregister(args: &[String]) -> i32 {
     }
 }
 
-async fn cmd_list(args: &[String]) -> i32 {
+pub(crate) async fn cmd_list(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         print_simple_help(
             "sovereign project list",
@@ -6130,7 +6164,7 @@ async fn cmd_list(args: &[String]) -> i32 {
     }
 }
 
-async fn cmd_watch(args: &[String]) -> i32 {
+pub(crate) async fn cmd_watch(args: &[String]) -> i32 {
     if args.is_empty() || crate::util::help::wants_help(args) {
         print_simple_help(
             "sovereign project watch",
@@ -6325,7 +6359,7 @@ async fn daemon_post(
 /// Cheap TCP + `GET /v1/models` probe. Matches what the desktop's
 /// bootstrap does (see `sovereign-desktop/src-tauri/src/bootstrap.rs`).
 /// Used by `cmd_serve` to decide whether to refuse the legacy path.
-async fn daemon_is_running() -> bool {
+pub(crate) async fn daemon_is_running() -> bool {
     let tcp = tokio::time::timeout(
         std::time::Duration::from_secs(1),
         tokio::net::TcpStream::connect(("127.0.0.1", 9741)),
@@ -6639,7 +6673,7 @@ async fn check_mcp_server(url: &str) -> bool {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-fn default_data_dir() -> Option<PathBuf> {
+pub(crate) fn default_data_dir() -> Option<PathBuf> {
     // Thin wrapper around util::dirs::sovereign_indexes(), kept as an
     // `Option<PathBuf>` so existing `.or_else(default_data_dir)` call
     // sites don't need to change shape. Returns None only when the home

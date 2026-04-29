@@ -19,6 +19,7 @@ pub mod local_corpus;
 #[cfg(feature = "treesitter")]
 pub mod manifest;
 pub mod mcp;
+pub mod mcp_surface;
 pub mod rag;
 pub mod recipe_author;
 pub mod search;
@@ -32,6 +33,10 @@ pub use code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 pub use code::{GetRunOutputTool, RunTestsTool, TestStatusTool};
 #[cfg(feature = "treesitter")]
 pub use code::{GetLintOutputTool, LintStatusTool};
+#[cfg(feature = "treesitter")]
+pub use code::BuildTool;
+#[cfg(feature = "treesitter")]
+pub use code::{DriftTool, SpecTool};
 #[cfg(feature = "treesitter")]
 pub use code::{WriteNoteTool, ReadNotesTool, DeleteNoteTool};
 #[cfg(feature = "treesitter")]

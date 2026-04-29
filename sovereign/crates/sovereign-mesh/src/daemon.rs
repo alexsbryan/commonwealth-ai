@@ -1236,6 +1236,16 @@ impl EmbeddedDaemon {
             let internal_router =
                 commonwealth_api::server::internal_router(app_state_clone);
 
+            // Phase 3 takeover: a `sovereign init` invocation may
+            // have spawned a standalone `sovereign serve` background
+            // process holding `:9741`. Before we bind, look for the
+            // pid pointer in `~/.sovereign/server.pid` and SIGTERM
+            // the process so we can take ownership of the port. If
+            // the daemon was started by a service manager (launchd,
+            // systemd) on a fresh boot, the pointer file won't exist
+            // and this is a no-op.
+            takeover_standalone_serve_if_present();
+
             let client_listener = match tokio::net::TcpListener::bind(client_addr).await {
                 Ok(l) => l,
                 Err(e) => {
@@ -1424,6 +1434,57 @@ impl EmbeddedDaemon {
 /// Write minimal `ModelInfo` entries into the inference store for
 /// each configured local slot. The `/v1/models` handler reads from
 /// this store, so without these registrations a freshly-set-up
+/// Phase 3 takeover: when the daemon is starting, look for a PID
+/// file written by `sovereign serve --background` (which `sovereign
+/// init` invokes before the user gets around to running the
+/// daemon). If we find a live process, SIGTERM it and wait briefly
+/// so the port is free by the time we bind. The pid pointer lives
+/// at `~/.sovereign/server.pid` so this works regardless of which
+/// project directory the daemon is launched from.
+///
+/// This is best-effort. Failures are logged at info level and the
+/// caller proceeds — if the port really is held by something the
+/// daemon can't displace, the subsequent `bind()` will fail loudly
+/// with the actual error. We don't want this helper to be a
+/// hard-stop in the daemon path.
+fn takeover_standalone_serve_if_present() {
+    let Some(home) = dirs::home_dir() else { return };
+    let pid_path = home.join(".sovereign").join("server.pid");
+    let Ok(contents) = std::fs::read_to_string(&pid_path) else {
+        return; // No file is the common case: clean boot, no prior init.
+    };
+    let Ok(pid) = contents.trim().parse::<i32>() else {
+        warn!(path = %pid_path.display(), "takeover: malformed pid file");
+        let _ = std::fs::remove_file(&pid_path);
+        return;
+    };
+    if pid == std::process::id() as i32 {
+        // We somehow inherited our own pid file (shouldn't happen
+        // in production, but possible in tests where the same
+        // binary writes the pointer and then becomes the daemon).
+        let _ = std::fs::remove_file(&pid_path);
+        return;
+    }
+    let killed = std::process::Command::new("/bin/kill")
+        .arg("-TERM")
+        .arg(pid.to_string())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if killed {
+        info!(pid, "daemon: signalled standalone serve to release :9741");
+        // Give the child a moment to release the listener. axum's
+        // graceful-shutdown is fast; 1s is plenty in practice. We
+        // could poll the port instead, but on slow CI this would
+        // over-engineer the wait — the bind() retry below catches
+        // anything we miss.
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+    } else {
+        info!(pid, "daemon: stale serve pid file (process gone) — cleared");
+    }
+    let _ = std::fs::remove_file(&pid_path);
+}
+
 /// daemon answers the endpoint with an empty list — misleading for
 /// anyone running it as a smoke check after `sovereign setup`.
 ///

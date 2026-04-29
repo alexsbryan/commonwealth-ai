@@ -31,17 +31,23 @@
 //! External callers consume a single entry point:
 //! [`run_atos`]. Everything else is crate-private.
 
-mod ab;
+// The flat namespace (`sovereign milestone`, `sovereign drift`,
+// `sovereign audit`, etc.) reaches into these submodules directly,
+// so they're `pub(crate)` rather than the original module-private
+// `mod`. The new top-level subcommand modules call the same
+// handlers without forcing every alias path through `run_atos`'s
+// string-match dispatcher.
+pub(crate) mod ab;
 mod args;
-mod doctor;
-mod feature;
-mod milestone;
-mod plugin;
-mod provision;
-mod spec;
-mod status;
+pub(crate) mod doctor;
+pub(crate) mod feature;
+pub(crate) mod milestone;
+pub(crate) mod plugin;
+pub(crate) mod provision;
+pub(crate) mod spec;
+pub(crate) mod status;
 mod stores;
-mod teardown;
+pub(crate) mod teardown;
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -61,24 +67,87 @@ pub async fn run_atos(args: &[String]) -> i32 {
         return 0;
     }
 
+    // Most leaves below moved to the flat `sovereign <leaf>`
+    // namespace. Each shim prints a one-time banner and forwards to
+    // the same underlying handler the new top-level arm calls, so
+    // behaviour is identical. SOVEREIGN_QUIET_DEPRECATIONS=1
+    // silences the banner.
+    use crate::util::deprecation::announce;
     let rest = &args[1..];
     match first.as_str() {
-        "provision" => provision::cmd_provision(rest).await,
+        "provision" => {
+            // Provision is no-op'd in Phase 6 (commit = founding);
+            // until then it still does the original work but
+            // signals the upcoming change.
+            announce(
+                "sovereign atos provision",
+                "sovereign init + commit .sovereign/features/<id>/spec.md",
+            );
+            provision::cmd_provision(rest).await
+        }
         "next" => milestone::cmd_next(rest).await,
-        "start-milestone" => milestone::cmd_start_milestone(rest).await,
-        "end-milestone" => milestone::cmd_end_milestone(rest).await,
-        "archive" => provision::cmd_archive(rest).await,
-        "status" => status::cmd_status(rest).await,
-        "promote" => status::cmd_promote(rest).await,
+        "start-milestone" => {
+            announce(
+                "sovereign atos start-milestone",
+                "sovereign milestone <feature-id> <N>",
+            );
+            milestone::cmd_start_milestone(rest).await
+        }
+        "end-milestone" => {
+            announce(
+                "sovereign atos end-milestone",
+                "sovereign milestone <feature-id> <N>",
+            );
+            milestone::cmd_end_milestone(rest).await
+        }
+        "archive" => {
+            announce(
+                "sovereign atos archive",
+                "sovereign audit <feature-id> --archive",
+            );
+            provision::cmd_archive(rest).await
+        }
+        "status" => {
+            announce("sovereign atos status", "sovereign status");
+            status::cmd_status(rest).await
+        }
+        "promote" => {
+            announce("sovereign atos promote", "sovereign notes promote");
+            status::cmd_promote(rest).await
+        }
         "diff" => ab::cmd_diff(rest).await,
         "run-ab" => ab::cmd_run_ab(rest).await,
-        "probe-driver" => ab::cmd_probe_driver(rest).await,
-        "report" => status::cmd_report(rest).await,
-        "teardown" => teardown::cmd_teardown(rest).await,
+        "probe-driver" => {
+            announce("sovereign atos probe-driver", "sovereign doctor");
+            ab::cmd_probe_driver(rest).await
+        }
+        "report" => {
+            announce("sovereign atos report", "sovereign audit <feature-id>");
+            status::cmd_report(rest).await
+        }
+        "teardown" => {
+            announce(
+                "sovereign atos teardown",
+                "sovereign audit <feature-id> --archive",
+            );
+            teardown::cmd_teardown(rest).await
+        }
         "feature" => feature::cmd_feature(rest).await,
-        "spec" => spec::cmd_spec(rest).await,
-        "doctor" => doctor::cmd_doctor(rest).await,
-        "install-plugin" => plugin::cmd_install_plugin(rest).await,
+        "spec" => {
+            announce("sovereign atos spec", "sovereign drift");
+            spec::cmd_spec(rest).await
+        }
+        "doctor" => {
+            announce("sovereign atos doctor", "sovereign doctor");
+            doctor::cmd_doctor(rest).await
+        }
+        "install-plugin" => {
+            announce(
+                "sovereign atos install-plugin",
+                "sovereign doctor --fix (lands in Phase 5)",
+            );
+            plugin::cmd_install_plugin(rest).await
+        }
         other => {
             eprintln!("atos: unknown subcommand '{other}'");
             print_help();

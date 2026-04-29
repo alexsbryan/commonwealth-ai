@@ -19,7 +19,7 @@ use super::stores::open_orchestrator;
 
 // ─── diff ────────────────────────────────────────────────────────────────────
 
-pub(super) async fn cmd_diff(args: &[String]) -> i32 {
+pub(crate) async fn cmd_diff(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("diff: missing <feature-id>");
@@ -256,7 +256,7 @@ fn classify_delta(counts: &[usize], parse_errors: bool) -> String {
 
 // ─── run-ab ──────────────────────────────────────────────────────────────────
 
-pub(super) async fn cmd_run_ab(args: &[String]) -> i32 {
+pub(crate) async fn cmd_run_ab(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("run-ab: missing <feature-id>");
@@ -323,7 +323,7 @@ pub(super) async fn cmd_run_ab(args: &[String]) -> i32 {
 
 // ─── probe-driver ────────────────────────────────────────────────────────────
 
-pub(super) async fn cmd_probe_driver(args: &[String]) -> i32 {
+pub(crate) async fn cmd_probe_driver(args: &[String]) -> i32 {
     let (_positional, flags) = split_args(args);
     let url = get_flag(&flags, "--url")
         .unwrap_or_else(|| "http://localhost:9741/v1/chat/completions".to_string());

@@ -40,7 +40,7 @@ impl FindCallersTool {
 impl Tool for FindCallersTool {
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
-            id: "find_callers".to_string(),
+            id: "callers".to_string(),
             name: "Find Callers".to_string(),
             description: "Find all call sites of a given symbol in the codebase, \
                           using the SCIP symbol graph. No false positives from \
@@ -129,7 +129,7 @@ impl Tool for FindCallersTool {
             .find_callers(symbol, depth)
             .await
             .map_err(|e| Error::Tool {
-                tool_id: "find_callers".to_string(),
+                tool_id: "callers".to_string(),
                 message: e.to_string(),
             })?;
 

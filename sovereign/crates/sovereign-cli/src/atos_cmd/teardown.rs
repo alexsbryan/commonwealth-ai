@@ -13,7 +13,7 @@ use sovereign_atos::AtosOrchestrator;
 use super::args::split_args;
 use super::stores::open_orchestrator;
 
-pub(super) async fn cmd_teardown(args: &[String]) -> i32 {
+pub(crate) async fn cmd_teardown(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("teardown: missing <feature-id>");

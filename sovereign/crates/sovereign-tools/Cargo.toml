@@ -5,6 +5,11 @@ edition.workspace = true
 
 [dependencies]
 sovereign-core = { workspace = true }
+# `DriftTool` calls `sovereign_atos::approval::{find_approval,
+# detect_drift, current_spec_hash}` so its verdict matches the
+# daemon's approval_gate middleware exactly. The dep is one-way
+# (sovereign-atos depends on sovereign-core only); no cycle.
+sovereign-atos = { workspace = true }
 corpus-engine = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

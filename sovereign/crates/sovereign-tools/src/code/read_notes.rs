@@ -29,7 +29,7 @@ impl ReadNotesTool {
 impl Tool for ReadNotesTool {
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
-            id: "read_notes".to_string(),
+            id: "notes".to_string(),
             name: "Read Notes".to_string(),
             description: "Retrieve working notes written by write_note. \
                           Search by keyword (FTS), filter by symbol names, \
@@ -207,7 +207,7 @@ impl Tool for ReadNotesTool {
                 .await
         }
         .map_err(|e| Error::Tool {
-            tool_id: "read_notes".to_string(),
+            tool_id: "notes".to_string(),
             message: e.to_string(),
         })?;
 

@@ -502,6 +502,41 @@ with values from `~/.sovereign/recipes/registry.toml`. Resolution order:
 local > live > bundled. `is_local_entry(id)` powers the `(local)` badge in
 both the CLI list view and the desktop "Add Knowledge Source" panel.
 
+**Schema back-compat policy** (`corpus-engine/src/recipe.rs`)
+
+Recipes live outside the repo (community registry, user authoring) so a
+TOML written six months ago must keep loading. Convention enforced by the
+reader + a regression-fixture suite:
+
+1. **New fields** carry `#[serde(default)]` (or a typed default helper).
+   Removing a default breaks every published recipe.
+2. **Renamed fields** keep the old name as `#[serde(alias = "old-name")]`.
+3. **Removed enum variants** get a deprecation arm in
+   `translate_parse_error` that emits "use `<replacement>` instead" rather
+   than a generic `unknown variant` parse error. `api_paginated` →
+   `http_api` is the live example (PR1 retired the never-implemented
+   stub). The deprecation message points at this section.
+4. **`[corpus] schema_version`** is bumped only when readers must opt in
+   to interpret the recipe; pure additions don't require a bump. The
+   reader refuses recipes declaring `schema_version > MAX_SCHEMA_VERSION`
+   so future-recipe-meets-old-engine fails loudly.
+5. **Reserved variants** — when a feature is coming but not implemented
+   (e.g. the SQL escape hatch `PatternDecl::CustomSql`), reserve its
+   variant in the schema now. The reserved shape parses cleanly, the
+   runtime emits a visible placeholder (warning + finding row, never
+   silent skip), and the validator flags it so the recipe author knows
+   it's not fully wired. Recipes authored against the future shape don't
+   need a migration when the runtime lands. The investigation pipeline's
+   `custom_sql` is the live example: declare it today, see the validator
+   warn "reserved for a future engine version", run the pipeline, see a
+   placeholder finding with `status = "reserved_not_yet_implemented"`
+   and the SQL preserved verbatim. Future PR adds the rusqlite executor
+   without touching the schema.
+
+`corpus-engine/tests/recipe_back_compat.rs` pins canonical TOML shapes from
+each schema boundary and asserts they all parse. Adding a fixture there is
+the standard cost of a schema change.
+
 **Publish nudge**
 (`sovereign-cli/src/project_cmd.rs::compose_publish_recipe_nudge`)
 

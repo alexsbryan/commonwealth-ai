@@ -12,6 +12,7 @@
 //! more `*_cmd.rs` modules. Nothing in `util` depends on anything
 //! outside the CLI crate.
 
+pub mod deprecation;
 pub mod dirs;
 pub mod help;
 pub mod log_rotation;

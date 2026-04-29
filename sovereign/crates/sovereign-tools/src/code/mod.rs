@@ -47,6 +47,29 @@ pub mod lint_status;
 #[cfg(feature = "treesitter")]
 pub mod get_lint_output;
 
+// Single-call build/lint view. Wraps the same `LintResultStore`
+// as `LintStatusTool` but folds the agent's typical follow-up
+// `get_lint_output` call into the default response. The renamed
+// tool surface (Phase 2 of the CLI refactor) advertises `build`;
+// the legacy `lint_status` / `get_lint_output` ids remain
+// registered for backward-compatible access.
+#[cfg(feature = "treesitter")]
+pub mod build;
+
+// Active-spec / architecture / charter reader. Single-call
+// answer to "what's the contract I'm working under?" — replaces
+// the older `project_context` + manual file-read combination on
+// the agent's side.
+#[cfg(feature = "treesitter")]
+pub mod spec;
+
+// Spec-drift inspection. Calls into `sovereign_atos::approval`
+// so the verdict matches the daemon's approval_gate middleware
+// exactly: a feature this tool calls "drifted" is the same
+// feature the gate would write a deviation note for.
+#[cfg(feature = "treesitter")]
+pub mod drift;
+
 // Working notes tools.
 #[cfg(feature = "treesitter")]
 pub mod write_note;
@@ -120,6 +143,12 @@ pub use get_run_output::GetRunOutputTool;
 pub use lint_status::LintStatusTool;
 #[cfg(feature = "treesitter")]
 pub use get_lint_output::GetLintOutputTool;
+#[cfg(feature = "treesitter")]
+pub use build::BuildTool;
+#[cfg(feature = "treesitter")]
+pub use spec::SpecTool;
+#[cfg(feature = "treesitter")]
+pub use drift::DriftTool;
 
 #[cfg(feature = "treesitter")]
 pub use write_note::WriteNoteTool;

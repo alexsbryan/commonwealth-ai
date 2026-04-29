@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-pub(super) async fn cmd_install_plugin(_args: &[String]) -> i32 {
+pub(crate) async fn cmd_install_plugin(_args: &[String]) -> i32 {
     let repo_root = find_repo_root()
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     match crate::atos_plugin::install_plugin(&repo_root) {

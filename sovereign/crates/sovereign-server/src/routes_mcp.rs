@@ -264,49 +264,15 @@ async fn mcp_stats(
 
 // ─── tools/list ───────────────────────────────────────────────
 
-/// Tool IDs exposed through the MCP surface. Five Code Intelligence
-/// tools: three index-based (symbol_lookup, code_search, recent_changes)
-/// and two SCIP call-graph tools (find_callees, find_callers). Adding
-/// a tool here without also implementing it would be a trust violation,
-/// so the list is colocated with the handler and tested against the spec.
-const MCP_EXPOSED_TOOLS: &[&str] = &[
-    // Code index tools (LanceDB)
-    "symbol_lookup",
-    "code_search",
-    "recent_changes",
-    // SCIP call-graph tools
-    "find_callees",
-    "find_callers",
-    // Test watcher tools
-    "test_status",
-    "run_tests",
-    "get_run_output",
-    // Lint watcher tools
-    "lint_status",
-    "get_lint_output",
-    // Working notes tools
-    "write_note",
-    "read_notes",
-    "delete_note",
-    // Blast radius
-    "blast_radius",
-    // Project context
-    "project_context",
-];
+// MCP allowlist + alias logic lives in
+// [`sovereign_tools::mcp_surface`]. The standalone server and the
+// embedded daemon's `sovereign-mesh::mcp_router` share that module
+// so they advertise the same surface to clients.
+use sovereign_tools::mcp_surface::{is_mcp_exposed, render_tools_list, resolve_alias};
 
 pub(crate) fn handle_tools_list(registry: &ToolRegistry, id: Value) -> JsonRpcResponse {
-    let mut tools = Vec::new();
-    for descriptor in registry.descriptors() {
-        if !MCP_EXPOSED_TOOLS.contains(&descriptor.id.as_str()) {
-            continue;
-        }
-        tools.push(serde_json::json!({
-            "name": descriptor.id,
-            "description": descriptor.description,
-            "inputSchema": descriptor.parameters,
-        }));
-    }
-
+    let descriptors = registry.descriptors();
+    let tools = render_tools_list(&descriptors);
     JsonRpcResponse::result(id, serde_json::json!({ "tools": tools }))
 }
 
@@ -328,10 +294,16 @@ pub(crate) async fn handle_tools_call(
         None => return JsonRpcResponse::error(id, -32602, "missing params"),
     };
 
-    let name = match params.get("name").and_then(|v| v.as_str()) {
+    let raw_name = match params.get("name").and_then(|v| v.as_str()) {
         Some(n) => n.to_string(),
         None => return JsonRpcResponse::error(id, -32602, "missing 'name' in params"),
     };
+    // Alias rewrite: a client that cached a legacy name (e.g.
+    // `find_callers`) hits the same canonical handler (`callers`)
+    // as a fresh client. Telemetry is recorded against the
+    // canonical name so call counts aggregate across both
+    // spellings.
+    let name = resolve_alias(&raw_name).to_string();
     let arguments = params
         .get("arguments")
         .cloned()
@@ -340,13 +312,13 @@ pub(crate) async fn handle_tools_call(
     // Honest refusal for unsupported tools. Returns a successful
     // result envelope with `isError: false` and a helpful message so
     // the agent's loop can keep going.
-    if UNSUPPORTED_TOOLS.contains(&name.as_str()) {
+    if UNSUPPORTED_TOOLS.contains(&raw_name.as_str()) {
         return JsonRpcResponse::result(
             id,
             call_tool_text(
                 format!(
-                    "`{name}` is not available in this version. \
-                     I can find the symbol definition with `symbol_lookup` \
+                    "`{raw_name}` is not available in this version. \
+                     I can find the symbol definition with `symbols` \
                      and semantically similar code with `code_search` — \
                      would either help?"
                 ),
@@ -359,8 +331,8 @@ pub(crate) async fn handle_tools_call(
     // tool ID we host internally but don't expose (e.g. `shell`) gets
     // a method-not-found error — keeps the MCP surface bounded to the
     // coding-agent use case.
-    if !MCP_EXPOSED_TOOLS.contains(&name.as_str()) {
-        return JsonRpcResponse::error(id, -32601, format!("tool not found: {name}"));
+    if !is_mcp_exposed(&name) {
+        return JsonRpcResponse::error(id, -32601, format!("tool not found: {raw_name}"));
     }
 
     let tool = match registry.get(&name) {
@@ -517,48 +489,40 @@ mod tests {
         }
     }
 
+    /// The drift-guard moved to `sovereign_tools::mcp_surface` —
+    /// the `MCP_TOOLS_ALWAYS` allowlist + `MCP_TOOL_ALIASES` map
+    /// are unit-tested in that module so both the standalone
+    /// server and the embedded daemon's mcp_router test the same
+    /// contract once. Smoke-check the import resolves here so a
+    /// mis-merged refactor surfaces immediately.
     #[test]
-    fn mcp_exposed_tools_are_declared() {
-        // This test is the guard against accidental drift. When you add or remove
-        // a tool from MCP_EXPOSED_TOOLS, update this list too.
-        let expected: &[&str] = &[
-            // Code index
-            "symbol_lookup", "code_search", "recent_changes",
-            // SCIP call graph
-            "find_callees", "find_callers",
-            // Test watcher
-            "test_status", "run_tests", "get_run_output",
-            // Lint watcher
-            "lint_status", "get_lint_output",
-            // Working notes
-            "write_note", "read_notes", "delete_note",
-            // Blast radius + project context
-            "blast_radius", "project_context",
-        ];
-        for tool in expected {
-            assert!(
-                MCP_EXPOSED_TOOLS.contains(tool),
-                "Expected tool `{tool}` missing from MCP_EXPOSED_TOOLS"
-            );
+    fn mcp_surface_exports_the_renamed_canonicals() {
+        use sovereign_tools::mcp_surface::{is_mcp_exposed, resolve_alias};
+        // Renamed canonical ids are exposed.
+        for new in &["symbols", "callers", "callees", "blast", "note", "notes"] {
+            assert!(is_mcp_exposed(new), "{new} should be MCP-exposed");
         }
-        assert_eq!(
-            MCP_EXPOSED_TOOLS.len(),
-            expected.len(),
-            "MCP_EXPOSED_TOOLS has {} entries but test expects {} — update the test when adding/removing tools",
-            MCP_EXPOSED_TOOLS.len(),
-            expected.len(),
-        );
+        // Legacy ids alias-rewrite to the renamed canonical.
+        assert_eq!(resolve_alias("find_callers"), "callers");
+        assert_eq!(resolve_alias("write_note"), "note");
     }
 
-    // ─── T-15: tools/list returns exactly the registered code tools ─
+    // ─── T-15: tools/list emits canonical + deprecated aliases ───
     //
-    // This test registry only has the 5 code intelligence tools registered.
-    // `handle_tools_list` returns the intersection of (registered tools) and
-    // (MCP_EXPOSED_TOOLS), so the list will contain exactly those 5.
-    // The full production server registers more (test/lint/notes tools).
-
+    // The test registry registers the 3 SCIP code-intel tools that
+    // have been renamed in this build (`symbols`, `callers`,
+    // `callees`). `tools/list` should advertise those 3 canonical
+    // names plus 3 deprecated mirror entries (`symbol_lookup`,
+    // `find_callers`, `find_callees`) — 6 total — so cached agent
+    // clients keep working until they refresh. Out-of-scope tool
+    // ids (`find_references`, retired ATOS lifecycle tools, etc.)
+    // never appear.
+    //
+    // The full production server registers more tools (notes,
+    // lint, blast); this minimal harness keeps the test fast and
+    // independent of `corpus-engine/treesitter`.
     #[tokio::test]
-    async fn t15_tools_list_complete_and_bounded() {
+    async fn t15_tools_list_emits_canonical_plus_deprecated_aliases() {
         let registry = registry_with_code_tools();
         let resp = handle_tools_list(&registry, Value::from(1));
 
@@ -569,35 +533,48 @@ mod tests {
             .filter_map(|t| t["name"].as_str())
             .collect();
 
-        // All five code intelligence tools must be present
-        for required in &[
-            "symbol_lookup", "code_search", "recent_changes",
-            "find_callees", "find_callers",
-        ] {
+        // Canonical (renamed) ids appear.
+        for required in &["symbols", "callers", "callees"] {
             assert!(
                 names.contains(required),
-                "Required tool `{required}` missing from tools/list"
+                "Required tool `{required}` missing from tools/list — got {names:?}"
             );
         }
 
-        // Out-of-scope tools never appear, even if someone adds them
-        // to the registry later and forgets to update `MCP_EXPOSED_TOOLS`.
+        // Deprecated aliases also appear, marked as such, so a
+        // cached client keeps working.
+        for legacy in &["symbol_lookup", "find_callers", "find_callees"] {
+            let entry = tools
+                .iter()
+                .find(|t| t["name"].as_str() == Some(legacy))
+                .unwrap_or_else(|| panic!("alias `{legacy}` missing from tools/list"));
+            let desc = entry["description"].as_str().unwrap_or("");
+            assert!(
+                desc.starts_with("(deprecated alias for `"),
+                "alias `{legacy}` description should be marked deprecated, got {desc:?}"
+            );
+        }
+
+        // Out-of-scope / unsupported tool ids never appear, even if
+        // they were registered (they aren't in this minimal harness).
         for excluded in &[
             "find_references",
             "impact_analysis",
-            "decision_context",
-            "capture_session",
-            "consistency_check",
+            "provision_feature",
+            "session_reflection",
         ] {
             assert!(
                 !names.contains(excluded),
-                "Out-of-scope tool `{excluded}` appeared in tools/list"
+                "Out-of-scope tool `{excluded}` appeared in tools/list — got {names:?}"
             );
         }
 
-        // Only the 5 registered code tools — the others aren't in this
-        // test registry so they don't appear in the list.
-        assert_eq!(tools.len(), 5, "expected exactly 5 MCP tools from this test registry");
+        // 3 canonicals + 3 deprecated mirrors = 6.
+        assert_eq!(
+            tools.len(),
+            6,
+            "expected 3 canonical + 3 alias mirrors, got {names:?}"
+        );
     }
 
     // ─── T-16: Honest refusal for unsupported tools ──────────

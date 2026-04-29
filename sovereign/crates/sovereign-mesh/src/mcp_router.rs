@@ -81,38 +81,12 @@ fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
     })
 }
 
-const MCP_TOOLS: &[&str] = &[
-    // Code index
-    "symbol_lookup", "code_search", "recent_changes",
-    // SCIP call graph
-    "find_callees", "find_callers",
-    // Test watcher
-    "test_status", "run_tests", "get_run_output",
-    // Lint watcher
-    "lint_status", "get_lint_output",
-    // Working notes
-    "write_note", "read_notes", "delete_note",
-    // Blast radius (transitive impact analysis)
-    "blast_radius",
-    // Project documentation search
-    "project_context",
-    // Session reflection & feedback loop
-    "session_reflection",
-    // Doc path validity checker
-    "check_doc_paths",
-    // ATOS feature management
-    "provision_feature", "archive_feature",
-    // ATOS note lookup
-    "read_note_by_id",
-    // ATOS note promotion
-    "promote_note",
-    // ATOS digest (Fast-slot summarization of scope-filtered notes)
-    "read_note_digest",
-    // ATOS run ledger — driver-side tool-call telemetry.
-    "record_atos_event",
-    // ATOS red-team findings.
-    "write_redteam_finding",
-];
+// MCP allowlist + alias logic lives in
+// [`sovereign_tools::mcp_surface`] so the daemon's mount and the
+// standalone `sovereign serve` HTTP module agree on exactly the
+// same surface. See that module for the full contract; this file
+// just imports the helpers.
+use sovereign_tools::mcp_surface::{is_mcp_exposed, render_tools_list, resolve_alias};
 
 /// Build the MCP router. Mounts `/mcp`, `/mcp/message`, and `/mcp/stats`
 /// with shared per-session state (tool registry, note store, session id,
@@ -252,16 +226,8 @@ async fn dispatch(
             JsonRpcResponse::ok(id, result)
         }
         "tools/list" => {
-            let mut tool_list = Vec::new();
-            for desc in tools.descriptors() {
-                if MCP_TOOLS.contains(&desc.id.as_str()) {
-                    tool_list.push(serde_json::json!({
-                        "name": desc.id,
-                        "description": desc.description,
-                        "inputSchema": desc.parameters,
-                    }));
-                }
-            }
+            let descriptors = tools.descriptors();
+            let tool_list = render_tools_list(&descriptors);
             JsonRpcResponse::ok(id, serde_json::json!({ "tools": tool_list }))
         }
         "tools/call" => handle_tool_call(id, req.params, tools, logger, session_id, call_counter).await,
@@ -291,17 +257,22 @@ async fn handle_tool_call(
     let Some(params) = params else {
         return JsonRpcResponse::err(id, -32602, "missing params");
     };
-    let Some(name) = params.get("name").and_then(|v| v.as_str()) else {
+    let Some(raw_name) = params.get("name").and_then(|v| v.as_str()) else {
         return JsonRpcResponse::err(id, -32602, "missing 'name'");
     };
-    let name = name.to_string();
+    // Alias rewrite: a client that cached the old MCP name (e.g.
+    // `find_callers`) hits the same canonical handler as the new
+    // name (`callers`). Telemetry (`record_call`) is keyed off the
+    // canonical name so call counts aggregate across both spellings.
+    let canonical = resolve_alias(raw_name).to_string();
+    let name = canonical;
     let arguments = params
         .get("arguments")
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
 
-    if !MCP_TOOLS.contains(&name.as_str()) {
-        return JsonRpcResponse::err(id, -32601, format!("tool not found: {name}"));
+    if !is_mcp_exposed(&name) {
+        return JsonRpcResponse::err(id, -32601, format!("tool not found: {raw_name}"));
     }
 
     let tool = match tools.get(&name) {

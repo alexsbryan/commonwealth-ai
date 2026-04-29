@@ -395,6 +395,8 @@ mod tests {
                 feature_id: None,
                 promoted_from: None,
                 related_entity: None,
+                source: "agent".into(),
+                supersedes: None,
             },
         ];
         let out = fallback_header_digest(&rows);

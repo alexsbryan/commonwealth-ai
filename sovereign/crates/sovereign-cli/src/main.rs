@@ -1,14 +1,19 @@
 mod amend;
+mod amend_cmd;
 mod atos_cmd;
 mod atos_plugin;
+mod audit_cmd;
 #[cfg(feature = "dev-tools")]
 mod awareness_cmd;
 mod bench_cmd;
+mod charter_cmd;
 mod chat_cmd;
 mod code_cmd;
 mod daemon_cmd;
+mod design_cmd;
 mod design_onboarding;
 mod design_session;
+mod drift_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod corpus_catalog_cmd;
@@ -16,18 +21,26 @@ mod doc_fetcher;
 mod doctor_cmd;
 mod found;
 mod honesty;
+mod init;
 mod mcp_cmd;
 mod mesh_cmd;
+mod milestone_cmd;
+mod notes_cmd;
 mod observation;
 mod phases;
+mod plan_cmd;
 mod plan_composer;
 mod project_cmd;
 mod project_toml;
 mod recipe_cmd;
+mod refresh_cmd;
 mod reflect_cmd;
+mod serve_cmd;
 mod service_install;
 mod setup_cmd;
 mod setup_config;
+mod status_cmd;
+mod stop_cmd;
 mod tools_cmd;
 mod util;
 
@@ -378,6 +391,62 @@ async fn main() {
             }
             "code" => {
                 let code = code_cmd::run_code(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "init" => {
+                // Top-level `sovereign init` — replaces
+                // `sovereign project init`. The old name continues
+                // to work via the alias arm in
+                // `project_cmd::run_project`.
+                let code = init::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "status" => {
+                let code = status_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "audit" => {
+                let code = audit_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "milestone" => {
+                let code = milestone_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "notes" => {
+                let code = notes_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "drift" => {
+                let code = drift_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "charter" => {
+                let code = charter_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "amend" => {
+                let code = amend_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "design" => {
+                let code = design_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "plan" => {
+                let code = plan_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "serve" => {
+                let code = serve_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "stop" => {
+                let code = stop_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "refresh" => {
+                let code = refresh_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "project" => {

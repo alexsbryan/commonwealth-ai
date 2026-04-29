@@ -73,7 +73,7 @@ impl BlastRadiusTool {
 impl Tool for BlastRadiusTool {
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
-            id: "blast_radius".to_string(),
+            id: "blast".to_string(),
             name: "Blast Radius".to_string(),
             description: "Compute the transitive impact of changing a symbol: \
                           all callers at every depth level up to max_depth. \
@@ -178,7 +178,7 @@ impl Tool for BlastRadiusTool {
             .blast_radius(symbol, max_depth, max_symbols)
             .await
             .map_err(|e| Error::Tool {
-                tool_id: "blast_radius".to_string(),
+                tool_id: "blast".to_string(),
                 message: e.to_string(),
             })?;
 

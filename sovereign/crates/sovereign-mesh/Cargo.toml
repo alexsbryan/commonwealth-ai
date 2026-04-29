@@ -29,6 +29,11 @@ sovereign-core = { workspace = true }
 # RemoteApiProvider — synthesised at request time when routing to
 # a peer for federated inference.
 sovereign-inference = { workspace = true }
+# `mcp_surface` — the shared MCP allowlist + alias map. The
+# embedded daemon's mcp_router and the standalone MCP server in
+# sovereign-server share this so they advertise the same surface
+# to clients without drifting.
+sovereign-tools = { workspace = true }
 # async_trait is needed to impl the (async) MeshKnowledgeSource
 # trait on MeshKnowledgeClient. sovereign-core already uses it.
 async-trait = { workspace = true }

@@ -10,7 +10,7 @@
 
 use super::args::split_args;
 
-pub(super) async fn cmd_feature(args: &[String]) -> i32 {
+pub(crate) async fn cmd_feature(args: &[String]) -> i32 {
     let Some(sub) = args.first().cloned() else {
         eprintln!("feature: missing subcommand (approve)");
         return 2;

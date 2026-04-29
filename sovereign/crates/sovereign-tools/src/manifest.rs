@@ -63,11 +63,15 @@ pub fn all_descriptors() -> &'static [ToolDescriptor] {
 /// These are the ones currently hand-maintained in
 /// `commonwealth-api::tool_injector`.
 pub fn atos_critical_descriptors() -> Vec<ToolDescriptor> {
+    // Renamed in Phase 2 of the CLI refactor: `read_notes` → `notes`,
+    // `write_note` → `note`. The legacy ids stay reachable via the
+    // `mcp_surface::MCP_TOOL_ALIASES` alias map; the descriptor's
+    // canonical id is what we filter on.
     const IDS: &[&str] = &[
-        "read_notes",
+        "notes",
         "read_note_by_id",
         "read_note_digest",
-        "write_note",
+        "note",
         "write_redteam_finding",
     ];
     all_descriptors()
@@ -169,15 +173,18 @@ mod tests {
 
     #[test]
     fn atos_critical_subset_covers_the_five_pinned_ids() {
+        // Phase 2 of the CLI refactor renamed `read_notes` → `notes`
+        // and `write_note` → `note` at the descriptor layer. The
+        // pinned ids here are the post-rename canonical names.
         let ids: Vec<String> = atos_critical_descriptors()
             .iter()
             .map(|d| d.id.clone())
             .collect();
         for expected in [
-            "read_notes",
+            "notes",
             "read_note_by_id",
             "read_note_digest",
-            "write_note",
+            "note",
             "write_redteam_finding",
         ] {
             assert!(

@@ -42,6 +42,13 @@ chrono = { workspace = true }
 # for `awareness reset --full`. Production CLI paths go through
 # StateStore; this dep is paid for only in dev-tools builds.
 rusqlite = { version = "0.35", features = ["bundled"] }
+# `libc` is used by `serve_cmd` to call `setsid()` in the spawned
+# child's `pre_exec` hook, fully detaching the background MCP server
+# from the parent's controlling terminal. Without setsid, closing the
+# launching terminal sends SIGHUP to the orphaned child and kills it.
+# Unix-only — gated below.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

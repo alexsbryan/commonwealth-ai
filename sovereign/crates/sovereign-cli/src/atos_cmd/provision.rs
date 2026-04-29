@@ -17,7 +17,7 @@ use sovereign_atos::AtosOrchestrator;
 use super::args::{get_flag, split_args};
 use super::stores::open_orchestrator;
 
-pub(super) async fn cmd_provision(args: &[String]) -> i32 {
+pub(crate) async fn cmd_provision(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let id_flag = positional.first().cloned();
     let title_flag = get_flag(&flags, "--title");
@@ -100,7 +100,7 @@ pub(super) async fn cmd_provision(args: &[String]) -> i32 {
     }
 }
 
-pub(super) async fn cmd_archive(args: &[String]) -> i32 {
+pub(crate) async fn cmd_archive(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(id) = positional.first().cloned() else {
         eprintln!("archive: missing <id>");

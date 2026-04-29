@@ -27,7 +27,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use corpus_engine::{NoteRow, NoteStore, ToolCallLogRow};
 
+/// Old top-level `sovereign reflect` entry point. Prints the
+/// deprecation banner and forwards to the canonical view handler.
+/// `sovereign notes` (the new name) calls [`run_reflect_view`]
+/// directly so it doesn't trigger the banner.
 pub async fn run_reflect(args: &[String]) -> i32 {
+    crate::util::deprecation::announce("sovereign reflect", "sovereign notes");
+    run_reflect_view(args).await
+}
+
+/// Canonical reflection-view handler. Both the legacy `reflect`
+/// alias and the new `sovereign notes` default view forward here.
+pub(crate) async fn run_reflect_view(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP);
         return 0;
@@ -476,7 +487,7 @@ async fn run_retire(
 /// Locate notes.db. Looks for `<data_dir>/*/notes.db` (one level of project
 /// subdirectory) or `<data_dir>/notes.db` directly. Returns the most recently
 /// modified one, or accepts an explicit path.
-fn find_notes_db(data_dir: Option<&Path>) -> Option<PathBuf> {
+pub(crate) fn find_notes_db(data_dir: Option<&Path>) -> Option<PathBuf> {
     // If caller passed --data-dir, treat that directory as the base and look
     // for notes.db directly inside it (or one subdirectory deep).
     if let Some(base) = data_dir {

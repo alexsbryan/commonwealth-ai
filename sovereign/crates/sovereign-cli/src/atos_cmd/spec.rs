@@ -18,7 +18,7 @@ use super::args::{get_flag, split_args};
 use super::feature::derive_node_id_from_git;
 use super::stores::open_note_store;
 
-pub(super) async fn cmd_spec(args: &[String]) -> i32 {
+pub(crate) async fn cmd_spec(args: &[String]) -> i32 {
     let Some(sub) = args.first().cloned() else {
         eprintln!("spec: missing subcommand (diff|accept)");
         return 2;
@@ -34,7 +34,7 @@ pub(super) async fn cmd_spec(args: &[String]) -> i32 {
     }
 }
 
-async fn cmd_spec_diff(args: &[String]) -> i32 {
+pub(crate) async fn cmd_spec_diff(args: &[String]) -> i32 {
     let (positional, _flags) = split_args(args);
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("spec diff: missing <feature-id>");
@@ -138,7 +138,7 @@ async fn cmd_spec_diff(args: &[String]) -> i32 {
     }
 }
 
-async fn cmd_spec_accept(args: &[String]) -> i32 {
+pub(crate) async fn cmd_spec_accept(args: &[String]) -> i32 {
     let (positional, flags) = split_args(args);
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("spec accept: missing <feature-id>");

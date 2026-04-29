@@ -33,7 +33,7 @@ impl SymbolLookupTool {
 impl Tool for SymbolLookupTool {
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
-            id: "symbol_lookup".to_string(),
+            id: "symbols".to_string(),
             name: "Symbol Lookup".to_string(),
             description: "Exact lookup of a named symbol (function, struct, trait, type). \
                           Use this when you know the name of what you are looking for. \
@@ -136,7 +136,7 @@ impl Tool for SymbolLookupTool {
         let rows = query_all_code_indexes(&self.engine, &filter, 8)
             .await
             .map_err(|e| Error::Tool {
-                tool_id: "symbol_lookup".to_string(),
+                tool_id: "symbols".to_string(),
                 message: e.to_string(),
             })?;
 

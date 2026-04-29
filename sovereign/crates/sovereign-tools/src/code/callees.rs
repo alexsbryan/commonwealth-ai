@@ -47,7 +47,7 @@ impl FindCalleesTool {
 impl Tool for FindCalleesTool {
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
-            id: "find_callees".to_string(),
+            id: "callees".to_string(),
             name: "Find Callees".to_string(),
             description: "Find all functions and methods that a given symbol calls, \
                           using the SCIP symbol graph. More precise than parsing \
@@ -121,7 +121,7 @@ impl Tool for FindCalleesTool {
             .find_callees(symbol)
             .await
             .map_err(|e| Error::Tool {
-                tool_id: "find_callees".to_string(),
+                tool_id: "callees".to_string(),
                 message: e.to_string(),
             })?;
 

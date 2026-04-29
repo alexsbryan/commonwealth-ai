@@ -45,7 +45,7 @@ impl WriteNoteTool {
 impl Tool for WriteNoteTool {
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
-            id: "write_note".to_string(),
+            id: "note".to_string(),
             name: "Write Note".to_string(),
             description: "Persist a working note that survives across sessions. \
                           Use to record decisions, failed attempts, known invariants, \
@@ -240,7 +240,7 @@ impl Tool for WriteNoteTool {
             )
             .await
             .map_err(|e| Error::Tool {
-                tool_id: "write_note".to_string(),
+                tool_id: "note".to_string(),
                 message: e.to_string(),
             })?;
 
