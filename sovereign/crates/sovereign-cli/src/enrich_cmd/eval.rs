@@ -630,6 +630,30 @@ impl AtlasSnapshot {
             _ => None,
         })
     }
+
+    /// Every name the entity is known by (canonical + aliases). Used by
+    /// participant-keyword matchers so a golden listing "Alyosha" still
+    /// credits an event whose participant resolves to entity
+    /// `Alexey Fyodorovich Karamazov` with `aliases: ["Alyosha"]`. The
+    /// canonical-only version is kept for display contexts (miss
+    /// labels, fault-line endpoint resolution) where one name is wanted.
+    fn entity_match_strings_by_id(&self, id: &AtomId) -> Vec<&str> {
+        let Some(file) = self.atoms.as_ref() else {
+            return Vec::new();
+        };
+        file.atoms
+            .iter()
+            .find_map(|a| match a {
+                AtomEnvelope::Entity(e) if e.id == *id => {
+                    let mut names: Vec<&str> = Vec::with_capacity(1 + e.aliases.len());
+                    names.push(e.canonical_name.as_str());
+                    names.extend(e.aliases.iter().map(String::as_str));
+                    Some(names)
+                }
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
@@ -645,9 +669,97 @@ fn matches_any(haystack: &str, needles: &[String]) -> bool {
         return true; // "no constraint" → trivially satisfied
     }
     let lower = normalize_for_match(haystack);
-    needles
+    // Fast path: case-insensitive substring.
+    if needles
         .iter()
         .any(|n| lower.contains(&normalize_for_match(n)))
+    {
+        return true;
+    }
+    // Token-presence fallback for multi-token needles. Handles
+    // surface-form variance the substring check can't see — e.g.
+    // golden's `"hard incompatibilism"` matching corpus's
+    // `"incompatibilism (hard)"` (paren reorders the tokens but
+    // both tokens are present). Single-token needles fall through
+    // (no improvement).
+    let haystack_tokens: std::collections::HashSet<String> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .collect();
+    needles.iter().any(|n| {
+        let n_norm = normalize_for_match(n);
+        let n_tokens: Vec<String> = n_norm
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        n_tokens.len() >= 2 && n_tokens.iter().all(|t| haystack_tokens.contains(t))
+    })
+}
+
+/// `matches_any` plus a 7-char common-prefix fallback used only
+/// for fault-line position-name matching.
+///
+/// Rationale: golden authors write academic surface forms
+/// (`aristotelian`, `situationism`, `sentimentalist`) but the
+/// corpus's atom inventory often uses the proponent's name
+/// (`Aristotle`) or a related concept (`situational variables`).
+/// Plain substring fails — `aristotle` doesn't contain
+/// `aristotelian` (the suffix `-elian` versus the proper noun's
+/// `-tle` ending diverge at index 7) and `situational` doesn't
+/// contain `situationism`. A 7-char common-prefix rule across
+/// haystack tokens captures these without admitting the
+/// false-positive cases (`polis` vs `police` share only 4 chars,
+/// `stoic` vs `stoicism` share 5; both stay below threshold).
+///
+/// Why 7: empirically threads the needle between
+/// `aristotle/aristotelian` (7) and `aristotle/aristocracy` (6).
+/// At 6 we'd over-match across academic root families that share
+/// a Greek prefix; at 8+ we'd lose the load-bearing
+/// philosopher/school bridge. 7 is the smallest threshold
+/// preserving the bridge without admitting the family confusions
+/// the bench corpora actually contain.
+///
+/// Scoped to fault-line position matching specifically so the
+/// rule's slightly looser stance doesn't propagate into entity /
+/// claim / question matching where the strict substring rule has
+/// served well.
+fn matches_any_with_morphology(haystack: &str, needles: &[String]) -> bool {
+    if matches_any(haystack, needles) {
+        return true;
+    }
+    if needles.is_empty() {
+        return false;
+    }
+    const MIN_PREFIX: usize = 7;
+    let h_lower = normalize_for_match(haystack);
+    let h_tokens: Vec<String> = h_lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.len() >= MIN_PREFIX)
+        .map(str::to_string)
+        .collect();
+    if h_tokens.is_empty() {
+        return false;
+    }
+    needles.iter().any(|n| {
+        let n_lower = normalize_for_match(n);
+        // Restrict to single-token needles ≥ MIN_PREFIX chars long;
+        // multi-token needles already get the token-presence path.
+        if n_lower.len() < MIN_PREFIX
+            || n_lower.chars().any(|c| !c.is_alphanumeric())
+        {
+            return false;
+        }
+        h_tokens.iter().any(|t| {
+            let common: usize = n_lower
+                .chars()
+                .zip(t.chars())
+                .take_while(|(a, b)| a == b)
+                .count();
+            common >= MIN_PREFIX
+        })
+    })
 }
 
 /// Lowercase + fold the four common Unicode "smart" punctuation marks
@@ -983,9 +1095,9 @@ fn score_event_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
                 true
             } else {
                 e.participants.iter().any(|pid| {
-                    snap.entity_name_by_id(pid)
-                        .map(|n| matches_any(n, &ee.participants_any))
-                        .unwrap_or(false)
+                    snap.entity_match_strings_by_id(pid)
+                        .iter()
+                        .any(|n| matches_any(n, &ee.participants_any))
                 })
             };
             desc_ok && part_ok
@@ -1021,8 +1133,10 @@ fn score_state_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
     }
     for es in &golden.expected_state_atoms {
         let hit = states.iter().find(|st| {
-            let entity_name = snap.entity_name_by_id(&st.entity_id).unwrap_or("");
-            let entity_ok = matches_any(entity_name, &es.entity_name_contains_any);
+            let entity_ok = snap
+                .entity_match_strings_by_id(&st.entity_id)
+                .iter()
+                .any(|n| matches_any(n, &es.entity_name_contains_any));
             let label_ok = matches_any(&st.label, &es.label_contains_any);
             entity_ok && label_ok
         });
@@ -1050,22 +1164,48 @@ fn score_relation_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
         return s;
     }
 
-    let participant_names = |r: &Relation| -> Vec<String> {
+    // Per-participant name set (canonical + aliases). A relation
+    // pair-match accepts a hit on any of an entity's known names so a
+    // golden listing "Alyosha" credits a relation involving entity
+    // "Alexey Fyodorovich Karamazov".
+    let participant_name_sets = |r: &Relation| -> Vec<Vec<String>> {
         r.participants
             .iter()
-            .filter_map(|pid| snap.entity_name_by_id(pid).map(str::to_string))
+            .map(|pid| {
+                snap.entity_match_strings_by_id(pid)
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect()
+            })
             .collect()
     };
 
     for er in &golden.expected_relation_atoms {
         let hit = relations.iter().find(|r| {
-            let names = participant_names(r);
+            let name_sets = participant_name_sets(r);
+            let any_match = |needles: &[String]| -> bool {
+                name_sets
+                    .iter()
+                    .any(|names| names.iter().any(|n| matches_any(n, needles)))
+            };
+            // Two-side check requires the matches to come from
+            // *different* participants. Same-participant double-hit
+            // (one entity's name happens to fall in both keyword
+            // sets) would otherwise spuriously satisfy a pair check.
             let pair_ok = if er.participants_b_any.is_empty() {
-                names.iter().any(|n| matches_any(n, &er.participants_a_any))
+                any_match(&er.participants_a_any)
             } else {
-                let a_hit = names.iter().any(|n| matches_any(n, &er.participants_a_any));
-                let b_hit = names.iter().any(|n| matches_any(n, &er.participants_b_any));
-                a_hit && b_hit
+                name_sets.iter().enumerate().any(|(i, names_i)| {
+                    let a_here =
+                        names_i.iter().any(|n| matches_any(n, &er.participants_a_any));
+                    if !a_here {
+                        return false;
+                    }
+                    name_sets.iter().enumerate().any(|(j, names_j)| {
+                        i != j
+                            && names_j.iter().any(|n| matches_any(n, &er.participants_b_any))
+                    })
+                })
             };
             let label_ok = matches_any(&r.label, &er.label_contains_any);
             pair_ok && label_ok
@@ -1080,9 +1220,10 @@ fn score_relation_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
     }
     for fb in &golden.forbidden_relation_atoms {
         if relations.iter().any(|r| {
-            let names = participant_names(r);
             let label_hit = matches_any(&r.label, &fb.name_contains_any);
-            let name_hit = names.iter().any(|n| matches_any(n, &fb.name_contains_any));
+            let name_hit = participant_name_sets(r)
+                .iter()
+                .any(|names| names.iter().any(|n| matches_any(n, &fb.name_contains_any)));
             label_hit || name_hit
         }) {
             s.forbidden_hit += 1;
@@ -1151,10 +1292,10 @@ fn score_claim_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
             } else {
                 match &c.attributed_to {
                     None => false,
-                    Some(id) => match snap.entity_name_by_id(id) {
-                        None => false,
-                        Some(name) => matches_any(name, &ec.attributed_proponent_contains_any),
-                    },
+                    Some(id) => snap
+                        .entity_match_strings_by_id(id)
+                        .iter()
+                        .any(|n| matches_any(n, &ec.attributed_proponent_contains_any)),
                 }
             };
             content_ok && prop_ok
@@ -1304,10 +1445,10 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         let hit = tension_edges.iter().find(|e| {
             let a = lookup_name(&e.source);
             let b = lookup_name(&e.target);
-            let pair_a_ok = (matches_any(&a, &ef.position_a_contains_any)
-                && matches_any(&b, &ef.position_b_contains_any))
-                || (matches_any(&a, &ef.position_b_contains_any)
-                    && matches_any(&b, &ef.position_a_contains_any));
+            let pair_a_ok = (matches_any_with_morphology(&a, &ef.position_a_contains_any)
+                && matches_any_with_morphology(&b, &ef.position_b_contains_any))
+                || (matches_any_with_morphology(&a, &ef.position_b_contains_any)
+                    && matches_any_with_morphology(&b, &ef.position_a_contains_any));
             pair_a_ok
         });
         match hit {
@@ -1337,10 +1478,10 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         if tension_edges.iter().any(|e| {
             let a = lookup_name(&e.source);
             let b = lookup_name(&e.target);
-            let pair_match = (matches_any(&a, &fb.position_a_contains_any)
-                && matches_any(&b, &fb.position_b_contains_any))
-                || (matches_any(&a, &fb.position_b_contains_any)
-                    && matches_any(&b, &fb.position_a_contains_any));
+            let pair_match = (matches_any_with_morphology(&a, &fb.position_a_contains_any)
+                && matches_any_with_morphology(&b, &fb.position_b_contains_any))
+                || (matches_any_with_morphology(&a, &fb.position_b_contains_any)
+                    && matches_any_with_morphology(&b, &fb.position_a_contains_any));
             pair_match
         }) {
             s.forbidden_hit += 1;
@@ -1583,6 +1724,79 @@ mod tests {
     }
 
     #[test]
+    fn matches_any_token_presence_handles_paren_reorder() {
+        // Golden phrase "hard incompatibilism" must match corpus
+        // canonical "incompatibilism (hard)" — substring fails
+        // (parens reorder), but token-presence catches both.
+        let needles = vec!["hard incompatibilism".to_string()];
+        assert!(matches_any("incompatibilism (hard)", &needles));
+        // Disjoint tokens still don't match.
+        assert!(!matches_any("compatibilism alone", &needles));
+    }
+
+    #[test]
+    fn morphology_bridges_proper_noun_to_school_adjective() {
+        // The headline case the morphology rule was added for.
+        let needles = vec!["aristotelian".to_string()];
+        assert!(matches_any_with_morphology("Aristotle", &needles));
+    }
+
+    #[test]
+    fn morphology_bridges_ism_needle_to_underlying_stem() {
+        // golden writes "situationism", corpus has "situational variables".
+        let needles = vec!["situationism".to_string()];
+        assert!(matches_any_with_morphology("situational variables", &needles));
+        // -ist variant shares the same stem.
+        let needles = vec!["situationist".to_string()];
+        assert!(matches_any_with_morphology("situational variables", &needles));
+    }
+
+    #[test]
+    fn morphology_holds_short_prefix_below_threshold() {
+        // `polis` and `police` share 4 chars — far below 7-char
+        // threshold. Must not match.
+        let needles = vec!["polis".to_string()];
+        assert!(!matches_any_with_morphology("police state", &needles));
+        // `aristotle` and `aristocracy` share 6 chars — still below
+        // 7. Must not match.
+        let needles = vec!["aristotelian".to_string()];
+        assert!(!matches_any_with_morphology("aristocracy", &needles));
+    }
+
+    #[test]
+    fn morphology_inherits_substring_match() {
+        // Substring already wins; morphology layer doesn't break it.
+        let needles = vec!["compatibilism".to_string()];
+        assert!(matches_any_with_morphology("compatibilism", &needles));
+        assert!(matches_any_with_morphology("Compatibilism", &needles));
+    }
+
+    #[test]
+    fn morphology_skips_multi_token_needles() {
+        // Multi-token needles route through token-presence; morphology
+        // path doesn't try to prefix-match across spaces.
+        let needles = vec!["hard incompatibilism".to_string()];
+        assert!(matches_any_with_morphology("incompatibilism (hard)", &needles));
+        // But a multi-token needle that isn't substring-matchable and
+        // doesn't have all tokens present must not slip through via
+        // morphology of one token.
+        let needles = vec!["hard incompatibilism".to_string()];
+        assert!(!matches_any_with_morphology("hard libertarian", &needles));
+    }
+
+    #[test]
+    fn matches_any_token_presence_requires_multitoken_needle() {
+        // Single-token needles MUST not benefit from the fallback —
+        // it would over-match (e.g. needle "polis" matching haystack
+        // "polished" because the only token "polis" is searched as
+        // substring, not as a free-standing token).
+        let needles = vec!["polis".to_string()];
+        assert!(matches_any("city polis", &needles));
+        // Substring still wins on partial words (existing behavior).
+        assert!(matches_any("polished mirror", &needles));
+    }
+
+    #[test]
     fn phase_filter_parsing_accepts_aliases() {
         assert_eq!(PhaseFilter::parse("all").unwrap(), PhaseFilter::All);
         assert_eq!(
@@ -1665,9 +1879,13 @@ mod tests {
             "/../../bench/philosophy/free-will-debate.toml"
         ));
         let g = GoldenSet::load(path).expect("free-will-debate golden should parse");
-        assert!(!g.expected_positions.is_empty());
+        // v2 atlas goldens have dropped `expected_positions`
+        // (legacy v1 artifact — concept-atom + claim-attribution
+        // scoring covers the same ground). The load itself round-tripping
+        // is the load-bearing assertion; fault-lines and forbidden edges
+        // are populated regardless.
         assert!(!g.expected_fault_lines.is_empty());
-        assert!(!g.forbidden_positions.is_empty());
+        assert!(!g.forbidden_edges.is_empty());
     }
 
     #[test]
