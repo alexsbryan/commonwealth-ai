@@ -175,6 +175,27 @@ pub struct CorpusEngine {
     /// hot path is one rwlock acquisition per embed-batch start,
     /// which is on the order of seconds — negligible.
     yield_hook: std::sync::RwLock<Option<Arc<dyn crate::yield_hook::YieldHook>>>,
+    /// Per-partition exclusion locks. Each entry serializes (well —
+    /// rejects, see below) concurrent `ingest` / `ingest_with_overrides`
+    /// calls that would write into the same `<corpus>-partition-<node>/`
+    /// LanceDB. Without this guard, two unit-scoped leases on the same
+    /// partition (the failure mode behind the "throughput stuck at half
+    /// of peak" incident: a zombie pull_loop's stale handoff plus the
+    /// live one both winning leases against the same partition) both
+    /// open the index in append mode and contend on the embed slot and
+    /// LanceDB writer mutex — net throughput equals one writer, the
+    /// second is pure overhead.
+    ///
+    /// Acquisition is `try_lock` not `lock`: the second caller fails
+    /// fast with `Error::Recipe` rather than serializing silently. The
+    /// queue-mode caller (pull_loop) reports the failed unit back to the
+    /// coordinator, the coordinator re-leases it elsewhere, and the bug
+    /// surfaces in logs instead of hiding behind degraded throughput.
+    ///
+    /// Outer `std::sync::Mutex` is held only for the brief get-or-insert
+    /// against the map; the per-path inner `tokio::sync::Mutex` is what
+    /// the ingest holds across its many awaits.
+    partition_locks: Arc<std::sync::Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>>,
 }
 
 /// Returns the raw ZIP entry indices (in TOC order) that represent real
@@ -260,7 +281,30 @@ impl CorpusEngine {
             cancel_registry: CancellationRegistry::new(),
             custom_acquirers: Arc::new(RwLock::new(HashMap::new())),
             yield_hook: std::sync::RwLock::new(None),
+            partition_locks: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Try to acquire exclusive access to ingest into `path`. Returns
+    /// `Some(guard)` when the caller is the only one writing; returns
+    /// `None` when another `ingest` / `ingest_with_overrides` is already
+    /// in flight against the same partition. Held across all the awaits
+    /// inside `ingest_inner_with_skipset`, so the second concurrent
+    /// caller fails fast at the gate instead of contending on LanceDB.
+    pub(crate) fn try_acquire_partition_lock(
+        &self,
+        path: &Path,
+    ) -> Option<tokio::sync::OwnedMutexGuard<()>> {
+        let inner = {
+            let mut map = self
+                .partition_locks
+                .lock()
+                .expect("partition_locks Mutex poisoned");
+            map.entry(path.to_path_buf())
+                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+                .clone()
+        };
+        inner.try_lock_owned().ok()
     }
 
     /// Install a cooperative-yield hook polled before each embed

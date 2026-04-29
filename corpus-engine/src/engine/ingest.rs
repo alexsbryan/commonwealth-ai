@@ -330,6 +330,23 @@ impl CorpusEngine {
         already_indexed: Option<std::sync::Arc<std::collections::HashSet<String>>>,
         peer_pulled: bool,
     ) -> Result<IngestResult> {
+        // Per-partition exclusion. See `CorpusEngine::partition_locks`
+        // for the full motivation; in short, two concurrent ingests into
+        // the same `<corpus>-partition-<node>/` halve effective
+        // throughput instead of doubling it (single-threaded embed slot
+        // + LanceDB writer mutex), so we reject the second caller
+        // outright. The guard is held until this function returns.
+        let _partition_guard =
+            self.try_acquire_partition_lock(index_path).ok_or_else(|| {
+                Error::Recipe(format!(
+                    "another ingest is already writing to '{}'. \
+                     Refusing to start a second concurrent run on the \
+                     same partition — the existing run will continue \
+                     and this unit should be re-leased to a different peer.",
+                    index_path.display()
+                ))
+            })?;
+
         let start = Instant::now();
 
         // Step 1: Acquire source data.
