@@ -189,6 +189,27 @@ pub struct IndexInfo {
     /// this flag from the on-disk meta is the source of truth.
     #[serde(default)]
     pub vector_index_built: bool,
+    /// Stable content fingerprint for canonical indexes. See
+    /// `IndexMeta::canonical_fingerprint` for the full contract; in
+    /// short, two nodes with identical content arrive at the same
+    /// hex string here, so the mesh can compare its peers' canonical
+    /// states without shipping the index. `None` for partition
+    /// indexes and for legacy canonicals that haven't been stamped
+    /// yet (the daemon's `auto_recover` tick stamps them lazily).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_fingerprint: Option<String>,
+    /// Total source shards this corpus expects (e.g. 38 for the
+    /// canonical Wikipedia ingest). `None` for non-sharded corpora
+    /// and for legacy indexes where the count was never stamped.
+    /// Mirrors `IndexMeta.total_shards`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_shards: Option<usize>,
+    /// Source shards this index has processed. Surfaces
+    /// `IndexMeta.processed_shards` so callers (gossip publish, the
+    /// auto-recover ratio compute) don't have to reach into the
+    /// `CorpusIndex` for one extra method call.
+    #[serde(default)]
+    pub processed_shards: Vec<usize>,
 }
 
 // ─── Scored Chunk (search result) ───────────────────────

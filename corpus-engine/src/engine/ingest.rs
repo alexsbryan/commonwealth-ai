@@ -223,6 +223,36 @@ impl CorpusEngine {
                         corpus_id,
                         "ingest: promoted partition-of-self to canonical (solo run)"
                     );
+                    // Stamp the canonical fingerprint after the
+                    // rename so peers can compare. The `Result`
+                    // path inside `finalise_solo_ingest` is sync
+                    // (filesystem rename); fingerprint compute
+                    // requires an async LanceDB scan, so we do it
+                    // here on the canonical path. Failures are
+                    // logged but non-fatal — the canonical is
+                    // valid; mesh sync just degrades to chunk-count
+                    // comparisons until a future stamp succeeds.
+                    let canonical_path = self.index_dir.join(&corpus_id);
+                    match crate::index::CorpusIndex::open(&canonical_path).await {
+                        Ok(canonical) => {
+                            if let Err(e) = canonical.compute_and_stamp_fingerprint().await {
+                                tracing::warn!(
+                                    corpus_id,
+                                    error = %e,
+                                    "ingest: fingerprint stamping failed after solo \
+                                     promotion; mesh sync degrades to chunk-count"
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                corpus_id,
+                                error = %e,
+                                "ingest: cannot reopen canonical post-promotion to \
+                                 stamp fingerprint"
+                            );
+                        }
+                    }
                     Ok(r)
                 }
                 Ok(false) => {
@@ -1441,6 +1471,21 @@ impl CorpusEngine {
             // rather than being treated as a partial/incomplete ingest.
             if let Err(e) = index.mark_ingestion_complete() {
                 tracing::warn!("Failed to mark ingestion complete for '{}': {e}", recipe.corpus.id);
+            }
+
+            // Stamp the canonical content fingerprint as the last
+            // write — after `mark_ingestion_complete` so a peer
+            // pulling against this fingerprint can trust the chunk
+            // set is stable. Failures are logged but non-fatal:
+            // the index is still locally usable; mesh sync just
+            // falls back to chunk-count comparisons.
+            if let Err(e) = index.compute_and_stamp_fingerprint().await {
+                tracing::warn!(
+                    corpus = recipe.corpus.id.as_str(),
+                    error = %e,
+                    "finalise: fingerprint stamping failed; mesh sync \
+                     will fall back to chunk-count comparisons"
+                );
             }
 
             // For code corpora sourced from a local directory, record the

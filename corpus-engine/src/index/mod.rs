@@ -405,6 +405,28 @@ struct IndexMeta {
     /// stand-alone corpora.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     parent_corpus_id: Option<String>,
+
+    /// Stable identity for the *content* of this canonical index.
+    /// Computed as `blake3(sorted(content_hash))` over every chunk
+    /// row's `content_hash` column at canonical-write time. Two
+    /// nodes that ran the same ingest with the same source data
+    /// arrive at byte-identical fingerprints; mismatched
+    /// fingerprints with overlapping `chunk_count` mean one node
+    /// has more (or different) content than the other.
+    ///
+    /// Drives the mesh's canonical-sync path: a peer's gossiped
+    /// `canonical_fingerprint` is the receipt the puller validates
+    /// against after fetching the tarball, so a poisoned transfer
+    /// fails closed.
+    ///
+    /// `None` for legacy canonicals written before this field
+    /// existed and for partition indexes (which carry only their
+    /// shard's worth of chunks; the fingerprint over a partition
+    /// would be meaningless to compare against another peer's
+    /// canonical). The fingerprint helper stamps the field on
+    /// next-read for legacy canonicals so the upgrade is silent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    canonical_fingerprint: Option<String>,
 }
 
 /// Provenance of an on-disk index. See the `IndexMeta::provenance`
@@ -667,6 +689,9 @@ impl CorpusIndex {
             update_manifest_url: meta.update_manifest_url,
             kind,
             vector_index_built: meta.vector_index_built,
+            canonical_fingerprint: meta.canonical_fingerprint,
+            total_shards: meta.total_shards,
+            processed_shards: meta.processed_shards,
         })
     }
 
@@ -1456,5 +1481,162 @@ mod tests {
             .await
             .unwrap();
         assert!(results.is_empty());
+    }
+
+    // ─── Canonical fingerprint ─────────────────────────────────
+
+    /// Build a canonical with three explicit content_hashes and
+    /// confirm the fingerprint is the BLAKE3 of `<sorted hashes
+    /// joined by \n>`. This pins the algorithm — if the format
+    /// ever changes silently, every existing canonical's
+    /// fingerprint advertised over gossip suddenly mismatches.
+    #[tokio::test]
+    async fn canonical_fingerprint_is_blake3_of_sorted_hashes() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        let mk = |hash: &str, ord: f32| {
+            (
+                InsertChunk {
+                    content: format!("content-{hash}"),
+                    title: None,
+                    url: None,
+                    metadata: None,
+                    content_hash: Some(hash.to_string()),
+                    source_doc_id: None,
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[ord, 0.0, 0.0, 0.0]),
+            )
+        };
+        // Insert in non-sorted order to prove sorting kicks in.
+        idx.insert_batch(&[mk("ccc", 0.3), mk("aaa", 0.1), mk("bbb", 0.2)])
+            .await
+            .unwrap();
+
+        let fp = idx.compute_canonical_fingerprint().await.unwrap();
+
+        let mut hasher = blake3::Hasher::new();
+        for h in ["aaa", "bbb", "ccc"] {
+            hasher.update(h.as_bytes());
+            hasher.update(b"\n");
+        }
+        let expected = hasher.finalize().to_hex().to_string();
+        assert_eq!(fp, expected, "fingerprint must be blake3 of sorted hashes");
+    }
+
+    /// Two indexes with the same content_hash set produce identical
+    /// fingerprints regardless of insert order. This is the load-
+    /// bearing property: peers that ingested the same data agree.
+    #[tokio::test]
+    async fn canonical_fingerprint_is_insertion_order_invariant() {
+        let dir_a = tempdir().unwrap();
+        let dir_b = tempdir().unwrap();
+        let idx_a = create_test_index(dir_a.path()).await;
+        let idx_b = create_test_index(dir_b.path()).await;
+        let mk = |hash: &str| {
+            (
+                InsertChunk {
+                    content: format!("content-{hash}"),
+                    title: None,
+                    url: None,
+                    metadata: None,
+                    content_hash: Some(hash.to_string()),
+                    source_doc_id: None,
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[0.0, 0.0, 0.0, 0.0]),
+            )
+        };
+        idx_a.insert_batch(&[mk("aaa"), mk("bbb"), mk("ccc")]).await.unwrap();
+        idx_b.insert_batch(&[mk("ccc"), mk("aaa"), mk("bbb")]).await.unwrap();
+
+        let fp_a = idx_a.compute_canonical_fingerprint().await.unwrap();
+        let fp_b = idx_b.compute_canonical_fingerprint().await.unwrap();
+        assert_eq!(fp_a, fp_b);
+    }
+
+    /// Adding a single new content_hash must change the fingerprint
+    /// — that's the whole point. Catches a silent regression where
+    /// the hasher isn't actually consuming the new line.
+    #[tokio::test]
+    async fn canonical_fingerprint_changes_on_new_content() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        let mk = |hash: &str| {
+            (
+                InsertChunk {
+                    content: format!("content-{hash}"),
+                    title: None,
+                    url: None,
+                    metadata: None,
+                    content_hash: Some(hash.to_string()),
+                    source_doc_id: None,
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[0.0, 0.0, 0.0, 0.0]),
+            )
+        };
+        idx.insert_batch(&[mk("aaa"), mk("bbb")]).await.unwrap();
+        let fp_before = idx.compute_canonical_fingerprint().await.unwrap();
+
+        idx.insert_batch(&[mk("ccc")]).await.unwrap();
+        let fp_after = idx.compute_canonical_fingerprint().await.unwrap();
+
+        assert_ne!(fp_before, fp_after, "fingerprint must change with new content");
+    }
+
+    /// `compute_and_stamp_fingerprint` writes the value into the
+    /// on-disk meta and `info()` surfaces it. End-to-end check
+    /// that the round-trip path works.
+    #[tokio::test]
+    async fn compute_and_stamp_fingerprint_persists_to_meta() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        let chunk = (
+            InsertChunk {
+                content: "hello".into(),
+                title: None,
+                url: None,
+                metadata: None,
+                content_hash: Some("hash-1".into()),
+                source_doc_id: None,
+                source_file: None,
+                code: InsertCodeMeta::default(),
+                unit_id: None,
+            },
+            make_embedding(&[1.0, 0.0, 0.0, 0.0]),
+        );
+        idx.insert_batch(&[chunk]).await.unwrap();
+
+        let fp = idx.compute_and_stamp_fingerprint().await.unwrap();
+        assert!(!fp.is_empty());
+
+        let info = idx.info().await.unwrap();
+        assert_eq!(info.canonical_fingerprint, Some(fp.clone()));
+
+        // Stamping again is idempotent — content hasn't changed.
+        let fp2 = idx.compute_and_stamp_fingerprint().await.unwrap();
+        assert_eq!(fp, fp2);
+    }
+
+    /// An index whose rows all have null `content_hash` returns the
+    /// empty-input fingerprint (BLAKE3 of zero bytes). Logged as a
+    /// warning but not an error; mesh sync degrades gracefully when
+    /// every peer falls into this case.
+    #[tokio::test]
+    async fn canonical_fingerprint_handles_hashless_rows() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        // sample_chunks() leaves content_hash None on every row —
+        // exactly the legacy/hashless case.
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+        let fp = idx.compute_canonical_fingerprint().await.unwrap();
+        assert_eq!(fp, blake3::Hasher::new().finalize().to_hex().to_string());
     }
 }

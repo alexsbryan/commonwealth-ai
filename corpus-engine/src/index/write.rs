@@ -218,6 +218,126 @@ impl CorpusIndex {
         Ok((distinct.len() as u64, with_hash, total_chunks))
     }
 
+    /// Compute the stable content fingerprint for this index.
+    ///
+    /// Algorithm: walk every row's `content_hash`, collect into a
+    /// sorted `Vec<&str>`, BLAKE3 over the sorted lines (each
+    /// terminated with `\n`), return hex.
+    ///
+    /// Properties:
+    /// - **Deterministic across nodes.** Two nodes that have the
+    ///   same set of `content_hash` values produce byte-identical
+    ///   fingerprints regardless of insertion order or row layout.
+    /// - **Cheap-to-recompute.** One full table scan for
+    ///   `content_hash` (already optimised in LanceDB) + a sort +
+    ///   one BLAKE3 stream. ~5-10s for a Wikipedia-scale 2.7M-chunk
+    ///   index; trivial for smaller corpora.
+    /// - **Fails closed.** Rows missing `content_hash` (legacy
+    ///   corpora pre-dating that column being populated) are
+    ///   skipped silently and the resulting fingerprint *only
+    ///   reflects the hashed subset*. We log a warning so callers
+    ///   can spot the case; the alternative — returning an error —
+    ///   would block canonical sync for any corpus that ever held
+    ///   an unhashed row.
+    ///
+    /// Used by:
+    /// - `merge_partitions_into_canonical` to stamp a new canonical
+    ///   on completion.
+    /// - The auto-recover path before pulling from a peer (verifies
+    ///   the local canonical is byte-identical to what gossip
+    ///   advertised before deciding it's worth pulling a fresh
+    ///   copy).
+    /// - `sovereign corpus diag` to surface fingerprint mismatch
+    ///   between local and gossip-advertised values.
+    pub async fn compute_canonical_fingerprint(&self) -> Result<String> {
+        let batches: Vec<arrow_array::RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "content_hash".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| {
+                Error::Database(format!(
+                    "compute_canonical_fingerprint query: {e}"
+                ))
+            })?
+            .try_collect()
+            .await
+            .map_err(|e| {
+                Error::Database(format!(
+                    "compute_canonical_fingerprint collect: {e}"
+                ))
+            })?;
+
+        let mut hashes: Vec<String> = Vec::new();
+        let mut hashless_rows: u64 = 0;
+        for batch in &batches {
+            let arr = batch
+                .column_by_name("content_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| {
+                    Error::Serialization("missing content_hash column".into())
+                })?;
+            for i in 0..batch.num_rows() {
+                if arr.is_null(i) {
+                    hashless_rows += 1;
+                } else {
+                    hashes.push(arr.value(i).to_string());
+                }
+            }
+        }
+
+        if hashless_rows > 0 {
+            tracing::warn!(
+                hashless_rows,
+                hashed_rows = hashes.len(),
+                "compute_canonical_fingerprint: skipping rows without content_hash; \
+                 fingerprint reflects only hashed subset"
+            );
+        }
+
+        // Sort lexicographically so insertion-order doesn't change
+        // the fingerprint. dedup() afterwards guards against the
+        // same content_hash appearing twice (should not happen on a
+        // properly-deduped canonical, but cheap defence).
+        hashes.sort();
+        hashes.dedup();
+
+        let mut hasher = blake3::Hasher::new();
+        for h in &hashes {
+            hasher.update(h.as_bytes());
+            hasher.update(b"\n");
+        }
+        Ok(hasher.finalize().to_hex().to_string())
+    }
+
+    /// Persist a precomputed `canonical_fingerprint` into the
+    /// on-disk meta. Idempotent — safe to call repeatedly with the
+    /// same value, or to update with a recomputed value after the
+    /// chunk set legitimately changed.
+    pub fn set_canonical_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<()> {
+        let index_dir = std::path::Path::new(self.connection().uri());
+        let mut meta = super::read_meta(index_dir)?;
+        meta.canonical_fingerprint = Some(fingerprint.to_string());
+        meta.last_updated = super::now_unix();
+        super::write_meta(index_dir, &meta)
+    }
+
+    /// Convenience: compute the fingerprint and stamp it. Used by
+    /// the canonical-finalize hook (post-merge, post-build_indexes)
+    /// and by lazy stamping of legacy canonicals on the daemon's
+    /// next-info read.
+    pub async fn compute_and_stamp_fingerprint(&self) -> Result<String> {
+        let fp = self.compute_canonical_fingerprint().await?;
+        self.set_canonical_fingerprint(&fp)?;
+        Ok(fp)
+    }
+
     /// Stream the `content_hash` column and load into an in-memory
     /// HashSet — the seen-set used by the embed-side dedup gate at
     /// ingest startup. A resumed ingest queries this once, then

@@ -1547,6 +1547,76 @@ impl CorpusEngine {
     /// partition-specific metadata. Idempotent: returns `Ok(false)`
     /// when there is nothing to promote.
     ///
+    /// Lazily stamp the canonical fingerprint for any installed
+    /// canonical that doesn't already have one. Called once at
+    /// daemon startup (after the corpus engine is wired) so legacy
+    /// canonicals — written before the fingerprint field existed
+    /// — get stamped without requiring a re-ingest.
+    ///
+    /// Cost: one BLAKE3 over each canonical's content_hash list at
+    /// startup. ~10s for a Wikipedia-scale canonical, near-zero
+    /// for code corpora. Idempotent — canonicals that already
+    /// carry a fingerprint are skipped via a cheap meta read.
+    ///
+    /// Failures are logged per-corpus and don't block other
+    /// corpora from being stamped. The mesh sync path tolerates a
+    /// missing fingerprint (falls back to chunk-count comparisons),
+    /// so this is purely an upgrade path, not a correctness gate.
+    pub async fn lazy_stamp_legacy_fingerprints(&self) {
+        let canonicals: Vec<String> = match self.installed_indexes().await {
+            Ok(idxs) => idxs
+                .into_iter()
+                .filter(|info| info.canonical_fingerprint.is_none())
+                .map(|info| info.corpus_id)
+                .collect(),
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "lazy_stamp_legacy_fingerprints: installed_indexes failed; \
+                     skipping upgrade pass"
+                );
+                return;
+            }
+        };
+        if canonicals.is_empty() {
+            return;
+        }
+        tracing::info!(
+            count = canonicals.len(),
+            "lazy_stamp_legacy_fingerprints: stamping canonicals without fingerprint"
+        );
+        for corpus_id in canonicals {
+            let path = self.index_dir.join(&corpus_id);
+            match crate::index::CorpusIndex::open(&path).await {
+                Ok(idx) => {
+                    match idx.compute_and_stamp_fingerprint().await {
+                        Ok(fp) => {
+                            tracing::info!(
+                                corpus_id,
+                                fp_prefix = %&fp[..fp.len().min(12)],
+                                "lazy_stamp_legacy_fingerprints: stamped canonical"
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                corpus_id,
+                                error = %e,
+                                "lazy_stamp_legacy_fingerprints: compute failed"
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        corpus_id,
+                        error = %e,
+                        "lazy_stamp_legacy_fingerprints: cannot open canonical"
+                    );
+                }
+            }
+        }
+    }
+
     /// Refuses to run and returns `Ok(false)` when *any* other
     /// `<corpus_id>-partition-*` directory is present — that means at
     /// least one peer participated, so the correct finaliser is the

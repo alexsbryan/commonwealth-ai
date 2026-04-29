@@ -225,6 +225,11 @@ impl CorpusIndex {
             provenance: super::CorpusProvenance::default(),
             kind: None,
             parent_corpus_id: None,
+            // Stamped at canonical-write time by
+            // `compute_and_stamp_fingerprint()` after ingestion is
+            // complete. Leaving None during ingestion is correct —
+            // the chunk set is still mutating.
+            canonical_fingerprint: None,
         };
         write_meta(path, &meta)?;
 

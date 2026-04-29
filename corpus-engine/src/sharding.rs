@@ -786,6 +786,26 @@ pub async fn merge_partitions_into_canonical(
         .await?;
     canonical.mark_indexes_built()?;
     canonical.mark_ingestion_complete()?;
+
+    // Stamp the content fingerprint as the last write before
+    // returning. Order matters: fingerprint must be written *after*
+    // mark_ingestion_complete so an interrupted merge doesn't leave
+    // a fingerprint advertised for an in-progress index. A peer
+    // pulling against a fingerprint trusts that the chunk set is
+    // stable; the ingestion-complete bit is the proxy for "stable."
+    //
+    // Failures are logged but non-fatal — the canonical is still
+    // valid for local queries; mesh sync just falls back to chunk-
+    // count-only comparisons until the next stamp succeeds.
+    if let Err(e) = canonical.compute_and_stamp_fingerprint().await {
+        tracing::warn!(
+            corpus = corpus_id,
+            error = %e,
+            "merge_partitions_into_canonical: fingerprint stamping failed; \
+             mesh sync will fall back to chunk-count comparisons"
+        );
+    }
+
     if let Some(cb) = &progress {
         cb(MergePhaseProgress::Complete);
     }

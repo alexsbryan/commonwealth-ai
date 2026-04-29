@@ -12,6 +12,7 @@
 
 pub mod acquirers;
 pub mod atlas_traversal;
+pub mod canonical_sync;
 pub mod chunkers;
 pub mod engine;
 pub mod enrichment;

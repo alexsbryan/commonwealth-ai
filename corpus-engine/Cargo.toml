@@ -78,6 +78,13 @@ tempfile = "3"
 blake3 = "1"
 sha2 = "0.10"
 
+# Canonical-sync packing: tar over zstd for cross-peer canonical
+# transfers. Both are mature pure-Rust impls; tar handles directory
+# walks + sparse files, zstd gives ~3-5× compression on LanceDB
+# fragment files in practice.
+tar = "0.4"
+zstd = "0.13"
+
 # Clustering
 hdbscan = "0.12"
 
