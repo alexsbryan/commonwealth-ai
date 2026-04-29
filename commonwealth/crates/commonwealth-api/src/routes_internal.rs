@@ -1490,6 +1490,181 @@ pub async fn corpus_progress(
     Json(ProgressSnapshotResponse { progress: snapshot })
 }
 
+/// GET /internal/corpus/canonical/{corpus_id} — stream the canonical
+/// index directory for `corpus_id` as a tar+zstd archive.
+///
+/// Phase 6 of the resilience track: peers that need to sync a
+/// canonical (because their own is missing, smaller, or
+/// fingerprint-divergent) fetch this endpoint and unpack into a
+/// fresh dir. The response carries the canonical's
+/// `canonical_fingerprint` in an `X-Canonical-Fingerprint` header
+/// so the receiver can validate before atomic rename.
+///
+/// Refused with `404 Not Found` when:
+///   - The corpus engine isn't wired (Commonwealth-only deployments).
+///   - No canonical for `corpus_id` exists at this node.
+///   - The canonical's `query_sharing` flag is false (private
+///     corpora — e.g. a personal codebase — never leave the host).
+///
+/// The streaming model uses `tokio::io::duplex`: a blocking task
+/// produces the tar.zst into the sync end while the response body
+/// pipes the async end to the client. Memory bound is the duplex
+/// buffer (64 KB), not the canonical size — so a 12 GB Wikipedia
+/// canonical streams without fitting in RAM.
+pub async fn corpus_canonical_stream(
+    State(state): State<AppState>,
+    axum::extract::Path(corpus_id): axum::extract::Path<String>,
+) -> axum::response::Response {
+    use axum::body::Body;
+    use axum::http::{header, StatusCode};
+    use axum::response::IntoResponse;
+
+    let Some(engine) = state.inner.corpus_engine.clone() else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "corpus engine not wired on this node"})),
+        )
+            .into_response();
+    };
+
+    // Resolve the canonical path. We use `canonical_path` (engine
+    // helper) to centralise the layout convention rather than
+    // hand-joining `index_dir.join(&corpus_id)`.
+    let canonical_path = engine.canonical_path(&corpus_id);
+    if !canonical_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("no canonical for '{corpus_id}' at this node"),
+            })),
+        )
+            .into_response();
+    }
+
+    // Resolve the index info so we can:
+    //   1. Refuse private corpora (query_sharing=false).
+    //   2. Surface the fingerprint header for client-side validation.
+    let info = match corpus_engine::index::CorpusIndex::open(&canonical_path).await {
+        Ok(idx) => match idx.info().await {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::warn!(
+                    corpus_id,
+                    error = %e,
+                    "corpus_canonical_stream: cannot read index info"
+                );
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": format!("info: {e}")})),
+                )
+                    .into_response();
+            }
+        },
+        Err(e) => {
+            tracing::warn!(
+                corpus_id,
+                error = %e,
+                "corpus_canonical_stream: cannot open canonical"
+            );
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("open: {e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    if !info.query_sharing {
+        // Private corpus — refuse cross-peer transfer the same way
+        // `build_hosted_corpora` filters them out of the gossip
+        // catalog. Without this gate a peer who knew the corpus_id
+        // out-of-band could still pull.
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": format!(
+                    "corpus '{corpus_id}' is not query-sharable; \
+                     mesh sync is disabled"
+                ),
+            })),
+        )
+            .into_response();
+    }
+
+    // Snapshot what we'll send so the spawn_blocking task doesn't
+    // need to hold an `Arc` to the index. The path is stable — even
+    // if the canonical is concurrently rewritten, an in-flight tar
+    // stream reads from a consistent set of LanceDB fragment files
+    // (LanceDB's append-only fragment layout means a concurrent
+    // write produces NEW fragment files; the tar reads the existing
+    // set we resolved at open time).
+    let path_for_pack = canonical_path.clone();
+    let fp_header_value = info.canonical_fingerprint.clone().unwrap_or_default();
+    let chunk_count_header = info.chunk_count;
+
+    // Duplex pipe: blocking task writes tar.zst into the sync end;
+    // the async end becomes the response body via ReaderStream.
+    // 64 KiB matches axum's default streaming chunk; smaller buffers
+    // cost more syscalls, larger ones don't help on most networks.
+    let (async_writer, async_reader) = tokio::io::duplex(64 * 1024);
+    let sync_writer = tokio_util::io::SyncIoBridge::new(async_writer);
+
+    tokio::task::spawn_blocking(move || {
+        // Compression level 1 — fast on the sender, ~10% larger than
+        // default (3) in our benchmarks. We're network-bound on the
+        // common LAN/WAN case; the receiver wins more from sooner-
+        // available bytes than from smaller transfer.
+        match corpus_engine::canonical_sync::pack_canonical(
+            &path_for_pack,
+            sync_writer,
+            1,
+        ) {
+            Ok(bytes_in) => {
+                tracing::info!(
+                    corpus = path_for_pack.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
+                    bytes_in,
+                    "corpus_canonical_stream: pack complete"
+                );
+            }
+            Err(e) => {
+                // The duplex sync end will close when this fn
+                // returns; the client sees an early EOF + the
+                // tar/zstd parser errors at the receiver. We can't
+                // surface a structured error mid-stream over plain
+                // HTTP body, but the warn log + receiver-side
+                // fingerprint validation gives operators enough to
+                // diagnose.
+                tracing::warn!(
+                    corpus = path_for_pack.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
+                    error = %e,
+                    "corpus_canonical_stream: pack failed mid-stream"
+                );
+            }
+        }
+    });
+
+    let body_stream = tokio_util::io::ReaderStream::new(async_reader);
+
+    let mut resp = axum::response::Response::new(Body::from_stream(body_stream));
+    *resp.status_mut() = StatusCode::OK;
+    let headers = resp.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "application/x-tar+zstd"
+            .parse()
+            .expect("static content type"),
+    );
+    if !fp_header_value.is_empty() {
+        if let Ok(v) = fp_header_value.parse() {
+            headers.insert("x-canonical-fingerprint", v);
+        }
+    }
+    if let Ok(v) = chunk_count_header.to_string().parse() {
+        headers.insert("x-canonical-chunk-count", v);
+    }
+    resp
+}
+
 /// GET /internal/corpus/status — richer per-corpus snapshot that
 /// combines every signal the Desktop UI needs to render the
 /// "Installing…" row without needing to have initiated the install

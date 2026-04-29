@@ -122,6 +122,15 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/corpus/status",
             get(routes_internal::corpus_status),
         )
+        // Phase 6 canonical-sync: peers fetch this node's canonical
+        // index for `<corpus_id>` as a streaming tar.zst. Loopback-
+        // gated like the other internal routes; the auth path is the
+        // same one peers already use for `/internal/knowledge/search`
+        // and friends.
+        .route(
+            "/internal/corpus/canonical/{corpus_id}",
+            get(routes_internal::corpus_canonical_stream),
+        )
         .route(
             "/internal/node/activity",
             post(routes_internal::node_activity),

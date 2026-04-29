@@ -129,6 +129,10 @@ fn member(
                     chunk_range: None,
                     is_replica: false,
                     last_updated: 1_000,
+                    chunk_count: 0,
+                    canonical_fingerprint: None,
+                    total_shards: None,
+                    processed_shards: vec![],
                 })
                 .collect(),
             reported_at: 1_000,

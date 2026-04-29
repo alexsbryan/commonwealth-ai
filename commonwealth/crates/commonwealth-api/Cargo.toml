@@ -45,6 +45,12 @@ futures = "0.3"
 # atomic swap on adoption, no async lock contention.
 arc-swap = "1.7"
 sha2 = "0.10"
+# Phase 6 canonical-sync: server side packs the canonical index dir
+# into a tar.zst stream, client side unpacks and validates fingerprint
+# before atomic rename. Both crates have stable C/Rust impls.
+tar = "0.4"
+zstd = "0.13"
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
 
 [dev-dependencies]
 commonwealth-discovery = { workspace = true }

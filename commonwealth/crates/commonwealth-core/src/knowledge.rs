@@ -45,12 +45,73 @@ impl ChunkRange {
 
 /// Information about a corpus shard hosted on a node.
 /// Used in capability reports.
+///
+/// ## Phase: canonical-sync surface (Phase 6 of the resilience track)
+///
+/// Three new fields drive the mesh's self-healing canonical sync:
+///
+/// - `chunk_count`: how many chunks this peer's canonical contains.
+///   Compared by the auto-recover path to pick the healthier peer
+///   when several have a canonical for the same id.
+/// - `canonical_fingerprint`: blake3 of the sorted content_hash list
+///   for the canonical at this peer. Two peers with byte-identical
+///   chunks arrive at the same string. The puller validates this
+///   value against the file it actually downloaded so a poisoned
+///   tarball fails closed.
+/// - `total_shards` + `processed_shards`: lets a peer compute its
+///   coverage ratio (`processed / total`) for sharded corpora.
+///   Auto-recover compares ratios — not raw chunk counts — to pick
+///   the most-complete peer, which is robust to legitimate corpus
+///   updates that shrink the chunk set.
+///
+/// All three are `Option`/`Vec`-defaulted so older peers (whose
+/// gossip blobs predate this struct) deserialize cleanly. A peer
+/// missing the fields just opts out of the new sync paths until
+/// it upgrades.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorpusShardInfo {
     pub corpus_id: String,
     pub chunk_range: Option<ChunkRange>,
     pub is_replica: bool,
     pub last_updated: u64,
+    /// Total chunks in this peer's canonical (or partition).
+    /// Defaults to 0 for older peers; auto-recover treats `0` as
+    /// "unknown" rather than "empty" — peers with a fingerprint
+    /// but no chunk_count are eligible to pull from but not
+    /// rankable by count.
+    #[serde(default)]
+    pub chunk_count: u64,
+    /// Stable content fingerprint for the canonical. See
+    /// `corpus_engine::IndexInfo::canonical_fingerprint` for the
+    /// algorithm. `None` for partitions and for canonicals that
+    /// haven't been stamped yet (the daemon's lazy-stamp pass on
+    /// next start fills these in).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_fingerprint: Option<String>,
+    /// Total source shards this corpus expects (e.g. 38 for the
+    /// canonical Wikipedia ingest). `None` for non-sharded corpora.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_shards: Option<usize>,
+    /// Source shards this peer's canonical (or partition) has
+    /// processed. The auto-recover path takes the union of these
+    /// across peers to compute coverage ratios.
+    #[serde(default)]
+    pub processed_shards: Vec<usize>,
+}
+
+impl CorpusShardInfo {
+    /// Coverage ratio for sharded corpora — `processed_shards.len()
+    /// / total_shards`. Returns `None` for non-sharded corpora
+    /// (`total_shards.is_none()`) and for the degenerate case
+    /// `total_shards = 0`. Used by `auto_recover` to pick the
+    /// most-complete peer.
+    pub fn coverage_ratio(&self) -> Option<f64> {
+        let total = self.total_shards?;
+        if total == 0 {
+            return None;
+        }
+        Some(self.processed_shards.len() as f64 / total as f64)
+    }
 }
 
 // -----------------------------------------------------------------
