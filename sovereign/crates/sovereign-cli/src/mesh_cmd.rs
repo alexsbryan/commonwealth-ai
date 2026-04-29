@@ -64,6 +64,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "status" => cmd_corpus_status().await,
         "diag" => cmd_corpus_diag(&args[1..]).await,
         "dedupe" => cmd_corpus_dedupe(&args[1..]).await,
+        "repair" => cmd_corpus_repair(&args[1..]).await,
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
         "catalog" => crate::corpus_catalog_cmd::run_catalog(&args[1..]).await,
@@ -150,6 +151,7 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("status",                    "Show shard status for all corpora"),
             ("diag <id>",                 "Audit an installed corpus: distinct-article count vs. recipe filter"),
             ("dedupe <id>",               "One-shot rescue: collapse duplicate-content rows from a resume-rewind ingest"),
+            ("repair <id>",               "Reset a 'completed' partition with missing shards back to in-progress so resume picks it up"),
             ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
             ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
         ]),
@@ -1097,6 +1099,300 @@ async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// Reset a "completed" partition's meta back to in-progress so the
+/// daemon's auto-resume / a fresh `corpus install` picks it up.
+///
+/// Why this exists: the resume-cursor-rewind bug we fought during the
+/// wikipedia ingest could leave a partition with `indexes_built=true`,
+/// `ingestion_in_progress=false`, and missing shards in
+/// `processed_shards`. The system then considers the corpus DONE — even
+/// though shards never made it through — and no automated path will
+/// retry them.
+///
+/// This command makes the surgery explicit and reversible:
+///   1. Resolve canonical or self-partition path.
+///   2. Read meta. Show the user which shards are missing (vs.
+///      `total_shards` if stamped, otherwise vs. trailing-shard
+///      heuristic).
+///   3. Show the flag transitions that will happen.
+///   4. y/N confirm (or `--yes`).
+///   5. Apply: `reset_for_resume()` flips the four `*_built` flags +
+///      `ingestion_in_progress`. `set_provenance(SelfInitiated)`
+///      flips PeerPulled → SelfInitiated so auto-resume actually
+///      acts on it.
+///
+/// The embed-side dedup gate (loaded at ingest start from
+/// `list_indexed_content_hashes`) makes resuming safe — already-
+/// embedded content is skipped, so only the genuinely missing shards
+/// do work.
+async fn cmd_corpus_repair(args: &[String]) -> i32 {
+    let mut corpus_id: Option<String> = None;
+    let mut yes = false;
+    let mut total_shards_override: Option<usize> = None;
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--yes" | "-y" => yes = true,
+            "--total-shards" => {
+                let Some(val) = iter.next() else {
+                    eprintln!("--total-shards requires a value");
+                    return 1;
+                };
+                match val.parse::<usize>() {
+                    Ok(n) => total_shards_override = Some(n),
+                    Err(_) => {
+                        eprintln!("--total-shards value must be a non-negative integer");
+                        return 1;
+                    }
+                }
+            }
+            "--help" | "-h" => {
+                println!(
+                    "Usage: sovereign corpus repair <corpus_id> [--yes] [--total-shards N]\n\n\
+                     Reset a partition that completed with missing shards \
+                     back to in-progress, so the daemon's auto-resume or a \
+                     subsequent `sovereign corpus install` picks it up.\n\n\
+                     Specifically:\n\
+                     - Clears indexes_built / vector_index_built / \
+                     content_fts_built / title_fts_built\n\
+                     - Sets ingestion_in_progress = true\n\
+                     - Stamps provenance = self_initiated (auto-resume \
+                     skips peer_pulled)\n\n\
+                     --total-shards N  Override the missing-shards display \
+                     when meta.total_shards isn't stamped (older partitions). \
+                     The surgery itself doesn't depend on this — the next \
+                     ingest will discover and stamp the true count.\n\n\
+                     Committed data (chunks, processed_shards, \
+                     committed_iter_pos) is left untouched. The embed-\
+                     side dedup gate prevents re-embedding any \
+                     content_hash already on disk."
+                );
+                return 0;
+            }
+            other if !other.starts_with('-') => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(other.to_string());
+                }
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                return 1;
+            }
+        }
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("Missing corpus ID. Usage: sovereign corpus repair <corpus_id>");
+        return 1;
+    };
+
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|cfg| cfg.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        });
+    let index_dir = data_dir.join("indexes");
+
+    // Same resolution as diag/dedupe — canonical first, then
+    // self-partition. Never touch peer partitions.
+    let canonical_path = index_dir.join(&corpus_id);
+    let (index_path, surface_label) = if canonical_path.exists() {
+        (canonical_path, "canonical".to_string())
+    } else if let Some((partition_path, node_id_label)) =
+        find_self_partition(&index_dir, &corpus_id)
+    {
+        (partition_path, format!("partition-{node_id_label}"))
+    } else {
+        eprintln!(
+            "Index not found at {} (and no self-partition either).",
+            canonical_path.display()
+        );
+        return 1;
+    };
+
+    println!("Resolved index: {} ({})", index_path.display(), surface_label);
+
+    // Read the raw meta so we can show the user the exact diff.
+    let meta_path = index_path.join("_corpus_meta.json");
+    let raw = match std::fs::read_to_string(&meta_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Failed to read {}: {e}", meta_path.display());
+            return 1;
+        }
+    };
+    let meta_json: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to parse meta JSON: {e}");
+            return 1;
+        }
+    };
+
+    let processed: Vec<u64> = meta_json["processed_shards"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
+        .unwrap_or_default();
+    let total_shards = meta_json["total_shards"].as_u64().map(|n| n as usize);
+    let provenance = meta_json["provenance"].as_str().unwrap_or("self_initiated");
+
+    let indexes_built = meta_json["indexes_built"].as_bool().unwrap_or(false);
+    let vector_built = meta_json["vector_index_built"].as_bool().unwrap_or(false);
+    let content_fts = meta_json["content_fts_built"].as_bool().unwrap_or(false);
+    let title_fts = meta_json["title_fts_built"].as_bool().unwrap_or(false);
+    let in_progress = meta_json["ingestion_in_progress"].as_bool().unwrap_or(false);
+
+    // Compute missing shards. If total_shards isn't stamped, fall back
+    // to "trailing shard from max(processed)+1" — same heuristic as
+    // diag, with the same caveat (may undercount if the trailing shard
+    // never started).
+    let processed_set: std::collections::BTreeSet<u64> = processed.iter().copied().collect();
+    // Priority chain matches diag: --total-shards override > meta-stamped >
+    // legacy heuristic. Older partitions written before the total_shards
+    // field landed need the override or they'll undercount trailing
+    // missing shards (max(processed)+1 misses anything beyond max).
+    let (total_for_display, missing): (String, Vec<u64>) = if let Some(n) = total_shards_override {
+        let missing: Vec<u64> = (0..n as u64)
+            .filter(|s| !processed_set.contains(s))
+            .collect();
+        (format!("{n} (--total-shards override)"), missing)
+    } else if let Some(n) = total_shards {
+        let missing: Vec<u64> = (0..n as u64)
+            .filter(|s| !processed_set.contains(s))
+            .collect();
+        (format!("{n} (from meta.total_shards)"), missing)
+    } else {
+        let max_seen = processed.iter().max().copied().unwrap_or(0);
+        let inferred_total = max_seen + 1;
+        let missing: Vec<u64> = (0..inferred_total)
+            .filter(|s| !processed_set.contains(s))
+            .collect();
+        (
+            format!("{inferred_total} (heuristic: max(processed)+1)"),
+            missing,
+        )
+    };
+
+    println!();
+    println!("Current state:");
+    println!("  ingestion_in_progress:    {in_progress}");
+    println!("  indexes_built:            {indexes_built}");
+    println!("  vector_index_built:       {vector_built}");
+    println!("  content_fts_built:        {content_fts}");
+    println!("  title_fts_built:          {title_fts}");
+    println!("  provenance:               {provenance}");
+    println!("  processed shards:         {} of {}", processed.len(), total_for_display);
+    if !missing.is_empty() {
+        println!("  missing shards:           {missing:?}");
+    }
+
+    // Decide whether there's anything to do.
+    let needs_flag_reset =
+        indexes_built || vector_built || content_fts || title_fts || !in_progress;
+    let needs_provenance_flip = provenance == "peer_pulled";
+
+    if !needs_flag_reset && !needs_provenance_flip && missing.is_empty() {
+        println!("\n✓ Nothing to do — partition is already in a resumable state.");
+        return 0;
+    }
+    if !needs_flag_reset && !needs_provenance_flip {
+        println!(
+            "\nMeta flags already say in-progress, but {} shards are missing.",
+            missing.len()
+        );
+        println!("No reset needed — auto-resume / install should already pick this up.");
+        return 0;
+    }
+
+    println!();
+    println!("Will apply:");
+    if needs_flag_reset {
+        println!("  ingestion_in_progress: {in_progress} → true");
+        if indexes_built {
+            println!("  indexes_built:         true → false");
+        }
+        if vector_built {
+            println!("  vector_index_built:    true → false");
+        }
+        if content_fts {
+            println!("  content_fts_built:     true → false");
+        }
+        if title_fts {
+            println!("  title_fts_built:       true → false");
+        }
+    }
+    if needs_provenance_flip {
+        println!("  provenance:            peer_pulled → self_initiated");
+    }
+
+    if missing.is_empty() {
+        println!();
+        println!(
+            "Heads up: no shards appear missing. Repair will still flip the \
+             flags above so a future ingest treats this corpus as work-needed, \
+             but resume will short-circuit if there's truly nothing to do."
+        );
+    }
+
+    if !yes {
+        eprint!("\nProceed? [y/N] ");
+        use std::io::BufRead;
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        if stdin.lock().read_line(&mut line).is_err() {
+            eprintln!("aborted (could not read stdin)");
+            return 1;
+        }
+        let answer = line.trim().to_lowercase();
+        if answer != "y" && answer != "yes" {
+            println!("aborted.");
+            return 0;
+        }
+    }
+
+    // Open the index to use the typed helpers. `reset_for_resume`
+    // round-trips through serde so any unknown fields in the meta are
+    // preserved (it reads → mutates → writes the typed struct).
+    println!("\nOpening index…");
+    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("Failed to open corpus index: {e}");
+            return 1;
+        }
+    };
+
+    if needs_flag_reset {
+        if let Err(e) = index.reset_for_resume() {
+            eprintln!("Failed to reset built/in-progress flags: {e}");
+            return 1;
+        }
+        println!("  flags reset ✓");
+    }
+
+    if needs_provenance_flip {
+        if let Err(e) = corpus_engine::set_provenance(
+            &index_path,
+            corpus_engine::CorpusProvenance::SelfInitiated,
+        ) {
+            eprintln!("Failed to flip provenance: {e}");
+            return 1;
+        }
+        println!("  provenance: self_initiated ✓");
+    }
+
+    println!("\n✓ Repair complete.");
+    println!();
+    println!("Next steps:");
+    println!("  - The daemon's auto-resume loop will pick this up on its next tick.");
+    println!("  - Or run `sovereign corpus install {corpus_id}` to kick off resume now.");
+    println!("  - Either path will skip already-embedded content_hashes via the embed-side dedup gate.");
+    0
 }
 
 async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
