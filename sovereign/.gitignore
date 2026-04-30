@@ -30,3 +30,7 @@ bench/sep_atlas/logs/
 crates/sovereign-desktop/test-results/
 crates/sovereign-desktop/playwright-report/
 crates/sovereign-desktop/playwright/.cache/
+
+# TTFI harness reports — local artifacts, regenerable via `npm run test:ttfi`.
+crates/sovereign-desktop/tests/e2e/.ttfi-report.json
+crates/sovereign-desktop/tests/e2e/.ttfi-baseline.json

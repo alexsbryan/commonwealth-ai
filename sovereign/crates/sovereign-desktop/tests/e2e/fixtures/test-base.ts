@@ -1,9 +1,11 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { TtfiReport } from "./scenario-player";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SHIM_PATH = path.resolve(__dirname, "./tauri-shim.js");
+const TTFI_PROBE_PATH = path.resolve(__dirname, "./ttfi-probe.js");
 
 /** Surface exposed by tauri-shim.js on `window.__sovereign_test__`. */
 export interface SovereignTestAPI {
@@ -62,6 +64,18 @@ interface ChatHarness {
     } | null>;
     /** Convenience: peek the last cancel_stream invocation. */
     lastCancel(): Promise<{ conversationId: string } | null>;
+    /** Time-to-First-Intelligence probe. The probe is installed
+     *  via addInitScript on every page; tests anchor t0 immediately
+     *  before the Send click and read the report after the scenario's
+     *  terminal state. See `fixtures/ttfi-probe.js`. */
+    ttfi: {
+      /** Anchor t0 = now. Resets all markers. Call IMMEDIATELY before
+       *  the Send-button click. */
+      markStart(): Promise<void>;
+      /** Read the latest report. Any tier still null means the marker
+       *  hasn't appeared yet. */
+      getReport(): Promise<TtfiReport>;
+    };
   };
 }
 
@@ -81,6 +95,11 @@ export const test = base.extend<{
     const pageErrors: Error[] = [];
     page.on("pageerror", (err) => pageErrors.push(err));
     await page.addInitScript({ path: SHIM_PATH });
+    // TTFI probe installs window.__ttfi__ — independent of the shim,
+    // but must load before app code so MutationObserver can be primed
+    // from page-load. Tests that don't measure TTFI simply never call
+    // markStart() and the probe stays inert.
+    await page.addInitScript({ path: TTFI_PROBE_PATH });
     await use(page);
     if (pageErrors.length > 0) {
       const allowed = testInfo.annotations.some(
@@ -142,6 +161,13 @@ export const test = base.extend<{
           ),
         lastCancel: async () =>
           sovereignPage.evaluate(() => window.__sovereign_test__.lastCancel()),
+        ttfi: {
+          markStart: async () => {
+            await sovereignPage.evaluate(() => window.__ttfi__.markStart());
+          },
+          getReport: async () =>
+            sovereignPage.evaluate(() => window.__ttfi__.getReport()),
+        },
       },
     };
     await use(harness);

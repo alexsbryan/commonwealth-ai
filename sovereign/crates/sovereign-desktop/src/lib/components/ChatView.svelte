@@ -204,6 +204,18 @@
       docOpInFlight,
   );
 
+  // Time-to-First-Intelligence: surface the most recent narration in
+  // the loading slot so the user sees a calm, specific signal of what
+  // the system is doing instead of bare typing dots. The
+  // NarrationChip below the bubble keeps the running history; this
+  // promotes the freshest line into the indicator the user is already
+  // looking at.
+  let latestNarrationText = $derived(
+    routingStore.narrationLog.length > 0
+      ? routingStore.narrationLog[routingStore.narrationLog.length - 1].text
+      : null,
+  );
+
   // Convenience snapshot accessors. Svelte 5 re-derives whenever
   // `$snapshot` changes (which is on every event send).
   let messages = $derived($snapshot.context.messages);
@@ -847,6 +859,15 @@
           <div class="doc-progress-indicator" aria-label="Sovereign is processing document">
             <span class="progress-mark">{"\u25C8"}</span>
             <span class="progress-text">{docProgressText}</span>
+          </div>
+        {:else if latestNarrationText}
+          <div
+            class="doc-progress-indicator"
+            data-source="narration"
+            aria-label="Sovereign is working"
+          >
+            <span class="progress-mark">{"\u25C8"}</span>
+            <span class="progress-text">{latestNarrationText}</span>
           </div>
         {:else}
           <div class="typing-indicator" aria-label="Sovereign is responding">

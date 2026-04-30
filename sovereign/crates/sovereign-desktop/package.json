@@ -12,7 +12,10 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:ttfi": "playwright test specs/ttfi.spec.ts",
+    "report:ttfi": "node tests/e2e/scripts/ttfi-summary.mjs",
+    "report:ttfi:save-baseline": "cp tests/e2e/.ttfi-report.json tests/e2e/.ttfi-baseline.json"
   },
   "dependencies": {
     "@fontsource/syne": "^5.2.7",
