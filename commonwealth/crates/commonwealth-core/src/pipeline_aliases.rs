@@ -169,6 +169,25 @@ mod tests {
         assert!(p.middleware.contains(&"context_injector".to_string()));
         assert!(p.middleware.contains(&"tool_injector".to_string()));
         assert!(p.middleware.contains(&"artifact_surface".to_string()));
+        // Phase 7.2 gap A: decision_extractor must be present so
+        // per-turn decision capture fires in production. The
+        // extractor lives at the tail of the chain — its
+        // `post_process` runs after every other middleware
+        // observes the response.
+        assert!(
+            p.middleware.contains(&"decision_extractor".to_string()),
+            "decision_extractor must be in the sovereign-coder pipeline so \
+             per-turn decision capture fires in production. Got: {:?}",
+            p.middleware
+        );
+        let last = p.middleware.last().map(String::as_str);
+        assert_eq!(
+            last,
+            Some("decision_extractor"),
+            "decision_extractor must be the LAST middleware so its post_process \
+             runs after every other observer; got chain: {:?}",
+            p.middleware
+        );
         assert!(p.context.inject_notes);
         assert!(p.context.inject_spec);
         assert!(!p.context.inject_invariants_only);

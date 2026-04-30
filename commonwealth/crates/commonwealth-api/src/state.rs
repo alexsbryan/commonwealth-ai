@@ -314,6 +314,17 @@ impl AppState {
         middleware_registry.register(Arc::new(crate::middleware::ToolInjector::new()));
         middleware_registry.register(Arc::new(crate::middleware::ArtifactSurface::new()));
         middleware_registry.register(Arc::new(crate::middleware::SessionBriefing::new()));
+        // Phase 7.2: per-turn DecisionExtractor mines assistant
+        // responses for decision-shaped phrases on `post_process`,
+        // then on the next turn either persists as
+        // `source='extracted'` or drops on a user correction
+        // phrase. Lives at the END of the chain so it observes
+        // the response after every other middleware has had its
+        // say. Stateless beyond `MiddlewareSession.pending_decision`,
+        // which is already plumbed through routes_inference's
+        // session round-trip.
+        middleware_registry
+            .register(Arc::new(crate::middleware::DecisionExtractor::new()));
         // `read_only_enforcer` is the red-team alias's gate. For M4
         // it shares the ApprovalGate implementation under a distinct
         // id — M5 splits them if the behavior actually diverges.

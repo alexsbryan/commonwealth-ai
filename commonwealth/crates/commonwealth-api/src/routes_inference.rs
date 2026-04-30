@@ -847,6 +847,7 @@ async fn run_atos_pipeline(
         deviation_note_id: handle.state.deviation_note_id.clone(),
         pending_artifact_delta: handle.state.pending_artifact_delta.clone(),
         last_seen_at: handle.state.last_seen_at,
+        pending_decision: handle.state.pending_decision.clone(),
     };
 
     let outcome = pipeline_exec.run(request, &mut mw_session, &ctx).await;
@@ -859,6 +860,7 @@ async fn run_atos_pipeline(
     handle.state.pending_deviation_ack = mw_session.pending_deviation_ack;
     handle.state.deviation_note_id = mw_session.deviation_note_id;
     handle.state.pending_artifact_delta = mw_session.pending_artifact_delta;
+    handle.state.pending_decision = mw_session.pending_decision;
     handle.save().await;
 
     match outcome {
@@ -913,6 +915,7 @@ impl Drop for PostPathGuard {
                 deviation_note_id: handle.state.deviation_note_id.clone(),
                 pending_artifact_delta: handle.state.pending_artifact_delta.clone(),
                 last_seen_at: handle.state.last_seen_at,
+                pending_decision: handle.state.pending_decision.clone(),
             };
             // For M5.1 we pass a synthetic empty response view.
             // M5.2's ArtifactSurface reads from the DB, not from
@@ -931,6 +934,7 @@ impl Drop for PostPathGuard {
             handle.state.pending_deviation_ack = mw_session.pending_deviation_ack;
             handle.state.deviation_note_id = mw_session.deviation_note_id;
             handle.state.pending_artifact_delta = mw_session.pending_artifact_delta;
+            handle.state.pending_decision = mw_session.pending_decision;
             handle.save().await;
         });
     }

@@ -12,10 +12,19 @@
 [[pipeline]]
 # The "just start opencode" entry point. Resolves to the big coder
 # model with the full ATOS middleware stack: approval gating,
-# automatic context injection, ATOS tool advertisement.
+# automatic context injection, ATOS tool advertisement, per-turn
+# decision extraction.
+#
+# `decision_extractor` lives at the tail so its `post_process` runs
+# after every other middleware has finished observing the response,
+# and its pre-path `process` (which consumes the previous turn's
+# `pending_decision`) runs after `approval_gate` has resolved the
+# session's feature scope. See
+# `commonwealth-api::middleware::decision_extractor` for the
+# two-turn-lookahead state machine.
 name = "sovereign-coder"
 model_id = "qwen-27b-coder"
-middleware = ["approval_gate", "session_briefing", "context_injector", "tool_injector", "artifact_surface"]
+middleware = ["approval_gate", "session_briefing", "context_injector", "tool_injector", "artifact_surface", "decision_extractor"]
 
 [pipeline.context]
 inject_notes = true

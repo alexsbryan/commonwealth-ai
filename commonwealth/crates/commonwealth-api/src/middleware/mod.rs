@@ -48,12 +48,14 @@ use crate::openai_types::ChatCompletionRequest;
 pub mod approval_gate;
 pub mod artifact_surface;
 pub mod context_injector;
+pub mod decision_extractor;
 pub mod session_briefing;
 pub mod tool_injector;
 
 pub use approval_gate::ApprovalGate;
 pub use artifact_surface::ArtifactSurface;
 pub use context_injector::ContextInjector;
+pub use decision_extractor::DecisionExtractor;
 pub use session_briefing::SessionBriefing;
 pub use tool_injector::ToolInjector;
 
@@ -108,6 +110,24 @@ pub struct MiddlewareSession {
     /// so all middleware see a consistent baseline.
     #[serde(default)]
     pub last_seen_at: i64,
+    /// Phase 7.2: a candidate decision sentence that
+    /// `decision_extractor.post_process` mined from the previous
+    /// turn's assistant response. `decision_extractor.process` on
+    /// the NEXT turn either:
+    ///
+    /// 1. Detects a correction phrase in the user's latest message
+    ///    (e.g. "actually, that's not a decision") → drops the
+    ///    candidate without persisting it, or
+    /// 2. Persists it as a `source='extracted'` note and injects
+    ///    `[Noted: "<snippet>". Auto-recording unless corrected.]`
+    ///    into the system prompt so the agent sees the audit
+    ///    trail.
+    ///
+    /// Cleared after use either way. `None` when no candidate is
+    /// pending — the steady-state for sessions that aren't
+    /// surfacing decisions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_decision: Option<String>,
 }
 
 /// Errors a middleware can raise. The handler pattern-matches on
@@ -464,6 +484,41 @@ mod tests {
             .build_pipeline(&["never-registered".to_string()])
             .unwrap_err();
         assert!(matches!(err, MiddlewareError::Infra(_)));
+    }
+
+    /// Phase 7.2 gap A: the production middleware list (mirroring
+    /// `state.rs::AppState::new_with_*`) must include
+    /// `decision_extractor`, AND the default `sovereign-coder`
+    /// pipeline declared in `default_pipelines.toml` must
+    /// resolve cleanly through that registry. A typo on either
+    /// side fails this test loud — without it the wiring could
+    /// silently drift again.
+    #[tokio::test]
+    async fn sovereign_coder_default_pipeline_resolves_decision_extractor() {
+        // Mirror the production registry from
+        // `commonwealth-api::state::AppState`.
+        let mut registry = MiddlewareRegistry::new();
+        registry.register(Arc::new(ApprovalGate::new()));
+        registry.register(Arc::new(ContextInjector::new()));
+        registry.register(Arc::new(ToolInjector::new()));
+        registry.register(Arc::new(ArtifactSurface::new()));
+        registry.register(Arc::new(SessionBriefing::new()));
+        registry.register(Arc::new(DecisionExtractor::new()));
+
+        // Resolve the toml-declared chain.
+        let table =
+            commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table();
+        let resolution = table
+            .resolve("sovereign-coder")
+            .expect("sovereign-coder pipeline must exist in default_pipelines.toml");
+        let pipeline = registry
+            .build_pipeline(&resolution.middleware)
+            .expect("every id in sovereign-coder must resolve in the registry");
+        assert_eq!(
+            pipeline.len(),
+            resolution.middleware.len(),
+            "all middleware ids resolved into the chain"
+        );
     }
 
     #[tokio::test]

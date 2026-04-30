@@ -36,27 +36,25 @@ use crate::openai_types::ChatCompletionRequest;
 /// appears in the request's `tool_choice` or `tools` array AND the
 /// feature is unapproved, the request is rejected pre-inference.
 ///
-/// Includes both the canonical (renamed) ids and their legacy
+/// Includes both the canonical (renamed) id and its legacy
 /// aliases so the gate fires regardless of which spelling the
 /// agent advertises. The MCP `tools/list` advertises both during
 /// the alias period, so an agent that cached the old `tools/list`
 /// will still send `write_note` in its tools array — we must
 /// recognise it.
 ///
-/// Phase 6 trims this list down once the retired entries
+/// Phase 6: the entries for tools retired from the MCP surface
 /// (`provision_feature`, `archive_feature`, `record_atos_event`,
-/// `write_redteam_finding`) are removed from the registry.
+/// `write_redteam_finding`) are removed. They no longer appear in
+/// any agent's `tools/list`, so listing them here is dead weight.
+/// The list is now centred on the audit's primary input: the
+/// `note` family.
 const WRITE_INTENT_TOOLS: &[&str] = &[
     // Canonical (renamed) ids.
     "note",
     // Legacy aliases — kept while `tools/list` advertises them.
     "write_note",
     "promote_note",
-    // Retired but still registered until Phase 6.
-    "provision_feature",
-    "archive_feature",
-    "record_atos_event",
-    "write_redteam_finding",
 ];
 
 pub struct ApprovalGate {
@@ -373,5 +371,99 @@ mod tests {
         let ctx = ctx_with(Some("unapproved-replay"), tmp.path().to_path_buf());
         let err = gate.process(&mut req, &mut session, &ctx).await.unwrap_err();
         assert!(matches!(err, MiddlewareError::ApprovalRequired { .. }));
+    }
+
+    /// Phase 6 invariant: a freshly-`init`'d project that just
+    /// commits a feature spec must reach the approval gate cleanly
+    /// — no provision step, no founding step. The committed spec
+    /// IS the approval (per `find_approval_via_git`), and a
+    /// write-intent request for that feature must succeed.
+    ///
+    /// This test materialises the new default flow exactly:
+    ///
+    ///   1. `git init` (Phase 6 + earlier: `sovereign init`)
+    ///   2. write `.sovereign/features/foo/spec.md`
+    ///   3. `git add . && git commit`
+    ///   4. agent calls `note(...)` — must NOT be rejected.
+    ///
+    /// Without this regression test, a future tightening of the
+    /// gate logic could quietly re-introduce a ceremony gate. We
+    /// shell out to real `git` because that's exactly what
+    /// `find_approval_via_git` does in production.
+    #[tokio::test]
+    async fn committed_spec_alone_grants_approval_no_provision_needed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path();
+
+        // 1. git init + identity. We use --initial-branch=main so
+        // the test doesn't depend on a system git config.
+        let init = std::process::Command::new("git")
+            .args(["init", "--initial-branch=main"])
+            .current_dir(repo)
+            .output()
+            .expect("git init");
+        assert!(init.status.success(), "git init failed");
+        // Local identity so commit-as-you (no global identity
+        // assumed on CI runners).
+        for (k, v) in [("user.email", "test@example.com"), ("user.name", "Test")] {
+            let out = std::process::Command::new("git")
+                .args(["config", k, v])
+                .current_dir(repo)
+                .output()
+                .expect("git config");
+            assert!(out.status.success());
+        }
+
+        // 2. Write the spec. Note the path matches what
+        // `find_approval_via_git` walks: `.sovereign/features/<id>/spec.md`.
+        let foo = repo.join(".sovereign").join("features").join("foo");
+        std::fs::create_dir_all(&foo).unwrap();
+        std::fs::write(foo.join("spec.md"), b"# foo spec\n\nan invariant\n").unwrap();
+
+        // 3. add + commit.
+        let add = std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo)
+            .output()
+            .expect("git add");
+        assert!(add.status.success(), "git add failed");
+        let commit = std::process::Command::new("git")
+            .args(["commit", "-m", "spec: foo"])
+            .current_dir(repo)
+            .output()
+            .expect("git commit");
+        assert!(
+            commit.status.success(),
+            "git commit failed: {}",
+            String::from_utf8_lossy(&commit.stderr)
+        );
+
+        // 4. Build a request with a write-intent tool advertised,
+        // pointing the gate at this repo + feature_id.
+        let gate = ApprovalGate::new();
+        let mut req = minimal_request();
+        req.tools = Some(vec![ToolDefinition {
+            kind: "function".into(),
+            function: ToolFunction {
+                name: "note".into(), // the canonical Phase 6 write tool
+                description: None,
+                parameters: serde_json::json!({}),
+            },
+        }]);
+        let mut session = MiddlewareSession::default();
+        let ctx = ctx_with(Some("foo"), repo.to_path_buf());
+
+        // The committed spec is the approval — gate must pass.
+        gate.process(&mut req, &mut session, &ctx)
+            .await
+            .expect("committed spec alone must grant approval");
+
+        // Sanity: the gate marked the session as approved so
+        // subsequent calls in the same conversation skip the git
+        // walk on the cache hit path.
+        assert!(
+            session.approval_validated,
+            "session.approval_validated should be set after a successful gate"
+        );
     }
 }
