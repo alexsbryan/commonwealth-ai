@@ -319,23 +319,38 @@ SIMPLE
             "If all A are B and all B are C, are all A C?"
 
 LOOKUP
-  A factual question where a specific, correct answer EXISTS and
-  could plausibly be wrong if answered from memory alone.
-  Includes: names, dates, statistics, records, lists, lineups,
+  A factual question where ONE specific, atomic answer exists and
+  could plausibly be wrong if answered from memory alone. The full
+  answer fits in a sentence or a short list; no aggregation across
+  sources is required.
+  Includes: names, dates, statistics, records, single-fact rosters,
   specific events, anything that changes over time.
   When installed knowledge sources are available, prefer LOOKUP
-  over SIMPLE for ANY factual question involving specific details.
+  over SIMPLE for atomic factual questions involving specific details.
   When in doubt between SIMPLE and LOOKUP: choose LOOKUP.{lookup_note}
+  NOT LOOKUP: questions that ask for *causes*, *effects*, *reasons*,
+  *contributions across multiple actors*, *how X drew on Y*, *why X
+  happened*, or *the differences between X and Y*. Those aggregate
+  across sources and are REASONING, even when they sound like they
+  want specific historical facts.
   Examples: "Who was in the Arsenal Invincibles squad?",
             "What year was the Eiffel Tower built?",
             "How many episodes are in Breaking Bad season 3?"
 
 REASONING
   Analysis, synthesis, comparison, creative work, or multi-step
-  thinking where no single lookup would answer it.
+  thinking where no single lookup would answer it. A REASONING
+  answer aggregates evidence across multiple facts/sources, even
+  when each individual fact is itself looked up.
+  Includes: causes/effects/reasons questions, multi-aspect "how did
+  X relate to Y" questions, comparisons of two or more named things,
+  anything that asks for the structure or logic behind a sequence
+  of facts rather than a single fact.
   Examples: "Compare Wenger's 4-4-2 to his 4-2-3-1",
             "Write a short poem about autumn",
-            "Explain why inflation causes interest rate rises"
+            "Explain why inflation causes interest rate rises",
+            "What were the main causes of the 2008 financial crisis?",
+            "How did Roman trade networks shape early Christian spread?"
 
 ACTION
   Requires a tool with external reach or side-effects: web search,

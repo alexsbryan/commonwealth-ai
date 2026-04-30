@@ -120,6 +120,60 @@ pub fn score_facts(expected: &[String], retrieved: &[ScoredChunk]) -> FactScore 
     }
 }
 
+/// Same matching rule as [`score_facts`] but against an arbitrary
+/// haystack — used by the `--synth` path to score expected_facts
+/// against the model's synthesised answer rather than the bag of
+/// retrieved chunks. Keeping the rule identical means a fact that
+/// would have scored against the chunks scores the same way against
+/// the answer; the *only* thing that changes is the haystack.
+pub fn score_facts_in_text(expected: &[String], text: &str) -> FactScore {
+    let haystack = text.to_lowercase();
+    let mut matched = Vec::new();
+    let mut missing = Vec::new();
+    for fact in expected {
+        let tokens = keyword_tokens(fact);
+        if tokens.is_empty() {
+            continue;
+        }
+        if tokens.iter().all(|t| haystack.contains(t)) {
+            matched.push(fact.clone());
+        } else {
+            missing.push(fact.clone());
+        }
+    }
+    FactScore {
+        matched,
+        missing,
+        total_expected: expected.len(),
+    }
+}
+
+/// Source-match against pre-extracted titles. Used by the synth path,
+/// which only has the metadata `retrieved_chunks` array (titles, no
+/// `ScoredChunk`s) to work with. Normalisation matches `score_sources`.
+pub fn score_sources_titles<S: AsRef<str>>(expected: &[String], titles: &[S]) -> SourceScore {
+    let normalized: Vec<String> = titles
+        .iter()
+        .map(|t| corpus_engine::filters::normalize_title(t.as_ref()))
+        .collect();
+
+    let mut matched = Vec::new();
+    let mut missing = Vec::new();
+    for want in expected {
+        let want_norm = corpus_engine::filters::normalize_title(want);
+        if normalized.iter().any(|t| t == &want_norm) {
+            matched.push(want.clone());
+        } else {
+            missing.push(want.clone());
+        }
+    }
+    SourceScore {
+        matched,
+        missing,
+        total_expected: expected.len(),
+    }
+}
+
 fn keyword_tokens(s: &str) -> Vec<String> {
     s.split(|c: char| !c.is_alphanumeric())
         .filter(|t| t.chars().count() >= 3)

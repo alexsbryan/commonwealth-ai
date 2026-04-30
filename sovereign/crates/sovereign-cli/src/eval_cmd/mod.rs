@@ -16,11 +16,16 @@
 //!   - `run`  — execute a bank, print results, optionally write JSON
 //!   - `diff` — compare two run-output JSON files (planned; not in v1)
 //!
-//! v1 is retrieval-only — it does NOT call `/v1/chat/completions`. The
-//! question is "did the right chunks come back?" not "did the model
-//! say the right thing about them." Synthesis judgment can layer on
-//! later behind `--synth`; today it would just couple eval cost to
-//! whatever 27B model the daemon happens to have loaded.
+//! By default the runner is retrieval-only — it does NOT call
+//! `/v1/chat/completions`. That keeps the cheap baseline cheap and
+//! isolates retrieval-tuning experiments from chat-model variance.
+//! Pass `--synth` to drive each question through the full
+//! `Runtime::handle_message_stream` path the desktop chat surface uses
+//! (intent classifier → router → search tools → prompt assembly →
+//! chat completion); facts are then matched against the synthesised
+//! answer rather than the retrieved chunks. Synth mode exercises the
+//! routing and aggregation layers, which are tunable in their own
+//! right.
 
 pub mod bank;
 pub mod report;
@@ -54,11 +59,13 @@ const RUN_HELP: Help = Help {
     summary: "Run a question bank, print per-question results + category rollup.",
     sections: &[
         HelpSection::Usage(
-            "sovereign eval run --bank <path> [--limit N] [--inspect] [--format text|json] [--output <path>]",
+            "sovereign eval run --bank <path> [--synth] [--limit N] [--inspect] [--format text|json] [--output <path>]",
         ),
         HelpSection::Flags(&[
             ("--bank <path>",  "Path to the bank TOML (e.g. sovereign-recipes/wikipedia/eval/wikipedia_questions.toml)."),
-            ("--limit <N>",    "Top-N chunks to retrieve per question (default: 10)."),
+            ("--synth",        "Drive each question through the full chat pipeline (routing → retrieval → synthesis). Slower, but exercises the model + routing layers."),
+            ("--routing-only", "Call the classifier per question and score the routing decision against `expected_intent` (or category default). Skips retrieval and synthesis — fast iteration loop for tuning the classifier prompt."),
+            ("--limit <N>",    "Top-N chunks to retrieve per question (retrieval mode only; default: 10)."),
             ("--inspect",      "Print missing facts/sources + top retrieved chunks per question."),
             ("--format text|json", "Stdout format (default: text)."),
             ("--output <path>", "Also write the full run as pretty JSON to this path."),
@@ -66,8 +73,12 @@ const RUN_HELP: Help = Help {
         ]),
         HelpSection::Notes(
             "All `chat` global flags also apply: --daemon, --data-dir, --chat-model, \
-             --embed-model. The bank's `corpus` field MUST match an installed \
-             corpus_id; install it first via `sovereign corpus install <id>`.",
+             --embed-model, --temperature, --max-tokens. The bank's `corpus` field \
+             MUST match an installed corpus_id; install it first via \
+             `sovereign corpus install <id>`. Under --synth, --chat-model selects the \
+             model that will do synthesis; --max-tokens lets you sweep the \
+             latency/coverage tradeoff (lower = faster wall, terser answer) without \
+             touching the operator's product config.",
         ),
     ],
 };
@@ -102,6 +113,8 @@ struct RunArgs {
     bank: PathBuf,
     limit: usize,
     inspect: bool,
+    synth: bool,
+    routing_only: bool,
     format: OutputFormat,
     output: Option<PathBuf>,
 }
@@ -112,6 +125,8 @@ impl Default for RunArgs {
             bank: PathBuf::new(),
             limit: 10,
             inspect: false,
+            synth: false,
+            routing_only: false,
             format: OutputFormat::Text,
             output: None,
         }
@@ -124,13 +139,26 @@ async fn cmd_run(args: &[String]) -> i32 {
         return 0;
     }
 
-    let (globals, rest) = match parse_globals(args) {
+    let (mut globals, rest) = match parse_globals(args) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("error: {e}");
             return 2;
         }
     };
+
+    // Eval is a rule-following measurement, not a free-form chat —
+    // sampling variance from a non-zero temperature shows up as
+    // run-to-run noise on the bank metrics, swamping the signal we
+    // care about (did the routing/retrieval/synthesis change actually
+    // move the score?). Default to temperature 0 unless the operator
+    // passed `--temperature` explicitly. Same logic applies to
+    // retrieval-only mode (route classifier + Fast-slot calls in any
+    // path the runtime takes) so we set it on `globals` regardless of
+    // mode rather than only under `--synth`.
+    if globals.temperature.is_none() {
+        globals.temperature = Some(0.0);
+    }
 
     let mut a = RunArgs::default();
     let mut i = 0;
@@ -153,6 +181,12 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
             "--inspect" => {
                 a.inspect = true;
+            }
+            "--synth" => {
+                a.synth = true;
+            }
+            "--routing-only" => {
+                a.routing_only = true;
             }
             "--format" => {
                 i += 1;
@@ -213,16 +247,54 @@ async fn cmd_run(args: &[String]) -> i32 {
         }
     };
 
-    let run = match runner::run_bank(&session, &bank, a.limit).await {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("error: {e}");
-            return 1;
+    if a.routing_only {
+        eprintln!(
+            "routing-only mode — calling the classifier per question, scoring against \
+             expected_intent (or category default). No retrieval, no synthesis. \
+             Useful for tuning the classifier prompt against a specific fast-slot model."
+        );
+        let run = match runner::run_bank_routing(&session, &bank).await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        };
+        report::print_routing(&run);
+        if let Some(path) = a.output.as_deref() {
+            if let Err(e) = report::write_routing_json_file(&run, path) {
+                eprintln!("error: write output: {e}");
+                return 1;
+            }
+            eprintln!("wrote routing JSON to {}", path.display());
+        }
+        return 0;
+    }
+
+    let run = if a.synth {
+        eprintln!(
+            "synth mode — driving full chat pipeline. This will take ~one chat-completion \
+             per question; sit tight."
+        );
+        match runner::run_bank_synth(&session, &bank).await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        }
+    } else {
+        match runner::run_bank(&session, &bank, a.limit).await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
         }
     };
 
     match a.format {
-        OutputFormat::Text => report::print_text(&run, a.inspect),
+        OutputFormat::Text => report::print_text(&run, a.inspect, Some(&bank)),
         OutputFormat::Json => {
             if let Err(e) = report::print_json(&run) {
                 eprintln!("error: {e}");

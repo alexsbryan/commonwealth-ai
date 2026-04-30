@@ -33,6 +33,21 @@ pub struct ChatGlobals {
     /// decide whether to override the well-known `~/.sovereign/indexes`
     /// corpus path with `<data_dir>/indexes`.
     pub data_dir_explicit: bool,
+    /// Override `InferenceConfig::temperature` for every chat completion
+    /// driven by this session. `None` keeps the runtime default (0.7),
+    /// suitable for free-form interactive chat. Set to `Some(0.0)` for
+    /// rule-following / deterministic flows — eval, regression
+    /// benchmarks, the routing→retrieval→synthesis pipeline where the
+    /// goal is to extract facts that downstream tools can consume.
+    pub temperature: Option<f32>,
+    /// Override `InferenceConfig::max_tokens` for every chat completion
+    /// driven by this session. `None` keeps the runtime default. Used
+    /// by the eval CLI to sweep the latency/coverage tradeoff (smaller
+    /// budget = faster wall, less verbose answer) without touching the
+    /// operator's product config. Internal pipeline steps (router
+    /// classifier, gap check, planner, etc.) keep their own
+    /// hardcoded caps regardless of this override.
+    pub max_tokens: Option<usize>,
 }
 
 impl ChatGlobals {
@@ -58,6 +73,8 @@ impl ChatGlobals {
             chat_model: None,
             embed_model: None,
             data_dir_explicit: false,
+            temperature: None,
+            max_tokens: None,
         }
     }
 }
@@ -100,6 +117,34 @@ pub fn parse_globals(args: &[String]) -> Result<(ChatGlobals, Vec<String>), Stri
                     .get(i + 1)
                     .ok_or_else(|| "--embed-model needs a value".to_string())?;
                 globals.embed_model = Some(v.clone());
+                i += 2;
+            }
+            "--temperature" => {
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "--temperature needs a value".to_string())?;
+                let t: f32 = v
+                    .parse()
+                    .map_err(|_| format!("--temperature: not a float: {v}"))?;
+                if !(0.0..=2.0).contains(&t) {
+                    return Err(format!(
+                        "--temperature must be in [0.0, 2.0], got {t}"
+                    ));
+                }
+                globals.temperature = Some(t);
+                i += 2;
+            }
+            "--max-tokens" => {
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "--max-tokens needs a value".to_string())?;
+                let n: usize = v
+                    .parse()
+                    .map_err(|_| format!("--max-tokens: not a positive integer: {v}"))?;
+                if n == 0 {
+                    return Err("--max-tokens must be > 0".to_string());
+                }
+                globals.max_tokens = Some(n);
                 i += 2;
             }
             _ => {

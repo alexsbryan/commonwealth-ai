@@ -75,6 +75,8 @@ const HELP: Help = Help {
             ("--data-dir <path>", "State-store root (default: SetupConfig.data.dir, else ~/.sovereign)."),
             ("--chat-model <id>", "Force a specific chat model ID (default: SetupConfig.models.primary stem; fallback to first non-embed /v1/models entry)."),
             ("--embed-model <id>","Force a specific embedding model ID (default: SetupConfig.models.embed stem; fallback to first embedding-like /v1/models entry)."),
+            ("--temperature <f>", "Override sampling temperature for this session (range [0.0, 2.0]). Default: runtime default (0.7)."),
+            ("--max-tokens <n>",  "Override max generated tokens for synthesis. Default: runtime default (2048). Internal pipeline steps keep their own caps."),
             ("--help, -h",        "Show this message."),
         ]),
         HelpSection::Notes(

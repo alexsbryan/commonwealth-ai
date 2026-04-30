@@ -58,8 +58,22 @@ impl RemoteApiProvider {
             "content": &request.prompt,
         }));
 
+        // Pin the OpenAI `model` field only when the caller asked
+        // for a specific model. The runtime sets
+        // `request.model_id = None` for slot-routed calls (router
+        // classifier, synthesis, etc.) to let the daemon's OICP
+        // picker decide. Hardcoding `self.model_id` here would defeat
+        // that — `embedded::select_slot_for_request` matches the
+        // model field against fast/primary slot file stems and routes
+        // by name, bypassing OICP. With None we send an empty model
+        // and the picker uses the OICP envelope (latency_class)
+        // we attached below.
+        let model_field = request
+            .model_id
+            .as_deref()
+            .unwrap_or("");
         let mut body = serde_json::json!({
-            "model": &self.model_id,
+            "model": model_field,
             "messages": messages,
         });
 
@@ -70,11 +84,36 @@ impl RemoteApiProvider {
             body["temperature"] = serde_json::json!(temperature);
         }
 
-        // Attach OICP requirements if present.
-        if let Some(ref oicp) = request.oicp {
-            if let Ok(oicp_val) = serde_json::to_value(oicp) {
-                body["oicp"] = oicp_val;
+        // OICP envelope. The runtime's local `Speed` enum is mapped
+        // to `latency_class` (v0.3 §2.2) — internal types stay off
+        // the wire while the daemon's slot picker routes by the
+        // protocol's standard signal. If the caller attached an
+        // explicit `oicp`, we honor it as-is.
+        //
+        // Privacy: deliberately left at the protocol default
+        // (`LocalOnly` per §3.1). We do NOT silently downgrade the
+        // privacy contract here — that would violate ARCH_PRINCIPLES
+        // §7 (privacy invariants must be structural). Privacy-aware
+        // callers attach their own oicp envelope above. The daemon's
+        // privacy gate is responsible for serving LocalOnly via
+        // local_inference rather than rejecting it.
+        let oicp_val = if let Some(ref oicp) = request.oicp {
+            serde_json::to_value(oicp).ok()
+        } else {
+            let class = match request.preferred_speed {
+                Speed::Fast => sovereign_core::oicp::LatencyClass::Fast,
+                Speed::Medium => sovereign_core::oicp::LatencyClass::Normal,
+                Speed::Slow => sovereign_core::oicp::LatencyClass::Extended,
+            };
+            let mut req = sovereign_core::oicp::InferenceRequirements::new()
+                .with_latency_class(class);
+            if let Some(n) = request.max_tokens {
+                req = req.with_max_output_tokens(n as u32);
             }
+            serde_json::to_value(&req).ok()
+        };
+        if let Some(v) = oicp_val {
+            body["oicp"] = v;
         }
 
         body

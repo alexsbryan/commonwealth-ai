@@ -297,7 +297,15 @@ pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
     //     the no-op default (the CLI has no UI to emit to), and
     //     landscape-digest / KnowledgeView is intentionally omitted
     //     (desktop feature, not load-bearing for chat correctness).
-    let inference_config = InferenceConfig::default();
+    let mut inference_config = InferenceConfig::default();
+    if let Some(t) = globals.temperature {
+        inference_config.temperature = t;
+        eprintln!("Temperature: {t} (override)");
+    }
+    if let Some(n) = globals.max_tokens {
+        inference_config.max_tokens = n;
+        eprintln!("Max tokens: {n} (override)");
+    }
     let mut runtime = Runtime::new(
         Arc::clone(&inference),
         router,

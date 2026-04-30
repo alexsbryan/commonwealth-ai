@@ -12,9 +12,10 @@
 
 use std::collections::BTreeMap;
 
+use crate::eval_cmd::bank::{EvalBank, LatencyBudget};
 use crate::eval_cmd::runner::{EvalResult, EvalRun};
 
-pub fn print_text(run: &EvalRun, inspect: bool) {
+pub fn print_text(run: &EvalRun, inspect: bool, bank: Option<&EvalBank>) {
     println!("═══ {} (corpus={}) — {} questions ═══",
         run.bank_name, run.corpus, run.results.len());
     println!();
@@ -27,22 +28,57 @@ pub fn print_text(run: &EvalRun, inspect: bool) {
     print_category_rollup(run);
     println!();
     print_overall(run);
+
+    // Latency rollup is synth-only — there's no meaningful per-question
+    // latency in retrieval mode (search is sub-second). Skip when no
+    // synth row carries timings.
+    let any_synth = run.results.iter().any(|r| r.synth.is_some());
+    if any_synth {
+        println!();
+        let budget = bank.and_then(|b| b.bank.latency_budget.as_ref());
+        print_latency_rollup(run, budget);
+    }
 }
 
 fn print_question_row(r: &EvalResult, inspect: bool) {
     let src = score_label(&r.source_score.matched.len(), r.source_score.total_expected);
     let fact = score_label(&r.fact_score.matched.len(), r.fact_score.total_expected);
-    let vec_tag = if r.vector_eligible { "vec+fts" } else { "fts-only" };
 
-    println!(
-        "  [{id:30}] sources {src:>7}  facts {fact:>7}  {vec_tag:>8}  ({embed_ms}ms embed, {search_ms}ms search)",
-        id = r.question_id,
-        src = src,
-        fact = fact,
-        vec_tag = vec_tag,
-        embed_ms = r.embed_ms,
-        search_ms = r.search_ms,
-    );
+    if let Some(s) = r.synth.as_ref() {
+        // Synth mode: timing column shows total wall + intent. The
+        // chunks-fact-score is shown as a parenthetical delta so a
+        // glance tells you "model surfaced N of M facts the chunks
+        // already contained."
+        let chunks_fact = score_label(
+            &s.chunks_fact_score.matched.len(),
+            s.chunks_fact_score.total_expected,
+        );
+        let intent = s.intent.as_deref().unwrap_or("?");
+        let latency_s = s.total_latency_ms.map(|m| m as f64 / 1000.0).unwrap_or(0.0);
+        let wall_s = s.stream_wall_ms as f64 / 1000.0;
+        println!(
+            "  [{id:30}] sources {src:>7}  facts {fact:>7}  (chunks {chunks_fact:>7})  intent={intent:<16} {latency:>5.1}s rt / {wall:>5.1}s wall  chunks={chunks}",
+            id = r.question_id,
+            src = src,
+            fact = fact,
+            chunks_fact = chunks_fact,
+            intent = intent,
+            latency = latency_s,
+            wall = wall_s,
+            chunks = s.retrieved_chunk_count,
+        );
+    } else {
+        let vec_tag = if r.vector_eligible { "vec+fts" } else { "fts-only" };
+        println!(
+            "  [{id:30}] sources {src:>7}  facts {fact:>7}  {vec_tag:>8}  ({embed_ms}ms embed, {search_ms}ms search)",
+            id = r.question_id,
+            src = src,
+            fact = fact,
+            vec_tag = vec_tag,
+            embed_ms = r.embed_ms,
+            search_ms = r.search_ms,
+        );
+    }
 
     if !inspect {
         return;
@@ -55,18 +91,53 @@ fn print_question_row(r: &EvalResult, inspect: bool) {
     if !r.fact_score.missing.is_empty() {
         println!("       missing facts:   {:?}", r.fact_score.missing);
     }
+    if let Some(s) = r.synth.as_ref() {
+        if !s.source_origins.is_empty() {
+            println!("       origins:         {:?}", s.source_origins);
+        }
+        if !s.chunks_fact_score.missing.is_empty() {
+            println!(
+                "       missing in chunks too: {:?}",
+                s.chunks_fact_score.missing
+            );
+        }
+        // Truncate the answer for the inspect block — full text is in
+        // the JSON output for detailed review.
+        let answer_preview: String = s.answer.chars().take(280).collect();
+        println!(
+            "       answer ({} chars, {} reasoning chars):",
+            s.answer.chars().count(),
+            s.reasoning_chars,
+        );
+        for line in answer_preview.lines().take(6) {
+            println!("         {line}");
+        }
+        if s.answer.chars().count() > 280 {
+            println!("         …");
+        }
+    }
     if r.retrieved.is_empty() {
         println!("       (no chunks retrieved)");
     } else {
         println!("       top retrieved:");
         for (i, c) in r.retrieved.iter().take(5).enumerate() {
             let title = c.title.as_deref().unwrap_or("<untitled>");
-            println!(
-                "         [{rank:>2}] score={score:.3} {title}",
-                rank = i + 1,
-                score = c.score,
-                title = title,
-            );
+            // In synth mode the metadata snippets don't carry a score,
+            // so we hide the `score=` prefix when it's stuck at 0.0.
+            if r.synth.is_some() {
+                println!(
+                    "         [{rank:>2}] {title}",
+                    rank = i + 1,
+                    title = title,
+                );
+            } else {
+                println!(
+                    "         [{rank:>2}] score={score:.3} {title}",
+                    rank = i + 1,
+                    score = c.score,
+                    title = title,
+                );
+            }
         }
     }
     println!();
@@ -101,6 +172,162 @@ fn print_overall(run: &EvalRun) {
     println!("─── overall ───");
     println!("  sources {sm}/{st}  ({:.0}%)", percent(sm, st));
     println!("  facts   {fm}/{ft}  ({:.0}%)", percent(fm, ft));
+
+    // Synth-only rollups: chunks-vs-answer fact gap (= "how often did
+    // retrieval surface the fact but the model failed to use it"), and
+    // total wall time across the run. Only emit when at least one row
+    // came back with synth data.
+    let has_synth = run.results.iter().any(|r| r.synth.is_some());
+    if !has_synth {
+        return;
+    }
+    let (cfm, cft) = run
+        .results
+        .iter()
+        .filter_map(|r| r.synth.as_ref())
+        .fold((0usize, 0usize), |acc, s| {
+            (
+                acc.0 + s.chunks_fact_score.matched.len(),
+                acc.1 + s.chunks_fact_score.total_expected,
+            )
+        });
+    let total_wall_ms: u64 = run
+        .results
+        .iter()
+        .filter_map(|r| r.synth.as_ref())
+        .map(|s| s.stream_wall_ms)
+        .sum();
+    let avg_wall_s = if run.results.is_empty() {
+        0.0
+    } else {
+        (total_wall_ms as f64 / 1000.0) / run.results.len() as f64
+    };
+    println!(
+        "  facts-in-chunks {cfm}/{cft}  ({:.0}%)  ← upper bound from snippet haystack",
+        percent(cfm, cft)
+    );
+    println!(
+        "  wall            {:.1}s total / {:.1}s avg per question",
+        total_wall_ms as f64 / 1000.0,
+        avg_wall_s
+    );
+}
+
+/// Render per-category and overall wall-time percentiles, with
+/// budget-violation counts when the bank declares a `LatencyBudget`.
+/// Wall time is the synth-mode `stream_wall_ms` field — the time
+/// from `handle_message_stream` start to stream-drained end. We
+/// prefer this over `provenance.total_latency_ms` because the
+/// runtime's own clock can be missing on bail-outs (clarification
+/// path), but wall is always present for any row that produced
+/// SOMETHING.
+fn print_latency_rollup(run: &EvalRun, budget: Option<&LatencyBudget>) {
+    println!("─── latency (synth wall_ms) ───");
+
+    // Group wall times by category. Skip rows with no synth payload —
+    // those are retrieval-only rows that snuck into a synth-style run
+    // (shouldn't happen, but guard anyway).
+    let mut by_cat: BTreeMap<&str, Vec<u64>> = BTreeMap::new();
+    let mut all: Vec<u64> = Vec::with_capacity(run.results.len());
+    for r in &run.results {
+        let Some(s) = r.synth.as_ref() else { continue };
+        if s.stream_wall_ms == 0 {
+            // Bail-out path with zero-latency placeholder — exclude
+            // from percentiles so it doesn't pull p50 down.
+            continue;
+        }
+        by_cat
+            .entry(r.category.as_str())
+            .or_default()
+            .push(s.stream_wall_ms);
+        all.push(s.stream_wall_ms);
+    }
+
+    // Header. Width-aligned to category column from upstream rollup
+    // for visual continuity in the terminal.
+    println!(
+        "  {:30}  {:>7}  {:>7}  {:>7}  {:>9}",
+        "category", "p50", "p95", "max", "over-p95"
+    );
+    for (cat, mut vals) in by_cat {
+        vals.sort_unstable();
+        let p50 = percentile(&vals, 0.50);
+        let p95 = percentile(&vals, 0.95);
+        let max = *vals.last().unwrap();
+        let cat_budget = budget.and_then(|b| b.by_category.get(cat));
+        let p95_target = cat_budget
+            .map(|cb| cb.p95_ms)
+            .or_else(|| budget.and_then(|b| b.default_p95_ms));
+        let over = match p95_target {
+            Some(t) => vals.iter().filter(|v| **v > t).count(),
+            None => 0,
+        };
+        let over_label = match p95_target {
+            Some(t) => {
+                if over == 0 {
+                    format!("0 (≤{}ms)", t)
+                } else {
+                    format!("{}/{} (>{}ms)", over, vals.len(), t)
+                }
+            }
+            None => "—".to_string(),
+        };
+        println!(
+            "  {:30}  {:>5.1}s  {:>5.1}s  {:>5.1}s  {:>9}",
+            cat,
+            p50 as f64 / 1000.0,
+            p95 as f64 / 1000.0,
+            max as f64 / 1000.0,
+            over_label,
+        );
+    }
+    if !all.is_empty() {
+        all.sort_unstable();
+        let p50 = percentile(&all, 0.50);
+        let p95 = percentile(&all, 0.95);
+        let max = *all.last().unwrap();
+        let total_target = budget.and_then(|b| b.default_p95_ms);
+        let max_target = budget.and_then(|b| b.max_per_question_ms);
+        let over_max = match max_target {
+            Some(t) => all.iter().filter(|v| **v > t).count(),
+            None => 0,
+        };
+        println!(
+            "  {:30}  {:>5.1}s  {:>5.1}s  {:>5.1}s  {}",
+            "overall",
+            p50 as f64 / 1000.0,
+            p95 as f64 / 1000.0,
+            max as f64 / 1000.0,
+            match (total_target, max_target) {
+                (Some(t), Some(m)) => format!("p95 budget {}ms · {} over hard cap {}ms", t, over_max, m),
+                (Some(t), None) => format!("p95 budget {}ms", t),
+                (None, Some(m)) => format!("{} over hard cap {}ms", over_max, m),
+                (None, None) => "no budget".to_string(),
+            }
+        );
+    }
+}
+
+/// Linear-interpolation percentile on a sorted slice. Returns 0 when
+/// `vals` is empty so the caller can short-circuit cleanly.
+fn percentile(vals: &[u64], p: f64) -> u64 {
+    if vals.is_empty() {
+        return 0;
+    }
+    if vals.len() == 1 {
+        return vals[0];
+    }
+    let n = vals.len() as f64;
+    // p95 on 20 samples: rank = 0.95 * 19 = 18.05, between idx 18 and 19.
+    let rank = p * (n - 1.0);
+    let lo = rank.floor() as usize;
+    let hi = rank.ceil() as usize;
+    if lo == hi {
+        return vals[lo];
+    }
+    let frac = rank - lo as f64;
+    let interp = vals[lo] as f64 + frac * (vals[hi] as f64 - vals[lo] as f64);
+    interp.round() as u64
 }
 
 fn score_label(matched: &usize, total: usize) -> String {
@@ -124,6 +351,87 @@ pub fn print_json(run: &EvalRun) -> Result<(), String> {
 }
 
 pub fn write_json_file(run: &EvalRun, path: &std::path::Path) -> Result<(), String> {
+    let s = serde_json::to_string_pretty(run).map_err(|e| format!("serialize run: {e}"))?;
+    std::fs::write(path, s).map_err(|e| format!("write {}: {e}", path.display()))
+}
+
+/// Routing-only run printer.
+///
+/// One row per question with the classifier's decision, the expected
+/// intent, a ✓/✗ marker, the router's confidence + rationale, and
+/// the per-question latency. Trailing rollup shows accuracy by
+/// category — that's the signal a prompt tweak should move.
+pub fn print_routing(run: &crate::eval_cmd::runner::RoutingRun) {
+    use std::collections::BTreeMap;
+
+    println!(
+        "═══ {} — routing-only ({} questions) ═══\n",
+        run.bank_name,
+        run.results.len()
+    );
+
+    for r in &run.results {
+        let mark = if r.correct { "✓" } else { "✗" };
+        let rationale = r
+            .rationale
+            .as_deref()
+            .map(|s| {
+                let trimmed = s.trim();
+                if trimmed.len() > 90 {
+                    format!("{}…", &trimmed[..90])
+                } else {
+                    trimmed.to_string()
+                }
+            })
+            .unwrap_or_default();
+        println!(
+            "  {mark} [{:30}] expected={:14} actual={:14} conf={:.2} {:>5}ms  {}",
+            r.question_id,
+            r.expected,
+            r.actual_intent,
+            r.confidence,
+            r.latency_ms,
+            rationale
+        );
+    }
+
+    // Per-category rollup.
+    let mut by_cat: BTreeMap<String, (usize, usize, u64)> = BTreeMap::new();
+    let mut total_correct = 0usize;
+    let mut total_latency: u64 = 0;
+    for r in &run.results {
+        let entry = by_cat.entry(r.category.clone()).or_default();
+        entry.0 += if r.correct { 1 } else { 0 };
+        entry.1 += 1;
+        entry.2 += r.latency_ms;
+        if r.correct {
+            total_correct += 1;
+        }
+        total_latency += r.latency_ms;
+    }
+    println!("\n─── per category ───");
+    for (cat, (correct, total, lat_sum)) in &by_cat {
+        let avg_ms = if *total > 0 { lat_sum / (*total as u64) } else { 0 };
+        println!(
+            "  {cat:<26} {correct}/{total} correct  avg {avg_ms}ms"
+        );
+    }
+    let n = run.results.len();
+    let avg_total = if n > 0 { total_latency / n as u64 } else { 0 };
+    let pct = if n > 0 {
+        100.0 * total_correct as f32 / n as f32
+    } else {
+        0.0
+    };
+    println!(
+        "\n─── overall ───\n  {total_correct}/{n} correct ({pct:.0}%)  avg {avg_total}ms per classify"
+    );
+}
+
+pub fn write_routing_json_file(
+    run: &crate::eval_cmd::runner::RoutingRun,
+    path: &std::path::Path,
+) -> Result<(), String> {
     let s = serde_json::to_string_pretty(run).map_err(|e| format!("serialize run: {e}"))?;
     std::fs::write(path, s).map_err(|e| format!("write {}: {e}", path.display()))
 }
@@ -155,6 +463,7 @@ mod tests {
             search_ms: 0,
             corpora_hit: Vec::new(),
             vector_eligible: true,
+            synth: None,
         }
     }
 

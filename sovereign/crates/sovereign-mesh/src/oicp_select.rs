@@ -215,7 +215,12 @@ pub(crate) fn pick_slot_for_oicp(
     provider: &dyn InferenceProvider,
     request: &sovereign_core::types::CompletionRequest,
 ) -> Speed {
-    // No OICP envelope → Slow default (pre-mesh path).
+    // No OICP envelope → Slow default (pre-mesh path). External
+    // OpenAI-compatible clients that don't speak OICP get the
+    // conservative fall-through. Internal callers carry intent via
+    // OICP (`SplitInferenceProvider::build_request` auto-derives a
+    // `latency_class` from the runtime's `Speed`), so this branch is
+    // not on the internal hot path.
     let Some(oicp) = &request.oicp else {
         return Speed::Slow;
     };
@@ -224,8 +229,10 @@ pub(crate) fn pick_slot_for_oicp(
 
 /// v0.3 slot selection: latency class picks the primary slot; hint
 /// acts as a veto when the primary slot's model cannot serve the
-/// requested specialization. Returns `Speed::Slow` as the conservative
-/// default if neither loaded slot satisfies the hint.
+/// requested specialization. Falls back to the latency-class default
+/// when slots have no manifest entries (BYOM case) — trusting the
+/// operator's slot configuration rather than punishing them with a
+/// blanket Slow.
 fn pick_slot_v03(
     provider: &dyn InferenceProvider,
     req: &InferenceRequirements,
@@ -287,12 +294,42 @@ fn pick_slot_v03(
         return fallback;
     }
 
+    // Neither slot has a manifest entry — BYOM case. Trust the
+    // operator's slot configuration: route on latency_class alone,
+    // verifying only that the chosen slot is actually loaded.
+    let fast_loaded = slot_loaded(provider, Speed::Fast);
+    let slow_loaded = slot_loaded(provider, Speed::Slow);
+    let resolved = match (primary, fast_loaded, slow_loaded) {
+        (Speed::Fast, true, _) => Some(Speed::Fast),
+        (Speed::Fast, false, true) => Some(Speed::Slow),
+        (Speed::Slow, _, true) => Some(Speed::Slow),
+        (Speed::Slow, true, false) => Some(Speed::Fast),
+        _ => None,
+    };
+    if let Some(s) = resolved {
+        tracing::info!(
+            hint = %hint,
+            latency_class = ?class,
+            picked = ?s,
+            "pick_slot_for_oicp (v0.3): BYOM slots — routing on latency_class"
+        );
+        return s;
+    }
+
     tracing::warn!(
         hint = %hint,
         latency_class = ?class,
-        "pick_slot_for_oicp (v0.3): neither slot matches hint — serving from Slow"
+        "pick_slot_for_oicp (v0.3): no slot loaded — serving from Slow"
     );
     Speed::Slow
+}
+
+/// True when the provider has a model loaded into `speed`'s slot.
+/// Mirrors `slot_matches_hint`'s id check without the manifest lookup
+/// — distinguishes empty/unknown (no slot) from a loaded BYOM model.
+fn slot_loaded(provider: &dyn InferenceProvider, speed: Speed) -> bool {
+    let id = provider.model_id_for(speed);
+    !id.is_empty() && id != "unknown"
 }
 
 #[cfg(test)]

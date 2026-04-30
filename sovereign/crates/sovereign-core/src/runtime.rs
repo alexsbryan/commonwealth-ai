@@ -20,7 +20,15 @@ use crate::types::*;
 
 /// Maximum characters of knowledge context to inject into prompts.
 /// ~1000 tokens at ~4 chars/token, leaving room for history + system + response.
-const MAX_KNOWLEDGE_CHARS: usize = 4000;
+/// Default prompt budget for retrieved-chunk context. 8000 chars ≈
+/// 2k prompt tokens, which fits 15 chunks at ~530 chars each — the
+/// merged top-K used by both KnowledgeQuery and DeepQuery. The
+/// budget was 4000 when per-corpus K was 5 and merged K was 8;
+/// raising K without raising the budget meant the formatter dropped
+/// half the chunks we'd just gone to the trouble of retrieving. The
+/// expansion path's `EXPANDED_KNOWLEDGE_CHARS` is now coincident
+/// with this default, since both serve roughly 12-15 chunks.
+const MAX_KNOWLEDGE_CHARS: usize = 8000;
 
 /// Truncate per-chunk content to produce a budget for the total knowledge context.
 const MAX_CHUNK_CHARS: usize = 600;
@@ -118,6 +126,20 @@ Example — follow this citation pattern:\n\
 Notice how every claim drawn from the passages earns a [Source: X] \
 tag, while the parametric claim (Girton) carries none. That's the \
 target pattern — apply it to your answer.\n\
+\n\
+PRESERVE SOURCE TERMINOLOGY — when the passages use a specific \
+named concept, technical term, date, place name, or proper noun \
+that bears on what the question asks, reproduce that exact phrase \
+in your answer. Do not paraphrase named concepts into descriptive \
+prose, do not generalise specific people or places into category \
+words (\"the scientist\", \"the king\", \"the institution\"), and \
+do not strip dates or numerical specifics that the passages \
+supplied. Specific terms, dates, and proper nouns are the \
+load-bearing parts of a factual answer — paraphrasing them away \
+makes the answer less correct, not more readable. When the \
+passages provide a domain term that has a smoother colloquial \
+rephrasing, use the domain term anyway: it is what readers will \
+recognise and what makes the claim verifiable.\n\
 \n\
 Anti-fabrication guardrails:\n\
 - NEVER invent an authorship, date, quotation, book title, statistic, or \
@@ -230,58 +252,203 @@ fn truncate_chunk_content(content: &str) -> String {
     truncate_with_ellipsis(content, MAX_CHUNK_CHARS)
 }
 
-/// Rescale each chunk's `score` by the max score observed in its
-/// own corpus. Result: every corpus's top hit lands at 1.0,
-/// lower-ranked hits scale proportionally within their corpus, and
-/// cross-corpus comparison becomes meaningful.
+/// Reweight every chunk's `score` by how much of the query it
+/// actually matches in its title + body, then leave the result on
+/// the same comparable scale across corpora.
 ///
-/// Why this is needed: FTS5 BM25 scores depend on corpus-specific
-/// IDF weights and document-length statistics. On a two-corpus
-/// setup where one is a 1k-row code index and the other is a
-/// 188k-row SEP prose index, a query like
-/// *"is free will compatible with determinism?"* can score a code
-/// test function at 21 (because the test name's underscore-split
-/// tokens are rare enough in the small corpus to fire high IDF)
-/// while SEP's genuine `compatibilism` match scores 19. Naive
-/// `sort_by(score)` then ranks the test function above the
-/// philosophy passage — visible in the UI as a top-listed code
-/// chunk for a pure-philosophy query.
+/// Replaces an earlier `normalise_scores_per_corpus` that divided
+/// each corpus's chunks by *that corpus's* max score. The old form
+/// was fine for raw BM25 (where IDF differences across corpus sizes
+/// can make a small-corpus outlier outscore a real match elsewhere)
+/// but wrong for the RRF-fused scores that corpus-engine's hybrid
+/// search actually returns: RRF rank-1 across corpora ALREADY has
+/// the same score (~0.033 with k=60), so per-corpus normalisation
+/// equalised every corpus's top hit to 1.0 and destroyed
+/// cross-corpus ranking. Observed in practice: a sep-al-farabi
+/// philosophy chunk and a Wikipedia "Operation Barbarossa" chunk
+/// both ended up at score 1.0 for the query "Why did Operation
+/// Barbarossa fail?", and the merge sort flooded the prompt with
+/// off-domain SEP entries.
 ///
-/// Max-based normalisation is the least-surgical fix. Alternatives
-/// considered and rejected:
-///   * **Round-robin by corpus**: loses score fidelity; a corpus
-///     with only mediocre hits gets equal billing to one with
-///     strong hits.
-///   * **Z-score**: needs mean + stddev, which are unreliable on
-///     5-to-8-element distributions.
-///   * **Query/corpus classifier**: the "right" answer, but needs
-///     labelled training data and a judgement model.
+/// The reweight signal here is the same `extract_tokens` filter the
+/// off-target gate uses — substantive ≥ 4-char tokens, stopwords
+/// dropped — applied separately to each chunk's title and body.
+/// Title overlap counts double, since a title-token match is the
+/// strongest evidence that retrieval landed on the right document.
+/// A chunk with neither title nor content overlap with the query
+/// keeps its raw RRF score and naturally sinks; a chunk that
+/// genuinely matches the query rises.
 ///
-/// This is a heuristic: it doesn't *know* philosophy queries should
-/// prefer SEP, but it does prevent one outlier in a small corpus
-/// from monopolising the top-N. In-context, that's enough — the
-/// synthesis model sees evidence from every corpus that had a real
-/// match, weighted by within-corpus rank.
-pub(crate) fn normalise_scores_per_corpus(chunks: &mut [corpus_engine::ScoredChunk]) {
-    use std::collections::HashMap;
-    let mut max_per_corpus: HashMap<String, f32> = HashMap::new();
-    for c in chunks.iter() {
-        let entry = max_per_corpus.entry(c.corpus_id.clone()).or_insert(c.score);
-        if c.score > *entry {
-            *entry = c.score;
-        }
+/// Trade-off: the substring `contains` check on content can fire on
+/// false positives (e.g. "operation" matches "operationalism"). The
+/// title-overlap term uses token equality (no substring) so the
+/// dominant signal stays clean; content_overlap is a weaker
+/// secondary boost that doesn't outweigh title alone.
+pub(crate) fn reweight_by_query_relevance(
+    chunks: &mut [corpus_engine::ScoredChunk],
+    query: &str,
+) {
+    let query_tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+    if query_tokens.is_empty() {
+        // All-stopword or all-short-token query (rare). Nothing to
+        // reweight against — leave RRF order intact and trust the
+        // off-target gate downstream.
+        return;
     }
+    let qn = query_tokens.len() as f32;
     for c in chunks.iter_mut() {
-        if let Some(&max) = max_per_corpus.get(&c.corpus_id) {
-            if max > 0.0 {
-                c.score /= max;
+        let title = c.title.as_deref().unwrap_or("");
+        let title_tokens = extract_tokens(title, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+        let title_overlap = if title_tokens.is_empty() {
+            0.0_f32
+        } else {
+            let hits = query_tokens
+                .iter()
+                .filter(|q| title_tokens.iter().any(|t| t == *q))
+                .count();
+            hits as f32 / qn
+        };
+        let content_lower = c.content.to_lowercase();
+        let content_hits = query_tokens
+            .iter()
+            .filter(|q| content_lower.contains(q.as_str()))
+            .count();
+        let content_overlap = content_hits as f32 / qn;
+        // Title double-weight + content single-weight, additive into a
+        // [0, 3]-bounded multiplier. A chunk with full title overlap
+        // and full content overlap gets a 4x boost; a chunk with
+        // nothing relevant stays at 1x.
+        let relevance = 2.0 * title_overlap + content_overlap;
+        c.score *= 1.0 + relevance;
+    }
+}
+
+/// Drop chunks that have zero query-token overlap in title or content.
+///
+/// Hybrid search returns up to `KQ_PER_CORPUS_LIMIT` chunks per
+/// corpus — at the bottom of that distribution there are chunks that
+/// survived RRF on a tangential FTS match (a single shared token in a
+/// 1024-char chunk) or a vector-similarity match to phrasing rather
+/// than topic. They're not catastrophically wrong but they're not
+/// signal either; they fill prompt budget the model can't use. This
+/// filter removes only the truly-no-overlap cases — chunks where
+/// neither the title nor the content (lowercased) contains any of the
+/// substantive query tokens. Anything with even one overlap is kept;
+/// the reweight + sort + cap downstream handles ranking.
+pub(crate) fn drop_no_overlap_chunks(
+    chunks: Vec<corpus_engine::ScoredChunk>,
+    query: &str,
+) -> Vec<corpus_engine::ScoredChunk> {
+    let query_tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+    if query_tokens.is_empty() {
+        return chunks;
+    }
+    chunks
+        .into_iter()
+        .filter(|c| {
+            let title = c.title.as_deref().unwrap_or("");
+            let title_tokens = extract_tokens(title, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+            let title_hit = query_tokens
+                .iter()
+                .any(|q| title_tokens.iter().any(|t| t == q));
+            if title_hit {
+                return true;
+            }
+            let content_lower = c.content.to_lowercase();
+            query_tokens.iter().any(|q| content_lower.contains(q.as_str()))
+        })
+        .collect()
+}
+
+/// Extract proper-noun entities from the question for entity-boost
+/// retrieval.
+///
+/// Heuristics:
+/// - Skips sentence-initial capitalised words (grammar, not entity).
+/// - Skips a leading-token stop list of wh-words and verbs that often
+///   appear capitalised at start (`How`, `What`, `Compare`, ...).
+/// - Groups consecutive capitalised tokens into multi-word phrases
+///   (`Industrial Revolution`, `Marie Curie`, `Yalta Conference`).
+/// - Strips trailing possessives (`Einstein's` → `Einstein`).
+/// - Dedupes while preserving order.
+///
+/// False positives are cheap (a search for `Allied` returns no
+/// high-relevance hits and the noise floor drops them); false
+/// negatives miss the entity-rich articles that question-named
+/// entities almost always have. Tune toward catching too many.
+pub(crate) fn extract_question_entities(text: &str) -> Vec<String> {
+    const SKIP_LEAD: &[&str] = &[
+        "How", "What", "When", "Where", "Why", "Who", "Which",
+        "Compare", "Contrast", "Describe", "Explain", "Tell", "Give",
+        "List", "Discuss", "Summarize", "Show", "Did", "Does", "Do",
+        "Is", "Are", "Was", "Were",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    let mut current: Vec<String> = Vec::new();
+    let mut at_sentence_start = true;
+    for word in text.split_whitespace() {
+        let trimmed = word.trim_matches(|c: char| {
+            !c.is_alphanumeric() && c != '\'' && c != '-'
+        });
+        let starts_upper = trimmed
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false);
+        let is_skip = SKIP_LEAD.contains(&trimmed);
+        if starts_upper && !at_sentence_start && !is_skip {
+            let clean = trimmed
+                .trim_end_matches("'s")
+                .trim_end_matches('\'')
+                .to_string();
+            if !clean.is_empty() {
+                current.push(clean);
+            }
+        } else {
+            if !current.is_empty() {
+                out.push(current.join(" "));
+                current.clear();
             }
         }
+        let last_char = word.chars().last();
+        at_sentence_start = matches!(last_char, Some('.') | Some('!') | Some('?'));
     }
-    tracing::debug!(
-        corpora = ?max_per_corpus.keys().collect::<Vec<_>>(),
-        "runtime: normalised per-corpus scores before global merge"
-    );
+    if !current.is_empty() {
+        out.push(current.join(" "));
+    }
+    let mut seen = std::collections::HashSet::new();
+    out.into_iter().filter(|s| seen.insert(s.clone())).collect()
+}
+
+/// Cap chunks per `(corpus_id, title)` group to enforce article
+/// diversity in the merged top-K.
+///
+/// Walks chunks in input order — callers pass score-sorted order so
+/// the first `MAX_CHUNKS_PER_ARTICLE_AT_MERGE` per group are the
+/// highest-scoring within their article. Drops the rest. This runs
+/// before `truncate(KQ_MERGED_LIMIT)` so a query that hits one article
+/// densely (Wikipedia's main subject article filling 10/20 hybrid-
+/// search slots, or an SEP entry on the question's exact philosophical
+/// angle) doesn't crowd out the other articles that appeared further
+/// down. The multi-source expander downstream tops top groups back to
+/// `EXPANSION_MULTI_PER_SOURCE` (4) where depth actually matters.
+pub(crate) fn cap_chunks_per_article(
+    chunks: Vec<corpus_engine::ScoredChunk>,
+    max_per_article: usize,
+) -> Vec<corpus_engine::ScoredChunk> {
+    use std::collections::HashMap;
+    let mut counts: HashMap<(String, String), usize> = HashMap::new();
+    let mut out = Vec::with_capacity(chunks.len());
+    for c in chunks {
+        let title = c.title.as_deref().unwrap_or("").to_string();
+        let key = (c.corpus_id.clone(), title);
+        let n = counts.entry(key).or_insert(0);
+        if *n < max_per_article {
+            *n += 1;
+            out.push(c);
+        }
+    }
+    out
 }
 
 // ─── Evidence-shape routing (KnowledgeQuery) ─────────────────────────
@@ -292,9 +459,48 @@ pub(crate) fn normalise_scores_per_corpus(chunks: &mut [corpus_engine::ScoredChu
 // for genuine cross-source synthesis). The decision is logged transparently
 // so thresholds can be tuned against real traffic without guessing.
 
-/// Minimum token length for a query word to count toward title-match.
-/// Short tokens like "the", "and", "can", "you" are ignored regardless.
+/// Minimum token length for a query word to count toward title-match
+/// or content-coverage. Short tokens like "the", "and", "can", "you"
+/// are ignored regardless. Stopwords are dropped on top of this floor
+/// (see `extract_tokens`).
 const EVIDENCE_TITLE_MIN_TOKEN_LEN: usize = 4;
+
+/// Coverage threshold below which retrieval is considered to have no
+/// signal (genuinely dispersed noise). `coverage = fraction of the
+/// query's content tokens that appear in the concatenated top-K chunk
+/// text`. Calibrated from observation: a legitimately on-topic
+/// retrieval against Wikipedia surfaces ≥ 60% of substantive query
+/// tokens in its top chunks; truly off-target retrieval (the
+/// "Commonwealth scheduler" failure mode this gate was designed for)
+/// surfaces < 20%. Sitting the threshold at 0.4 catches the noise case
+/// without nipping at marginal-but-real retrievals.
+const EVIDENCE_MIN_TOKEN_COVERAGE: f32 = 0.4;
+
+/// Per-corpus chunk limit for KnowledgeQuery retrieval. Tuned for
+/// 1M-2M chunk corpora (Wikipedia L5 scale) where the merged top-K
+/// must absorb noise from cross-corpus search without losing the
+/// canonical article. See `prepare_knowledge_query_plan` for the
+/// budget reasoning — Lance vector search is fast at this K, prompt
+/// budget is bounded downstream by `MAX_KNOWLEDGE_CHARS`.
+const KQ_PER_CORPUS_LIMIT: usize = 20;
+
+/// Post-merge global cap. Set high enough to support multi-article
+/// synthesis (5-7 distinct articles each contributing 2-3 chunks)
+/// without truncating the long tail; the prompt formatter trims to
+/// `MAX_KNOWLEDGE_CHARS` regardless, so this is the cap that the
+/// evidence-shape signals are computed against.
+///
+/// Sized for the entity-boost flow: standard hybrid search returns
+/// `KQ_PER_CORPUS_LIMIT` (20) per corpus, entity boost adds up to
+/// `MAX_ENTITY_QUERIES * ENTITY_QUERY_LIMIT` (12) more. At 15 the
+/// entity-boost chunks displaced fact-bearing chunks from the main
+/// retrieval (v11 regression: +Einstein source but -Christianity,
+/// -Mercury perihelion, -mass unemployment because the expanded set
+/// was forced through a too-tight cap). 20 absorbs the entity adds
+/// without crowding the main retrieval; expander still tops top
+/// groups to 4 chunks beyond this. 20 chunks × ~530 chars/chunk +
+/// expander = ~13k chars, comfortably under the 16k prompt budget.
+const KQ_MERGED_LIMIT: usize = 20;
 
 /// `top1_score / median(top_k_scores)` above this ratio marks the
 /// retrieval as *concentrated* — the top hit stands clearly above the
@@ -319,6 +525,7 @@ const EVIDENCE_DECISIVE_TOP_SOURCE_REPEAT: usize = 3;
 /// not enough to invite the model to ramble. Pairs with `think_budget = 0`.
 const FAST_KNOWLEDGE_MAX_TOKENS: u32 = 600;
 
+
 /// When evidence-shape routes FastFocused and a single source dominates,
 /// pull up to this many chunks from that source by title (cohesion, not
 /// query similarity). Calibrated for an Obsidian note or Wikipedia article
@@ -332,12 +539,71 @@ const EXPANSION_MAX_FROM_TOP_SOURCE: usize = 12;
 /// "other sources exist" without diluting the dominant narrative.
 const EXPANSION_GROUNDING_CHUNKS: usize = 2;
 
-/// Context budget when source-expansion has fired. Raw `MAX_KNOWLEDGE_CHARS`
-/// (4000) fits ~8 chunks; expansion needs room for ~12 dominant + 2
-/// grounding, each ~500 chars after truncation. 8000 chars ≈ 2k prompt
-/// tokens, which adds ~2.7s of prompt_eval on Metal — a worthwhile trade
-/// for answers built from the whole source note instead of fragments.
-const EXPANDED_KNOWLEDGE_CHARS: usize = 8000;
+/// Maximum proper-noun entities extracted from the question to drive
+/// entity-boost retrieval. Each entity gets its own focused hybrid
+/// search, results are merged with the main retrieval before reweight.
+/// Capped low because each entity costs an embed + per-corpus search
+/// (~300-500ms together); 4 covers the typical compare/multi-entity
+/// question without blowing the latency budget.
+const MAX_ENTITY_QUERIES: usize = 4;
+
+/// Per-entity chunk limit for entity-boost retrieval. Kept small
+/// because the entity search is meant to surface the canonical article
+/// for the named entity, not its full corpus footprint — depth on
+/// entity articles is the multi-source expander's job.
+const ENTITY_QUERY_LIMIT: usize = 3;
+
+/// Multi-source expansion: how many distinct top-ranked (corpus_id, title)
+/// groups to expand by title when the question is genuinely
+/// multi-article (no single source dominates). Calibrated to the
+/// shape of the bank's `multi_article_synthesis` and `causal_reasoning`
+/// questions — they typically require pulling depth from 3-4 distinct
+/// articles ("Treaty of Versailles" + "Weimar Republic" + "Adolf Hitler"
+/// for the Versailles→WWII question, say). Going higher (5-6) starts
+/// dragging in tangentially-relevant articles whose title shares a
+/// common token but adds noise rather than evidence.
+const EXPANSION_MULTI_SOURCE_GROUPS: usize = 4;
+
+/// Per-source chunk fetch limit under multi-source expansion. Smaller
+/// than `EXPANSION_MAX_FROM_TOP_SOURCE` (12, single-source case)
+/// because here we're fetching from N sources not 1, and the prompt
+/// budget caps total chunks at ~14-20. With 4 sources × 4 chunks = 16
+/// dominant + 2 grounding = 18 chunks — fits the 8000-char budget
+/// after the formatter's per-chunk truncation.
+const EXPANSION_MULTI_PER_SOURCE: usize = 4;
+
+/// Maximum chunks of any one (corpus_id, title) article kept in the
+/// merged top-K before expansion runs.
+///
+/// Hybrid search returns up to `KQ_PER_CORPUS_LIMIT` (20) chunks per
+/// corpus; for queries that hit one article densely (e.g. an entire
+/// SEP entry on the question's exact topic) the same article can fill
+/// 8-12 of those slots and crowd out other articles when we truncate
+/// to `KQ_MERGED_LIMIT`. The cap forces breadth across articles.
+///
+/// 5 is the calibrated value: low enough to break up the worst pile-
+/// ups (single articles holding 7-12 of the merged slots, observed
+/// for SEP entries on philosophy questions and Wikipedia main-subject
+/// articles), high enough not to amputate a genuinely fact-rich
+/// dominant article. Earlier value of 3 regressed `synth_industrial_
+/// revolution_origins` — the Industrial Revolution article had 6
+/// distinct fact-bearing chunks (enclosure, steam engine, colonial),
+/// and capping at 3 dropped half of them.
+const MAX_CHUNKS_PER_ARTICLE_AT_MERGE: usize = 5;
+
+/// Context budget when source-expansion has fired.
+///
+/// Sized for the multi-source expansion path, which is additive on top
+/// of the merged top-K: the initial 15 chunks (RRF-ranked, fills ~8000
+/// chars) come first, then up to 12 fetched-by-title chunks from the
+/// top source documents follow. With ~530 chars per chunk after
+/// per-chunk truncation, 27 chunks ≈ 14300 chars; 16000 leaves
+/// headroom and avoids the v6 failure mode where the formatter ate
+/// the initial top-K with the budget and never reached the appended
+/// depth-fetched chunks. 16000 chars ≈ 4k prompt tokens, well below
+/// gemma-4-E4B's 32k context window after the system prompt and the
+/// model's own output budget.
+const EXPANDED_KNOWLEDGE_CHARS: usize = 16000;
 
 /// Numeric signals computed from the retrieved chunks. Emitted as one
 /// structured `tracing::info!` line per turn so operators can see how
@@ -362,7 +628,21 @@ pub struct EvidenceShape {
     /// times, which is the strongest single-source signal we have.
     top_source_repeat_count: usize,
     distinct_sources: usize,
+    /// True iff *any* chunk in the top-K has a title sharing a content
+    /// token with the query (after stopword + min-length filter).
+    /// Originally top-1 only; broadened so the signal isn't lost when
+    /// cross-corpus pollution edges the canonical article out of slot
+    /// 1. A positive title_match is *positive evidence* that retrieval
+    /// landed on the right document — even if the model has to look
+    /// past the top score to find it.
     title_match: bool,
+    /// Fraction of the query's content tokens (≥ 4 chars, stopwords
+    /// dropped) that appear in the concatenated top-K chunk text.
+    /// 0.0 when the query has no content tokens (all-stopwords query).
+    /// Range [0, 1]. The single most-important signal for the
+    /// off-target gate: retrieval-without-signal scores near 0,
+    /// on-topic retrieval scores 0.6+.
+    query_token_coverage: f32,
     /// `(corpus_id, title)` of the top-scoring chunk — the identity
     /// the source-expansion path uses to pull more chunks from the
     /// dominant document. Empty when chunks is empty.
@@ -390,44 +670,56 @@ pub fn build_test_evidence_shape(
         top_source_repeat_count,
         distinct_sources,
         title_match,
+        // `1.0` matches the test's intent: callers of
+        // `build_test_evidence_shape` are constructing positive-evidence
+        // shapes where token coverage is implicitly assumed full. Tests
+        // that need to probe coverage-driven bail-outs construct chunks
+        // and call `compute_evidence_shape` directly.
+        query_token_coverage: 1.0,
         top_source_key: ("test-corpus".to_string(), "Test Note".to_string()),
         top_source_label: "test-corpus::Test Note".to_string(),
     }
 }
 
 impl EvidenceShape {
-    /// PR5 — retrieval-miss signal.
+    /// Retrieval-miss signal: does the top-K contain *any* content
+    /// related to the user's question?
     ///
-    /// Returns `true` when retrieval happened but the results are
-    /// clearly dispersed noise — chunks spread across many corpora,
-    /// no source concentration, no title match. The classic
-    /// "the corpora didn't have what the user asked about, but the
-    /// hybrid scorer returned something anyway" shape.
+    /// Returns `true` only when retrieval is genuinely dispersed
+    /// noise — chunks came back, but their content has no overlap
+    /// with the query's substantive tokens AND no title in the
+    /// top-K touches the query. That's the actual "the corpora
+    /// didn't have what was asked" shape, and the only case where
+    /// suppressing synthesis prevents fabrication.
     ///
-    /// Triggered in practice when:
-    ///   - User asks about a specific niche topic (e.g. a project
-    ///     name) the installed corpora don't cover.
-    ///   - The query's embeddings vaguely correlate with chunks in
-    ///     unrelated corpora (Machiavelli, political theory, code)
-    ///     and every corpus ships 2 chunks that nominally scored.
+    /// Replaces an earlier shape-only heuristic (`!title_match` on
+    /// the top-1 chunk + `distinct_sources >= 3` + no source repeat)
+    /// that conflated two different shapes:
+    ///   1. true noise — chunks unrelated to the query, but the
+    ///      hybrid scorer returned something anyway,
+    ///   2. legitimate multi-article synthesis — chunks span 3-5
+    ///      relevant Wikipedia articles, no single one dominates.
+    /// The old test fired on both; this one separates them by
+    /// looking at whether the chunks *actually contain* substantive
+    /// tokens from the question.
     ///
-    /// On `true`, the runtime diverts to an Ask-tier clarification
-    /// card rather than committing to synthesis against off-target
-    /// evidence (which is the shape that produces confident
-    /// fabrication).
-    ///
-    /// Deliberately conservative — all three conditions must hold:
-    ///   - retrieval returned at least one chunk (empty is not a
-    ///     "miss", it's a "no data" case handled upstream),
-    ///   - no title of a retrieved chunk matches the query
-    ///     (`title_match == false`),
-    ///   - no source concentration
-    ///     (`top_source_repeat_count < EVIDENCE_MIN_TOP_SOURCE_REPEAT`),
-    ///   - results are fanned out across ≥ 3 distinct corpora.
+    /// Conditions for an off-target verdict:
+    ///   - retrieval returned at least one chunk (empty is "no
+    ///     data", handled by a sibling parametric-knowledge branch),
+    ///   - no chunk title in the top-K shares a content token with
+    ///     the query (`title_match == false`),
+    ///   - the concatenated top-K content covers fewer than
+    ///     `EVIDENCE_MIN_TOKEN_COVERAGE` of the query's content
+    ///     tokens — i.e., the question's substantive words don't
+    ///     appear in what came back,
+    ///   - retrieval fanned out across ≥ 3 distinct sources (a
+    ///     single dominating source is never "dispersed", even when
+    ///     coverage is low — the model can read the document and
+    ///     decide for itself).
     fn is_off_target(&self) -> bool {
         self.count > 0
             && !self.title_match
-            && self.top_source_repeat_count < EVIDENCE_MIN_TOP_SOURCE_REPEAT
+            && self.query_token_coverage < EVIDENCE_MIN_TOKEN_COVERAGE
             && self.distinct_sources >= 3
     }
 }
@@ -515,6 +807,7 @@ fn compute_evidence_shape(chunks: &[corpus_engine::ScoredChunk], query: &str) ->
             top_source_repeat_count: 0,
             distinct_sources: 0,
             title_match: false,
+            query_token_coverage: 0.0,
             top_source_key: (String::new(), String::new()),
             top_source_label: String::new(),
         };
@@ -542,15 +835,48 @@ fn compute_evidence_shape(chunks: &[corpus_engine::ScoredChunk], query: &str) ->
         keys.len()
     };
 
-    let title_match = {
-        let title = chunks[0].title.as_deref().unwrap_or("");
-        if title.is_empty() {
-            false
-        } else {
+    // Title-match across the entire top-K — not just slot 1 — because
+    // cross-corpus retrieval routinely lands the canonical article at
+    // rank 2-3 when an off-domain corpus has a high vector-similarity
+    // false positive on common query terms. A title-token overlap
+    // anywhere in top-K is positive evidence that the right document
+    // is in the prompt.
+    let query_tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+    let title_match = !query_tokens.is_empty()
+        && chunks.iter().any(|c| {
+            let title = c.title.as_deref().unwrap_or("");
+            if title.is_empty() {
+                return false;
+            }
             let title_tokens = extract_tokens(title, EVIDENCE_TITLE_MIN_TOKEN_LEN);
-            let query_tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
-            query_tokens.iter().any(|q| title_tokens.iter().any(|t| t == q))
-        }
+            query_tokens
+                .iter()
+                .any(|q| title_tokens.iter().any(|t| t == q))
+        });
+
+    // Content-token coverage — fraction of the query's substantive
+    // tokens that show up *anywhere* in the concatenated top-K chunk
+    // text. This is the single grounded signal for "did retrieval
+    // return content related to what was asked": a real
+    // retrieval-miss (chunks unrelated to the query) scores near 0,
+    // a legitimate retrieval scores 0.5-1.0 even when no single
+    // article dominates. Replaces the shape-only proxy that was
+    // declaring multi-article syntheses "off-target" simply because
+    // no source repeated.
+    let query_token_coverage = if query_tokens.is_empty() {
+        0.0
+    } else {
+        let haystack: String = chunks
+            .iter()
+            .map(|c| c.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .to_lowercase();
+        let hits = query_tokens
+            .iter()
+            .filter(|q| haystack.contains(q.as_str()))
+            .count();
+        hits as f32 / query_tokens.len() as f32
     };
 
     let top_source_label = format!("{}::{}", top_key.0, top_key.1);
@@ -563,6 +889,7 @@ fn compute_evidence_shape(chunks: &[corpus_engine::ScoredChunk], query: &str) ->
         top_source_repeat_count,
         distinct_sources,
         title_match,
+        query_token_coverage,
         top_source_key: top_key,
         top_source_label,
     }
@@ -1529,6 +1856,174 @@ impl Runtime {
         (merged, from_source, grounding_kept, dropped_noise)
     }
 
+    /// Multi-source cohesion expansion — the synthesis-class sibling of
+    /// [`expand_from_dominant_source`].
+    ///
+    /// **Additive, not replacive.** Earlier iteration of this expander
+    /// replaced the initial top-K with title-fetched chunks from the
+    /// top N source groups, on the theory that depth-from-canonical
+    /// articles beat width-from-mixed-articles. Empirically that lost
+    /// expected-source coverage on bank rows where the canonical
+    /// articles ranked 5th-7th in the merged set: those articles got
+    /// squeezed out of the top-N selection and disappeared from the
+    /// prompt entirely. The bank measures sources-matched against the
+    /// chunk titles in the prompt, so any breadth loss reads as a
+    /// regression.
+    ///
+    /// The additive form: keep every chunk in `initial`, then *top up*
+    /// each of the top `EXPANSION_MULTI_SOURCE_GROUPS` source groups
+    /// to `EXPANSION_MULTI_PER_SOURCE` chunks by fetching the missing
+    /// ones via title. Sources already at-or-above quota stay as-is;
+    /// sources below quota gain depth without anyone losing breadth.
+    /// Total chunk count grows from the initial set; the formatter
+    /// downstream truncates at `EXPANDED_KNOWLEDGE_CHARS`, so
+    /// over-generous fetches don't blow the prompt — they just give
+    /// the formatter more material to choose from.
+    ///
+    /// Returns `(expanded_chunks, sources_expanded, chunks_added)`
+    /// where `sources_expanded` is the number of groups that received
+    /// at least one fetched chunk, and `chunks_added` is the gross
+    /// number of new chunks added (after dedupe).
+    async fn expand_from_top_sources(
+        &self,
+        initial: Vec<corpus_engine::ScoredChunk>,
+    ) -> (Vec<corpus_engine::ScoredChunk>, usize, usize) {
+        use std::collections::{HashMap, HashSet};
+
+        let engine = match &self.corpus_engine {
+            Some(e) => e,
+            None => return (initial, 0, 0),
+        };
+
+        // Tally each (corpus_id, title) group's existing chunk count
+        // and best score within the initial set. The best-score is
+        // what ranks groups for top-N selection; the count is what
+        // determines how many more we still need to fetch to reach
+        // EXPANSION_MULTI_PER_SOURCE.
+        let mut group_score: HashMap<(String, String), f32> = HashMap::new();
+        let mut group_count: HashMap<(String, String), usize> = HashMap::new();
+        let mut existing_contents: HashSet<(String, String)> = HashSet::new();
+        for c in &initial {
+            existing_contents.insert((c.corpus_id.clone(), c.content.clone()));
+            if c.corpus_id == "conversation-history" {
+                continue;
+            }
+            let title = c.title.as_deref().unwrap_or("").trim();
+            if title.is_empty() {
+                continue;
+            }
+            let key = (c.corpus_id.clone(), title.to_string());
+            *group_count.entry(key.clone()).or_insert(0) += 1;
+            let entry = group_score.entry(key).or_insert(c.score);
+            if c.score > *entry {
+                *entry = c.score;
+            }
+        }
+        if group_score.len() < 2 {
+            // Single-source-or-empty — single-source expander handles
+            // the dominant case and we have nothing to multi-fetch.
+            return (initial, 0, 0);
+        }
+
+        // Pick top N groups by best score.
+        let mut groups: Vec<((String, String), f32)> = group_score.into_iter().collect();
+        groups.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        groups.truncate(EXPANSION_MULTI_SOURCE_GROUPS);
+
+        // Resolve corpus paths once.
+        let indexes = match engine.installed_indexes().await {
+            Ok(ix) => ix,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "multi-source expansion skipped — installed_indexes() failed"
+                );
+                return (initial, 0, 0);
+            }
+        };
+        let path_for: HashMap<String, std::path::PathBuf> = indexes
+            .iter()
+            .map(|i| (i.corpus_id.clone(), i.path.clone()))
+            .collect();
+
+        // For each top group, top up to EXPANSION_MULTI_PER_SOURCE.
+        // `fetch_chunks_by_title` returns chunks in natural document
+        // order; we discard ones already present (by content equality
+        // within the same corpus) and append the rest to the merged
+        // result. Errors on a single group skip that group.
+        let t_fetch = std::time::Instant::now();
+        let mut merged = initial; // start from initial — additive!
+        let mut sources_expanded = 0usize;
+        let mut chunks_added = 0usize;
+        for (key, _) in &groups {
+            let already = group_count.get(key).copied().unwrap_or(0);
+            if already >= EXPANSION_MULTI_PER_SOURCE {
+                continue; // group already at quota; don't waste fetch
+            }
+            let need = EXPANSION_MULTI_PER_SOURCE - already;
+            let Some(path) = path_for.get(&key.0) else {
+                tracing::warn!(corpus = %key.0, "multi-source expansion: corpus path not found");
+                continue;
+            };
+            let idx = match engine.open_index(path).await {
+                Ok(i) => i,
+                Err(e) => {
+                    tracing::warn!(corpus = %key.0, error = %e, "multi-source expansion: open_index failed");
+                    continue;
+                }
+            };
+            // Fetch the full quota — the dedupe loop below drops the
+            // ones already present, leaving us with up to `need` net
+            // additions per group.
+            match idx
+                .fetch_chunks_by_title(&key.1, EXPANSION_MULTI_PER_SOURCE)
+                .await
+            {
+                Ok(group_chunks) => {
+                    let mut added_this_group = 0usize;
+                    for c in group_chunks {
+                        if added_this_group >= need {
+                            break;
+                        }
+                        let id = (c.corpus_id.clone(), c.content.clone());
+                        if existing_contents.insert(id) {
+                            merged.push(c);
+                            chunks_added += 1;
+                            added_this_group += 1;
+                        }
+                    }
+                    if added_this_group > 0 {
+                        sources_expanded += 1;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = %key.0,
+                        title = %key.1,
+                        error = %e,
+                        "multi-source expansion: fetch_chunks_by_title failed"
+                    );
+                }
+            }
+        }
+        let fetch_ms = t_fetch.elapsed().as_millis() as u64;
+
+        tracing::info!(
+            sources_expanded,
+            chunks_added,
+            initial_count = merged.len() - chunks_added,
+            final_count = merged.len(),
+            top_groups = ?groups
+                .iter()
+                .map(|(k, _)| format!("{}::{}", k.0, k.1))
+                .collect::<Vec<_>>(),
+            fetch_ms,
+            "multi-source expansion (additive)"
+        );
+
+        (merged, sources_expanded, chunks_added)
+    }
+
     /// Search all knowledge sources, build the prompt with retrieved context,
     /// and assemble provenance metadata. Shared between the streaming and
     /// non-streaming response paths so they cannot diverge.
@@ -1584,11 +2079,20 @@ impl Runtime {
             // budget per peer), the local call is LanceDB disk I/O,
             // so there's no point serialising them. `tokio::join!`
             // waits for both.
+            // K calibration mirrors KnowledgeQuery (`KQ_PER_CORPUS_LIMIT`,
+            // `KQ_MERGED_LIMIT`). DeepQuery is the path multi-article
+            // synthesis questions take ("How did the Treaty of Versailles
+            // contribute to WWII?", "How did Stalin's and Churchill's
+            // styles differ?"). At K=5/corpus → top-8, the merged set
+            // contained only 1-2 chunks per source article — not enough
+            // depth for the model to write a sourced multi-paragraph
+            // answer. At K=20/corpus → top-15, the merge holds 4-5
+            // articles each with 2-3 chunks: real synthesis material.
             let local_corpora_fut =
-                self.search_corpus_indexes(&corpus_embedding, message, 5, &label);
+                self.search_corpus_indexes(&corpus_embedding, message, KQ_PER_CORPUS_LIMIT, &label);
             let mesh_fut = async {
                 match &self.mesh_knowledge {
-                    Some(m) => m.search(message, &corpus_embedding, 8).await,
+                    Some(m) => m.search(message, &corpus_embedding, KQ_PER_CORPUS_LIMIT).await,
                     None => Vec::new(),
                 }
             };
@@ -1667,14 +2171,69 @@ impl Runtime {
             }
         }
 
-        // Put chunks on a comparable score scale before the global
-        // merge. See `normalise_scores_per_corpus` for the full
-        // rationale — short version: raw BM25 scores aren't
-        // comparable across corpora, and on a philosophy query
-        // that landed on both a large SEP prose corpus and a small
-        // code corpus, the code corpus can produce an outlier
-        // score that drowns out the real semantic matches.
-        normalise_scores_per_corpus(&mut all_chunks);
+        // Entity boost — extract proper-noun entities from the
+        // question and run a focused hybrid search per entity. The
+        // bag-of-words query embedding tends to land on topic-central
+        // articles (e.g. "How do Einstein's and Newton's conceptions
+        // of gravity differ?" surfaces "Introduction to general
+        // relativity" but not the Albert Einstein and Isaac Newton
+        // articles — those are more biographical than thematic for
+        // the embedded query). A per-entity search gives each named
+        // entity its own retrieval pass; these articles are almost
+        // always fact-rich for the question.
+        let entities = extract_question_entities(message);
+        if !entities.is_empty() {
+            let initial_count = all_chunks.len();
+            let mut entity_added = 0usize;
+            for entity in entities.iter().take(MAX_ENTITY_QUERIES) {
+                let entity_emb = self
+                    .inference
+                    .embed_query(entity)
+                    .await
+                    .unwrap_or_default();
+                let entity_chunks = self
+                    .search_corpus_indexes(
+                        &entity_emb,
+                        entity,
+                        ENTITY_QUERY_LIMIT,
+                        "EntityBoost",
+                    )
+                    .await;
+                entity_added += entity_chunks.len();
+                all_chunks.extend(entity_chunks);
+            }
+            tracing::info!(
+                entities = ?entities.iter().take(MAX_ENTITY_QUERIES).collect::<Vec<_>>(),
+                initial_count,
+                entity_added,
+                "DeepQuery: entity-boost retrieval"
+            );
+        }
+
+        // Noise floor — drop chunks with zero query-token overlap in
+        // both title and content. These survived hybrid RRF on a weak
+        // tangential signal (one shared FTS token in a 1024-char
+        // chunk, or vector similarity to phrasing rather than topic);
+        // they fill prompt budget the model can't act on.
+        let pre_floor = all_chunks.len();
+        all_chunks = drop_no_overlap_chunks(all_chunks, message);
+        if all_chunks.len() < pre_floor {
+            tracing::info!(
+                pre_floor,
+                post_floor = all_chunks.len(),
+                "DeepQuery: noise floor dropped no-overlap chunks"
+            );
+        }
+
+        // Reweight chunks by query relevance before the global merge.
+        // RRF rank-1 chunks across corpora come back at the same raw
+        // score (~0.033 with k=60), so without a relevance signal an
+        // off-domain corpus's barely-related top hit ties with the
+        // canonical Wikipedia article on a Wikipedia-domain question.
+        // Reweighting by title- + content-token overlap with the
+        // query lets in-domain chunks rise; off-domain chunks stay at
+        // their RRF baseline and naturally sink in the truncation.
+        reweight_by_query_relevance(&mut all_chunks, message);
 
         // Dedupe by (corpus_id, content) before truncating so a
         // corpus that appears both locally and via mesh doesn't
@@ -1689,7 +2248,19 @@ impl Runtime {
                 std::collections::HashSet::new();
             all_chunks.retain(|c| seen.insert((c.corpus_id.clone(), c.content.clone())));
         }
-        all_chunks.truncate(8);
+        all_chunks = cap_chunks_per_article(all_chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
+        all_chunks.truncate(KQ_MERGED_LIMIT);
+
+        // Multi-source cohesion expansion. DeepQuery is the path
+        // multi-article synthesis questions take, so this is exactly
+        // where pulling depth from the top-N source documents pays
+        // off (see `expand_from_top_sources` for the rationale).
+        // Single-source dominance is rare here — DeepQuery questions
+        // are by-classifier "REASONING" — but the expander returns
+        // initial unchanged when fewer than 2 distinct titled sources
+        // appear, so it's safe to call unconditionally.
+        let (all_chunks, _sources_expanded, _total_fetched) =
+            self.expand_from_top_sources(all_chunks).await;
 
         // Count mesh hits that survived dedupe so the search_method
         // label reflects what's actually in the prompt.
@@ -1753,9 +2324,19 @@ impl Runtime {
             .collect();
 
         // 5. Build prompt with knowledge context.
+        //
+        // Use the EXPANDED budget here because `prepare_knowledge_context`
+        // is the DeepQuery path and the multi-source expander above
+        // may have appended depth-fetched chunks beyond the initial
+        // top-K. The formatter takes chunks in order until the budget
+        // is hit; if we kept `MAX_KNOWLEDGE_CHARS` (8000) the appended
+        // depth chunks would never reach the prompt — which is the
+        // exact failure mode v6 surfaced empirically (chunks_fact_score
+        // climbed but answer-fact-score didn't, because the model
+        // never saw the depth chunks).
         let history = format_history_as_prompt(context, 10);
         let prompt = if !all_chunks.is_empty() {
-            let doc_context = format_scored_chunks(&all_chunks, MAX_KNOWLEDGE_CHARS);
+            let doc_context = format_scored_chunks(&all_chunks, EXPANDED_KNOWLEDGE_CHARS);
             if history.is_empty() {
                 format!(
                     "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
@@ -2547,8 +3128,13 @@ impl Runtime {
             if plan.shape.is_off_target() {
                 tracing::info!(
                     session_id = %_session_id,
-                    distinct_sources = plan.shape.distinct_sources,
                     retrieval_count = plan.shape.count,
+                    distinct_sources = plan.shape.distinct_sources,
+                    title_match = plan.shape.title_match,
+                    top_source_repeat = plan.shape.top_source_repeat_count,
+                    top_source = %plan.shape.top_source_label,
+                    top1_score = plan.shape.top1_score,
+                    median_ratio = plan.shape.median_ratio,
                     "routing:retrieval_miss — diverting to Ask clarification"
                 );
                 return self
@@ -3754,13 +4340,74 @@ impl Runtime {
         let embedding = self.inference.embed_query(message).await.unwrap_or_default();
 
         // 2. Search corpus-engine LanceDB indexes.
+        //
+        // Per-corpus limit `KQ_PER_CORPUS_LIMIT = 20`: at the previous
+        // value of 5, a single off-domain corpus with one false-positive
+        // vector match could edge the canonical article out of the
+        // merged top-K. With 20 we get real headroom — the canonical
+        // article almost always survives merge even when an unrelated
+        // corpus also contributes hits. Lance vector search is sub-
+        // 200ms at this K on a 1.85M-chunk index; the prompt budget
+        // (`MAX_KNOWLEDGE_CHARS`) downstream still bounds what the
+        // model sees, so the larger merge set only buys us a sharper
+        // evidence-shape signal, not a longer prompt.
         let mut chunks = self
-            .search_corpus_indexes(&embedding, message, 5, "KnowledgeQuery")
+            .search_corpus_indexes(&embedding, message, KQ_PER_CORPUS_LIMIT, "KnowledgeQuery")
             .await;
 
-        // 3. Sort by score, keep top 8.
+        // 2b. Entity boost — fetch articles named in the question via
+        //     focused per-entity searches. See `prepare_knowledge_context`
+        //     for the rationale (the embedded query lands on topic-
+        //     central articles, not entity-biographical ones).
+        let entities = extract_question_entities(message);
+        if !entities.is_empty() {
+            let initial_count = chunks.len();
+            let mut entity_added = 0usize;
+            for entity in entities.iter().take(MAX_ENTITY_QUERIES) {
+                let entity_emb = self
+                    .inference
+                    .embed_query(entity)
+                    .await
+                    .unwrap_or_default();
+                let entity_chunks = self
+                    .search_corpus_indexes(
+                        &entity_emb,
+                        entity,
+                        ENTITY_QUERY_LIMIT,
+                        "EntityBoost",
+                    )
+                    .await;
+                entity_added += entity_chunks.len();
+                chunks.extend(entity_chunks);
+            }
+            tracing::info!(
+                entities = ?entities.iter().take(MAX_ENTITY_QUERIES).collect::<Vec<_>>(),
+                initial_count,
+                entity_added,
+                "KnowledgeQuery: entity-boost retrieval"
+            );
+        }
+
+        // 2c. Noise floor — drop chunks with zero query-token overlap
+        //     in title or content. These are pure-RRF noise that fills
+        //     prompt budget without contributing signal.
+        let pre_floor = chunks.len();
+        let mut chunks = drop_no_overlap_chunks(chunks, message);
+        if chunks.len() < pre_floor {
+            tracing::info!(
+                pre_floor,
+                post_floor = chunks.len(),
+                "KnowledgeQuery: noise floor dropped no-overlap chunks"
+            );
+        }
+
+        // 3. Reweight by query relevance (mirrors prepare_knowledge_context),
+        //    then sort by score, cap chunks-per-article for breadth, and
+        //    keep top `KQ_MERGED_LIMIT`.
+        reweight_by_query_relevance(&mut chunks, message);
         chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
-        chunks.truncate(8);
+        let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
+        chunks.truncate(KQ_MERGED_LIMIT);
 
         let search_ms = t_search.elapsed().as_millis() as u64;
         tracing::info!(
@@ -3831,15 +4478,44 @@ impl Runtime {
             "KnowledgeQuery: evidence-shape routing decision"
         );
 
-        // 4c. Source-cohesion expansion (FastFocused + >=2 repeats).
-        let expansion_fired = matches!(route, SynthesisRoute::FastFocused)
+        // 4c. Cohesion expansion. Two flavors based on retrieval shape:
+        //
+        //   - **Single-source dominance** (FastFocused route + ≥2
+        //     top-source repeats): the question landed clearly on one
+        //     document. Pull all chunks from that document by title;
+        //     keep 2 grounding chunks for breadth. (`expand_from_dominant_source`)
+        //   - **Multi-article synthesis** (PrimarySynthesis route, ≥2
+        //     distinct titled sources): the question requires combining
+        //     evidence from several articles. Pull
+        //     `EXPANSION_MULTI_PER_SOURCE` chunks from each of the top
+        //     `EXPANSION_MULTI_SOURCE_GROUPS` source documents. This
+        //     directly addresses the chunks_fact_score gap where
+        //     retrieval lands on the right articles but only contributes
+        //     1-2 chunks per source — synthesis ends up sparse.
+        //     (`expand_from_top_sources`)
+        //
+        // Either expansion path uses the `EXPANDED_KNOWLEDGE_CHARS`
+        // budget; the formatter trims to fit if the expanded set is
+        // larger than 8000 chars.
+        let single_source_expansion = matches!(route, SynthesisRoute::FastFocused)
             && shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT;
-        let (chunks, knowledge_char_budget) = if expansion_fired {
+        let (chunks, knowledge_char_budget, expansion_fired) = if single_source_expansion {
             let (expanded, _from_source, _grounding, _dropped) =
                 self.expand_from_dominant_source(chunks, &shape).await;
-            (expanded, EXPANDED_KNOWLEDGE_CHARS)
+            (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
+        } else if matches!(route, SynthesisRoute::PrimarySynthesis) && shape.distinct_sources >= 2 {
+            let (expanded, sources_expanded, _total) =
+                self.expand_from_top_sources(chunks).await;
+            // Only count as "fired" when the expander actually pulled
+            // from ≥ 2 sources — otherwise we're back to the initial
+            // chunk set and the prompt budget should reflect that.
+            if sources_expanded >= 2 {
+                (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
+            } else {
+                (expanded, MAX_KNOWLEDGE_CHARS, false)
+            }
         } else {
-            (chunks, MAX_KNOWLEDGE_CHARS)
+            (chunks, MAX_KNOWLEDGE_CHARS, false)
         };
 
         // 4d. Build prompt. Retrieved content first, question last —
@@ -4620,15 +5296,15 @@ impl Runtime {
 }
 
 #[cfg(test)]
-mod score_normalisation_tests {
-    use super::normalise_scores_per_corpus;
+mod query_relevance_tests {
+    use super::reweight_by_query_relevance;
     use corpus_engine::ScoredChunk;
     use std::collections::HashMap;
 
-    fn chunk(corpus: &str, content: &str, score: f32) -> ScoredChunk {
+    fn chunk(corpus: &str, title: &str, content: &str, score: f32) -> ScoredChunk {
         ScoredChunk {
             content: content.into(),
-            title: Some(content.into()),
+            title: Some(title.into()),
             url: None,
             corpus_id: corpus.into(),
             score,
@@ -4636,102 +5312,99 @@ mod score_normalisation_tests {
         }
     }
 
+    /// The Operation Barbarossa failure mode this reweight was
+    /// designed for: an off-domain corpus (sep-al-farabi, philosophy
+    /// entries) returns RRF rank-1 hits at the same numeric score
+    /// as Wikipedia's canonical article. Pre-reweight, the merge
+    /// sort treats them as ties and floods the top-K with off-topic
+    /// chunks. Post-reweight, the Wikipedia chunk's title- and
+    /// content-overlap with the query boost it above the SEP chunk.
     #[test]
-    fn sep_beats_code_after_normalisation() {
-        // Reconstruct the observed scenario from the 08:40 demo
-        // logs: a BM25 outlier from a small code corpus (score
-        // 21.37) was out-ranking SEP's genuine top match (19.25)
-        // in the merged list even though SEP had 8 consistently-
-        // strong hits and code had 1 outlier + a long tail.
-        //
-        // After per-corpus max normalisation the code outlier
-        // reduces to 1.0, SEP's top also reduces to 1.0, but
-        // SEP's *second* chunk at 0.954 outranks code's *second*
-        // chunk at 0.700 — so top-8 ends up dominated by SEP.
+    fn wikipedia_chunk_outranks_off_domain_after_reweight() {
         let mut chunks = vec![
-            // SEP: 8 strong, clustered hits (realistic shape).
-            chunk("sep", "compatibilism", 19.25),
-            chunk("sep", "incompatibilism-arguments-1", 18.37),
-            chunk("sep", "locke-freedom", 18.16),
-            chunk("sep", "providence-divine", 16.95),
-            chunk("sep", "incompatibilism-arguments-2", 16.83),
-            chunk("sep", "incompatibilism-arguments-3", 16.57),
-            chunk("sep", "frankfurt-aim", 15.65),
-            chunk("sep", "moral-responsibility", 15.48),
-            // corpus-engine: 1 spurious outlier + long tail.
-            chunk("corpus-engine", "extract_questions_prefers_canonical", 21.37),
-            chunk("corpus-engine", "test_skeleton", 14.96),
-            chunk("corpus-engine", "mock_inference_fn", 14.80),
-            // sovereign: a code corpus with middling matches.
-            chunk("sovereign", "needs_deep_reasoning", 16.44),
-            chunk("sovereign", "LlmRouter", 12.91),
+            // sep-al-farabi: an unrelated philosophy entry whose
+            // RRF rank-1 happens to match the numeric score of
+            // Wikipedia's hit. Title doesn't share tokens with the
+            // query; content has at most a marginal substring.
+            chunk("sep", "operationalism", "operationalism is a philosophy", 0.0328),
+            // Wikipedia: the canonical article. Title shares two
+            // tokens with the query, content carries every
+            // substantive token.
+            chunk(
+                "wikipedia",
+                "Operation Barbarossa",
+                "Operation Barbarossa was the failed German invasion of the Soviet Union in 1941.",
+                0.0328,
+            ),
         ];
-
-        normalise_scores_per_corpus(&mut chunks);
-        chunks.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        let top8: Vec<&str> = chunks
-            .iter()
-            .take(8)
-            .map(|c| c.corpus_id.as_str())
-            .collect();
-
-        // The code outlier still appears (score 1.0, tied for
-        // top) — that's correct: it IS its corpus's top hit, so
-        // the merge can't hide it without losing evidence from
-        // that corpus entirely. But SEP should contribute at
-        // least 5 of the top 8, because its within-corpus ranks
-        // 2..=6 all score above code's rank 2 after rescaling.
-        let sep_count = top8.iter().filter(|&&c| c == "sep").count();
-        assert!(
-            sep_count >= 5,
-            "expected SEP to dominate top-8 after normalisation; \
-             got corpus list {top8:?}"
+        reweight_by_query_relevance(&mut chunks, "Why did Operation Barbarossa fail?");
+        chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        assert_eq!(
+            chunks[0].title.as_deref(),
+            Some("Operation Barbarossa"),
+            "Wikipedia's canonical article must outrank the off-domain corpus's tied RRF hit \
+             after reweight; got order {:?}",
+            chunks.iter().map(|c| c.title.clone()).collect::<Vec<_>>()
         );
     }
 
+    /// Reweight must preserve relative order within a single corpus
+    /// when chunks have the same overlap profile — multiplicative
+    /// boosts that depend only on title/content tokens shouldn't
+    /// shuffle hits whose only difference is the underlying RRF
+    /// score.
     #[test]
-    fn preserves_within_corpus_ranking() {
-        // Within a single corpus, the rescaling must not reorder
-        // hits — just compress the scale to [0, 1].
+    fn within_corpus_ranking_is_stable_under_reweight() {
         let mut chunks = vec![
-            chunk("one", "best", 20.0),
-            chunk("one", "mid", 10.0),
-            chunk("one", "worst", 5.0),
+            chunk("wiki", "Yalta Conference", "Yalta Conference details", 0.030),
+            chunk("wiki", "Yalta Conference", "Yalta Conference more", 0.020),
+            chunk("wiki", "Yalta Conference", "Yalta Conference still", 0.010),
         ];
-        normalise_scores_per_corpus(&mut chunks);
-        assert_eq!(chunks[0].content, "best");
-        assert!((chunks[0].score - 1.0).abs() < 1e-6);
-        assert!((chunks[1].score - 0.5).abs() < 1e-6);
-        assert!((chunks[2].score - 0.25).abs() < 1e-6);
+        reweight_by_query_relevance(&mut chunks, "Yalta Conference leaders");
+        // Each chunk has identical title and content overlap, so the
+        // boost factor is constant; sort order should match
+        // descending raw score.
+        assert!(chunks[0].score > chunks[1].score);
+        assert!(chunks[1].score > chunks[2].score);
     }
 
+    /// All-stopword query (or an all-short-token query) should be a
+    /// no-op — there's nothing meaningful to reweight against, and
+    /// the off-target gate downstream has its own handling.
+    #[test]
+    fn no_query_tokens_is_a_noop() {
+        let mut chunks = vec![chunk("wiki", "Some Title", "Some Content", 0.020)];
+        let before = chunks[0].score;
+        reweight_by_query_relevance(&mut chunks, "the and you");
+        assert_eq!(chunks[0].score, before);
+    }
+
+    /// Empty input must not panic.
     #[test]
     fn empty_input_is_a_noop() {
-        // Guard against divide-by-zero or panic on empty slice —
-        // `search_corpus_indexes` can legitimately return zero
-        // hits when the query embedding is empty AND FTS returns
-        // nothing.
         let mut chunks: Vec<ScoredChunk> = Vec::new();
-        normalise_scores_per_corpus(&mut chunks);
+        reweight_by_query_relevance(&mut chunks, "any query");
         assert!(chunks.is_empty());
     }
 
+    /// A chunk with zero overlap (no title-token match, no content-
+    /// token substring) keeps its raw RRF score. This is the
+    /// signal: chunks that don't actually answer the query don't
+    /// get artificially boosted just because their corpus had a hit.
     #[test]
-    fn single_corpus_zero_max_stays_zero() {
-        // If every hit in a corpus scored 0.0 (shouldn't happen
-        // in practice — ScoredChunk implies at least a bare
-        // match), the rescaler must not divide by zero.
-        let mut chunks = vec![
-            chunk("empty", "a", 0.0),
-            chunk("empty", "b", 0.0),
-        ];
-        normalise_scores_per_corpus(&mut chunks);
-        assert_eq!(chunks[0].score, 0.0);
-        assert_eq!(chunks[1].score, 0.0);
+    fn no_overlap_keeps_raw_score() {
+        let mut chunks = vec![chunk(
+            "off-domain",
+            "Walter Chatton",
+            "medieval scholastic philosopher",
+            0.0167,
+        )];
+        reweight_by_query_relevance(&mut chunks, "How did the Battle of Midway end?");
+        assert!(
+            (chunks[0].score - 0.0167).abs() < 1e-6,
+            "off-domain chunk with no overlap should keep its baseline RRF score; got {}",
+            chunks[0].score
+        );
     }
 }
 

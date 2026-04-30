@@ -32,6 +32,44 @@ pub struct BankMeta {
     pub corpus: String,
     #[serde(default)]
     pub description: String,
+    /// Latency budget for synth-mode wall time, by category. Optional —
+    /// banks without a budget skip the over-budget surfacing in the
+    /// rollup. Categories not listed here have no budget. Calibrate
+    /// once per hardware/model pair: a target that's tight on a Strix
+    /// Halo Vulkan + 4B-Q4 setup is loose on a server-class GPU + 27B,
+    /// and meaningful comparisons require holding the bench setup
+    /// fixed. See `wikipedia_questions.toml` for a reference shape.
+    #[serde(default)]
+    pub latency_budget: Option<LatencyBudget>,
+}
+
+/// Wall-time targets in milliseconds. Values are *budgets*, not hard
+/// failures: a row that exceeds is flagged in the report and counted
+/// against the over-budget percentage, but the run still completes
+/// and per-question scoring is unchanged. Budgets serve regression
+/// detection and capacity-planning, not pass/fail.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LatencyBudget {
+    /// Per-category overrides keyed by category string (matches
+    /// `Question.category`). Categories absent from the map fall back
+    /// to `default_p95_ms` (or no budget if that's also unset).
+    #[serde(default)]
+    pub by_category: std::collections::BTreeMap<String, CategoryBudget>,
+    /// Default p95 budget applied to any category not in
+    /// `by_category`. `None` means "no default" — only categories
+    /// with explicit budgets get evaluated.
+    #[serde(default)]
+    pub default_p95_ms: Option<u64>,
+    /// Hard wall-time ceiling. Any individual question over this
+    /// reads as "stuck" regardless of category. `None` disables.
+    #[serde(default)]
+    pub max_per_question_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CategoryBudget {
+    pub p50_ms: u64,
+    pub p95_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +83,63 @@ pub struct Question {
     pub expected_sources: Vec<String>,
     #[serde(default)]
     pub notes: String,
+    /// Routing-eval target. Optional: when present, `--routing-only`
+    /// scores the classifier against this. When absent, derived from
+    /// `category` via `Question::default_expected_intent`. Wire form
+    /// is the lowercase Intent variant: `simple_query`,
+    /// `knowledge_query`, `deep_query`, `complex_task`, etc.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_intent: Option<String>,
+}
+
+impl Question {
+    /// Map bank category → expected intent for routing-eval scoring
+    /// when no per-question `expected_intent` override is set.
+    ///
+    /// The mapping reflects the synthesis pipeline's design: short
+    /// factual lookups belong on `KnowledgeQuery` (FastFocused or
+    /// PrimarySynthesis depending on evidence shape), while
+    /// multi-article / causal / comparative / contested questions
+    /// require the `DeepQuery` reasoning path with its larger merge
+    /// limit and multi-source expansion. `boundary_coverage` is left
+    /// permissive — these probe the corpus-vs-training boundary and
+    /// either route can be defensible — so it accepts both.
+    pub fn default_expected_intent(&self) -> ExpectedIntent {
+        match self.category.as_str() {
+            "factual_recall" => ExpectedIntent::Exact("knowledge_query"),
+            "multi_article_synthesis"
+            | "causal_reasoning"
+            | "comparative"
+            | "contested" => ExpectedIntent::Exact("deep_query"),
+            "boundary_coverage" => {
+                ExpectedIntent::AnyOf(&["knowledge_query", "deep_query"])
+            }
+            _ => ExpectedIntent::AnyOf(&["knowledge_query", "deep_query"]),
+        }
+    }
+}
+
+/// Routing-eval acceptance shape: a single intent or any of a set.
+#[derive(Debug, Clone)]
+pub enum ExpectedIntent {
+    Exact(&'static str),
+    AnyOf(&'static [&'static str]),
+}
+
+impl ExpectedIntent {
+    pub fn matches(&self, actual: &str) -> bool {
+        match self {
+            ExpectedIntent::Exact(s) => *s == actual,
+            ExpectedIntent::AnyOf(set) => set.contains(&actual),
+        }
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            ExpectedIntent::Exact(s) => (*s).into(),
+            ExpectedIntent::AnyOf(set) => set.join("|"),
+        }
+    }
 }
 
 pub fn load_bank(path: &Path) -> Result<EvalBank, String> {
