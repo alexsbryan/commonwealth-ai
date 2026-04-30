@@ -329,25 +329,34 @@ LOOKUP
   over SIMPLE for atomic factual questions involving specific details.
   When in doubt between SIMPLE and LOOKUP: choose LOOKUP.{lookup_note}
   NOT LOOKUP: questions that ask for *causes*, *effects*, *reasons*,
-  *contributions across multiple actors*, *how X drew on Y*, *why X
-  happened*, or *the differences between X and Y*. Those aggregate
-  across sources and are REASONING, even when they sound like they
-  want specific historical facts.
+  *contributions across multiple actors*, *how X drew on Y*, or *why
+  X happened*. Those aggregate across sources and are REASONING. For
+  *the differences between X and Y* / *compare X and Y*, use COMPARISON.
   Examples: "Who was in the Arsenal Invincibles squad?",
             "What year was the Eiffel Tower built?",
             "How many episodes are in Breaking Bad season 3?"
 
+COMPARISON
+  Two or more named entities (people, theories, technologies, places)
+  being contrasted. The answer has a bounded structure: a handful of
+  axes on which X and Y differ. Not an open-ended essay — fits in a
+  short paragraph or three bullets.
+  Signals: "difference between X and Y", "compare X and Y",
+  "how does X differ from Y", "X vs Y".
+  Examples: "What's the difference between TCP and UDP?",
+            "How does a turbine engine differ from a piston engine?",
+            "Compare cuneiform and hieroglyphic writing systems."
+
 REASONING
-  Analysis, synthesis, comparison, creative work, or multi-step
+  Open-ended analysis, synthesis, creative work, or multi-step
   thinking where no single lookup would answer it. A REASONING
-  answer aggregates evidence across multiple facts/sources, even
-  when each individual fact is itself looked up.
+  answer aggregates evidence across multiple facts/sources without
+  the bounded contrast shape of COMPARISON.
   Includes: causes/effects/reasons questions, multi-aspect "how did
-  X relate to Y" questions, comparisons of two or more named things,
-  anything that asks for the structure or logic behind a sequence
-  of facts rather than a single fact.
-  Examples: "Compare Wenger's 4-4-2 to his 4-2-3-1",
-            "Write a short poem about autumn",
+  X relate to Y" / "how did X draw on Y" questions, multi-actor
+  attributions, anything that asks for the structure or logic behind
+  a sequence of facts rather than a single fact.
+  Examples: "Write a short poem about autumn",
             "Explain why inflation causes interest rate rises",
             "What were the main causes of the 2008 financial crisis?",
             "How did Roman trade networks shape early Christian spread?"
@@ -371,7 +380,7 @@ Conversation context: {context_str}
 User message: "{message}"{corrections_note}{skill_hints}
 
 Respond with JSON only:
-{{"intent": "SIMPLE|LOOKUP|REASONING|ACTION", "confidence": 0.0, "rationale": "one short clause"}}"#,
+{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION", "confidence": 0.0, "rationale": "one short clause"}}"#,
         )
     }
 
@@ -561,6 +570,63 @@ Reply with ONLY the letter: A, B, or C"#
         let has_search_request = search_keywords.iter().any(|kw| lower.contains(kw));
 
         has_recent_year || has_temporal || has_search_request
+    }
+
+    /// Heuristic check: is this message a two-entity comparison shape
+    /// ("difference between X and Y", "X vs Y", "how do X and Y differ",
+    /// "compare X and Y")? High-precision — requires both a comparison
+    /// verb/preposition AND a conjunction/separator AND no in-prompt-content
+    /// markers ("this", "these", "the passage", etc.) so it doesn't
+    /// poach `looks_like_content_processing`'s territory.
+    fn looks_like_comparison(message: &str) -> bool {
+        let lower = message.to_lowercase();
+
+        // In-prompt-content markers — if present, this is "compare these
+        // sections" not "compare X and Y", so let content_processing handle.
+        const IN_PROMPT_MARKERS: &[&str] = &[
+            "this passage", "this section", "this chapter", "this paragraph",
+            "this code", "this snippet", "this text", "this excerpt",
+            "this document", "this article", "this paper",
+            "these passages", "these sections", "these paragraphs",
+            "these snippets", "these excerpts", "the passage above",
+            "the section above", "the snippet above", "the excerpt above",
+            "above and below", "the above", "the below",
+        ];
+        if IN_PROMPT_MARKERS.iter().any(|m| lower.contains(m)) {
+            return false;
+        }
+
+        // Unambiguous comparison signals — any one of these is sufficient.
+        const STRONG_SIGNALS: &[&str] = &[
+            "difference between", "differences between",
+            "differ from", "differs from", "differing from",
+            " vs ", " vs.", " versus ",
+        ];
+        if STRONG_SIGNALS.iter().any(|m| lower.contains(m)) {
+            return true;
+        }
+
+        // "differ" anywhere in the message is a strong contrast signal as
+        // long as it's not part of "different" (a softer adjective).
+        // We check for whitespace/punctuation boundaries on both sides.
+        if lower.split(|c: char| !c.is_alphabetic()).any(|w| w == "differ") {
+            return true;
+        }
+
+        // "compare X and Y" / "contrast X and Y" — comparison verb plus a
+        // conjunction. Loose, but the in-prompt filter above already
+        // ruled out content-processing cases.
+        let has_compare_verb = lower.contains("compare ")
+            || lower.contains("contrast ")
+            || lower.contains("comparison of ")
+            || lower.contains("compared to ")
+            || lower.contains("compared with ");
+        let has_conjunction = lower.contains(" and ") || lower.contains(" or ");
+        if has_compare_verb && has_conjunction {
+            return true;
+        }
+
+        false
     }
 
     /// Heuristic check: is this message asking the model to *process* content
@@ -933,17 +999,28 @@ impl Router for LlmRouter {
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
         let force_action = has_search && Self::needs_current_info(message);
 
-        // Pre-check 2: content-processing signal → force REASONING. Catches
+        // Pre-check 2: comparison shape → force COMPARISON. Two-entity
+        // contrast ("difference between X and Y", "X vs Y", "compare X
+        // and Y") — bounded shape that's served by the fast slot with a
+        // constrained prompt rather than the open-ended REASONING path.
+        // Runs BEFORE content-processing so `compare X and Y` (world
+        // entities) doesn't get poached by the `compare ` content verb.
+        let force_comparison = !force_action
+            && Self::looks_like_comparison(message);
+
+        // Pre-check 3: content-processing signal → force REASONING. Catches
         // "summarize this", "explain this passage", "compare these sections"
         // etc. which the Fast model sometimes misreads as ACTION because of
         // the imperative verb. Content processing never needs external reach.
         let force_content_reasoning = !force_action
+            && !force_comparison
             && Self::looks_like_content_processing(message);
 
-        // Pre-check 3: deep reasoning signal → force REASONING before the LLM sees it.
+        // Pre-check 4: deep reasoning signal → force REASONING before the LLM sees it.
         // This catches philosophical, analytical, and compatibility questions that
         // small fast models frequently mis-classify as SimpleQuery.
         let force_deep = !force_action
+            && !force_comparison
             && !force_content_reasoning
             && Self::needs_deep_reasoning(message);
 
@@ -953,6 +1030,12 @@ impl Router for LlmRouter {
                 intent: "ACTION".to_string(),
                 confidence: 1.0,
                 rationale: Some("current/time-sensitive signal → external tool".to_string()),
+            }
+        } else if force_comparison {
+            CoarseClassification {
+                intent: "COMPARISON".to_string(),
+                confidence: 1.0,
+                rationale: Some("two-entity contrast signal → bounded comparison".to_string()),
             }
         } else if force_content_reasoning {
             CoarseClassification {
@@ -981,6 +1064,7 @@ impl Router for LlmRouter {
 
         let (intent, self_assessment_outcome) = match coarse.intent.as_str() {
             "LOOKUP" => (Intent::KnowledgeQuery, None),
+            "COMPARISON" => (Intent::ComparisonQuery, None),
             "REASONING" => (Intent::DeepQuery, None),
             "ACTION" => (self.pass2_refine(message, context, available_tools).await?, None),
             "SIMPLE" => {

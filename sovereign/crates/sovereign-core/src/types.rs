@@ -248,6 +248,12 @@ pub enum Intent {
     SimpleQuery,
     DeepQuery,
     KnowledgeQuery,
+    /// Two or more named things contrasted along shared axes. Bounded
+    /// shape (a small set of contrast points), so it's served by the
+    /// fast slot with a constrained synthesis prompt rather than the
+    /// open-ended `DeepQuery` essay path. Retrieval should anchor on
+    /// every named entity, not just the first.
+    ComparisonQuery,
     SimpleAction { tool: ToolId },
     ComplexTask,
     Continuation { task_id: TaskId },

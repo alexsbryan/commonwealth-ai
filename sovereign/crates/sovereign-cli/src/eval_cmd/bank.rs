@@ -109,8 +109,14 @@ impl Question {
             "factual_recall" => ExpectedIntent::Exact("knowledge_query"),
             "multi_article_synthesis"
             | "causal_reasoning"
-            | "comparative"
             | "contested" => ExpectedIntent::Exact("deep_query"),
+            // `comparative` is the bounded two-entity contrast shape
+            // — split off from DeepQuery in the comparison-pre-check
+            // landed in the v20 routing pass. Per-question override
+            // still lets a recipe pin a different intent when the
+            // shape is genuinely open-ended (e.g. "how do X and Y
+            // relate" rather than "how do X and Y differ").
+            "comparative" => ExpectedIntent::Exact("comparison_query"),
             "boundary_coverage" => {
                 ExpectedIntent::AnyOf(&["knowledge_query", "deep_query"])
             }

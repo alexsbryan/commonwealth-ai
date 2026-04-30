@@ -211,6 +211,22 @@ Spend your thinking on the substance of the question.\n\
 Source inventory (\"source X discusses Y\") belongs in a single brief scan, \
 not as the primary content of your reasoning.";
 
+/// Comparison-shape directive — appended to `KNOWLEDGE_SYNTHESIS_SYSTEM`
+/// when the routed intent is `ComparisonQuery`. The shape constraint
+/// is what lets the fast slot serve a quality answer: instead of an
+/// open-ended essay, the model produces a bounded contrast structured
+/// along shared axes. Citation and source-terminology rules from the
+/// base prompt still apply.
+const COMPARISON_DIRECTIVE: &str = "\
+This question asks for a contrast between two or more named things. \
+Structure your answer as a bounded comparison along shared axes — \
+the dimensions on which the entities differ. For each axis, state \
+how each entity stands. 3–5 axes is the target; do not pad with \
+unrelated background. Lead with the single sharpest contrast. Keep \
+the answer compact: a short paragraph or three bullet points, not \
+an essay. Use exact source terminology for technical terms, dates, \
+and proper nouns — paraphrase only the connective prose.";
+
 fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -376,6 +392,150 @@ pub(crate) fn drop_no_overlap_chunks(
 /// high-relevance hits and the noise floor drops them); false
 /// negatives miss the entity-rich articles that question-named
 /// entities almost always have. Tune toward catching too many.
+/// Comparison-aware entity extraction. Pulls the two contrasted
+/// noun phrases from a comparison-shape question, including the
+/// lowercase case ("special relativity vs general relativity")
+/// that [`extract_question_entities`] misses by design — its
+/// proper-noun heuristic skips lowercase tokens.
+///
+/// Patterns handled (in order):
+/// - "between X and Y" — X and Y are the slots between
+///   "between"/"and" and "and"/sentence boundary.
+/// - "X and Y differ" / "X vs Y" — X/Y are parallel-length noun
+///   phrases bracketing the comparison signal, with leading
+///   wh-words / aux verbs stripped from X.
+///
+/// Falls back to the proper-noun extractor when no pattern matches
+/// — questions like "Compare Marie Curie and Lise Meitner" already
+/// work via the proper-noun path, so we only need this helper for
+/// the cases that path misses.
+pub(crate) fn extract_comparison_entities(text: &str) -> Vec<String> {
+    const STOP_PREFIX: &[&str] = &[
+        "how", "what", "when", "where", "why", "who", "which",
+        "do", "did", "does", "is", "are", "was", "were",
+        "compare", "contrast", "describe", "explain",
+        "the", "a", "an",
+    ];
+    let trim_word = |w: &str| -> String {
+        w.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'')
+            .trim_end_matches("'s")
+            .trim_end_matches('\'')
+            .to_string()
+    };
+    let strip_lead_stops = |words: &[&str]| -> Vec<String> {
+        let mut out: Vec<String> = words
+            .iter()
+            .map(|w| trim_word(w))
+            .filter(|w| !w.is_empty())
+            .collect();
+        while !out.is_empty() && STOP_PREFIX.iter().any(|s| out[0].eq_ignore_ascii_case(s)) {
+            out.remove(0);
+        }
+        out
+    };
+
+    // ── Pattern A: "between X and Y" (covers "the difference between
+    //    special relativity and general relativity?"). Both X and Y
+    //    can be lowercase noun phrases — that's the whole point.
+    let lower = text.to_lowercase();
+    if let Some(b_start) = lower.find("between ") {
+        // Only fire if "between" is preceded by whitespace or sentence
+        // start — avoid grabbing inside a longer word.
+        let preceded_ok = b_start == 0
+            || lower
+                .as_bytes()
+                .get(b_start - 1)
+                .map(|b| b.is_ascii_whitespace())
+                .unwrap_or(false);
+        if preceded_ok {
+            let after = &text[b_start + "between ".len()..];
+            // Find the first " and " in `after`.
+            let after_lower = after.to_lowercase();
+            if let Some(a_pos) = after_lower.find(" and ") {
+                let x_part = &after[..a_pos];
+                let after_and = &after[a_pos + " and ".len()..];
+                // Y ends at the first sentence-terminator or
+                // contrast-suffix ("?", ".", ",", " differ",
+                // " in their"). Lowercase scan.
+                let after_and_lower = after_and.to_lowercase();
+                let mut y_end = after_and.len();
+                for needle in &["?", ".", ",", " differ", " in their", " regarding"] {
+                    if let Some(p) = after_and_lower.find(needle) {
+                        y_end = y_end.min(p);
+                    }
+                }
+                let y_part = &after_and[..y_end];
+                let x: String = strip_lead_stops(&x_part.split_whitespace().collect::<Vec<_>>())
+                    .join(" ");
+                let y: String = strip_lead_stops(&y_part.split_whitespace().collect::<Vec<_>>())
+                    .join(" ");
+                if !x.is_empty() && !y.is_empty() {
+                    let mut out = vec![x.clone(), y.clone()];
+                    if x.eq_ignore_ascii_case(&y) {
+                        out.pop();
+                    }
+                    return out;
+                }
+            }
+        }
+    }
+
+    // ── Pattern B: "X and Y differ" / "X and Y differs" — X and Y
+    //    bracket " and " with X to the left of " and " and Y between
+    //    " and " and " differ". Use parallel-length extraction so
+    //    "How do Einstein's and Newton's conceptions of gravity differ"
+    //    produces ["Einstein", "Newton"] rather than dragging the
+    //    "conceptions of gravity" tail into Y.
+    if let Some(diff_pos) = lower.find(" differ") {
+        let before_differ = &text[..diff_pos];
+        let bd_lower = before_differ.to_lowercase();
+        if let Some(a_pos) = bd_lower.rfind(" and ") {
+            let before_and = &before_differ[..a_pos];
+            let after_and = &before_differ[a_pos + " and ".len()..];
+            let bef_words: Vec<&str> = before_and.split_whitespace().collect();
+            let x_words = strip_lead_stops(&bef_words);
+            // Take parallel length: |Y| = |X|, so we don't grab
+            // post-modifying noun phrases.
+            let aft_words: Vec<&str> = after_and.split_whitespace().collect();
+            let take = x_words.len().min(aft_words.len()).max(1);
+            let y_words: Vec<String> = aft_words
+                .iter()
+                .take(take)
+                .map(|w| trim_word(w))
+                .filter(|w| !w.is_empty())
+                .collect();
+            if !x_words.is_empty() && !y_words.is_empty() {
+                return vec![x_words.join(" "), y_words.join(" ")];
+            }
+        }
+    }
+
+    // ── Pattern C: " vs " / " versus " — split on the separator and
+    //    take the parallel-length noun phrase on each side, leading
+    //    stop words stripped from the X side.
+    for sep in [" vs ", " vs.", " versus "] {
+        if let Some(pos) = lower.find(sep) {
+            let x_part = &text[..pos];
+            let y_part = &text[pos + sep.len()..];
+            let x_words = strip_lead_stops(&x_part.split_whitespace().collect::<Vec<_>>());
+            let aft_words: Vec<&str> = y_part.split_whitespace().collect();
+            let take = x_words.len().min(aft_words.len()).max(1);
+            let y_words: Vec<String> = aft_words
+                .iter()
+                .take(take)
+                .map(|w| trim_word(w))
+                .filter(|w| !w.is_empty())
+                .collect();
+            if !x_words.is_empty() && !y_words.is_empty() {
+                return vec![x_words.join(" "), y_words.join(" ")];
+            }
+        }
+    }
+
+    // Fallback: proper-noun extractor handles "Compare X and Y" etc.
+    extract_question_entities(text)
+}
+
 pub(crate) fn extract_question_entities(text: &str) -> Vec<String> {
     const SKIP_LEAD: &[&str] = &[
         "How", "What", "When", "Where", "Why", "Who", "Which",
@@ -448,6 +608,66 @@ pub(crate) fn cap_chunks_per_article(
             out.push(c);
         }
     }
+    out
+}
+
+/// Move up to `per_entity_reserve` chunks per entity to the front of
+/// the score-sorted merge so they survive the downstream truncation.
+/// Chunks are matched to an entity by case-insensitive title-contains.
+///
+/// Reserved chunks keep their relative score order (the highest-
+/// scoring entity-titled chunks for entity X come before lower-scoring
+/// ones for entity X), and the non-reserved tail stays in score order
+/// behind them. The net effect: for ComparisonQuery, `KQ_MERGED_LIMIT`
+/// truncate cannot drop a Newton-side chunk just because Einstein's
+/// chunks ranked higher — both sides are guaranteed shelf space.
+///
+/// No-op when `entities` is empty.
+pub(crate) fn reserve_chunks_per_entity(
+    chunks: Vec<corpus_engine::ScoredChunk>,
+    entities: &[String],
+    per_entity_reserve: usize,
+) -> Vec<corpus_engine::ScoredChunk> {
+    if entities.is_empty() || per_entity_reserve == 0 {
+        return chunks;
+    }
+    use std::collections::HashSet;
+    let entity_lowers: Vec<String> =
+        entities.iter().map(|e| e.to_lowercase()).collect();
+    let mut reserved_idx: HashSet<usize> = HashSet::new();
+    for entity_lower in &entity_lowers {
+        let mut taken = 0usize;
+        for (i, c) in chunks.iter().enumerate() {
+            if reserved_idx.contains(&i) {
+                continue;
+            }
+            let title_lower = c
+                .title
+                .as_deref()
+                .map(str::to_lowercase)
+                .unwrap_or_default();
+            if title_lower.contains(entity_lower) {
+                reserved_idx.insert(i);
+                taken += 1;
+                if taken >= per_entity_reserve {
+                    break;
+                }
+            }
+        }
+    }
+    let mut reserved: Vec<corpus_engine::ScoredChunk> =
+        Vec::with_capacity(reserved_idx.len());
+    let mut rest: Vec<corpus_engine::ScoredChunk> =
+        Vec::with_capacity(chunks.len().saturating_sub(reserved_idx.len()));
+    for (i, c) in chunks.into_iter().enumerate() {
+        if reserved_idx.contains(&i) {
+            reserved.push(c);
+        } else {
+            rest.push(c);
+        }
+    }
+    let mut out = reserved;
+    out.extend(rest);
     out
 }
 
@@ -552,6 +772,24 @@ const MAX_ENTITY_QUERIES: usize = 4;
 /// for the named entity, not its full corpus footprint — depth on
 /// entity articles is the multi-source expander's job.
 const ENTITY_QUERY_LIMIT: usize = 3;
+
+/// Per-entity chunk limit specifically when intent is ComparisonQuery.
+/// Higher than the default — comparison questions guarantee ≥2 named
+/// entities being contrasted, and each side needs enough candidates
+/// before per-entity merge reservation can pin them. Pairs with
+/// `COMPARISON_PER_ENTITY_RESERVE` below.
+const COMPARISON_ENTITY_QUERY_LIMIT: usize = 6;
+
+/// For ComparisonQuery, guarantee this many entity-titled chunks per
+/// named entity survive the `KQ_MERGED_LIMIT` truncation. Without
+/// this, an entity-boost contribution can be out-ranked by the
+/// embedded-query results and dropped at merge time — the v20
+/// regression on `compare_einstein_newton_gravity` (Newton-side
+/// chunks lost despite extraction returning ["Einstein", "Newton"])
+/// is exactly this failure mode. 3 per entity × 2 entities = 6 of
+/// the 20 merged slots reserved for entity anchors; the other 14
+/// stay free for embedded-query / contrast-axis chunks.
+const COMPARISON_PER_ENTITY_RESERVE: usize = 3;
 
 /// Multi-source expansion: how many distinct top-ranked (corpus_id, title)
 /// groups to expand by title when the question is genuinely
@@ -1294,6 +1532,12 @@ fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequ
             // Retrieval-driven synthesis over a bounded chunk set.
             (CapabilityHint::general(), LatencyClass::Normal)
         }
+        Intent::ComparisonQuery => {
+            // Bounded two-entity contrast — Fast slot, no reasoning
+            // budget. Retrieval over a small chunk set, constrained
+            // synthesis prompt, sub-second TTFT target.
+            (CapabilityHint::general(), LatencyClass::Fast)
+        }
         Intent::SimpleQuery
         | Intent::SimpleAction { .. }
         | Intent::Continuation { .. } => {
@@ -1320,6 +1564,7 @@ fn format_interpretation(
         Intent::SimpleQuery => "a quick factual answer",
         Intent::DeepQuery => "a deeper explanation",
         Intent::KnowledgeQuery => "a look in your installed knowledge",
+        Intent::ComparisonQuery => "a comparison between two things",
         Intent::SimpleAction { .. } => "a tool call",
         Intent::ComplexTask => "a multi-step task",
         Intent::Continuation { .. } => "a follow-up to earlier work",
@@ -1337,6 +1582,7 @@ fn label_for_intent(intent: &Intent) -> String {
         Intent::SimpleQuery => "Give me a quick answer".into(),
         Intent::DeepQuery => "Walk me through it in depth".into(),
         Intent::KnowledgeQuery => "Check my knowledge base".into(),
+        Intent::ComparisonQuery => "Compare them side by side".into(),
         Intent::SimpleAction { tool } => format!("Use the {tool} tool"),
         Intent::ComplexTask => "Plan a multi-step task".into(),
         Intent::Continuation { .. } => "Continue prior task".into(),
@@ -1353,6 +1599,7 @@ fn intent_hint(intent: &Intent) -> String {
         Intent::SimpleQuery => "simple_query".into(),
         Intent::DeepQuery => "deep_query".into(),
         Intent::KnowledgeQuery => "knowledge_query".into(),
+        Intent::ComparisonQuery => "comparison_query".into(),
         Intent::SimpleAction { tool } => format!("simple_action:{tool}"),
         Intent::ComplexTask => "complex_task".into(),
         Intent::Continuation { task_id } => format!("continuation:{task_id}"),
@@ -1367,6 +1614,7 @@ fn parse_intent_hint(hint: &str) -> Intent {
         "simple_query" => Intent::SimpleQuery,
         "deep_query" => Intent::DeepQuery,
         "knowledge_query" => Intent::KnowledgeQuery,
+        "comparison_query" => Intent::ComparisonQuery,
         "complex_task" => Intent::ComplexTask,
         _ if hint.starts_with("simple_action:") => {
             let tool = hint.trim_start_matches("simple_action:").to_string();
@@ -1395,6 +1643,7 @@ fn build_clarification_question(_message: &str, primary: &Intent) -> String {
         Intent::SimpleQuery => "a quick factual answer",
         Intent::DeepQuery => "a deeper explanation",
         Intent::KnowledgeQuery => "a corpus lookup",
+        Intent::ComparisonQuery => "a side-by-side comparison",
         Intent::SimpleAction { .. } => "an action",
         Intent::ComplexTask => "a multi-step task",
         Intent::Continuation { .. } => "a continuation",
@@ -2376,6 +2625,10 @@ impl Runtime {
                 }
             }
             Intent::DeepQuery => Speed::Slow,
+            // Bounded contrast — Fast slot is enough; the constrained
+            // synthesis prompt does the structuring work the primary
+            // model would otherwise do.
+            Intent::ComparisonQuery => Speed::Fast,
             _ => Speed::Medium,
         };
 
@@ -3112,12 +3365,12 @@ impl Runtime {
         // caller as it arrives. This replaces the old one-shot wrapper
         // which made the desktop chat window sit inert for ~35s while
         // the full response was assembled server-side.
-        if matches!(intent, Intent::KnowledgeQuery) {
+        if matches!(intent, Intent::KnowledgeQuery | Intent::ComparisonQuery) {
             tracing::info!(
                 intent = ?intent,
-                "runtime: stream path — KnowledgeQuery with token streaming"
+                "runtime: stream path — KnowledgeQuery/ComparisonQuery with token streaming"
             );
-            let plan = self.prepare_knowledge_query_plan(message, &context).await;
+            let plan = self.prepare_knowledge_query_plan(message, &context, &intent).await;
 
             // PR5 — post-retrieval retrieval-miss diversion. Off-
             // target evidence shape (dispersed across ≥3 sources,
@@ -3782,9 +4035,13 @@ impl Runtime {
         }
 
         // 3. Dispatch based on intent.
+        // ComparisonQuery rides the same retrieval+synthesis path as
+        // KnowledgeQuery; the difference is in (a) the OICP envelope
+        // (Fast latency_class → fast slot) and (b) the comparison-aware
+        // synthesis prompt branch built downstream by intent matching.
         let dispatch = match intent {
             Intent::ComplexTask => "handle_complex_task",
-            Intent::KnowledgeQuery => "handle_knowledge_query",
+            Intent::KnowledgeQuery | Intent::ComparisonQuery => "handle_knowledge_query",
             _ => "handle_simple",
         };
         tracing::info!(dispatch, "runtime: dispatching");
@@ -3794,9 +4051,9 @@ impl Runtime {
                 self.handle_complex_task(message, conversation_id, &context, &tool_descriptors)
                     .await
             }
-            Intent::KnowledgeQuery => {
+            Intent::KnowledgeQuery | Intent::ComparisonQuery => {
                 self.handle_knowledge_query(
-                    message, conversation_id, &context, coarse_intent, self_assessment,
+                    message, conversation_id, &context, &intent, coarse_intent, self_assessment,
                 )
                 .await
             }
@@ -4329,6 +4586,7 @@ impl Runtime {
         &self,
         message: &str,
         context: &ConversationContext,
+        intent: &Intent,
     ) -> KnowledgeQueryPlan {
         use std::cmp::Ordering;
 
@@ -4359,7 +4617,25 @@ impl Runtime {
         //     focused per-entity searches. See `prepare_knowledge_context`
         //     for the rationale (the embedded query lands on topic-
         //     central articles, not entity-biographical ones).
-        let entities = extract_question_entities(message);
+        //
+        //     For ComparisonQuery we (a) use a comparison-aware
+        //     extractor that catches lowercase contrast entities
+        //     ("special relativity vs general relativity") which the
+        //     proper-noun heuristic skips by design, and (b) raise
+        //     the per-entity chunk limit so each side of the contrast
+        //     has enough candidates before per-entity merge reservation
+        //     kicks in below.
+        let is_comparison = matches!(intent, Intent::ComparisonQuery);
+        let entities = if is_comparison {
+            extract_comparison_entities(message)
+        } else {
+            extract_question_entities(message)
+        };
+        let entity_query_limit = if is_comparison {
+            COMPARISON_ENTITY_QUERY_LIMIT
+        } else {
+            ENTITY_QUERY_LIMIT
+        };
         if !entities.is_empty() {
             let initial_count = chunks.len();
             let mut entity_added = 0usize;
@@ -4373,7 +4649,7 @@ impl Runtime {
                     .search_corpus_indexes(
                         &entity_emb,
                         entity,
-                        ENTITY_QUERY_LIMIT,
+                        entity_query_limit,
                         "EntityBoost",
                     )
                     .await;
@@ -4384,6 +4660,7 @@ impl Runtime {
                 entities = ?entities.iter().take(MAX_ENTITY_QUERIES).collect::<Vec<_>>(),
                 initial_count,
                 entity_added,
+                is_comparison,
                 "KnowledgeQuery: entity-boost retrieval"
             );
         }
@@ -4403,10 +4680,21 @@ impl Runtime {
 
         // 3. Reweight by query relevance (mirrors prepare_knowledge_context),
         //    then sort by score, cap chunks-per-article for breadth, and
-        //    keep top `KQ_MERGED_LIMIT`.
+        //    keep top `KQ_MERGED_LIMIT`. For ComparisonQuery, reserve
+        //    per-entity slots before truncate so neither side of the
+        //    contrast can be out-ranked out of the merge — the v20
+        //    `compare_einstein_newton_gravity` regression was Newton-
+        //    side chunks losing to Einstein-side at this exact step.
         reweight_by_query_relevance(&mut chunks, message);
         chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
         let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
+        if is_comparison {
+            chunks = reserve_chunks_per_entity(
+                chunks,
+                &entities,
+                COMPARISON_PER_ENTITY_RESERVE,
+            );
+        }
         chunks.truncate(KQ_MERGED_LIMIT);
 
         let search_ms = t_search.elapsed().as_millis() as u64;
@@ -4464,7 +4752,15 @@ impl Runtime {
 
         // 4b. Evidence-shape routing.
         let shape = compute_evidence_shape(&chunks, message);
-        let route = route_from_evidence(&shape);
+        // ComparisonQuery is a bounded contrast — pin to FastFocused
+        // regardless of evidence shape. The whole point of the split
+        // is to keep these off the primary slot; letting the evidence
+        // shape escalate to PrimarySynthesis would defeat that.
+        let route = if matches!(intent, Intent::ComparisonQuery) {
+            SynthesisRoute::FastFocused
+        } else {
+            route_from_evidence(&shape)
+        };
         tracing::info!(
             count = shape.count,
             top1 = shape.top1_score,
@@ -4554,7 +4850,15 @@ impl Runtime {
         // 4e. Request shape varies by route.
         let request = match route {
             SynthesisRoute::FastFocused => {
-                let system = self.build_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
+                // Comparison-shape contrast — append the directive that
+                // pins the model to a bounded axes structure rather
+                // than the open-ended essay shape.
+                let base = if matches!(intent, Intent::ComparisonQuery) {
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{COMPARISON_DIRECTIVE}")
+                } else {
+                    KNOWLEDGE_SYNTHESIS_SYSTEM.to_string()
+                };
+                let system = self.build_system_message(&base, context);
                 CompletionRequest {
                     prompt,
                     system_message: Some(system),
@@ -4565,6 +4869,9 @@ impl Runtime {
                     structured_output: None,
                     top_k: self.inference_config.top_k,
                     top_p: None,
+                    // oicp=None lets the wire layer auto-derive
+                    // latency_class=Fast from preferred_speed (per the
+                    // OICP-native fast-slot routing landed in v19).
                     oicp: None,
                     tools: None,
                     tool_choice: None,
@@ -4645,16 +4952,20 @@ impl Runtime {
         }
     }
 
-    /// Handle KnowledgeQuery: search corpus-engine LanceDB indexes → inject into prompt → synthesize.
+    /// Handle KnowledgeQuery (and ComparisonQuery): search corpus-engine
+    /// LanceDB indexes → inject into prompt → synthesize. The intent
+    /// pins the plan's synthesis route — ComparisonQuery always rides
+    /// FastFocused regardless of evidence shape.
     async fn handle_knowledge_query(
         &self,
         message: &str,
         conversation_id: &str,
         context: &ConversationContext,
+        intent: &Intent,
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
     ) -> Result<Response> {
-        let plan = self.prepare_knowledge_query_plan(message, context).await;
+        let plan = self.prepare_knowledge_query_plan(message, context, intent).await;
 
         // PR5 — non-streaming retrieval-miss diversion. Mirrors the
         // streaming path: dispersed noise → suppress synthesis +

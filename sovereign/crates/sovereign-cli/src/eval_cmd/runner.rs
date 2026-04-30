@@ -312,6 +312,7 @@ fn intent_wire_label(intent: &sovereign_core::types::Intent) -> String {
         Intent::SimpleQuery => "simple_query".into(),
         Intent::KnowledgeQuery => "knowledge_query".into(),
         Intent::DeepQuery => "deep_query".into(),
+        Intent::ComparisonQuery => "comparison_query".into(),
         Intent::ComplexTask => "complex_task".into(),
         Intent::SimpleAction { .. } => "simple_action".into(),
         Intent::Continuation { .. } => "continuation".into(),
