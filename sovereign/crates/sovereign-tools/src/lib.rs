@@ -20,6 +20,8 @@ pub mod local_corpus;
 pub mod manifest;
 pub mod mcp;
 pub mod mcp_surface;
+pub mod notes;
+pub mod spec_watcher;
 pub mod rag;
 pub mod recipe_author;
 pub mod search;

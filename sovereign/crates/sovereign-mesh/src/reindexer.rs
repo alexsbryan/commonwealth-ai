@@ -141,6 +141,12 @@ pub struct Reindexer {
     indexes_dir: PathBuf,
     projects: RwLock<HashMap<String, Arc<ProjectHandle>>>,
     merged: ScipGraphHandle,
+    /// Phase 7.1 commit harvester. Set by the daemon via
+    /// [`Reindexer::with_commit_harvester`] when a NoteStore is
+    /// available. When `None`, the git-poll path skips harvesting
+    /// — production daemons configure it; minimal test setups
+    /// don't have to.
+    commit_harvester: Option<Arc<corpus_engine::NoteStore>>,
 }
 
 impl Reindexer {
@@ -154,7 +160,33 @@ impl Reindexer {
             indexes_dir,
             projects: RwLock::new(HashMap::new()),
             merged,
+            commit_harvester: None,
         })
+    }
+
+    /// Configure the commit-message harvester (Phase 7.1). When
+    /// set, the worker's git-HEAD poll harvests non-noisy commit
+    /// messages between `old_head..new_head` and writes them as
+    /// `source='committed'` notes via the supplied store.
+    ///
+    /// `Arc::get_mut` ordering: callers must invoke this BEFORE
+    /// the Reindexer is shared (cloning it after this returns
+    /// `None` from `get_mut`). The daemon's startup wires the
+    /// harvester immediately after `Reindexer::new` and before
+    /// handing the Arc to anything else.
+    pub fn with_commit_harvester(
+        self: &mut Arc<Self>,
+        notes: Arc<corpus_engine::NoteStore>,
+    ) {
+        if let Some(inner) = Arc::get_mut(self) {
+            inner.commit_harvester = Some(notes);
+        } else {
+            tracing::error!(
+                "Reindexer::with_commit_harvester: Arc already shared; \
+                 harvester not configured. Call this before sharing the \
+                 Reindexer handle."
+            );
+        }
     }
 
     /// Register or update a project. Idempotent: re-registering
@@ -204,6 +236,7 @@ impl Reindexer {
             fs_tx: fs_tx.clone(),
             indexes_dir: self.indexes_dir.clone(),
             shutdown_rx,
+            commit_harvester: self.commit_harvester.clone(),
         };
 
         let worker = tokio::spawn(run_worker(ctx));
@@ -275,6 +308,10 @@ struct WorkerCtx {
     fs_tx: mpsc::Sender<Event>,
     indexes_dir: PathBuf,
     shutdown_rx: oneshot::Receiver<()>,
+    /// Phase 7.1: optional commit-message harvester. When set, the
+    /// git-HEAD poll calls into [`crate::commit_harvest`] for the
+    /// `old_head..new_head` range alongside the SCIP rebuild.
+    commit_harvester: Option<Arc<corpus_engine::NoteStore>>,
 }
 
 /// Per-rebuild context. Separated from [`WorkerCtx`] because the
@@ -301,6 +338,7 @@ async fn run_worker(ctx: WorkerCtx) {
         fs_tx: _fs_tx,
         indexes_dir,
         shutdown_rx,
+        commit_harvester,
     } = ctx;
 
     state.set(WatcherKind::Scip, WatcherStatus::Idle).await;
@@ -392,6 +430,36 @@ async fn run_worker(ctx: WorkerCtx) {
                         .await
                         .unwrap_or_default();
                     if old_head != new_head {
+                        // Phase 7.1: harvest commit messages
+                        // between old_head..new_head into
+                        // `source='committed'` notes BEFORE the
+                        // SCIP rebuild kicks off. Order doesn't
+                        // matter for correctness — both are
+                        // independent — but doing it first means
+                        // the next `sovereign audit` after the
+                        // rebuild completes already has the new
+                        // committed-source rows.
+                        if let Some(notes) = commit_harvester.as_deref() {
+                            let session_id = format!(
+                                "harvest-{}",
+                                rebuild_ctx.entry.corpus_id
+                            );
+                            let wrote = crate::commit_harvest::harvest_between(
+                                &entry.root,
+                                &old_head,
+                                &new_head,
+                                notes,
+                                &session_id,
+                            )
+                            .await;
+                            if wrote > 0 {
+                                tracing::info!(
+                                    corpus_id = %rebuild_ctx.entry.corpus_id,
+                                    new_notes = wrote,
+                                    "commit_harvest: persisted committed-source notes"
+                                );
+                            }
+                        }
                         let req = RebuildRequest {
                             reason: RebuildReason::GitHead {
                                 old: old_head,

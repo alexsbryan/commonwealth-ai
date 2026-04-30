@@ -2992,11 +2992,41 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // is process-global so repeated `tools/list` calls amortise the
     // stat against a 1-second TTL.
     let feature_root = sovereign_mesh::mcp_router::FeatureRoot::new(Some(repo_root.clone()));
+    // Phase 5b: build a notifier and wire it to a SpecWatcher rooted
+    // at repo_root. The watcher's on_change closure publishes to the
+    // notifier; the notifier fans the JSON-RPC frame out to every
+    // subscribed SSE client. Result: when the user creates
+    // `.sovereign/features/foo/spec.md` (or edits ARCHITECTURE.md),
+    // every connected MCP agent sees `notifications/tools/list_changed`
+    // within ~100ms and refetches `tools/list` — surfacing `spec` and
+    // `drift` without a restart.
+    let notifier = sovereign_mesh::mcp_router::McpNotifier::new();
+    let watcher_notifier = notifier.clone();
+    let _spec_watcher = match sovereign_tools::spec_watcher::SpecWatcher::start(
+        &repo_root,
+        move || watcher_notifier.notify_tools_list_changed(),
+    ) {
+        Ok(w) => Some(w),
+        Err(e) => {
+            // Don't fail the whole serve over a non-critical watcher;
+            // fall back to TTL-only cache freshness. Log so the
+            // operator sees why list_changed events aren't firing.
+            tracing::warn!(
+                error = %e,
+                root = %repo_root.display(),
+                "spec_watcher: failed to start; falling back to 1s TTL — \
+                 spec edits will surface within a second instead of \
+                 immediately"
+            );
+            None
+        }
+    };
     let app = sovereign_mesh::mcp_router::mcp_router(
         tools,
         Arc::clone(&notes_store),
         mcp_session_id,
         feature_root,
+        notifier,
     );
 
     let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
@@ -3012,6 +3042,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         eprintln!("error: server failed: {e}");
         return 1;
     }
+    // _spec_watcher dropped here on serve exit — releases the FS
+    // backend and stops the dispatch task. Made explicit by
+    // shadowing in the let-binding above.
+    drop(_spec_watcher);
 
     0
 }
@@ -3169,682 +3203,33 @@ async fn scip_graph_reloader(
 }
 
 
-// ─── sovereign project found (M6.3) ──────────────────────────
+// ─── sovereign project found (Phase 6: retired) ─────────────
 //
-// Structured founding conversation. M6.3 ships Stage 1 only:
-// Understanding. Later milestones layer stages 2-4 on top.
+// Phase 6 of the CLI refactor retires the structured "founding"
+// conversation. The default flow is now:
 //
-// Flow:
-//   1. Read .sovereign/project.toml. If `lifecycle.founded == true`,
-//      refuse — founding is once per project (amendments come via
-//      `sovereign project amend`, M6.7).
-//   2. Load a design doc if --design <path> given. Missing path is
-//      treated the same as "no design doc" — we elicit instead.
-//   3. Run Stage 1 (see `found::run_stage1`): curated-catalog
-//      question selection filtered by observation + design presence,
-//      each Q&A persisted as a decision-kind note in Global scope.
-//   4. Print a summary with the count of recorded decisions and a
-//      pointer to where stage 2 picks up (when M6.4 lands).
+//   sovereign init   →   write `.sovereign/features/<id>/spec.md`
+//                    →   git commit  (= approval; see approval_gate)
+//                    →   work
 //
-// Every Q&A lives in the NoteStore permanently. A sessions six
-// weeks later reading notes by symbol or kind can see "this was
-// asked, answered, and committed to."
-
-// ─── Orchestrator path (step 8, opt-in via `--orchestrate`) ──
+// Founding is implicit — the first `init` + commit is sufficient.
+// `sovereign charter` remains as the explicit team-conventions
+// surface for projects that want one. The legacy questionnaire
+// flow (Stage 1/2 elicitation, fault-line selection, charter
+// composition, approval gate) lives on under
+// [`crate::found`] for `sovereign project amend` and the audit's
+// charter-hash check; only the user-facing entry point is gone.
 //
-// Replaces the Stage-1 / Stage-2 questionnaire with a sequencing
-// check: DESIGN.md + CHARTER.md + IMPLEMENTATION_PLAN.md must
-// already exist (produced by `project design`, `project charter`,
-// `project plan`). Skipping the questionnaire is the point — the
-// design session already captured everything it could, and the
-// plan composer already derived the phase skeleton from DESIGN.md.
-//
-// This path IS additive — default `project found` behavior is
-// unchanged. The existing byte-exact charter-composition test
-// suite stays green because we don't touch `compose_charter`.
-// A future session can retire the questionnaire path in a
-// dedicated pass.
-async fn cmd_found_orchestrate(design_flag: Option<&Path>) -> i32 {
-    let repo_root = match find_repo_root() {
-        Some(r) => r,
-        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-    };
-    let sovereign_dir = repo_root.join(".sovereign");
-    let project_toml_path = sovereign_dir.join("project.toml");
-    if !project_toml_path.exists() {
-        eprintln!();
-        eprintln!(
-            "  sovereign project found --orchestrate: no .sovereign/project.toml found.\n\
-             Run `sovereign project init` first."
-        );
-        return 1;
-    }
-    let mut project_toml = match crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("  orchestrator: cannot read project.toml: {e}");
-            return 1;
-        }
-    };
-    if project_toml.lifecycle.founded {
-        eprintln!();
-        eprintln!(
-            "  \u{2713} already founded (charter_version={}, current_phase={}).",
-            project_toml.lifecycle.charter_version, project_toml.lifecycle.current_phase
-        );
-        eprintln!("    Re-run edits via `sovereign project amend design` / `amend charter`.");
-        return 0;
-    }
-
-    eprintln!();
-    eprintln!("  Sovereign Project Founding — orchestrated mode");
-    eprintln!("  {}", "─".repeat(54));
-
-    // Gate 1: DESIGN.md. If `--design <path>` was passed, import
-    // it through the existing onboarding helper so the diff-confirm
-    // path is consistent.
-    let design_md_path = repo_root.join("DESIGN.md");
-    if let Some(src) = design_flag {
-        match crate::design_onboarding::import_design(&repo_root, src) {
-            crate::design_onboarding::OnboardOutcome::Cancelled => {
-                eprintln!("  \u{2717} --design import cancelled; aborting.");
-                return 1;
-            }
-            _ => {}
-        }
-    }
-    if !design_md_path.exists() {
-        eprintln!();
-        eprintln!("  \u{2717} No DESIGN.md at repo root.");
-        eprintln!(
-            "    Run `sovereign project design` first (agent-collaborative) or\n\
-             `sovereign project design --solo` (CLI prompts)."
-        );
-        return 2;
-    }
-    let design_text = match std::fs::read_to_string(&design_md_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("  \u{2717} cannot read DESIGN.md: {e}");
-            return 1;
-        }
-    };
-    eprintln!(
-        "    \u{2713} DESIGN.md ({} line(s), sha=`{}`)",
-        design_text.lines().count(),
-        {
-            let h = crate::found::hash_charter(&design_text);
-            h[..h.len().min(12)].to_string()
-        }
+// `--orchestrate` (which sequenced DESIGN.md + CHARTER.md +
+// IMPLEMENTATION_PLAN.md + PHASES.md composition) is retired in
+// favour of the explicit `sovereign design` / `sovereign charter`
+// / `sovereign plan` triad.
+async fn cmd_found(_args: &[String]) -> i32 {
+    crate::util::deprecation::announce_retired(
+        "sovereign project found",
+        "Founding is implicit now: `sovereign init` + a committed          spec is sufficient. Use `sovereign charter` if you want          to define team conventions, or `sovereign plan` to write          PHASES.md from a design doc.",
     );
-
-    // Gate 2: OPEN_QUESTIONS.md — all blocking questions must be
-    // answered. Orchestrator inherits the same contract as
-    // `project plan`: unanswered gaps are load-bearing, don't
-    // paper over them.
-    let oq_path = repo_root.join("OPEN_QUESTIONS.md");
-    let oq_text = std::fs::read_to_string(&oq_path).unwrap_or_default();
-    let oqs = crate::plan_composer::parse_open_questions(&oq_text);
-    let unanswered: Vec<_> = oqs.iter().filter(|o| !o.is_answered()).collect();
-    if !unanswered.is_empty() {
-        eprintln!();
-        eprintln!(
-            "  \u{26a0} {} unanswered OPEN_QUESTIONS.md entry(s):",
-            unanswered.len()
-        );
-        for oq in &unanswered {
-            eprintln!("    · {} ({})", oq.id, oq.anchor);
-        }
-        eprintln!();
-        eprintln!(
-            "    Founding requires these resolved — edit OPEN_QUESTIONS.md inline,\n\
-             then re-run `sovereign project plan` before founding again."
-        );
-        return 2;
-    }
-    eprintln!(
-        "    \u{2713} OPEN_QUESTIONS.md ({} answered / 0 open)",
-        oqs.len()
-    );
-
-    // Gate 3: IMPLEMENTATION_PLAN.md.
-    let plan_md_path = repo_root.join("IMPLEMENTATION_PLAN.md");
-    if !plan_md_path.exists() {
-        eprintln!();
-        eprintln!("  \u{2717} No IMPLEMENTATION_PLAN.md at repo root.");
-        eprintln!("    Run `sovereign project plan` first.");
-        return 2;
-    }
-    let plan_text = std::fs::read_to_string(&plan_md_path).unwrap_or_default();
-    let plan_hash = crate::found::hash_charter(&plan_text);
-    eprintln!(
-        "    \u{2713} IMPLEMENTATION_PLAN.md (sha=`{}`)",
-        &plan_hash[..plan_hash.len().min(12)]
-    );
-
-    // Gate 4: CHARTER.md. Distinct from the questionnaire path —
-    // CHARTER.md is the user-authored culture doc, NOT auto-composed.
-    let charter_path = crate::amend::charter_path(&repo_root);
-    if !charter_path.exists() {
-        eprintln!();
-        eprintln!("  \u{2717} No CHARTER.md at {}.", charter_path.display());
-        eprintln!("    Run `sovereign project charter` first to author it.");
-        return 2;
-    }
-    let charter_text = match std::fs::read_to_string(&charter_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("  \u{2717} cannot read CHARTER.md: {e}");
-            return 1;
-        }
-    };
-    let charter_hash = crate::found::hash_charter(&charter_text);
-    eprintln!(
-        "    \u{2713} CHARTER.md (sha=`{}`)",
-        &charter_hash[..charter_hash.len().min(12)]
-    );
-
-    // Gate 5: the one question `found` legitimately still needs
-    // from the human — the Phase-1 stop condition. Plan items are
-    // derived from DESIGN.md sections; Phase-1's stop is the
-    // concrete "when is feature-foundation done?" line that only
-    // the human knows.
-    eprintln!();
-    eprintln!("  Phase-1 stop condition — what proves the first real end-to-end path works?");
-    eprintln!("  Examples: `cargo test --test e2e_ingest`, `curl localhost:8080/health returns 200`.");
-    eprint!("    > ");
-    let _ = std::io::Write::flush(&mut std::io::stderr());
-    let phase1_stop = crate::found::stdin_read_line();
-    let phase1_stop = phase1_stop.trim().to_string();
-    if phase1_stop.is_empty() {
-        eprintln!();
-        eprintln!("  \u{2717} A Phase-1 stop condition is required; aborting.");
-        return 2;
-    }
-
-    // Compose PHASES.md. Reuses the existing compose_phases for
-    // back-compat with `project phase pass N` (which parses PHASES.md
-    // today). Phase-0 stop comes from observation; Phase-1 from the
-    // user; Phase-2 degraded condition inferred from observation.
-    let observation = crate::observation::observe(&repo_root);
-    let today = today_iso();
-    let project_id = derive_project_id(&repo_root);
-    let phases_md = crate::found::compose_phases(&crate::found::FoundingInputs {
-        project_id: &project_id,
-        founded_date: &today,
-        design: Some(&design_text),
-        observation: &observation,
-        stage1_answers: &[],
-        stage2_outcomes: &[],
-        phase1_stop_condition: &phase1_stop,
-    });
-
-    let phases_path = sovereign_dir.join("PHASES.md");
-    if let Err(e) = std::fs::write(&phases_path, &phases_md) {
-        eprintln!("  \u{2717} could not write PHASES.md: {e}");
-        return 1;
-    }
-
-    // Flip the lifecycle.
-    project_toml.lifecycle.founded = true;
-    project_toml.lifecycle.charter_version = 1;
-    project_toml.lifecycle.current_phase = 0;
-    project_toml.lifecycle.charter_hash = charter_hash.clone();
-    if let Err(e) = project_toml.write(&project_toml_path) {
-        eprintln!("  \u{2717} could not persist project.toml: {e}");
-        return 1;
-    }
-
-    eprintln!();
-    eprintln!(
-        "  \u{2713} Founded. charter_version=1, current_phase=0, charter_hash=`{}`.",
-        &charter_hash[..charter_hash.len().min(12)]
-    );
-    eprintln!("    Artifacts at repo root: DESIGN.md, OPEN_QUESTIONS.md, IMPLEMENTATION_PLAN.md, CHARTER.md.");
-    eprintln!("    PHASES.md written at {}.", phases_path.display());
-    eprintln!("    Next: `sovereign project phase pass 0` when Phase 0's stop condition is green.");
     0
-}
-
-async fn cmd_found(args: &[String]) -> i32 {
-    let mut design_path: Option<PathBuf> = None;
-    let mut orchestrate = false;
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--design" => {
-                i += 1;
-                design_path = args.get(i).map(PathBuf::from);
-            }
-            "--orchestrate" => orchestrate = true,
-            "--help" | "-h" => {
-                println!("sovereign project found [--design <path>] [--orchestrate]");
-                println!();
-                println!("Once per project: the founding conversation that produces");
-                println!("CHARTER.md + PHASES.md.");
-                println!();
-                println!("  (default)      Classic Stage 1 + Stage 2 questionnaire; auto-composes");
-                println!("                 CHARTER.md from answers. Stage-1/2 questions are");
-                println!("                 signal-gated against DESIGN.md when present.");
-                println!("  --orchestrate  Orchestrator mode: require DESIGN.md + CHARTER.md +");
-                println!("                 IMPLEMENTATION_PLAN.md at repo root (run the respective");
-                println!("                 subcommands first), then flip the lifecycle and compose");
-                println!("                 PHASES.md from plan_items. Skips the questionnaire — the");
-                println!("                 design session + plan composer already captured what we'd");
-                println!("                 have asked. Elicits only the Phase-1 stop condition.");
-                return 0;
-            }
-            flag if flag.starts_with("--") => {
-                eprintln!("warning: unknown flag '{flag}' — ignored");
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    if orchestrate {
-        return cmd_found_orchestrate(design_path.as_deref()).await;
-    }
-
-    let repo_root = match find_repo_root() {
-        Some(r) => r,
-        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-    };
-    let sovereign_dir = repo_root.join(".sovereign");
-    let project_toml_path = sovereign_dir.join("project.toml");
-
-    // Gate 1: project.toml must exist — `project init` is the
-    // prerequisite. A helpful message, not an opaque "file not found."
-    if !project_toml_path.exists() {
-        eprintln!();
-        eprintln!(
-            "  sovereign project found: no .sovereign/project.toml found.\n\
-             \n\
-             Run `sovereign project init` first so we have an observation\n\
-             of the project to anchor the founding conversation to."
-        );
-        return 1;
-    }
-
-    let mut project_toml = match crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("  sovereign project found: cannot read project.toml: {e}");
-            return 1;
-        }
-    };
-
-    // Gate 2: once-per-project. Amendments go through
-    // `sovereign project amend` (M6.7).
-    if project_toml.lifecycle.founded {
-        eprintln!();
-        eprintln!(
-            "  sovereign project found: this project was already founded\n\
-             (charter_version={}, current_phase={}).\n\
-             \n\
-             To revise the charter, use `sovereign project amend` (M6.7).",
-            project_toml.lifecycle.charter_version, project_toml.lifecycle.current_phase,
-        );
-        return 1;
-    }
-
-    // Re-observe: project.toml has a snapshot but it may be stale.
-    // Founding is a small moment; pay the <200ms cost for a fresh
-    // read rather than trust a potentially-days-old observation.
-    let observation = crate::observation::observe(&repo_root);
-
-    // Design doc handling.
-    let design_text: Option<String> = match design_path.as_deref() {
-        Some(p) => match crate::found::load_design(p) {
-            Some(text) => {
-                println!();
-                println!("  Using design document: {}", p.display());
-                let preview = crate::found::design_preview(&text);
-                if !preview.is_empty() {
-                    println!("    \u{2192} {}", preview);
-                }
-                Some(text)
-            }
-            None => {
-                eprintln!(
-                    "  sovereign project found: could not read --design {} — falling back to elicitation.",
-                    p.display()
-                );
-                None
-            }
-        },
-        None => None,
-    };
-
-    println!();
-    println!("  Sovereign Project Founding — Stage 1: Understanding");
-    println!("  {}", "─".repeat(54));
-    println!();
-    println!(
-        "  A few questions — each one is material (it changes what ends up in the charter)."
-    );
-    println!("  Hit Enter to skip any question; you can amend later.");
-
-    // Persistence: open the project's NoteStore under the
-    // canonical .sovereign/notes.db path.
-    let notes_path = sovereign_dir.join("notes.db");
-    let note_store = match corpus_engine::NoteStore::open(&notes_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("  sovereign project found: cannot open notes.db: {e}");
-            return 1;
-        }
-    };
-    let session_id = format!("found-{}", unix_now_secs());
-
-    // Handle is needed so the blocking recorder can reuse the
-    // current multi-thread runtime for its writes.
-    let rt_handle = tokio::runtime::Handle::current();
-    let mut recorder = crate::found::NoteStoreDecisionWriter {
-        store: &note_store,
-        session_id: &session_id,
-        written: Vec::new(),
-        rt: rt_handle,
-    };
-    let mut interlocutor = crate::found::StdinFoundInterlocutor::new();
-
-    // Signals are extracted from the design doc when one is present.
-    // Step-3 wiring: we compute them once and thread them into both
-    // Stage 1 (catalog predicates) and Stage 2 (fault-line
-    // predicates). Step 4's `cmd_design` flow will likely have
-    // already computed these; recomputing here is cheap (O(n) over
-    // the doc) and keeps this code path self-contained.
-    let design_signals: Option<corpus_engine::design_signals::DesignSignals> =
-        design_text.as_deref().map(corpus_engine::design_signals::extract);
-
-    let answers = crate::found::run_stage1(
-        &observation,
-        design_text.as_deref(),
-        design_signals.as_ref(),
-        &mut interlocutor,
-        &mut recorder,
-    );
-
-    // Stage 1 summary.
-    let recorded_s1 = recorder.written.len();
-    let answered: usize = answers.iter().filter(|a| !a.skipped).count();
-    let skipped: usize = answers.iter().filter(|a| a.skipped).count();
-    println!();
-    println!("  Stage 1 complete.");
-    println!(
-        "    {recorded_s1} decision note{} written ({answered} answered, {skipped} skipped).",
-        if recorded_s1 == 1 { "" } else { "s" },
-    );
-
-    // Stage 2 — Fault lines. The stage-1 answers become input
-    // signals for fault-line selection.
-    let rt_handle_2 = tokio::runtime::Handle::current();
-    let mut fault_recorder = crate::found::NoteStoreFaultLineWriter {
-        store: &note_store,
-        session_id: &session_id,
-        written: Vec::new(),
-        outcomes: Vec::new(),
-        rt: rt_handle_2,
-    };
-    let mut fault_interlocutor = crate::found::StdinFaultLineInterlocutor::new();
-    let selected_faults =
-        crate::found::select_fault_lines(&observation, &answers, design_signals.as_ref());
-    let stage2_summary = if selected_faults.is_empty() {
-        println!();
-        println!("  Sovereign Project Founding — Stage 2: Fault lines");
-        println!("  {}", "─".repeat(54));
-        println!();
-        println!("  No fault lines fired for this project's shape — moving on.");
-        crate::found::Stage2Summary::default()
-    } else {
-        println!();
-        println!("  Sovereign Project Founding — Stage 2: Fault lines");
-        println!("  {}", "─".repeat(54));
-        println!();
-        println!(
-            "  {} genuine disagreement{} in your domain. These aren't recommendations —",
-            selected_faults.len(),
-            if selected_faults.len() == 1 { "" } else { "s" }
-        );
-        println!("  reasonable people pick different sides. Decide now, leave open, or skip.");
-        crate::found::run_stage2(
-            &observation,
-            &answers,
-            design_signals.as_ref(),
-            &mut fault_interlocutor,
-            &mut fault_recorder,
-        )
-    };
-
-    println!();
-    println!("  Stage 2 complete.");
-    println!(
-        "    {} resolved → decision notes, {} open → uncertainty notes, {} skipped (no note).",
-        stage2_summary.resolved, stage2_summary.open, stage2_summary.skipped,
-    );
-    println!(
-        "    Read them back with:  sovereign read-notes --session {session_id}",
-    );
-
-    // Persist the observation refresh before we head into the
-    // write-on-approval stages — if the user cancels in Stage 3/4,
-    // we still want the observation update to stick.
-    project_toml.update_observation(&observation, &project_toml_path);
-    if let Err(e) = project_toml.write(&project_toml_path) {
-        eprintln!("    \u{2717} Could not persist observation refresh: {e}");
-    }
-
-    // ── Stage 2.5 — Documentation URLs (M6.6) ───────────────────
-    //
-    // One question, asked once. Drop URLs → fetch + index into
-    // ProjectDocsStore. Empty answer → decision note explaining
-    // the runtime fallback. Either way, the user isn't asked this
-    // again inside a founding session.
-    let docs_prompt = crate::found::render_docs_prompt(&observation);
-    let mut docs_interlocutor = crate::found::StdinDocsInterlocutor::new();
-    let raw_urls = crate::found::DocsInterlocutor::ask_docs_urls(
-        &mut docs_interlocutor,
-        &docs_prompt,
-    );
-    let urls = crate::doc_fetcher::parse_urls(&raw_urls);
-
-    if !urls.is_empty() {
-        // Open ProjectDocsStore alongside the daemon's canonical
-        // path (.sovereign/project_docs.db). init already created
-        // .sovereign/ when it wrote project.toml.
-        let docs_db = sovereign_dir.join("project_docs.db");
-        match corpus_engine::ProjectDocsStore::open(&docs_db) {
-            Ok(store) => {
-                let rt = tokio::runtime::Handle::current();
-                let fetcher = crate::doc_fetcher::ProjectDocsFetcher {
-                    http: crate::doc_fetcher::reqwest_http(rt.clone()),
-                    store: &store,
-                    repo_root: repo_root.clone(),
-                    rt,
-                };
-                println!();
-                println!("  Fetching {} documentation URL{}…", urls.len(), if urls.len() == 1 { "" } else { "s" });
-                let summaries = fetcher.fetch_many(&urls);
-                let mut ok_count = 0usize;
-                let mut err_count = 0usize;
-                for s in &summaries {
-                    match &s.outcome {
-                        crate::honesty::FetchOutcome::Ok { bytes_indexed } => {
-                            ok_count += 1;
-                            println!(
-                                "    \u{2713} {} ({} chunk{})",
-                                s.url,
-                                bytes_indexed,
-                                if *bytes_indexed == 1 { "" } else { "s" }
-                            );
-                        }
-                        crate::honesty::FetchOutcome::Err(e) => {
-                            err_count += 1;
-                            println!("    \u{2717} {}  ({e})", s.url);
-                        }
-                    }
-                }
-                println!(
-                    "    → {} indexed, {} failed. Re-fetch failures later by editing\n      `.sovereign/docs/` and re-running `sovereign project refresh`.",
-                    ok_count, err_count
-                );
-            }
-            Err(e) => {
-                eprintln!("    \u{2717} Could not open project_docs.db: {e}");
-                eprintln!("    URLs recorded but not indexed. You can retry later.");
-            }
-        }
-    } else if !raw_urls.trim().is_empty() {
-        println!();
-        println!(
-            "    No HTTP(S) URLs parsed from your answer. Nothing fetched; \
-             runtime honesty prompts will surface gaps as they come up."
-        );
-    } else {
-        println!();
-        println!(
-            "    No URLs provided — runtime honesty prompts will surface gaps \
-             as they come up."
-        );
-    }
-
-    // Durable record: Stage-2.5 decision note regardless of the
-    // answer shape. Empty answer is itself a decision.
-    let docs_body = crate::found::render_docs_decision_body(&docs_prompt, &urls);
-    let rt_for_docs = tokio::runtime::Handle::current();
-    let _ = tokio::task::block_in_place(|| {
-        rt_for_docs.block_on(note_store.write_note_scoped(
-            "decision",
-            &docs_body,
-            Vec::new(),
-            Vec::new(),
-            &session_id,
-            corpus_engine::NoteScope::Global,
-            None,
-        ))
-    });
-
-    // ── Stages 3 + 4 — CHARTER.md + PHASES.md ───────────────────
-    //
-    // Collect the stage-2 outcomes for composition. The runner
-    // already recorded them; we need the parallel (fault, outcome)
-    // tuples here for rendering. We rebuild them by re-running the
-    // selection over the observation+stage1 answers and re-asking
-    // — but that'd be a second interactive pass. Instead, we track
-    // outcomes from the stage 2 loop we just ran, via the
-    // fault_recorder's side channel.
-    //
-    // The simplest correct path is to re-query the notes we just
-    // wrote in stage 2, since `NoteStoreFaultLineWriter` persists
-    // decision + uncertainty notes with stable id prefixes. But
-    // that's a round-trip through SQLite just to re-derive
-    // in-memory data. So here: we change the fault recorder to
-    // ALSO retain the (fault, outcome) pairs and expose them.
-    //
-    // That change is minimal — see `NoteStoreFaultLineWriter.outcomes`.
-
-    let mut approval_interlocutor = crate::found::StdinApprovalInterlocutor::new();
-
-    let phase1_stop =
-        crate::found::ApprovalInterlocutor::ask_phase1_stop(&mut approval_interlocutor);
-    if phase1_stop.trim().is_empty() {
-        eprintln!();
-        eprintln!(
-            "  sovereign project found: a Phase 1 stop condition is required.\n\
-             Stages 1 + 2 decision notes are already recorded — re-run\n\
-             `sovereign project found` when you have a concrete answer."
-        );
-        return 0; // cancel, not error — stage 1+2 work is preserved
-    }
-
-    let founded_date = today_iso();
-    let project_id = derive_project_id(&repo_root);
-    let stage2_pairs = fault_recorder.outcomes.clone();
-    let founding_inputs = crate::found::FoundingInputs {
-        project_id: &project_id,
-        founded_date: &founded_date,
-        observation: &observation,
-        design: design_text.as_deref(),
-        stage1_answers: &answers,
-        stage2_outcomes: &stage2_pairs,
-        phase1_stop_condition: &phase1_stop,
-    };
-
-    let charter = crate::found::compose_charter(&founding_inputs);
-    let phases = crate::found::compose_phases(&founding_inputs);
-
-    println!();
-    println!("  Sovereign Project Founding — Stage 3 + 4: Charter + Phases");
-    println!("  {}", "─".repeat(54));
-
-    // Drafts live in .sovereign/.pending/ during the edit loop so
-    // the user can $EDITOR them directly. Cleaned up after
-    // approval; retained on cancel so the user can inspect.
-    let pending_dir = sovereign_dir.join(".pending");
-    if let Err(e) = std::fs::create_dir_all(&pending_dir) {
-        eprintln!("    \u{2717} Could not create .pending directory: {e}");
-        return 1;
-    }
-
-    let outcome = crate::found::run_stage34(
-        charter,
-        phases,
-        &pending_dir,
-        &mut approval_interlocutor,
-    );
-
-    match outcome {
-        crate::found::FoundingApproval::Approved {
-            charter: final_charter,
-            phases: final_phases,
-        } => {
-            let charter_out = sovereign_dir.join("CHARTER.md");
-            let phases_out = sovereign_dir.join("PHASES.md");
-            if let Err(e) = std::fs::write(&charter_out, &final_charter) {
-                eprintln!("    \u{2717} Could not write CHARTER.md: {e}");
-                return 1;
-            }
-            if let Err(e) = std::fs::write(&phases_out, &final_phases) {
-                eprintln!("    \u{2717} Could not write PHASES.md: {e}");
-                return 1;
-            }
-            println!();
-            println!("    \u{2713} {}", charter_out.display());
-            println!("    \u{2713} {}", phases_out.display());
-
-            // Flip lifecycle + record charter hash.
-            project_toml.lifecycle.founded = true;
-            project_toml.lifecycle.charter_version = 1;
-            project_toml.lifecycle.current_phase = 0;
-            project_toml.lifecycle.charter_hash = crate::found::hash_charter(&final_charter);
-            if let Err(e) = project_toml.write(&project_toml_path) {
-                eprintln!("    \u{2717} Could not flip lifecycle.founded in project.toml: {e}");
-                return 1;
-            }
-            println!(
-                "    \u{2713} project.toml: founded=true, charter_version=1, current_phase=0"
-            );
-
-            // Clean up the pending drafts — the canonical files are
-            // the output now.
-            let _ = std::fs::remove_file(pending_dir.join("CHARTER.md"));
-            let _ = std::fs::remove_file(pending_dir.join("PHASES.md"));
-            let _ = std::fs::remove_dir(&pending_dir);
-
-            println!();
-            println!("  Project founded. Phase 0 begins.");
-            0
-        }
-        crate::found::FoundingApproval::Cancelled => {
-            println!();
-            println!("  Founding cancelled. Stage 1 + 2 decision notes are preserved;");
-            println!(
-                "  draft CHARTER.md + PHASES.md remain under {} for you to review.",
-                pending_dir.display()
-            );
-            println!("  Re-run `sovereign project found` when you're ready to approve.");
-            0
-        }
-    }
 }
 
 // ─── sovereign project phase (M7.1) ──────────────────────────
@@ -3853,6 +3238,16 @@ async fn cmd_found(args: &[String]) -> i32 {
 // phase's stop condition, write phase-N.md, advance
 // lifecycle.current_phase, write a decision note. The artifact
 // trail closes the "was Phase N actually verified?" gap.
+//
+// **Phase 6 status: advisory.** No other command in the
+// codebase refuses to run because of `lifecycle.current_phase` —
+// the phase machinery is self-contained (it manages its own
+// PHASES.md artifact and increments its own counter on `pass`).
+// Users who want explicit phase progression keep using this
+// surface; users who don't can write a spec, commit, and work
+// without ever invoking it. `cmd_audit` reads the phase table
+// for display only; the approval_gate / MCP tools do not consult
+// `current_phase` at all.
 
 pub(crate) async fn cmd_phase(args: &[String]) -> i32 {
     let Some(sub) = args.first().cloned() else {
@@ -4202,6 +3597,37 @@ pub(crate) async fn cmd_audit(args: &[String]) -> i32 {
         }
     };
 
+    // Phase 7.3 gap E: run the LLM-backed extraction pass before
+    // the report renders, so any new `source='extracted'` notes
+    // land in the same audit. Best-effort — head-equality
+    // short-circuit makes repeated runs cheap; backend-availability
+    // failures skip cleanly without affecting the surrounding
+    // audit. Output goes to stderr so the markdown report on
+    // stdout isn't polluted.
+    let notes_db = sov.join("notes.db");
+    if notes_db.exists() {
+        if let Ok(store) = corpus_engine::NoteStore::open(&notes_db) {
+            let summary = crate::audit_extract::run_with_default_backend(
+                &repo_root, &store,
+            )
+            .await;
+            if summary.ran && summary.written > 0 {
+                eprintln!(
+                    "  audit: extracted {} new decision{} from diff at HEAD {}",
+                    summary.written,
+                    if summary.written == 1 { "" } else { "s" },
+                    summary
+                        .head
+                        .as_deref()
+                        .map(|h| h.chars().take(8).collect::<String>())
+                        .unwrap_or_default(),
+                );
+            } else if let Some(reason) = summary.skip_reason {
+                tracing::debug!(reason, "audit_extract: skipped");
+            }
+        }
+    }
+
     let report = build_audit_report(&repo_root, &project_toml).await;
     println!("{report}");
     0
@@ -4292,70 +3718,92 @@ async fn build_audit_report(
         out.push_str("_(no PHASES.md — project not founded)_\n\n");
     }
 
-    // ── Notes by kind ──────────────────────────────────────────
-    out.push_str("## Notes by kind\n\n");
+    // ── Phase 7.3: multi-source audit sections ─────────────────
+    //
+    // The audit is the deliverable. The "non-empty floor" contract
+    // says any session that did real work produces something
+    // here, even if the agent never explicitly called `note(...)`
+    // — that floor is held up by the four extraction streams
+    // (agent / committed / extracted / inferred / observed).
+    //
+    // Layout (per spec §2.7):
+    //
+    //   ## Decisions       — kind=decision|invariant, sorted by
+    //                        (source priority desc, created_at desc).
+    //                        Reversal lines render under their
+    //                        original via `supersedes`.
+    //   ## Deviations      — kind=deviation. Source-tagged.
+    //   ## Open questions  — kind=uncertainty. Source-tagged;
+    //                        inferred-source rows lower-emphasised.
+    //   ## Observed patterns — source=observed (any kind).
+    //   ## Notes by kind   — kept for backward compatibility with
+    //                        readers used to the old layout.
     let notes_db = sov.join("notes.db");
-    let (note_counts, recent_open_questions, recent_deviations) = if notes_db.exists() {
+    let audit_notes: AuditNotes = if notes_db.exists() {
         match corpus_engine::NoteStore::open(&notes_db) {
-            Ok(store) => gather_note_summary(&store).await,
-            Err(_) => (Default::default(), Vec::new(), Vec::new()),
+            Ok(store) => gather_audit_notes(&store).await,
+            Err(_) => AuditNotes::default(),
         }
     } else {
-        (Default::default(), Vec::new(), Vec::new())
+        AuditNotes::default()
     };
-    if note_counts.is_empty() {
+
+    out.push_str(&render_decisions(&audit_notes));
+    out.push_str(&render_deviations(&audit_notes));
+    out.push_str(&render_open_questions(&audit_notes));
+    out.push_str(&render_observed_patterns(&audit_notes));
+
+    // Legacy "Notes by kind" count table — kept so reviewers used
+    // to it don't notice a regression. Empty case still renders
+    // the placeholder so empty audits stay consistent.
+    out.push_str("## Notes by kind\n\n");
+    if audit_notes.counts.is_empty() {
         out.push_str("_(no notes recorded)_\n\n");
     } else {
         out.push_str("| Kind | Count |\n|---|---|\n");
-        for (kind, count) in &note_counts {
+        for (kind, count) in &audit_notes.counts {
             out.push_str(&format!("| {kind} | {count} |\n"));
         }
         out.push('\n');
     }
 
-    if !recent_open_questions.is_empty() {
-        out.push_str("### Open questions\n\n");
-        for (id, first_line) in &recent_open_questions {
-            out.push_str(&format!("- `[note:{id}]` {first_line}\n"));
-        }
-        out.push('\n');
-    }
-    if !recent_deviations.is_empty() {
-        out.push_str("### Deviations (accepted drift + spec changes)\n\n");
-        for (id, first_line) in &recent_deviations {
-            out.push_str(&format!("- `[note:{id}]` {first_line}\n"));
-        }
-        out.push('\n');
-    }
-
     // ── Features ───────────────────────────────────────────────
+    //
+    // Phase 6: enumerate features from BOTH sources and merge by
+    // id, so a feature with just a committed `spec.md` (no
+    // `provision` step) shows up alongside features that were
+    // explicitly seeded into `features.db`.
+    //
+    //   - `.sovereign/features/<id>/` directories on disk → "spec
+    //     present" / "no spec yet" depending on whether `spec.md`
+    //     exists. Source of truth for the new flat-namespace flow.
+    //   - `features.db` rows → state machine (active/archived) and
+    //     auto-redteam preference. Still useful for projects that
+    //     ran `sovereign atos provision`, but no longer required.
+    //
+    // Both sources are merged on `id`. A directory-only feature
+    // shows `state = "(directory only)"`; a db-only feature
+    // (provisioned but never had its spec written) shows
+    // `state = <db state>` + a missing-spec note.
     out.push_str("## Features\n\n");
-    let features_db = sov.join("features.db");
-    if features_db.exists() {
-        match corpus_engine::FeatureStore::open(&features_db) {
-            Ok(store) => match store.list(true).await {
-                Ok(features) if !features.is_empty() => {
-                    out.push_str("| Feature | State | Auto red-team |\n|---|---|---|\n");
-                    for f in &features {
-                        out.push_str(&format!(
-                            "| {} | {} | {} |\n",
-                            f.id,
-                            f.state,
-                            if f.auto_redteam { "yes" } else { "no" }
-                        ));
-                    }
-                    out.push('\n');
-                }
-                _ => {
-                    out.push_str("_(no features provisioned yet)_\n\n");
-                }
-            },
-            Err(_) => {
-                out.push_str("_(features.db unreadable)_\n\n");
-            }
-        }
+    let feature_rows = collect_feature_rows(&sov).await;
+    if feature_rows.is_empty() {
+        out.push_str("_(no features yet — write a spec at \
+            `.sovereign/features/<id>/spec.md` and commit it)_\n\n");
     } else {
-        out.push_str("_(no features.db yet)_\n\n");
+        out.push_str(
+            "| Feature | State | Spec | Auto red-team |\n|---|---|---|---|\n",
+        );
+        for row in &feature_rows {
+            out.push_str(&format!(
+                "| {} | {} | {} | {} |\n",
+                row.id,
+                row.state,
+                if row.spec_present { "✓" } else { "missing" },
+                if row.auto_redteam { "yes" } else { "no" },
+            ));
+        }
+        out.push('\n');
     }
 
     // ── Artifact inventory ─────────────────────────────────────
@@ -4532,13 +3980,39 @@ fn read_phase_verdict(path: &Path) -> Option<String> {
 /// Count notes by kind and pull up to 10 open-question + 10
 /// deviation notes. Uses the broad Global + Feature scope
 /// combined — auditor wants the whole picture.
-async fn gather_note_summary(
-    store: &corpus_engine::NoteStore,
-) -> (
-    std::collections::BTreeMap<String, u32>,
-    Vec<(String, String)>,
-    Vec<(String, String)>,
-) {
+/// Phase 7.3: everything the audit's note-derived sections need.
+/// Built once per audit run by [`gather_audit_notes`]; the
+/// section renderers are pure with respect to this struct.
+#[derive(Debug, Default)]
+struct AuditNotes {
+    /// `kind=decision` or `kind=invariant`, sorted by
+    /// (source priority desc, created_at desc). Reversal lines
+    /// follow their originals — see [`render_decisions`].
+    decisions: Vec<corpus_engine::NoteRow>,
+    /// `kind=deviation`. Source-tagged in the renderer.
+    deviations: Vec<corpus_engine::NoteRow>,
+    /// `kind=uncertainty`. The renderer de-emphasises
+    /// `source=inferred` rows since they're the lowest-confidence
+    /// stream.
+    open_questions: Vec<corpus_engine::NoteRow>,
+    /// `source=observed` (any kind). These are the audit's
+    /// "the agent did X but didn't say so" stream from the Phase
+    /// 7.1 ToolPatternMatcher.
+    observed: Vec<corpus_engine::NoteRow>,
+    /// All notes, indexed by id. Used by the renderer to look up
+    /// the row a `supersedes` link points at.
+    by_id: std::collections::HashMap<String, corpus_engine::NoteRow>,
+    /// Total count per kind across all sources. Powers the
+    /// legacy "Notes by kind" table.
+    counts: std::collections::BTreeMap<String, u32>,
+}
+
+/// Read every active note in the store and bucket it by the
+/// audit's section needs. Decisions are sorted by source priority
+/// (agent > committed > extracted > inferred > observed) then
+/// reverse chronological. Read-once, render-many — the renderers
+/// don't touch the DB.
+async fn gather_audit_notes(store: &corpus_engine::NoteStore) -> AuditNotes {
     let filter = corpus_engine::ScopeFilter {
         scopes: vec![
             corpus_engine::NoteScope::Global,
@@ -4547,31 +4021,310 @@ async fn gather_note_summary(
         feature_id: None,
     };
     let rows = store
-        .read_notes_scoped(None, &[], &[], &[], 500, false, &filter)
+        .read_notes_scoped(None, &[], &[], &[], 1000, false, &filter)
         .await
         .unwrap_or_default();
 
     let mut counts: std::collections::BTreeMap<String, u32> = Default::default();
-    let mut opens = Vec::new();
-    let mut devs = Vec::new();
-    for n in rows {
+    let mut decisions = Vec::new();
+    let mut deviations = Vec::new();
+    let mut open_questions = Vec::new();
+    let mut observed = Vec::new();
+    let mut by_id = std::collections::HashMap::new();
+
+    for n in &rows {
         *counts.entry(n.kind.clone()).or_insert(0) += 1;
-        let first_line = n
-            .content
-            .lines()
-            .next()
-            .unwrap_or("")
-            .chars()
-            .take(120)
-            .collect::<String>();
-        if n.kind == "uncertainty" && opens.len() < 10 {
-            opens.push((n.id.clone(), first_line.clone()));
+        if n.kind == "decision" || n.kind == "invariant" {
+            decisions.push(n.clone());
         }
-        if n.kind == "deviation" && devs.len() < 10 {
-            devs.push((n.id.clone(), first_line));
+        if n.kind == "deviation" {
+            deviations.push(n.clone());
+        }
+        if n.kind == "uncertainty" {
+            open_questions.push(n.clone());
+        }
+        if n.source == corpus_engine::NoteSource::Observed.as_str() {
+            observed.push(n.clone());
+        }
+        by_id.insert(n.id.clone(), n.clone());
+    }
+
+    // Decisions get the multi-source priority sort. Higher
+    // priority first; tie-broken by recency. The audit reader
+    // sees agent-written decisions above extracted/inferred ones
+    // — the trust ordering matches the eye flow.
+    decisions.sort_by(|a, b| {
+        let pa = source_priority(&a.source);
+        let pb = source_priority(&b.source);
+        pb.cmp(&pa).then_with(|| b.created_at.cmp(&a.created_at))
+    });
+    deviations.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    open_questions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    observed.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    AuditNotes {
+        decisions,
+        deviations,
+        open_questions,
+        observed,
+        by_id,
+        counts,
+    }
+}
+
+/// Lookup helper for the audit sort. Maps the string-form source
+/// (which is what's in the DB row) back to the priority number.
+/// Unknown / pre-v6 strings are treated as lowest priority so a
+/// stale row never accidentally floats above the agent's own.
+fn source_priority(s: &str) -> u8 {
+    match corpus_engine::NoteSource::parse(s) {
+        Some(src) => src.priority(),
+        None => 0,
+    }
+}
+
+/// Render a one-line summary of `note` suitable for the audit's
+/// bullet lists. First line of the body, truncated to a
+/// reasonable cap, with a `[<source>]` suffix the reviewer can
+/// scan to gauge confidence at a glance.
+fn render_audit_line(note: &corpus_engine::NoteRow) -> String {
+    let first_line: String = note
+        .content
+        .lines()
+        .next()
+        .unwrap_or("")
+        .chars()
+        .take(160)
+        .collect();
+    format!(
+        "- `[note:{}]` {} _[{}]_",
+        note.id,
+        first_line.trim_end(),
+        note.source
+    )
+}
+
+/// Phase 7.3 Decisions section. Walks `notes.decisions` once;
+/// for each top-level note (one without a `supersedes` link) it
+/// renders the line and any subsequent reversal. The reverse
+/// shows up indented under the original so the audit reader sees
+/// the chain.
+fn render_decisions(notes: &AuditNotes) -> String {
+    let mut out = String::new();
+    out.push_str("## Decisions\n\n");
+    if notes.decisions.is_empty() {
+        out.push_str("_(no decisions recorded yet)_\n\n");
+        return out;
+    }
+    // Build the reverse map: original.id → list of supersedes rows.
+    let mut supers_of: std::collections::HashMap<String, Vec<&corpus_engine::NoteRow>> =
+        std::collections::HashMap::new();
+    for n in &notes.decisions {
+        if let Some(orig_id) = n.supersedes.as_ref() {
+            supers_of.entry(orig_id.clone()).or_default().push(n);
         }
     }
-    (counts, opens, devs)
+    // Sort each reversal chain by created_at ascending so the
+    // earliest reversal renders directly under the original.
+    for chain in supers_of.values_mut() {
+        chain.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    }
+
+    let mut already_rendered: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    for n in &notes.decisions {
+        // Skip rows that are themselves reversals — they'll be
+        // rendered under the originals below.
+        if n.supersedes.is_some() {
+            // ...unless the original isn't in our visible set
+            // (e.g. retired separately). In that case render it
+            // standalone so the reviewer doesn't lose the entry.
+            let orphan = n
+                .supersedes
+                .as_ref()
+                .map(|id| !notes.by_id.contains_key(id))
+                .unwrap_or(true);
+            if !orphan {
+                continue;
+            }
+        }
+        if already_rendered.contains(&n.id) {
+            continue;
+        }
+        out.push_str(&render_audit_line(n));
+        out.push('\n');
+        already_rendered.insert(n.id.clone());
+        if let Some(reversals) = supers_of.get(&n.id) {
+            for r in reversals {
+                out.push_str(&format!(
+                    "  ↳ REVERSED {}: {} _[{}]_\n",
+                    short_date(&r.created_at),
+                    r.content
+                        .lines()
+                        .next()
+                        .unwrap_or("")
+                        .chars()
+                        .take(140)
+                        .collect::<String>()
+                        .trim_end(),
+                    r.source
+                ));
+                already_rendered.insert(r.id.clone());
+            }
+        }
+    }
+    out.push('\n');
+    out
+}
+
+/// Phase 7.3 Deviations section. Sorted reverse-chronological;
+/// each row carries a `[<source>]` suffix so the reviewer can
+/// distinguish drift the agent acknowledged (`agent`) from drift
+/// surfaced via spec-hash comparison (`extracted` / `inferred`).
+fn render_deviations(notes: &AuditNotes) -> String {
+    let mut out = String::new();
+    if notes.deviations.is_empty() {
+        return out;
+    }
+    out.push_str("## Deviations\n\n");
+    for n in &notes.deviations {
+        out.push_str(&render_audit_line(n));
+        out.push('\n');
+    }
+    out.push('\n');
+    out
+}
+
+/// Phase 7.3 Open questions section. `kind=uncertainty`. The
+/// renderer marks `source=inferred` rows with a "(low confidence)"
+/// suffix because regex-mining over assistant prose is noisier
+/// than the agent's own `note(uncertainty, …)`.
+fn render_open_questions(notes: &AuditNotes) -> String {
+    let mut out = String::new();
+    if notes.open_questions.is_empty() {
+        return out;
+    }
+    out.push_str("## Open questions\n\n");
+    for n in &notes.open_questions {
+        let confidence_suffix =
+            if n.source == corpus_engine::NoteSource::Inferred.as_str() {
+                " _(low confidence)_"
+            } else {
+                ""
+            };
+        out.push_str(&render_audit_line(n));
+        out.push_str(confidence_suffix);
+        out.push('\n');
+    }
+    out.push('\n');
+    out
+}
+
+/// Phase 7.3 Observed patterns section. Pulls notes tagged
+/// `source=observed` from any kind. These are the
+/// `ToolPatternMatcher`'s output — workflow-shape signals like
+/// "investigated impact before editing" that no human or agent
+/// recorded explicitly.
+fn render_observed_patterns(notes: &AuditNotes) -> String {
+    let mut out = String::new();
+    if notes.observed.is_empty() {
+        return out;
+    }
+    out.push_str("## Observed patterns\n\n");
+    for n in &notes.observed {
+        out.push_str(&render_audit_line(n));
+        out.push('\n');
+    }
+    out.push('\n');
+    out
+}
+
+/// Format a NoteRow's RFC-3339 created_at as `YYYY-MM-DD`. If the
+/// string isn't parseable as RFC-3339, returns the raw column
+/// truncated to 10 chars (the date prefix). Audit lines are
+/// terse — we don't render the full timestamp.
+fn short_date(rfc3339: &str) -> String {
+    // First 10 chars of an RFC-3339 timestamp is "YYYY-MM-DD".
+    rfc3339.chars().take(10).collect()
+}
+
+/// One audit row in the Features table. Merges what we know from
+/// `features.db` (lifecycle state, redteam preference) with what we
+/// see on disk (`.sovereign/features/<id>/spec.md`). A row exists
+/// if either source has the feature.
+struct FeatureRow {
+    id: String,
+    /// "(directory only)" when the feature is on disk but absent
+    /// from features.db; the db state ("active", "archived", …)
+    /// otherwise. Phase 6: directory-only is the new default —
+    /// users no longer need to run `sovereign atos provision` to
+    /// have a feature exist for the audit.
+    state: String,
+    /// True iff `<id>/spec.md` is present at the canonical path.
+    spec_present: bool,
+    /// Mirrors `FeatureRow.auto_redteam` from the db. Defaults to
+    /// false for directory-only entries.
+    auto_redteam: bool,
+}
+
+/// Enumerate features from both sources (db + on-disk directories)
+/// and return one merged row per id, sorted alphabetically. Result
+/// is empty when neither source has any features — the audit
+/// renders that as a one-line "_(no features yet)_" note rather
+/// than a header-less table.
+async fn collect_feature_rows(sov: &Path) -> Vec<FeatureRow> {
+    use std::collections::BTreeMap;
+
+    let mut by_id: BTreeMap<String, FeatureRow> = BTreeMap::new();
+
+    // Source A: `.sovereign/features/<id>/` directories.
+    let features_dir = sov.join("features");
+    if let Ok(entries) = std::fs::read_dir(&features_dir) {
+        for entry in entries.flatten() {
+            if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let Some(id) = entry.file_name().to_str().map(String::from) else {
+                continue;
+            };
+            let spec_present = entry.path().join("spec.md").is_file();
+            by_id.insert(
+                id.clone(),
+                FeatureRow {
+                    id,
+                    state: "(directory only)".into(),
+                    spec_present,
+                    auto_redteam: false,
+                },
+            );
+        }
+    }
+
+    // Source B: `features.db` rows. Where ids overlap, the db row
+    // "wins" for state + auto_redteam; spec_present is taken from
+    // the directory walk (we don't trust the db to know whether
+    // spec.md was actually written).
+    let features_db = sov.join("features.db");
+    if features_db.exists() {
+        if let Ok(store) = corpus_engine::FeatureStore::open(&features_db) {
+            if let Ok(features) = store.list(true).await {
+                for f in features {
+                    let spec_present = features_dir.join(&f.id).join("spec.md").is_file();
+                    by_id.insert(
+                        f.id.clone(),
+                        FeatureRow {
+                            id: f.id,
+                            state: f.state.to_string(),
+                            spec_present,
+                            auto_redteam: f.auto_redteam,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    by_id.into_values().collect()
 }
 
 fn collect_artifact_inventory(sov: &Path) -> Vec<String> {
@@ -6871,5 +6624,360 @@ fi
         let empty_tmp = tempfile::tempdir().unwrap();
         let empty_snap = snapshot_graph_mtimes(empty_tmp.path());
         assert!(empty_snap.is_empty());
+    }
+
+    // ─── Phase 6: directory-only features show up in audit ────────
+
+    /// `collect_feature_rows` returns one row for a feature with a
+    /// `.sovereign/features/<id>/spec.md` on disk and no
+    /// `features.db`. Phase 6: this is the new default — users do
+    /// NOT need to run `sovereign atos provision` to have a feature
+    /// surface in the audit; writing the spec is sufficient.
+    #[tokio::test]
+    async fn audit_lists_directory_only_feature_without_features_db() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sov = tmp.path().to_path_buf();
+        // Spec on disk, no features.db at all.
+        let foo = sov.join("features").join("foo");
+        std::fs::create_dir_all(&foo).unwrap();
+        std::fs::write(foo.join("spec.md"), b"# foo\n").unwrap();
+
+        let rows = collect_feature_rows(&sov).await;
+        assert_eq!(rows.len(), 1, "expected one row for directory-only foo");
+        assert_eq!(rows[0].id, "foo");
+        assert_eq!(rows[0].state, "(directory only)");
+        assert!(
+            rows[0].spec_present,
+            "directory-only feature with spec.md must report spec_present=true"
+        );
+        assert!(
+            !rows[0].auto_redteam,
+            "directory-only feature defaults to auto_redteam=false"
+        );
+    }
+
+    /// A feature directory WITHOUT a `spec.md` still appears in the
+    /// audit (so the user sees the empty scaffold) but
+    /// `spec_present` is false. The audit will render this as
+    /// "missing" so the user knows to write the spec.
+    #[tokio::test]
+    async fn audit_lists_directory_only_feature_with_missing_spec() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sov = tmp.path().to_path_buf();
+        let foo = sov.join("features").join("foo");
+        std::fs::create_dir_all(&foo).unwrap();
+        // Sibling file, but no spec.md.
+        std::fs::write(foo.join("brief.md"), b"# foo\n").unwrap();
+
+        let rows = collect_feature_rows(&sov).await;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "foo");
+        assert!(
+            !rows[0].spec_present,
+            "feature dir without spec.md must report spec_present=false"
+        );
+    }
+
+    /// Empty `.sovereign/` (no features dir, no db) → empty Vec, so
+    /// the audit emits the "no features yet" pointer.
+    #[tokio::test]
+    async fn audit_returns_empty_when_no_features_anywhere() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rows = collect_feature_rows(tmp.path()).await;
+        assert!(rows.is_empty(), "expected no rows in an empty sovereign dir");
+    }
+
+    /// Two features on disk → two rows, sorted alphabetically. The
+    /// BTreeMap key ordering is part of the contract — operators
+    /// scanning the audit table benefit from stable layout.
+    #[tokio::test]
+    async fn audit_returns_alphabetically_sorted_rows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let features = tmp.path().join("features");
+        for id in &["zeta", "alpha", "mu"] {
+            let dir = features.join(id);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("spec.md"), b"# spec\n").unwrap();
+        }
+        let rows = collect_feature_rows(tmp.path()).await;
+        let ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+        assert_eq!(ids, vec!["alpha", "mu", "zeta"]);
+    }
+
+    // ─── Phase 7.3: multi-source audit assembly tests ─────────────
+
+    use corpus_engine::{NoteScope, NoteSource, NoteStore};
+
+    async fn write_note(
+        store: &NoteStore,
+        kind: &str,
+        body: &str,
+        source: NoteSource,
+        supersedes: Option<&str>,
+    ) -> String {
+        store
+            .write_note_with_source(
+                kind,
+                body,
+                Vec::new(),
+                Vec::new(),
+                "audit-test",
+                NoteScope::Global,
+                None,
+                None,
+                source,
+                supersedes,
+            )
+            .await
+            .unwrap()
+    }
+
+    /// Decisions section sorts by source priority (agent > committed
+    /// > extracted > inferred > observed) and renders the
+    /// `[source]` suffix on each row. Same-priority rows fall back
+    /// to created_at desc.
+    #[tokio::test]
+    async fn render_decisions_orders_by_source_priority_with_source_suffix() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        // Mix sources so the priority sort has work to do.
+        let _e = write_note(
+            &store,
+            "decision",
+            "extracted decision E",
+            NoteSource::Extracted,
+            None,
+        )
+        .await;
+        let _a = write_note(&store, "decision", "agent decision A", NoteSource::Agent, None)
+            .await;
+        let _c = write_note(
+            &store,
+            "decision",
+            "committed decision C",
+            NoteSource::Committed,
+            None,
+        )
+        .await;
+
+        let notes = gather_audit_notes(&store).await;
+        // Ordering: A (agent, p=4), C (committed, p=3), E (extracted, p=2).
+        assert_eq!(notes.decisions[0].content, "agent decision A");
+        assert_eq!(notes.decisions[1].content, "committed decision C");
+        assert_eq!(notes.decisions[2].content, "extracted decision E");
+
+        let rendered = render_decisions(&notes);
+        // Each row carries the [source] suffix.
+        assert!(rendered.contains("_[agent]_"));
+        assert!(rendered.contains("_[committed]_"));
+        assert!(rendered.contains("_[extracted]_"));
+        // The agent row appears BEFORE committed/extracted in the
+        // rendered output.
+        let i_a = rendered.find("agent decision A").unwrap();
+        let i_c = rendered.find("committed decision C").unwrap();
+        let i_e = rendered.find("extracted decision E").unwrap();
+        assert!(i_a < i_c, "agent should render above committed");
+        assert!(i_c < i_e, "committed should render above extracted");
+    }
+
+    /// Empty store → "no decisions recorded yet" placeholder, no panic.
+    #[tokio::test]
+    async fn render_decisions_empty_store_renders_placeholder() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        let notes = gather_audit_notes(&store).await;
+        let rendered = render_decisions(&notes);
+        assert!(rendered.contains("no decisions recorded yet"));
+    }
+
+    /// A reversal — note with `supersedes` set to a prior id —
+    /// renders under the original as an indented "↳ REVERSED"
+    /// sub-line. The reversal does NOT also appear at the top
+    /// level (already_rendered guard).
+    #[tokio::test]
+    async fn render_decisions_renders_reversal_under_original() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        let original_id = write_note(
+            &store,
+            "decision",
+            "BTreeMap over HashMap — ordered iteration",
+            NoteSource::Agent,
+            None,
+        )
+        .await;
+        let _reversal_id = write_note(
+            &store,
+            "decision",
+            "HashMap over BTreeMap — random access pattern",
+            NoteSource::Extracted,
+            Some(&original_id),
+        )
+        .await;
+
+        let notes = gather_audit_notes(&store).await;
+        let rendered = render_decisions(&notes);
+
+        assert!(
+            rendered.contains("BTreeMap over HashMap"),
+            "original missing from render: {rendered}"
+        );
+        assert!(
+            rendered.contains("↳ REVERSED"),
+            "reversal marker missing: {rendered}"
+        );
+        assert!(
+            rendered.contains("HashMap over BTreeMap"),
+            "reversal text missing: {rendered}"
+        );
+        // The reversal text should appear BELOW the original, AFTER
+        // the "↳ REVERSED" marker.
+        let i_original = rendered.find("BTreeMap over HashMap").unwrap();
+        let i_reverse_marker = rendered.find("↳ REVERSED").unwrap();
+        let i_reverse_text = rendered.find("HashMap over BTreeMap").unwrap();
+        assert!(
+            i_original < i_reverse_marker,
+            "original should come before the reversal marker"
+        );
+        assert!(
+            i_reverse_marker < i_reverse_text,
+            "reversal marker should come before reversal body text"
+        );
+        // The reversal does NOT appear as a separate top-level row
+        // (the renderer skips supersedes-set rows that have a
+        // visible original).
+        let count_top = rendered
+            .matches("HashMap over BTreeMap")
+            .count();
+        assert_eq!(
+            count_top, 1,
+            "reversal should appear exactly once (under the original); got {count_top}"
+        );
+    }
+
+    /// Reversal pointing at a row that's no longer in our visible
+    /// set (e.g. retired separately) renders as a top-level
+    /// orphan rather than being silently dropped.
+    #[tokio::test]
+    async fn render_decisions_orphan_reversal_renders_at_top_level() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        // The "original" id is fabricated; the reversal points at a
+        // row we never wrote, so the renderer's by_id lookup misses
+        // and the reversal must show as a standalone row.
+        let _r = write_note(
+            &store,
+            "decision",
+            "orphan reversal — original gone",
+            NoteSource::Extracted,
+            Some("nonexistent-id"),
+        )
+        .await;
+
+        let notes = gather_audit_notes(&store).await;
+        let rendered = render_decisions(&notes);
+        assert!(
+            rendered.contains("orphan reversal"),
+            "orphan reversal should still render: {rendered}"
+        );
+    }
+
+    /// Open-questions section flags `source=inferred` rows as low
+    /// confidence so the reviewer sees the trust ordering.
+    #[tokio::test]
+    async fn render_open_questions_marks_inferred_as_low_confidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        let _agent = write_note(
+            &store,
+            "uncertainty",
+            "what happens on a partial commit?",
+            NoteSource::Agent,
+            None,
+        )
+        .await;
+        let _inferred = write_note(
+            &store,
+            "uncertainty",
+            "is the cache TTL correct?",
+            NoteSource::Inferred,
+            None,
+        )
+        .await;
+
+        let notes = gather_audit_notes(&store).await;
+        let rendered = render_open_questions(&notes);
+        assert!(rendered.contains("partial commit"));
+        assert!(rendered.contains("cache TTL"));
+        // The inferred row carries the low-confidence suffix.
+        let inferred_line = rendered
+            .lines()
+            .find(|l| l.contains("cache TTL"))
+            .unwrap();
+        assert!(
+            inferred_line.contains("low confidence")
+                || rendered.contains("(low confidence)"),
+            "inferred row missing low-confidence marker: {rendered}"
+        );
+        // The agent row does NOT carry it.
+        let agent_line = rendered
+            .lines()
+            .find(|l| l.contains("partial commit"))
+            .unwrap();
+        assert!(
+            !agent_line.contains("low confidence"),
+            "agent row should not be flagged as low confidence: {agent_line}"
+        );
+    }
+
+    /// Observed patterns section pulls notes tagged with
+    /// `source=observed` regardless of kind.
+    #[tokio::test]
+    async fn render_observed_patterns_lists_observed_source_notes() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        let _o = write_note(
+            &store,
+            "reflection",
+            "Investigated impact (blast) before running build.",
+            NoteSource::Observed,
+            None,
+        )
+        .await;
+
+        let notes = gather_audit_notes(&store).await;
+        let rendered = render_observed_patterns(&notes);
+        assert!(rendered.contains("## Observed patterns"));
+        assert!(rendered.contains("Investigated impact"));
+        assert!(rendered.contains("_[observed]_"));
+    }
+
+    /// Empty observed list → no section header at all (we don't
+    /// want an empty section dangling in the audit).
+    #[tokio::test]
+    async fn render_observed_patterns_empty_renders_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        // Decision-only — no observed rows.
+        let _d =
+            write_note(&store, "decision", "agent decision", NoteSource::Agent, None).await;
+        let notes = gather_audit_notes(&store).await;
+        let rendered = render_observed_patterns(&notes);
+        assert!(
+            rendered.is_empty(),
+            "observed-patterns section should be empty when no observed notes exist; got: {rendered}"
+        );
+    }
+
+    /// `gather_audit_notes` populates the by_id index so the
+    /// reversal lookup in `render_decisions` works.
+    #[tokio::test]
+    async fn gather_audit_notes_populates_by_id_index() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        let id = write_note(&store, "decision", "anchor", NoteSource::Agent, None).await;
+        let notes = gather_audit_notes(&store).await;
+        assert!(notes.by_id.contains_key(&id));
+        assert_eq!(notes.by_id.get(&id).unwrap().content, "anchor");
     }
 }

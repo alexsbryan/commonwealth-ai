@@ -68,6 +68,12 @@ rand = "0.9"
 # pipeline. `io-util` exposes SyncIoBridge; `io` brings ReaderStream /
 # StreamReader.
 tokio-util = { version = "0.7", features = ["io", "io-util"] }
+# `tokio-stream` exposes BroadcastStream — the adapter that turns a
+# `tokio::sync::broadcast::Receiver` into a `futures::Stream`, so
+# the MCP `GET /mcp` SSE handler can chain it with the endpoint
+# event and forward server-pushed JSON-RPC notifications
+# (`notifications/tools/list_changed`, Phase 5b).
+tokio-stream = { version = "0.1", features = ["sync"] }
 # Enumerate ALL local network interfaces so a node on both WiFi
 # and Tailscale (the usual Commonwealth LAN-+-VPN topology) can
 # advertise both addresses in its `MemberRecord.addresses`. The

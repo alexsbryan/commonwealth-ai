@@ -242,6 +242,28 @@ pub fn spec_present_in_dir(dir: &std::path::Path) -> bool {
     false
 }
 
+/// Process-global cache of `(stamped_at, value)` per absolute path.
+/// The map and TTL constant live up here at module scope so the
+/// FS-watcher path ([`invalidate_spec_cache`] / [`crate::spec_watcher`])
+/// can drop entries eagerly without round-tripping through the
+/// 1-second TTL.
+///
+/// Mutex-poisoning recovery is the caller's responsibility — every
+/// access goes through `lock_cache()` which returns the inner map
+/// after a panic. A poisoned cache is a perf hit, never a
+/// correctness hazard.
+type SpecCacheKey = std::path::PathBuf;
+type SpecCacheValue = (std::time::Instant, bool);
+type SpecCacheMap = std::collections::HashMap<SpecCacheKey, SpecCacheValue>;
+static SPEC_CACHE: std::sync::OnceLock<std::sync::Mutex<SpecCacheMap>> =
+    std::sync::OnceLock::new();
+const SPEC_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(1);
+
+fn lock_cache() -> std::sync::MutexGuard<'static, SpecCacheMap> {
+    let lock = SPEC_CACHE.get_or_init(|| std::sync::Mutex::new(SpecCacheMap::new()));
+    lock.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 /// Cached variant of [`spec_present_in_dir`] with a 1-second TTL
 /// per directory. The cache is process-global; callers don't need
 /// to manage one. A 1s window is short enough that interactive
@@ -250,31 +272,43 @@ pub fn spec_present_in_dir(dir: &std::path::Path) -> bool {
 /// dozens of `tools/list` calls per second) still amortise the
 /// stat over many requests.
 ///
-/// The [Phase 5b FS watcher][crate::mcp_surface] will invalidate
-/// the cache eagerly on `.sovereign/features/*/spec.md` writes;
-/// until then the TTL is the only lever.
+/// Phase 5b: the [`crate::spec_watcher::SpecWatcher`] eagerly
+/// invalidates entries via [`invalidate_spec_cache`] on
+/// `.sovereign/features/*/spec.md` and `ARCHITECTURE.md` writes,
+/// so cache freshness no longer depends on the TTL window.
 fn spec_present_in_dir_cached(dir: &std::path::Path) -> bool {
-    use std::collections::HashMap;
-    use std::sync::{Mutex, OnceLock};
-    use std::time::{Duration, Instant};
-    static CACHE: OnceLock<Mutex<HashMap<std::path::PathBuf, (Instant, bool)>>> =
-        OnceLock::new();
-    const TTL: Duration = Duration::from_secs(1);
-
-    let lock = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    // Mutex poisoning here means a concurrent stat panicked. We
-    // recover the inner map and continue — the cache is a
-    // performance optimisation, never load-bearing for correctness.
-    let mut map = lock.lock().unwrap_or_else(|p| p.into_inner());
-    let now = Instant::now();
+    let mut map = lock_cache();
+    let now = std::time::Instant::now();
     if let Some((stamped_at, value)) = map.get(dir) {
-        if now.duration_since(*stamped_at) < TTL {
+        if now.duration_since(*stamped_at) < SPEC_CACHE_TTL {
             return *value;
         }
     }
     let fresh = spec_present_in_dir(dir);
     map.insert(dir.to_path_buf(), (now, fresh));
     fresh
+}
+
+/// Eagerly drop the cached `spec_present_in_dir` answer for `dir`.
+///
+/// Called by [`crate::spec_watcher::SpecWatcher`] whenever a watched
+/// path under `dir` (an `ARCHITECTURE.md` or
+/// `.sovereign/features/*/spec.md`) is created, modified, or
+/// removed. The next [`render_tools_list_gated`] call will re-stat
+/// rather than serve a stale answer.
+///
+/// A no-op if `dir` was never cached.
+pub fn invalidate_spec_cache(dir: &std::path::Path) {
+    let mut map = lock_cache();
+    map.remove(dir);
+}
+
+/// Drop every entry in the spec-presence cache. Used in tests where
+/// many tempdirs accumulate, and as the watcher's "I don't know
+/// which root the event belongs to" fallback.
+pub fn invalidate_all_spec_caches() {
+    let mut map = lock_cache();
+    map.clear();
 }
 
 #[cfg(test)]
@@ -488,6 +522,76 @@ mod tests {
             names.contains(&"drift".to_string()),
             "spec-gated tool missing despite spec on disk: {names:?}"
         );
+    }
+
+    /// Tests that mutate the process-global spec-cache via
+    /// `invalidate_all_spec_caches()` race each other under
+    /// `cargo test`'s parallel runner — one test can wipe another's
+    /// primed entry and break a "should be cached" assertion.
+    /// We serialise them with a per-test-suite `Mutex` rather than
+    /// pulling in `serial_test`.
+    fn cache_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// `invalidate_spec_cache(dir)` drops the cached answer for
+    /// that path. After the drop, the next render re-stats the disk
+    /// and reflects the new state — a critical step for the
+    /// FS watcher in `spec_watcher` to deliver eager visibility
+    /// on spec writes.
+    #[test]
+    fn invalidate_spec_cache_drops_entry_so_next_call_restats() {
+        let _g = cache_test_lock();
+        let dir = tempfile::tempdir().unwrap();
+        // Prime the cache with the empty state.
+        assert!(!spec_present_in_dir_cached(dir.path()));
+
+        // Create a spec but DON'T invalidate yet — the cache should
+        // still report false during the TTL window.
+        let foo = dir.path().join(".sovereign").join("features").join("foo");
+        std::fs::create_dir_all(&foo).unwrap();
+        std::fs::write(foo.join("spec.md"), b"# foo\n").unwrap();
+        assert!(
+            !spec_present_in_dir_cached(dir.path()),
+            "cache should still return the pre-write answer until invalidation"
+        );
+
+        // Invalidate; next call must re-stat and see the new spec.
+        invalidate_spec_cache(dir.path());
+        assert!(
+            spec_present_in_dir_cached(dir.path()),
+            "post-invalidation call must reflect on-disk state"
+        );
+    }
+
+    /// `invalidate_all_spec_caches()` clears every entry — useful as
+    /// a watcher-level "fall through to re-stat" hammer when the
+    /// event's path doesn't map cleanly to a cached root.
+    #[test]
+    fn invalidate_all_spec_caches_clears_every_entry() {
+        let _g = cache_test_lock();
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        // Prime both with their (empty) state.
+        assert!(!spec_present_in_dir_cached(a.path()));
+        assert!(!spec_present_in_dir_cached(b.path()));
+
+        // Add a spec to A only.
+        let foo = a.path().join(".sovereign").join("features").join("foo");
+        std::fs::create_dir_all(&foo).unwrap();
+        std::fs::write(foo.join("spec.md"), b"# foo\n").unwrap();
+
+        // Without invalidation, A still reports stale.
+        assert!(!spec_present_in_dir_cached(a.path()));
+
+        // Drop both entries; next A read sees fresh state, B still
+        // returns false because it has no spec.
+        invalidate_all_spec_caches();
+        assert!(spec_present_in_dir_cached(a.path()));
+        assert!(!spec_present_in_dir_cached(b.path()));
     }
 
     /// The 1-second TTL means the cache returns a stable answer for

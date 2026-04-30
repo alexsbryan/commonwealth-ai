@@ -1224,11 +1224,18 @@ impl EmbeddedDaemon {
                 // request gating via the registered project root is a
                 // follow-up — the embedded daemon serves many projects
                 // and we don't yet plumb per-request feature_root.
+                //
+                // Phase 5b: a fresh `McpNotifier` with no producer is
+                // fine — the daemon doesn't drive list-changed
+                // notifications today (that's the per-project
+                // standalone serve's job). Subscribers connect
+                // harmlessly and idle until something publishes.
                 client_router = client_router.merge(mcp_router::mcp_router(
                     m.tools,
                     m.notes,
                     m.session_id,
                     mcp_router::FeatureRoot::new(None),
+                    mcp_router::McpNotifier::new(),
                 ));
             }
             if let Some(mesh_http_router) = mesh_http {

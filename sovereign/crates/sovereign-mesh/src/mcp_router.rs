@@ -107,24 +107,108 @@ impl FeatureRoot {
     }
 }
 
+/// Phase 5b broadcast surface for server-initiated MCP
+/// notifications.
+///
+/// MCP defines `notifications/tools/list_changed` as a
+/// server-pushed signal that the tool list has changed and the
+/// client should refetch. We deliver these via the SSE channel
+/// (`GET /mcp`) — a long-lived stream every spec-compliant client
+/// opens after `initialize`.
+///
+/// Internally a [`tokio::sync::broadcast::Sender`] fans out one
+/// payload to every connected SSE subscriber. A bounded buffer
+/// (16 messages) is plenty: clients are expected to refetch on
+/// any signal, so queued duplicates collapse into one re-fetch.
+/// A lagging subscriber drops oldest items — we tolerate the loss
+/// because the client's next `tools/list` re-syncs the truth.
+///
+/// Construct via [`McpNotifier::new`] and pass into
+/// [`mcp_router`]. The watcher in `sovereign_tools::spec_watcher`
+/// calls [`McpNotifier::notify_tools_list_changed`] from its
+/// `on_change` callback when a spec event lands.
+#[derive(Clone)]
+pub struct McpNotifier {
+    sender: std::sync::Arc<tokio::sync::broadcast::Sender<Value>>,
+}
+
+impl McpNotifier {
+    /// Buffer size for the broadcast channel. Subscribers that lag
+    /// past this many messages will see [`broadcast::error::RecvError::Lagged`]
+    /// and we silently skip the missed entries. Tools/list_changed
+    /// is idempotent (the client refetches), so dropping is fine.
+    const BUFFER_SIZE: usize = 16;
+
+    /// Build a fresh notifier with no subscribers. Subscriptions
+    /// happen lazily as SSE clients connect.
+    pub fn new() -> Self {
+        let (sender, _) = tokio::sync::broadcast::channel(Self::BUFFER_SIZE);
+        Self { sender: std::sync::Arc::new(sender) }
+    }
+
+    /// Push a `notifications/tools/list_changed` JSON-RPC frame to
+    /// every connected SSE client. No-op if there are no
+    /// subscribers (e.g. during startup before any client opens
+    /// `GET /mcp`).
+    pub fn notify_tools_list_changed(&self) {
+        let payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/tools/list_changed"
+        });
+        // `send` returns Err only when there are zero receivers —
+        // not an error condition for us.
+        let _ = self.sender.send(payload);
+    }
+
+    /// Subscribe a new SSE handler to the broadcast. Each handler
+    /// gets its own independent receive cursor.
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Value> {
+        self.sender.subscribe()
+    }
+}
+
+impl Default for McpNotifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Build the MCP router. Mounts `/mcp`, `/mcp/message`, and `/mcp/stats`
 /// with shared per-session state (tool registry, note store, session id,
-/// call counter, feature_root).
+/// call counter, feature_root, notifier).
 ///
 /// Phase 5: callers pass `feature_root = Some(dir)` to enable the
 /// spec-presence gate. The standalone `sovereign serve` does this
 /// with the cwd it was launched from. The embedded daemon currently
 /// passes `None` so its `tools/list` matches Phase 4 behaviour; a
 /// per-request gate via the project registry can wire in later.
+///
+/// Phase 5b: `notifier` is the broadcast surface for server-pushed
+/// notifications (currently just `notifications/tools/list_changed`).
+/// SSE handlers subscribe to it; producers (the spec watcher) push
+/// to it. The router builder accepts an [`McpNotifier`] handle by
+/// value so the caller can keep its own clone for triggering events.
+/// If the caller has no producer, `McpNotifier::new()` is fine — the
+/// channel is lazy and stays idle until something publishes.
 pub fn mcp_router(
     tools: Arc<ToolRegistry>,
     logger: Arc<NoteStore>,
     session_id: String,
     feature_root: FeatureRoot,
+    notifier: McpNotifier,
 ) -> Router {
     // Shared per-session call counter. Every REFLECT_HINT_INTERVAL tool
     // calls we append a brief reminder to write a session_reflection.
     let call_counter: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
+    // Phase 7.1: ToolPatternMatcher observes recent tool calls and
+    // writes `source='observed'` notes for recognised patterns
+    // (e.g. blast→build = "investigated impact, then acted"). One
+    // instance per router so per-session cooldown state persists
+    // across requests on the same session id. Fire-and-forget after
+    // every successful tool dispatch.
+    let pattern_matcher = Arc::new(
+        sovereign_tools::notes::patterns::ToolPatternMatcher::new(Arc::clone(&logger)),
+    );
     Router::new()
         // Both URLs accept the full JSON-RPC dispatch.
         // `POST /mcp` is the modern (2025-03-26 Streamable HTTP) entry point.
@@ -144,6 +228,8 @@ pub fn mcp_router(
         .layer(Extension(Arc::new(session_id)))
         .layer(Extension(call_counter))
         .layer(Extension(feature_root))
+        .layer(Extension(notifier))
+        .layer(Extension(pattern_matcher))
         .layer(CorsLayer::permissive())
 }
 
@@ -176,23 +262,57 @@ async fn mcp_stats(
         .into_response()
 }
 
-/// Emit the `endpoint` event required by the 2024-11-05 HTTP+SSE transport.
+/// Emit the `endpoint` event required by the 2024-11-05 HTTP+SSE transport,
+/// then forward server-pushed JSON-RPC notifications from the
+/// [`McpNotifier`] broadcast (Phase 5b — currently just
+/// `notifications/tools/list_changed`).
+///
 /// Clients open this stream first, wait for the endpoint URL, then POST
 /// JSON-RPC messages to it. We point them back at `/mcp` itself so both
 /// transports converge on the same handler.
+///
+/// Each broadcast payload ships as an unnamed SSE `data:` event whose
+/// body is the JSON-RPC frame — the format MCP clients already parse
+/// for server-sent notifications. A lagging subscriber that misses
+/// items (the broadcast buffer is small) silently drops them; the
+/// notification is idempotent (the client refetches on any signal),
+/// so the next event re-syncs.
 async fn mcp_sse(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(notifier): Extension<McpNotifier>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
     if !is_localhost(&peer) {
         return Err(StatusCode::FORBIDDEN);
     }
-    // Emit exactly one `endpoint` event, then hold the connection open
-    // with keepalive so spec-compliant clients stay subscribed.
     let endpoint_event = stream::once(async {
         Ok::<_, Infallible>(Event::default().event("endpoint").data("/mcp"))
     });
-    let forever = stream::pending::<Result<Event, Infallible>>();
-    Ok(Sse::new(endpoint_event.chain(forever)).keep_alive(KeepAlive::default()))
+    // Subscribe per-connection so each client gets its own cursor.
+    // BroadcastStream maps lagged-receiver errors to a stream Err,
+    // which we surface as a JSON `{"error":"lagged"}` event so the
+    // client can refetch defensively. Empty stream items between
+    // notifications are kept alive by axum's KeepAlive ping.
+    let rx = notifier.subscribe();
+    let notifications = tokio_stream::wrappers::BroadcastStream::new(rx).map(|res| {
+        match res {
+            Ok(payload) => {
+                let body = payload.to_string();
+                Ok::<_, Infallible>(Event::default().data(body))
+            }
+            Err(_lagged) => {
+                // Don't log every lag — for tools/list the client's
+                // next refetch is the truth anyway. Emit a blank
+                // data event so well-behaved clients refetch
+                // defensively.
+                Ok::<_, Infallible>(
+                    Event::default().data(
+                        r#"{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}"#,
+                    ),
+                )
+            }
+        }
+    });
+    Ok(Sse::new(endpoint_event.chain(notifications)).keep_alive(KeepAlive::default()))
 }
 
 /// Single JSON-RPC handler for both `/mcp` and `/mcp/message`.
@@ -205,6 +325,9 @@ async fn mcp_handle(
     Extension(session_id): Extension<Arc<String>>,
     Extension(call_counter): Extension<Arc<AtomicU64>>,
     Extension(feature_root): Extension<FeatureRoot>,
+    Extension(pattern_matcher): Extension<
+        Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
+    >,
     Json(req): Json<JsonRpcRequest>,
 ) -> axum::response::Response {
     if !is_localhost(&peer) {
@@ -216,7 +339,17 @@ async fn mcp_handle(
             .into_response();
     }
 
-    match dispatch(req, tools, logger, session_id, call_counter, feature_root).await {
+    match dispatch(
+        req,
+        tools,
+        logger,
+        session_id,
+        call_counter,
+        feature_root,
+        pattern_matcher,
+    )
+    .await
+    {
         Some(response) => (StatusCode::OK, Json(response)).into_response(),
         None => StatusCode::NO_CONTENT.into_response(),
     }
@@ -233,6 +366,7 @@ async fn dispatch(
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
     feature_root: FeatureRoot,
+    pattern_matcher: Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
 ) -> Option<JsonRpcResponse> {
     // Notifications: no id → no response. We still want to accept the
     // method (e.g. `notifications/initialized`) so the client doesn't see
@@ -244,9 +378,16 @@ async fn dispatch(
 
     let response = match req.method.as_str() {
         "initialize" => {
+            // Phase 5b: advertise `tools.listChanged: true` so MCP
+            // clients (Claude Code, Cursor, opencode) subscribe to
+            // the SSE channel and refetch `tools/list` on the
+            // server-pushed notification we now emit on spec
+            // create/modify/remove.
             let result = serde_json::json!({
                 "protocolVersion": "2024-11-05",
-                "capabilities": { "tools": {} },
+                "capabilities": {
+                    "tools": { "listChanged": true }
+                },
                 "serverInfo": {
                     "name": "sovereign-code",
                     "version": env!("CARGO_PKG_VERSION")
@@ -265,7 +406,18 @@ async fn dispatch(
             );
             JsonRpcResponse::ok(id, serde_json::json!({ "tools": tool_list }))
         }
-        "tools/call" => handle_tool_call(id, req.params, tools, logger, session_id, call_counter).await,
+        "tools/call" => {
+            handle_tool_call(
+                id,
+                req.params,
+                tools,
+                logger,
+                session_id,
+                call_counter,
+                pattern_matcher,
+            )
+            .await
+        }
         "ping" => JsonRpcResponse::ok(id, serde_json::json!({})),
         other => JsonRpcResponse::err(id, -32601, format!("method not found: {other}")),
     };
@@ -288,6 +440,7 @@ async fn handle_tool_call(
     logger: Arc<NoteStore>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
+    pattern_matcher: Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
 ) -> JsonRpcResponse {
     let Some(params) = params else {
         return JsonRpcResponse::err(id, -32602, "missing params");
@@ -387,6 +540,20 @@ async fn handle_tool_call(
     };
     let _ = logger.log_tool_call(&session_id, &name, outcome).await;
 
+    // Phase 7.1: run the pattern matcher against the freshly-logged
+    // call. Fire-and-forget on a tokio task so a slow DB write
+    // (writing an `observed`-source note) doesn't lengthen the tool
+    // response. The matcher's per-session state lives on the Arc'd
+    // matcher; cooldowns persist across requests on the same
+    // session id.
+    let matcher_for_task = Arc::clone(&pattern_matcher);
+    let session_for_task = Arc::clone(&session_id);
+    tokio::spawn(async move {
+        matcher_for_task
+            .observe_and_record(session_for_task.as_str(), None)
+            .await;
+    });
+
     // The session call counter is kept for telemetry / rate-limit
     // decisions even though the periodic reflection nudge was removed
     // in Phase 2. Tools now surface their salient state via
@@ -407,5 +574,52 @@ async fn handle_tool_call(
             id,
             call_tool_text(format!("Tool `{name}` failed: {e}"), true),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `McpNotifier::notify_tools_list_changed` delivers the
+    /// JSON-RPC frame to every subscriber. Two subscribers each
+    /// see the same payload — independent cursors, broadcast fanout.
+    #[tokio::test]
+    async fn notifier_fans_out_tools_list_changed_to_subscribers() {
+        let n = McpNotifier::new();
+        let mut a = n.subscribe();
+        let mut b = n.subscribe();
+
+        n.notify_tools_list_changed();
+
+        let recv_a = tokio::time::timeout(std::time::Duration::from_secs(1), a.recv())
+            .await
+            .expect("subscriber A should receive within 1s")
+            .expect("payload arrives");
+        let recv_b = tokio::time::timeout(std::time::Duration::from_secs(1), b.recv())
+            .await
+            .expect("subscriber B should receive within 1s")
+            .expect("payload arrives");
+
+        assert_eq!(
+            recv_a, recv_b,
+            "both subscribers must see the same broadcast payload"
+        );
+        assert_eq!(
+            recv_a["method"], "notifications/tools/list_changed",
+            "method name must match MCP spec"
+        );
+        assert_eq!(recv_a["jsonrpc"], "2.0");
+    }
+
+    /// Publishing with no subscribers is a no-op (broadcast::send
+    /// returns Err, which we swallow). The notifier must not panic
+    /// or block in this case — common during startup.
+    #[test]
+    fn notifier_publish_with_no_subscribers_is_noop() {
+        let n = McpNotifier::new();
+        // Just check it doesn't panic. The `let _ = ...` inside
+        // `notify_tools_list_changed` swallows the no-receivers err.
+        n.notify_tools_list_changed();
     }
 }

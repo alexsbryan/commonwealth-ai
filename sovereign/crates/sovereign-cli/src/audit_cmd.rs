@@ -26,6 +26,15 @@ pub async fn run(args: &[String]) -> i32 {
         return 0;
     }
 
+    // Phase 7.3 `--recover`: walk tool_call_log for sessions with
+    // no extraction-source notes yet and re-run the
+    // ToolPatternMatcher idempotently. Catches sessions that
+    // SIGKILL'd before the in-process pattern matcher's
+    // tokio::spawn finished writing.
+    if args.iter().any(|a| a == "--recover") {
+        return crate::audit_recover::cmd_audit_recover().await;
+    }
+
     // Detect the `--archive` flag anywhere in args. Strip it before
     // forwarding so the underlying teardown handler doesn't see a
     // duplicated flag.

@@ -3,6 +3,8 @@ mod amend_cmd;
 mod atos_cmd;
 mod atos_plugin;
 mod audit_cmd;
+mod audit_extract;
+mod audit_recover;
 #[cfg(feature = "dev-tools")]
 mod awareness_cmd;
 mod bench_cmd;

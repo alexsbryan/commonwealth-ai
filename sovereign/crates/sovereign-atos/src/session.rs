@@ -95,6 +95,14 @@ pub struct AtosSessionState {
     /// this field absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_artifact_delta: Option<ArtifactDelta>,
+    /// Phase 7.2: assistant-response sentence the
+    /// `decision_extractor` middleware mined from the previous
+    /// turn. The next turn either persists it as a
+    /// `source='extracted'` note (no correction) or drops it (the
+    /// user pushed back). `#[serde(default)]` so older session
+    /// rows decode cleanly without this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_decision: Option<String>,
 }
 
 impl AtosSessionState {
@@ -109,6 +117,7 @@ impl AtosSessionState {
             deviation_note_id: None,
             last_seen_at: unix_now(),
             pending_artifact_delta: None,
+            pending_decision: None,
         }
     }
 
@@ -380,6 +389,7 @@ mod tests {
             deviation_note_id: None,
             last_seen_at: 0,
             pending_artifact_delta: None,
+            pending_decision: None,
         };
         let bytes = serde_json::to_vec(&ancient).unwrap();
         store

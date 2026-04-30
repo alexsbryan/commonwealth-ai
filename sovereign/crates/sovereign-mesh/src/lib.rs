@@ -15,6 +15,7 @@ pub mod auto_ingest;
 pub mod auto_resume;
 pub mod canonical_pull;
 pub mod capabilities;
+pub mod commit_harvest;
 pub mod daemon;
 pub mod loopback_guard;
 pub mod project_http;

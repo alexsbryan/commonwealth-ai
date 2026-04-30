@@ -567,9 +567,17 @@ async fn run_daemon(args: &[String]) -> i32 {
         let initial = build_merged_scip_graph(&freshness_indexes_dir).await;
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(initial))
     };
-    let reindexer = sovereign_mesh::reindexer::Reindexer::new(
+    let mut reindexer = sovereign_mesh::reindexer::Reindexer::new(
         freshness_indexes_dir.clone(),
         Arc::clone(&merged_handle),
+    );
+    // Phase 7.1: configure the commit-message harvester so the
+    // reindexer's git-HEAD poll harvests non-noisy commits into
+    // `source='committed'` notes. Must run BEFORE any clone /
+    // share — Arc::get_mut returns None once this is shared.
+    sovereign_mesh::reindexer::Reindexer::with_commit_harvester(
+        &mut reindexer,
+        Arc::clone(&notes_store),
     );
     daemon
         .install_project_http_router(sovereign_mesh::project_http::project_router(Arc::clone(

@@ -62,6 +62,12 @@ serde_yaml = "0.9"
 # existing Jsonl extractor). Uses the same `bundled` feature as
 # sovereign-store so both crates link against one libsqlite3.
 rusqlite = { version = "0.35", features = ["bundled"] }
+# `notify` drives the SpecWatcher used to invalidate the
+# spec-presence cache + push MCP `notifications/tools/list_changed`
+# events when `.sovereign/features/*/spec.md` or `ARCHITECTURE.md`
+# changes. Same major version as sovereign-mesh's reindexer use to
+# keep the lockfile single-resolved.
+notify = "8"
 
 [features]
 default = []
@@ -75,3 +81,8 @@ futures = { workspace = true }
 tempfile = "3"
 tokio = { workspace = true, features = ["test-util"] }
 filetime = "0.2"
+# axum is the HTTP stub harness for `notes::diff_extract_backend`
+# tests — spins up `/v1/chat/completions` on an ephemeral port so
+# we can exercise `LocalLlmBackend` without a live daemon. Production
+# code does NOT depend on axum.
+axum = { workspace = true }

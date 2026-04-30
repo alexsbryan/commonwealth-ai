@@ -8658,6 +8658,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tower-http",
  "tracing",
@@ -8717,6 +8718,7 @@ dependencies = [
  "arrow",
  "arrow-array",
  "async-trait",
+ "axum",
  "bzip2 0.5.2",
  "chrono",
  "corpus-engine",
@@ -8727,6 +8729,7 @@ dependencies = [
  "image",
  "lancedb",
  "lettre",
+ "notify",
  "parquet",
  "pdf-extract",
  "pdfium-render",
@@ -9834,6 +9837,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

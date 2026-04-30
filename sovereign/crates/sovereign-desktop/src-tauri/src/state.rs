@@ -1020,6 +1020,17 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
 
         // 2. /mcp — ToolRegistry backed by the already-loaded CorpusEngine.
         let notes_path = data_dir.join("notes.db");
+        // Open the NoteStore once at the top so both the MCP arm
+        // (consumes it via set_mcp) and the reindexer commit
+        // harvester (Phase 7.1, configured below) can share the
+        // same connection pool. None on failure means MCP doesn't
+        // mount AND no commit harvesting — same graceful-degrade
+        // posture as before.
+        let notes_for_harvester: Option<Arc<corpus_engine::NoteStore>> =
+            match corpus_engine::NoteStore::open(&notes_path) {
+                Ok(s) => Some(Arc::new(s)),
+                Err(_) => None,
+            };
         match corpus_engine::NoteStore::open(&notes_path) {
             Ok(notes_store) => {
                 let notes = Arc::new(notes_store);
@@ -1116,10 +1127,22 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             .expect("in-memory ScipGraph for project pipeline");
         let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle =
             Arc::new(arc_swap::ArcSwap::from_pointee(merged_for_indexer));
-        let reindexer = sovereign_mesh::reindexer::Reindexer::new(
+        let mut reindexer = sovereign_mesh::reindexer::Reindexer::new(
             indexes_dir.clone(),
             merged_handle,
         );
+        // Phase 7.1: hook the commit-message harvester so the
+        // desktop daemon's git-HEAD poll persists committed-source
+        // notes alongside the SCIP rebuild. The harvester opens
+        // its own NoteStore handle (`notes_for_harvester` above) —
+        // the MCP arm's `notes` is moved into set_mcp and out of
+        // scope here. Same DB file, separate Arc handles.
+        if let Some(notes) = notes_for_harvester.as_ref() {
+            sovereign_mesh::reindexer::Reindexer::with_commit_harvester(
+                &mut reindexer,
+                Arc::clone(notes),
+            );
+        }
         daemon_arc
             .install_project_http_router(sovereign_mesh::project_http::project_router(
                 Arc::clone(&reindexer),
