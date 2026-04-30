@@ -502,8 +502,16 @@ fn parse_object_key(
     }
     p.advance();
     let mut accumulated: Vec<u8> = Vec::new();
-    // Pull bytes until closing quote (no escape handling for keys —
-    // ASCII property names are the only thing our schemas use).
+    // Property names in supported schemas are simple alphanumeric/
+    // underscore identifiers. JSON allows escape sequences in keys
+    // (`\"`, `\u00XX`, etc.), but no real schema uses them — and
+    // permitting them is exploitable: under temp=0 + greedy a model
+    // can fall into a degenerate `\u\u\u…` loop in the key (observed
+    // 2026-04-30 on the judge's `present`/`evidence` schema, fact=
+    // "poverty"). Each `\u` token kept the parse `Incomplete` while
+    // the prefix check on the regular-byte branch never fired
+    // (escapes bypassed it). Treating any backslash in a key as
+    // Invalid breaks the loop and matches what real schemas use.
     loop {
         match p.peek() {
             None => return KeyParse::Incomplete,
@@ -529,19 +537,8 @@ fn parse_object_key(
                     }
                 }
             }
-            Some(b'\\') => {
-                // Skip escape sequence for partial validity. For the
-                // prototype, `\\` + any byte is treated as 2 literal
-                // bytes — keys with escapes won't match property
-                // names exactly, so we'd reject regardless.
-                accumulated.push(b'\\');
-                p.advance();
-                if p.eof() {
-                    return KeyParse::Incomplete;
-                }
-                accumulated.push(p.peek().unwrap());
-                p.advance();
-            }
+            Some(b'\\') => return KeyParse::Invalid,
+            Some(b) if b < 0x20 => return KeyParse::Invalid,
             Some(b) => {
                 accumulated.push(b);
                 p.advance();
@@ -707,11 +704,22 @@ fn parse_string_enum(p: &mut Cursor, opts: &[String]) -> ParseStatus {
 
 /// Parse any JSON string. Supports basic escape sequences
 /// (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`).
+///
+/// **Anti-loop guard.** With temperature=0 + greedy sampling, a model
+/// can fall into a degenerate mode where it emits `\"` over and over
+/// without ever consuming a non-escape byte (observed on the judge's
+/// `evidence` field for `contested_quantum_determinism`'s "free will"
+/// fact: output was `{"\"\"\"\"…` repeating). Each `\"` is a valid
+/// 2-byte escape and the parser would never reject it on its own.
+/// Capping consecutive escapes at `MAX_CONSECUTIVE_STRING_ESCAPES`
+/// (3) breaks the loop without forbidding legitimate uses (escaped
+/// runs that long are vanishingly rare in real JSON content).
 fn parse_string_any(p: &mut Cursor) -> ParseStatus {
     if p.peek() != Some(b'"') {
         return ParseStatus::Invalid;
     }
     p.advance();
+    let mut consecutive_escapes = 0usize;
     loop {
         match p.peek() {
             None => return ParseStatus::Incomplete,
@@ -720,11 +728,17 @@ fn parse_string_any(p: &mut Cursor) -> ParseStatus {
                 return ParseStatus::Complete;
             }
             Some(b'\\') => {
+                if consecutive_escapes >= MAX_CONSECUTIVE_STRING_ESCAPES {
+                    return ParseStatus::Invalid;
+                }
                 p.advance();
                 match p.peek() {
                     None => return ParseStatus::Incomplete,
                     Some(b'"') | Some(b'\\') | Some(b'/') | Some(b'b') | Some(b'f')
-                    | Some(b'n') | Some(b'r') | Some(b't') => p.advance(),
+                    | Some(b'n') | Some(b'r') | Some(b't') => {
+                        p.advance();
+                        consecutive_escapes += 1;
+                    }
                     Some(b'u') => {
                         p.advance();
                         for _ in 0..4 {
@@ -734,15 +748,21 @@ fn parse_string_any(p: &mut Cursor) -> ParseStatus {
                                 _ => return ParseStatus::Invalid,
                             }
                         }
+                        consecutive_escapes += 1;
                     }
                     _ => return ParseStatus::Invalid,
                 }
             }
             Some(b) if b < 0x20 => return ParseStatus::Invalid,
-            Some(_) => p.advance(),
+            Some(_) => {
+                p.advance();
+                consecutive_escapes = 0;
+            }
         }
     }
 }
+
+const MAX_CONSECUTIVE_STRING_ESCAPES: usize = 3;
 
 /// Parse a JSON number. `allow_fraction` distinguishes Number from
 /// Integer.

@@ -145,18 +145,35 @@ fn print_question_row(r: &EvalResult, inspect: bool) {
 
 fn print_category_rollup(run: &EvalRun) {
     println!("─── per category ───");
-    let mut by_cat: BTreeMap<&str, (usize, usize, usize, usize)> = BTreeMap::new();
+    // (sources_m, sources_t, strict_m, strict_t, judge_m, judge_t,
+    //  judge_present_count) — `judge_present_count` lets us skip the
+    //  judge column for categories where every row was --no-judge.
+    let mut by_cat: BTreeMap<&str, (usize, usize, usize, usize, usize, usize, usize)> =
+        BTreeMap::new();
     for r in &run.results {
-        let entry = by_cat.entry(r.category.as_str()).or_insert((0, 0, 0, 0));
+        let entry = by_cat
+            .entry(r.category.as_str())
+            .or_insert((0, 0, 0, 0, 0, 0, 0));
         entry.0 += r.source_score.matched.len();
         entry.1 += r.source_score.total_expected;
         entry.2 += r.fact_score.matched.len();
         entry.3 += r.fact_score.total_expected;
+        if let Some(s) = r.synth.as_ref() {
+            if let Some(j) = s.judge_fact_score.as_ref() {
+                entry.4 += j.matched.len();
+                entry.5 += j.total_expected;
+                entry.6 += 1;
+            }
+        }
     }
-    for (cat, (sm, st, fm, ft)) in by_cat {
-        println!(
-            "  {cat:30} sources {sm}/{st}  facts {fm}/{ft}",
-        );
+    for (cat, (sm, st, fm, ft, jm, jt, jc)) in by_cat {
+        if jc > 0 {
+            println!(
+                "  {cat:30} sources {sm}/{st}  facts strict {fm}/{ft}  judge {jm}/{jt}",
+            );
+        } else {
+            println!("  {cat:30} sources {sm}/{st}  facts {fm}/{ft}");
+        }
     }
 }
 
@@ -169,9 +186,29 @@ fn print_overall(run: &EvalRun) {
             acc.3 + r.fact_score.total_expected,
         )
     });
+    let (jm, jt, jc) = run.results.iter().fold((0usize, 0usize, 0usize), |acc, r| {
+        if let Some(s) = r.synth.as_ref() {
+            if let Some(j) = s.judge_fact_score.as_ref() {
+                return (
+                    acc.0 + j.matched.len(),
+                    acc.1 + j.total_expected,
+                    acc.2 + 1,
+                );
+            }
+        }
+        acc
+    });
     println!("─── overall ───");
     println!("  sources {sm}/{st}  ({:.0}%)", percent(sm, st));
-    println!("  facts   {fm}/{ft}  ({:.0}%)", percent(fm, ft));
+    if jc > 0 {
+        println!("  facts strict {fm}/{ft}  ({:.0}%)", percent(fm, ft));
+        println!(
+            "  facts judge  {jm}/{jt}  ({:.0}%)  ← instructor mode",
+            percent(jm, jt)
+        );
+    } else {
+        println!("  facts   {fm}/{ft}  ({:.0}%)", percent(fm, ft));
+    }
 
     // Synth-only rollups: chunks-vs-answer fact gap (= "how often did
     // retrieval surface the fact but the model failed to use it"), and

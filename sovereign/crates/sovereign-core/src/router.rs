@@ -1493,14 +1493,13 @@ impl Router for LlmRouter {
                 &routing_hints,
             );
             // 60-token budget: JSON + confidence + short rationale clause.
-            // 120-token budget: small models (Qwen3.5-2B) sometimes
-            // write a full sentence for `rationale` rather than the
-            // "one short clause" the prompt asks for. With the
-            // grammar constraint forcing valid JSON, hitting
-            // max_tokens mid-rationale leaves the JSON unclosed,
-            // which `parse_coarse` can't recover from. 120 tokens fit
-            // a paragraph-length rationale + the JSON wrapper.
-            let pass1_response = self.classify_call_json(pass1_prompt, 120).await?;
+            // 60-token budget: gemma-4-E4B writes terse rationales
+            // ("one short clause" per the prompt) and 60 fits the
+            // typical JSON wrapper + clause comfortably. Qwen3.5-2B
+            // can run out at this budget on verbose rationales — bump
+            // to 120 ONLY if a small fast slot is in use (set the
+            // bumped value via a knob if/when we wire one up).
+            let pass1_response = self.classify_call_json(pass1_prompt, 60).await?;
             Self::parse_coarse(&pass1_response)
         };
 

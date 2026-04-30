@@ -181,6 +181,176 @@ fn keyword_tokens(s: &str) -> Vec<String> {
         .collect()
 }
 
+// ─── Instructor-mode (LLM-as-judge) fact scorer ────────────────
+
+/// One audit record per (expected_fact, judge call). Lets the report
+/// show *why* the judge said yes or no without re-running the bench.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct JudgeFactDetail {
+    pub fact: String,
+    pub present: bool,
+    /// Short verbatim quote from the answer, or `"(absent)"` if the
+    /// judge said the concept isn't there. `(parse failed)` when the
+    /// daemon returned malformed JSON (rare with the in-house grammar
+    /// enforcer; logged separately to stderr).
+    pub evidence: String,
+}
+
+/// LLM-judge fact scorer — "instructor mode."
+///
+/// Scores each `expected_fact` against `answer` by asking a fast-slot
+/// model whether the concept is conveyed, regardless of whether the
+/// answer uses the bank's exact wording. Pairs with [`score_facts_in_text`]
+/// (the strict keyword-AND scorer) so the report can show both:
+/// strict catches verbatim coverage, judge catches paraphrase.
+///
+/// Returns the boolean rollup as a [`FactScore`] AND a
+/// per-fact `Vec<JudgeFactDetail>` carrying the judge's evidence
+/// quote. The detail list is what makes the score auditable — a
+/// reviewer reading the run JSON can verify each yes/no without
+/// re-running.
+///
+/// Each fact gets one structured-output call constrained by the
+/// in-house JSON enforcer (see `sovereign-inference::json_constraint`).
+/// Schema: `{present: "yes" | "no", evidence: <quote>}`.
+///
+/// Prompt is generic — describes the *shape* of the judgment, never
+/// the specific bank. See `feedback_no_teaching_to_test.md`.
+pub async fn score_facts_judge(
+    expected: &[String],
+    answer: &str,
+    inference: &dyn sovereign_core::traits::InferenceProvider,
+) -> (FactScore, Vec<JudgeFactDetail>) {
+    let mut matched = Vec::new();
+    let mut missing = Vec::new();
+    let mut details: Vec<JudgeFactDetail> = Vec::with_capacity(expected.len());
+
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "present": {"type": "string", "enum": ["yes", "no"]},
+            "evidence": {"type": "string"},
+        },
+        "required": ["present", "evidence"],
+    });
+
+    for fact in expected {
+        // The prompt is intentionally generous. Earlier we observed
+        // gemma-4-E4B reading "concept conveyed" too literally on
+        // sub-points (e.g. marking "American Revolution" absent from a
+        // French-Revolution answer that named it as a financial-cause
+        // factor). The framing below makes it explicit: the answer is
+        // a multi-point response and the concept is *one of many
+        // relevant items*; mention-in-context counts.
+        let prompt = format!(
+            "You are evaluating an answer against a list of relevant concepts, \
+             one at a time. The answer responds to a broader question, so a \
+             concept counts as present if it appears anywhere in the answer in a \
+             way that bears on the topic — direct mention, paraphrase, contextual \
+             inference, or as one item in a larger list. Mark \"yes\" if a \
+             reasonable instructor would credit a student for surfacing the concept. \
+             Mark \"no\" only if the concept is genuinely absent from the answer, \
+             or mentioned only in an unrelated way.\n\n\
+             Quote a short verbatim span from the answer as evidence (≤30 words), \
+             or write \"(absent)\" if the concept is not there.\n\n\
+             Concept: {fact}\n\n\
+             Answer:\n{answer}\n\n\
+             Respond with JSON only."
+        );
+
+        let request = sovereign_core::types::CompletionRequest {
+            prompt,
+            system_message: Some(
+                "You evaluate whether answers convey concepts. Be generous: \
+                 mention-in-context counts. Respond with JSON only."
+                    .to_string(),
+            ),
+            preferred_speed: sovereign_core::types::Speed::Fast,
+            max_tokens: Some(200),
+            temperature: Some(0.0),
+            structured_output: Some(schema.clone()),
+            think_budget: Some(0),
+            top_k: None,
+            top_p: None,
+            oicp: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+        };
+
+        match inference.complete(&request).await {
+            Ok(resp) => match parse_judge(&resp.text) {
+                Some((present, evidence)) => {
+                    if present {
+                        matched.push(fact.clone());
+                    } else {
+                        missing.push(fact.clone());
+                    }
+                    details.push(JudgeFactDetail {
+                        fact: fact.clone(),
+                        present,
+                        evidence,
+                    });
+                }
+                None => {
+                    eprintln!(
+                        "  [judge] parse failed for fact={fact:?} raw={raw:?}",
+                        raw = &resp.text[..resp.text.len().min(120)]
+                    );
+                    missing.push(fact.clone());
+                    details.push(JudgeFactDetail {
+                        fact: fact.clone(),
+                        present: false,
+                        evidence: "(parse failed)".into(),
+                    });
+                }
+            },
+            Err(e) => {
+                eprintln!("  [judge] inference failed for fact={fact:?}: {e}");
+                missing.push(fact.clone());
+                details.push(JudgeFactDetail {
+                    fact: fact.clone(),
+                    present: false,
+                    evidence: format!("(inference failed: {e})"),
+                });
+            }
+        }
+    }
+
+    let score = FactScore {
+        matched,
+        missing,
+        total_expected: expected.len(),
+    };
+    (score, details)
+}
+
+/// Pull `(present, evidence)` out of the judge's JSON response. The
+/// in-house constraint guarantees a valid JSON object with the right
+/// shape, so the only failure mode is a daemon-side fallthrough (rare
+/// post-resolution of the alpha-blocker). Returns `None` on parse
+/// failure so the caller can log + treat as a miss.
+fn parse_judge(raw: &str) -> Option<(bool, String)> {
+    let trimmed = raw
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+    let v: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+    let present = v.get("present")?.as_str()?;
+    let evidence = v
+        .get("evidence")
+        .and_then(|e| e.as_str())
+        .unwrap_or("")
+        .to_string();
+    match present.to_ascii_lowercase().as_str() {
+        "yes" => Some((true, evidence)),
+        "no" => Some((false, evidence)),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

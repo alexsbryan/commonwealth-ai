@@ -725,23 +725,52 @@ pub(crate) fn parse_metalingual_locator(message: &str) -> MetalingualLocator {
 /// angle) doesn't crowd out the other articles that appeared further
 /// down. The multi-source expander downstream tops top groups back to
 /// `EXPANSION_MULTI_PER_SOURCE` (4) where depth actually matters.
+///
+/// Within the per-article cap, also enforces a per-section
+/// (`MAX_CHUNKS_PER_SECTION_AT_MERGE`) sub-cap derived from the URL
+/// fragment (the `#Section_name` anchor on a Wikipedia/SEP URL).
+/// Without this, a question whose exact phrasing pattern-matches the
+/// article's overview/abstract section can fill all 5 article slots
+/// with chunks from one or two sections (we observed this on
+/// `contested_atomic_bombings_morality`: 5 article slots all filled
+/// with `#Abstract` + `#Air_raids_on_Japan` chunks, leaving zero room
+/// for the `#Debate_over_bombings` and `#Soviet_entry` sections where
+/// the actual pro/con arguments live). Section-aware capping forces
+/// distribution across sections inside a fact-rich article.
 pub(crate) fn cap_chunks_per_article(
     chunks: Vec<corpus_engine::ScoredChunk>,
     max_per_article: usize,
 ) -> Vec<corpus_engine::ScoredChunk> {
     use std::collections::HashMap;
-    let mut counts: HashMap<(String, String), usize> = HashMap::new();
+    let mut article_counts: HashMap<(String, String), usize> = HashMap::new();
+    let mut section_counts: HashMap<(String, String, String), usize> = HashMap::new();
     let mut out = Vec::with_capacity(chunks.len());
     for c in chunks {
         let title = c.title.as_deref().unwrap_or("").to_string();
-        let key = (c.corpus_id.clone(), title);
-        let n = counts.entry(key).or_insert(0);
-        if *n < max_per_article {
-            *n += 1;
-            out.push(c);
+        let section = section_from_url(c.url.as_deref());
+        let article_key = (c.corpus_id.clone(), title.clone());
+        let section_key = (c.corpus_id.clone(), title, section);
+        let article_n = *article_counts.get(&article_key).unwrap_or(&0);
+        let section_n = *section_counts.get(&section_key).unwrap_or(&0);
+        if article_n >= max_per_article || section_n >= MAX_CHUNKS_PER_SECTION_AT_MERGE {
+            continue;
         }
+        *article_counts.entry(article_key).or_insert(0) += 1;
+        *section_counts.entry(section_key).or_insert(0) += 1;
+        out.push(c);
     }
     out
+}
+
+/// Pull the section anchor out of a Wikipedia/SEP/etc. URL —
+/// everything after the first `#`. Empty string when there's no
+/// fragment (i.e. the article overview / no specific section).
+/// Treating the no-fragment case as its own bucket means the
+/// abstract chunks share the section sub-cap with each other but
+/// don't compete with named sections, which is the intended behavior.
+fn section_from_url(url: Option<&str>) -> String {
+    url.and_then(|u| u.split_once('#').map(|(_, frag)| frag.to_string()))
+        .unwrap_or_default()
 }
 
 /// Move up to `per_entity_reserve` chunks per entity to the front of
@@ -960,7 +989,13 @@ const EXPANSION_MULTI_PER_SOURCE: usize = 4;
 /// revolution_origins` — the Industrial Revolution article had 6
 /// distinct fact-bearing chunks (enclosure, steam engine, colonial),
 /// and capping at 3 dropped half of them.
-const MAX_CHUNKS_PER_ARTICLE_AT_MERGE: usize = 5;
+const MAX_CHUNKS_PER_ARTICLE_AT_MERGE: usize = 10;
+
+/// Within the per-article cap, max chunks from a single section
+/// (URL fragment / `#anchor`). Forces cross-section distribution
+/// inside fact-rich articles. See `cap_chunks_per_article`'s docstring
+/// for the atomic-bombings case study that motivated this.
+const MAX_CHUNKS_PER_SECTION_AT_MERGE: usize = 4;
 
 /// Context budget when source-expansion has fired.
 ///
@@ -4057,42 +4092,59 @@ impl Runtime {
             let collab_evidence = evidence.clone();
             let collab_original = full_text.clone();
             let collab_metadata = metadata_json;
-            tokio::spawn(async move {
-                run_post_stream_refinement(
-                    collab_inference.as_ref(),
-                    collab_approval.as_ref(),
-                    collab_store.as_ref(),
-                    &collab_config,
-                    &collab_cid,
-                    &collab_mid,
-                    &collab_question,
-                    &collab_original,
-                    &collab_evidence,
-                    Some(collab_metadata),
-                )
-                .await;
-            });
+            // Post-stream tasks (epistemic-humility audit + auto-title)
+            // share the fast-slot inflight semaphore with user-facing
+            // requests. Under sequential load — eval bench, atlas
+            // pipeline, anyone calling the daemon back-to-back — the
+            // next request's routing classify queues behind these,
+            // adding 30–60s of latency per turn for ~zero observable
+            // benefit on the bench (the streamed answer is already
+            // delivered; the refinement is a server-side rewrite).
+            // Set `SOVEREIGN_SKIP_POST_STREAM=1` to disable both tasks.
+            // The right architectural fix is a priority queue or
+            // separate slot for background work; this env knob is the
+            // diagnostic + bench-iteration lever.
+            let skip_post_stream = std::env::var("SOVEREIGN_SKIP_POST_STREAM")
+                .map(|v| v == "1")
+                .unwrap_or(false);
+            if !skip_post_stream {
+                tokio::spawn(async move {
+                    run_post_stream_refinement(
+                        collab_inference.as_ref(),
+                        collab_approval.as_ref(),
+                        collab_store.as_ref(),
+                        &collab_config,
+                        &collab_cid,
+                        &collab_mid,
+                        &collab_question,
+                        &collab_original,
+                        &collab_evidence,
+                        Some(collab_metadata),
+                    )
+                    .await;
+                });
 
-            // Auto-title after first exchange. Non-blocking; the stream has
-            // already delivered the response to the user.
-            let title_inference = Arc::clone(&inference);
-            let title_store = Arc::clone(&store);
-            let title_cid = conversation_id_owned.clone();
-            tokio::spawn(async move {
-                if let Err(e) = crate::title::try_auto_title(
-                    title_inference.as_ref(),
-                    title_store.as_ref(),
-                    &title_cid,
-                )
-                .await
-                {
-                    tracing::warn!(
-                        conversation_id = %title_cid,
-                        error = %e,
-                        "auto-title: generation failed (stream path)"
-                    );
-                }
-            });
+                // Auto-title after first exchange. Non-blocking; the stream has
+                // already delivered the response to the user.
+                let title_inference = Arc::clone(&inference);
+                let title_store = Arc::clone(&store);
+                let title_cid = conversation_id_owned.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = crate::title::try_auto_title(
+                        title_inference.as_ref(),
+                        title_store.as_ref(),
+                        &title_cid,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            conversation_id = %title_cid,
+                            error = %e,
+                            "auto-title: generation failed (stream path)"
+                        );
+                    }
+                });
+            }
         });
 
         let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =

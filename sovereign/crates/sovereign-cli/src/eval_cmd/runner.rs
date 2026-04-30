@@ -112,6 +112,17 @@ pub struct SynthSnapshot {
     /// retrieval actually saw — read alongside the retrieval-mode
     /// baseline for the unbiased number.
     pub chunks_fact_score: ScoreSnapshot,
+    /// Instructor-mode (LLM-as-judge) score: per fact, did a fast-slot
+    /// model decide the concept was conveyed by the answer? Catches
+    /// paraphrase coverage that the strict keyword-AND scorer misses.
+    /// `None` when the run was launched with `--no-judge`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge_fact_score: Option<ScoreSnapshot>,
+    /// Per-fact audit trail for the judge calls — verbatim evidence
+    /// quote (or `"(absent)"`) so a reviewer can verify yes/no
+    /// decisions without re-running. Empty when `--no-judge`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub judge_evidence: Vec<crate::eval_cmd::score::JudgeFactDetail>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -514,9 +525,16 @@ fn truncate(s: &str, max: usize) -> String {
 /// Drive every question through `Runtime::handle_message_stream` and
 /// score the persisted answer + provenance. Sequential — the chat
 /// model is a single GPU slot and concurrent turns would just queue.
+///
+/// `judge` toggles the LLM-as-judge "instructor mode" pass. When on,
+/// each question's answer is also scored by a fast-slot judge that
+/// asks per-fact whether the concept is conveyed; results land in
+/// `synth.judge_fact_score`. The strict keyword scorer always runs
+/// regardless. See `score::score_facts_judge`.
 pub async fn run_bank_synth(
     session: &ChatSession,
     bank: &EvalBank,
+    judge: bool,
 ) -> Result<EvalRun, String> {
     let started_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -532,7 +550,7 @@ pub async fn run_bank_synth(
 
     let mut results = Vec::with_capacity(bank.questions.len());
     for q in &bank.questions {
-        let result = run_question_synth(session, q).await;
+        let result = run_question_synth(session, q, judge).await;
         results.push(result);
     }
 
@@ -548,7 +566,7 @@ pub async fn run_bank_synth(
     })
 }
 
-async fn run_question_synth(session: &ChatSession, q: &Question) -> EvalResult {
+async fn run_question_synth(session: &ChatSession, q: &Question, judge: bool) -> EvalResult {
     let conversation_id = uuid::Uuid::new_v4().to_string();
     let t_wall = Instant::now();
 
@@ -701,6 +719,23 @@ async fn run_question_synth(session: &ChatSession, q: &Question) -> EvalResult {
     let source_score: ScoreSnapshot =
         score_sources_titles(&q.expected_sources, &titles).into();
 
+    // 8b. Instructor-mode pass — LLM-as-judge concept-conveyed score.
+    //     Strict keyword score above is preserved unchanged; this
+    //     adds a parallel column in the report. Skipped under
+    //     `--no-judge`. The judge call also returns a per-fact
+    //     evidence trail (quote or "(absent)") for auditability.
+    let (judge_fact_score, judge_evidence): (Option<ScoreSnapshot>, _) = if judge {
+        let (score, details) = crate::eval_cmd::score::score_facts_judge(
+            &q.expected_facts,
+            &visible,
+            session.inference.as_ref(),
+        )
+        .await;
+        (Some(score.into()), details)
+    } else {
+        (None, Vec::new())
+    };
+
     let synth = SynthSnapshot {
         answer: visible,
         reasoning_chars,
@@ -710,6 +745,8 @@ async fn run_question_synth(session: &ChatSession, q: &Question) -> EvalResult {
         source_origins,
         retrieved_chunk_count: retrieved_chunks_meta.len(),
         chunks_fact_score,
+        judge_fact_score,
+        judge_evidence,
     };
 
     EvalResult {
@@ -757,6 +794,8 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
             source_origins: Vec::new(),
             retrieved_chunk_count: 0,
             chunks_fact_score: score_facts_in_text(&q.expected_facts, "").into(),
+            judge_fact_score: None,
+            judge_evidence: Vec::new(),
         }),
     }
 }

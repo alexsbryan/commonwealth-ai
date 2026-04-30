@@ -67,6 +67,7 @@ const RUN_HELP: Help = Help {
             ("--routing-only", "Call the classifier per question and score the routing decision against `expected_intent` (or category default). Skips retrieval and synthesis — fast iteration loop for tuning the classifier prompt."),
             ("--limit <N>",    "Top-N chunks to retrieve per question (retrieval mode only; default: 10)."),
             ("--inspect",      "Print missing facts/sources + top retrieved chunks per question."),
+            ("--no-judge",     "Skip the LLM-as-judge \"instructor mode\" pass under --synth. Default: judge runs alongside the strict scorer to catch paraphrased coverage."),
             ("--format text|json", "Stdout format (default: text)."),
             ("--output <path>", "Also write the full run as pretty JSON to this path."),
             ("--help, -h",     "Show this message."),
@@ -117,6 +118,10 @@ struct RunArgs {
     routing_only: bool,
     format: OutputFormat,
     output: Option<PathBuf>,
+    /// Skip the LLM-as-judge "instructor mode" pass. Default: judge runs
+    /// alongside the strict scorer in synth mode. Use this on
+    /// fast-iteration loops where the strict score alone is enough.
+    no_judge: bool,
 }
 
 impl Default for RunArgs {
@@ -129,6 +134,7 @@ impl Default for RunArgs {
             routing_only: false,
             format: OutputFormat::Text,
             output: None,
+            no_judge: false,
         }
     }
 }
@@ -187,6 +193,9 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
             "--routing-only" => {
                 a.routing_only = true;
+            }
+            "--no-judge" => {
+                a.no_judge = true;
             }
             "--format" => {
                 i += 1;
@@ -276,7 +285,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             "synth mode — driving full chat pipeline. This will take ~one chat-completion \
              per question; sit tight."
         );
-        match runner::run_bank_synth(&session, &bank).await {
+        match runner::run_bank_synth(&session, &bank, !a.no_judge).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");
