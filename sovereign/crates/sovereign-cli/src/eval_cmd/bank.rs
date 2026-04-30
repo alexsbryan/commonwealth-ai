@@ -117,6 +117,11 @@ impl Question {
             // shape is genuinely open-ended (e.g. "how do X and Y
             // relate" rather than "how do X and Y differ").
             "comparative" => ExpectedIntent::Exact("comparison_query"),
+            // Framework cells from the situated routing pass.
+            "metalingual" => ExpectedIntent::Exact("metalingual_query"),
+            "conation" => ExpectedIntent::Exact("conation_query"),
+            "commissive" => ExpectedIntent::Exact("commissive_query"),
+            "expressive" => ExpectedIntent::Exact("expressive_query"),
             "boundary_coverage" => {
                 ExpectedIntent::AnyOf(&["knowledge_query", "deep_query"])
             }

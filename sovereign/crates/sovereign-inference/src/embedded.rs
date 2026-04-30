@@ -3124,82 +3124,78 @@ const THINK_BUDGET: usize = 512;
 ///   a collapsed distribution. When uncertain it relaxes, preserving diversity.
 /// - **penalties**: kept as a backstop for single-token repetition that DRY's
 ///   `allowed_length = 2` intentionally ignores.
-fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &ModelQuirks) -> LlamaSampler {
-    // Grammar-constrained decoding via llama.cpp's native GBNF
-    // sampler. We translate the JSON Schema to GBNF in-process
-    // (`crate::json_grammar::schema_to_gbnf`) and hand the grammar
-    // string to `LlamaSampler::grammar`, which masks logits at
-    // sampling time so output stays a valid prefix of a JSON
-    // document conforming to the schema.
-    //
-    // Why not `LlamaSampler::llguidance`? It silently falls through
-    // on the model's first emitted token across every model we've
-    // tested (Gemma-31B, Qwopus-27B, GLM-18B, Darwin-9B): the
-    // `LlamaSampler::llguidance` constructor returns Ok, the INFO
-    // log fires, but on first decode the underlying matcher errors
-    // with `byte '{' fails parse` (a stderr printf, not a
-    // tracing::warn — easy to miss), `compute_mask` returns Err for
-    // every subsequent call, and the model decodes free-form. The
-    // BYOM "valid JSON" guarantee was a coin flip per model.
-    // llama.cpp's native grammar sampler has shipped in production
-    // for years and is model-independent. See the
-    // `bench atlas`-driven memo at memory/project_grammar_alpha_blocker.md.
-    // 2026-04-26 STATUS: Both grammar-sampler paths are stuck on
-    // upstream bugs we can't fix in our wiring layer:
-    //  - `LlamaSampler::llguidance` silently falls through on first
-    //    token across every model tested (init says ok, no
-    //    `tracing::warn` ever fires; first decode emits a stderr
-    //    `Warning: Parser Error: byte '{' fails parse; stopping`,
-    //    matcher errors, decode runs unconstrained).
-    //  - `LlamaSampler::grammar` (native GBNF, with our in-tree
-    //    `json_grammar::schema_to_gbnf` translator at the ready)
-    //    crashes the process via `GGML_ASSERT(!stacks.empty())` at
-    //    `llama-grammar.cpp:940` on FIRST apply — but ONLY in the
-    //    daemon. The standalone `examples/grammar_smoke.rs` runs the
-    //    same model, ctx params, chat template, full sampler chain,
-    //    and identical 14-byte grammar without crashing. We tried
-    //    fresh-per-grammar-request contexts (didn't help) — narrows
-    //    the bug to something process-wide that the daemon has and
-    //    the smoke doesn't (the most likely candidate is the shared
-    //    `Arc<LlamaBackend>` carrying fast + embed + primary slots).
-    //  See `memory/project_grammar_alpha_blocker.md`.
-    // We keep llguidance wired here because it doesn't crash the
-    // daemon; grammar enforcement is currently a no-op and parser
-    // hardening (`prepare_phase_json`, `extract_json_block`,
-    // `sanitize_phase1_object_arrays`) does the work. The
-    // `json_grammar` translator + tests + `grammar_smoke` example
-    // stay in tree, ready to wire up the moment the upstream bug is
-    // found.
-    let grammar_sampler: Option<LlamaSampler> = request
-        .structured_output
-        .as_ref()
-        .and_then(|schema| match serde_json::to_string(schema) {
-            Ok(schema_json) => match LlamaSampler::llguidance(
-                model,
-                "json_schema",
-                &schema_json,
-            ) {
-                Ok(s) => {
-                    tracing::info!(
-                        schema_bytes = schema_json.len(),
-                        "grammar-constrained decoding enabled (llguidance, falls through silently)"
-                    );
-                    Some(s)
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        "llguidance grammar sampler failed to initialise — \
-                         falling back to free-form sampling"
-                    );
-                    None
-                }
-            },
+/// Sampler chain plus optional schema-driven logit mask.
+///
+/// History: the per-token loop used to call `LlamaSampler::sample`
+/// directly, which runs the entire chain inside llama.cpp. Grammar
+/// enforcement was provided either by `LlamaSampler::llguidance`
+/// (silent fallthrough on every BYOM model) or `LlamaSampler::grammar`
+/// (crashes the daemon process at `GGML_ASSERT(!stacks.empty())`,
+/// `llama-grammar.cpp:940`, reproducible across Vulkan AND ROCm AND
+/// single-slot daemon configurations). See
+/// `memory/project_grammar_alpha_blocker.md`.
+///
+/// `ConstrainedSampler` replaces both: it owns a `LlamaSampler` chain
+/// (without any grammar sampler), and optionally owns a
+/// `JsonConstraint` that masks token logits in pure Rust before the
+/// chain runs. No call into `llama-grammar.cpp` ever fires.
+pub struct ConstrainedSampler {
+    inner: LlamaSampler,
+    constraint: Option<crate::json_constraint::JsonConstraint>,
+}
+
+impl ConstrainedSampler {
+    /// Per-token: pull candidates from ctx, mask via constraint (if
+    /// any), apply the rest of the chain, return the selected token.
+    pub fn sample(&mut self, ctx: &llama_cpp_2::context::LlamaContext<'_>, idx: i32) -> LlamaToken {
+        let mut data = if idx < 0 {
+            ctx.token_data_array()
+        } else {
+            ctx.token_data_array_ith(idx)
+        };
+        if let Some(c) = self.constraint.as_ref() {
+            c.mask(&mut data);
+        }
+        data.apply_sampler(&self.inner);
+        data.selected_token()
+            .expect("sampler chain failed to select a token")
+    }
+
+    /// Advance both the inner chain (for stateful samplers — DRY,
+    /// penalties) and the constraint state machine.
+    pub fn accept(&mut self, token: LlamaToken) {
+        self.inner.accept(token);
+        if let Some(c) = self.constraint.as_mut() {
+            c.accept(token);
+        }
+    }
+}
+
+fn build_sampler(
+    model: &LlamaModel,
+    request: &CompletionRequest,
+    quirks: &ModelQuirks,
+) -> ConstrainedSampler {
+    // Schema-driven constraint (pure Rust, bypasses llama-grammar.cpp
+    // entirely). Compiled at request time from the OpenAI-style
+    // response_format → CompletionRequest.structured_output. Failure
+    // to compile is a real schema problem; warn loudly and fall back
+    // to unconstrained sampling so the request doesn't hard-fail.
+    let constraint = request.structured_output.as_ref().and_then(|schema| {
+        match crate::json_constraint::JsonConstraint::new(schema, model) {
+            Ok(c) => {
+                tracing::info!("grammar-constrained decoding enabled (in-house mask, no llama-grammar.cpp)");
+                Some(c)
+            }
             Err(e) => {
-                tracing::warn!(error = %e, "failed to serialise structured_output schema");
+                tracing::warn!(
+                    error = %e,
+                    "JsonConstraint compile failed — falling back to free-form sampling"
+                );
                 None
             }
-        });
+        }
+    });
 
     // Temperature: per-request override → family default.
     let temp = request.temperature.unwrap_or(quirks.default_temperature);
@@ -3211,13 +3207,11 @@ fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &Model
     // begins — any of these tokens resets the repeated-suffix detector.
     let breakers: &[&[u8]] = &[b"\n", b".", b"?", b"!", b":", b"\"", b"*"];
 
-    // Assemble the chain. Grammar (if any) goes first so it masks
-    // disallowed tokens before DRY/penalties/temp run on the
-    // surviving distribution.
+    // Inner chain: DRY → penalties → (greedy | top_k+min_p+temp+dist).
+    // Grammar masking is OUR responsibility now (in
+    // ConstrainedSampler::sample), not llama.cpp's, so the chain has
+    // no grammar slot.
     let mut samplers: Vec<LlamaSampler> = Vec::new();
-    if let Some(g) = grammar_sampler {
-        samplers.push(g);
-    }
     samplers.push(LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()));
     samplers.push(LlamaSampler::penalties(128, 1.15, 0.1, 0.1));
     if temp < 0.01 {
@@ -3228,7 +3222,10 @@ fn build_sampler(model: &LlamaModel, request: &CompletionRequest, quirks: &Model
         samplers.push(LlamaSampler::temp(temp));
         samplers.push(LlamaSampler::dist(rand_seed()));
     }
-    LlamaSampler::chain_simple(samplers)
+    ConstrainedSampler {
+        inner: LlamaSampler::chain_simple(samplers),
+        constraint,
+    }
 }
 
 fn rand_seed() -> u32 {

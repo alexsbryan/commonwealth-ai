@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 oicp-types = { path = "../../../oicp-types" }
-corpus-engine = { workspace = true }
+corpus-engine = { workspace = true, features = ["treesitter"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

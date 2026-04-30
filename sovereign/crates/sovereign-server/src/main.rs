@@ -350,16 +350,21 @@ async fn main() {
 
     // Working notes tools — persist across sessions, used for session attribution.
     let notes_db_path = home.join(".sovereign").join("notes.db");
-    match corpus_engine::NoteStore::open(&notes_db_path) {
-        Ok(store) => {
-            let store = Arc::new(store);
-            tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(&store))));
-            tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(&store))));
-            tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(store)));
-            tracing::info!("Notes: tools registered ({})", notes_db_path.display());
-        }
-        Err(e) => tracing::warn!(error = %e, "notes.db unavailable — note tools disabled"),
-    }
+    let note_store_for_runtime: Option<Arc<corpus_engine::NoteStore>> =
+        match corpus_engine::NoteStore::open(&notes_db_path) {
+            Ok(store) => {
+                let store = Arc::new(store);
+                tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(&store))));
+                tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(&store))));
+                tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(&store))));
+                tracing::info!("Notes: tools registered ({})", notes_db_path.display());
+                Some(store)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "notes.db unavailable — note tools disabled");
+                None
+            }
+        };
 
     // Activity reporter — signals coding intensity to Commonwealth so
     // the scheduler can route inference away from busy nodes.
@@ -394,6 +399,10 @@ async fn main() {
         sovereign_core::types::InferenceConfig::default(),
     )
     .with_corpus_engine(Arc::clone(&corpus_engine));
+    // Note store for commitment persistence (CommissiveQuery handler).
+    if let Some(store) = note_store_for_runtime {
+        runtime_builder = runtime_builder.with_note_store(store);
+    }
     // Install the landscape-digest provider only when KnowledgeView
     // is enabled. When disabled, the splice path stays a no-op —
     // identical to pre-KnowledgeView behaviour.

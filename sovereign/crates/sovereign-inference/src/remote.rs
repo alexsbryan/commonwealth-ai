@@ -116,6 +116,23 @@ impl RemoteApiProvider {
             body["oicp"] = v;
         }
 
+        // Forward `structured_output` to the daemon as the OpenAI
+        // `response_format: {type: "json_schema", json_schema: {...}}`
+        // envelope. Without this, the schema is dropped at the HTTP
+        // boundary and the daemon's grammar-constraint layer never
+        // sees it (silent fallback to free-form sampling). The daemon
+        // unwraps it back into `request.structured_output` via
+        // `inference_adapter::extract_response_format_schema`.
+        if let Some(schema) = &request.structured_output {
+            body["response_format"] = serde_json::json!({
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "structured",
+                    "schema": schema,
+                },
+            });
+        }
+
         body
     }
 

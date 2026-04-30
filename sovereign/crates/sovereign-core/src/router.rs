@@ -303,10 +303,27 @@ impl LlmRouter {
         format!(
             r#"Classify this message into exactly ONE category.
 
+═══ SITUATED CONTEXT (use for Gricean inference) ═══
+{context_str}
+
 Installed knowledge sources: {corpus_list}
 Other available tools: {tool_list}
 
-Categories:
+═══ INFERENCE INSTRUCTION ═══
+Pick the category whose move-shape would make the user's message
+*optimally relevant given the situated context above*. The
+grammatical surface form does NOT pick the category — the user's
+actual move does. Examples of surface ≠ intent:
+  - "you there?" after a long-running task → PHATIC under DIRECTIVE,
+    not LOOKUP. The user is checking presence, not asking a question.
+  - "I'm stuck on this" while debugging → EXPRESSIVE with implicit
+    help-request, not a SIMPLE statement of fact.
+  - "shorter please" after a long answer → CONATION (act on prior
+    turn), not a question about brevity.
+Reason about what the user actually wants given that they said this
+*now*, after seeing the assistant's last reply.
+
+═══ Categories ═══
 
 SIMPLE
   Answerable from general world knowledge without needing to look
@@ -376,11 +393,42 @@ ACTION
   "Paraphrase the excerpt", "Compare these sections" are REASONING,
   not ACTION, even though they use imperative verbs.
 
-Conversation context: {context_str}
+CONATION
+  Imperative command directed at *the assistant about its last reply*.
+  Short (typically 1-4 words), no question mark, no proper nouns,
+  references the assistant's prior turn — not the world. The user is
+  asking the system to *transform* what was just produced.
+  Examples: "Stop", "Try again", "Shorter please",
+            "Skip the boilerplate", "Walk me through it slower"
+  NOT CONATION: questions about whether to stop something in the
+  world ("should I stop the migration?") are ACTION or REASONING.
+
+COMMISSION
+  User committing to a future action, or asking the assistant to
+  remember something. First-person future framing ("I'll", "I'm
+  going to", "remind me to"). The intent is to *persist a
+  commitment*, not get an immediate answer.
+  Examples: "I'll fix the migration tomorrow",
+            "I'm going to refactor the router later",
+            "Remind me to review this Friday"
+  NOT COMMISSION: questions about future events ("when will X
+  happen?") are LOOKUP or REASONING.
+
+EXPRESSIVE
+  User expressing how they're feeling about the current work,
+  often with implicit help-request. Short, first-person, emotive
+  vocabulary ("stuck", "frustrated", "no idea"). Surface looks like
+  a feeling-statement but the actual move — given conversation
+  context — is usually "help me unstick".
+  Examples: "I'm stuck on this", "Ugh, broken again",
+            "I have no idea where to start", "This is exhausting"
+  NOT EXPRESSIVE: longer messages that embed a real question are
+  the question type, not EXPRESSIVE.
+
 User message: "{message}"{corrections_note}{skill_hints}
 
 Respond with JSON only:
-{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION", "confidence": 0.0, "rationale": "one short clause"}}"#,
+{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE", "confidence": 0.0, "rationale": "one short clause"}}"#,
         )
     }
 
@@ -418,8 +466,10 @@ Reply with ONLY the letter: A, B, or C"#
     fn format_context_summary(context: &ConversationContext) -> String {
         let mut parts = Vec::new();
 
-        // Include working memory if available — this gives the Router
-        // visibility into the conversational arc, not just the last 2 messages.
+        // Working memory — current_goal is the load-bearing situated
+        // signal for Gricean inference (it's what tells the classifier
+        // that "I'm stuck" is EXPRESSIVE about a real ongoing task,
+        // not idle chitchat).
         if let Some(wm) = &context.working_memory {
             if let Some(goal) = &wm.current_goal {
                 parts.push(format!("Current goal: {goal}"));
@@ -430,7 +480,35 @@ Reply with ONLY the letter: A, B, or C"#
             }
         }
 
-        // Recent messages (last 3 for slightly better context than 2).
+        // Topic context — the per-turn-updated arc. `topic` and
+        // `domain` add a second situated layer when working_memory
+        // hasn't been distilled yet (early in a conversation).
+        if let Some(tc) = &context.topic_context {
+            if let Some(topic) = &tc.topic {
+                parts.push(format!("Recent topic: {topic}"));
+            }
+            if let Some(anchor) = &tc.anchored_source {
+                parts.push(format!("Anchored source: {anchor}"));
+            }
+        }
+
+        // Last assistant turn — the *specific* prior reply, surfaced
+        // separately from the recent-messages list so the classifier
+        // can use it for Gricean reads ("is the user reacting to what
+        // I just said?"). Truncated to 200 chars to stay budget-safe.
+        let last_assistant: Option<&Message> = context
+            .conversation
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant);
+        if let Some(m) = last_assistant {
+            let snippet = &m.content[..m.content.len().min(200)];
+            parts.push(format!("Last assistant turn: {snippet}"));
+        }
+
+        // Recent messages (last 3) — broader conversation arc beneath
+        // the singled-out last_assistant entry above.
         let recent: Vec<String> = context
             .conversation
             .messages
@@ -572,6 +650,258 @@ Reply with ONLY the letter: A, B, or C"#
         has_recent_year || has_temporal || has_search_request
     }
 
+    /// Heuristic check: is this message a metalingual query — asking
+    /// about how a *specific source* uses a term, rather than asking
+    /// about the term's general meaning in the world?
+    ///
+    /// Jakobson's metalingual function: foregrounding the *code* (the
+    /// words themselves), not the world the words point at. The
+    /// distinguishing Gricean signal is the **source-anchor locator**
+    /// — without one, the question is referential (KnowledgeQuery);
+    /// with one, it's asking how *that source* uses the word.
+    ///
+    /// Locator families covered:
+    /// - **System-internal**: "in this codebase / repo / project /
+    ///   sovereign" → resolves to code corpora.
+    /// - **Conversation-internal**: "earlier", "we mentioned", "you
+    ///   said" → resolves to conversation history.
+    /// - **Source-anchored**: "according to X", "per X", "X defines",
+    ///   "in [author / framework]" → resolves to a named corpus.
+    /// - **Ambient**: "here", "this" + definitional → resolves from
+    ///   conversation context.
+    fn looks_like_metalingual(message: &str) -> bool {
+        let lower = message.to_lowercase();
+
+        // System-internal locators — the original code/project case.
+        const SYSTEM_MARKERS: &[&str] = &[
+            "in this codebase",
+            "in this repo",
+            "in this repository",
+            "in this project",
+            "in this code",
+            "in our codebase",
+            "in our repo",
+            "in our system",
+            "in the codebase",
+            "in the repo",
+            "in sovereign",
+            "in the sovereign",
+        ];
+
+        // Conversation-internal locators — asking about something said
+        // earlier in this thread.
+        const CONVERSATION_MARKERS: &[&str] = &[
+            "in this conversation",
+            "in our conversation",
+            " earlier ",
+            "earlier you",
+            "earlier i ",
+            "we mentioned",
+            "we discussed",
+            "we discuss ",   // "did we discuss" past-construction
+            "we talked",
+            "did we",
+            "did you",
+            "you mentioned",
+            "you said",
+        ];
+
+        // Source-anchored locators — "according to X / per X / X says /
+        // X defines / X uses the term Y". Phrases here must be high-
+        // precision; bare "how does" is too broad (false-positives on
+        // "how does Darwin's theory account for...") and is omitted.
+        const SOURCE_ANCHORS: &[&str] = &[
+            "according to",
+            " per ",
+            " says",
+            " defines",
+            " uses the term",
+            " use the term",
+        ];
+
+        let has_system = SYSTEM_MARKERS.iter().any(|m| lower.contains(m));
+        let has_conversation = CONVERSATION_MARKERS.iter().any(|m| lower.contains(m));
+        let has_source_anchor = SOURCE_ANCHORS.iter().any(|m| lower.contains(m));
+
+        // Ambient: " here" / " this" as a deictic locator. The
+        // downstream definitional-verb check is the actual precision
+        // gate — we don't double-require "mean"/"refer" here, so
+        // "how is gossip implemented here" qualifies despite having
+        // a verb-side rather than noun-side definitional shape.
+        // " this " is excluded when it's the start of an in-prompt
+        // content reference ("this is broken"), which is content-
+        // processing not metalingual.
+        let has_ambient_here = lower.contains(" here?")
+            || lower.contains(" here.")
+            || lower.contains(" here,")
+            || lower.contains(" here ");
+        let has_ambient_this = lower.contains(" this ")
+            && !lower.contains(" this is ")
+            && !lower.contains(" this code")
+            && !lower.contains(" this passage")
+            && !lower.contains(" this section");
+        let has_ambient = has_ambient_here || has_ambient_this;
+
+        // Pure source-anchored questions ("according to SEP, what does X mean")
+        // qualify even without an explicit definitional verb if the anchor
+        // itself implies metalingual framing — but in practice they almost
+        // always include a definitional verb downstream, so we still
+        // require one for precision.
+        let has_locator = has_system || has_conversation || has_source_anchor || has_ambient;
+        if !has_locator {
+            return false;
+        }
+
+        // Definitional / structural / discourse verbs — what the user
+        // is asking about the located term.
+        //
+        // Discourse verbs ("discuss", "say", "mention", "explain") are
+        // included because, paired with a conversation-internal
+        // locator ("what did we discuss earlier"), they're inherently
+        // metalingual — asking about a prior linguistic act, not about
+        // the world. They never fire without a locator since the
+        // outer `has_locator` gate already rejected those cases.
+        const DEFINITIONAL_VERBS: &[&str] = &[
+            "what does", "what is", "what's", "what are",
+            "what did", "what do",
+            "how does", "how do", "how is",
+            "mean", "refers to", "refer to", "stand for",
+            "where is", "where's", "where do",
+            "definition", "defines", "describe", "describes",
+            "discuss", "discussed",
+            "say", "said", "says",
+            "mention", "mentioned",
+            "explain", "explained",
+            "talk", "talked",
+        ];
+        DEFINITIONAL_VERBS.iter().any(|m| lower.contains(m))
+    }
+
+    /// Heuristic check: is this message a conation move — short
+    /// imperative directed at the assistant about its prior reply
+    /// ("stop", "try again", "shorter please", "skip the boilerplate",
+    /// "more detail")?
+    ///
+    /// High-precision: requires (a) ≤4 alphanumeric tokens, (b) no
+    /// question mark, (c) no proper nouns (filters out "Compare X
+    /// and Y"), (d) at least one imperative or style-modifier marker.
+    /// The conation handler then operates on the situated artifact —
+    /// the prior `QuerySession.classification` — without re-running
+    /// the router.
+    fn looks_like_conation(message: &str) -> bool {
+        if message.contains('?') {
+            return false;
+        }
+        let tokens: Vec<&str> = message
+            .split_whitespace()
+            .filter(|w| w.chars().any(|c| c.is_alphanumeric()))
+            .collect();
+        if tokens.is_empty() || tokens.len() > 4 {
+            return false;
+        }
+        // Reject mid-sentence proper nouns. First token treated as
+        // sentence-initial so "Stop" capitalized at start is allowed.
+        for (i, t) in tokens.iter().enumerate() {
+            if i == 0 {
+                continue;
+            }
+            let cleaned = t.trim_matches(|c: char| !c.is_alphabetic());
+            if cleaned
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
+                return false;
+            }
+        }
+        let lower = message.to_lowercase();
+        const IMPERATIVE_MARKERS: &[&str] = &[
+            "stop", "cancel", "abort", "halt",
+            "try again", "retry", "regenerate", "redo", "again",
+            "shorter", "terser", "concise", "be terse", "tldr",
+            "longer", "more detail", "expand", "elaborate",
+            "slower", "step by step", "walk through",
+            "faster", "skip", "boilerplate",
+            "less", "more",
+        ];
+        IMPERATIVE_MARKERS.iter().any(|m| lower.contains(m))
+    }
+
+    /// Heuristic check: is this message a commissive move — user
+    /// committing to a future action or asking the assistant to
+    /// remember something? "I'll fix this tomorrow", "I'm going to
+    /// refactor X", "remind me to check Friday".
+    ///
+    /// Distinct from a question with first-person framing ("I want
+    /// to know X" — that's still a question). Requires a future-
+    /// commitment marker AND no question mark.
+    fn looks_like_commissive(message: &str) -> bool {
+        if message.contains('?') {
+            return false;
+        }
+        let lower = message.to_lowercase();
+        const COMMITMENT_MARKERS: &[&str] = &[
+            "i'll ", "i will ", "i'm going to ", "i am going to ",
+            "i'm gonna ", "i plan to ", "i'll be ",
+            "remind me to ", "remind me about ", "remind me later ",
+            "remind me on ", "remind me in ",
+        ];
+        COMMITMENT_MARKERS.iter().any(|m| lower.contains(m))
+    }
+
+    /// Heuristic check: is this message an expressive move — user
+    /// stating how they're feeling about the current work, often with
+    /// implicit help-request? "I'm stuck on this bug", "ugh, broken
+    /// again", "I have no idea where to start".
+    ///
+    /// High-precision floor only — Pass 1 (situated) handles the
+    /// borderline cases. We require an emotive marker AND no question
+    /// mark AND short message length, because longer messages tend to
+    /// embed a real question that the LLM should classify.
+    fn looks_like_expressive(message: &str) -> bool {
+        if message.contains('?') {
+            return false;
+        }
+        let token_count = message.split_whitespace().count();
+        if token_count > 15 {
+            return false;
+        }
+        let lower = message.to_lowercase();
+
+        // Multi-word markers — substring match is safe because they
+        // include word characters that can't appear inside other words
+        // ("im stuck" can't accidentally match anywhere outside an
+        // intended occurrence).
+        const PHRASE_MARKERS: &[&str] = &[
+            "i'm stuck", "im stuck",
+            "i'm bored", "im bored",
+            "i'm frustrated", "im frustrated",
+            "i'm exhausted", "im exhausted",
+            "i'm tired", "im tired",
+            "i give up", "i gave up",
+            "i have no idea", "no idea where to start",
+            "this is frustrating", "this is broken",
+            "this is annoying", "this is exhausting",
+        ];
+        if PHRASE_MARKERS.iter().any(|m| lower.contains(m)) {
+            return true;
+        }
+
+        // Single-word interjections — must match as a whole word, not
+        // a substring (otherwise "ugh" matches inside "through",
+        // "argh" inside "marginal", "sigh" inside "signing"). Split
+        // on non-alphabetic so punctuation doesn't anchor us to the
+        // wrong boundary.
+        const WORD_MARKERS: &[&str] = &["ugh", "argh", "sigh", "agh", "blah"];
+        for word in lower.split(|c: char| !c.is_alphabetic()) {
+            if WORD_MARKERS.contains(&word) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Heuristic check: is this message a two-entity comparison shape
     /// ("difference between X and Y", "X vs Y", "how do X and Y differ",
     /// "compare X and Y")? High-precision — requires both a comparison
@@ -694,7 +1024,38 @@ Reply with ONLY the letter: A, B, or C"#
     }
 
     /// Call the fast model for a JSON-output classification prompt (Pass 1 + self-assessment).
+    ///
+    /// Populates `structured_output` with the classifier schema —
+    /// `JsonConstraint` (in `sovereign-inference::json_constraint`)
+    /// masks logits to force the model to emit only schema-conforming
+    /// bytes. Without this, small fast-slot models (Qwen3.5-2B) write
+    /// reasoning prose ("Let me analyse this message carefully…")
+    /// instead of JSON, which `parse_coarse` can't recover from. The
+    /// schema mirrors `CoarseClassification` (line 26): `intent` enum
+    /// + `confidence` number + optional `rationale` string.
     async fn classify_call_json(&self, prompt: String, max_tokens: usize) -> Result<String> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "string",
+                    "enum": [
+                        "SIMPLE",
+                        "LOOKUP",
+                        "COMPARISON",
+                        "REASONING",
+                        "ACTION",
+                        "CONATION",
+                        "COMMISSION",
+                        "EXPRESSIVE",
+                        "METALINGUAL",
+                    ],
+                },
+                "confidence": {"type": "number"},
+                "rationale": {"type": "string"},
+            },
+            "required": ["intent", "confidence"],
+        });
         let request = CompletionRequest {
             prompt,
             system_message: Some(
@@ -703,7 +1064,7 @@ Reply with ONLY the letter: A, B, or C"#
             preferred_speed: Speed::Fast,
             max_tokens: Some(max_tokens),
             temperature: Some(0.0),
-            structured_output: None,
+            structured_output: Some(schema),
             think_budget: Some(0),
             top_k: None,
             top_p: None,
@@ -994,10 +1355,37 @@ impl Router for LlmRouter {
             });
         }
 
+        // Pre-check 0: conation shape → force CONATION. Short imperative
+        // directed at the assistant about the prior turn ("stop", "try
+        // again", "shorter please"). Highest-precision pre-check; fires
+        // first so it pre-empts e.g. "stop" being read as ACTION (cancel
+        // an in-flight search would itself be conation routed correctly).
+        let force_conation = Self::looks_like_conation(message);
+
         // Pre-check 1: temporal/current-info → force ACTION (search).
         // Small models are unreliable at detecting these.
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
-        let force_action = has_search && Self::needs_current_info(message);
+        let force_action = !force_conation
+            && has_search
+            && Self::needs_current_info(message);
+
+        // Pre-check 1b: metalingual shape → force METALINGUAL. Question
+        // about the system's own vocabulary ("what does X mean in this
+        // codebase"). Runs BEFORE comparison so "what's the difference
+        // between plan and task in this codebase" routes metalingual,
+        // not comparison-against-Wikipedia.
+        let force_metalingual = !force_conation
+            && !force_action
+            && Self::looks_like_metalingual(message);
+
+        // Pre-check 1c: commissive shape → force COMMISSION. First-
+        // person future commitment ("I'll fix it tomorrow", "remind me
+        // to check Friday"). Distinct from comparison/metalingual; can
+        // fire after either without conflict.
+        let force_commissive = !force_conation
+            && !force_action
+            && !force_metalingual
+            && Self::looks_like_commissive(message);
 
         // Pre-check 2: comparison shape → force COMPARISON. Two-entity
         // contrast ("difference between X and Y", "X vs Y", "compare X
@@ -1005,37 +1393,84 @@ impl Router for LlmRouter {
         // constrained prompt rather than the open-ended REASONING path.
         // Runs BEFORE content-processing so `compare X and Y` (world
         // entities) doesn't get poached by the `compare ` content verb.
-        let force_comparison = !force_action
+        let force_comparison = !force_conation
+            && !force_action
+            && !force_metalingual
+            && !force_commissive
             && Self::looks_like_comparison(message);
+
+        // Pre-check 2b: expressive shape → force EXPRESSIVE. Short
+        // first-person feeling-statement, often with implicit help-
+        // request ("I'm stuck on this bug", "ugh, broken again").
+        // The heuristic catches surface-clear cases; situated Pass 1
+        // (and the tail-case refiner) handle the borderline ones.
+        let force_expressive = !force_conation
+            && !force_action
+            && !force_metalingual
+            && !force_commissive
+            && !force_comparison
+            && Self::looks_like_expressive(message);
 
         // Pre-check 3: content-processing signal → force REASONING. Catches
         // "summarize this", "explain this passage", "compare these sections"
         // etc. which the Fast model sometimes misreads as ACTION because of
         // the imperative verb. Content processing never needs external reach.
-        let force_content_reasoning = !force_action
+        let force_content_reasoning = !force_conation
+            && !force_action
+            && !force_metalingual
+            && !force_commissive
             && !force_comparison
+            && !force_expressive
             && Self::looks_like_content_processing(message);
 
         // Pre-check 4: deep reasoning signal → force REASONING before the LLM sees it.
         // This catches philosophical, analytical, and compatibility questions that
         // small fast models frequently mis-classify as SimpleQuery.
-        let force_deep = !force_action
+        let force_deep = !force_conation
+            && !force_action
+            && !force_metalingual
+            && !force_commissive
             && !force_comparison
+            && !force_expressive
             && !force_content_reasoning
             && Self::needs_deep_reasoning(message);
 
         // Pass 1: Coarse classification (skipped for pre-checked cases).
-        let coarse = if force_action {
+        let coarse = if force_conation {
+            CoarseClassification {
+                intent: "CONATION".to_string(),
+                confidence: 1.0,
+                rationale: Some("short imperative on prior turn → conation".to_string()),
+            }
+        } else if force_action {
             CoarseClassification {
                 intent: "ACTION".to_string(),
                 confidence: 1.0,
                 rationale: Some("current/time-sensitive signal → external tool".to_string()),
+            }
+        } else if force_metalingual {
+            CoarseClassification {
+                intent: "METALINGUAL".to_string(),
+                confidence: 1.0,
+                rationale: Some("in-system definitional signal → codebase lookup".to_string()),
+            }
+        } else if force_commissive {
+            CoarseClassification {
+                intent: "COMMISSION".to_string(),
+                confidence: 1.0,
+                rationale: Some("first-person future commitment → persist".to_string()),
             }
         } else if force_comparison {
             CoarseClassification {
                 intent: "COMPARISON".to_string(),
                 confidence: 1.0,
                 rationale: Some("two-entity contrast signal → bounded comparison".to_string()),
+            }
+        } else if force_expressive {
+            CoarseClassification {
+                intent: "EXPRESSIVE".to_string(),
+                confidence: 1.0,
+                rationale: Some("emotive marker, short first-person → expressive".to_string()),
             }
         } else if force_content_reasoning {
             CoarseClassification {
@@ -1058,13 +1493,24 @@ impl Router for LlmRouter {
                 &routing_hints,
             );
             // 60-token budget: JSON + confidence + short rationale clause.
-            let pass1_response = self.classify_call_json(pass1_prompt, 60).await?;
+            // 120-token budget: small models (Qwen3.5-2B) sometimes
+            // write a full sentence for `rationale` rather than the
+            // "one short clause" the prompt asks for. With the
+            // grammar constraint forcing valid JSON, hitting
+            // max_tokens mid-rationale leaves the JSON unclosed,
+            // which `parse_coarse` can't recover from. 120 tokens fit
+            // a paragraph-length rationale + the JSON wrapper.
+            let pass1_response = self.classify_call_json(pass1_prompt, 120).await?;
             Self::parse_coarse(&pass1_response)
         };
 
         let (intent, self_assessment_outcome) = match coarse.intent.as_str() {
             "LOOKUP" => (Intent::KnowledgeQuery, None),
             "COMPARISON" => (Intent::ComparisonQuery, None),
+            "METALINGUAL" => (Intent::MetalingualQuery, None),
+            "CONATION" => (Intent::ConationQuery, None),
+            "COMMISSION" => (Intent::CommissiveQuery, None),
+            "EXPRESSIVE" => (Intent::ExpressiveQuery, None),
             "REASONING" => (Intent::DeepQuery, None),
             "ACTION" => (self.pass2_refine(message, context, available_tools).await?, None),
             "SIMPLE" => {

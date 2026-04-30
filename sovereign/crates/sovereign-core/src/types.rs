@@ -254,6 +254,48 @@ pub enum Intent {
     /// open-ended `DeepQuery` essay path. Retrieval should anchor on
     /// every named entity, not just the first.
     ComparisonQuery,
+    /// Question about the *shared vocabulary of this system* — "what
+    /// does X mean here / in this codebase / in this project / in our
+    /// system / earlier in this conversation". Jakobson's metalingual
+    /// function: foregrounding the *code* (the words themselves), not
+    /// the world the words might point at.
+    ///
+    /// Routes to internal vocabulary sources — code corpora, notes,
+    /// conversation history, project docs — NOT the general knowledge
+    /// corpus. The Gricean signal that distinguishes metalingual from
+    /// referential is the in-system locator: "what does sharding mean"
+    /// is referential (KnowledgeQuery), "what does sharding mean here"
+    /// is metalingual (this variant). Without this carve-out, the
+    /// metalingual case hits the world corpus and confabulates a
+    /// generic answer that misses the project-specific meaning.
+    MetalingualQuery,
+    /// Imperative command directed at the assistant referencing the
+    /// prior turn ("stop", "try again", "shorter please", "skip the
+    /// boilerplate", "more detail"). Operates on the prior turn as a
+    /// situated artifact: the handler does NOT reclassify or re-extract
+    /// — it rebinds the prior `QuerySession.classification` and
+    /// transforms the response (cancel / regenerate / re-synthesize
+    /// with a style directive). The user already said what they wanted
+    /// last turn; conation just adjusts how it's expressed.
+    ConationQuery,
+    /// User committing to action ("I'll fix it tomorrow", "I'm going
+    /// to refactor X", "remind me to check Friday"). Searle's
+    /// commissive act. The handler persists the commitment to the
+    /// notes store anchored to the situated `working_memory.current_goal`
+    /// (or honestly anchorless when no goal is loaded), so the system's
+    /// memory of decisions accumulates rather than evaporating into
+    /// polite acknowledgments.
+    CommissiveQuery,
+    /// User expressing how they're feeling about the current work
+    /// ("I'm stuck on this bug", "ugh, broken again", "I have no idea
+    /// where to start"). Searle's expressive act. The handler grounds
+    /// its response in situated context (`working_memory.current_goal`,
+    /// last assistant turn, open commitments on this work) so "I'm
+    /// stuck" produces a help-offer anchored to the actual current
+    /// work, not a generic pep talk. When no situated context is
+    /// loaded, the handler asks plainly what the user is working on
+    /// — epistemic honesty as the natural path.
+    ExpressiveQuery,
     SimpleAction { tool: ToolId },
     ComplexTask,
     Continuation { task_id: TaskId },

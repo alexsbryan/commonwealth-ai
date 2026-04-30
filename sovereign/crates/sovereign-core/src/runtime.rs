@@ -580,6 +580,139 @@ pub(crate) fn extract_question_entities(text: &str) -> Vec<String> {
     out.into_iter().filter(|s| seen.insert(s.clone())).collect()
 }
 
+/// Extract the commitment phrase from a commissive message — the
+/// noun-verb clause following the marker. Best-effort: if no marker
+/// is found, returns `None` and the caller falls back to the full
+/// trimmed message.
+pub(crate) fn extract_commitment_phrase(message: &str) -> Option<String> {
+    let lower = message.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "i'll ", "i will ", "i'm going to ", "i am going to ",
+        "i'm gonna ", "i plan to ", "i'll be ",
+        "remind me to ", "remind me about ", "remind me later to ",
+        "remind me on ", "remind me in ",
+    ];
+    for marker in MARKERS {
+        if let Some(pos) = lower.find(marker) {
+            let after = &message[pos + marker.len()..];
+            // Cap at sentence boundary to avoid dragging in unrelated trailing context.
+            let end = after
+                .find(|c: char| matches!(c, '.' | '!' | '?' | '\n'))
+                .unwrap_or(after.len());
+            let phrase = after[..end].trim();
+            if !phrase.is_empty() {
+                return Some(phrase.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Metalingual locator — what kind of source-anchor the question
+/// references. Drives which corpora the metalingual handler filters
+/// retrieval to. Inferred heuristically from the message; the
+/// `Ambient` and `Unknown` variants exist so the handler can degrade
+/// gracefully when the parser can't pin down the locator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum MetalingualLocator {
+    /// "in this codebase / repo / project / sovereign" — internal
+    /// system code.
+    SystemCode,
+    /// "earlier", "we mentioned", "you said" — internal conversation.
+    Conversation,
+    /// "according to <X>", "per <X>", "<X> defines" — captures the
+    /// named source string for case-insensitive corpus_id / display
+    /// name match downstream.
+    NamedSource(String),
+    /// "here" / "this" with definitional context — best handled by
+    /// resolving from active conversation context (anchored doc,
+    /// recently-discussed corpus).
+    Ambient,
+    /// Heuristic fired but no specific locator extracted — fall back
+    /// to broadest internal-source set.
+    Unknown,
+}
+
+/// Parse the metalingual locator from a message. Mirrors the heuristic
+/// in [`LlmRouter::looks_like_metalingual`] — same families, but here
+/// we record *which* family fired so the handler can resolve to the
+/// right source set.
+pub(crate) fn parse_metalingual_locator(message: &str) -> MetalingualLocator {
+    let lower = message.to_lowercase();
+
+    // 1. NamedSource — "according to <name>", "per <name>", "<name>
+    //    defines / says / uses". Capture the name token(s) after the
+    //    anchor preposition; cap at 3 words so we don't drag the rest
+    //    of the sentence in.
+    let named_anchors: &[&str] = &["according to ", " per "];
+    for anchor in named_anchors {
+        if let Some(pos) = lower.find(anchor) {
+            // Use original-case `message` for the captured name so
+            // proper-noun corpora (SEP, Wikipedia) survive lookup.
+            let after = &message[pos + anchor.len()..];
+            // Take up to 3 words, stop at common terminators.
+            let mut name_words: Vec<&str> = Vec::new();
+            for w in after.split_whitespace() {
+                let cleaned = w.trim_matches(|c: char| {
+                    !c.is_alphanumeric() && c != '-' && c != '_'
+                });
+                if cleaned.is_empty() {
+                    break;
+                }
+                let cleaned_lower = cleaned.to_lowercase();
+                // Stop on filler / definitional verbs / clause boundaries.
+                if matches!(
+                    cleaned_lower.as_str(),
+                    "what" | "how" | "the" | "a" | "an" | "is" | "are"
+                        | "does" | "do" | "did" | "mean" | "means"
+                        | "say" | "says" | "define" | "defines"
+                        | "use" | "uses"
+                ) {
+                    break;
+                }
+                name_words.push(cleaned);
+                if name_words.len() >= 3 {
+                    break;
+                }
+            }
+            if !name_words.is_empty() {
+                return MetalingualLocator::NamedSource(name_words.join(" "));
+            }
+        }
+    }
+
+    // 2. SystemCode — explicit codebase/system locators.
+    const SYSTEM_MARKERS: &[&str] = &[
+        "in this codebase", "in this repo", "in this repository",
+        "in this project", "in this code",
+        "in our codebase", "in our repo", "in our system",
+        "in the codebase", "in the repo",
+        "in sovereign", "in the sovereign",
+    ];
+    if SYSTEM_MARKERS.iter().any(|m| lower.contains(m)) {
+        return MetalingualLocator::SystemCode;
+    }
+
+    // 3. Conversation — internal thread references.
+    const CONVERSATION_MARKERS: &[&str] = &[
+        "in this conversation", "in our conversation",
+        "earlier you said", "earlier i said",
+        "we mentioned", "we discussed", "we talked about",
+        "you mentioned", "you said",
+    ];
+    if CONVERSATION_MARKERS.iter().any(|m| lower.contains(m)) {
+        return MetalingualLocator::Conversation;
+    }
+
+    // 4. Ambient ("here" / "this" + definitional) — handled at the
+    //    heuristic level; if we got here, it's the residual case.
+    if lower.contains(" here") || lower.contains(" this") {
+        return MetalingualLocator::Ambient;
+    }
+
+    MetalingualLocator::Unknown
+}
+
 /// Cap chunks per `(corpus_id, title)` group to enforce article
 /// diversity in the merged top-K.
 ///
@@ -1538,6 +1671,32 @@ fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequ
             // synthesis prompt, sub-second TTFT target.
             (CapabilityHint::general(), LatencyClass::Fast)
         }
+        Intent::MetalingualQuery => {
+            // Codebase lookup + brief synthesis — same shape as
+            // KnowledgeQuery's FastFocused path but against code
+            // corpora. Fast slot is enough; no reasoning budget.
+            (CapabilityHint::code(), LatencyClass::Fast)
+        }
+        Intent::ConationQuery => {
+            // Operates on the prior turn — no new retrieval, no
+            // reclassification. The OICP envelope of the rebound
+            // classification is what actually matters; this default
+            // just covers the rare case where conation is dispatched
+            // without rebind context.
+            (CapabilityHint::general(), LatencyClass::Fast)
+        }
+        Intent::CommissiveQuery => {
+            // Persistence-only path — no LLM synthesis required for
+            // the storage step; a brief Fast-slot acknowledgment
+            // citing the situated anchor is all we need.
+            (CapabilityHint::general(), LatencyClass::Fast)
+        }
+        Intent::ExpressiveQuery => {
+            // Acknowledge + situated help-offer. Fast slot synthesis
+            // grounded in working_memory + last assistant turn; no
+            // retrieval against the world corpus.
+            (CapabilityHint::general(), LatencyClass::Fast)
+        }
         Intent::SimpleQuery
         | Intent::SimpleAction { .. }
         | Intent::Continuation { .. } => {
@@ -1565,6 +1724,10 @@ fn format_interpretation(
         Intent::DeepQuery => "a deeper explanation",
         Intent::KnowledgeQuery => "a look in your installed knowledge",
         Intent::ComparisonQuery => "a comparison between two things",
+        Intent::MetalingualQuery => "a lookup in your codebase",
+        Intent::ConationQuery => "a tweak to my last reply",
+        Intent::CommissiveQuery => "a commitment to save",
+        Intent::ExpressiveQuery => "an acknowledgment + help offer",
         Intent::SimpleAction { .. } => "a tool call",
         Intent::ComplexTask => "a multi-step task",
         Intent::Continuation { .. } => "a follow-up to earlier work",
@@ -1583,6 +1746,10 @@ fn label_for_intent(intent: &Intent) -> String {
         Intent::DeepQuery => "Walk me through it in depth".into(),
         Intent::KnowledgeQuery => "Check my knowledge base".into(),
         Intent::ComparisonQuery => "Compare them side by side".into(),
+        Intent::MetalingualQuery => "Look it up in this codebase".into(),
+        Intent::ConationQuery => "Adjust the last reply".into(),
+        Intent::CommissiveQuery => "Save this as a commitment".into(),
+        Intent::ExpressiveQuery => "Hear me out and help".into(),
         Intent::SimpleAction { tool } => format!("Use the {tool} tool"),
         Intent::ComplexTask => "Plan a multi-step task".into(),
         Intent::Continuation { .. } => "Continue prior task".into(),
@@ -1600,6 +1767,10 @@ fn intent_hint(intent: &Intent) -> String {
         Intent::DeepQuery => "deep_query".into(),
         Intent::KnowledgeQuery => "knowledge_query".into(),
         Intent::ComparisonQuery => "comparison_query".into(),
+        Intent::MetalingualQuery => "metalingual_query".into(),
+        Intent::ConationQuery => "conation_query".into(),
+        Intent::CommissiveQuery => "commissive_query".into(),
+        Intent::ExpressiveQuery => "expressive_query".into(),
         Intent::SimpleAction { tool } => format!("simple_action:{tool}"),
         Intent::ComplexTask => "complex_task".into(),
         Intent::Continuation { task_id } => format!("continuation:{task_id}"),
@@ -1615,6 +1786,10 @@ fn parse_intent_hint(hint: &str) -> Intent {
         "deep_query" => Intent::DeepQuery,
         "knowledge_query" => Intent::KnowledgeQuery,
         "comparison_query" => Intent::ComparisonQuery,
+        "metalingual_query" => Intent::MetalingualQuery,
+        "conation_query" => Intent::ConationQuery,
+        "commissive_query" => Intent::CommissiveQuery,
+        "expressive_query" => Intent::ExpressiveQuery,
         "complex_task" => Intent::ComplexTask,
         _ if hint.starts_with("simple_action:") => {
             let tool = hint.trim_start_matches("simple_action:").to_string();
@@ -1644,6 +1819,10 @@ fn build_clarification_question(_message: &str, primary: &Intent) -> String {
         Intent::DeepQuery => "a deeper explanation",
         Intent::KnowledgeQuery => "a corpus lookup",
         Intent::ComparisonQuery => "a side-by-side comparison",
+        Intent::MetalingualQuery => "a vocabulary lookup in our system",
+        Intent::ConationQuery => "an adjustment to my last reply",
+        Intent::CommissiveQuery => "a commitment to save",
+        Intent::ExpressiveQuery => "an acknowledgment + targeted help",
         Intent::SimpleAction { .. } => "an action",
         Intent::ComplexTask => "a multi-step task",
         Intent::Continuation { .. } => "a continuation",
@@ -1664,6 +1843,12 @@ pub struct Runtime {
     pub approval: Arc<dyn ApprovalChannel>,
     pub inference_config: InferenceConfig,
     pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    /// Optional note store. Populated by the daemon bootstrap; absent
+    /// in the chat-CLI path where commitment persistence isn't wired.
+    /// Consumed by `handle_commissive_query` to write `kind="commitment"`
+    /// and `kind="todo"` notes anchored to `working_memory.current_goal`
+    /// (or honestly anchorless when no situated goal is loaded).
+    pub note_store: Option<Arc<corpus_engine::NoteStore>>,
     /// Optional mesh-knowledge client. Populated by the desktop
     /// bootstrap when an `EmbeddedDaemon` is running — the Runtime
     /// fans out knowledge queries through its local Commonwealth
@@ -1718,6 +1903,7 @@ impl Runtime {
             approval,
             inference_config,
             corpus_engine: None,
+            note_store: None,
             mesh_knowledge: None,
             landscape_digests: None,
             sessions: Arc::new(SessionStore::new()),
@@ -1740,6 +1926,15 @@ impl Runtime {
 
     pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
         self.corpus_engine = Some(engine);
+        self
+    }
+
+    /// Install a note store for commitment persistence. Daemon bootstrap
+    /// wires this; CLI eval path leaves it `None`, in which case the
+    /// commissive handler degrades to a clear "no notes store wired"
+    /// reply rather than dropping the commitment silently.
+    pub fn with_note_store(mut self, store: Arc<corpus_engine::NoteStore>) -> Self {
+        self.note_store = Some(store);
         self
     }
 
@@ -1911,6 +2106,104 @@ impl Runtime {
                         results = scored.len(),
                         "{label}: search complete"
                     );
+                    chunks.extend(scored);
+                }
+                Err(e) => {
+                    tracing::warn!(corpus = %info.corpus_id, error = %e, "{label}: search failed");
+                }
+            }
+        }
+        chunks
+    }
+
+    /// Search a *specific subset* of installed corpora — the
+    /// metalingual companion to [`search_corpus_indexes`].
+    ///
+    /// Two filter axes:
+    /// - `kind_filter`: if `Some`, restrict to that `CorpusKind`
+    ///   (e.g. `Code` for SystemCode locators). If `None`, allow all
+    ///   kinds (Knowledge + Code + Catalog).
+    /// - `name_match`: if `Some`, restrict to corpora whose
+    ///   `corpus_id` or `corpus_name` *contains* the substring (case-
+    ///   insensitive). Used to resolve NamedSource locators like
+    ///   "according to SEP" → only the `sep` corpus.
+    ///
+    /// Empty result is meaningful — caller treats it as "no source
+    /// for this locator is indexed" and surfaces that to the user.
+    async fn search_corpora_filtered(
+        &self,
+        embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+        kind_filter: Option<corpus_engine::CorpusKind>,
+        name_match: Option<&str>,
+        label: &str,
+    ) -> Vec<corpus_engine::ScoredChunk> {
+        let mut chunks = Vec::new();
+        let engine = match &self.corpus_engine {
+            Some(e) => e,
+            None => {
+                tracing::warn!("{label}: corpus_engine is None");
+                return chunks;
+            }
+        };
+        let indexes = match engine.installed_indexes().await {
+            Ok(ix) => ix,
+            Err(e) => {
+                tracing::warn!(error = %e, "{label}: installed_indexes() failed");
+                return chunks;
+            }
+        };
+
+        let name_lower = name_match.map(str::to_lowercase);
+        let eligible: Vec<_> = indexes
+            .into_iter()
+            .filter(|info| {
+                let kind_ok = match kind_filter {
+                    Some(k) => info.kind == k,
+                    None => true,
+                };
+                let name_ok = match &name_lower {
+                    Some(needle) => {
+                        info.corpus_id.to_lowercase().contains(needle)
+                            || info.corpus_name.to_lowercase().contains(needle)
+                    }
+                    None => true,
+                };
+                kind_ok && name_ok
+            })
+            .filter(|info| {
+                // Dim filter — skip embedding-mismatched corpora when
+                // we have an embedding to compare against. Mirrors
+                // search_corpus_indexes's filter 2.
+                embedding.is_empty() || info.embedding_dimensions == embedding.len()
+            })
+            .collect();
+
+        if eligible.is_empty() {
+            tracing::info!(
+                kind_filter = ?kind_filter,
+                name_match = ?name_match,
+                "{label}: no eligible corpora after filter"
+            );
+            return chunks;
+        }
+
+        for info in &eligible {
+            tracing::info!(
+                corpus = %info.corpus_id,
+                kind = ?info.kind,
+                "{label}: opening filtered index"
+            );
+            let idx = match engine.open_index(&info.path).await {
+                Ok(i) => i,
+                Err(e) => {
+                    tracing::warn!(corpus = %info.corpus_id, error = %e, "{label}: open_index failed");
+                    continue;
+                }
+            };
+            match idx.search(embedding, query_text, limit).await {
+                Ok(scored) => {
                     chunks.extend(scored);
                 }
                 Err(e) => {
@@ -3316,7 +3609,14 @@ impl Runtime {
         // work. Instead we now run KnowledgeQuery inline below and emit the
         // response as a single stream chunk.)
         if message.starts_with("[Document attached: ")
-            || matches!(intent, Intent::ComplexTask)
+            || matches!(
+                intent,
+                Intent::ComplexTask
+                    | Intent::MetalingualQuery
+                    | Intent::ConationQuery
+                    | Intent::CommissiveQuery
+                    | Intent::ExpressiveQuery
+            )
         {
             tracing::info!(
                 intent = ?intent,
@@ -4039,9 +4339,19 @@ impl Runtime {
         // KnowledgeQuery; the difference is in (a) the OICP envelope
         // (Fast latency_class → fast slot) and (b) the comparison-aware
         // synthesis prompt branch built downstream by intent matching.
+        // MetalingualQuery has its own handler — source-anchored
+        // retrieval against a filtered corpus subset, distinct from
+        // KnowledgeQuery's broad retrieval. ConationQuery,
+        // CommissiveQuery, and ExpressiveQuery each have dedicated
+        // situated handlers (no retrieval — they operate on prior
+        // turn / notes store / situated context respectively).
         let dispatch = match intent {
             Intent::ComplexTask => "handle_complex_task",
             Intent::KnowledgeQuery | Intent::ComparisonQuery => "handle_knowledge_query",
+            Intent::MetalingualQuery => "handle_metalingual_query",
+            Intent::ConationQuery => "handle_conation_query",
+            Intent::CommissiveQuery => "handle_commissive_query",
+            Intent::ExpressiveQuery => "handle_expressive_query",
             _ => "handle_simple",
         };
         tracing::info!(dispatch, "runtime: dispatching");
@@ -4056,6 +4366,18 @@ impl Runtime {
                     message, conversation_id, &context, &intent, coarse_intent, self_assessment,
                 )
                 .await
+            }
+            Intent::MetalingualQuery => {
+                self.handle_metalingual_query(message, conversation_id, &context).await
+            }
+            Intent::ConationQuery => {
+                self.handle_conation_query(message, conversation_id, &context).await
+            }
+            Intent::CommissiveQuery => {
+                self.handle_commissive_query(message, conversation_id, &context).await
+            }
+            Intent::ExpressiveQuery => {
+                self.handle_expressive_query(message, conversation_id, &context).await
             }
             _ => {
                 self.handle_simple(
@@ -4950,6 +5272,559 @@ impl Runtime {
             source_map,
             result_quality,
         }
+    }
+
+    /// Handle ConationQuery: act on the prior assistant turn as a
+    /// situated artifact. We do NOT reclassify or re-retrieve — we
+    /// transform the prior reply with a style directive, or cancel
+    /// the in-flight session. The whole point of the situated design
+    /// is that the artifact is already there; conation just adjusts
+    /// how it's expressed.
+    async fn handle_conation_query(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: &ConversationContext,
+    ) -> Result<Response> {
+        let lower = message.to_lowercase();
+        let lower_tr = lower.trim();
+
+        // Cancel sub-shape — short-circuits without synthesis.
+        let is_cancel = ["stop", "cancel", "abort", "halt"]
+            .iter()
+            .any(|k| lower_tr == *k || lower_tr.starts_with(&format!("{k} ")) || lower_tr.starts_with(&format!("{k},")));
+        if is_cancel {
+            if let Some(s) = self.sessions.latest_for_conversation(conversation_id) {
+                s.cancel.cancel();
+                tracing::info!(session = %s.id, "ConationQuery: cancelled in-flight session");
+            }
+            let response_msg = Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id: conversation_id.to_string(),
+                role: Role::Assistant,
+                content: "Stopped.".to_string(),
+                created_at: now(),
+                metadata: Some(serde_json::json!({
+                    "intent": "ConationQuery",
+                    "subshape": "cancel",
+                })),
+                version: 0,
+            };
+            return Ok(Response { message: response_msg, task: None });
+        }
+
+        // Find the prior user message + assistant reply to transform.
+        let last_assistant: Option<&Message> = context
+            .conversation
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant);
+        let last_user: Option<&Message> = context
+            .conversation
+            .messages
+            .iter()
+            .rev()
+            .skip_while(|m| m.role != Role::Assistant)
+            .find(|m| m.role == Role::User);
+
+        if last_assistant.is_none() {
+            let empty = "I don't see a previous reply to act on \u{2014} could you rephrase \
+                         what you'd like?".to_string();
+            let response_msg = Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id: conversation_id.to_string(),
+                role: Role::Assistant,
+                content: empty,
+                created_at: now(),
+                metadata: Some(serde_json::json!({
+                    "intent": "ConationQuery",
+                    "subshape": "empty_state",
+                })),
+                version: 0,
+            };
+            return Ok(Response { message: response_msg, task: None });
+        }
+        let prior_assistant = last_assistant.unwrap();
+        let prior_user_text = last_user.map(|m| m.content.as_str()).unwrap_or("");
+
+        // Map the directive to a transformation cue.
+        let directive_phrase = if lower.contains("shorter") || lower.contains("terse")
+            || lower.contains("concise") || lower.contains("tldr")
+            || lower.contains("skip")
+        {
+            "Produce a shorter version of the prior reply. Skip preamble and recapping; \
+             keep only the load-bearing claims."
+        } else if lower.contains("longer") || lower.contains("more detail")
+            || lower.contains("expand") || lower.contains("elaborate")
+        {
+            "Produce a more detailed version of the prior reply with worked examples \
+             and additional context. Keep the same factual claims."
+        } else if lower.contains("slower") || lower.contains("step by step")
+            || lower.contains("walk through")
+        {
+            "Re-express the prior reply as a step-by-step walkthrough. Number the steps; \
+             keep one idea per step."
+        } else {
+            // Default for "try again" / "retry" / "regenerate" / unrecognised conation.
+            "Re-express the prior reply with a fresh phrasing while keeping all factual \
+             claims intact."
+        };
+
+        let prompt = format!(
+            "PRIOR USER QUESTION: {prior_user_text}\n\n\
+             PRIOR ASSISTANT REPLY:\n{prior_reply}\n\n\
+             DIRECTIVE: {directive_phrase}\n\n\
+             Produce the adjusted reply. Apply only the requested change; do not \
+             introduce new factual claims.",
+            prior_reply = prior_assistant.content,
+        );
+        let request = CompletionRequest {
+            prompt,
+            system_message: None,
+            preferred_speed: Speed::Fast,
+            max_tokens: Some(FAST_KNOWLEDGE_MAX_TOKENS as usize),
+            temperature: Some(self.inference_config.temperature),
+            think_budget: Some(0),
+            structured_output: None,
+            top_k: self.inference_config.top_k,
+            top_p: None,
+            oicp: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+        };
+        let completion = self.inference.complete(&request).await?;
+        let response_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: completion.text,
+            created_at: now(),
+            metadata: Some(serde_json::json!({
+                "intent": "ConationQuery",
+                "subshape": "transform",
+                "prior_message_id": prior_assistant.id,
+            })),
+            version: 0,
+        };
+        Ok(Response { message: response_msg, task: None })
+    }
+
+    /// Handle CommissiveQuery: persist a user commitment to the notes
+    /// store anchored to the situated `working_memory.current_goal`
+    /// (or honestly anchorless when no goal is loaded). The reply
+    /// cites the situated anchor so the user knows where the
+    /// commitment will surface.
+    async fn handle_commissive_query(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: &ConversationContext,
+    ) -> Result<Response> {
+        // Extract commitment phrase: text after the marker.
+        let phrase = extract_commitment_phrase(message)
+            .unwrap_or_else(|| message.trim().to_string());
+
+        // Resolve situated anchor — current_goal is the strongest
+        // signal; topic_context.topic is fallback; otherwise None.
+        let related_entity: Option<String> = context
+            .working_memory
+            .as_ref()
+            .and_then(|wm| wm.current_goal.clone())
+            .or_else(|| {
+                context
+                    .topic_context
+                    .as_ref()
+                    .and_then(|tc| tc.topic.clone())
+            });
+
+        let lower = message.to_lowercase();
+        let kind = if lower.contains("remind me") {
+            "todo"
+        } else {
+            "commitment"
+        };
+
+        // No notes store wired — degrade honestly, do not silently drop.
+        let Some(note_store) = self.note_store.as_ref() else {
+            let reply = format!(
+                "I'd save this commitment, but my notes store isn't wired in this build. \
+                 The commitment was: \"{phrase}\". Run via the desktop or daemon to enable \
+                 persistence."
+            );
+            let response_msg = Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id: conversation_id.to_string(),
+                role: Role::Assistant,
+                content: reply,
+                created_at: now(),
+                metadata: Some(serde_json::json!({
+                    "intent": "CommissiveQuery",
+                    "kind": kind,
+                    "phrase": phrase,
+                    "result_quality": "no_note_store",
+                })),
+                version: 0,
+            };
+            return Ok(Response { message: response_msg, task: None });
+        };
+
+        // Persist via existing NoteStore API. Defaults to
+        // `NoteSource::Agent` — the agent is recording what the user
+        // said about a future intention, which matches the agent-
+        // observation semantic.
+        let note_id = match note_store
+            .write_note_with_relation(
+                kind,
+                &phrase,
+                Vec::new(),
+                Vec::new(),
+                conversation_id,
+                corpus_engine::NoteScope::Session,
+                None,
+                related_entity.as_deref(),
+            )
+            .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                tracing::warn!(error = %e, "CommissiveQuery: note write failed");
+                let reply = format!(
+                    "I tried to save this commitment but the note store returned an error. \
+                     Phrase: \"{phrase}\". Error: {e}"
+                );
+                let response_msg = Message {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    conversation_id: conversation_id.to_string(),
+                    role: Role::Assistant,
+                    content: reply,
+                    created_at: now(),
+                    metadata: Some(serde_json::json!({
+                        "intent": "CommissiveQuery",
+                        "kind": kind,
+                        "phrase": phrase,
+                        "result_quality": "write_failed",
+                    })),
+                    version: 0,
+                };
+                return Ok(Response { message: response_msg, task: None });
+            }
+        };
+
+        let anchor_phrase = related_entity
+            .as_deref()
+            .map(|s| format!("under {s}"))
+            .unwrap_or_else(|| "to this conversation".to_string());
+        let reply = format!(
+            "Saved as a {kind} {anchor_phrase}. I'll surface it next time we touch that work.\n\n\
+             (Note id: {note_id})"
+        );
+        let response_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: reply,
+            created_at: now(),
+            metadata: Some(serde_json::json!({
+                "intent": "CommissiveQuery",
+                "kind": kind,
+                "phrase": phrase,
+                "note_id": note_id,
+                "related_entity": related_entity,
+            })),
+            version: 0,
+        };
+        Ok(Response { message: response_msg, task: None })
+    }
+
+    /// Handle ExpressiveQuery: situated acknowledgment + targeted
+    /// help-offer. The system prompt is built from
+    /// `working_memory.current_goal` + last assistant turn so the
+    /// model's reply is anchored to the actual current work, not a
+    /// generic pep talk. When no situated context is loaded, the
+    /// reply asks plainly what the user is working on — epistemic
+    /// honesty as the natural path.
+    async fn handle_expressive_query(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: &ConversationContext,
+    ) -> Result<Response> {
+        let current_goal = context
+            .working_memory
+            .as_ref()
+            .and_then(|wm| wm.current_goal.clone());
+        let recent_topic = context
+            .topic_context
+            .as_ref()
+            .and_then(|tc| tc.topic.clone());
+        let last_assistant: Option<String> = context
+            .conversation
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant)
+            .map(|m| m.content[..m.content.len().min(300)].to_string());
+
+        let goal_str = current_goal
+            .as_deref()
+            .or(recent_topic.as_deref())
+            .unwrap_or("unspecified");
+        let tried_str = last_assistant
+            .as_deref()
+            .unwrap_or("no prior turn in this conversation");
+
+        let system = format!(
+            "The user expressed how they're feeling about the current work.\n\
+             \n\
+             SITUATED CONTEXT:\n\
+             Current goal: {goal_str}\n\
+             Recently tried: {tried_str}\n\
+             \n\
+             Acknowledge briefly (one short sentence). Then offer ONE specific way to help, \
+             anchored to the current goal and what was just tried. End with ONE targeted \
+             question that would unblock you. Do not give a generic pep talk; do not minimize.\n\
+             \n\
+             If current_goal is 'unspecified' AND there is no prior turn, do not invent an \
+             offer. Say plainly that you don't have context loaded for what they're working on, \
+             and ask what they'd like to focus on. Epistemic honesty over confident-sounding \
+             improvisation."
+        );
+
+        let request = CompletionRequest {
+            prompt: message.to_string(),
+            system_message: Some(system),
+            preferred_speed: Speed::Fast,
+            max_tokens: Some(256),
+            temperature: Some(self.inference_config.temperature),
+            think_budget: Some(0),
+            structured_output: None,
+            top_k: self.inference_config.top_k,
+            top_p: None,
+            oicp: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+        };
+        let completion = self.inference.complete(&request).await?;
+        let response_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: completion.text,
+            created_at: now(),
+            metadata: Some(serde_json::json!({
+                "intent": "ExpressiveQuery",
+                "current_goal": current_goal,
+                "had_prior_assistant": last_assistant.is_some(),
+            })),
+            version: 0,
+        };
+        Ok(Response { message: response_msg, task: None })
+    }
+
+    /// Handle MetalingualQuery: source-anchored vocabulary lookup.
+    ///
+    /// Distinct from KnowledgeQuery: rather than retrieving across all
+    /// installed knowledge corpora, this filters to the source the
+    /// locator points to ("according to SEP" → only sep; "in this
+    /// codebase" → only Code corpora; "earlier in this conversation"
+    /// → conversation-history corpus). Synthesis is fast slot with a
+    /// source-attribution-heavy prompt — the answer says how *that
+    /// source* uses the term, not a generic dictionary entry.
+    ///
+    /// Empty-state behaviour is intentional: when the locator points
+    /// to a source that isn't indexed, we surface that explicitly and
+    /// suggest the operator command to enable it. We do *not* fall
+    /// through to general knowledge retrieval — that would defeat the
+    /// whole point of the metalingual carve-out (silent confabulation
+    /// against the wrong source).
+    async fn handle_metalingual_query(
+        &self,
+        message: &str,
+        _conversation_id: &str,
+        context: &ConversationContext,
+    ) -> Result<Response> {
+        use std::cmp::Ordering;
+        let locator = parse_metalingual_locator(message);
+        tracing::info!(?locator, "MetalingualQuery: parsed locator");
+
+        // Resolve locator → (kind_filter, name_match).
+        let (kind_filter, name_match): (Option<corpus_engine::CorpusKind>, Option<String>) =
+            match &locator {
+                MetalingualLocator::SystemCode => {
+                    (Some(corpus_engine::CorpusKind::Code), None)
+                }
+                MetalingualLocator::Conversation => {
+                    // sovereign's conversation-history corpus is a
+                    // Knowledge-kind corpus with a known id substring.
+                    (None, Some("conversation".to_string()))
+                }
+                MetalingualLocator::NamedSource(name) => {
+                    (None, Some(name.clone()))
+                }
+                MetalingualLocator::Ambient | MetalingualLocator::Unknown => {
+                    // Best-effort: prefer Code if any code corpus is
+                    // installed (most common ambient locator in a dev
+                    // chat); if none, the search returns empty and the
+                    // empty-state message handles it.
+                    (Some(corpus_engine::CorpusKind::Code), None)
+                }
+            };
+
+        let locator_phrase = match &locator {
+            MetalingualLocator::SystemCode => "this codebase".to_string(),
+            MetalingualLocator::Conversation => "this conversation".to_string(),
+            MetalingualLocator::NamedSource(n) => n.clone(),
+            MetalingualLocator::Ambient | MetalingualLocator::Unknown => {
+                "this system".to_string()
+            }
+        };
+
+        let embedding = self.inference.embed_query(message).await.unwrap_or_default();
+        let mut chunks = self
+            .search_corpora_filtered(
+                &embedding,
+                message,
+                KQ_PER_CORPUS_LIMIT,
+                kind_filter,
+                name_match.as_deref(),
+                "MetalingualQuery",
+            )
+            .await;
+
+        // Reweight + sort + cap mirror KnowledgeQuery's conditioning so
+        // chunk quality is on the same scale.
+        reweight_by_query_relevance(&mut chunks, message);
+        chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
+        chunks.truncate(KQ_MERGED_LIMIT);
+
+        if chunks.is_empty() {
+            // No indexed source matches the locator. Surface the gap
+            // honestly — the alternative (parametric fallback) is
+            // exactly the failure mode that motivated this carve-out.
+            let empty_message = match &locator {
+                MetalingualLocator::SystemCode => format!(
+                    "I read this as a question about *this codebase*, but I don't \
+                     have a code corpus indexed locally. Run `sovereign code \
+                     index <path>` against the relevant repo to enable in-system \
+                     vocabulary lookups, then ask again.\n\n\
+                     If you meant something else by \"in this codebase\", let me \
+                     know — I can re-route to general knowledge retrieval."
+                ),
+                MetalingualLocator::Conversation => format!(
+                    "I read this as a question about something we discussed \
+                     earlier in this conversation, but I couldn't find that \
+                     reference. Could you quote or paraphrase the part you're \
+                     asking about?"
+                ),
+                MetalingualLocator::NamedSource(n) => format!(
+                    "I read this as a question about how `{n}` uses the term, \
+                     but I don't have a corpus matching `{n}` indexed locally. \
+                     Run `sovereign corpus install <id>` (or the relevant \
+                     ingest recipe) and ask again. Available corpora: \
+                     {corpora}.",
+                    corpora = context.installed_corpora_display()
+                ),
+                MetalingualLocator::Ambient | MetalingualLocator::Unknown => format!(
+                    "I read this as a question about how *this system* uses \
+                     the term, but I couldn't find a matching internal source. \
+                     Could you tell me which source you meant — the codebase, \
+                     a specific corpus, our notes?"
+                ),
+            };
+            let response_msg = Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id: _conversation_id.to_string(),
+                role: Role::Assistant,
+                content: empty_message,
+                created_at: now(),
+                metadata: Some(serde_json::json!({
+                    "intent": "MetalingualQuery",
+                    "locator": format!("{:?}", locator),
+                    "result_quality": "no_source",
+                })),
+                version: 0,
+            };
+            return Ok(Response {
+                message: response_msg,
+                task: None,
+            });
+        }
+
+        // Build the synthesis prompt — emphasise that the answer
+        // describes how the located source uses the term, and that
+        // citations should attribute claims to the source.
+        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
+            if let Some(engine) = &self.corpus_engine {
+                engine
+                    .installed_indexes()
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|info| (info.corpus_id, info.kind))
+                    .collect()
+            } else {
+                Default::default()
+            };
+        let doc_context = format_scored_chunks_with_kinds(
+            &chunks,
+            MAX_KNOWLEDGE_CHARS,
+            Some(&kinds),
+        );
+        let prompt = format!(
+            "RETRIEVED FROM {locator_phrase}:\n\n{doc_context}\n\n\
+             ════════════════════════════════════\n\n\
+             Question: {message}\n\n\
+             Answer how *{locator_phrase}* uses the term(s) in this question. \
+             Quote and cite source titles. If the retrieved passages don't \
+             cover the term, say so explicitly — do not substitute generic \
+             knowledge. Source attribution is the whole point of this answer."
+        );
+        let system = self.build_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
+        let request = CompletionRequest {
+            prompt,
+            system_message: Some(system),
+            preferred_speed: Speed::Fast,
+            max_tokens: Some(FAST_KNOWLEDGE_MAX_TOKENS as usize),
+            temperature: Some(self.inference_config.temperature),
+            think_budget: Some(0),
+            structured_output: None,
+            top_k: self.inference_config.top_k,
+            top_p: None,
+            oicp: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+        };
+
+        let completion = self.inference.complete(&request).await?;
+        let sources: Vec<String> = chunks
+            .iter()
+            .filter_map(|c| c.title.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        let response_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: _conversation_id.to_string(),
+            role: Role::Assistant,
+            content: completion.text,
+            created_at: now(),
+            metadata: Some(serde_json::json!({
+                "intent": "MetalingualQuery",
+                "locator": format!("{:?}", locator),
+                "sources": sources,
+                "chunks_used": chunks.len(),
+            })),
+            version: 0,
+        };
+        Ok(Response {
+            message: response_msg,
+            task: None,
+        })
     }
 
     /// Handle KnowledgeQuery (and ComparisonQuery): search corpus-engine
