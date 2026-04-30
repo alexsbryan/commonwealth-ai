@@ -86,25 +86,6 @@ pub async fn chat_completions(
         _post_guard = None;
     }
 
-    // Privacy enforcement: reject local_only requests.
-    if let Some(ref oicp_req) = request.oicp {
-        if oicp_req.sharding() == ShardingPrivacy::LocalOnly {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(
-                    serde_json::to_value(ErrorResponse::new(
-                        "Requests with privacy 'local_only' must be handled by the client's \
-                         local inference engine, not sent to Commonwealth. This is likely a \
-                         client misconfiguration.",
-                        "invalid_request_error",
-                    ))
-                    .unwrap(),
-                ),
-            )
-                .into_response();
-        }
-    }
-
     // --- Priority 0: in-process local inference ---
     //
     // When the daemon is embedded in Sovereign (sovereign-mesh),
@@ -112,6 +93,12 @@ pub async fn chat_completions(
     // would use for a direct chat. Serve peer requests from it
     // first — cuts out the orchestrator path entirely and skips
     // the need for spawned llama-server processes.
+    //
+    // local_inference is local by definition, so it satisfies the
+    // OICP `LocalOnly` privacy default (§3.1) without any further
+    // gate. The privacy enforcement below intercepts only the
+    // forward-to-mesh / forward-to-Commonwealth paths where a
+    // request *would* leave this machine.
     if let Some(service) = state.inner.local_inference.as_ref() {
         let want_stream = request.stream.unwrap_or(false);
         info!(
@@ -139,6 +126,34 @@ pub async fn chat_completions(
                 model_id,
             )
             .await;
+        }
+    }
+
+    // Privacy enforcement at the forwarding boundary.
+    //
+    // We've already given local_inference (Priority 0) first refusal.
+    // If we're still here, this request will leave the machine — the
+    // OICP routing path can pick a peer model, and the legacy
+    // forward_to_model fall-through targets a non-local backend. Per
+    // OICP §3.1 the privacy default is `LocalOnly`, and the contract
+    // is that LocalOnly requests must NOT cross the trust boundary.
+    // Reject here so a misconfigured client can't accidentally leak
+    // by sending LocalOnly past the local serving path.
+    if let Some(ref oicp_req) = request.oicp {
+        if oicp_req.sharding() == ShardingPrivacy::LocalOnly {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    serde_json::to_value(ErrorResponse::new(
+                        "Requests with privacy 'local_only' cannot be forwarded — no \
+                         local inference path is available to serve them. Either load a \
+                         local model on this node or relax the privacy requirement.",
+                        "invalid_request_error",
+                    ))
+                    .unwrap(),
+                ),
+            )
+                .into_response();
         }
     }
 

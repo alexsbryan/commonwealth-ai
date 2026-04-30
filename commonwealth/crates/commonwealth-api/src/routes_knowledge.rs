@@ -38,6 +38,35 @@ use crate::state::AppState;
 /// when the mesh has degraded connectivity.
 const PEER_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// Per-peer cache of the most-recently-working `SocketAddr`.
+///
+/// Mirrors `sovereign_mesh::gossip::last_working_address_cache` — we
+/// can't share that one directly (cyclic crate dep), so this
+/// fan-out-local cache plays the same role for knowledge fan-out.
+/// Process-global, populated lazily on first successful contact, and
+/// cleared implicitly on daemon restart. The two caches converge
+/// quickly in practice (gossip pings every 10s; fan-out runs per
+/// question), so the duplicate state is bounded.
+fn last_working_address_cache(
+) -> &'static std::sync::Mutex<HashMap<NodeId, SocketAddr>> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<NodeId, SocketAddr>>> =
+        std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+fn preferred_address_for(peer: &NodeId) -> Option<SocketAddr> {
+    last_working_address_cache()
+        .lock()
+        .ok()
+        .and_then(|c| c.get(peer).copied())
+}
+
+fn record_working_address(peer: NodeId, addr: SocketAddr) {
+    if let Ok(mut cache) = last_working_address_cache().lock() {
+        cache.insert(peer, addr);
+    }
+}
+
 pub async fn knowledge_search(
     State(state): State<AppState>,
     Json(request): Json<KnowledgeSearchRequest>,
@@ -331,12 +360,32 @@ async fn fanout_one_peer(
         corpora: Some(corpora.clone()),
         limit: Some(limit),
     };
-    for addr in &addresses {
+    // Reorder the peer's addresses to put the most-recently-working
+    // one first. Mirrors gossip's `last_working_address_cache` (we
+    // can't import it directly without a cyclic dep, so this cache
+    // lives alongside the fan-out): a stale LAN IP shadowed by a
+    // working Tailscale address shouldn't burn a connect-failure
+    // round-trip on every fan-out call. Best-effort — if the cache
+    // is empty (fresh-process or pre-handshake) we fall back to the
+    // stored order.
+    let ordered: Vec<SocketAddr> = match preferred_address_for(&node_id) {
+        Some(p) if addresses.contains(&p) => {
+            let mut v = Vec::with_capacity(addresses.len());
+            v.push(p);
+            v.extend(addresses.iter().filter(|a| **a != p).copied());
+            v
+        }
+        _ => addresses.clone(),
+    };
+    for addr in &ordered {
         let url = format!("http://{addr}/internal/knowledge/search");
         match http.post(&url).json(&body).send().await {
             Ok(resp) if resp.status().is_success() => {
                 match resp.json::<KnowledgeSearchResponse>().await {
                     Ok(parsed) => {
+                        // Pin this address as the preferred starting
+                        // point for the next fan-out round.
+                        record_working_address(node_id, *addr);
                         tracing::info!(
                             peer = %node_id,
                             peer_name = %node_name,
