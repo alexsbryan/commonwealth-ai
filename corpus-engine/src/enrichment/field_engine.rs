@@ -164,13 +164,29 @@ impl FieldModelEngine {
         // Organization / Initiative atoms with Involves edges. All
         // other domains use the default impl (returns None) and the
         // step is a no-op — the existing five phases run unchanged.
+        //
+        // Resumable: passing `&mut checkpoint` lets the inner
+        // driver persist each batch's parsed response to
+        // `_phase_1b_parsed.jsonl` and update
+        // `phase_1b_batches_done`. A process killed mid-phase
+        // resumes on the next run rather than re-inferring
+        // already-completed batches.
         if !checkpoint.phase_1b_complete {
+            if checkpoint.phase_1b_batches_done > 0 {
+                progress(EnrichmentProgress::Resuming {
+                    from_phase: format!(
+                        "Entity extraction (batch {})",
+                        checkpoint.phase_1b_batches_done
+                    ),
+                });
+            }
             let all_chunks = index.all_chunks().await?;
             let result = super::entity_extraction::run_and_write_entity_extraction(
                 &all_chunks,
                 self.domain.as_ref(),
                 self.inference.clone(),
                 &index_dir,
+                Some(&mut checkpoint),
                 progress,
             )
             .await?;
@@ -183,6 +199,7 @@ impl FieldModelEngine {
                 "phase_1b: entity extraction complete"
             );
             checkpoint.phase_1b_complete = true;
+            checkpoint.phase_1b_batches_done = 0; // clear for cleanliness
             checkpoint.last_updated = chrono::Utc::now().to_rfc3339();
             checkpoint.save(&index_dir)?;
         } else {

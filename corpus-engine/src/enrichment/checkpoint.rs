@@ -32,6 +32,14 @@ pub struct EnrichmentCheckpoint {
     /// step on resume rather than silently skipping it.
     #[serde(default)]
     pub phase_1b_complete: bool,
+    /// Number of entity-extraction batches whose parsed responses
+    /// have been persisted to `_phase_1b_parsed.jsonl`. Updated
+    /// after every successful parse so a process killed mid-phase
+    /// resumes from where it left off rather than re-inferring.
+    /// The JSONL is the truth source on resume; this counter is
+    /// kept in sync for human-readable progress display.
+    #[serde(default)]
+    pub phase_1b_batches_done: usize,
     pub phase_2_complete: bool,  // clustering done
     pub phase_2b_complete: bool, // labeling done
     pub phase_3_complete: bool,  // alignment done

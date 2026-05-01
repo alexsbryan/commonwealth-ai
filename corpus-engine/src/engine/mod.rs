@@ -1020,9 +1020,14 @@ impl CorpusEngine {
             if !path.join("_corpus_meta.json").exists() {
                 continue;
             }
-            // Skip indexes where ingestion was interrupted (process killed mid-embed).
+            // Skip indexes where ingestion was interrupted (process
+            // killed mid-embed). Logged at trace because
+            // `installed_indexes` is called from several startup
+            // paths (HealthMonitor, vector-readiness verifier,
+            // engine list endpoint) and at debug it produces 5–6
+            // duplicate lines per partial corpus per launch.
             if !CorpusIndex::is_ingestion_complete(&path) {
-                tracing::debug!(
+                tracing::trace!(
                     corpus = name,
                     "Skipping partial index — ingestion was not completed"
                 );
