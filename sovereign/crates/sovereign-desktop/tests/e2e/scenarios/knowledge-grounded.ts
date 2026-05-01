@@ -24,7 +24,12 @@ export const knowledgeGrounded: Scenario = {
     aux: 400,
     // Pre-tweak this never fires; post-tweak it should track narration.
     specific: 500,
+    visible: 500,
     content: 1500,
+    // Gap is the user-perceived "staring at one sentence" window
+    // between routing narration and the first token. ~1s here; room
+    // to tune by rotating narration text or pulsing the indicator.
+    gap: 1500,
   },
   events: [
     {

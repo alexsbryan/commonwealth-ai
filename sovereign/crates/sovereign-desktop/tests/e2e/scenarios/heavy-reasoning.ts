@@ -20,7 +20,13 @@ export const heavyReasoning: Scenario = {
     generic: 200,
     aux: 400,
     specific: 500,
+    visible: 500,
     content: 3000,
+    // Gap is the open problem on this scenario. Today: ~2.4s of one
+    // calm sentence sitting in the slot. Optimizations: rotating
+    // narration text, pulsing accent, "still thinking" mode after
+    // some threshold. Budget set generously; tighten as the UI tunes.
+    gap: 2500,
   },
   events: [
     {

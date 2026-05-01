@@ -24,6 +24,9 @@ export const disambiguation: Scenario = {
     generic: 200,
     aux: 800,
     specific: 500,
+    visible: 800,
+    // No content tier here — the scenario terminates at clarification.
+    // Gap is therefore null and not budgeted.
   },
   events: [
     {

@@ -8,6 +8,9 @@ import { mount } from "svelte";
 import App from "./App.svelte";
 import "./app.css";
 import { diagnoseCorpus } from "./lib/api";
+// TTFI recorder — inert unless ?ttfi=record or localStorage flag is
+// set. Self-binds to window.__ttfi_recorder__ on import.
+import "./lib/ttfi/recorder";
 
 const app = mount(App, {
   target: document.getElementById("app")!,

@@ -247,10 +247,31 @@ impl HealthCheckable for CorpusIndexChecker {
     }
 
     fn can_repair_autonomously(&self, issue: &HealthIssue) -> bool {
-        // FTS rebuilds are safe and fast; all others need user sign-off.
-        matches!(issue, HealthIssue::FtsDesync { .. })
+        // FTS rebuilds are safe but only "fast" for small corpora.
+        // On a 500 K-chunk Wikipedia index a content-FTS rebuild
+        // takes ~3 minutes, which is the kind of work that absolutely
+        // must not run silently in the background while the user is
+        // trying to chat. Threshold below is the rebuild *workload*
+        // (delta between chunk_count and fts_count) — small drift
+        // gets repaired silently, large drift surfaces as a user
+        // decision via the standard `maybe_surface_decision` path.
+        match issue {
+            HealthIssue::FtsDesync { chunk_count, fts_count, .. } => {
+                let delta = chunk_count.abs_diff(*fts_count);
+                delta <= AUTO_FTS_REPAIR_MAX_DELTA
+            }
+            _ => false,
+        }
     }
 }
+
+/// Maximum number of chunks a silent FTS rebuild may touch. Above
+/// this, the rebuild is surfaced to the user instead of running
+/// autonomously. 5 K is empirically the boundary at which a tantivy
+/// FTS build crosses ~5 s on this hardware — fast enough that a user
+/// with the app open won't notice, slow enough that anything larger
+/// genuinely competes with foreground work.
+const AUTO_FTS_REPAIR_MAX_DELTA: u64 = 5_000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

@@ -89,8 +89,19 @@ impl HealthMonitor {
     // ── Main loop ────────────────────────────────────────────────────────────
 
     /// Run the monitor until `shutdown` is cancelled.
+    ///
+    /// The first cycle is deferred by `check_interval` so launch
+    /// stays quiet — `tokio::time::interval` would otherwise fire
+    /// the first tick immediately and the monitor would kick off a
+    /// repair (notably FTS rebuild) the moment the desktop process
+    /// starts, competing with the user's first interaction for the
+    /// fast slot. We trust startup-time validators (embed-dim probe
+    /// in `bootstrap`) to catch the issues that genuinely matter
+    /// before any user input; ongoing drift detection is what this
+    /// loop is for, and ongoing drift can wait one cycle.
     pub async fn run(&self, shutdown: CancellationToken) {
-        let mut interval = tokio::time::interval(self.config.check_interval);
+        let start = tokio::time::Instant::now() + self.config.check_interval;
+        let mut interval = tokio::time::interval_at(start, self.config.check_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {

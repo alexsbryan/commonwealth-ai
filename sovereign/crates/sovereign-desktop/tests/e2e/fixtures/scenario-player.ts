@@ -1,4 +1,11 @@
 import type { Page } from "@playwright/test";
+import type {
+  NarrationPhase,
+  Scenario as SharedScenario,
+  ScenarioEvent as SharedScenarioEvent,
+  ScenarioBudgets,
+  ScenarioTerminal,
+} from "../../../src/lib/ttfi/types";
 
 // Scenario player — replays a backend timing scenario at the Tauri
 // event boundary, on a controllable in-page timeline. Used by the TTFI
@@ -14,67 +21,43 @@ import type { Page } from "@playwright/test";
 // per-event Playwright IPC adds ~50ms of jitter that swamps small TTFI
 // deltas. In-page setTimeout is sub-millisecond.
 
-export type NarrationPhase =
-  | "routing_committed"
-  | "retrieval_complete"
-  | "primary_synthesis_start"
-  | "gap_check_fired";
-
-export type ScenarioEvent =
-  | {
-      atMs: number;
-      kind: "doc-op";
-      type: "Routing" | "Retrieving" | "AnalysingEntity" | "Synthesising";
-      operation?: string;
-      name?: string;
-    }
-  | { atMs: number; kind: "narration"; phase: NarrationPhase; text: string }
-  | {
-      atMs: number;
-      kind: "interpretation";
-      interpretation: string;
-      alternatives: { label: string; intent_hint: string }[];
-      confidence: number;
-    }
-  | {
-      atMs: number;
-      kind: "clarification";
-      question: string;
-      options: { label: string; follow_up: string; intent_hint: string }[];
-    }
-  | { atMs: number; kind: "chunk"; text: string }
-  | { atMs: number; kind: "complete"; fullText: string; metadata?: unknown }
-  | { atMs: number; kind: "error"; message: string };
-
-export type Scenario = {
-  /** Stable identifier — used in report rows + test titles. */
-  name: string;
-  /** One-line description for human readers of the report. */
-  description: string;
-  /** User-input text — typed into the textarea before clicking Send. */
-  query: string;
-  /** Timeline of backend-emitted events. atMs is from the click anchor. */
-  events: ScenarioEvent[];
-  /** What state to wait for before reading the TTFI report. */
-  terminal:
-    | { kind: "send-btn-visible" }
-    | { kind: "selector-visible"; selector: string };
-  /** Optional advisory budgets (ms). The spec console.warns when a
-   *  marker exceeds its budget; tests don't fail on overrun. Promote
-   *  to hard `expect()` once the metric stabilizes. */
-  budgets?: {
-    generic?: number;
-    specific?: number;
-    aux?: number;
-    content?: number;
-  };
-};
+// Re-exported from src/lib/ttfi/types so production-side recorder and
+// harness-side player stay wire-compatible by construction. The
+// shared-types module is the single source of truth for the on-the-wire
+// Scenario shape; this fixture adds Playwright-specific helpers.
+export type { NarrationPhase };
+export type ScenarioEvent = SharedScenarioEvent;
+export type Scenario = SharedScenario;
+export type { ScenarioBudgets, ScenarioTerminal };
 
 export type TtfiReport = {
+  /** First .typing-indicator paint — any "we got your input" feedback. */
   generic: number | null;
+  /** First .doc-progress-indicator paint — query-aware signal in the
+   *  loading slot. The optimization target. */
   specific: number | null;
+  /** First .narration-stack | .interpretation-banner | .clarification-card
+   *  paint — query-aware signal anywhere. */
   aux: number | null;
+  /** First time a specific-or-aux element actually intersects the
+   *  viewport (IntersectionObserver). DOM presence ≠ visibility — a
+   *  chip rendered far below the fold fires `aux` but not `visible`. */
+  visible: number | null;
+  /** First .think-block paint. Reasoning models stream <think>...</think>
+   *  before prose; without this tier `content` understates first-content
+   *  by the entire thinking duration. */
+  thinking: number | null;
+  /** First non-empty token text — traditional TTFT. */
   content: number | null;
+  /** Derived: content − specific. The user-perceived wait window
+   *  between "we have something specific to say" and "actual content
+   *  arrives". null when either input is null. */
+  gap: number | null;
+  /** Max ms the loading-slot text was static (no change). Bounds
+   *  sentence-stare: even when the slot has specific text, how long
+   *  did the user see the same exact text without any update? null
+   *  when the slot never appeared. */
+  staleness: number | null;
 };
 
 export type PlayContext = {

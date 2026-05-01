@@ -24,7 +24,9 @@ export const offTargetSuppressed: Scenario = {
     generic: 200,
     aux: 900,
     specific: 500,
+    visible: 500,
     content: 1500,
+    gap: 1500,
   },
   events: [
     {

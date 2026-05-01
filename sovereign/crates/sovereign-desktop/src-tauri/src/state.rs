@@ -424,6 +424,18 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// True when this process is talking to an external CLI daemon at
+    /// `:9741` rather than running its own embedded daemon. The
+    /// idiomatic check used to be `state.mesh.is_none()`, but the
+    /// connection between "no embedded mesh" and "we are a passive
+    /// UI" is non-obvious to readers; use this accessor instead.
+    pub fn is_attach_mode(&self) -> bool {
+        matches!(
+            self.bootstrap_mode,
+            crate::bootstrap::BootstrapMode::Attach { .. }
+        )
+    }
+
     /// Construct `AppState` branching on the bootstrap mode probed at
     /// app start:
     ///
@@ -878,13 +890,41 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     }
 
     // KnowledgeView wire-up (desktop mirror of the server/CLI path).
-    // Gated on Settings → Knowledge → "Enable KnowledgeView". When
-    // disabled, Sovereign behaves exactly as it did before the
-    // feature existed: no ingest, no observer, no landscape digests
-    // spliced into prompts. The toggle is read once at startup —
-    // changes require a desktop restart because the Runtime is
-    // built once with or without the landscape-digest provider.
-    let knowledge_view_manager = if config.knowledge_view_enabled {
+    // Gated on three things, in order of precedence:
+    //
+    // 1. **Attach mode** — when a CLI daemon at `:9741` is the source
+    //    of truth, IT owns the `KnowledgeViewManager` (see
+    //    `sovereign-cli/src/daemon_cmd.rs:697`). Constructing one here
+    //    too means: a duplicate observer fires on every conversation
+    //    write, two debouncers race to ingest the same view, and two
+    //    enrichment loops compete for the chat slot. Skip entirely.
+    //    Note: this means landscape digests are NOT spliced into
+    //    prompts on the desktop side in attach mode — the daemon has
+    //    the digest data but no HTTP endpoint exposes it yet. TODO:
+    //    add `/v1/knowledge/landscape_digest` on the daemon and a
+    //    thin client-side `LandscapeDigestProvider` impl that fetches
+    //    over HTTP, then wire that into the runtime here.
+    //
+    // 2. **Settings → Knowledge → Enable KnowledgeView** — when the
+    //    user has explicitly disabled the feature, Sovereign behaves
+    //    exactly as it did before KnowledgeView existed.
+    //
+    // 3. Otherwise (Local / CliSetup mode, feature on) build the
+    //    manager. The Runtime gets a landscape-digest provider; the
+    //    observer wires the manager into SQLite writes.
+    //
+    // The toggle is read once at startup — changes to the Settings
+    // toggle or to bootstrap mode require a desktop restart because
+    // the Runtime is built once with or without the provider.
+    let knowledge_view_manager = if state.is_attach_mode() {
+        tracing::info!(
+            "knowledge_view: attach mode — CLI daemon owns enrichment, \
+             skipping desktop-side construction. Landscape digests in \
+             chat splice are deferred until the daemon exposes an HTTP \
+             endpoint."
+        );
+        None
+    } else if config.knowledge_view_enabled {
         let knowledge_view_db_path = config.data_dir.join("sovereign.db");
         // Resolve local_only skill ids from the registry loaded above.
         // Mirror of the server/CLI paths.
@@ -934,24 +974,26 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         );
         None
     };
-    // Background init — desktop launch must be snappy; see server
-    // binary for rationale. Skipped entirely when KnowledgeView is
-    // disabled via Settings.
+    // No auto-backfill on launch.
     //
-    // Defer the kickoff by 30 s so the fast slot stays free for the
-    // user's first interaction. Without the delay, enrichment Phase 2
-    // fans out parallel `complete()` calls on the fast slot at the
-    // same moment the user is opening the app to chat — first
-    // response queues behind background work and the model load /
-    // chat-template-application path competes with entity extraction
-    // for the slot mutex. 30 s is long enough that a user who opens
-    // the app to chat almost always lands their first turn before
-    // enrichment starts; short enough that "open app, walk away,
-    // come back in a minute" still has fresh landscape digests.
-    if let Some(mgr) = knowledge_view_manager.as_ref() {
-        let _init_handle = Arc::clone(mgr)
-            .spawn_init_after(std::time::Duration::from_secs(30));
-    }
+    // KnowledgeView ingest used to fire on a 30 s timer here, on the
+    // theory that the user wouldn't notice if it kicked off "after
+    // they opened the app." In practice, on a CPU-only fast slot a
+    // single Phase 2 entity-extraction call against an 8 K-token
+    // prompt takes ~4 minutes, and the phase fans out 4 of them. The
+    // calls serialise through the slot mutex, so a user who opens
+    // the app to chat lands behind a 16-minute queue.
+    //
+    // Phase 2 is now resumable (see corpus-engine
+    // `_phase_1b_parsed.jsonl`), so partial work survives a kill —
+    // but we still don't auto-trigger here. The debouncer (spawned
+    // during `KnowledgeViewManager::new` in Local mode) picks up
+    // `ConversationTouched` / `MemoryTouched` events, so new
+    // conversations land in the index incrementally. Backfill of
+    // existing-but-unfinished views is an explicit user action —
+    // call `KnowledgeViewManager::enrich(view_id)` from a UI button
+    // or a CLI command when the user wants a sweep.
+    let _ = knowledge_view_manager.as_ref();
 
     // Hand the engine to the embedded Commonwealth daemon so that
     // when a user creates or joins a mesh, `/v1/knowledge/search` on
@@ -1354,6 +1396,12 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         }
     };
 
+    // Snapshot the local-only skill ids BEFORE the registry is
+    // consumed by `Runtime::new`. The attach-mode landscape-digest
+    // client below needs them to resolve `active_is_local_only`
+    // before sending each request to the daemon.
+    let local_only_skill_ids_for_digests = skills.local_only_skill_ids();
+
     let mut runtime = Runtime::new(
         inference,
         router,
@@ -1365,15 +1413,44 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         inference_config,
     )
     .with_corpus_engine(Arc::clone(&corpus_engine));
-    // Install the landscape-digest provider only when KnowledgeView
-    // is enabled. When disabled, Runtime.landscape_digests stays
-    // None and the entire splice path is a no-op — identical to
-    // pre-KnowledgeView behaviour.
+    // Landscape-digest provider wiring. Three branches:
+    //
+    // 1. **Local mode + KnowledgeView enabled** — install the local
+    //    `KnowledgeViewManager` (already constructed above).
+    // 2. **Attach mode** — fetch digests from the daemon's
+    //    `POST /v1/knowledge/landscape_digest` endpoint via
+    //    `MeshLandscapeDigestClient`. The desktop sends the
+    //    caller-resolved `active_is_local_only` so the daemon
+    //    doesn't have to introspect the skill registry.
+    // 3. **KnowledgeView disabled** — `Runtime.landscape_digests`
+    //    stays `None`, the splice path is a no-op (identical to
+    //    pre-KnowledgeView behaviour).
     if let Some(ref mgr) = knowledge_view_manager {
         runtime = runtime.with_landscape_digests(
             Arc::clone(mgr)
                 as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
         );
+    } else if state.is_attach_mode() && config.knowledge_view_enabled {
+        match sovereign_mesh::landscape_digest_client::MeshLandscapeDigestClient::new(
+            "http://127.0.0.1:9741",
+            local_only_skill_ids_for_digests,
+        ) {
+            Ok(client) => {
+                tracing::info!(
+                    "knowledge_view: attach mode — landscape digest client wired \
+                     to http://127.0.0.1:9741/v1/knowledge/landscape_digest"
+                );
+                runtime = runtime.with_landscape_digests(
+                    Arc::new(client)
+                        as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
+                );
+            }
+            Err(e) => tracing::warn!(
+                error = %e,
+                "knowledge_view: attach-mode landscape digest client build \
+                 failed; chat splice will run without digests this session"
+            ),
+        }
     }
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);

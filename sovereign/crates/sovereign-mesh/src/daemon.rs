@@ -95,6 +95,14 @@ pub struct EmbeddedDaemon {
     /// Same pattern — project_http router for `/v1/projects/*`.
     /// Owned by the CLI / desktop side which holds the Reindexer.
     project_http_router: RwLock<Option<axum::Router>>,
+    /// Knowledge-view HTTP router (`POST /v1/knowledge/landscape_digest`).
+    /// Built by `sovereign-cli`'s daemon bootstrap once the
+    /// `KnowledgeViewManager` exists; merged into the client listener
+    /// at `start_daemon` time. `None` in tests / paths without the
+    /// manager — the endpoint then 404s, which the desktop's
+    /// `MeshLandscapeDigestClient` handles by inserting an empty
+    /// digest list (identical to KnowledgeView=off).
+    knowledge_view_http_router: RwLock<Option<axum::Router>>,
     /// In-memory copy of the `SetupConfig` the daemon booted with.
     /// `admin_http::reload` diffs this against the file on disk so it
     /// knows which fields actually changed. Updated in place after a
@@ -177,6 +185,7 @@ impl EmbeddedDaemon {
             mesh_http_router: RwLock::new(None),
             admin_http_router: RwLock::new(None),
             project_http_router: RwLock::new(None),
+            knowledge_view_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
@@ -197,6 +206,7 @@ impl EmbeddedDaemon {
             mesh_http_router: RwLock::new(None),
             admin_http_router: RwLock::new(None),
             project_http_router: RwLock::new(None),
+            knowledge_view_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
@@ -247,6 +257,17 @@ impl EmbeddedDaemon {
 
     pub async fn install_admin_http_router(&self, router: axum::Router) {
         *self.admin_http_router.write().await = Some(router);
+    }
+
+    /// Install the knowledge-view HTTP router
+    /// (`POST /v1/knowledge/landscape_digest`). Same shape as
+    /// [`install_admin_http_router`] — caller builds
+    /// `landscape_digest_http::landscape_digest_router(Arc::clone(&mgr))`
+    /// and hands it here. `None` (no install) means the endpoint is
+    /// not exposed; an attached desktop's HTTP client soft-fails to
+    /// an empty digest list in that case.
+    pub async fn install_knowledge_view_http_router(&self, router: axum::Router) {
+        *self.knowledge_view_http_router.write().await = Some(router);
     }
 
     /// Record the `SetupConfig` this daemon booted with. The admin
@@ -1211,6 +1232,7 @@ impl EmbeddedDaemon {
         let mesh_http = self.mesh_http_router.read().await.clone();
         let admin_http = self.admin_http_router.read().await.clone();
         let project_http = self.project_http_router.read().await.clone();
+        let knowledge_view_http = self.knowledge_view_http_router.read().await.clone();
 
         // Spawn the API servers in the background.
         let app_state_clone = app_state.clone();
@@ -1246,6 +1268,9 @@ impl EmbeddedDaemon {
             }
             if let Some(project_http_router) = project_http {
                 client_router = client_router.merge(project_http_router);
+            }
+            if let Some(knowledge_view_http_router) = knowledge_view_http {
+                client_router = client_router.merge(knowledge_view_http_router);
             }
             let internal_router =
                 commonwealth_api::server::internal_router(app_state_clone);

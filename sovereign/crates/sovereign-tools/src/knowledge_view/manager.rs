@@ -389,15 +389,65 @@ impl KnowledgeViewManager {
     /// callers downstream can rely on the invariant "post-routing
     /// context has a non-`None` digests field".
     pub async fn splice_into(&self, ctx: &mut ConversationContext, active_skill: Option<&str>) {
+        // Extract conversation messages (the only piece of `ctx` the
+        // digest computation actually reads — the relational +
+        // strategic blocks build an in-conversation predicate from
+        // them). Pulling a borrow-free snapshot here keeps
+        // `compute_digests` reusable from the daemon's HTTP handler,
+        // which doesn't have a `ConversationContext` to lend.
+        let messages: Vec<String> = ctx
+            .conversation
+            .messages
+            .iter()
+            .map(|m| m.content.clone())
+            .collect();
+        // Resolve `active_is_local_only` against the manager's own
+        // registered set — the in-process splice path has the skill
+        // ids on hand and shouldn't pay an HTTP-style indirection.
+        let active_is_local_only = active_skill
+            .map(|s| self.local_only_skill_ids.iter().any(|id| id == s))
+            .unwrap_or(false);
+        let digests = self
+            .compute_digests(active_skill, active_is_local_only, &messages)
+            .await;
+        ctx.set_landscape_digests(digests);
+    }
+
+    /// Compute the full landscape-digest set for the given
+    /// `active_skill` and conversation transcript. Identical
+    /// orchestration to `splice_into` but returns the vector
+    /// instead of writing to a `ConversationContext`, so the daemon
+    /// HTTP surface (`POST /v1/knowledge/landscape_digest`) can
+    /// serve attached desktops a ready-to-splice payload.
+    ///
+    /// `active_is_local_only` is caller-determined — the in-process
+    /// path resolves it against `self.local_only_skill_ids`, the
+    /// HTTP handler reads it from the request body. Lifting it out
+    /// of the manager's state lets a daemon serve digests for a
+    /// caller whose skill registry it doesn't share (the desktop
+    /// has its own copy of `local_only_skill_ids`).
+    ///
+    /// `conversation_messages` is the in-conversation message
+    /// content used by the relational/strategic blocks for the
+    /// "name appears in this conversation already" predicate. Pass
+    /// an empty slice when no in-conversation context is available
+    /// (e.g. a digest-warm cache request) — the predicate degrades
+    /// to "no conversational matches" without affecting the rest of
+    /// the digest.
+    pub async fn compute_digests(
+        &self,
+        active_skill: Option<&str>,
+        active_is_local_only: bool,
+        conversation_messages: &[String],
+    ) -> Vec<LandscapeDigest> {
         // Skill-aware digest selection (spec: "when the active skill
         // is inner-work, the technical knowledge digest is absent
         // entirely"). Acquirer-level filtering already keeps
         // local_only conversations out of the corpus; this branch
         // suppresses the REMAINING digests so cross-session context
-        // can't leak into a private session.
-        let active_is_local_only = active_skill
-            .map(|s| self.local_only_skill_ids.iter().any(|id| id == s))
-            .unwrap_or(false);
+        // can't leak into a private session. The caller has
+        // already resolved `active_is_local_only` from its own skill
+        // registry — see signature docstring.
 
         let mut view_budgets: Vec<(ViewKind, usize)> = Vec::with_capacity(3);
         view_budgets.push((ViewKind::Personal, ViewKind::Personal.default_budget_tokens()));
@@ -413,7 +463,7 @@ impl KnowledgeViewManager {
         } else {
             tracing::debug!(
                 active_skill = ?active_skill,
-                "splice_into: omitting conversation-history + institutional \
+                "compute_digests: omitting conversation-history + institutional \
                  digests for privacy=local_only active skill"
             );
         }
@@ -477,10 +527,11 @@ impl KnowledgeViewManager {
         // skill must not see them surface here either.
         #[cfg(feature = "treesitter")]
         if !active_is_local_only {
-            self.append_relational_strategic_blocks(ctx, &mut digests).await;
+            self.append_relational_strategic_blocks(conversation_messages, &mut digests)
+                .await;
         }
 
-        ctx.set_landscape_digests(digests);
+        digests
     }
 
     /// Compose the Relational + Strategic digest blocks (Phase 4.B).
@@ -493,7 +544,7 @@ impl KnowledgeViewManager {
     #[cfg(feature = "treesitter")]
     async fn append_relational_strategic_blocks(
         &self,
-        ctx: &ConversationContext,
+        conversation_messages: &[String],
         digests: &mut Vec<LandscapeDigest>,
     ) {
         // 1. Resolve every atlas chunk_id once. Cheap (a few
@@ -562,10 +613,7 @@ impl KnowledgeViewManager {
 
         // 5. In-conversation predicate from the current message thread.
         let corpus = ConversationCorpus::from_messages(
-            ctx.conversation
-                .messages
-                .iter()
-                .map(|m| m.content.clone()),
+            conversation_messages.iter().cloned(),
         );
         let in_conv = |name: &str| corpus.contains_entity(name);
 

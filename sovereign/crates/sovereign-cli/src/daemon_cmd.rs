@@ -585,6 +585,44 @@ async fn run_daemon(args: &[String]) -> i32 {
         )))
         .await;
 
+    // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
+    //
+    // Built read-only at this stage: the daemon holds a
+    // KnowledgeViewManager so an attached desktop can fetch
+    // assembled digest blocks via HTTP, but the enrichment loop
+    // (observer → debouncer → atlas writes) is NOT wired here.
+    // That requires the daemon to own a SQLite state store with an
+    // installed observer, which is the next architectural pass.
+    // Today's behaviour: the daemon serves whatever digest can be
+    // built from existing on-disk skeletons. If no enrichment has
+    // been run, the digest is empty — the desktop's
+    // `MeshLandscapeDigestClient` treats that identically to
+    // KnowledgeView=off (empty splice, no prompt impact).
+    //
+    // `local_only_skill_ids` is empty here; the desktop's HTTP
+    // client resolves `active_is_local_only` against ITS own skill
+    // registry and passes the bool in the request. See
+    // `MeshLandscapeDigestClient::new` and
+    // `LandscapeDigestRequest.active_is_local_only`.
+    let knowledge_view_db_path = data_dir.join("sovereign.db");
+    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
+    let knowledge_view_manager = Arc::new(
+        sovereign_tools::knowledge_view::KnowledgeViewManager::new(
+            Arc::clone(&engine),
+            inference_fn,
+            knowledge_view_db_path,
+            Vec::new(),
+        )
+        .await,
+    );
+    daemon
+        .install_knowledge_view_http_router(
+            sovereign_mesh::landscape_digest_http::landscape_digest_router(Arc::clone(
+                &knowledge_view_manager,
+            )),
+        )
+        .await;
+
     // Resume any previously-registered projects so FS watchers
     // come back up without the user running `project register`
     // again. Missing / unreadable registry is non-fatal — the

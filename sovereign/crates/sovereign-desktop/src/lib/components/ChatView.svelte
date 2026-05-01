@@ -216,6 +216,69 @@
       : null,
   );
 
+  // Dot-stare guard: when isLoading has been true for >400ms with NO
+  // specific signal (no docProgressText, no narration), render a calm
+  // placeholder in the loading slot. The runtime suppresses narration
+  // below ~5s elapsed, and fast-path queries can complete with no
+  // narration at all — without this, the user sees only typing dots
+  // for the entire wait. Threshold tuned via TTFI harness silent-fast
+  // scenario; below 400ms is imperceptible, above 600ms feels frozen.
+  const PLACEHOLDER_DELAY_MS = 400;
+  let placeholderActive = $state(false);
+  $effect(() => {
+    // Reset on any condition that should HIDE the placeholder.
+    if (!isLoading || docProgressText || latestNarrationText) {
+      placeholderActive = false;
+      return;
+    }
+    // Loading, no specific signal yet — arm the timer. Cleanup
+    // returned by $effect cancels it on dependency change.
+    const t = setTimeout(() => {
+      placeholderActive = true;
+    }, PLACEHOLDER_DELAY_MS);
+    return () => {
+      clearTimeout(t);
+    };
+  });
+
+  // Sentence-stare guard: even when the slot has a specific signal,
+  // the user can stare at the same sentence for many seconds during
+  // long synthesis or non-streaming fallback paths. After 1500ms with
+  // no slot-text update, append "(still working)"; after 3000ms,
+  // "(taking longer than usual)". Caps there — beyond that the diamond
+  // pulse animation provides the "still alive" cue without adding
+  // false-progress claims. Suspended when a clarification card is up
+  // (system is genuinely waiting on the user, not crunching).
+  const STALE_INTERVAL_MS = 1500;
+  const STALE_SUFFIXES = [
+    "",
+    " (still working)",
+    " (taking longer than usual)",
+  ];
+  let staleRotation = $state(0);
+  $effect(() => {
+    // Reading every dependency inside the body so Svelte tracks
+    // them — any change resets the rotation counter and (if still
+    // active) restarts the interval.
+    const loading = isLoading;
+    const dpt = docProgressText;
+    const lnt = latestNarrationText;
+    const ph = placeholderActive;
+    const isClarifying = !!routingStore.clarification;
+    staleRotation = 0;
+    if (!loading) return;
+    if (isClarifying) return;
+    const haveSlotText = !!dpt || !!lnt || ph;
+    if (!haveSlotText) return;
+    const interval = setInterval(() => {
+      staleRotation = Math.min(staleRotation + 1, STALE_SUFFIXES.length - 1);
+    }, STALE_INTERVAL_MS);
+    return () => {
+      clearInterval(interval);
+    };
+  });
+  let staleSuffix = $derived(STALE_SUFFIXES[staleRotation] ?? "");
+
   // Convenience snapshot accessors. Svelte 5 re-derives whenever
   // `$snapshot` changes (which is on every event send).
   let messages = $derived($snapshot.context.messages);
@@ -857,8 +920,8 @@
       {#if isLoading}
         {#if docProgressText}
           <div class="doc-progress-indicator" aria-label="Sovereign is processing document">
-            <span class="progress-mark">{"\u25C8"}</span>
-            <span class="progress-text">{docProgressText}</span>
+            <span class="progress-mark pulse">{"\u25C8"}</span>
+            <span class="progress-text">{docProgressText}{staleSuffix}</span>
           </div>
         {:else if latestNarrationText}
           <div
@@ -866,8 +929,17 @@
             data-source="narration"
             aria-label="Sovereign is working"
           >
-            <span class="progress-mark">{"\u25C8"}</span>
-            <span class="progress-text">{latestNarrationText}</span>
+            <span class="progress-mark pulse">{"\u25C8"}</span>
+            <span class="progress-text">{latestNarrationText}{staleSuffix}</span>
+          </div>
+        {:else if placeholderActive}
+          <div
+            class="doc-progress-indicator"
+            data-source="placeholder"
+            aria-label="Sovereign is working"
+          >
+            <span class="progress-mark pulse">{"\u25C8"}</span>
+            <span class="progress-text">Working on it&hellip;{staleSuffix}</span>
           </div>
         {:else}
           <div class="typing-indicator" aria-label="Sovereign is responding">
@@ -1367,6 +1439,19 @@
   .progress-mark {
     color: var(--accent);
     font-size: 13px;
+  }
+
+  /* Calming pulse on the diamond accent — even when the slot text is
+     static, the indicator visibly breathes so the user knows the
+     system is still active. Slow + subtle so it doesn't compete
+     with content for attention. */
+  .progress-mark.pulse {
+    display: inline-block;
+    animation: progress-mark-breathe 2.4s ease-in-out infinite;
+  }
+  @keyframes progress-mark-breathe {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
   }
 
   @keyframes fade-in {

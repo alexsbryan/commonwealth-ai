@@ -12,6 +12,10 @@ import { knowledgeGrounded } from "../scenarios/knowledge-grounded";
 import { heavyReasoning } from "../scenarios/heavy-reasoning";
 import { disambiguation } from "../scenarios/disambiguation";
 import { offTargetSuppressed } from "../scenarios/off-target-suppressed";
+import { withThinking } from "../scenarios/with-thinking";
+import { complexTaskFallback } from "../scenarios/complex-task-fallback";
+import { documentAssetProgress } from "../scenarios/document-asset-progress";
+import { silentFast } from "../scenarios/silent-fast";
 
 // Time-to-First-Intelligence harness. Each scenario replays a
 // representative backend timing shape; the in-page probe records when
@@ -43,6 +47,10 @@ const scenarios: Scenario[] = [
   heavyReasoning,
   disambiguation,
   offTargetSuppressed,
+  withThinking,
+  complexTaskFallback,
+  documentAssetProgress,
+  silentFast,
 ];
 
 test.describe.configure({ mode: "serial" });

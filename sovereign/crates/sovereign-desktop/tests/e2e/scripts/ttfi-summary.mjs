@@ -60,7 +60,16 @@ const baseRows = new Map(
   (baseline?.rows ?? []).map((r) => [r.scenario, r.ttfi]),
 );
 
-const TIERS = ["generic", "specific", "aux", "content"];
+const TIERS = [
+  "generic",
+  "specific",
+  "aux",
+  "visible",
+  "thinking",
+  "content",
+  "gap",
+  "staleness",
+];
 
 console.log("");
 console.log(`# TTFI report`);
@@ -99,14 +108,28 @@ if (baseline) {
   }
 } else {
   // Single-run: scenario | tier | value
-  const headers = ["Scenario", "Generic", "Specific", "Aux", "Content"];
+  const headers = [
+    "Scenario",
+    "Generic",
+    "Specific",
+    "Aux",
+    "Visible",
+    "Thinking",
+    "Content",
+    "Gap",
+    "Staleness",
+  ];
   const widths = headers.map((h) => h.length);
   const rows = report.rows.map((r) => [
     r.scenario,
     fmt(r.ttfi.generic),
     fmt(r.ttfi.specific),
     fmt(r.ttfi.aux),
+    fmt(r.ttfi.visible),
+    fmt(r.ttfi.thinking),
     fmt(r.ttfi.content),
+    fmt(r.ttfi.gap),
+    fmt(r.ttfi.staleness),
   ]);
   for (const cells of rows) {
     cells.forEach((c, i) => (widths[i] = Math.max(widths[i], c.length)));

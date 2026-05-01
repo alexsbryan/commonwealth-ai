@@ -18,7 +18,12 @@ export const fastLocal: Scenario = {
   budgets: {
     generic: 200,
     aux: 500,
+    visible: 500,
     content: 600,
+    // Gap is small here by definition — no retrieval, content arrives
+    // right after the routing narration. The right answer for a fast
+    // direct query is "blink and you miss the specific tier".
+    gap: 250,
   },
   events: [
     {

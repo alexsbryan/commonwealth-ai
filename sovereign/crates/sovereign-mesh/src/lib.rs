@@ -27,6 +27,8 @@ pub mod gossip;
 pub mod inference_adapter;
 pub mod join;
 pub mod knowledge_client;
+pub mod landscape_digest_client;
+pub mod landscape_digest_http;
 pub mod mcp_router;
 pub mod mesh_http;
 pub(crate) mod oicp_select;
