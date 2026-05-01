@@ -178,10 +178,6 @@ enum MeshCommands {
 enum DaemonCommands {
     /// Start the daemon
     Start,
-    /// Stop the daemon
-    Stop,
-    /// Show daemon status
-    Status,
 }
 
 #[derive(Subcommand)]
@@ -257,8 +253,6 @@ fn main() -> Result<()> {
         },
         Commands::Daemon { command } => match command {
             DaemonCommands::Start => cmd_daemon_start(&config),
-            DaemonCommands::Stop => cmd_daemon_stop(&config),
-            DaemonCommands::Status => cmd_daemon_status(&config),
         },
         Commands::Recipe { command } => match command {
             RecipeCommands::Test { path, sample_size, no_embed, output, offline, verbose } => {
@@ -1014,17 +1008,6 @@ async fn probe_inference_capability(config: &InferenceConfig) -> bool {
         }
         found
     }
-}
-
-fn cmd_daemon_stop(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Stopping Commonwealth daemon...");
-    println!("(In production, this would send SIGTERM to the daemon process.)");
-    Ok(())
-}
-
-fn cmd_daemon_status(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("(In production, this would check if the daemon process is running.)");
-    Ok(())
 }
 
 // ── Recipe commands ─────────────────────────────────────────────────────────

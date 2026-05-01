@@ -4,6 +4,23 @@ _Phased build plan for the Commonwealth coordination daemon. Each phase declares
 
 ---
 
+> **Historical record (kept for the rationale behind the phased build, not
+> as truth-on-disk).** The original plan promised six crates; the codebase
+> has nine. `commonwealth-scheduler` and `commonwealth-orchestrator` were
+> merged into `commonwealth-inference`; `commonwealth-app`,
+> `commonwealth-knowledge`, `commonwealth-state`, and
+> `commonwealth-test-harness` shipped as new crates after this plan was
+> written. The phase numbering and deliverable specs are therefore stale.
+>
+> For the **current** shape of the workspace — crate layout, what's
+> implemented, what's deferred — read
+> [`../sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) §5
+> and §10 (Architecture Roadmap). This file is preserved so the original
+> phasing argument and dependency analysis remain accessible to anyone
+> tracing why the project landed where it did.
+
+---
+
 ## Phase 0: Project Scaffolding
 **Depends on:** nothing
 

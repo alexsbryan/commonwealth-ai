@@ -5,6 +5,22 @@ _A coordination daemon for community-owned distributed inference and knowledge._
 
 ---
 
+> **Historical record (kept for design rationale, not as truth-on-disk).**
+> This document was written early in the project and has drifted from the
+> code as the system evolved (the contribution ledger was redesigned, the
+> crate layout grew from 6 to 9, the FairnessPolicy enum was abandoned in
+> favour of per-peer affinity preferences, etc.). Read it for the *why*
+> behind the original design, the design-philosophy section that still
+> governs the project, and the threat-model framing — those parts hold.
+>
+> For the **current** shape of the running system — file paths, route
+> tables, type signatures, CLI subcommands — read
+> [`../sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) §5
+> instead. That doc is kept current with the code on the commit it
+> appears in (per ARCH_PRINCIPLES §1.1).
+
+---
+
 ## Design Philosophy
 
 Three principles govern this project. They are constitutional constraints. A contribution that violates them is rejected regardless of its technical merit.
