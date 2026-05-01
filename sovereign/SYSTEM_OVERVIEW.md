@@ -1346,3 +1346,42 @@ Default ports:
 - **Charter** — ATOS specification document (`CHARTER.md` for the project, `spec.md` for a feature). Committing it is approval.
 - **Drift** — ATOS term for "spec file changed since approval." Warns next turn; does not block. Either revert or `atos spec accept`.
 - **Sovereign-coder pipeline** — Commonwealth middleware chain (`approval_gate → session_briefing → context_injector → tool_injector → artifact_surface`) that adapts a generic coder model into an ATOS-aware one.
+
+---
+
+## 10. Architecture Roadmap
+
+Work that is intentionally deferred. Listed here so the next engineer
+inherits a todo list rather than a surprise (per ARCH_PRINCIPLES §14.3).
+A big file or a documented gap without an entry here is a bug; a big
+file or gap with an entry is sequenced work.
+
+### 10.1 Sovereign deferrals
+
+| Item | Location | Why deferred |
+|------|----------|--------------|
+| `atos_cmd.rs` split | `sovereign-cli/src/atos_cmd.rs` (2673 lines) | One concern per submodule already; splitting needs a façade-preserving sequence to avoid breaking the CLI surface. |
+| `local.rs` split | `sovereign-atos/src/local.rs` (1183 lines) | The orchestrator and helpers cohere as a single unit today. Split when the local-vs-remote orchestrator divergence forces the seam. |
+
+### 10.2 Commonwealth deferrals
+
+| Item | Location | Why deferred |
+|------|----------|--------------|
+| Multi-embed-model dispatch | `commonwealth-api/src/routes_inference.rs:418` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
+| `embed_batch` | `commonwealth-api/src/routes_inference.rs:441` | Inputs fan out one at a time; gated on a backend that batches more efficiently than serial. |
+| Knowledge replica fanout | `commonwealth-api/src/routes_knowledge.rs:212` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
+| mesh_store gossip replication | `commonwealth-api/src/routes_internal.rs:453-460` | Gossip replicates the `Mesh` member list only. `all_entries_for_gossip` is defined but unused; sender half + `POST /internal/app/state` receiver missing. Workaround: explicit peer push at queue-handoff time. |
+| Mesh Health attach-mode HTTP | `commonwealth-api/src/state.rs:245-251` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; attach mode silently returns empty for `mesh_get_contributions` / `mesh_set_peer_preference` because the daemon doesn't expose these over HTTP yet. |
+| ATOS middleware no-op fall-through | `commonwealth-api/src/routes_inference.rs:782` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design, but operators should expect the silent fall-through. |
+| `commonwealth daemon stop\|status` | (removed) | The lifecycle surface is `sovereign daemon`. The placeholders that printed "(In production this would...)" were removed in favour of `clap` rejecting the unknown subcommand cleanly. |
+| `commonwealth` CLI is mostly placeholders | `commonwealth-daemon/src/main.rs` (≈18 sites grep `"In production"`) | `daemon start` and `balance` are real; `join`, `status`, `pause`, `resume`, `leave`, `models`, `corpus *`, `logs`, `mesh *`, `recipe *` print `(In production, this would …)` and exit 0. The HTTP API on `:9741` is the actual control plane today; the CLI is a sketch. Decide per-command whether to implement against the HTTP surface or remove; don't bulk-fix in one PR. |
+
+### 10.3 Doc-as-source-of-truth posture
+
+The two long-form commonwealth docs — `commonwealth/ARCHITECTURE.md`
+and `commonwealth/IMPLEMENTATION_PLAN.md` — are now flagged at the top
+as historical record. They preserve the original design rationale (and
+the constitutional Design Philosophy section in ARCHITECTURE.md still
+governs the project) but are not maintained against current code shape.
+This file (§5 in particular) is the source of truth for the
+running system.

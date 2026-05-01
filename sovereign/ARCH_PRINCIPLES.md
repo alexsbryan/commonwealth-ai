@@ -180,7 +180,7 @@ The pattern:
 ### 3.3 Files we haven't split *yet* are flagged, not hidden
 
 `sovereign-cli/src/atos_cmd.rs` is 2673 lines; `sovereign-atos/src/local.rs`
-is 1183 lines. Both are noted in `SYSTEM_OVERVIEW.md` §12 Architecture
+is 1183 lines. Both are noted in `SYSTEM_OVERVIEW.md` §10 Architecture
 Roadmap. Big files without a roadmap entry are *bugs*. Big files with one
 are work that's intentionally sequenced.
 
