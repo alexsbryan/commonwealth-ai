@@ -94,6 +94,20 @@ pub struct DesktopConfig {
     #[serde(default = "default_auto_collaborate")]
     pub auto_collaborate: bool,
 
+    /// Idle seconds before the lazy-loaded primary chat slot is
+    /// unloaded to reclaim VRAM. Mirrors
+    /// `sovereign_core::setup_config::DaemonSection::primary_idle_secs`
+    /// so a desktop user who tunes one expects the other to behave
+    /// the same way. Default 300 (5 min) — long enough that
+    /// mid-conversation pauses don't re-pay the 10–20s lazy-load
+    /// tax on the next turn, short enough that an abandoned session
+    /// frees memory within a coffee break. Combined with the
+    /// window-focus prewarm, raising this towards "never" gives
+    /// always-hot semantics at the cost of pinning ~28 GB for a
+    /// 35B Q6.
+    #[serde(default = "default_primary_idle_secs")]
+    pub primary_idle_secs: u64,
+
     /// Model family of the embed slot. Controls pooling strategy (mean /
     /// last-token / cls) and instruction prefixes. For most open-weights
     /// embedding models this should be:
@@ -138,6 +152,11 @@ fn default_knowledge_view_enabled() -> bool {
 
 fn default_auto_collaborate() -> bool {
     true
+}
+
+/// Default 5 min — see the field doc for the rationale.
+fn default_primary_idle_secs() -> u64 {
+    300
 }
 
 /// Resolve the node name the user sees in others' mesh rosters.
@@ -252,6 +271,7 @@ impl Default for DesktopConfig {
             think_budget: default_think_budget(),
             top_k: None,
             auto_collaborate: default_auto_collaborate(),
+            primary_idle_secs: default_primary_idle_secs(),
             embed_family: ModelFamily::Unknown,
             node_name: String::new(),
             knowledge_view_enabled: default_knowledge_view_enabled(),
@@ -624,7 +644,12 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             );
 
             if config.primary_model_path.is_some() {
-                loaded.start_idle_monitor(60);
+                // Configurable via `DesktopConfig.primary_idle_secs`
+                // (default 300s). Mirrors the daemon-side knob in
+                // `sovereign_core::setup_config::DaemonSection`.
+                // Raise toward `u64::MAX` to effectively pin the
+                // primary; lower if you want eager VRAM reclaim.
+                loaded.start_idle_monitor(config.primary_idle_secs);
             }
 
             let raw: Arc<dyn InferenceProvider> = loaded;

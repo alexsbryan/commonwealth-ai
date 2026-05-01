@@ -59,6 +59,20 @@ export async function cancelStream(conversationId: string): Promise<void> {
   return invoke("cancel_stream", { conversationId });
 }
 
+/** Eagerly load the primary chat slot. Fire-and-forget — the Tauri
+ *  command spawns the load and returns immediately, so callers get
+ *  a `Promise<void>` that resolves the moment the request is
+ *  queued, not when the model is ready.
+ *
+ *  Call sites: window-focus is wired in the Tauri builder (Rust
+ *  side, fires automatically); ChatView calls this on mount so the
+ *  slot warms while the user is reading the empty state / picking
+ *  a starter question. Idempotent — a warm slot returns
+ *  immediately on the backend. */
+export async function warmupPrimarySlot(): Promise<void> {
+  return invoke("warmup_primary_slot");
+}
+
 /** PR2c — cancel the in-flight sampler AND start a new stream
  *  against the chosen alternative intent. Returns a
  *  `StreamStartedResponse` just like `sendMessageStream`; the caller

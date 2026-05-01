@@ -67,14 +67,23 @@ pub struct QuerySession {
 }
 
 /// Cap on narration entries per turn. Prevents pollution even if
-/// new emission points are added carelessly.
-pub const MAX_NARRATION_EVENTS_PER_TURN: usize = 3;
+/// new emission points are added carelessly. Sized for the four
+/// `NarrationPhase` variants currently defined (RoutingCommitted,
+/// RetrievalComplete, PrimarySynthesisStart, GapCheckFired).
+pub const MAX_NARRATION_EVENTS_PER_TURN: usize = 4;
 
 /// Don't narrate below this elapsed threshold — short responses
 /// don't need chrome. The runtime checks elapsed at the phase
-/// boundary, so a 4.9s turn emits nothing and a 5.1s turn emits at
-/// most one backward-looking entry.
-pub const NARRATION_MIN_ELAPSED: Duration = Duration::from_millis(5_000);
+/// boundary, so a sub-threshold turn emits nothing and a
+/// just-over turn emits at most one backward-looking entry.
+///
+/// Was 5s when only one phase was wired (RetrievalComplete on
+/// shape divergence). Lowered so a long DeepQuery turn — which
+/// today can spend 90s loading a CPU primary slot before any
+/// token streams — gets the RetrievalComplete + PrimarySynthesisStart
+/// chips early enough to reassure the user, instead of staring
+/// at a static "Working on it…" placeholder for the whole wait.
+pub const NARRATION_MIN_ELAPSED: Duration = Duration::from_millis(1_500);
 
 /// How long a completed session lingers before GC sweeps it.
 /// Picked to cover "user reads the banner, decides to redirect"
@@ -83,16 +92,39 @@ pub const SESSION_RETENTION: Duration = Duration::from_secs(30);
 
 /// Thin wrapper over the shared DashMap. Exists so the Runtime can
 /// hand callers an `Arc<SessionStore>` without leaking the map type.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SessionStore {
     sessions: DashMap<SessionId, QuerySession>,
+    /// Minimum elapsed time before a `try_emit_narration` call will
+    /// be allowed through. Defaults to [`NARRATION_MIN_ELAPSED`].
+    /// Tests override via [`SessionStore::with_narration_min_elapsed`]
+    /// so they can drive the runtime end-to-end without sleeping
+    /// past the production threshold on every assertion.
+    narration_min_elapsed: Duration,
+}
+
+impl Default for SessionStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SessionStore {
     pub fn new() -> Self {
         Self {
             sessions: DashMap::new(),
+            narration_min_elapsed: NARRATION_MIN_ELAPSED,
         }
+    }
+
+    /// Override the narration suppression threshold. Test-only knob:
+    /// production code keeps the const default. Pass `Duration::ZERO`
+    /// to disable the gate so a runtime test can assert that the
+    /// expected `NarrationPhase` events fire on a near-instant
+    /// stubbed turn.
+    pub fn with_narration_min_elapsed(mut self, threshold: Duration) -> Self {
+        self.narration_min_elapsed = threshold;
+        self
     }
 
     /// Create and register a fresh session. Returns the id + the
@@ -141,7 +173,7 @@ impl SessionStore {
     ) -> Option<NarrationEvent> {
         let mut entry = self.sessions.get_mut(session_id)?;
         let elapsed = entry.started_at.elapsed();
-        if elapsed < NARRATION_MIN_ELAPSED {
+        if elapsed < self.narration_min_elapsed {
             return None;
         }
         if entry.narration.len() >= MAX_NARRATION_EVENTS_PER_TURN {
@@ -287,7 +319,7 @@ mod tests {
     }
 
     #[test]
-    fn try_emit_narration_suppresses_under_five_seconds() {
+    fn try_emit_narration_suppresses_under_min_elapsed() {
         let store = SessionStore::new();
         let (id, _) = store.begin(
             "conv-1".into(),
@@ -296,6 +328,9 @@ mod tests {
             sample_classification(0.9),
             sample_policy(),
         );
+        // Brand-new session: elapsed ≈ 0ms, well below
+        // `NARRATION_MIN_ELAPSED`. Emit must be dropped so a
+        // sub-threshold turn doesn't flash a chip and disappear.
         let out = store.try_emit_narration(
             &id,
             NarrationPhase::RoutingCommitted,

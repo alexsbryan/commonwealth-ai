@@ -167,12 +167,17 @@ pub struct DaemonSection {
     #[serde(default = "default_autostart")]
     pub autostart: bool,
     /// Idle seconds before the lazy primary slot is unloaded to reclaim
-    /// VRAM. The default of 60s suits an interactive desktop where the
-    /// model is touched once an hour; for batch workloads (the atlas
-    /// enrich pipeline runs many short LLM calls back-to-back) it
-    /// causes a 3–4 s reload tax between calls. Bump to 1800 (30 min)
-    /// for batch hosts. Set to a very high number to effectively pin
-    /// the slot for the daemon's lifetime.
+    /// VRAM. Default 300s (5 min) — long enough that mid-conversation
+    /// pauses (read the answer, think, formulate follow-up) don't
+    /// cause an eviction-then-reload that re-pays the 10–90s
+    /// model-load wait on the next turn, short enough that an
+    /// abandoned session frees memory within a single coffee break.
+    /// For batch workloads (the atlas enrich pipeline runs many
+    /// short LLM calls back-to-back) bump to 1800 (30 min). Set to
+    /// a very high number to effectively pin the slot for the
+    /// daemon's lifetime; combined with the desktop's window-focus
+    /// prewarm, that gives "always-hot" semantics at the cost of
+    /// pinning ~28 GB for a 35B Q6.
     #[serde(default = "default_primary_idle_secs")]
     pub primary_idle_secs: u64,
 
@@ -291,7 +296,7 @@ fn default_wf_max_concurrent() -> usize { 2 }
 fn default_client_port() -> u16 { 9741 }
 fn default_internal_port() -> u16 { 9742 }
 fn default_autostart() -> bool { true }
-fn default_primary_idle_secs() -> u64 { 60 }
+fn default_primary_idle_secs() -> u64 { 300 }
 /// Default `0` keeps existing operators on the historical "extras
 /// stay loaded forever" behaviour — they explicitly opt in by
 /// setting a positive value.

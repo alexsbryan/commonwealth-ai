@@ -1066,6 +1066,15 @@ impl InferenceProvider for MeshInferenceProvider {
         Ok((observed, self.local.model_id_for(request.preferred_speed)))
     }
 
+    async fn warmup_primary(&self) -> Result<()> {
+        // Warm only the local primary slot. We deliberately don't
+        // poke peers — that would tie up their lazy mutex during a
+        // user's typing window, and the desktop already covers
+        // the local case (which is what the user will hit by default
+        // when the OICP scorer isn't strictly outscored by a peer).
+        self.local.warmup_primary().await
+    }
+
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         self.local.embed(text).await
     }

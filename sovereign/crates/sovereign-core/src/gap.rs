@@ -19,15 +19,33 @@ use crate::title::strip_think_blocks;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, InformationRequest, Speed};
 
-/// Hard caps on the inputs we feed the gap-assessment prompt. Keeps the
-/// Fast-slot call cheap regardless of how long the answer or evidence are.
-const MAX_ANSWER_CHARS: usize = 3000;
-const MAX_EVIDENCE_CHARS: usize = 3000;
-const MAX_QUESTION_CHARS: usize = 1000;
+/// Hard caps on the inputs we feed the gap-assessment prompt. The
+/// gap-checker doesn't need the full answer or evidence — it just
+/// needs enough to spot a missing-evidence shape. Halved from the
+/// original 3000+3000 because the prompt-fill on a Fast-slot 9B
+/// running grammar-constrained decoding turned the post-answer
+/// audit into a 55s wait that the user noticed.
+const MAX_ANSWER_CHARS: usize = 1500;
+const MAX_EVIDENCE_CHARS: usize = 1500;
+const MAX_QUESTION_CHARS: usize = 600;
 
-/// Token budget for the gap response. JSON with five short string fields
-/// + a string array fits comfortably in 300 tokens.
-const GAP_MAX_TOKENS: usize = 320;
+/// Token budget for the gap response. With the schema relaxed to
+/// require only `has_gap` + `gap`, a useful response fits in ~120
+/// tokens — current_understanding / relevance / satisfying_source /
+/// search_hints are all optional now (UI gracefully omits empties).
+/// Was 320 when the schema forced all six fields; that drove
+/// generation past 30s on grammar-constrained decoding.
+const GAP_MAX_TOKENS: usize = 192;
+
+/// Skip the gap check entirely when the answer is already long
+/// AND the corpus delivered substantial evidence. Heuristic guard
+/// — the gap check is most valuable when retrieval was thin or
+/// the answer is short enough to leave room for elaboration. On a
+/// 4000+ char answer grounded in 5000+ chars of evidence, the
+/// expected information-gain is low and the 15-20s wait isn't
+/// earning its keep.
+const ANSWER_SATURATION_CHARS: usize = 4_000;
+const EVIDENCE_SATURATION_CHARS: usize = 5_000;
 
 /// Identify whether a meaningful external information gap remains after
 /// the agent's first-pass answer.
@@ -44,35 +62,50 @@ pub async fn identify_gap(
     answer_so_far: &str,
     retrieved_evidence: &str,
 ) -> Result<Option<InformationRequest>> {
+    // Cheap pre-check: if the answer is already saturated by the
+    // corpus, don't pay 15-20s on a Fast-slot grammar-constrained
+    // call to almost certainly return "no gap." The saturation
+    // thresholds are deliberately conservative so we only skip
+    // when there's high confidence the call would be a no-op.
+    if answer_so_far.len() >= ANSWER_SATURATION_CHARS
+        && retrieved_evidence.len() >= EVIDENCE_SATURATION_CHARS
+    {
+        tracing::info!(
+            answer_chars = answer_so_far.len(),
+            evidence_chars = retrieved_evidence.len(),
+            "gap_check: skipped — answer is saturated by corpus evidence"
+        );
+        return Ok(None);
+    }
+
     let q = truncate_to_char_boundary(question, MAX_QUESTION_CHARS);
     let a = truncate_to_char_boundary(answer_so_far, MAX_ANSWER_CHARS);
     let e = truncate_to_char_boundary(retrieved_evidence, MAX_EVIDENCE_CHARS);
 
+    // Terse prompt: the model audits the answer for a missing
+    // piece of external evidence, returns a short JSON object.
+    // Optional fields are *allowed* but not requested — the model
+    // gravitates toward terse output when the prompt doesn't ask
+    // for elaboration, which cuts generation tokens (and grammar-
+    // constrained decoding wall time) substantially.
     let prompt = format!(
-        "You are auditing a research answer for the single most valuable \
-         missing piece of external evidence.\n\n\
-         The user asked:\n{q}\n\n\
-         The agent's current answer (built from the local corpus):\n{a}\n\n\
-         Evidence retrieved from the local corpus:\n{e}\n\n\
-         Identify ONE specific external piece of information that, if obtained, \
-         would materially sharpen this answer. Examples of \"sharpen\": \
-         resolves a contested empirical claim, supplies a recent statistic, \
-         names a primary source the agent should consult.\n\n\
-         If the corpus evidence is already strong enough that no single \
-         external item would meaningfully improve the answer, respond with \
-         {{\"has_gap\": false}}.\n\n\
-         Otherwise respond with this exact JSON shape:\n\
-         {{\n\
-           \"has_gap\": true,\n\
-           \"current_understanding\": \"one short paragraph of what the agent now believes\",\n\
-           \"gap\": \"a precise question or claim to verify, specific enough to act on\",\n\
-           \"relevance\": \"how resolving this would change or sharpen the answer\",\n\
-           \"satisfying_source\": \"what kind of source would satisfy the request (a paper, a stat, a primary doc)\",\n\
-           \"search_hints\": [\"specific journal\", \"specific term\", \"specific database\"]\n\
-         }}\n\n\
-         Respond with the JSON object only — no preface, no thinking out loud."
+        "Audit this answer for the single most valuable missing external evidence.\n\n\
+         Question: {q}\n\n\
+         Answer:\n{a}\n\n\
+         Local corpus evidence:\n{e}\n\n\
+         If the evidence is already strong enough, respond exactly: {{\"has_gap\": false}}\n\n\
+         Otherwise respond with: {{\"has_gap\": true, \"gap\": \"<a precise question to verify, specific enough to act on>\"}}\n\
+         You MAY add \"relevance\", \"satisfying_source\", or \"search_hints\" if useful — keep each terse.\n\n\
+         Output the JSON object only — no preface."
     );
 
+    // Schema requires only has_gap; the rest are optional. The
+    // UI's `{#if non-empty}` guards on `current_understanding`,
+    // `satisfying_source`, and `search_hints` mean omitting them
+    // produces a clean card with just the gap question + (if
+    // present) relevance — which is the load-bearing UX. Optional
+    // structure also gives llguidance fewer required-token paths
+    // to enforce, which speeds generation.
     let schema = serde_json::json!({
         "type": "object",
         "properties": {

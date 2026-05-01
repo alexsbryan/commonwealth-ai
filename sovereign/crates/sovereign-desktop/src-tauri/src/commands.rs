@@ -245,6 +245,45 @@ pub async fn detect_bootstrap() -> Result<crate::bootstrap::BootstrapSnapshot, S
     Ok(crate::bootstrap::BootstrapSnapshot::from(&mode))
 }
 
+/// Eagerly load the primary chat slot so the next chat-completions
+/// call doesn't pay the lazy-load tax.
+///
+/// Idempotent and fire-and-forget from the UI's perspective —
+/// callers don't await on the load. The frontend dispatches this
+/// on window-focus and ChatView mount so the slot is hot by the
+/// time the user finishes typing.
+///
+/// Returns immediately as `Ok(())` when no inference provider has
+/// been configured yet (pre-setup wizard, model files missing) so
+/// the focus handler can stay a fire-and-forget without surfacing
+/// errors that aren't user-actionable.
+#[tauri::command]
+pub async fn warmup_primary_slot(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let provider = {
+        let guard = state.inference.read().await;
+        guard.as_ref().map(Arc::clone)
+    };
+    let Some(provider) = provider else {
+        // Setup hasn't run / model files unconfigured. Fire-and-
+        // forget contract — this isn't an error from the UI's
+        // perspective, just nothing to warm.
+        return Ok(());
+    };
+    // Spawn so the Tauri command returns immediately. The load can
+    // take 10–90s; we don't want the focus handler to block on it.
+    tokio::spawn(async move {
+        let started = std::time::Instant::now();
+        match provider.warmup_primary().await {
+            Ok(()) => tracing::info!(
+                latency_ms = started.elapsed().as_millis() as u64,
+                "warmup_primary_slot: complete"
+            ),
+            Err(e) => tracing::warn!(error = %e, "warmup_primary_slot: failed"),
+        }
+    });
+    Ok(())
+}
+
 // ─── Commands ────────────────────────────────────────────────
 
 #[derive(Serialize, Clone)]

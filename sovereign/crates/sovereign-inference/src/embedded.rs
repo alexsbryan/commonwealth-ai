@@ -2801,6 +2801,67 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // produce if we just wrote `self.extras_inventory()` here.
         Self::extras_inventory(self)
     }
+
+    async fn warmup_primary(&self) -> Result<()> {
+        // No primary configured (single-model BYOM setup) — nothing
+        // to warm; return success so callers don't have to special-
+        // case the topology.
+        let Some(target_path) = self.primary_path.clone() else {
+            return Ok(());
+        };
+
+        // Acquire the same lazy-slot inflight permit `complete()` /
+        // `complete_stream()` use, so a warmup can't race a hot-swap
+        // out from under an in-flight request.
+        let _permit = self
+            .lazy_inflight
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
+        let primary_lock = Arc::clone(&self.primary);
+        let backend = Arc::clone(&self.primary_backend);
+        let ctx_size = self.primary_ctx_size;
+        let gpu_layers = self.gpu_layers;
+        let loaded_path = Arc::clone(&self.primary_loaded_path);
+
+        // Load on a blocking thread — `ModelSlot::load` is
+        // synchronous llama.cpp work and can take 10–90s on a 35B.
+        // Mirrors the dispatch path's blocking section.
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let mut primary = primary_lock.blocking_lock();
+            let mut loaded = loaded_path.blocking_lock();
+            // Already warm with the right model? Idempotent fast
+            // path — no log spam, no work.
+            if loaded.as_deref() == Some(target_path.as_path()) && primary.is_some() {
+                return Ok(());
+            }
+            let prior = loaded.clone();
+            tracing::info!(
+                slot = "primary",
+                from = ?prior.as_ref().map(|p| p.display().to_string()),
+                to = %target_path.display(),
+                "warmup_primary: loading lazy slot ahead of first request"
+            );
+            // If a different model is currently resident (e.g. a
+            // Code-slot hot-swap left it loaded), drop it before
+            // loading the primary — same eviction step the dispatch
+            // path runs on hot-swap.
+            *primary = None;
+            let started = Instant::now();
+            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers)?;
+            *primary = Some(s);
+            *loaded = Some(target_path.clone());
+            tracing::info!(
+                slot = "primary",
+                latency_ms = started.elapsed().as_millis() as u64,
+                "warmup_primary: lazy slot ready"
+            );
+            Ok(())
+        })
+        .await
+        .map_err(|e| Error::Inference(format!("warmup join failed: {e}")))?
+    }
 }
 
 // ─── Shared helpers ────────────────────────────────────────────

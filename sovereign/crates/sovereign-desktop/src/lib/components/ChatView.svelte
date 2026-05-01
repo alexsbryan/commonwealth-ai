@@ -16,6 +16,7 @@
     getDocumentAsset,
     enrichListCorpora,
     enrichGetStarterQuestions,
+    warmupPrimarySlot,
   } from "../api";
   import type { IngestDocumentResult } from "../api";
   import type {
@@ -365,6 +366,18 @@
     // listeners — it's cheap (reads atoms.json from disk) and the
     // empty state reads `starters` directly.
     void refreshStarters();
+
+    // Eagerly warm the primary chat slot so the user's first
+    // turn doesn't pay the 10–90s lazy-load tax. Fire-and-forget
+    // — the backend spawns the load and the user is typing while
+    // it runs. Idempotent on the backend if the slot is already
+    // warm. Errors are swallowed by the backend (logged, not
+    // raised) so we don't surface a false-alarm on pre-setup
+    // mounts where there's no inference provider yet. The
+    // window-focus warmup at the Tauri level handles the
+    // "user came back to the app after a long pause" case;
+    // mount handles "first open of the chat surface."
+    void warmupPrimarySlot();
 
     // Stream handlers now forward into the machine. The wordBuffer
     // stays component-local (pure output smoothing) — only flushed

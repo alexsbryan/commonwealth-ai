@@ -495,6 +495,13 @@ impl LocalInferenceService for SovereignInferenceAdapter {
     async fn extras_inventory(&self) -> Vec<(String, String)> {
         self.provider.extras_inventory()
     }
+
+    async fn warmup_primary(&self) -> Result<(), String> {
+        self.provider
+            .warmup_primary()
+            .await
+            .map_err(|e| format!("{e}"))
+    }
 }
 
 /// Resolve a single human-readable model name from a provider,

@@ -143,6 +143,27 @@ pub trait InferenceProvider: Send + Sync {
         None
     }
 
+    /// Trigger any deferred slot loads so the next `complete()` /
+    /// `complete_stream()` call doesn't pay the lazy-load tax.
+    /// Specifically, eagerly load the primary chat slot on
+    /// providers that lazy-load it (default behaviour for
+    /// `EmbeddedLlamaCpp`). Idempotent — calling on an
+    /// already-warm provider returns immediately.
+    ///
+    /// The default impl is a no-op so providers that don't manage
+    /// local slots (remote API, mesh peer, deterministic test stub)
+    /// satisfy the trait without behaviour changes.
+    ///
+    /// Wired into the desktop's foreground/focus events so the
+    /// primary slot is hot by the time the user hits send. Without
+    /// this, every conversation that pauses past
+    /// `primary_idle_secs` (default 60s) re-pays the model-load
+    /// wait — which on a 35B Q6 is ~10–20s on Metal and an order of
+    /// magnitude worse on CPU.
+    async fn warmup_primary(&self) -> Result<()> {
+        Ok(())
+    }
+
     fn capabilities(&self) -> ProviderCapabilities;
 
     /// Add (or replace) an operator-declared additional chat slot at

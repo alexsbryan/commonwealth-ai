@@ -66,6 +66,45 @@ fn main() -> ExitCode {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
+        // Eagerly warm the primary chat slot whenever the user
+        // foregrounds the app. The 35B Q6 we ship by default takes
+        // 10–20s to load on Metal, much longer on CPU; without
+        // prewarm, every "user came back to the app and asked a
+        // question" round-trip pays that load tax in the
+        // foreground. Firing on `Focused(true)` covers most of
+        // the typing window so the slot is hot by send.
+        // Idempotent: a warm slot returns immediately. Spawned
+        // inside `warmup_primary_slot` itself so this handler
+        // returns without blocking the UI thread.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(true) = event {
+                let app = window.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Manager;
+                    if let Some(state) =
+                        app.try_state::<std::sync::Arc<state::AppState>>()
+                    {
+                        let provider = {
+                            let guard = state.inference.read().await;
+                            guard.as_ref().map(std::sync::Arc::clone)
+                        };
+                        if let Some(provider) = provider {
+                            let started = std::time::Instant::now();
+                            match provider.warmup_primary().await {
+                                Ok(()) => tracing::info!(
+                                    latency_ms = started.elapsed().as_millis() as u64,
+                                    "window-focus: primary slot warm"
+                                ),
+                                Err(e) => tracing::warn!(
+                                    error = %e,
+                                    "window-focus: warmup failed"
+                                ),
+                            }
+                        }
+                    }
+                });
+            }
+        })
         .setup(|app| {
             // Listen for sovereign:// deep links and forward them to the frontend.
             {
@@ -225,6 +264,7 @@ fn main() -> ExitCode {
             commands::complete_setup,
             commands::detect_hardware,
             commands::detect_bootstrap,
+            commands::warmup_primary_slot,
             commands::search_web,
             commands::scan_for_models,
             commands::download_model,

@@ -49,6 +49,15 @@ const MAX_CHUNK_CHARS: usize = 600;
 /// arbitrary length.
 pub const MAX_TURN_MESSAGE_CHARS: usize = 16_000;
 
+/// Linger time after the Ask-move deliberation chip is emitted,
+/// before the clarification card itself lands. The Ask path runs
+/// in milliseconds — without this the chip and the card race to
+/// the UI in the same frame and the chip never registers. 400ms
+/// is the empirical sweet spot: long enough to read "I'm not sure
+/// — let me ask," short enough not to feel like the system is
+/// stalling.
+const ASK_MOVE_DELIBERATION_LINGER_MS: u64 = 400;
+
 /// Error text shown when a message exceeds `MAX_TURN_MESSAGE_CHARS`.
 /// Surfaced unchanged to the user via the Tauri command layer, so it
 /// needs to be action-guidance, not a stack trace.
@@ -1617,12 +1626,45 @@ pub(crate) async fn run_collaboration(
     question: &str,
     response: &str,
     evidence: &str,
+    // Optional narration channel: when both `routing_events` and
+    // `session_id` are `Some`, surface "checking for gaps" /
+    // "found a gap" chips alongside the gap-check work so the user
+    // sees the deliberation that produces the INFORMATION REQUEST
+    // instead of having the card pop in 30–60s after the answer
+    // with no warning. Both `None` = silent (back-compat path for
+    // synchronous callers without a live streaming session).
+    routing_events: Option<Arc<dyn RoutingEventSink>>,
+    session_id: Option<String>,
 ) -> String {
     if !inference_config.auto_collaborate {
         return response.to_string();
     }
 
     let t_start = std::time::Instant::now();
+
+    // Glassbox chip: "I drafted, now I'm auditing the answer."
+    // Emitted before `identify_gap` because that call can run
+    // for tens of seconds on grammar-constrained Fast-slot
+    // inference and the user is otherwise staring at a finished
+    // answer wondering if anything else is happening. Bypasses
+    // `try_emit_narration` — the session may already be past the
+    // 30s retention window by the time gap-check fires, and the
+    // chip's value is highest precisely on long turns.
+    if let (Some(events), Some(sid)) = (routing_events.as_ref(), session_id.as_ref()) {
+        events
+            .emit_turn_narration(TurnNarration {
+                session_id: sid.clone(),
+                conversation_id: conversation_id.to_string(),
+                event: NarrationEvent {
+                    phase: NarrationPhase::GapCheckFired,
+                    text:
+                        "Drafted. Auditing the answer for anything worth asking you about."
+                            .to_string(),
+                    elapsed_ms: 0,
+                },
+            })
+            .await;
+    }
 
     // 1. Ask the gap-identifier whether anything external would sharpen
     //    the answer. Conservative on any error — we never want this
@@ -1655,6 +1697,26 @@ pub(crate) async fn run_collaboration(
         gap_chars = req.gap.len(),
         "maybe_collaborate: surfacing information request"
     );
+
+    // Glassbox chip: "I found something worth asking — here it
+    // comes." Lands ~immediately before the INFORMATION REQUEST
+    // card, mirroring the Ask-move chip-then-card pattern. The
+    // gap text itself isn't surfaced in the chip — it'd duplicate
+    // the card content the user is about to read.
+    if let (Some(events), Some(sid)) = (routing_events.as_ref(), session_id.as_ref()) {
+        events
+            .emit_turn_narration(TurnNarration {
+                session_id: sid.clone(),
+                conversation_id: conversation_id.to_string(),
+                event: NarrationEvent {
+                    phase: NarrationPhase::GapCheckFired,
+                    text: "Found something worth asking about — preparing the question."
+                        .to_string(),
+                    elapsed_ms: 0,
+                },
+            })
+            .await;
+    }
 
     // 3. Surface the card and wait for the user.
     let user_content = approval.request_information(&req).await;
@@ -1733,6 +1795,12 @@ pub(crate) async fn run_post_stream_refinement(
     original_content: &str,
     evidence: &str,
     original_metadata: Option<serde_json::Value>,
+    // Optional narration channel — see `run_collaboration` for
+    // the contract. Spawns from the streaming path pass `Some`
+    // so the user sees gap-check progress chips; non-streaming
+    // / test callers pass `None`.
+    routing_events: Option<Arc<dyn RoutingEventSink>>,
+    session_id: Option<String>,
 ) -> Option<String> {
     let refined = run_collaboration(
         inference,
@@ -1742,6 +1810,8 @@ pub(crate) async fn run_post_stream_refinement(
         question,
         original_content,
         evidence,
+        routing_events,
+        session_id,
     )
     .await;
     if refined == original_content {
@@ -2002,6 +2072,47 @@ fn parse_intent_hint(hint: &str) -> Intent {
 /// Build a one-sentence clarifying question for the `Ask` move.
 /// Kept short and neutral — the alternatives themselves do most of
 /// the disambiguation work; the question just frames the choice.
+/// Emit a "system is deliberating, about to ask" narration chip
+/// before the clarification card lands. Bypasses
+/// `try_emit_narration` because the Ask path runs in milliseconds
+/// and would always be suppressed by the `NARRATION_MIN_ELAPSED`
+/// gate — the whole point of the chip here is to fire fast and
+/// give the user a glassbox cue that the system chose to ask
+/// rather than guess. Pure helper, no `&self`, so both the
+/// streaming and non-streaming Ask handlers can share it.
+async fn emit_ask_deliberation_chip(
+    routing_events: &dyn RoutingEventSink,
+    session_id: &str,
+    conversation_id: &str,
+    classification: &RouterClassification,
+) {
+    // Three buckets, keyed off how many alternatives the
+    // classifier surfaced. With ≥2 we know multiple intents
+    // scored close; with 1 the model was on the fence; with 0 we
+    // landed in Ask via low confidence on the primary alone (the
+    // clarification card pads with a free-text option).
+    let chip_text = match classification.alternatives.len() {
+        0 => "I'm not quite sure how to read this — let me ask before I guess.".to_string(),
+        1 => "On the fence about how to read this — about to ask.".to_string(),
+        n => format!(
+            "I see {} ways to read this — picking the most useful follow-up.",
+            n + 1
+        ),
+    };
+    let event = NarrationEvent {
+        phase: NarrationPhase::RoutingCommitted,
+        text: chip_text,
+        elapsed_ms: 0,
+    };
+    routing_events
+        .emit_turn_narration(TurnNarration {
+            session_id: session_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            event,
+        })
+        .await;
+}
+
 fn build_clarification_question(_message: &str, primary: &Intent) -> String {
     let read_as = match primary {
         Intent::SimpleQuery => "a quick factual answer",
@@ -2110,6 +2221,20 @@ impl Runtime {
             confidence_thresholds: ConfidenceThresholds::default(),
             routing_events: Arc::new(NoOpRoutingEventSink),
         }
+    }
+
+    /// Test-only knob: replace the default `SessionStore` so a
+    /// suite can drive the runtime with a relaxed narration gate
+    /// (e.g. `Duration::ZERO` so an instant stubbed turn still
+    /// emits its `NarrationPhase` events). Production callers
+    /// inherit the `NARRATION_MIN_ELAPSED` const default from
+    /// [`SessionStore::new`].
+    pub fn with_session_store(
+        mut self,
+        sessions: SharedSessionStore,
+    ) -> Self {
+        self.sessions = sessions;
+        self
     }
 
     /// Install a `RoutingEventSink` to receive interpretation,
@@ -3701,6 +3826,12 @@ impl Runtime {
         response: &str,
         evidence: &str,
     ) -> String {
+        // Synchronous (non-streaming) path: the routing-events
+        // sink is wired but no live streaming session_id exists
+        // here, so narration chips for the gap-check are skipped.
+        // The user is awaiting a `Response` return rather than
+        // staring at a streaming chat surface, so the chip is
+        // less load-bearing on this path.
         run_collaboration(
             self.inference.as_ref(),
             self.approval.as_ref(),
@@ -3709,6 +3840,8 @@ impl Runtime {
             question,
             response,
             evidence,
+            None,
+            None,
         )
         .await
     }
@@ -3742,6 +3875,12 @@ impl Runtime {
             original_content,
             evidence,
             original_metadata,
+            // Test/CLI entrypoint: no live session_id available
+            // here. The streaming-spawn path passes its own
+            // routing_events + session_id so the user actually
+            // sees the gap-check chips.
+            None,
+            None,
         )
         .await
     }
@@ -4250,16 +4389,32 @@ impl Runtime {
                     .await;
             }
 
-            // PR2 narration: report retrieval shape on long turns.
-            // Suppressed internally when total elapsed < 5s or cap
+            // Narration: report retrieval shape on long turns.
+            // Suppressed internally when total elapsed is below the
+            // `NARRATION_MIN_ELAPSED` window or the per-turn cap is
             // hit. The session store guards both; this call is safe
             // on short turns — it just returns `None`.
-            if plan.shape.top_source_repeat_count >= 2 {
-                let txt = format!(
-                    "Found {} chunks — {} from one source, so I'll keep the answer focused.",
-                    plan.chunks.len(),
-                    plan.shape.top_source_repeat_count,
-                );
+            //
+            // Emit on every non-empty retrieval (not just on
+            // `top_source_repeat_count >= 2`). The user is staring at
+            // the typing-dots spinner and the most useful thing we
+            // can tell them after retrieval finishes is "we read N
+            // chunks across these sources." When the top source
+            // dominates we say so; otherwise we report the spread.
+            if plan.chunks.len() > 0 {
+                let txt = if plan.shape.top_source_repeat_count >= 2 {
+                    format!(
+                        "Read {} chunks — {} from one source, so I'll keep the answer focused.",
+                        plan.chunks.len(),
+                        plan.shape.top_source_repeat_count,
+                    )
+                } else {
+                    format!(
+                        "Read {} chunks across {} sources — drafting the response.",
+                        plan.chunks.len(),
+                        plan.shape.distinct_sources.max(1),
+                    )
+                };
                 if let Some(event) = self.sessions.try_emit_narration(
                     &_session_id,
                     NarrationPhase::RetrievalComplete,
@@ -4283,6 +4438,15 @@ impl Runtime {
             let store = Arc::clone(&self.store);
             let approval = Arc::clone(&self.approval);
             let inference_config = self.inference_config.clone();
+            // Cloned into the outer spawn so the post-stream gap-
+            // check can emit narration chips that reach the desktop
+            // UI alongside the INFORMATION REQUEST card. Without
+            // these the chip-then-card glassbox UX silently drops
+            // for the streaming path. See `run_collaboration` for
+            // how they're consumed.
+            let collab_routing_events: Option<Arc<dyn RoutingEventSink>> =
+                Some(Arc::clone(&self.routing_events));
+            let collab_session_id: Option<String> = Some(_session_id.clone());
             let conversation_id_owned = conversation_id.to_string();
             let message_id_owned = message_id.clone();
             let question = message.to_string();
@@ -4330,6 +4494,36 @@ impl Runtime {
                 serde_json::Value::Array(Vec::new())
             });
             let route_for_log = route;
+
+            // Narration: synthesis-start chip. Bridges the silent
+            // gap between retrieval-complete and the first streamed
+            // token — which on a cold primary slot can be 90+
+            // seconds (model load) plus another minute or two of
+            // CPU decode for a 35B Q6. Without this the user sees
+            // the same "Working on it…" placeholder for the entire
+            // wait. Emitted on the main task (we still hold `&self`)
+            // immediately before the spawn that calls
+            // `complete_stream_with_id`. The 1.5s narration gate
+            // suppresses this on short DeepQuery turns where
+            // synthesis is fast enough that no chip is needed.
+            {
+                let txt = "Generating a deep answer with the primary model — \
+                           first use after a restart can take a minute."
+                    .to_string();
+                if let Some(event) = self.sessions.try_emit_narration(
+                    &_session_id,
+                    NarrationPhase::PrimarySynthesisStart,
+                    txt,
+                ) {
+                    self.routing_events
+                        .emit_turn_narration(TurnNarration {
+                            session_id: _session_id.clone(),
+                            conversation_id: conversation_id.to_string(),
+                            event,
+                        })
+                        .await;
+                }
+            }
 
             tokio::spawn(async move {
                 let started = std::time::Instant::now();
@@ -4428,6 +4622,13 @@ impl Runtime {
                     let collab_original = full_text.clone();
                     let collab_evidence = doc_context.clone();
                     let collab_metadata = metadata_json;
+                    // Clone the routing-events sink + session id
+                    // into the spawn so the gap-check chips ("now
+                    // auditing the answer", "found something to
+                    // ask about") reach the desktop UI alongside
+                    // the in-flight INFORMATION REQUEST card.
+                    let collab_events = collab_routing_events.clone();
+                    let collab_sid = collab_session_id.clone();
                     tokio::spawn(async move {
                         run_post_stream_refinement(
                             collab_inference.as_ref(),
@@ -4440,6 +4641,8 @@ impl Runtime {
                             &collab_original,
                             &collab_evidence,
                             Some(collab_metadata),
+                            collab_events,
+                            collab_sid,
                         )
                         .await;
                     });
@@ -4483,6 +4686,32 @@ impl Runtime {
             .prepare_knowledge_context(message, &context, &intent)
             .await;
 
+        // Narration — DeepQuery / SimpleQuery streaming path. Mirrors
+        // the KnowledgeQuery/ComparisonQuery branch above, but keyed
+        // off `KnowledgeContext` (no `plan.shape` available here).
+        // Suppressed by the session store when total elapsed < 1.5s
+        // or the per-turn cap is hit, so this is safe on fast paths.
+        if !matches!(intent, Intent::SimpleQuery) && !kc.chunks.is_empty() {
+            let txt = format!(
+                "Read {} chunks across {} sources — drafting the response.",
+                kc.chunks.len(),
+                kc.sources.len().max(1),
+            );
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::RetrievalComplete,
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
         } else {
@@ -4524,11 +4753,41 @@ impl Runtime {
         let intent_label = format!("{intent:?}");
         let message_id = uuid::Uuid::new_v4().to_string();
 
+        // Narration — synthesis-start chip on the DeepQuery /
+        // SimpleQuery streaming path. Bridges the silence between
+        // retrieval-complete and the first streamed token. With
+        // primary-slot prewarm in place this is typically a no-op
+        // wait, but it's still the right time to acknowledge the
+        // long phase to the user.
+        if matches!(request.preferred_speed, Speed::Slow) {
+            let txt =
+                "Generating a deep answer with the primary model.".to_string();
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::PrimarySynthesisStart,
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
         // 5. Spawn streaming task.
         let inference = Arc::clone(&self.inference);
         let store = Arc::clone(&self.store);
         let approval = Arc::clone(&self.approval);
         let inference_config = self.inference_config.clone();
+        // Cloned into the spawn so the post-stream gap-check chips
+        // can reach the desktop UI. See the matching block in the
+        // KnowledgeQuery streaming branch above for the rationale.
+        let routing_events_for_spawn: Option<Arc<dyn RoutingEventSink>> =
+            Some(Arc::clone(&self.routing_events));
+        let session_id_for_spawn: Option<String> = Some(_session_id.clone());
         let conversation_id_owned = conversation_id.to_string();
         let message_id_owned = message_id.clone();
 
@@ -4606,6 +4865,14 @@ impl Runtime {
             let collab_evidence = evidence.clone();
             let collab_original = full_text.clone();
             let collab_metadata = metadata_json;
+            // Routing-events sink + session id for gap-check
+            // narration chips. Same rationale as the KnowledgeQuery
+            // spawn above — without these the chip-then-card UX
+            // silently drops on the streaming path. The clones
+            // were already lifted above the outer spawn so this
+            // is a cheap inner re-clone.
+            let collab_events = routing_events_for_spawn.clone();
+            let collab_sid = session_id_for_spawn.clone();
             // Post-stream tasks (epistemic-humility audit + auto-title)
             // share the fast-slot inflight semaphore with user-facing
             // requests. Under sequential load — eval bench, atlas
@@ -4634,6 +4901,8 @@ impl Runtime {
                         &collab_original,
                         &collab_evidence,
                         Some(collab_metadata),
+                        collab_events,
+                        collab_sid,
                     )
                     .await;
                 });
@@ -4974,6 +5243,23 @@ impl Runtime {
         session_id: &str,
         classification: &RouterClassification,
     ) -> Result<Response> {
+        // Mirror the streaming-path glassbox surfacing — emit the
+        // deliberation chip and pause briefly before computing /
+        // emitting the clarification. Same rationale: the Ask path
+        // is too fast to surface its "let me ask first" moment
+        // unless we deliberately make it visible.
+        emit_ask_deliberation_chip(
+            self.routing_events.as_ref(),
+            session_id,
+            conversation_id,
+            classification,
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_millis(
+            ASK_MOVE_DELIBERATION_LINGER_MS,
+        ))
+        .await;
+
         let message_id = uuid::Uuid::new_v4().to_string();
         let question = build_clarification_question(
             original_message,
@@ -5056,6 +5342,33 @@ impl Runtime {
         classification: &RouterClassification,
     ) -> Result<StreamHandle> {
         let message_id = uuid::Uuid::new_v4().to_string();
+
+        // Glassbox surfacing: emit a "deliberating, about to ask"
+        // narration chip BEFORE the clarification card so the user
+        // sees the system's "let me check first" moment instead of
+        // the card popping in fully formed. The Ask path runs in
+        // milliseconds — well below `NARRATION_MIN_ELAPSED` — so we
+        // bypass `try_emit_narration` and build the event directly.
+        // The whole point of the chip here is to fire fast; gating
+        // would defeat it.
+        emit_ask_deliberation_chip(
+            self.routing_events.as_ref(),
+            session_id,
+            conversation_id,
+            classification,
+        )
+        .await;
+
+        // Brief pause so the user registers the chip before the
+        // clarification card lands underneath it. Below ~250ms
+        // feels jumpy; above ~700ms feels deliberate-to-the-point-
+        // of-theatre. 400ms is the empirical sweet spot — long
+        // enough to read "I'm not sure — let me ask," short enough
+        // not to feel slow.
+        tokio::time::sleep(std::time::Duration::from_millis(
+            ASK_MOVE_DELIBERATION_LINGER_MS,
+        ))
+        .await;
 
         // Build clarification payload from the classifier's
         // alternatives. If the heuristic surfaced fewer than two, pad
