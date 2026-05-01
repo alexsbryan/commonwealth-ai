@@ -17,6 +17,11 @@ encoding_rs = "0.8"
 tracing = { workspace = true }
 tokio-stream = "0.1"
 reqwest = { workspace = true, features = ["stream"] }
+# Parallel logit-mask in `json_constraint::mask`. Any model with a
+# large vocab (Gemma-3-E4B ≈ 262K, Qwen3 ≈ 152K, Llama-3 ≈ 128K)
+# pays a per-candidate validator cost on every generated token;
+# running it serially on one core was the dominant Phase-1 latency.
+rayon = "1.10"
 
 # llama.cpp's GPU backend is picked per-OS. If you're on a Vulkan-based
 # toolbox on Linux, swap "rocm" → "vulkan" below (one-line edit; no

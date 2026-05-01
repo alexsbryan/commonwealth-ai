@@ -219,7 +219,7 @@ async fn main() {
     let inference_fn =
         sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
     let corpus_engine = Arc::new(
-        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
+        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir.clone(), embed_fn)
             .with_batch_embed_fn(batch_embed_fn)
             .with_inference_fn(inference_fn.clone()),
     );
@@ -411,6 +411,18 @@ async fn main() {
             Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
         );
     }
+    // Atlas Layer 0: load any installed Wikipedia link graph at
+    // `<indexes_dir>/<corpus>/wikipedia_graph.db`. Build via
+    // `sovereign atlas wikipedia build-graph <corpus-id>`. Absent =
+    // pre-Layer-0 behaviour preserved exactly.
+    if let Some(graph) = load_wikipedia_graph_for_server(&corpus_engine, &indexes_dir).await {
+        tracing::info!(
+            articles = graph.article_count().await,
+            edges = graph.edge_count().await,
+            "wikipedia link graph: loaded"
+        );
+        runtime_builder = runtime_builder.with_wikipedia_graph(graph);
+    }
     let runtime = Arc::new(runtime_builder);
 
     // Auth state.
@@ -478,4 +490,35 @@ async fn main() {
         eprintln!("Server error: {e}");
         std::process::exit(1);
     }
+}
+
+/// Probe `<indexes_dir>/<corpus_id>/wikipedia_graph.db` for each
+/// installed corpus and return the first WikipediaGraph that opens
+/// cleanly. Mirrors `chat_cmd::bootstrap::load_wikipedia_graph` —
+/// duplicated here so the server doesn't take a dep on the CLI
+/// binary's internal modules.
+async fn load_wikipedia_graph_for_server(
+    engine: &corpus_engine::CorpusEngine,
+    indexes_dir: &std::path::Path,
+) -> Option<Arc<corpus_engine::WikipediaGraph>> {
+    let infos = engine.installed_indexes().await.ok()?;
+    for info in infos {
+        let db_path =
+            corpus_engine::WikipediaGraph::default_db_path(indexes_dir, &info.corpus_id);
+        if !db_path.exists() {
+            continue;
+        }
+        match corpus_engine::WikipediaGraph::open(&db_path, &info.corpus_id) {
+            Ok(g) => return Some(Arc::new(g)),
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %info.corpus_id,
+                    db = %db_path.display(),
+                    error = %e,
+                    "wikipedia_graph: open failed; skipping"
+                );
+            }
+        }
+    }
+    None
 }

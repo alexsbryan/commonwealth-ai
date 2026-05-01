@@ -1,5 +1,6 @@
 mod amend;
 mod amend_cmd;
+mod atlas_cmd;
 mod atos_cmd;
 mod atos_plugin;
 mod audit_cmd;
@@ -186,6 +187,7 @@ const HELP: Help = Help {
             ("reflect", "Review session reflections; retire fixed ones"),
             ("recipe",  "Run a corpus ingestion recipe"),
             ("bench",   "Throughput + correctness benchmarks for enrichment LLM tasks"),
+            ("atlas",   "Atlas-style structural enrichment (Wikipedia link graph today)"),
             ("eval",    "Run a question bank against a corpus; measure retrieval quality"),
             ("tools",   "Invoke code-intelligence tools from the CLI (list / describe / call)"),
             ("mcp",     "MCP server diagnostics (list tools, proxy)"),
@@ -496,7 +498,20 @@ async fn main() {
                 std::process::exit(code);
             }
             "enrich" => {
+                // Phase 1 / atlas runs spend minutes inside one
+                // `/v1/chat/completions` call. Without a subscriber the
+                // inference client's heartbeat + per-request timing
+                // logs silently disappear and a stuck call looks
+                // identical to a slow one.
+                util::tracing_init::init_tracing(
+                    "sovereign_cli=info,\
+                     corpus_engine=info",
+                );
                 let code = enrich_cmd::run_enrich(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "atlas" => {
+                let code = atlas_cmd::run_atlas(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "eval" => {

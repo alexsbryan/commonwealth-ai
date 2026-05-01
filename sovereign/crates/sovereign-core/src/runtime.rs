@@ -169,6 +169,20 @@ Anti-fabrication guardrails:\n\
   project name, person, API) is not something you can speak to with \
   concrete factual confidence, say so plainly.\n\
 \n\
+CONTESTED SOURCES — sources whose own metadata flags them as \
+carrying disputed or competing perspectives.\n\
+A source label suffixed `(contested)` means the source has been \
+flagged at the section level (e.g. POV-disputed, controversy \
+section, opposing-views block) by the corpus's own editorial \
+metadata. Treat it as evidence that interpretations differ here:\n\
+- Present the strongest argument for each documented view; do not \
+  paper over the disagreement with a single tidy synthesis.\n\
+- Acknowledge that the source itself flags multiple readings, in \
+  one short clause; do not bury the disagreement.\n\
+- Do not invent which view is correct or attribute one as canonical \
+  unless the source explicitly says so.\n\
+This signal is editor-curated, not LLM-classified — trust it.\n\
+\n\
 CATALOG-AWARE SOURCES — works the system has metadata for but has \
 NOT read in detail.\n\
 A retrieval block prefixed with `CATALOG:` lists works whose \
@@ -536,6 +550,94 @@ pub(crate) fn extract_comparison_entities(text: &str) -> Vec<String> {
     extract_question_entities(text)
 }
 
+/// For a comparison-shaped question with known entities, extract
+/// the *axis* — the noun phrase the entities are being compared on.
+/// Used by the heuristic decomposer to build per-entity sub-queries
+/// like `["Buddhism compassion", "Christianity compassion"]`.
+///
+/// Strategy: locate a comparison-axis cue (`differ in`, `differ on`,
+/// `regarding`, `concepts of`, `views on`, etc.) and lift the noun
+/// phrase that follows. Strip stopwords and entity-name tokens so
+/// the axis stays sharp. Returns `None` when no cue fires — the
+/// caller then declines to decompose.
+pub(crate) fn comparison_axis(text: &str, entities: &[String]) -> Option<String> {
+    const CUES: &[&str] = &[
+        " differ in their ",
+        " differ on ",
+        " differ in ",
+        " differ regarding ",
+        " regarding ",
+        " in their conceptions of ",
+        " in their concepts of ",
+        " in their views on ",
+        " in their treatment of ",
+        " on their ",
+        " about ",
+        " concerning ",
+        " in terms of ",
+        " with respect to ",
+    ];
+    let lower = text.to_lowercase();
+    let mut after_idx: Option<usize> = None;
+    for cue in CUES {
+        if let Some(p) = lower.find(cue) {
+            let candidate = p + cue.len();
+            if after_idx.map(|i| candidate < i).unwrap_or(true) {
+                after_idx = Some(candidate);
+            }
+        }
+    }
+    let start = after_idx?;
+    let tail = &text[start..];
+
+    // Tail ends at the first terminal punctuation.
+    let tail_end = tail
+        .find(|c: char| matches!(c, '?' | '.' | ',' | ';' | '!'))
+        .unwrap_or(tail.len());
+    let span = &tail[..tail_end];
+
+    // Strip lead-side filler words — "the X", "a Y", "their Z".
+    const LEAD_DROP: &[&str] = &[
+        "the", "a", "an", "their", "his", "her", "its",
+        "concept", "concepts", "conception", "conceptions",
+        "view", "views", "treatment", "treatments",
+        "notion", "notions", "idea", "ideas",
+        "of", "on", "about",
+    ];
+    let entity_lowers: Vec<String> = entities.iter().map(|e| e.to_lowercase()).collect();
+    let words: Vec<String> = span
+        .split_whitespace()
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'')
+                .to_string()
+        })
+        .filter(|w| !w.is_empty())
+        .collect();
+    let mut filtered: Vec<String> = Vec::new();
+    let mut leading = true;
+    for w in &words {
+        let wl = w.to_lowercase();
+        // Drop entity tokens — the axis is what's compared, not the
+        // entities themselves.
+        if entity_lowers.iter().any(|e| e == &wl) {
+            continue;
+        }
+        if leading && LEAD_DROP.iter().any(|d| *d == wl) {
+            continue;
+        }
+        leading = false;
+        filtered.push(w.clone());
+    }
+    // Cap to 4 words — anything longer is a verbose qualifier the
+    // retrieval scorer doesn't benefit from.
+    filtered.truncate(4);
+    let axis = filtered.join(" ").trim().to_string();
+    if axis.is_empty() {
+        return None;
+    }
+    Some(axis)
+}
+
 pub(crate) fn extract_question_entities(text: &str) -> Vec<String> {
     const SKIP_LEAD: &[&str] = &[
         "How", "What", "When", "Where", "Why", "Who", "Which",
@@ -883,6 +985,42 @@ const KQ_PER_CORPUS_LIMIT: usize = 20;
 /// groups to 4 chunks beyond this. 20 chunks × ~530 chars/chunk +
 /// expander = ~13k chars, comfortably under the 16k prompt budget.
 const KQ_MERGED_LIMIT: usize = 20;
+
+// ─── Wikipedia link-graph one-hop expansion (Atlas Layer 0) ──
+
+/// Number of top-scoring distinct article titles to seed graph
+/// expansion from. Three is enough to catch a handful of relevant
+/// neighborhoods without the title-anchored retrieval blowing up
+/// cost; tuned for KQ_PER_CORPUS_LIMIT = 20.
+const GRAPH_SEEDS_PER_QUERY: usize = 3;
+
+/// One-hop neighbor cap per seed title. Higher values pull in
+/// less-relevant neighbors and inflate latency.
+const GRAPH_NEIGHBORS_PER_HIT: usize = 5;
+
+/// Per-title chunk pull from each LanceDB corpus when fetching a
+/// neighbor's content. Small — enough to seed the article-deepening
+/// expansion that already happens downstream.
+const GRAPH_NEIGHBOR_LIMIT: usize = 5;
+
+/// Score-decay factor applied to graph-expanded neighbor chunks.
+/// At 0.6 a one-hop neighbor of the top hit (parent score 1.0)
+/// starts at 0.6 — well below the original top hit but above noise-
+/// floor cutoffs. Re-weighting and the cap can promote a neighbor
+/// that the query genuinely matches.
+const GRAPH_NEIGHBOR_DECAY: f32 = 0.6;
+
+// ─── Question decomposition (opt-in retrieval expansion) ─────
+
+/// Upper bound on sub-queries the decomposer may emit. Higher values
+/// inflate latency without lifting the bench in early prototyping.
+const DECOMP_MAX_QUERIES: usize = 4;
+
+/// Per-sub-query chunk pull from each corpus. Smaller than
+/// [`KQ_PER_CORPUS_LIMIT`] because the merge already has the full
+/// bag-of-words query's hits — sub-queries are supplementary depth,
+/// not a replacement.
+const DECOMP_QUERY_LIMIT: usize = 5;
 
 /// `top1_score / median(top_k_scores)` above this ratio marks the
 /// retrieval as *concentrated* — the top hit stands clearly above the
@@ -1377,7 +1515,7 @@ fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&str>) -> &'a 
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// grouped by provenance tier (corpus vs web) and staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
-    format_scored_chunks_with_kinds(chunks, max_chars, None)
+    format_scored_chunks_with_kinds(chunks, max_chars, None, None)
 }
 
 /// Like [`format_scored_chunks`], but if a `kinds` map is supplied,
@@ -1385,10 +1523,17 @@ fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize)
 /// "CATALOG-AWARE SOURCES" section that the synthesis prompt
 /// (`KNOWLEDGE_SYNTHESIS_SYSTEM`) knows how to handle (orient from
 /// metadata, do not invent, end with ingest offer).
+///
+/// When `contested` is supplied, chunks whose title appears in the
+/// set get a ` (contested)` suffix on their source label — a hint
+/// the synthesis prompt knows how to handle (present multiple views,
+/// don't synthesise false consensus). Populated by
+/// `prepare_knowledge_query_plan` from the Wikipedia link graph.
 fn format_scored_chunks_with_kinds(
     chunks: &[corpus_engine::ScoredChunk],
     max_chars: usize,
     kinds: Option<&std::collections::HashMap<String, corpus_engine::CorpusKind>>,
+    contested: Option<&std::collections::HashSet<String>>,
 ) -> String {
     let mut corpus_parts = Vec::new();
     let mut web_parts = Vec::new();
@@ -1403,13 +1548,22 @@ fn format_scored_chunks_with_kinds(
         let body = strip_leading_title_duplicate(&c.content, c.title.as_deref());
         let content = truncate_chunk_content(body);
         let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
+        let contested_suffix = contested
+            .and_then(|set| {
+                if c.title.as_deref().map(|t| set.contains(t)).unwrap_or(false) {
+                    Some(" (contested)")
+                } else {
+                    None
+                }
+            })
+            .unwrap_or("");
 
         let (label, bucket) = if is_catalog {
-            (format!("[Catalog: {title}]"), &mut catalog_parts)
+            (format!("[Catalog: {title}{contested_suffix}]"), &mut catalog_parts)
         } else if c.url.is_some() {
-            (format!("[Web: {title}]"), &mut web_parts)
+            (format!("[Web: {title}{contested_suffix}]"), &mut web_parts)
         } else {
-            (format!("[Source: {title}]"), &mut corpus_parts)
+            (format!("[Source: {title}{contested_suffix}]"), &mut corpus_parts)
         };
 
         let part = format!("{label}\n{content}");
@@ -1878,6 +2032,16 @@ pub struct Runtime {
     pub approval: Arc<dyn ApprovalChannel>,
     pub inference_config: InferenceConfig,
     pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    /// Optional structural link graph for a corpus that exposes one
+    /// (today: Wikipedia, via metadata `outgoing_links` /
+    /// `pov_count` / `section_path`). Populated by the bootstrap
+    /// when a `wikipedia_graph.db` is found alongside the corpus's
+    /// LanceDB table. When present, the retrieval path can opt into
+    /// one-hop neighbor expansion (env-gated) and surfaces
+    /// `(contested)` markers on chunks whose source has at least
+    /// one editor-flagged contested section. `None` preserves the
+    /// pre-graph behaviour.
+    pub wikipedia_graph: Option<Arc<corpus_engine::WikipediaGraph>>,
     /// Optional note store. Populated by the daemon bootstrap; absent
     /// in the chat-CLI path where commitment persistence isn't wired.
     /// Consumed by `handle_commissive_query` to write `kind="commitment"`
@@ -1938,6 +2102,7 @@ impl Runtime {
             approval,
             inference_config,
             corpus_engine: None,
+            wikipedia_graph: None,
             note_store: None,
             mesh_knowledge: None,
             landscape_digests: None,
@@ -1962,6 +2127,286 @@ impl Runtime {
     pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
         self.corpus_engine = Some(engine);
         self
+    }
+
+    /// Install a structural link graph. The bootstrap does this
+    /// when a graph DB is found alongside a corpus's LanceDB table;
+    /// callers that don't wire one (e.g. tests, code-corpus chat)
+    /// leave it `None` and retrieval behaves exactly as before.
+    pub fn with_wikipedia_graph(
+        mut self,
+        graph: Arc<corpus_engine::WikipediaGraph>,
+    ) -> Self {
+        self.wikipedia_graph = Some(graph);
+        self
+    }
+
+    /// Axis-aware structural-graph expansion (opt-in via
+    /// `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND=1`). Two primitives:
+    ///
+    /// 1. **Per-entity axis-aligned neighbors**: for each entity in
+    ///    the question, return outbound graph edges whose target
+    ///    title, link text, or section path lexically match the
+    ///    question's axis term(s). Surfaces concept articles the
+    ///    entity directly references that are about the asked
+    ///    dimension.
+    /// 2. **Co-citation**: for ≥2-entity questions, articles linked
+    ///    to by all entities (intersection of outbound edge sets),
+    ///    optionally axis-filtered. Surfaces bridge concepts that
+    ///    a comparative answer would naturally cite.
+    ///
+    /// When the question has no extractable axis or only one
+    /// entity, falls back to occurrence-ranked neighbors of the
+    /// top hit. Neighbor chunks are score-decayed by
+    /// [`GRAPH_NEIGHBOR_DECAY`] so they compete with original hits
+    /// only after query-relevance reweighting promotes them.
+    async fn expand_via_wikipedia_graph(
+        &self,
+        chunks: &[corpus_engine::ScoredChunk],
+        message: &str,
+    ) -> Option<Vec<corpus_engine::ScoredChunk>> {
+        if std::env::var("SOVEREIGN_GRAPH_NEIGHBOR_EXPAND").ok().as_deref() != Some("1") {
+            return None;
+        }
+        let graph = self.wikipedia_graph.as_ref()?;
+
+        let already_present: std::collections::HashSet<String> = chunks
+            .iter()
+            .filter_map(|c| c.title.clone())
+            .collect();
+
+        // Pull entities + axis from the question. The comparison
+        // extractor is broader than the proper-noun one (catches
+        // lowercase contrast pairs) so it's the right primary.
+        let entities = extract_comparison_entities(message);
+        let axis = comparison_axis(message, &entities);
+
+        // Build the axis-term vocabulary for graph filtering. We
+        // include both the joined axis phrase and its individual
+        // ≥4-char tokens so a multi-word axis like "salvation and
+        // the afterlife" matches "Salvation in Christianity" and
+        // "Eternal salvation" simultaneously.
+        let axis_terms: Vec<String> = if let Some(axis) = axis.as_ref() {
+            let mut v: Vec<String> = vec![axis.clone()];
+            for tok in axis.split_whitespace() {
+                let t = tok
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_lowercase();
+                if t.len() >= 4 && !["with", "their", "from", "into", "onto"].contains(&t.as_str()) {
+                    v.push(t);
+                }
+            }
+            v
+        } else {
+            Vec::new()
+        };
+
+        let mut candidate_titles: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
+        // Primitive 1: per-entity axis-aligned neighbors.
+        if !axis_terms.is_empty() {
+            for entity in &entities {
+                for n in graph
+                    .neighbors_for_axis(entity, &axis_terms, GRAPH_NEIGHBORS_PER_HIT)
+                    .await
+                {
+                    if n.in_scope && !already_present.contains(&n.title) {
+                        candidate_titles.insert(n.title);
+                    }
+                }
+            }
+        }
+
+        // Primitive 2: co-citation across all entities. Empty axis
+        // is allowed — the intersection is itself a strong filter.
+        if entities.len() >= 2 {
+            for n in graph
+                .co_neighbors(&entities, &axis_terms, GRAPH_NEIGHBORS_PER_HIT)
+                .await
+            {
+                if n.in_scope && !already_present.contains(&n.title) {
+                    candidate_titles.insert(n.title);
+                }
+            }
+        }
+
+        // Fallback: no axis + single-entity → use occurrence-ranked
+        // neighbors of the top hit. Cheap, preserves the prior
+        // behaviour for shapes the new primitives don't address.
+        if candidate_titles.is_empty() {
+            if let Some(top_title) = chunks.iter().find_map(|c| c.title.as_ref()) {
+                for n in graph.neighbors(top_title, GRAPH_NEIGHBORS_PER_HIT).await {
+                    if n.in_scope && !already_present.contains(&n.title) {
+                        candidate_titles.insert(n.title);
+                    }
+                }
+            }
+        }
+
+        if candidate_titles.is_empty() {
+            return Some(Vec::new());
+        }
+
+        eprintln!(
+            "[graph_expand] entities={:?} axis={:?} candidates={:?}",
+            entities,
+            axis,
+            candidate_titles.iter().collect::<Vec<_>>(),
+        );
+
+        // Title-anchored retrieval per candidate. Filter to chunks
+        // whose title matches the candidate exactly to avoid
+        // cross-corpus false positives that share a token.
+        let parent_score: f32 = chunks.first().map(|c| c.score).unwrap_or(0.05);
+        let mut added: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        for title in candidate_titles {
+            let title_emb = self.inference.embed_query(&title).await.unwrap_or_default();
+            let hits = self
+                .search_corpus_indexes(
+                    &title_emb,
+                    &title,
+                    GRAPH_NEIGHBOR_LIMIT,
+                    "GraphExpand",
+                )
+                .await;
+            for mut c in hits {
+                if c.title.as_deref() != Some(title.as_str()) {
+                    continue;
+                }
+                c.score = (c.score * GRAPH_NEIGHBOR_DECAY).max(parent_score * GRAPH_NEIGHBOR_DECAY);
+                added.push(c);
+            }
+        }
+        let chunks_added = added.len();
+        tracing::debug!(
+            entities = ?entities,
+            axis = ?axis,
+            chunks_added,
+            query = message,
+            "graph axis-aware expansion: completed"
+        );
+        Some(added)
+    }
+
+    /// Build the set of chunk titles whose Wikipedia source has at
+    /// least one section flagged contested (`pov_count > 0` OR
+    /// `section_type = "controversy"`). Used by
+    /// `format_scored_chunks_with_kinds` to suffix `(contested)` on
+    /// source labels. Returns an empty set when no graph is loaded —
+    /// callers degrade gracefully.
+    async fn contested_titles_for_chunks(
+        &self,
+        chunks: &[corpus_engine::ScoredChunk],
+    ) -> std::collections::HashSet<String> {
+        let mut out = std::collections::HashSet::new();
+        let Some(graph) = self.wikipedia_graph.as_ref() else {
+            return out;
+        };
+        let mut seen: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for c in chunks {
+            let Some(title) = c.title.clone() else {
+                continue;
+            };
+            if !seen.insert(title.clone()) {
+                continue;
+            }
+            if graph.has_contested_section(&title).await {
+                out.insert(title);
+            }
+        }
+        out
+    }
+
+    /// Heuristic question decomposition (opt-in via
+    /// `SOVEREIGN_QUERY_DECOMP=1`). Pure-Rust, zero LLM calls.
+    ///
+    /// Today only handles the comparison shape: a question with ≥2
+    /// extractable entities ("Buddhism", "Christianity") and a
+    /// shared topic noun ("compassion") gets decomposed into one
+    /// sub-query per entity, each pairing the entity with the topic
+    /// — `["Buddhism compassion", "Christianity compassion"]`. The
+    /// caller fans these out as supplementary retrievals.
+    ///
+    /// Why heuristic, not LLM: a small fast-slot model (2B-7B)
+    /// reliably hallucinates topics absent from the question even
+    /// under tight prompts ("Buddhism Christianity differ" → the
+    /// model emits "salvation/afterlife" regardless of what the
+    /// user actually asked about). Heuristic decomp uses the
+    /// literal words from the question, so a topical word the user
+    /// typed will appear in every sub-query that mentions it.
+    ///
+    /// Returns `None` when the gate is off, the question doesn't
+    /// match the comparison shape, or no axis term is detectable.
+    /// The caller then proceeds with no decomposition.
+    fn decompose_question(&self, message: &str, intent: &Intent) -> Option<Vec<String>> {
+        if std::env::var("SOVEREIGN_QUERY_DECOMP").ok().as_deref() != Some("1") {
+            return None;
+        }
+
+        // Only fire on shapes where per-entity decomposition is
+        // structurally meaningful. KnowledgeQuery is included
+        // because the classifier sometimes routes "How do X and Y
+        // differ on Z?" to KnowledgeQuery rather than
+        // ComparisonQuery.
+        if !matches!(
+            intent,
+            Intent::ComparisonQuery | Intent::KnowledgeQuery | Intent::DeepQuery
+        ) {
+            return None;
+        }
+
+        let entities = extract_comparison_entities(message);
+        if entities.len() < 2 {
+            return None;
+        }
+
+        let axis = comparison_axis(message, &entities)?;
+
+        let queries: Vec<String> = entities
+            .iter()
+            .take(DECOMP_MAX_QUERIES)
+            .map(|e| format!("{e} {axis}"))
+            .collect();
+        if queries.is_empty() {
+            return None;
+        }
+        eprintln!(
+            "[query_decomp] entities={:?} axis={axis:?} queries={queries:?}",
+            entities,
+        );
+        tracing::info!(
+            entities = ?entities,
+            axis = %axis,
+            queries = ?queries,
+            "query_decomp: heuristic decomposition"
+        );
+        Some(queries)
+    }
+
+    /// Run each decomposed sub-query through the standard corpus
+    /// search and append results to the existing chunk pool. No
+    /// score-decay — sub-queries are *also* the user's question,
+    /// just decomposed; their hits compete on equal footing with
+    /// the bag-of-words original via the downstream reweight step.
+    /// Returns the number of chunks added (for logging).
+    async fn fan_out_decomposed_queries(
+        &self,
+        sub_queries: &[String],
+        chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        label: &str,
+    ) -> usize {
+        let mut added = 0usize;
+        for sq in sub_queries {
+            let emb = self.inference.embed_query(sq).await.unwrap_or_default();
+            let hits = self
+                .search_corpus_indexes(&emb, sq, DECOMP_QUERY_LIMIT, label)
+                .await;
+            added += hits.len();
+            chunks.extend(hits);
+        }
+        added
     }
 
     /// Install a note store for commitment persistence. Daemon bootstrap
@@ -2787,6 +3232,21 @@ impl Runtime {
             );
         }
 
+        // Optional question decomposition (gated by env flag). Catches
+        // concept axes that proper-noun extraction misses ("compassion",
+        // "indeterminism") and gives each named side of a comparison
+        // its own focused retrieval pass.
+        if let Some(sub_queries) = self.decompose_question(message, intent) {
+            let added = self
+                .fan_out_decomposed_queries(&sub_queries, &mut all_chunks, "QueryDecomp")
+                .await;
+            tracing::info!(
+                sub_queries = sub_queries.len(),
+                chunks_added = added,
+                "DeepQuery: query-decomp retrieval"
+            );
+        }
+
         // Noise floor — drop chunks with zero query-token overlap in
         // both title and content. These survived hybrid RRF on a weak
         // tangential signal (one shared FTS token in a 1024-char
@@ -2820,6 +3280,32 @@ impl Runtime {
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        // Optional structural-graph one-hop expansion. DeepQuery
+        // is *by classifier* always reasoning across sources, so
+        // there's no FastFocused/PrimarySynthesis gate here — the
+        // helper itself handles the env-flag opt-in.
+        if let Some(neighbors) = self
+            .expand_via_wikipedia_graph(&all_chunks, message)
+            .await
+        {
+            if !neighbors.is_empty() {
+                let added = neighbors.len();
+                all_chunks.extend(neighbors);
+                reweight_by_query_relevance(&mut all_chunks, message);
+                all_chunks.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+                tracing::info!(
+                    added,
+                    total = all_chunks.len(),
+                    "DeepQuery: graph one-hop expansion"
+                );
+            }
+        }
+
         {
             let mut seen: std::collections::HashSet<(String, String)> =
                 std::collections::HashSet::new();
@@ -2911,9 +3397,37 @@ impl Runtime {
         // exact failure mode v6 surfaced empirically (chunks_fact_score
         // climbed but answer-fact-score didn't, because the model
         // never saw the depth chunks).
+        // Build the corpus-kind map and contested-titles set for
+        // formatting. Catalog routing + Wikipedia editors' POV
+        // markers — both no-ops when the supporting metadata isn't
+        // available, so safe to compute unconditionally.
+        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
+            if let Some(engine) = &self.corpus_engine {
+                engine
+                    .installed_indexes()
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|info| (info.corpus_id, info.kind))
+                    .collect()
+            } else {
+                Default::default()
+            };
+        let contested_titles: std::collections::HashSet<String> =
+            self.contested_titles_for_chunks(&all_chunks).await;
+
         let history = format_history_as_prompt(context, 10);
         let prompt = if !all_chunks.is_empty() {
-            let doc_context = format_scored_chunks(&all_chunks, EXPANDED_KNOWLEDGE_CHARS);
+            let doc_context = format_scored_chunks_with_kinds(
+                &all_chunks,
+                EXPANDED_KNOWLEDGE_CHARS,
+                Some(&kinds),
+                if contested_titles.is_empty() {
+                    None
+                } else {
+                    Some(&contested_titles)
+                },
+            );
             if history.is_empty() {
                 format!(
                     "Relevant knowledge:\n{doc_context}\n\nUser: {message}\n\nAssistant:"
@@ -5039,6 +5553,20 @@ impl Runtime {
             );
         }
 
+        // 2b'. Optional question decomposition (gated by env flag).
+        //      Catches concept axes that proper-noun extraction misses
+        //      and gives each side of a comparison its own focused pass.
+        if let Some(sub_queries) = self.decompose_question(message, intent) {
+            let added = self
+                .fan_out_decomposed_queries(&sub_queries, &mut chunks, "QueryDecomp")
+                .await;
+            tracing::info!(
+                sub_queries = sub_queries.len(),
+                chunks_added = added,
+                "KnowledgeQuery: query-decomp retrieval"
+            );
+        }
+
         // 2c. Noise floor — drop chunks with zero query-token overlap
         //     in title or content. These are pure-RRF noise that fills
         //     prompt budget without contributing signal.
@@ -5061,6 +5589,30 @@ impl Runtime {
         //    side chunks losing to Einstein-side at this exact step.
         reweight_by_query_relevance(&mut chunks, message);
         chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+
+        // 3b. Optional structural-graph expansion (env-gated). The
+        //     axis-aware variant works on comparisons too — co-
+        //     citation between two named entities is exactly the
+        //     bridge-concept signal a comparative answer needs.
+        if let Some(neighbors) = self
+            .expand_via_wikipedia_graph(&chunks, message)
+            .await
+        {
+            if !neighbors.is_empty() {
+                let added = neighbors.len();
+                chunks.extend(neighbors);
+                reweight_by_query_relevance(&mut chunks, message);
+                chunks.sort_by(|a, b| {
+                    b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal)
+                });
+                tracing::info!(
+                    added,
+                    total = chunks.len(),
+                    "KnowledgeQuery: graph expansion"
+                );
+            }
+        }
+
         let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
         if is_comparison {
             chunks = reserve_chunks_per_entity(
@@ -5209,10 +5761,21 @@ impl Runtime {
             } else {
                 Default::default()
             };
+        // Surface Wikipedia editors' POV/controversy flags as
+        // `(contested)` markers on the source label. Best-effort:
+        // graph absent → empty set → no markers, behaviour
+        // unchanged.
+        let contested_titles: std::collections::HashSet<String> =
+            self.contested_titles_for_chunks(&chunks).await;
         let doc_context = format_scored_chunks_with_kinds(
             &chunks,
             knowledge_char_budget,
             Some(&kinds),
+            if contested_titles.is_empty() {
+                None
+            } else {
+                Some(&contested_titles)
+            },
         );
         let corpus_display = context.installed_corpora_display();
         let prompt = format!(
@@ -5825,6 +6388,7 @@ impl Runtime {
             &chunks,
             MAX_KNOWLEDGE_CHARS,
             Some(&kinds),
+            None,
         );
         let prompt = format!(
             "RETRIEVED FROM {locator_phrase}:\n\n{doc_context}\n\n\

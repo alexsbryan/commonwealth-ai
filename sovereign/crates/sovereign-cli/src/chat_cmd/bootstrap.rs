@@ -320,6 +320,20 @@ pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
     }
+    // Atlas Layer 0: load any installed Wikipedia link graph. Probes
+    // `<indexes_dir>/<corpus>/wikipedia_graph.db` for each installed
+    // corpus and, on the first hit, wires it into the Runtime. Today
+    // we expect at most one Wikipedia-class corpus per install — if
+    // a future build needs multiple, switch this to a registry of
+    // (corpus_id, Arc<WikipediaGraph>).
+    if let Some(graph) = load_wikipedia_graph(&corpus_engine, &indexes_dir).await {
+        eprintln!(
+            "Wiki graph:  {} articles, {} edges",
+            graph.article_count().await,
+            graph.edge_count().await,
+        );
+        runtime = runtime.with_wikipedia_graph(graph);
+    }
 
     Ok(ChatSession {
         runtime: Arc::new(runtime),
@@ -485,6 +499,40 @@ async fn log_installed_corpora(engine: &corpus_engine::CorpusEngine) {
             eprintln!("Corpora:     <error: {e}>");
         }
     }
+}
+
+/// Probe `<indexes_dir>/<corpus_id>/wikipedia_graph.db` for each
+/// installed corpus and return the first WikipediaGraph that opens
+/// cleanly. `None` when no graph file is present — retrieval then
+/// behaves exactly as before (no graph expansion, no contested
+/// markers). Builds graphs out-of-band via
+/// `sovereign atlas wikipedia build-graph <corpus-id>`.
+async fn load_wikipedia_graph(
+    engine: &corpus_engine::CorpusEngine,
+    indexes_dir: &std::path::Path,
+) -> Option<Arc<corpus_engine::WikipediaGraph>> {
+    let infos = engine.installed_indexes().await.ok()?;
+    for info in infos {
+        let db_path = corpus_engine::WikipediaGraph::default_db_path(
+            indexes_dir,
+            &info.corpus_id,
+        );
+        if !db_path.exists() {
+            continue;
+        }
+        match corpus_engine::WikipediaGraph::open(&db_path, &info.corpus_id) {
+            Ok(g) => return Some(Arc::new(g)),
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %info.corpus_id,
+                    db = %db_path.display(),
+                    error = %e,
+                    "wikipedia_graph: open failed; skipping"
+                );
+            }
+        }
+    }
+    None
 }
 
 /// Approval channel that silently yes-answers everything. Chat never

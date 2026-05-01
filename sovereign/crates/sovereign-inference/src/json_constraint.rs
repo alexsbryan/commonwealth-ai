@@ -30,12 +30,13 @@
 //! `ConstraintError::Unsupported` at compile time so callers fail
 //! loudly rather than producing a too-permissive constraint.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::token::LlamaToken;
 use llama_cpp_2::token::data_array::LlamaTokenDataArray;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -928,13 +929,81 @@ fn any_value_alts() -> Vec<Schema> {
 
 // ─── JsonConstraint ───────────────────────────────────────────
 
+/// Per-process cache of `vocab_bytes` keyed by `LlamaModel` pointer.
+///
+/// Building `vocab_bytes` calls `token_to_piece_bytes` once per token
+/// id (~262K calls for Gemma-3-E4B); doing that on every request was
+/// the dominant `JsonConstraint::new` cost. Slots stay loaded for
+/// the daemon's lifetime, so a pointer key is stable enough — and
+/// when a slot drops we just leave the entry; the next constraint
+/// against the same model address may rebuild (cheap miss). For
+/// long-lived daemons this is effectively a one-time cost per loaded
+/// model.
+fn vocab_cache() -> &'static Mutex<HashMap<usize, Arc<Vec<Vec<u8>>>>> {
+    static CACHE: OnceLock<Mutex<HashMap<usize, Arc<Vec<Vec<u8>>>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
+    let key = model as *const LlamaModel as usize;
+    {
+        let guard = vocab_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(v) = guard.get(&key) {
+            return v.clone();
+        }
+    }
+    let n_vocab = model.n_vocab();
+    let mut vocab_bytes = Vec::with_capacity(n_vocab as usize);
+    for id in 0..n_vocab {
+        // CRITICAL: must mirror the args the streaming generation loop
+        // uses for `token_to_piece` in `embedded.rs`. That call uses
+        // `special=true` (renders user-defined / control tokens as
+        // their text), so any divergence here means the constraint
+        // tracks a different `emitted` buffer than what the response
+        // body actually contains. Observed 2026-04-30 with gemma-4-E4B
+        // Phase 1: response had `entities_introduced` followed by a
+        // literal backtick (0x60) where the closing quote should be,
+        // because the chosen token's `special=false` cache view (empty
+        // for a user-defined-attr token) made the mask believe the
+        // candidate was a no-op while the response decoder rendered it
+        // as text.
+        //
+        // Buffer size: the streaming loop uses `token_to_piece` which
+        // retries on InsufficientBufferSpace; we replicate that
+        // explicitly. 32 is a generous starting size for the typical
+        // BPE token (≤16 bytes); the retry handles the long tail.
+        let bytes = match model.token_to_piece_bytes(LlamaToken(id), 32, true, None) {
+            Ok(b) => b,
+            Err(llama_cpp_2::TokenToStringError::InsufficientBufferSpace(neg)) => {
+                let needed = (-neg).try_into().unwrap_or(1024_usize).max(32);
+                model
+                    .token_to_piece_bytes(LlamaToken(id), needed, true, None)
+                    .unwrap_or_default()
+            }
+            Err(_) => Vec::new(),
+        };
+        vocab_bytes.push(bytes);
+    }
+    let arc = Arc::new(vocab_bytes);
+    let mut guard = vocab_cache().lock().unwrap_or_else(|e| e.into_inner());
+    // Race: another caller may have populated between our miss and
+    // re-lock. `entry().or_insert_with` would re-walk the vocab —
+    // just check once more and reuse.
+    if let Some(existing) = guard.get(&key) {
+        return existing.clone();
+    }
+    guard.insert(key, arc.clone());
+    arc
+}
+
 /// State carried across sample steps: the byte buffer of what's been
 /// emitted, and a lazily-cached vocab byte map.
 pub struct JsonConstraint {
     schema: Schema,
     emitted: Vec<u8>,
     /// byte sequence per token id (indexed by token id, sparse holes
-    /// for unknown-type tokens are empty Vec).
+    /// for unknown-type tokens are empty Vec). Shared across requests
+    /// against the same model via `vocab_cache`.
     vocab_bytes: Arc<Vec<Vec<u8>>>,
     eos_token: i32,
 }
@@ -943,19 +1012,12 @@ impl JsonConstraint {
     /// Build a constraint from a JSON Schema and the model's vocab.
     pub fn new(schema: &Value, model: &LlamaModel) -> Result<Self, ConstraintError> {
         let compiled = compile_schema(schema)?;
-        let n_vocab = model.n_vocab();
-        let mut vocab_bytes = Vec::with_capacity(n_vocab as usize);
-        for id in 0..n_vocab {
-            let bytes = model
-                .token_to_piece_bytes(LlamaToken(id), 64, false, None)
-                .unwrap_or_default();
-            vocab_bytes.push(bytes);
-        }
+        let vocab_bytes = vocab_bytes_for(model);
         let eos_token = model.token_eos().0;
         Ok(Self {
             schema: compiled,
             emitted: Vec::new(),
-            vocab_bytes: Arc::new(vocab_bytes),
+            vocab_bytes,
             eos_token,
         })
     }
@@ -963,54 +1025,154 @@ impl JsonConstraint {
     /// Mask logits: set NEG_INFINITY for any token whose bytes would
     /// produce a definitively-invalid prefix when appended to the
     /// emitted buffer.
+    ///
+    /// Parallelised across rayon's global pool — for Gemma-3-E4B
+    /// (n_vocab ≈ 262K) the per-candidate validator is the dominant
+    /// cost of a generation step. `for_each_init` gives each rayon
+    /// worker its own scratch buffer pre-loaded with `emitted`, so we
+    /// pay one `Vec::clone` per worker per call instead of one per
+    /// candidate. Net effect on a 16-core box: ~16× fewer wall-time
+    /// seconds per token.
     pub fn mask(&self, data: &mut LlamaTokenDataArray) {
         // Pre-decide whether the buffer is a complete root value. If
         // yes, only EOS (or trailing whitespace) is allowed.
         let buffer_status = validate(&self.schema, &self.emitted);
         let buffer_is_complete = matches!(buffer_status, ParseStatus::Complete);
+        let emitted_len = self.emitted.len();
 
-        for entry in data.data.iter_mut() {
-            let token_id = entry.id().0;
-            // EOS is special — allowed only if the buffer is at a
-            // complete root value.
-            if token_id == self.eos_token {
-                if !buffer_is_complete {
+        let schema = &self.schema;
+        let emitted = &self.emitted;
+        let vocab_bytes = &*self.vocab_bytes;
+        let eos_token = self.eos_token;
+
+        data.data.par_iter_mut().for_each_init(
+            // Each rayon worker reuses one scratch buffer across all
+            // its candidates. Pre-load it with `emitted` once; per
+            // candidate we truncate to `emitted_len` and append the
+            // token bytes.
+            || {
+                let mut scratch = Vec::with_capacity(emitted_len + 64);
+                scratch.extend_from_slice(emitted);
+                scratch
+            },
+            |scratch, entry| {
+                let token_id = entry.id().0;
+                if token_id == eos_token {
+                    if !buffer_is_complete {
+                        entry.set_logit(f32::NEG_INFINITY);
+                    }
+                    return;
+                }
+                let bytes = match vocab_bytes.get(token_id as usize) {
+                    Some(b) if !b.is_empty() => b,
+                    _ => {
+                        entry.set_logit(f32::NEG_INFINITY);
+                        return;
+                    }
+                };
+                if buffer_is_complete {
+                    if !bytes.iter().all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r')) {
+                        entry.set_logit(f32::NEG_INFINITY);
+                    }
+                    return;
+                }
+                scratch.truncate(emitted_len);
+                scratch.extend_from_slice(bytes);
+                if let ParseStatus::Invalid = validate(schema, scratch) {
                     entry.set_logit(f32::NEG_INFINITY);
                 }
-                continue;
-            }
-            let bytes = match self.vocab_bytes.get(token_id as usize) {
-                Some(b) if !b.is_empty() => b,
-                _ => {
-                    entry.set_logit(f32::NEG_INFINITY);
-                    continue;
-                }
-            };
-            // If the buffer is already complete, only whitespace
-            // tokens may extend (followed by EOS). Reject anything
-            // else.
-            if buffer_is_complete {
-                if !bytes.iter().all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r')) {
-                    entry.set_logit(f32::NEG_INFINITY);
-                }
-                continue;
-            }
-            let mut probe = self.emitted.clone();
-            probe.extend_from_slice(bytes);
-            match validate(&self.schema, &probe) {
-                ParseStatus::Complete | ParseStatus::Incomplete => {}
-                ParseStatus::Invalid => entry.set_logit(f32::NEG_INFINITY),
-            }
-        }
+            },
+        );
     }
 
     /// Advance the emitted buffer with the bytes of the chosen token.
+    ///
+    /// Diagnostic invariant: the prefix `emitted + chosen_bytes` should
+    /// be Complete or Incomplete after every accept — the masker is
+    /// supposed to have rejected anything that produces Invalid. When
+    /// the post-accept validate trips Invalid, log a `warn` with the
+    /// token id and a head excerpt so operators can correlate against
+    /// the produced response. Set `SOVEREIGN_CONSTRAINT_TRACE=1` to
+    /// upgrade to `info`-level traces of every accept (verbose; only
+    /// for triage).
     pub fn accept(&mut self, token: LlamaToken) {
         if token.0 == self.eos_token {
             return;
         }
-        if let Some(bytes) = self.vocab_bytes.get(token.0 as usize) {
-            self.emitted.extend_from_slice(bytes);
+        let Some(bytes) = self.vocab_bytes.get(token.0 as usize).cloned() else {
+            tracing::warn!(
+                token_id = token.0,
+                "JsonConstraint::accept: chosen token is out of vocab range — emitted buffer will desync from response"
+            );
+            return;
+        };
+        self.emitted.extend_from_slice(&bytes);
+        // Per-token dump (env-gated). Set
+        // `SOVEREIGN_CONSTRAINT_DUMP=/path/to/file` to record one line
+        // per accepted token: token_id, bytes (escaped), running
+        // emitted_len. After a run, the file gives ground truth on
+        // what the constraint thinks was emitted; diff against the
+        // response body to spot cache-vs-decoder divergence.
+        if let Ok(path) = std::env::var("SOVEREIGN_CONSTRAINT_DUMP") {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+            {
+                let escaped: String = bytes
+                    .iter()
+                    .map(|b| match b {
+                        0x20..=0x7e => (*b as char).to_string(),
+                        _ => format!("\\x{b:02x}"),
+                    })
+                    .collect();
+                let _ = writeln!(
+                    f,
+                    "tok={} len={} bytes={}",
+                    token.0,
+                    self.emitted.len(),
+                    escaped
+                );
+            }
+        }
+        // Post-accept validation. If we see Invalid here, the masker
+        // failed to reject this token and we now have a corrupted
+        // prefix — every subsequent mask call validates against
+        // garbage, which is exactly the gemma Phase-1 failure mode
+        // (`"entities_introduced` 0x60). Surface it loudly.
+        let status = validate(&self.schema, &self.emitted);
+        if matches!(status, ParseStatus::Invalid) {
+            let head: String = self
+                .emitted
+                .iter()
+                .rev()
+                .take(40)
+                .copied()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .map(|b| if (0x20..0x7f).contains(&b) { b as char } else { '·' })
+                .collect();
+            let token_bytes_repr: String = bytes
+                .iter()
+                .map(|b| if (0x20..0x7f).contains(b) { (*b as char).to_string() } else { format!("\\x{b:02x}") })
+                .collect();
+            tracing::warn!(
+                token_id = token.0,
+                token_bytes = %token_bytes_repr,
+                emitted_tail = %head,
+                emitted_len = self.emitted.len(),
+                "JsonConstraint::accept: post-accept buffer is Invalid — masker did not catch this token"
+            );
+        } else if std::env::var("SOVEREIGN_CONSTRAINT_TRACE").as_deref() == Ok("1") {
+            tracing::info!(
+                token_id = token.0,
+                token_bytes_len = bytes.len(),
+                emitted_len = self.emitted.len(),
+                ?status,
+                "JsonConstraint::accept"
+            );
         }
     }
 
@@ -1093,6 +1255,113 @@ mod tests {
         let i = compile_schema(&json!({"type": "integer"})).unwrap();
         // Integer schema rejects "1.5" — the trailing ".5" isn't whitespace.
         assert_eq!(validate(&i, b"1.5"), ParseStatus::Invalid);
+    }
+
+    /// Reproduce the gemma Phase-1 failure pattern observed in
+    /// 2026-04-30 wiki-test sec_00001 run: the model emitted
+    /// `"entities_introduced` followed by literal byte 0x60 (backtick)
+    /// instead of the closing quote 0x22. The validator MUST mark
+    /// any bytes after `entities_introduced` that aren't a continuation
+    /// of an allowed property name as Invalid, so the mask can flip
+    /// the corresponding token's logit to NEG_INFINITY.
+    ///
+    /// This test exercises validate() directly — no rayon, no
+    /// LlamaModel — so it isolates the constraint logic from any
+    /// concurrency or model-state concerns.
+    #[test]
+    fn validate_rejects_backtick_in_property_name() {
+        let s = compile_schema(&json!({
+            "type": "object",
+            "properties": {
+                "section_id": {"type": "string"},
+                "entities_introduced": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": false}
+                }
+            },
+            "required": ["section_id", "entities_introduced"],
+            "additionalProperties": false
+        }))
+        .unwrap();
+        // The exact byte sequence from sec_00001's failed run:
+        // `{"section_id":"x","entities_introduced` then 0x60 (backtick).
+        let mut bytes: Vec<u8> = br#"{"section_id":"x","entities_introduced"#.to_vec();
+        bytes.push(0x60); // ` instead of "
+        assert_eq!(
+            validate(&s, &bytes),
+            ParseStatus::Invalid,
+            "backtick after a complete property name should be Invalid"
+        );
+    }
+
+    /// `mask()`-shaped reproduction: simulate what the masker does
+    /// per candidate. The candidate token's bytes — starting from a
+    /// state where the buffer ends mid-quote — must produce Invalid
+    /// when concatenated as a single multi-byte slice. This is the
+    /// granularity at which `JsonConstraint::mask` validates: the
+    /// whole token piece appended at once, not byte-by-byte.
+    #[test]
+    fn mask_shaped_validate_catches_mid_token_backtick_corruption() {
+        let s = compile_schema(&json!({
+            "type": "object",
+            "properties": {
+                "section_id": {"type": "string"},
+                "entities_introduced": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": false}
+                }
+            },
+            "required": ["section_id", "entities_introduced"],
+            "additionalProperties": false
+        }))
+        .unwrap();
+        // emitted state: just past the comma, just-opened the next key.
+        let emitted: &[u8] = br#"{"section_id":"x","#;
+        // candidate token's bytes (simulating gemma fusing closing
+        // bracket + structural noise into a single piece). The mid-
+        // token byte 0x60 must make the whole appended slice Invalid.
+        let mut candidate: Vec<u8> = b"\"entities_introduced".to_vec();
+        candidate.push(0x60);
+        candidate.extend_from_slice(b": [ {");
+        let mut probe = emitted.to_vec();
+        probe.extend_from_slice(&candidate);
+        assert_eq!(
+            validate(&s, &probe),
+            ParseStatus::Invalid,
+            "appending a token containing a mid-key backtick to a valid \
+             prefix must be Invalid so the masker rejects it"
+        );
+    }
+
+    /// Companion to the above: the second observed failure mode is an
+    /// empty / whitespace-only property key. After `{ "`, the model
+    /// emitted whitespace bytes (spaces + tabs) before the closing
+    /// quote. With `additionalProperties: false`, no property in the
+    /// schema starts with whitespace, so this prefix must be Invalid
+    /// at the first whitespace byte.
+    #[test]
+    fn validate_rejects_whitespace_only_property_key() {
+        let s = compile_schema(&json!({
+            "type": "object",
+            "properties": {
+                "section_id": {"type": "string"},
+                "entities_introduced": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": false}
+                }
+            },
+            "required": ["section_id", "entities_introduced"],
+            "additionalProperties": false
+        }))
+        .unwrap();
+        // Inside the entities_introduced array, the model opened an
+        // object then a quote then a space — `{ "` then 0x20.
+        let bytes = br#"{"section_id":"x","entities_introduced":[{ " "#;
+        assert_eq!(
+            validate(&s, bytes),
+            ParseStatus::Invalid,
+            "whitespace-only property key should be Invalid"
+        );
     }
 
     #[test]

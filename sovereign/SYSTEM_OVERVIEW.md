@@ -87,7 +87,7 @@ src/
 │   ├── domain_registry.rs    #   v1 dispatch
 │   ├── domains/              #   philosophy, multi, personal, conversational, institutional + 4 stubs
 │   ├── pipeline/             #   v2 atlas — Pipeline trait + ExemplarBank + PhaseCache
-│   │   └── pipelines/        #     literary, literary_atlas, philosophy_atlas
+│   │   └── pipelines/        #     literary, literary_atlas, philosophy_atlas, referential_atlas
 │   └── atlas/                #   atom-graph storage (atoms.json, edges.json, …)
 ├── atlas_traversal/          # Query layer over atlas graphs
 ├── update/                   # Code/file watchers, delta updates, lint/test watchers
@@ -357,8 +357,10 @@ Two coexisting systems. Both opt-in per recipe.
   four stubs.
 - **v2 atlas (`enrichment/pipeline/`)** — typed atom graph (7 atom types ×
   7 edge types). `Pipeline` trait + `PipelineRegistry` + `ExemplarBank`
-  + `PhaseCache`. Three pipelines: `literary`, `literary_atlas`,
-  `philosophy_atlas`. Atlas state stored at
+  + `PhaseCache`. Four pipelines: `literary`, `literary_atlas`,
+  `philosophy_atlas`, `referential_atlas` (encyclopedias / wikis /
+  reference works — same scaffolding, referential-tuned prompt assets,
+  Phase 8 skipped). Atlas state stored at
   `~/.sovereign/indexes/<corpus>/atlas/`.
 
 See `corpus-engine/ENRICHMENT_V2.md` for the v2 plan of record (status table,

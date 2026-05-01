@@ -176,6 +176,7 @@ impl DaemonInferenceClient {
         // `response_format` so the daemon installs a
         // grammar-constrained sampler. Schema name defaults to a
         // generic label if the caller didn't set one.
+        let mut has_schema = false;
         if let Some(schema) = prompt.response_schema.as_ref() {
             let name = prompt
                 .response_schema_name
@@ -193,19 +194,86 @@ impl DaemonInferenceClient {
                         }
                     }),
                 );
+                has_schema = true;
             }
         }
-        let resp = self.client.post(&url).json(&body).send().await?;
-        let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| Error::Serialization(format!("chat response read error: {e}")))?;
-        if !status.is_success() {
-            return Err(Error::Serialization(format!(
-                "daemon chat error {status}: {text}"
-            )));
-        }
+
+        // Observability: a Phase-1 chat call against the fast slot
+        // routinely runs minutes. Without a heartbeat the CLI looks
+        // dead from the outside — operator can't tell "daemon is still
+        // generating" from "daemon wedged on a grammar mask". Spawn a
+        // 15s ticker that emits a stderr line tagged with phase_id +
+        // model + elapsed; cancel it as soon as the response lands.
+        // tracing::info also goes through the subscriber so
+        // RUST_LOG=info upgrades the heartbeat to richer context.
+        let started = std::time::Instant::now();
+        let phase_label = prompt.phase_id.clone().unwrap_or_else(|| "?".to_string());
+        let model_label = model.to_string();
+        let heartbeat = {
+            let phase = phase_label.clone();
+            let model = model_label.clone();
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(15));
+                tick.tick().await; // skip immediate
+                loop {
+                    tick.tick().await;
+                    let elapsed = started.elapsed().as_secs();
+                    eprintln!(
+                        "      · waiting on daemon ({elapsed}s elapsed, phase={phase}, model={model}, schema={has_schema})"
+                    );
+                    tracing::info!(
+                        elapsed_s = elapsed,
+                        phase = %phase,
+                        model = %model,
+                        schema = has_schema,
+                        "inference_client: still waiting on /v1/chat/completions"
+                    );
+                }
+            })
+        };
+
+        tracing::info!(
+            phase = %phase_label,
+            model = %model_label,
+            schema = has_schema,
+            max_tokens = ?max_tokens,
+            "inference_client: dispatching /v1/chat/completions"
+        );
+
+        let result = self.client.post(&url).json(&body).send().await;
+        let outcome = match result {
+            Ok(resp) => {
+                let status = resp.status();
+                let text_res = resp.text().await;
+                match text_res {
+                    Ok(text) if !status.is_success() => Err(Error::Serialization(format!(
+                        "daemon chat error {status}: {text}"
+                    ))),
+                    Ok(text) => Ok(text),
+                    Err(e) => Err(Error::Serialization(format!(
+                        "chat response read error: {e}"
+                    ))),
+                }
+            }
+            Err(e) => Err(Error::from(e)),
+        };
+
+        heartbeat.abort();
+
+        let elapsed_ms = started.elapsed().as_millis();
+        let text = match outcome {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!(
+                    phase = %phase_label,
+                    model = %model_label,
+                    elapsed_ms = elapsed_ms as u64,
+                    error = %e,
+                    "inference_client: /v1/chat/completions failed"
+                );
+                return Err(e);
+            }
+        };
         let v: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| Error::Serialization(format!("non-JSON chat response: {e} — body: {text}")))?;
         let content = v
@@ -216,6 +284,28 @@ impl DaemonInferenceClient {
                     "chat response missing choices[0].message.content: {text}"
                 ))
             })?;
+        let total_tokens = v
+            .pointer("/usage/total_tokens")
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0);
+        let completion_tokens = v
+            .pointer("/usage/completion_tokens")
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0);
+        let tok_per_s = if elapsed_ms > 0 {
+            (completion_tokens as f64 * 1000.0) / (elapsed_ms as f64)
+        } else {
+            0.0
+        };
+        tracing::info!(
+            phase = %phase_label,
+            model = %model_label,
+            elapsed_ms = elapsed_ms as u64,
+            total_tokens,
+            completion_tokens,
+            tok_per_s = format!("{tok_per_s:.1}"),
+            "inference_client: /v1/chat/completions ok"
+        );
         Ok(content.to_string())
     }
 
