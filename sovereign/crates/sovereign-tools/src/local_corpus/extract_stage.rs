@@ -117,7 +117,7 @@ pub fn stage_blocking(
     Ok(result)
 }
 
-fn extract_one(path: &Path, _config: &LocalCorpusConfig) -> Result<String, String> {
+pub(crate) fn extract_one(path: &Path, _config: &LocalCorpusConfig) -> Result<String, String> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())

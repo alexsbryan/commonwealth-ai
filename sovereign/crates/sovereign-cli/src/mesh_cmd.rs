@@ -70,6 +70,18 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
         "catalog" => crate::corpus_catalog_cmd::run_catalog(&args[1..]).await,
+        // Watched-folder lifecycle subcommands. Implemented in
+        // `corpus_watch_cmd` and proxied through the daemon's
+        // `/internal/corpus/watch/*` HTTP routes.
+        "watch" => crate::corpus_watch_cmd::run_register(&args[1..]).await,
+        "watch-list" => crate::corpus_watch_cmd::run_list(&args[1..]).await,
+        "watch-status" => crate::corpus_watch_cmd::run_status(&args[1..]).await,
+        "watch-pause" => crate::corpus_watch_cmd::run_pause(&args[1..]).await,
+        "watch-resume" => crate::corpus_watch_cmd::run_resume(&args[1..]).await,
+        "watch-confirm-deletion" => {
+            crate::corpus_watch_cmd::run_confirm_deletion(&args[1..]).await
+        }
+        "watch-remove" => crate::corpus_watch_cmd::run_remove(&args[1..]).await,
         other => {
             eprintln!("Unknown corpus subcommand: {other}");
             crate::util::help::print(&HELP_CORPUS);
@@ -158,6 +170,13 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("pull <id>",                 "Stream a peer's canonical index over the mesh (use when local is missing or smaller than peer's)"),
             ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
             ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
+            ("watch <path>",              "Register a folder the daemon keeps in sync (adds/edits/deletes flow through every ~2 minutes)"),
+            ("watch-list",                "List every registered watched-folder corpus"),
+            ("watch-status <id>",         "Show the most recent reconciliation status for one watched corpus"),
+            ("watch-pause <id>",          "Pause sweeps for a watched folder until `watch-resume`"),
+            ("watch-resume <id>",         "Resume sweeps after a manual pause"),
+            ("watch-confirm-deletion <id>", "Acknowledge a guard-tripped pause so the next sweep applies the pending deletes"),
+            ("watch-remove <id>",         "Unregister a watched folder and remove its index (source folder untouched)"),
         ]),
         crate::util::help::HelpSection::Notes(
             "`reconstruct-manifest` accepts --source-dir <path> (default:\n\

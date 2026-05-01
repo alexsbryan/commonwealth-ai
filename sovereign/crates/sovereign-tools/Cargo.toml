@@ -68,6 +68,10 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 # changes. Same major version as sovereign-mesh's reindexer use to
 # keep the lockfile single-resolved.
 notify = "8"
+# Gitignore-syntax parser for the watched-folder `.sovereignignore`
+# file (spec §5.4 layer 2). Same version as sovereign-mesh so the
+# workspace resolves a single `ignore` across both crates.
+ignore = "0.4"
 
 [features]
 default = []

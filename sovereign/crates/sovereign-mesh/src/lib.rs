@@ -34,8 +34,11 @@ pub mod mesh_http;
 pub(crate) mod oicp_select;
 pub mod peer_inference;
 pub mod persist;
+pub mod corpus_watch_http;
 pub mod state;
 pub mod types;
+pub mod watched_folder_runtime;
+pub mod watched_folder_setup;
 
 pub use daemon::EmbeddedDaemon;
 pub use deep_link::{DeepLink, parse_deep_link};

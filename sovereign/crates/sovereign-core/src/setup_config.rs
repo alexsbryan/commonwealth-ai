@@ -26,6 +26,14 @@ pub struct SetupConfig {
     pub daemon: DaemonSection,
     #[serde(default)]
     pub data: DataSection,
+    /// Operator-tunable defaults for the watched-folder reconciliation
+    /// scheduler. Per-corpus values stored in
+    /// `WatchedFolderConfig` always win — this section just supplies
+    /// the defaults that `corpus watch` uses when a CLI flag is
+    /// omitted, plus a global `paused_at_boot` override for batch
+    /// hosts that don't want sweeps running unattended.
+    #[serde(default)]
+    pub watched_folders: WatchedFoldersSection,
 }
 
 /// Absolute paths to the loaded GGUF models. Three slots are
@@ -234,6 +242,52 @@ impl Default for DataSection {
     }
 }
 
+/// Defaults for watched-folder corpora (`sovereign corpus watch`).
+/// Per-corpus values from `WatchedFolderConfig` override these — the
+/// only setting here that's *not* overridable per-corpus is
+/// `paused_at_boot`, which is an operator/host-level decision.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchedFoldersSection {
+    #[serde(default = "default_wf_sweep_interval_secs")]
+    pub default_sweep_interval_secs: u64,
+    #[serde(default = "default_wf_grace_secs")]
+    pub default_soft_delete_grace_secs: u64,
+    #[serde(default = "default_wf_absolute_threshold")]
+    pub default_absolute_threshold: usize,
+    #[serde(default = "default_wf_fractional_threshold")]
+    pub default_fractional_threshold: f32,
+    /// When `true`, all watched-folder corpora start in
+    /// `PausedManual` on daemon boot. Use on batch hosts where the
+    /// operator wants to inspect status before the scheduler starts
+    /// sweeping unattended.
+    #[serde(default)]
+    pub paused_at_boot: bool,
+    /// Cap on the number of watched-folder sweeps that may run
+    /// concurrently. Default 2 — bounded so a user with several
+    /// large folders doesn't fan out unboundedly.
+    #[serde(default = "default_wf_max_concurrent")]
+    pub max_concurrent_sweeps: usize,
+}
+
+impl Default for WatchedFoldersSection {
+    fn default() -> Self {
+        Self {
+            default_sweep_interval_secs: default_wf_sweep_interval_secs(),
+            default_soft_delete_grace_secs: default_wf_grace_secs(),
+            default_absolute_threshold: default_wf_absolute_threshold(),
+            default_fractional_threshold: default_wf_fractional_threshold(),
+            paused_at_boot: false,
+            max_concurrent_sweeps: default_wf_max_concurrent(),
+        }
+    }
+}
+
+fn default_wf_sweep_interval_secs() -> u64 { 120 }
+fn default_wf_grace_secs() -> u64 { 7 * 86_400 }
+fn default_wf_absolute_threshold() -> usize { 100 }
+fn default_wf_fractional_threshold() -> f32 { 0.25 }
+fn default_wf_max_concurrent() -> usize { 2 }
+
 fn default_client_port() -> u16 { 9741 }
 fn default_internal_port() -> u16 { 9742 }
 fn default_autostart() -> bool { true }
@@ -372,6 +426,7 @@ mod tests {
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),
+            watched_folders: WatchedFoldersSection::default(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("config.toml");

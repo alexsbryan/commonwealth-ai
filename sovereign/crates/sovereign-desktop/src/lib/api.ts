@@ -712,6 +712,82 @@ export async function lcCancel(corpusId: string): Promise<boolean> {
   return invoke("lc_cancel", { corpusId });
 }
 
+// ─── Watched-folder lifecycle ─────────────────────────────────────
+//
+// Mirrors the daemon's `/internal/corpus/watch/*` HTTP routes; the
+// Tauri commands HTTP-proxy to the running daemon (Attach mode) or
+// the desktop's embedded daemon (Local mode). Same router on both
+// sides, so the wire shape is identical.
+
+import type {
+  WatchedFolderConfig,
+  WatchedFolderRegisterResponse,
+  WatchedFolderListResponse,
+  WatchedFolderStatusResponse,
+  WatchedFolderStateResponse,
+  WatchedFolderAckResponse,
+  WatchedFolderIncompleteJobsResponse,
+} from "./types";
+
+export async function lcWatchRegister(
+  path: string,
+  displayName?: string,
+  config?: WatchedFolderConfig,
+  syncInitial?: boolean,
+): Promise<WatchedFolderRegisterResponse> {
+  return invoke("lc_watch_register", {
+    path,
+    displayName: displayName ?? null,
+    config: config ?? null,
+    syncInitial: syncInitial ?? false,
+  });
+}
+
+export async function lcWatchList(): Promise<WatchedFolderListResponse> {
+  return invoke("lc_watch_list");
+}
+
+export async function lcWatchStatus(
+  corpusId: string,
+): Promise<WatchedFolderStatusResponse> {
+  return invoke("lc_watch_status", { corpusId });
+}
+
+export async function lcWatchState(
+  corpusId: string,
+): Promise<WatchedFolderStateResponse> {
+  return invoke("lc_watch_state", { corpusId });
+}
+
+export async function lcWatchPause(
+  corpusId: string,
+  reason?: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_pause", { corpusId, reason: reason ?? null });
+}
+
+export async function lcWatchResume(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_resume", { corpusId });
+}
+
+export async function lcWatchConfirmDeletion(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_confirm_deletion", { corpusId });
+}
+
+export async function lcWatchRemove(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_remove", { corpusId });
+}
+
+export async function lcWatchIncompleteJobs(): Promise<WatchedFolderIncompleteJobsResponse> {
+  return invoke("lc_watch_incomplete_jobs");
+}
+
 // ─── Atlas enrichment (Landing 3.C/3.D) ──────────────────────────────
 //
 // Wrappers for the enrichment Tauri command surface in

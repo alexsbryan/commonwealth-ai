@@ -381,3 +381,147 @@ async fn local_only_sharding_never_routes_to_peer() {
         }
     }
 }
+
+// ── Explicit `model` field routing ─────────────────────────────
+//
+// Guards the silent-substitution bug: a `model: "<peer-only-id>"`
+// request without an OICP envelope must not be answered by the
+// local primary slot. Three scenarios — peer-only model, unknown
+// model, peer-only model on a Fast-speed request that today's
+// OICP path would have refused to consider for peer routing.
+
+/// A request with `model_id = "Qwen3.5-9B.test"` (advertised by
+/// the mock peer, NOT by the local stub) must route to the peer
+/// even with no OICP envelope and no Speed::Slow signal.
+#[tokio::test]
+async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
+    let peer_addr = spawn_mock_peer().await;
+    let base_url = format!("http://{}/v1", peer_addr);
+
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![base_url],
+        system_ram_gb: 64,
+        benchmark: None,
+    }];
+    let peer_source: Arc<dyn PeerEndpointSource> =
+        Arc::new(StubPeerSource { peers });
+    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub {
+        fast_id: "qwen2.5-3b-instruct-q4_k_m".into(),
+    });
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+
+    // No OICP envelope, Speed::Fast (which would normally bail
+    // peer routing). The model name is the routing signal.
+    let request = CompletionRequest::new("hi")
+        .with_speed(Speed::Fast)
+        .with_model_id("Qwen3.5-9B.test");
+
+    let (mut stream, model_id) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("explicit peer model_id should route to peer");
+    assert!(
+        model_id.contains("Qwen3.5-9B.test"),
+        "attribution should name the requested model; got {model_id:?}"
+    );
+    assert!(
+        model_id.contains("@ peer Founder"),
+        "attribution should carry peer suffix; got {model_id:?}"
+    );
+
+    let mut collected = String::new();
+    while let Some(chunk) = stream.next().await {
+        collected.push_str(&chunk.expect("stream chunk should be Ok"));
+    }
+    assert_eq!(collected, PEER_RESPONSE_TEXT);
+}
+
+/// A `model` name that no node advertises must surface as a clear
+/// error rather than be silently substituted with the local primary.
+/// This is the bug we are explicitly closing.
+#[tokio::test]
+async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
+    let peer_addr = spawn_mock_peer().await;
+    let base_url = format!("http://{}/v1", peer_addr);
+
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![base_url],
+        system_ram_gb: 64,
+        benchmark: None,
+    }];
+    let peer_source: Arc<dyn PeerEndpointSource> =
+        Arc::new(StubPeerSource { peers });
+    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub {
+        fast_id: "qwen2.5-3b-instruct-q4_k_m".into(),
+    });
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+
+    let request = CompletionRequest::new("hi")
+        .with_speed(Speed::Slow)
+        .with_model_id("not-a-real-model-anywhere");
+
+    match wrapper.complete_stream_with_id(&request).await {
+        Ok((_, attribution)) => panic!(
+            "unknown model_id should NOT be served; instead got attribution {attribution:?}"
+        ),
+        Err(e) => {
+            let msg = format!("{e}");
+            assert!(
+                msg.contains("not-a-real-model-anywhere"),
+                "error should mention the requested model id; got {msg:?}"
+            );
+            assert!(
+                msg.to_lowercase().contains("no node") || msg.to_lowercase().contains("model not loaded"),
+                "error should signal that no node advertises the model; got {msg:?}"
+            );
+        }
+    }
+}
+
+/// Empty/whitespace `model_id` is not a routing signal — the
+/// request should fall through to the OICP-driven path. This pins
+/// the back-compat contract for callers that pass `model: ""`.
+#[tokio::test]
+async fn empty_model_id_falls_through_to_oicp_path() {
+    let peer_addr = spawn_mock_peer().await;
+    let base_url = format!("http://{}/v1", peer_addr);
+
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![base_url],
+        system_ram_gb: 64,
+        benchmark: None,
+    }];
+    let peer_source: Arc<dyn PeerEndpointSource> =
+        Arc::new(StubPeerSource { peers });
+    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub {
+        fast_id: "qwen2.5-3b-instruct-q4_k_m".into(),
+    });
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+
+    let envelope = InferenceRequirements::new()
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Extended)
+        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+    let request = CompletionRequest::new("hi")
+        .with_speed(Speed::Slow)
+        .with_oicp(envelope)
+        .with_model_id("   "); // whitespace-only, treat as None
+
+    // Should reach the OICP-driven peer route (mock peer beats
+    // the BYOM local stub on score+size). Same outcome as
+    // `joiner_streams_through_mesh_and_attributes_peer`.
+    let (_stream, model_id) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("OICP-driven peer route should succeed");
+    assert!(
+        model_id.contains("@ peer Founder"),
+        "OICP route should still attribute to peer; got {model_id:?}"
+    );
+}

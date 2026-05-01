@@ -707,11 +707,152 @@ impl MeshInferenceProvider {
         resp.model_id = format!("{} @ peer {}", resp.model_id, peer_name);
         resp
     }
+
+    /// Resolve `request.model_id` to a concrete location.
+    ///
+    /// Contract: when a caller names a specific model the daemon
+    /// MUST honour that name — silent substitution to the local
+    /// primary slot is the bug we're fixing. Lookup order is
+    /// local-first (local wins ties — no round-trip, no
+    /// attribution churn) then each reachable peer's manifest in
+    /// the order `peer_inference_endpoints` returns them.
+    ///
+    /// Returns:
+    /// - `Local`: our `self_manifest` advertises the id; serve via
+    ///   `self.local`. The local provider's slot picker
+    ///   (`EmbeddedLlamaCpp::select_slot_for_request`) knows how to
+    ///   route by name into Fast/Primary/Code/extras slots.
+    /// - `Peer(peer, candidate)`: a reachable peer's manifest
+    ///   advertises the id; route there over HTTP.
+    /// - `Unknown`: no node in the mesh advertises the id. Caller
+    ///   surfaces this as a clear error rather than falling back to
+    ///   a different model.
+    async fn locate_named_model(&self, model_id: &str) -> NamedModelLocation {
+        // Local first.
+        if self
+            .self_manifest
+            .models
+            .iter()
+            .any(|m| m.id == model_id)
+        {
+            return NamedModelLocation::Local;
+        }
+        // Then peers, in the order the mesh hands them back.
+        let peers = self.mesh.peer_inference_endpoints().await;
+        for peer in peers {
+            let (manifest, _rtt) = match self.get_peer_manifest(&peer).await {
+                Some(m) => m,
+                None => continue,
+            };
+            if let Some(model) = manifest.models.iter().find(|m| m.id == model_id) {
+                let claim_affinity = model
+                    .claims
+                    .first()
+                    .map(|c| c.effective_affinity())
+                    .unwrap_or(0.0);
+                return NamedModelLocation::Peer(
+                    peer,
+                    ModelCandidate {
+                        score: 0.0,
+                        size_gb: model.size_gb,
+                        model_id: model_id.to_string(),
+                        claim_affinity,
+                    },
+                );
+            }
+        }
+        NamedModelLocation::Unknown
+    }
+}
+
+/// Where an explicitly-named `request.model_id` lives in the mesh.
+/// Returned by [`MeshInferenceProvider::locate_named_model`]; see
+/// that method for the contract this enum encodes.
+enum NamedModelLocation {
+    /// Our own `self_manifest` advertises this model id. The local
+    /// provider's slot picker will route the request into the
+    /// matching slot — no further metadata needed at this layer.
+    Local,
+    /// A peer's manifest advertises this model id.
+    Peer(PeerInferenceEndpoint, ModelCandidate),
+    /// Nobody in the mesh advertises it.
+    Unknown,
+}
+
+/// Trim and reject empty `request.model_id`. Empty/whitespace
+/// strings are not a routing signal — they fall through to the
+/// OICP-driven path.
+fn explicit_model_id(request: &CompletionRequest) -> Option<&str> {
+    request
+        .model_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
 }
 
 #[async_trait]
 impl InferenceProvider for MeshInferenceProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
+        // Priority: when the caller names a specific model_id, that
+        // name is the routing signal — even when the request has no
+        // OICP envelope and no Speed::Slow signal. Silent
+        // substitution to the local primary slot was the bug here;
+        // an explicit name must either be served by the node that
+        // advertises it or fail loudly so the caller can react.
+        if let Some(model_id) = explicit_model_id(request) {
+            match self.locate_named_model(model_id).await {
+                NamedModelLocation::Local => {
+                    tracing::info!(
+                        model = %model_id,
+                        "mesh-inference: serving complete() locally by explicit model name"
+                    );
+                    return self.local.complete(request).await;
+                }
+                NamedModelLocation::Peer(peer, peer_cand) => {
+                    tracing::info!(
+                        peer = %peer.name,
+                        addrs = peer.base_urls.len(),
+                        model = %peer_cand.model_id,
+                        "mesh-inference: routing complete() to peer by explicit model name"
+                    );
+                    let mut last_transport_err: Option<String> = None;
+                    for url in &peer.base_urls {
+                        let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
+                        match rp.complete(request).await {
+                            Ok(mut resp) => {
+                                resp.model_id = peer_cand.model_id.clone();
+                                return Ok(Self::annotate(resp, &peer.name));
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    peer = %peer.name,
+                                    url = %url,
+                                    error = %e,
+                                    "mesh-inference: peer complete() transport error \
+                                     under explicit model_id, trying next address"
+                                );
+                                last_transport_err = Some(format!("{e}"));
+                            }
+                        }
+                    }
+                    return Err(sovereign_core::error::Error::Routing(format!(
+                        "model '{}' is advertised by peer '{}' but all peer \
+                         addresses failed: {}",
+                        model_id,
+                        peer.name,
+                        last_transport_err.unwrap_or_else(|| "unreachable".into())
+                    )));
+                }
+                NamedModelLocation::Unknown => {
+                    return Err(sovereign_core::error::Error::ModelNotLoaded(format!(
+                        "no node in this mesh advertises model '{}' — \
+                         check `/v1/models` for available names",
+                        model_id
+                    )));
+                }
+            }
+        }
+
         if let Some((peer, peer_cand)) = self.select_peer(request).await {
             tracing::info!(
                 peer = %peer.name,
@@ -776,6 +917,93 @@ impl InferenceProvider for MeshInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<(Pin<Box<dyn Stream<Item = Result<String>> + Send>>, String)> {
+        // Mirror the non-streaming priority: an explicit model_id
+        // wins over OICP-driven selection so a request for a named
+        // peer-only model gets to that peer instead of falling back
+        // to the local primary.
+        if let Some(model_id) = explicit_model_id(request) {
+            match self.locate_named_model(model_id).await {
+                NamedModelLocation::Local => {
+                    tracing::info!(
+                        model = %model_id,
+                        "mesh-inference: serving complete_stream() locally by explicit model name"
+                    );
+                    let stream = self.local.complete_stream(request).await?;
+                    let observed: Pin<
+                        Box<dyn Stream<Item = Result<String>> + Send>,
+                    > = Box::pin(ThroughputObservedStream::new(
+                        stream,
+                        ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+                    ));
+                    return Ok((observed, model_id.to_string()));
+                }
+                NamedModelLocation::Peer(peer, peer_cand) => {
+                    tracing::info!(
+                        peer = %peer.name,
+                        addrs = peer.base_urls.len(),
+                        model = %peer_cand.model_id,
+                        "mesh-inference: routing complete_stream() to peer by explicit model name"
+                    );
+                    let ledger_emission = self
+                        .mesh
+                        .ledger_emission_for(
+                            &peer.node_id,
+                            &peer_cand.model_id,
+                            &peer.name,
+                        )
+                        .await;
+                    let mut last_transport_err: Option<String> = None;
+                    for url in &peer.base_urls {
+                        let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
+                        match rp.complete_stream(request).await {
+                            Ok(stream) => {
+                                let attribution =
+                                    format!("{} @ peer {}", peer_cand.model_id, peer.name);
+                                let mut wrapper = ThroughputObservedStream::new(
+                                    stream,
+                                    ThroughputTarget::Peer {
+                                        name: peer.name.clone(),
+                                        map: Arc::clone(&self.peer_observations),
+                                    },
+                                );
+                                if let Some(em) = ledger_emission.clone() {
+                                    wrapper = wrapper.with_ledger_emission(em);
+                                }
+                                let observed: Pin<
+                                    Box<dyn Stream<Item = Result<String>> + Send>,
+                                > = Box::pin(wrapper);
+                                return Ok((observed, attribution));
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    peer = %peer.name,
+                                    url = %url,
+                                    error = %e,
+                                    "mesh-inference: peer complete_stream() transport \
+                                     error under explicit model_id, trying next address"
+                                );
+                                last_transport_err = Some(format!("{e}"));
+                            }
+                        }
+                    }
+                    return Err(sovereign_core::error::Error::Routing(format!(
+                        "model '{}' is advertised by peer '{}' but all peer \
+                         addresses failed: {}",
+                        model_id,
+                        peer.name,
+                        last_transport_err.unwrap_or_else(|| "unreachable".into())
+                    )));
+                }
+                NamedModelLocation::Unknown => {
+                    return Err(sovereign_core::error::Error::ModelNotLoaded(format!(
+                        "no node in this mesh advertises model '{}' — \
+                         check `/v1/models` for available names",
+                        model_id
+                    )));
+                }
+            }
+        }
+
         if let Some((peer, peer_cand)) = self.select_peer(request).await {
             tracing::info!(
                 peer = %peer.name,

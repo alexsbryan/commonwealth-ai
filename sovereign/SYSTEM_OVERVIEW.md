@@ -886,24 +886,140 @@ header. Injects `X-Feature-Id` (from current branch's feature dir) and
 `X-Session-Id` so the daemon knows which spec to splice.
 `sovereign atos doctor` compares installed plugin to CLI binary version.
 
-### 4.14 Local Corpora — Folder Drop + Obsidian Vault
+### 4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder
 
-Two flows in **Settings → Local Knowledge** — "Drop or browse a folder"
-(PDFs + TXT) and "Connect Obsidian vault" (markdown) — share the same
-`sovereign-tools/src/local_corpus/` machinery (config, pre_scanner, humanise,
-extract_stage, progress, excerpt, clusterer, preview, frontmatter, writeback,
-git, manager). Differ only in configuration and extension points.
+Three source types in **Settings → Local Knowledge**, all under
+`sovereign-tools/src/local_corpus/`:
+
+| Source type | Surface | Initial ingest | Resync | Writeback |
+|---|---|---|---|---|
+| `DocumentFolder` | "Drop or browse a folder" (PDFs + TXT) | one-shot | manual re-run | none |
+| `ObsidianVault` | "Connect Obsidian vault" (markdown) | one-shot | manual re-run | `<namespace>/*` tags + frontmatter |
+| `WatchedFolder` | `sovereign corpus watch <PATH>` (PDFs + TXT + MD) | one-shot via `manager.ingest()` | polling sweep every ~120s through `corpus_engine::update::CorpusUpdater::apply_update` | none (read-only on source) |
+
+All three share the same `sovereign-tools/src/local_corpus/` machinery
+(config, pre_scanner, humanise, extract_stage, progress, excerpt,
+clusterer, preview, frontmatter, writeback, git, manager). Differ in
+configuration, watcher behaviour, and writeback semantics.
 
 Architectural invariants (test-pinned):
 
-- **Snapshot before any write.** Atomic JSON snapshot under `~/.sovereign/vault-snapshots/{corpus_id}/` *before* the first file is touched. Lives outside the vault to avoid self-ingest.
-- **`<namespace>/*` is inviolable.** Only `<namespace>/` tags and `<namespace>_*` frontmatter keys are added/modified/removed. Every other key/tag round-trips at value level.
-- **Rollback is idempotent.** Deleted-since-snapshot files are re-created from the snapshot payload, not reported as errors.
-- **pdf-extract panics are caught.** `safe_extract_pdf_text` runs `pdf_extract::extract_text` inside `catch_unwind` so a DeviceN colour-space panic gets classified as `Corrupt` instead of taking down the `spawn_blocking` task.
+- **Snapshot before any write** (Obsidian only). Atomic JSON snapshot under `~/.sovereign/vault-snapshots/{corpus_id}/` *before* the first file is touched. Lives outside the vault to avoid self-ingest.
+- **`<namespace>/*` is inviolable** (Obsidian only). Only `<namespace>/` tags and `<namespace>_*` frontmatter keys are added/modified/removed. Every other key/tag round-trips at value level.
+- **Rollback is idempotent** (Obsidian only). Deleted-since-snapshot files are re-created from the snapshot payload, not reported as errors.
+- **pdf-extract panics are caught** (all three). `safe_extract_pdf_text` runs `pdf_extract::extract_text` inside `catch_unwind` so a DeviceN colour-space panic gets classified as `Corrupt` instead of taking down the `spawn_blocking` task.
+- **Watched folders are read-only on source.** Nothing under the folder is ever written, moved, or renamed by Sovereign. Pinned by `local_corpus::config::tests::watched_folder_recipe_toml_pins_privacy_invariants`.
+- **Watched folders are scope=Local + mesh_sharing=false.** The `LocalCorpusConfig::watched_folder` factory hardcodes both — same structural-privacy pattern §7 of `ARCH_PRINCIPLES.md` describes for KnowledgeView.
 
 Resume-on-relaunch: `CorpusEngine::ingest` checkpoints to
 `_source_manifest.json` on every flush; `lc_incomplete_jobs` surfaces
 non-`Complete` corpora; the ResumePrompt re-invokes `lc_ingest`.
+
+**Watched-folder reconciliation pipeline** (under `local_corpus/watched/`):
+
+```
+Scheduler (per-corpus cadence)
+    └─> Worker::run_once(corpus_id)
+          ├─ acquire per-corpus lock from registry
+          ├─ load WatchedFolderState  (_watched_folder_state.json)
+          ├─ skip if Paused
+          ├─ walker::walk_folder       (PreScanner + (mtime,size) fast-path + sha256 short hash)
+          ├─ soft_delete_gc::detect_revivals
+          ├─ diff::compute_diff
+          ├─ threshold::DeletionGuard::evaluate    (absolute OR fractional)
+          ├─ apply::apply_watched_diff    →   CorpusUpdater::apply_update (3-phase)
+          ├─ soft_delete_gc::record_tombstones / expire / enforce_cap (100k)
+          └─ persist state, emit SweepCompleted
+```
+
+Daemon integration: `daemon_cmd.rs::run_daemon` constructs the
+`LocalCorpusManager` + `WatchedFolderRegistry`, auto-resumes every
+persisted `WatchedFolder` corpus from
+`{data_dir}/local-corpora/*.json`, then spawns
+`watched::Scheduler::spawn` and parks the manager + registry on
+`sovereign_mesh::watched_folder_runtime` so the loopback HTTP routes
+can reach them. CLI: `sovereign corpus watch …` and the seven
+`watch-*` subcommands proxy through
+`/internal/corpus/watch/{register,list,status,pause,resume,confirm-deletion,{id}}`
+on the daemon's :9741 listener (loopback-only).
+
+Soft-delete semantics: chunks are *physically* deleted by
+`apply_update`'s deletion phase. The watched-folder state file holds a
+sidecar tombstone `{doc_id, path, content_hash, removed_at_unix}`.
+Restoring a file with matching content hash inside the grace window
+(default 7 days) drops the tombstone and re-classifies the file as
+an Add — chunks get re-extracted and re-embedded. Tombstones are
+bounded at 100,000 per corpus; eviction logs at `warn!` so the
+operator notices grace expiry won't drain naturally.
+
+**OCR for watched folders.** `WatchedFolderConfig.with_ocr` projects
+onto `LocalCorpusConfig.ocr_pdfs` at registration. During a sweep,
+`apply.rs::apply_watched_diff` first runs the plain text-layer
+extractor; when the file is a PDF, OCR is enabled, the daemon's
+`OcrCtx` is installed, AND the plain text comes back shorter than 32
+chars (matches the pre-scanner's scanned-PDF heuristic), the closure
+falls through to `ocr::extract_pdf_via_ocr` (rasterize → tesseract →
+daemon cleanup). The fallback runs per-file inside the existing
+`CorpusUpdater::apply_update` flow, so resumability + tombstones +
+soft-delete all keep working unchanged. Worker fetches the `OcrCtx`
+fresh each sweep so a runtime install via
+`LocalCorpusManager::set_ocr_ctx` takes effect without a restart.
+The classifier in `worker::collect_failed_files` mirrors this: when
+OCR is active, scanned PDFs no longer surface as `failed_files`
+(they'll get OCR'd); when OCR is configured but the runtime is
+missing, the failure reason explains why
+(`"OcrCtx isn't installed"`).
+
+CLI: `sovereign corpus watch <PATH> --ocr`. Svelte: OCR checkbox in
+the WatchedFolderRegisterFlow advanced panel, hidden when
+`lcOcrAvailable()` returns false; the toggle is also gated on
+`ocrAvailable` in the submit path so a UI race can't register a
+corpus configured for OCR on a daemon that can't honour it.
+
+**Phase 2 polish.** Three additions on top of the Phase 1 daemon + CLI:
+
+- `.sovereignignore` (gitignore syntax via the `ignore` crate) at the
+  watched folder's root, hot-reloaded between sweeps and additive to
+  `--exclude` globs. Negation (`!path`) and dir-only (`scratch/`) work
+  as in git.
+- `WatchedFolderState` carries `skipped_by_extension` (per-extension
+  count of files the walker saw but had no extractor for) and
+  `failed_files` (corrupt / password-protected / scanned-no-OCR
+  files). Surfaced via `corpus watch-status --skipped --failures` and
+  the desktop's status panel. `PreScanner` now populates a
+  `skipped_by_extension: HashMap<String, usize>` field on its result
+  in addition to the existing `ignored_types: u32` count.
+- One-shot guard bypass: `confirm-deletion` sets
+  `state.bypass_guard_next_sweep = true` so the next sweep applies the
+  pending deletion even when the diff still trips the threshold (a
+  100%-deletion scenario would otherwise re-trip forever). Subsequent
+  sweeps re-evaluate the guard normally.
+
+**Desktop integration** (Phase 2 UI):
+
+- `sovereign-mesh::watched_folder_setup::WatchedSubsystem::install` —
+  one call wires registry + auto-resume + scheduler + runtime
+  singleton + HTTP router on an `EmbeddedDaemon`. Both
+  `daemon_cmd.rs::run_daemon` (CLI) and
+  `sovereign-desktop/src-tauri/src/state.rs` (Local mode embedded
+  daemon) call it; the standalone CLI path and the desktop's
+  embedded path expose identical surface area.
+- `sovereign-desktop/src-tauri/src/watched_folder_commands.rs` —
+  Tauri commands `lc_watch_register`, `lc_watch_list`,
+  `lc_watch_status`, `lc_watch_state`, `lc_watch_pause`,
+  `lc_watch_resume`, `lc_watch_confirm_deletion`, `lc_watch_remove`,
+  `lc_watch_incomplete_jobs`. All HTTP-proxy to the daemon at
+  `127.0.0.1:<client_port>` (Attach mode uses the attached port;
+  Local mode uses the embedded daemon's 9741).
+- Svelte components under
+  `sovereign-desktop/src/lib/components/local-knowledge/`:
+  `LocalKnowledgeAdd` gains a "Watch a folder" tile;
+  `WatchedFolderRegisterFlow` is the picker → register flow with a
+  collapsible advanced panel for sweep cadence / grace / threshold
+  knobs; `WatchedFolderList` renders cards with status badges +
+  pause/resume/confirm/remove actions; `WatchedFolderBanner` surfaces
+  guard-tripped or errored corpora prominently above the source list
+  (5-second polling refresh while the section is mounted).
 
 ---
 
@@ -964,7 +1080,7 @@ peer reachability)
 
 | Path                          | Notes                                                  |
 |-------------------------------|--------------------------------------------------------|
-| `POST /v1/chat/completions`   | OpenAI-compatible. Routing: OICP → exact name → glob alias → pipeline alias → default. `LocalOnly` privacy → 400. |
+| `POST /v1/chat/completions`   | OpenAI-compatible. Routing differs by daemon shape (embedded vs standalone) — see `commonwealth/docs/routing-field-guide.md`. `LocalOnly` privacy → 400. |
 | `GET  /v1/models`             | Loaded models w/ capabilities and performance estimates|
 | `POST /v1/knowledge/search`   | Determines target corpora, fans out to shard nodes, merges, reranks |
 | `GET  /status`                | Comprehensive node/mesh/inference/knowledge summary    |
@@ -1299,6 +1415,7 @@ Default ports:
 | Add an internal mesh route                       | `commonwealth-api/src/routes_internal.rs`                           |
 | Stand up a multi-node test                       | `commonwealth-test-harness/`                                        |
 | See OICP routing logic                           | `oicp-types/src/lib.rs` + `sovereign-mesh/src/oicp_select.rs` + `commonwealth-inference/src/scheduler/oicp_select.rs` + `sovereign-inference/src/selector.rs` |
+| Trace a `/v1/chat/completions` end-to-end        | `commonwealth/docs/routing-field-guide.md` (priority ladder, embedded vs standalone, `MeshInferenceProvider` gates, gotchas) |
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand embedding injection                   | `corpus-engine/src/types.rs` (`EmbedFn`) + `commonwealth-knowledge/src/embed_http.rs` |
 | Understand v1 enrichment domains                 | `corpus-engine/src/enrichment/domain.rs` + `enrichment/domains/`    |

@@ -120,6 +120,16 @@ pub struct PreScanResult {
     /// Count of files whose extension was outside the allow-list.
     /// NOT named — per §9, "unsupported types" is a count-only skip.
     pub ignored_types: u32,
+    /// Per-extension breakdown of `ignored_types`. Lower-case
+    /// extension (without the leading dot) → count. The watched-folder
+    /// status surface uses this so a user who drops 200 `.docx` files
+    /// gets a visible answer to "why isn't this searchable?" rather
+    /// than seeing only the aggregate `ignored_types` number. Empty
+    /// for the existing DropFolder + ObsidianVault flows that don't
+    /// surface the breakdown — there's no compatibility risk because
+    /// `#[serde(default)]` lets older sidecars deserialize cleanly.
+    #[serde(default)]
+    pub skipped_by_extension: std::collections::HashMap<String, usize>,
     /// Total files visited (informational).
     pub total_visited: u32,
 }
@@ -155,12 +165,14 @@ impl<'a> PreScanner<'a> {
     ) -> PreScanResult {
         // First pass: collect candidate paths + sizes and count files
         // whose extension didn't match the allow-list.
-        let (candidates, ignored_types, total_visited) = self.collect_candidates();
+        let (candidates, ignored_types, total_visited, skipped_by_extension) =
+            self.collect_candidates();
         let total = candidates.len();
 
         let mut result = PreScanResult {
             total_visited,
             ignored_types,
+            skipped_by_extension,
             ..Default::default()
         };
 
@@ -207,8 +219,15 @@ impl<'a> PreScanner<'a> {
         result
     }
 
-    /// Returns `(candidates, ignored_type_count, total_files_visited)`.
-    fn collect_candidates(&self) -> (Vec<(PathBuf, u64)>, u32, u32) {
+    /// Returns `(candidates, ignored_type_count, total_files_visited, skipped_by_extension)`.
+    fn collect_candidates(
+        &self,
+    ) -> (
+        Vec<(PathBuf, u64)>,
+        u32,
+        u32,
+        std::collections::HashMap<String, usize>,
+    ) {
         let allowed: Vec<String> = self
             .config
             .extensions
@@ -219,6 +238,8 @@ impl<'a> PreScanner<'a> {
         let mut candidates = Vec::new();
         let mut ignored_extensions: u32 = 0;
         let mut total_visited: u32 = 0;
+        let mut skipped_by_extension: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
 
         // filter_entry runs on the walker root too — if the user's
         // chosen folder happens to be hidden (e.g. a macOS tempdir
@@ -247,13 +268,33 @@ impl<'a> PreScanner<'a> {
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                     candidates.push((path, size));
                 }
-                _ => {
+                Some(ext) => {
+                    // Named-extension skip — bumps both the aggregate
+                    // counter (preserved for existing callers) and
+                    // the per-extension breakdown the watched-folder
+                    // status surface consumes.
                     ignored_extensions = ignored_extensions.saturating_add(1);
+                    *skipped_by_extension.entry(ext).or_insert(0) += 1;
+                }
+                None => {
+                    // Extension-less file — count as ignored without
+                    // a label. Rare in practice (READMEs etc) but
+                    // worth bucketing as `(no extension)` so the UI
+                    // total reconciles.
+                    ignored_extensions = ignored_extensions.saturating_add(1);
+                    *skipped_by_extension
+                        .entry("(no extension)".into())
+                        .or_insert(0) += 1;
                 }
             }
         }
 
-        (candidates, ignored_extensions, total_visited)
+        (
+            candidates,
+            ignored_extensions,
+            total_visited,
+            skipped_by_extension,
+        )
     }
 }
 

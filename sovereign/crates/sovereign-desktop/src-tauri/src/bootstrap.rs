@@ -251,6 +251,7 @@ mod tests {
                 yield_to_foreground_secs: 60,
             },
             data: sovereign_core::setup_config::DataSection::default(),
+            watched_folders: Default::default(),
         };
         let mode = BootstrapMode::Local { source: ConfigSource::CliSetup(cfg) };
         let snap = BootstrapSnapshot::from(&mode);

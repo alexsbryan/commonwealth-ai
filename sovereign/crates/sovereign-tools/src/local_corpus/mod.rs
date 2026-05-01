@@ -34,13 +34,20 @@ pub mod ocr;
 pub mod pre_scanner;
 pub mod preview;
 pub mod progress;
+pub mod watched;
 pub mod writeback;
 
 pub use config::{
     CorpusScope, LocalCorpusConfig, LocalCorpusSourceType, PreScanConfig, WatcherConfig,
-    WriteBackConfig,
+    WatchedFolderConfig, DeletionGuardConfig, WriteBackConfig,
 };
 pub use humanise::humanise_display_name;
-pub use manager::{IncompleteJob, IngestStats, LocalCorpusManager};
+pub use manager::{
+    IncompleteJob, IngestStats, LocalCorpusManager, WatchedIncompleteJob,
+};
 pub use pre_scanner::{FileMeta, PdfClass, PreScanResult, PreScanner};
 pub use progress::{ClusterStage, CompletionResult, ExcerptChunk, LocalCorpusProgress};
+pub use watched::{
+    Scheduler as WatchedFolderScheduler, Worker as WatchedFolderWorker,
+    WatchedFolderEvent, WatchedFolderRegistry, WatchedFolderStatus,
+};

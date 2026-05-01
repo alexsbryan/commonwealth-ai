@@ -60,6 +60,100 @@ pub enum LocalCorpusSourceType {
         follow_wiki_links: bool,
     },
     DocumentFolder,
+    /// A directory the user wants kept in sync — adds, edits, and
+    /// deletes are reflected in the index by a polling reconciliation
+    /// worker. Read-only on source: nothing under the folder is ever
+    /// written, moved, or renamed by Sovereign. See
+    /// `local_corpus/watched/` for the worker implementation and the
+    /// plan at `~/.claude/plans/let-s-build-out-this-noble-ladybug.md`.
+    WatchedFolder(WatchedFolderConfig),
+}
+
+// ─── Watched-folder configuration ─────────────────────────────────────
+
+/// Per-corpus tunables for a `WatchedFolder` source. Stored verbatim on
+/// the `LocalCorpusSourceType::WatchedFolder` variant so the worker can
+/// reconstruct its behaviour after a daemon restart.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchedFolderConfig {
+    /// When `false`, symlinked files and directories are skipped
+    /// (default). When `true`, the walker follows symlinks and tracks
+    /// visited inodes via `(dev, ino)` to break loops.
+    pub follow_symlinks: bool,
+    /// Threshold guard against catastrophic deletion (drive unmount,
+    /// `rm -rf`, etc.). Evaluated before any deletion is applied.
+    pub deletion_guard: DeletionGuardConfig,
+    /// Polling cadence between sweeps. Floored at 60 s by the scheduler
+    /// regardless of the configured value — tighter intervals hammer
+    /// the disk and shrink the deletion-guard window below human
+    /// reaction time.
+    pub sweep_interval_secs: u64,
+    /// Soft-delete grace window. Removed files keep a tombstone in the
+    /// per-corpus state file; restoring the file with the same content
+    /// hash within this window short-circuits re-extraction. Default 7
+    /// days.
+    pub soft_delete_grace_secs: u64,
+    /// Glob patterns excluded from the walk, in addition to the
+    /// built-in defaults (`.git/`, `node_modules/`, `.DS_Store`, …).
+    /// Matched against the path relative to the watched root.
+    pub exclude_globs: Vec<String>,
+    /// When `true`, scanned PDFs (no text layer) get OCR'd through
+    /// the existing `local_corpus::ocr` pipeline (rasterize →
+    /// tesseract → daemon cleanup) during a sweep. Requires the
+    /// daemon to have an `OcrCtx` installed (`set_ocr_ctx`); the
+    /// desktop runs `lcOcrAvailable()` to decide whether to surface
+    /// the toggle. When `false` (the default), scanned PDFs land in
+    /// `WatchedFolderState.failed_files` with reason
+    /// `"scanned_no_text"` and don't enter the index.
+    ///
+    /// `#[serde(default)]` keeps existing on-disk corpora
+    /// backwards-compatible — a JSON sidecar written before this
+    /// field existed deserialises as `with_ocr: false`.
+    #[serde(default)]
+    pub with_ocr: bool,
+}
+
+impl Default for WatchedFolderConfig {
+    fn default() -> Self {
+        Self {
+            follow_symlinks: false,
+            deletion_guard: DeletionGuardConfig::default(),
+            sweep_interval_secs: 120,
+            soft_delete_grace_secs: 7 * 86_400,
+            exclude_globs: Vec::new(),
+            with_ocr: false,
+        }
+    }
+}
+
+/// Catastrophe gate: a sweep that would remove `>= absolute_threshold`
+/// files OR `>= fractional_threshold * live_count` files pauses the
+/// corpus into `WatchedFolderStatus::PausedAwaitingConfirmation`. The
+/// adds + updates from the same sweep still apply.
+///
+/// Defaults are deliberately generous: a folder of 50 files losing 30
+/// trips on percentage; a folder of 200,000 files losing 5,000 trips
+/// on absolute. Both failure modes are real, so the thresholds compose
+/// as OR.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeletionGuardConfig {
+    pub absolute_threshold: usize,
+    pub fractional_threshold: f32,
+    /// `false` disables the guard entirely — eager deletion. Default
+    /// `true`. Bypass is exposed because the spec's discipline
+    /// ("visible placeholder beats silent loss every time") is the
+    /// right default but not the only credible setting.
+    pub enabled: bool,
+}
+
+impl Default for DeletionGuardConfig {
+    fn default() -> Self {
+        Self {
+            absolute_threshold: 100,
+            fractional_threshold: 0.25,
+            enabled: true,
+        }
+    }
 }
 
 // ─── Write-back (Obsidian only) ───────────────────────────────────────
@@ -185,6 +279,60 @@ impl LocalCorpusConfig {
             },
             scope: CorpusScope::Local,
             ocr_pdfs: false,
+        }
+    }
+
+    /// Default config for a `WatchedFolder` corpus. Mirrors the
+    /// `document_folder` defaults (PDF + TXT + MD readers, paragraph
+    /// chunker, scanned-PDF detection on) but defaults `watcher.enabled`
+    /// to `true` so the per-corpus mtime/size cache survives restarts
+    /// — the watched-folder scheduler relies on the persisted
+    /// `WatchedFolderConfig` carried inside `source_type`.
+    ///
+    /// `scope` is hardcoded to `Local` and `mesh_sharing` is wired off
+    /// downstream in `recipe_toml`. These are not parameterised: per
+    /// `ARCH_PRINCIPLES.md` §7, watched folders are a personal
+    /// knowledge surface and the privacy invariant is structural.
+    pub fn watched_folder(
+        path: PathBuf,
+        display_name: String,
+        watched: WatchedFolderConfig,
+    ) -> Self {
+        let canon = canonical_or_as_is(&path);
+        let id = format!("watched-{}", sha256_short(&canon));
+        // Pull `with_ocr` off the watched config and project it onto
+        // the LocalCorpusConfig.ocr_pdfs flag — single source of truth
+        // for "should the OCR path run?", reused by both the initial
+        // ingest path (which already honours `ocr_pdfs`) and the
+        // sweep path (`apply.rs::apply_watched_diff` reads it).
+        let with_ocr = watched.with_ocr;
+        Self {
+            id,
+            display_name,
+            root_path: canon,
+            source_type: LocalCorpusSourceType::WatchedFolder(watched),
+            // Markdown gets folded in alongside PDF + TXT because notes
+            // folders are the primary use case. Extractors not yet
+            // wired (`.docx`, `.rtf`, …) fall into the "skipped" bucket
+            // automatically and surface in the watched-folder status.
+            extensions: vec!["pdf".into(), "txt".into(), "md".into()],
+            chunker: ChunkerKind::Paragraph {
+                max_chars: 2048,
+                overlap_chars: 256,
+            },
+            write_back: None,
+            enrichment: None,
+            watcher: WatcherConfig {
+                enabled: true,
+                debounce_ms: 0,
+            },
+            pre_scan: PreScanConfig {
+                scanned_pdf_detection: true,
+                password_detection: true,
+                large_file_threshold_mb: 200,
+            },
+            scope: CorpusScope::Local,
+            ocr_pdfs: with_ocr,
         }
     }
 
@@ -332,6 +480,24 @@ fn source_type_tag(t: &LocalCorpusSourceType) -> &'static str {
     match t {
         LocalCorpusSourceType::ObsidianVault { .. } => "obsidian",
         LocalCorpusSourceType::DocumentFolder => "folder",
+        LocalCorpusSourceType::WatchedFolder(_) => "watched",
+    }
+}
+
+impl LocalCorpusSourceType {
+    /// True for `WatchedFolder` variants; useful for filtering the
+    /// manager's list when the daemon spawns reconciliation workers.
+    pub fn is_watched(&self) -> bool {
+        matches!(self, LocalCorpusSourceType::WatchedFolder(_))
+    }
+
+    /// Borrow the `WatchedFolderConfig` if this is a watched-folder
+    /// source. Returns `None` for the other source types.
+    pub fn watched_config(&self) -> Option<&WatchedFolderConfig> {
+        match self {
+            LocalCorpusSourceType::WatchedFolder(cfg) => Some(cfg),
+            _ => None,
+        }
     }
 }
 
@@ -420,6 +586,57 @@ mod tests {
         assert_eq!(recipe.corpus.id, cfg.id);
         assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
         assert!(!recipe.corpus.mesh_sharing);
+    }
+
+    #[test]
+    fn watched_folder_default_extensions_and_scope() {
+        let cfg = LocalCorpusConfig::watched_folder(
+            PathBuf::from("/tmp/notes"),
+            "Research notes".into(),
+            WatchedFolderConfig::default(),
+        );
+        assert_eq!(cfg.scope, CorpusScope::Local);
+        assert!(cfg.id.starts_with("watched-"));
+        // PDF + TXT + MD covers the common notes-folder mix.
+        assert_eq!(cfg.extensions, vec!["pdf".to_string(), "txt".into(), "md".into()]);
+        assert!(matches!(cfg.source_type, LocalCorpusSourceType::WatchedFolder(_)));
+        assert!(cfg.write_back.is_none()); // Read-only on source — no writeback path.
+    }
+
+    #[test]
+    fn watched_folder_recipe_toml_pins_privacy_invariants() {
+        // ARCH §7: privacy invariants must be structural. A watched
+        // folder must serialise with `scope = "local"` and
+        // `mesh_sharing = false` regardless of caller config. If a
+        // future refactor parameterises either, this test fails first.
+        let cfg = LocalCorpusConfig::watched_folder(
+            PathBuf::from("/tmp/notes"),
+            "Research notes".into(),
+            WatchedFolderConfig::default(),
+        );
+        let jsonl = PathBuf::from("/tmp/staged.jsonl");
+        let toml = recipe_toml(&cfg, &jsonl);
+        let recipe = corpus_engine::Recipe::from_toml(&toml)
+            .expect("watched-folder recipe TOML must parse");
+        assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
+        assert!(!recipe.corpus.mesh_sharing);
+    }
+
+    #[test]
+    fn deletion_guard_defaults_are_on_with_credible_thresholds() {
+        let g = DeletionGuardConfig::default();
+        assert!(g.enabled);
+        assert_eq!(g.absolute_threshold, 100);
+        assert!((g.fractional_threshold - 0.25).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn watched_folder_config_defaults_match_spec() {
+        let c = WatchedFolderConfig::default();
+        assert_eq!(c.sweep_interval_secs, 120);
+        assert_eq!(c.soft_delete_grace_secs, 7 * 86_400);
+        assert!(!c.follow_symlinks);
+        assert!(c.exclude_globs.is_empty());
     }
 
     #[test]

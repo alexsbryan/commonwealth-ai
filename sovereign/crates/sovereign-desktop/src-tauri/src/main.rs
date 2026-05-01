@@ -5,6 +5,7 @@ mod enrich_commands;
 mod friendly_names;
 mod insight_commands;
 mod local_corpus_commands;
+mod watched_folder_commands;
 mod mesh_commands;
 mod recipe_commands;
 mod routing_events;
@@ -293,6 +294,15 @@ fn main() -> ExitCode {
             local_corpus_commands::lc_rollback,
             local_corpus_commands::lc_clean,
             local_corpus_commands::lc_cancel,
+            watched_folder_commands::lc_watch_register,
+            watched_folder_commands::lc_watch_list,
+            watched_folder_commands::lc_watch_status,
+            watched_folder_commands::lc_watch_state,
+            watched_folder_commands::lc_watch_pause,
+            watched_folder_commands::lc_watch_resume,
+            watched_folder_commands::lc_watch_confirm_deletion,
+            watched_folder_commands::lc_watch_remove,
+            watched_folder_commands::lc_watch_incomplete_jobs,
             enrich_commands::enrich_build_async,
             enrich_commands::enrich_cancel_build,
             enrich_commands::enrich_errors,

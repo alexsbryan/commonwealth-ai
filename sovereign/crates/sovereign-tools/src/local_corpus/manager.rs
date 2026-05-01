@@ -54,6 +54,19 @@ pub struct IncompleteJob {
     pub files_total: usize,
 }
 
+/// A watched-folder corpus the user should know about — not in
+/// `Idle` status. Surfaced by `LocalCorpusManager::watched_incomplete_jobs`
+/// to the desktop's ResumePrompt and the CLI's `corpus watch-list`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchedIncompleteJob {
+    pub corpus_id: String,
+    pub display_name: String,
+    pub root_path: PathBuf,
+    pub status: super::watched::status::WatchedFolderStatus,
+    pub tombstones: usize,
+    pub failed_files: usize,
+}
+
 /// One registered corpus plus its current disk-level summary, shown
 /// in the settings list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +154,16 @@ impl LocalCorpusManager {
     /// honour the click.
     pub async fn ocr_available(&self) -> bool {
         self.ocr_ctx.read().await.is_some()
+    }
+
+    /// Clone the installed OCR context (if any). The watched-folder
+    /// worker calls this once per sweep so a per-file OCR fallback
+    /// can run when `cfg.ocr_pdfs` is true. Returns `None` when no
+    /// `OcrCtx` has been installed — a watched corpus with
+    /// `with_ocr: true` configured but no runtime context surfaces
+    /// scanned PDFs as `failed_files` instead of OCR'ing.
+    pub async fn ocr_ctx_clone(&self) -> Option<OcrCtx> {
+        self.ocr_ctx.read().await.clone()
     }
 
     /// The default snapshot root Obsidian write-back should use when a
@@ -690,12 +713,199 @@ impl LocalCorpusManager {
         out
     }
 
+    /// Public accessor for the engine's per-corpus index directory
+    /// root. The watched-folder worker needs this to locate its
+    /// `_watched_folder_state.json` sidecar inside each corpus dir.
+    pub fn index_dir_root(&self) -> PathBuf {
+        self.engine_index_dir()
+    }
+
     fn engine_index_dir(&self) -> PathBuf {
         // The engine does not expose its index_dir publicly yet, so we
         // derive it from data_dir by convention. `AppState` passes the
         // same data_dir both to CorpusEngine and to us.
         self.data_dir.join("indexes")
     }
+
+    // ─── Watched-folder shims ────────────────────────────────────────
+
+    /// Snapshot of every registered `WatchedFolder` corpus. Used by
+    /// the daemon at startup (auto-resume) and by the
+    /// `corpus watch-list` CLI.
+    pub async fn list_watched(&self) -> Vec<LocalCorpusConfig> {
+        self.corpora
+            .read()
+            .await
+            .values()
+            .filter(|c| c.source_type.is_watched())
+            .cloned()
+            .collect()
+    }
+
+    /// Transition a watched-folder corpus into `PausedManual`. The
+    /// scheduler skips paused corpora on its next tick. Idempotent —
+    /// already-paused corpora keep their original `since_unix`.
+    pub async fn pause_watched(&self, corpus_id: &str, reason: String) -> Result<()> {
+        use super::watched::state::WatchedFolderState;
+        use super::watched::status::WatchedFolderStatus;
+        let _cfg = self.require_watched(corpus_id).await?;
+        let state_dir = self.engine_index_dir().join(corpus_id);
+        let mut state = WatchedFolderState::load(&state_dir)?
+            .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
+        if !matches!(state.status, WatchedFolderStatus::PausedManual { .. }) {
+            state.status = WatchedFolderStatus::PausedManual {
+                since_unix: now_unix(),
+                reason,
+            };
+            state.last_updated_unix = now_unix();
+            state.save(&state_dir)?;
+        }
+        Ok(())
+    }
+
+    /// Resume a paused watched-folder corpus. The next scheduler
+    /// tick picks it up; we do not force an immediate sweep here so
+    /// the cadence behaviour is uniform with normal operation.
+    pub async fn resume_watched(&self, corpus_id: &str) -> Result<()> {
+        use super::watched::state::WatchedFolderState;
+        use super::watched::status::WatchedFolderStatus;
+        let _cfg = self.require_watched(corpus_id).await?;
+        let state_dir = self.engine_index_dir().join(corpus_id);
+        let mut state = WatchedFolderState::load(&state_dir)?
+            .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
+        if state.is_paused() || matches!(state.status, WatchedFolderStatus::Errored { .. }) {
+            // Last sweep numbers no longer reflect reality after a
+            // pause window — reset to a fresh Idle so the UI reflects
+            // "we're starting from a clean state, sweep due imminently".
+            state.status = WatchedFolderStatus::Idle {
+                last_sweep_unix: 0,
+                live_docs: state.entries.len(),
+                tombstones: state.tombstones.len(),
+            };
+            state.last_updated_unix = now_unix();
+            state.save(&state_dir)?;
+        }
+        Ok(())
+    }
+
+    /// Acknowledge a `PausedAwaitingConfirmation` state. Per plan Q3,
+    /// this clears the pause flag; the next sweep re-walks fresh and
+    /// applies whatever the current diff is — which is safer than
+    /// replaying a stale diff (the user may have restored some files
+    /// in the meantime).
+    pub async fn confirm_pending_deletion(&self, corpus_id: &str) -> Result<()> {
+        use super::watched::state::WatchedFolderState;
+        use super::watched::status::WatchedFolderStatus;
+        let _cfg = self.require_watched(corpus_id).await?;
+        let state_dir = self.engine_index_dir().join(corpus_id);
+        let mut state = WatchedFolderState::load(&state_dir)?
+            .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
+        if matches!(
+            state.status,
+            WatchedFolderStatus::PausedAwaitingConfirmation { .. }
+        ) {
+            state.status = WatchedFolderStatus::Idle {
+                last_sweep_unix: 0, // 0 makes the corpus due immediately on next tick
+                live_docs: state.entries.len(),
+                tombstones: state.tombstones.len(),
+            };
+            // One-shot bypass — the worker consumes this on the next
+            // sweep so the guard doesn't immediately re-trip on the
+            // same diff. Subsequent sweeps re-evaluate the guard
+            // normally.
+            state.bypass_guard_next_sweep = true;
+            state.last_updated_unix = now_unix();
+            state.save(&state_dir)?;
+        } else {
+            return Err(Error::Execution(format!(
+                "corpus '{corpus_id}' is not in PausedAwaitingConfirmation state"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Read the current `WatchedFolderStatus` for a corpus. Returns a
+    /// fresh `Idle { live_docs: 0 }` when the state file doesn't
+    /// exist yet (first sweep hasn't run).
+    pub async fn watched_status(
+        &self,
+        corpus_id: &str,
+    ) -> Result<super::watched::status::WatchedFolderStatus> {
+        use super::watched::state::WatchedFolderState;
+        let _cfg = self.require_watched(corpus_id).await?;
+        let state_dir = self.engine_index_dir().join(corpus_id);
+        let state = WatchedFolderState::load(&state_dir)?
+            .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
+        Ok(state.status)
+    }
+
+    /// Read the full `WatchedFolderState` for a corpus. The richer
+    /// surface includes `skipped_by_extension` + `failed_files` for
+    /// `corpus watch-status --skipped --failures`. Returns a fresh
+    /// state when the file doesn't exist.
+    pub async fn watched_state(
+        &self,
+        corpus_id: &str,
+    ) -> Result<super::watched::state::WatchedFolderState> {
+        use super::watched::state::WatchedFolderState;
+        let _cfg = self.require_watched(corpus_id).await?;
+        let state_dir = self.engine_index_dir().join(corpus_id);
+        Ok(WatchedFolderState::load(&state_dir)?
+            .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id)))
+    }
+
+    /// Watched-folder corpora that are NOT in `Idle` status (i.e.,
+    /// the user should know about them). Used by the desktop's
+    /// ResumePrompt at startup to surface guard-tripped, paused,
+    /// errored, or mid-sweep corpora. Returns a snapshot — the next
+    /// scheduler tick may resolve `Sweeping` entries on its own.
+    pub async fn watched_incomplete_jobs(&self) -> Vec<WatchedIncompleteJob> {
+        use super::watched::state::WatchedFolderState;
+        use super::watched::status::WatchedFolderStatus;
+        let mut out = Vec::new();
+        for cfg in self.corpora.read().await.values() {
+            if !cfg.source_type.is_watched() {
+                continue;
+            }
+            let state_dir = self.engine_index_dir().join(&cfg.id);
+            let state = match WatchedFolderState::load(&state_dir) {
+                Ok(Some(s)) => s,
+                _ => continue, // No state yet → nothing to surface.
+            };
+            if matches!(state.status, WatchedFolderStatus::Idle { .. }) {
+                continue;
+            }
+            out.push(WatchedIncompleteJob {
+                corpus_id: cfg.id.clone(),
+                display_name: cfg.display_name.clone(),
+                root_path: cfg.root_path.clone(),
+                status: state.status,
+                tombstones: state.tombstones.len(),
+                failed_files: state.failed_files.len(),
+            });
+        }
+        out
+    }
+
+    async fn require_watched(&self, corpus_id: &str) -> Result<LocalCorpusConfig> {
+        let cfg = self
+            .get(corpus_id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{corpus_id}' not registered")))?;
+        if !cfg.source_type.is_watched() {
+            return Err(Error::Execution(format!(
+                "corpus '{corpus_id}' is not a watched folder"
+            )));
+        }
+        Ok(cfg)
+    }
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 // ─── Progress bridge ─────────────────────────────────────────────────

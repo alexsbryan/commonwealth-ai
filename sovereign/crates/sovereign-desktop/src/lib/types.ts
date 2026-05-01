@@ -736,7 +736,43 @@ export interface DocOpProgress {
 
 export type LocalCorpusSourceType =
   | { ObsidianVault: { parse_frontmatter: boolean; follow_wiki_links: boolean } }
-  | "DocumentFolder";
+  | "DocumentFolder"
+  | { WatchedFolder: WatchedFolderConfig };
+
+/** Per-corpus tunables for a `WatchedFolder` source. Mirrors
+ *  `sovereign_tools::local_corpus::config::WatchedFolderConfig`. */
+export interface WatchedFolderConfig {
+  follow_symlinks: boolean;
+  deletion_guard: DeletionGuardConfig;
+  /** Floor: 60s. Default 120. */
+  sweep_interval_secs: number;
+  /** Default 7 days. */
+  soft_delete_grace_secs: number;
+  exclude_globs: string[];
+  /** OCR scanned PDFs (no text layer). Requires the daemon's
+   *  OcrCtx to be installed — `lcOcrAvailable()` reflects whether
+   *  the runtime can honour the toggle. Default false. */
+  with_ocr: boolean;
+}
+
+export interface DeletionGuardConfig {
+  absolute_threshold: number;
+  fractional_threshold: number;
+  enabled: boolean;
+}
+
+export const DEFAULT_WATCHED_FOLDER_CONFIG: WatchedFolderConfig = {
+  follow_symlinks: false,
+  deletion_guard: {
+    absolute_threshold: 100,
+    fractional_threshold: 0.25,
+    enabled: true,
+  },
+  sweep_interval_secs: 120,
+  soft_delete_grace_secs: 7 * 86_400,
+  exclude_globs: [],
+  with_ocr: false,
+};
 
 export interface WriteBackConfig {
   namespace: string;
@@ -835,6 +871,104 @@ export interface IncompleteJob {
   display_name: string;
   files_done: number;
   files_total: number;
+}
+
+// ─── Watched-folder status ─────────────────────────────────────────
+
+/** Tagged union mirroring `WatchedFolderStatus` on the Rust side.
+ *  The `kind` discriminator matches `serde(tag = "kind")`. */
+export type WatchedFolderStatus =
+  | { kind: "idle"; last_sweep_unix: number; live_docs: number; tombstones: number }
+  | { kind: "sweeping"; phase: SweepPhase; current: number; total: number }
+  | {
+      kind: "paused_awaiting_confirmation";
+      diff_summary: DiffSummary;
+      tripped_rule: TrippedRule;
+      sweep_started_unix: number;
+    }
+  | { kind: "paused_manual"; since_unix: number; reason: string }
+  | { kind: "errored"; message: string; errored_unix: number };
+
+export type SweepPhase =
+  | "walking"
+  | "diffing"
+  | "deleting"
+  | "updating"
+  | "adding"
+  | "gc_soft_deletes";
+
+export interface DiffSummary {
+  added: number;
+  modified: number;
+  removed: number;
+  live_before: number;
+}
+
+export type TrippedRule =
+  | { rule: "absolute"; threshold: number; observed: number }
+  | { rule: "fractional"; threshold: number; observed: number };
+
+export interface FailedFile {
+  doc_id: string;
+  absolute_path: string;
+  /** "corrupt" | "password_protected" | "scanned_no_text" — extensible. */
+  kind: string;
+  reason: string;
+  first_seen_unix: number;
+}
+
+// ─── Watched-folder Tauri command response shapes ──────────────────
+
+export interface WatchedFolderRegisterResponse {
+  corpus_id: string;
+  display_name: string;
+  initial_sweep:
+    | { kind: "skipped" }
+    | { kind: "spawned"; corpus_id: string }
+    | { kind: "completed"; files_indexed: number; chunks_written: number };
+}
+
+export interface WatchedFolderListEntry {
+  corpus_id: string;
+  display_name: string;
+  root_path: string;
+  status: WatchedFolderStatus;
+}
+
+export interface WatchedFolderListResponse {
+  corpora: WatchedFolderListEntry[];
+}
+
+export interface WatchedFolderStatusResponse {
+  corpus_id: string;
+  status: WatchedFolderStatus;
+}
+
+export interface WatchedFolderStateResponse {
+  corpus_id: string;
+  status: WatchedFolderStatus;
+  skipped_by_extension: Record<string, number>;
+  failed_files: FailedFile[];
+  tombstones: number;
+  live_entries: number;
+}
+
+export interface WatchedFolderAckResponse {
+  corpus_id: string;
+  ok: boolean;
+}
+
+export interface WatchedIncompleteJob {
+  corpus_id: string;
+  display_name: string;
+  root_path: string;
+  status: WatchedFolderStatus;
+  tombstones: number;
+  failed_files: number;
+}
+
+export interface WatchedFolderIncompleteJobsResponse {
+  jobs: WatchedIncompleteJob[];
 }
 
 /// Mirror of Rust's `LocalCorpusProgress` with `tag = "phase"`, `content = "data"`.

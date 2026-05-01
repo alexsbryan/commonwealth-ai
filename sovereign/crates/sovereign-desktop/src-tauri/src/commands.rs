@@ -999,6 +999,7 @@ async fn mirror_to_setup_config(
         },
         daemon: DaemonSection::default(),
         data: DataSection { dir: desktop.data_dir.clone() },
+        watched_folders: Default::default(),
     });
 
     let mut changed = false;

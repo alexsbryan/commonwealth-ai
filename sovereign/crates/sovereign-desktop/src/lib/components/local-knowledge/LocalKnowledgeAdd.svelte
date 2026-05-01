@@ -2,9 +2,10 @@
   interface Props {
     onPickFolder: () => void;
     onPickObsidian: () => void;
+    onPickWatchedFolder: () => void;
   }
 
-  let { onPickFolder, onPickObsidian }: Props = $props();
+  let { onPickFolder, onPickObsidian, onPickWatchedFolder }: Props = $props();
 </script>
 
 <div class="add">
@@ -13,6 +14,17 @@
       <div class="choice-body">
         <span class="choice-title">Folder</span>
         <span class="choice-sub">PDFs and text files. Indexed for search.</span>
+      </div>
+      <span class="choice-arrow" aria-hidden="true">→</span>
+    </button>
+
+    <button class="choice" onclick={onPickWatchedFolder}>
+      <div class="choice-body">
+        <span class="choice-title">Watch a folder</span>
+        <span class="choice-sub">
+          Sovereign keeps a folder in sync — drop, edit, or remove files
+          and the index updates within a few minutes. Read-only on source.
+        </span>
       </div>
       <span class="choice-arrow" aria-hidden="true">→</span>
     </button>

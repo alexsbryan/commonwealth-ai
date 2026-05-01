@@ -103,6 +103,10 @@ pub struct EmbeddedDaemon {
     /// `MeshLandscapeDigestClient` handles by inserting an empty
     /// digest list (identical to KnowledgeView=off).
     knowledge_view_http_router: RwLock<Option<axum::Router>>,
+    /// Watched-folder HTTP router (`/internal/corpus/watch/...`).
+    /// Reads the `watched_folder_runtime` singleton internally —
+    /// `EmbeddedDaemon` doesn't carry the manager directly.
+    corpus_watch_http_router: RwLock<Option<axum::Router>>,
     /// In-memory copy of the `SetupConfig` the daemon booted with.
     /// `admin_http::reload` diffs this against the file on disk so it
     /// knows which fields actually changed. Updated in place after a
@@ -186,6 +190,7 @@ impl EmbeddedDaemon {
             admin_http_router: RwLock::new(None),
             project_http_router: RwLock::new(None),
             knowledge_view_http_router: RwLock::new(None),
+            corpus_watch_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
@@ -207,6 +212,7 @@ impl EmbeddedDaemon {
             admin_http_router: RwLock::new(None),
             project_http_router: RwLock::new(None),
             knowledge_view_http_router: RwLock::new(None),
+            corpus_watch_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
@@ -268,6 +274,16 @@ impl EmbeddedDaemon {
     /// an empty digest list in that case.
     pub async fn install_knowledge_view_http_router(&self, router: axum::Router) {
         *self.knowledge_view_http_router.write().await = Some(router);
+    }
+
+    /// Install the watched-folder HTTP router
+    /// (`/internal/corpus/watch/...`). Same pattern as
+    /// [`install_knowledge_view_http_router`]: caller builds
+    /// `corpus_watch_http::corpus_watch_router()` and hands it here.
+    /// Must be called before `start_daemon` for the routes to bind;
+    /// a later install affects only the next restart.
+    pub async fn install_corpus_watch_http_router(&self, router: axum::Router) {
+        *self.corpus_watch_http_router.write().await = Some(router);
     }
 
     /// Record the `SetupConfig` this daemon booted with. The admin
@@ -1233,6 +1249,7 @@ impl EmbeddedDaemon {
         let admin_http = self.admin_http_router.read().await.clone();
         let project_http = self.project_http_router.read().await.clone();
         let knowledge_view_http = self.knowledge_view_http_router.read().await.clone();
+        let corpus_watch_http = self.corpus_watch_http_router.read().await.clone();
 
         // Spawn the API servers in the background.
         let app_state_clone = app_state.clone();
@@ -1271,6 +1288,9 @@ impl EmbeddedDaemon {
             }
             if let Some(knowledge_view_http_router) = knowledge_view_http {
                 client_router = client_router.merge(knowledge_view_http_router);
+            }
+            if let Some(corpus_watch_http_router) = corpus_watch_http {
+                client_router = client_router.merge(corpus_watch_http_router);
             }
             let internal_router =
                 commonwealth_api::server::internal_router(app_state_clone);
@@ -2006,6 +2026,7 @@ mod tests {
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),
+            watched_folders: Default::default(),
         };
 
         register_local_model_slots(&app_state, &cfg, node_id);

@@ -421,6 +421,13 @@ pub struct AppState {
     /// and the `CorpusEngine` is ready; commands check this and
     /// surface a "finish setup first" error when unset.
     pub local_corpus: RwLock<Option<Arc<LocalCorpusManager>>>,
+    /// Watched-folder reconciliation subsystem. The handle inside
+    /// holds the scheduler's JoinHandle alive — dropping `AppState`
+    /// stops the dispatcher loop. `None` in Attach mode (the
+    /// standalone daemon owns the scheduler) and before the embedded
+    /// daemon's wire-up completes in Local mode.
+    pub watched_subsystem:
+        RwLock<Option<sovereign_mesh::watched_folder_setup::WatchedSubsystem>>,
 }
 
 impl AppState {
@@ -487,6 +494,7 @@ impl AppState {
             health_shutdown: CancellationToken::new(),
             insight_service: RwLock::new(None),
             local_corpus: RwLock::new(None),
+            watched_subsystem: RwLock::new(None),
         }
     }
 }
@@ -1206,8 +1214,31 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         // watchers alive for the process lifetime — the local clone can drop.
         drop(reindexer);
 
+        // 4. /internal/corpus/watch/* — watched-folder reconciliation.
+        // Mirrors `sovereign-cli/src/daemon_cmd.rs`'s call so Local
+        // mode and the standalone CLI daemon expose the same surface.
+        // Skipped silently if the LocalCorpusManager isn't yet
+        // initialised (init may have failed earlier — the warn there
+        // is enough; we don't want to fire a second warn here).
+        if let Some(lc_mgr) = state.local_corpus.read().await.as_ref().cloned() {
+            let max_concurrent = cli_cfg.watched_folders.max_concurrent_sweeps;
+            let subsystem = sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
+                Arc::clone(&daemon_arc),
+                Arc::clone(&corpus_engine),
+                lc_mgr,
+                max_concurrent,
+            )
+            .await;
+            // Stash the subsystem on the AppState so its
+            // JoinHandle outlives this scope. AppState is held in an
+            // Arc for the desktop's lifetime, so the loop runs as
+            // long as the desktop process does.
+            *state.watched_subsystem.write().await = Some(subsystem);
+            tracing::info!("desktop daemon: /internal/corpus/watch/* router + scheduler wired");
+        }
+
         tracing::info!(
-            "desktop daemon: /v1/models, /mcp, and /v1/projects are now wired"
+            "desktop daemon: /v1/models, /mcp, /v1/projects, and /internal/corpus/watch/* are now wired"
         );
     }
 

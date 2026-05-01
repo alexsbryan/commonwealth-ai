@@ -422,7 +422,37 @@ async fn run_daemon(args: &[String]) -> i32 {
     // owned `Arc<EmbeddedDaemon>` to drive `create/join/rotate/leave`
     // from HTTP callers).
     let daemon = Arc::new(sovereign_mesh::EmbeddedDaemon::new(data_dir.clone()));
-    daemon.set_inference_provider(Arc::clone(&provider)).await;
+
+    // Wrap the raw `EmbeddedLlamaCpp` in `MeshInferenceProvider`
+    // before installing it as the daemon's serving provider.
+    //
+    // Without this wrapper the daemon's HTTP `/v1/chat/completions`
+    // path silently substitutes a local model whenever the request
+    // names a model that's only advertised by a peer (e.g. asking
+    // for `gemma-4-E4B-it-Q4_K_M` on a node that only loads
+    // `Qwen3.5-9B` and `35B-Q6` would answer with 35B-Q6 and stamp
+    // the response accordingly). The wrapper inspects
+    // `request.model_id` and either:
+    //   * serves locally when self_manifest advertises the id
+    //     (the local provider's slot picker handles Fast/Primary/
+    //     Code/extras matching by name), or
+    //   * forwards the request over HTTP to the peer whose manifest
+    //     advertises the id, or
+    //   * returns `ModelNotLoaded` if no node serves it — instead
+    //     of the previous silent substitution.
+    //
+    // Mirrors the desktop wiring in
+    // `sovereign-desktop/src-tauri/src/state.rs:649` so a request
+    // hitting either entrypoint follows the same routing rules.
+    let routed_provider: Arc<dyn InferenceProvider> = Arc::new(
+        sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+            Arc::clone(&provider),
+            Arc::clone(&daemon),
+        ),
+    );
+    daemon
+        .set_inference_provider(Arc::clone(&routed_provider))
+        .await;
     // Hand the engine to the mesh daemon so the auto_ingest loop and
     // /internal/corpus/* HTTP surface can both see in-progress
     // wikipedia/etc. ingests. See engine block above for the
@@ -544,7 +574,11 @@ async fn run_daemon(args: &[String]) -> i32 {
             &daemon,
         )))
         .await;
-    daemon.set_provider_factory(Arc::new(LlamaCppFactory)).await;
+    daemon
+        .set_provider_factory(Arc::new(LlamaCppFactory {
+            daemon: Arc::clone(&daemon),
+        }))
+        .await;
     daemon.set_setup_config(config.clone()).await;
 
     // ── Project freshness pipeline ────────────────────────────────
@@ -640,6 +674,58 @@ async fn run_daemon(args: &[String]) -> i32 {
     // The variable binding is load-bearing — dropping the Arc
     // stops every supervised watcher.
     let _reindexer_handle = reindexer;
+
+    // ── Watched-folder reconciliation scheduler ─────────────────
+    //
+    // Constructs the LocalCorpusManager + per-corpus registry,
+    // re-populates the registry from the persisted corpora list
+    // (auto-resume on daemon restart), then spawns the dispatcher
+    // loop. The scheduler walks each registered watched-folder
+    // corpus on its configured cadence (default 120 s, floored at
+    // 60 s) and applies the diff through CorpusUpdater.
+    //
+    // The local-corpus subsystem requires a StateStore but only
+    // touches it on `remove` (delete_corpus_state). The persistent
+    // source of truth for corpus metadata is `{data_dir}/local-corpora/*.json`,
+    // which the manager loads at construction. An in-memory store
+    // is therefore sufficient for the daemon — `remove`'s
+    // delete_corpus_state becomes a benign no-op against the empty
+    // in-memory map.
+    // Watched-folder reconciliation subsystem. The full wiring (build
+    // registry → resume corpora → install runtime singleton → mount
+    // HTTP routes → spawn scheduler) is factored into
+    // `sovereign_mesh::watched_folder_setup` so the desktop's
+    // embedded daemon can call the same path.
+    let _watched_subsystem = {
+        let lc_store: Arc<dyn sovereign_core::traits::StateStore> =
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+        match sovereign_tools::local_corpus::LocalCorpusManager::init(
+            Arc::clone(&engine),
+            lc_store,
+            None,
+            data_dir.clone(),
+            data_dir.join("vault-snapshots"),
+        )
+        .await
+        {
+            Ok(manager) => Some(
+                sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
+                    Arc::clone(&daemon),
+                    Arc::clone(&engine),
+                    Arc::new(manager),
+                    config.watched_folders.max_concurrent_sweeps,
+                )
+                .await,
+            ),
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "watched_folder:manager_init_failed — scheduler not spawned"
+                );
+                None
+            }
+        }
+    };
 
     // ── Resume or bootstrap a solo mesh ───────────────────────────
     match daemon.try_resume().await {
@@ -1241,13 +1327,25 @@ async fn wait_for_ready(timeout: std::time::Duration) -> bool {
     false
 }
 
-/// Rebuilds the embedded llama.cpp provider from a fresh `SetupConfig`.
+/// Rebuilds the embedded llama.cpp provider from a fresh `SetupConfig`,
+/// wrapped in the same `MeshInferenceProvider` used at cold start so
+/// hot-reloads preserve mesh-aware model routing.
+///
 /// Hot-swapped into `EmbeddedDaemon::inference_provider` by the admin
 /// reload handler when the user changes a `models.*` path in
 /// `~/.config/sovereign/config.toml` (e.g. via the desktop Settings
 /// panel's model picker). Keeps the model-loading side of the daemon
 /// out of `sovereign-mesh`, which has no business knowing about GGUF.
-struct LlamaCppFactory;
+struct LlamaCppFactory {
+    /// Same `EmbeddedDaemon` the cold-start path wraps the raw
+    /// llama.cpp provider against. Held here so a hot-reload
+    /// (operator changing the primary GGUF path while the daemon is
+    /// running) produces a `MeshInferenceProvider` view of the new
+    /// raw provider — without this, reload would drop the wrapper
+    /// and `/v1/chat/completions` would silently start substituting
+    /// for peer-only model names again.
+    daemon: Arc<sovereign_mesh::EmbeddedDaemon>,
+}
 
 #[async_trait]
 impl ProviderFactory for LlamaCppFactory {
@@ -1273,9 +1371,25 @@ impl ProviderFactory for LlamaCppFactory {
             ModelFamily::Unknown, // code slot — family detection deferred (see PR-E2)
         )
         .map_err(|e| format!("reload: failed to load models: {e}"))?;
-        let arc = Arc::new(provider);
-        arc.start_idle_monitor(cfg.daemon.primary_idle_secs);
-        Ok(arc)
+        // Keep a typed `Arc<EmbeddedLlamaCpp>` to fire
+        // `start_idle_monitor` (inherent method), then upcast to
+        // `Arc<dyn InferenceProvider>` so the wrapper can hold it.
+        let raw_concrete = Arc::new(provider);
+        raw_concrete.start_idle_monitor(cfg.daemon.primary_idle_secs);
+        let raw: Arc<dyn InferenceProvider> = raw_concrete;
+
+        // Wrap so a hot-reloaded daemon keeps its mesh-aware model
+        // routing — same wrapper the cold-start path installs in
+        // `run_daemon`. See the comment on the cold-start wiring
+        // for why a bare `EmbeddedLlamaCpp` here would re-introduce
+        // the silent-substitution bug.
+        let routed: Arc<dyn InferenceProvider> = Arc::new(
+            sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+                raw,
+                Arc::clone(&self.daemon),
+            ),
+        );
+        Ok(routed)
     }
 }
 

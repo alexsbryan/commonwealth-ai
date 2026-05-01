@@ -913,6 +913,7 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         },
         daemon: DaemonSection::default(),
         data: DataSection { dir: data_dir.clone() },
+        watched_folders: Default::default(),
     };
 
     let config_path = match cfg.save() {

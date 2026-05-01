@@ -19,6 +19,7 @@ mod drift_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod corpus_catalog_cmd;
+mod corpus_watch_cmd;
 mod doc_fetcher;
 mod doctor_cmd;
 mod found;
