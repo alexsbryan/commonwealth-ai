@@ -156,7 +156,11 @@ impl CorpusIndex {
             let col_names: Vec<&str> = schema.fields().iter()
                 .map(|f| f.name().as_str())
                 .collect();
-            tracing::debug!(columns = ?col_names, "CorpusIndex::search result schema");
+            // Schema is fully static after index creation — once
+            // an operator has confirmed the columns at TRACE on a
+            // first run, nothing learns more from seeing them again
+            // on every chat turn. Demoted from DEBUG to TRACE.
+            tracing::trace!(columns = ?col_names, "CorpusIndex::search result schema");
         }
 
         // Convert Arrow RecordBatches to ScoredChunks.
@@ -221,12 +225,23 @@ impl CorpusIndex {
                     (1.0_f32, "none")
                 };
 
-                tracing::debug!(
+                // Char-bounded preview: never slice on byte index 120
+                // because a UTF-8 multi-byte char (e.g. `–`, `é`, CJK)
+                // straddling that boundary panics with
+                // "byte index N is not a char boundary".
+                //
+                // Per-rank lines run at TRACE: one chat turn fans out
+                // across ≥6 corpora × 20 results = 120+ lines per
+                // turn, which buries everything else in the log at
+                // DEBUG. Operators who actually want to see the
+                // ranking can flip the level for this module.
+                let preview: String = content.chars().take(120).collect();
+                tracing::trace!(
                     rank = i + 1,
                     score,
                     score_source,
                     title = title.as_deref().unwrap_or(""),
-                    content_preview = &content[..content.len().min(120)],
+                    content_preview = preview.as_str(),
                     "CorpusIndex::search result"
                 );
 
