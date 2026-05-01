@@ -771,6 +771,68 @@ pub struct KnowledgeResult {
 }
 
 // -----------------------------------------------------------------
+// Section 6.5 — Knowledge Landscape Digest API
+// -----------------------------------------------------------------
+//
+// The daemon-side `KnowledgeViewManager` exposes its assembled
+// digests via `POST /v1/knowledge/landscape_digest`, so an attached
+// desktop (which does NOT construct its own manager — see
+// `AppState::is_attach_mode`) can splice the same prompt blocks the
+// daemon would. Wire shape mirrors the existing
+// `LandscapeDigest` type in `sovereign-core::types`; we redefine it
+// here to keep `oicp-types` a leaf crate with no upstream Sovereign
+// deps. The receiving side maps between the two.
+
+/// One assembled landscape-digest block (e.g. personal-knowledge,
+/// conversation-history, cross-view, relational, strategic). The
+/// `body` is markdown ready to splice; the `view_id` lets clients
+/// dedupe / re-order if needed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LandscapeDigestEntry {
+    pub view_id: String,
+    pub body: String,
+}
+
+/// Request body for `POST /v1/knowledge/landscape_digest`. All
+/// fields are optional — the simplest valid request is `{}`,
+/// equivalent to "give me the unconstrained digest set with no
+/// active-skill privacy filter and no in-conversation context."
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LandscapeDigestRequest {
+    /// Active skill id. Today this is informational only; reserved
+    /// for v2 skill-tiered digest work. The daemon does NOT
+    /// introspect it for privacy gating — see
+    /// `active_is_local_only` for that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_skill: Option<String>,
+    /// Caller-resolved "the active skill has privacy = local_only"
+    /// flag. The desktop has the canonical skill registry and
+    /// computes this against `SkillRegistry::local_only_skill_ids`;
+    /// the daemon trusts the flag and applies it directly. This
+    /// design keeps the daemon out of the skill-registry business
+    /// while preserving the splice-time privacy filter (a
+    /// `local_only` session must NOT receive
+    /// conversational/institutional/cross-view blocks).
+    #[serde(default)]
+    pub active_is_local_only: bool,
+    /// In-conversation message contents. Drives the "this entity is
+    /// already on screen, don't re-introduce it" predicate in the
+    /// relational/strategic blocks. Empty = no in-conv suppression.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conversation_messages: Vec<String>,
+}
+
+/// Response shape — a flat list of digests in the order the daemon
+/// would have spliced them. The desktop calls
+/// `ConversationContext::set_landscape_digests` with the converted
+/// list and the runtime treats it identically to a locally-spliced
+/// payload.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LandscapeDigestResponse {
+    pub digests: Vec<LandscapeDigestEntry>,
+}
+
+// -----------------------------------------------------------------
 // v0.3 §6 — Reference scoring function
 // -----------------------------------------------------------------
 
