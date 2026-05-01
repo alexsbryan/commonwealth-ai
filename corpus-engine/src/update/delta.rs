@@ -14,6 +14,7 @@
 //! `save_stored_manifest()` is called only after all three phases complete.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -133,13 +134,18 @@ impl UpdateProgressLog {
 // ─── CorpusUpdater ───────────────────────────────────────────────────────────
 
 /// Applies a `ManifestDiff` to an installed corpus index.
+///
+/// Owns an `Arc<CorpusEngine>` because `CorpusEngine` is not `Clone`
+/// (it holds `RwLock`s and a yield hook) and the watched-folder worker
+/// constructs one updater per sweep while the engine itself lives for
+/// the daemon's lifetime.
 pub struct CorpusUpdater {
-    engine: CorpusEngine,
+    engine: Arc<CorpusEngine>,
     progress_tx: Option<mpsc::Sender<UpdateProgress>>,
 }
 
 impl CorpusUpdater {
-    pub fn new(engine: CorpusEngine) -> Self {
+    pub fn new(engine: Arc<CorpusEngine>) -> Self {
         Self { engine, progress_tx: None }
     }
 
