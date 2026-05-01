@@ -1637,7 +1637,7 @@ fn render_atlas_exemplar(buf: &mut String, n: usize, e: &Exemplar) {
 // level (mirroring the existing parser checks at parse_phase1).
 const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "section_id": { "type": "string" },
     "entities_introduced": {
@@ -1674,7 +1674,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
   "$defs": {
     "entity_sketch": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "canonical_name": { "type": "string" },
         "aliases": { "type": "array", "items": { "type": "string" } },
@@ -1689,7 +1689,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
     },
     "entity_state_sketch": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "entity_name": { "type": "string" },
         "label": { "type": "string" },
@@ -1699,7 +1699,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
     },
     "relation_sketch": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "participants": { "type": "array", "items": { "type": "string" } },
         "label": { "type": "string" },
@@ -1709,7 +1709,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
     },
     "relation_state_sketch": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "participants": { "type": "array", "items": { "type": "string" } },
         "label": { "type": "string" },
@@ -1719,7 +1719,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
     },
     "event_sketch": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "description": { "type": "string" },
         "participants": { "type": "array", "items": { "type": "string" } },
@@ -1729,7 +1729,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
     },
     "claim_sketch": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "content": { "type": "string" },
         "discourse_act": { "type": "string" },
@@ -1747,7 +1747,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
     },
     "question_sketch": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "content": { "type": "string" },
         "anchor": { "type": "string" }

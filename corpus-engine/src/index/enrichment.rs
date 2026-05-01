@@ -11,7 +11,7 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 
 use crate::error::{Error, Result};
 
-use super::{CorpusIndex, StoredChunk, StoredChunkWithMetadata};
+use super::{CorpusIndex, EnrichmentChunkRow, StoredChunk, StoredChunkWithMetadata};
 
 impl CorpusIndex {
     /// Sample up to `n` chunk embeddings for integrity checking.
@@ -212,6 +212,175 @@ impl CorpusIndex {
                         if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
                     }),
                 });
+            }
+        }
+        Ok(out)
+    }
+
+    /// Read every chunk with its full content + metadata + source-doc
+    /// id. Used by atlas-pipeline adapters that need to reconstruct
+    /// source text from an already-indexed corpus (e.g. the
+    /// `enrich init --from-corpus` adapter synthesises a
+    /// `ChapterManifest` from these rows).
+    ///
+    /// Materialises everything in memory — fine at Vital L5 scope
+    /// (~1.85M chunks × ~1KB ≈ 2GB). For larger corpora a streaming
+    /// variant should land alongside this; today every consumer fits.
+    pub async fn all_chunks_full(&self) -> Result<Vec<EnrichmentChunkRow>> {
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "id".to_string(),
+                "content".to_string(),
+                "title".to_string(),
+                "url".to_string(),
+                "metadata".to_string(),
+                "source_doc_id".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("all_chunks_full query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("all_chunks_full collect: {e}")))?;
+
+        let mut out = Vec::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let contents = batch
+                .column_by_name("content")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| Error::Serialization("missing content column".into()))?;
+            let titles = batch
+                .column_by_name("title")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let urls = batch
+                .column_by_name("url")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let metadatas = batch
+                .column_by_name("metadata")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let source_doc_ids = batch
+                .column_by_name("source_doc_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+            for i in 0..batch.num_rows() {
+                out.push(EnrichmentChunkRow {
+                    id: ids.value(i) as u64,
+                    content: contents.value(i).to_string(),
+                    title: titles.and_then(|t| {
+                        if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                    }),
+                    url: urls.and_then(|u| {
+                        if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                    }),
+                    metadata_raw: metadatas.and_then(|m| {
+                        if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                    }),
+                    source_doc_id: source_doc_ids.and_then(|s| {
+                        if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                    }),
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    /// Subset of [`all_chunks_full`] — fetch only chunks whose `id`
+    /// is in `ids`. Lets enrichment subset runs on a multi-document
+    /// corpus avoid materialising every chunk in memory just to
+    /// hydrate a few chapters' bodies.
+    ///
+    /// Returns rows in arbitrary order. Empty `ids` returns an empty
+    /// `Vec` without hitting the table.
+    ///
+    /// Implementation note: LanceDB's `only_if` takes a SQL-ish
+    /// predicate string. We chunk the id list into batches of 1024
+    /// (LanceDB plans degrade on huge `IN (…)` lists) and union the
+    /// results. Duplicate ids in the input are deduped before
+    /// dispatching.
+    pub async fn chunks_by_ids(
+        &self,
+        ids: &[u64],
+    ) -> Result<Vec<EnrichmentChunkRow>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut unique: Vec<u64> = ids.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+
+        let mut out: Vec<EnrichmentChunkRow> = Vec::with_capacity(unique.len());
+        for batch_ids in unique.chunks(1024) {
+            let in_list = batch_ids
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let filter = format!("id IN ({in_list})");
+            let batches: Vec<RecordBatch> = self
+                .table
+                .query()
+                .only_if(filter)
+                .select(lancedb::query::Select::Columns(vec![
+                    "id".to_string(),
+                    "content".to_string(),
+                    "title".to_string(),
+                    "url".to_string(),
+                    "metadata".to_string(),
+                    "source_doc_id".to_string(),
+                ]))
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("chunks_by_ids query: {e}")))?
+                .try_collect()
+                .await
+                .map_err(|e| Error::Database(format!("chunks_by_ids collect: {e}")))?;
+
+            for batch in &batches {
+                let id_col = batch
+                    .column_by_name("id")
+                    .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                    .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+                let contents = batch
+                    .column_by_name("content")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                    .ok_or_else(|| Error::Serialization("missing content column".into()))?;
+                let titles = batch
+                    .column_by_name("title")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+                let urls = batch
+                    .column_by_name("url")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+                let metadatas = batch
+                    .column_by_name("metadata")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+                let source_doc_ids = batch
+                    .column_by_name("source_doc_id")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                for i in 0..batch.num_rows() {
+                    out.push(EnrichmentChunkRow {
+                        id: id_col.value(i) as u64,
+                        content: contents.value(i).to_string(),
+                        title: titles.and_then(|t| {
+                            if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                        }),
+                        url: urls.and_then(|u| {
+                            if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                        }),
+                        metadata_raw: metadatas.and_then(|m| {
+                            if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                        }),
+                        source_doc_id: source_doc_ids.and_then(|s| {
+                            if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                        }),
+                    });
+                }
             }
         }
         Ok(out)

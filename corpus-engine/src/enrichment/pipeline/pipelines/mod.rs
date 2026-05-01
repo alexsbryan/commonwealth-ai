@@ -6,3 +6,4 @@
 pub mod literary;
 pub mod literary_atlas;
 pub mod philosophy_atlas;
+pub mod referential_atlas;

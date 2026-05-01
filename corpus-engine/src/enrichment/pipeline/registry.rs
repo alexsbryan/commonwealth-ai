@@ -34,6 +34,9 @@ impl PipelineRegistry {
         r.register(super::pipelines::philosophy_atlas::PIPELINE_ID, || {
             Arc::new(super::pipelines::philosophy_atlas::PhilosophyAtlasPipeline::new())
         });
+        r.register(super::pipelines::referential_atlas::PIPELINE_ID, || {
+            Arc::new(super::pipelines::referential_atlas::ReferentialAtlasPipeline::new())
+        });
         r
     }
 
@@ -84,6 +87,18 @@ mod tests {
         // opts into the configuration phase without any code
         // branches in the runner.
         assert!(p.runs_configuration_phase());
+    }
+
+    #[test]
+    fn builtin_registers_referential_atlas() {
+        let r = PipelineRegistry::builtin();
+        let p = r
+            .get("referential_atlas")
+            .expect("referential_atlas should be registered as a builtin pipeline");
+        assert_eq!(p.id(), "referential_atlas");
+        // Referential corpora skip Phase 8 — there's no interpretive
+        // rollup to produce when the source text is editorial neutral.
+        assert!(!p.runs_configuration_phase());
     }
 
     #[test]

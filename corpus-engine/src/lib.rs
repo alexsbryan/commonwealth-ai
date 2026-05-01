@@ -39,6 +39,12 @@ pub mod scip_export;
 #[cfg(feature = "treesitter")]
 mod scip_proto;
 
+// Wikipedia link graph (Atlas-style enrichment, Layer 0). Shares the
+// `treesitter` feature gate because rusqlite is gated there; the
+// graph itself has nothing to do with treesitter.
+#[cfg(feature = "treesitter")]
+pub mod wikipedia_graph;
+
 // Test / lint result stores (use rusqlite, gated alongside SCIP).
 #[cfg(feature = "treesitter")]
 pub mod test_results;
@@ -83,7 +89,8 @@ pub use filters::{
 };
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
-    FilterOverride, InsertChunk, ScopeMeta, StoredChunk, StoredChunkWithMetadata,
+    EnrichmentChunkRow, FilterOverride, InsertChunk, ScopeMeta, StoredChunk,
+    StoredChunkWithMetadata,
 };
 pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,
@@ -114,6 +121,12 @@ pub use yield_hook::YieldHook;
 pub use scip_graph::{
     BlastEntry, BlastRadiusResult, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
     ScipRefRecord, ScipSymbolRecord, SCHEMA_VERSION,
+};
+
+#[cfg(feature = "treesitter")]
+pub use wikipedia_graph::{
+    ArticleRecord as WikipediaArticleRecord, IngestSummary as WikipediaGraphIngestSummary,
+    Neighbor as WikipediaNeighbor, StalenessCaution as WikipediaStaleness, WikipediaGraph,
 };
 
 #[cfg(feature = "treesitter")]

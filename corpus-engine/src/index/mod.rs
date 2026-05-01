@@ -105,6 +105,22 @@ pub struct StoredChunkWithMetadata {
     pub metadata_raw: Option<String>,
 }
 
+/// Full-content chunk row used by adapters that need to reconstruct
+/// the source text (atlas pipeline `--from-corpus` synthesises a
+/// `ChapterManifest` from these). Carries every column the v2
+/// enrichment pipeline's per-section extraction needs to operate
+/// on an already-indexed multi-document corpus without re-chunking
+/// from a single source file.
+#[derive(Debug, Clone)]
+pub struct EnrichmentChunkRow {
+    pub id: u64,
+    pub content: String,
+    pub title: Option<String>,
+    pub url: Option<String>,
+    pub metadata_raw: Option<String>,
+    pub source_doc_id: Option<String>,
+}
+
 /// Counts produced by [`CorpusIndex::dedupe_by_content_hash`]. The
 /// caller logs/displays these so the operator can see how much of
 /// their compute was duplicate work.
@@ -1468,6 +1484,56 @@ mod tests {
         let meta = read_meta(&index_dir).unwrap();
         assert!(!meta.indexes_built);
         assert!(meta.ingestion_in_progress);
+    }
+
+    #[tokio::test]
+    async fn chunks_by_ids_returns_only_requested_rows() {
+        // Subset enrichment use-case: a multi-document corpus with
+        // many chunks; only a handful belong to the chapters this
+        // run cares about. `chunks_by_ids` must return exactly the
+        // requested ids and no more, so the caller doesn't materialise
+        // unrelated content. Empty input returns empty without
+        // hitting the table.
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+
+        let all = idx.all_chunks_full().await.unwrap();
+        assert!(
+            all.len() >= 3,
+            "fixture insufficient: need ≥3 chunks, got {}",
+            all.len()
+        );
+        let pick: Vec<u64> = all.iter().take(2).map(|c| c.id).collect();
+
+        let got = idx.chunks_by_ids(&pick).await.unwrap();
+        let mut got_ids: Vec<u64> = got.iter().map(|c| c.id).collect();
+        got_ids.sort_unstable();
+        let mut want_ids = pick.clone();
+        want_ids.sort_unstable();
+        assert_eq!(got_ids, want_ids);
+
+        let empty = idx.chunks_by_ids(&[]).await.unwrap();
+        assert!(empty.is_empty());
+    }
+
+    #[tokio::test]
+    async fn chunks_by_ids_dedupes_input() {
+        // Caller may hand in repeated ids (chapter A and chapter B
+        // both reference the same chunk). The implementation must
+        // dedupe before issuing the query, returning each row at
+        // most once.
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+
+        let all = idx.all_chunks_full().await.unwrap();
+        let one = all.first().expect("fixture has at least one chunk").id;
+        let dupes = vec![one, one, one];
+
+        let got = idx.chunks_by_ids(&dupes).await.unwrap();
+        assert_eq!(got.len(), 1, "duplicate ids must collapse to one row");
+        assert_eq!(got[0].id, one);
     }
 
     #[tokio::test]
