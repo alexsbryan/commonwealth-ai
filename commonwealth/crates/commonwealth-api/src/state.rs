@@ -98,6 +98,15 @@ pub trait LocalInferenceService: Send + Sync {
     async fn extras_inventory(&self) -> Vec<(String, String)> {
         Vec::new()
     }
+
+    /// Eagerly load the primary chat slot so the next chat-completions
+    /// request doesn't pay the lazy-load tax. Idempotent. Default
+    /// returns success without doing work — backends that don't
+    /// manage local slots have nothing to warm.
+    /// Route: `POST /internal/inference/warmup`.
+    async fn warmup_primary(&self) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// Callback the route handlers fire whenever they mutate `Mesh` —

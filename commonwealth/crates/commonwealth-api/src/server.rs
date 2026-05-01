@@ -145,6 +145,13 @@ pub fn internal_router(state: AppState) -> Router {
         .route("/internal/models/load", post(routes_internal::models_load))
         .route("/internal/models/unload", post(routes_internal::models_unload))
         .route("/internal/models/inventory", get(routes_internal::models_inventory))
+        // Eagerly warm the primary chat slot. Desktop fires this on
+        // window-focus / chat-mount so the first turn after a
+        // resume doesn't pay the 10–90s lazy-load tax.
+        .route(
+            "/internal/inference/warmup",
+            post(routes_internal::inference_warmup),
+        )
         // Foreground-yield introspection — read-only snapshot of the
         // atomics that decide whether ingest workers are pausing for
         // chat. No POST: the window is configured at startup via

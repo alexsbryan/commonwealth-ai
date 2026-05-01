@@ -42,12 +42,12 @@ pub use gossip::{
 };
 pub use knowledge::{knowledge_search, latency_probe};
 pub use mesh_admin::{
-    foreground_state, ingest_budget_get, ingest_budget_set, join, mesh_quiesce_get,
-    mesh_quiesce_set, models_inventory, models_load, models_unload, node_activity,
-    ForegroundStateResponse, IngestBudgetState, InventoryEntry, InventoryResponse, JoinRejection,
-    JoinRequest, JoinResponse, LoadModelRequest, LoadModelResponse, MeshQuiesceState, MeshWire,
-    NodeActivityPayload, SetIngestBudgetRequest, SetMeshQuiesceRequest, UnloadModelRequest,
-    UnloadModelResponse,
+    foreground_state, inference_warmup, ingest_budget_get, ingest_budget_set, join,
+    mesh_quiesce_get, mesh_quiesce_set, models_inventory, models_load, models_unload,
+    node_activity, ForegroundStateResponse, IngestBudgetState, InventoryEntry, InventoryResponse,
+    JoinRejection, JoinRequest, JoinResponse, LoadModelRequest, LoadModelResponse,
+    MeshQuiesceState, MeshWire, NodeActivityPayload, SetIngestBudgetRequest,
+    SetMeshQuiesceRequest, UnloadModelRequest, UnloadModelResponse, WarmupResponse,
 };
 
 // Queue helpers re-exported intra-module so `corpus_collaborate` can keep

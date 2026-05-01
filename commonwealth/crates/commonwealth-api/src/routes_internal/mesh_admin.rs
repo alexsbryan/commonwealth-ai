@@ -120,6 +120,13 @@ pub struct InventoryResponse {
     pub extras: Vec<InventoryEntry>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WarmupResponse {
+    /// Wall-clock from request received to slot ready, including
+    /// the no-op fast path when the slot was already warm.
+    pub latency_ms: u64,
+}
+
 /// `POST /internal/models/load` — add (or replace) an extras slot.
 ///
 /// On success, also registers a `ModelInfo` entry in the inference
@@ -264,6 +271,35 @@ pub async fn models_unload(
         })),
         Err(e) => Err((StatusCode::BAD_REQUEST, e)),
     }
+}
+
+/// `POST /internal/inference/warmup` — eagerly load the primary
+/// chat slot so the next chat-completions request doesn't pay
+/// the lazy-load tax. Idempotent. Loopback-only (mounted on the
+/// `:9741` client router behind the loopback guard).
+///
+/// Wired into the desktop app's window-focus / chat-mount events
+/// so the slot is hot by the time the user hits send. Without
+/// this, every conversation that pauses past `primary_idle_secs`
+/// (default 60s) re-pays the full model load on the next turn —
+/// 10–20s on Metal, much worse on CPU.
+pub async fn inference_warmup(
+    State(state): State<AppState>,
+) -> Result<Json<WarmupResponse>, (StatusCode, String)> {
+    let Some(service) = state.inner.local_inference.as_ref() else {
+        // Standalone Commonwealth daemon path (orchestrator-spawned
+        // llama-server) — no in-process slot to warm. 200 with
+        // zero latency so the desktop's fire-and-forget call
+        // stays a no-op rather than a noisy error.
+        return Ok(Json(WarmupResponse { latency_ms: 0 }));
+    };
+    let started = std::time::Instant::now();
+    service
+        .warmup_primary()
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+    let latency_ms = started.elapsed().as_millis() as u64;
+    Ok(Json(WarmupResponse { latency_ms }))
 }
 
 /// `GET /internal/models/inventory` — list the currently-loaded
