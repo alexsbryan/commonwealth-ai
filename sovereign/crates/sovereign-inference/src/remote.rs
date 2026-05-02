@@ -116,6 +116,25 @@ impl RemoteApiProvider {
             body["oicp"] = v;
         }
 
+        // Forward the per-request `enable_thinking` toggle as
+        // `chat_template_kwargs: { enable_thinking: <bool> }` —
+        // the convention vLLM and llama-server both accept on
+        // OpenAI-compatible endpoints. Without this the daemon
+        // falls through to its hardcoded default
+        // (`embedded.rs::apply_chat_template_oaicompat` historically
+        // pinned `enable_thinking: false`). With it set explicitly
+        // by the caller, the relational/witness path can flip
+        // thinking ON so the chat template wraps the model's
+        // planning trace in `<think>...</think>` — and the
+        // post-process `strip_think_blocks` (eval-side runner +
+        // production runtime where wired) can drop it cleanly.
+        // Daemon-side unwrap: `inference_adapter::extract_enable_thinking`.
+        if let Some(enable) = request.enable_thinking {
+            body["chat_template_kwargs"] = serde_json::json!({
+                "enable_thinking": enable,
+            });
+        }
+
         // Forward `structured_output` to the daemon as the OpenAI
         // `response_format: {type: "json_schema", json_schema: {...}}`
         // envelope. Without this, the schema is dropped at the HTTP
@@ -438,6 +457,7 @@ mod tests {
             tools: None,
             tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
         };
 
         let body = provider.build_request(&request);
@@ -481,6 +501,7 @@ mod tests {
             tools: None,
             tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
         };
 
         let body = provider.build_request(&request);

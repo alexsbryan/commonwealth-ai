@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::Result;
-use crate::skills::MergedMemoryConfig;
+use crate::skills::{MergedMemoryConfig, SkillRegister};
 use crate::traits::{InferenceProvider, StateStore};
 use crate::types::*;
 
@@ -91,6 +91,7 @@ pub async fn compress_working_memory(
                 tools: None,
                 tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -232,6 +233,7 @@ pub async fn extract_long_term_memories(
                 tools: None,
                 tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -285,14 +287,303 @@ fn parse_extracted_memories(text: &str) -> Result<Vec<Memory>> {
 
 // ─── Memory Prompt Injection ──────────────────────────────────
 
-/// Format memories for injection into system prompts.
-pub fn format_memories_for_prompt(memories: &[Memory]) -> Option<String> {
+/// Confidence threshold for the "directly stated" register —
+/// memories at or above this are presented as things the user
+/// said in their own words.
+const RELATIONAL_DIRECT_THRESHOLD: f64 = 0.85;
+
+/// Confidence threshold for the "inferred" register — memories
+/// between this and `RELATIONAL_DIRECT_THRESHOLD` are presented as
+/// patterns read across conversations rather than verbatim claims.
+/// Memories below this threshold land in the "tentative" band.
+const RELATIONAL_INFER_THRESHOLD: f64 = 0.5;
+
+/// Format memories for injection into system prompts. The `register`
+/// argument determines the surface shape:
+///
+/// * `Factual` — flat bulleted list under the heading "Known facts
+///   about the user:". Pre-existing behavior; preserved for the
+///   default voice contract.
+/// * `Relational` — three confidence-banded sections that the model
+///   can render into its three epistemic registers (history /
+///   inference / guess). Memories whose `source_conversation_id` is
+///   set get a `[YYYY-MM-DD]` prefix derived from `created_at`, so
+///   the model can produce situated phrasing like "you told me on
+///   2026-03-12 that…" instead of flat assertions.
+///
+/// Returns `None` when `memories` is empty.
+pub fn format_memories_for_prompt(
+    memories: &[Memory],
+    register: SkillRegister,
+) -> Option<String> {
     if memories.is_empty() {
         return None;
     }
 
-    let items: Vec<String> = memories.iter().map(|m| format!("- {}", m.content)).collect();
+    match register {
+        SkillRegister::Factual => format_factual(memories),
+        SkillRegister::Relational => format_relational(memories),
+    }
+}
+
+fn format_factual(memories: &[Memory]) -> Option<String> {
+    let items: Vec<String> = memories
+        .iter()
+        .map(|m| format!("- {}", m.content))
+        .collect();
     Some(format!("Known facts about the user:\n{}", items.join("\n")))
+}
+
+fn format_relational(memories: &[Memory]) -> Option<String> {
+    let mut directly: Vec<&Memory> = Vec::new();
+    let mut inferred: Vec<&Memory> = Vec::new();
+    let mut tentative: Vec<&Memory> = Vec::new();
+    for m in memories {
+        if m.confidence >= RELATIONAL_DIRECT_THRESHOLD {
+            directly.push(m);
+        } else if m.confidence >= RELATIONAL_INFER_THRESHOLD {
+            inferred.push(m);
+        } else {
+            tentative.push(m);
+        }
+    }
+
+    let mut sections: Vec<String> = Vec::new();
+    if !directly.is_empty() {
+        sections.push(format!(
+            "What you've told me directly:\n{}",
+            render_band(&directly).join("\n")
+        ));
+    }
+    if !inferred.is_empty() {
+        sections.push(format!(
+            "What I've inferred from earlier conversations:\n{}",
+            render_band(&inferred).join("\n")
+        ));
+    }
+    if !tentative.is_empty() {
+        sections.push(format!(
+            "Tentative — flag these as guesses if you surface them:\n{}",
+            render_band(&tentative).join("\n")
+        ));
+    }
+
+    Some(sections.join("\n\n"))
+}
+
+fn render_band(memories: &[&Memory]) -> Vec<String> {
+    memories
+        .iter()
+        .map(|m| {
+            let date_prefix = m
+                .source_conversation_id
+                .as_ref()
+                .and_then(|_| format_unix_date(m.created_at))
+                .map(|d| format!("[{d}] "))
+                .unwrap_or_default();
+            format!(
+                "- {date_prefix}{}   (confidence {:.2})",
+                m.content, m.confidence
+            )
+        })
+        .collect()
+}
+
+/// Render a Unix timestamp (seconds) as `YYYY-MM-DD` in UTC.
+/// Returns `None` for negative timestamps and timestamps that don't
+/// resolve to a valid date — both treated as missing-date cases so
+/// the renderer can fall through to an undated bullet.
+fn format_unix_date(ts: i64) -> Option<String> {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
+        .map(|dt| dt.format("%Y-%m-%d").to_string())
+}
+
+// ─── Temporal Tension Detection ───────────────────────────────
+
+/// Maximum number of memories considered in a single tension
+/// pre-pass. Bounds the Quick-slot inference cost so adding the
+/// pre-pass doesn't dominate per-turn latency. Picked at 5 because
+/// the directly-stated band is by construction a small set per
+/// retrieval call (top-K=5 in current production), and at K=5 the
+/// classifier batch fits comfortably under the Fast slot's
+/// 1024-token budget.
+const MAX_TENSION_CANDIDATES: usize = 5;
+
+/// Maximum char length of the user-message excerpt that's spliced
+/// alongside a tension. Bounds the prompt size so a long pasted
+/// passage doesn't bloat every turn's system prompt. The model
+/// only needs the gist of what the user just said; the full
+/// message is in the conversation history immediately below.
+const TENSION_EXCERPT_CHAR_CAP: usize = 240;
+
+/// JSON shape the Quick-slot classifier is asked to return, one
+/// item per candidate memory.
+#[derive(Debug, serde::Deserialize)]
+struct TensionClassification {
+    index: usize,
+    relation: String,
+}
+
+/// Detect tensions between the user's current message and prior
+/// directly-stated memories. Implements principle 5 ("surface
+/// contradictions across time") of the relational voice contract.
+///
+/// Inputs:
+/// * `inference` — provider used to make a single Fast-slot call.
+/// * `current_message` — what the user just said.
+/// * `memories` — the memories already loaded into the
+///   conversation context (from FTS retrieval). Filtered here to
+///   the directly-stated band (`confidence ≥ RELATIONAL_DIRECT_THRESHOLD`)
+///   so guesses and inferences don't seed false-positive tensions.
+///
+/// Behaviour:
+/// * Returns `Ok(Vec::new())` when there are no candidate memories
+///   — common case for casual chat, costs zero inference.
+/// * Issues one Fast-slot batched JSON-classifier call. Soft-fails
+///   on parse error (returns empty rather than blocking the turn).
+/// * Returns at most `MAX_TENSION_CANDIDATES` tensions.
+///
+/// The function is register-agnostic — the *caller* (the Runtime)
+/// is responsible for skipping it for factual skills. Keeping the
+/// gate in the caller avoids threading `SkillRegister` through
+/// memory's public surface and keeps this fn unit-testable in
+/// isolation.
+pub async fn detect_temporal_tensions(
+    inference: &dyn InferenceProvider,
+    current_message: &str,
+    memories: &[Memory],
+) -> Result<Vec<TemporalTension>> {
+    let candidates: Vec<&Memory> = memories
+        .iter()
+        .filter(|m| m.confidence >= RELATIONAL_DIRECT_THRESHOLD)
+        .filter(|m| m.deleted_at.is_none())
+        .take(MAX_TENSION_CANDIDATES)
+        .collect();
+
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let listing = candidates
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            // Memory.content is user-derived but JSON-escape it
+            // before splicing into the prompt — defensive against
+            // quotes / newlines that would corrupt the listing.
+            format!(
+                "{{\"index\": {i}, \"memory\": {}}}",
+                serde_json::to_string(&m.content).unwrap_or_else(|_| "\"\"".to_string())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+
+    let prompt = format!(
+        "You are a tension-detector for a situated conversation. Compare each \
+prior memory the user expressed against the user's current message. Classify \
+each pairing as exactly one of:\n\
+- \"tension\" — the new statement materially contradicts the prior memory, OR \
+describes the same subject in a way that would benefit from gentle surfacing \
+(e.g., \"I'm leaving the job\" vs. \"I want to grow here\").\n\
+- \"consistent\" — the new statement reinforces or naturally extends the prior memory.\n\
+- \"neutral\" — the topics don't relate enough to evaluate.\n\n\
+Bias toward \"neutral\" when uncertain. \"tension\" should be a deliberate \
+flag, not a default.\n\n\
+User's current message:\n{current_message}\n\n\
+Prior memories (JSON):\n[\n{listing}\n]\n\n\
+Reply with a JSON array, one entry per memory, in the original order:\n\
+[{{\"index\": <i>, \"relation\": \"consistent|neutral|tension\"}}, ...]"
+    );
+
+    let schema = serde_json::json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "index": { "type": "integer", "minimum": 0 },
+                "relation": { "type": "string", "enum": ["consistent", "neutral", "tension"] }
+            },
+            "required": ["index", "relation"],
+            "additionalProperties": false
+        }
+    });
+
+    let mut request = CompletionRequest::new(&prompt).with_speed(Speed::Fast);
+    request.structured_output = Some(schema);
+    request.max_tokens = Some(512);
+
+    let response = inference.complete(&request).await?;
+    let parsed = parse_tension_classifications(&response.text);
+
+    let excerpt = excerpt_message(current_message);
+    let tensions: Vec<TemporalTension> = parsed
+        .into_iter()
+        .filter(|item| item.relation == "tension")
+        .filter_map(|item| {
+            candidates
+                .get(item.index)
+                .map(|m| TemporalTension {
+                    memory_id: m.id.clone(),
+                    prior_content: m.content.clone(),
+                    prior_created_at: m.created_at,
+                    prior_has_source_conversation: m.source_conversation_id.is_some(),
+                    current_excerpt: excerpt.clone(),
+                })
+        })
+        .collect();
+
+    Ok(tensions)
+}
+
+fn excerpt_message(msg: &str) -> String {
+    if msg.chars().count() <= TENSION_EXCERPT_CHAR_CAP {
+        msg.to_string()
+    } else {
+        let head: String = msg.chars().take(TENSION_EXCERPT_CHAR_CAP).collect();
+        format!("{head}…")
+    }
+}
+
+/// Parse the Quick-slot classifier's response. Soft-fail policy:
+/// any deviation from the schema yields an empty `Vec`, NOT an
+/// error — a malformed pre-pass response must never block a turn,
+/// it just suppresses the tension-surfacing cue and the model
+/// continues without it.
+fn parse_tension_classifications(text: &str) -> Vec<TensionClassification> {
+    // Try the raw text first — the structured_output path should
+    // produce a clean JSON array directly.
+    if let Ok(items) = serde_json::from_str::<Vec<TensionClassification>>(text.trim()) {
+        return items;
+    }
+    // Fallback: extract bracketed array from a possibly-fenced or
+    // prose-wrapped response.
+    if let Some(arr) = extract_json_array(text) {
+        if let Ok(items) = serde_json::from_str::<Vec<TensionClassification>>(&arr) {
+            return items;
+        }
+    }
+    Vec::new()
+}
+
+/// Extract a `[...]` JSON array from text that may contain code
+/// fences or trailing prose. Mirrors `extract_json_object` but for
+/// arrays.
+fn extract_json_array(text: &str) -> Option<String> {
+    if let Some(start) = text.find("```json") {
+        let after = &text[start + "```json".len()..];
+        if let Some(end) = after.find("```") {
+            return Some(after[..end].trim().to_string());
+        }
+    }
+    if let Some(start) = text.find('[') {
+        if let Some(end) = text.rfind(']') {
+            if end > start {
+                return Some(text[start..=end].to_string());
+            }
+        }
+    }
+    None
 }
 
 // ─── Contradiction Detection ──────────────────────────────────
@@ -340,6 +631,7 @@ pub async fn detect_contradictions(
                 tools: None,
                 tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -708,11 +1000,12 @@ mod tests {
 
     #[test]
     fn format_memories_empty_returns_none() {
-        assert!(format_memories_for_prompt(&[]).is_none());
+        assert!(format_memories_for_prompt(&[], SkillRegister::Factual).is_none());
+        assert!(format_memories_for_prompt(&[], SkillRegister::Relational).is_none());
     }
 
     #[test]
-    fn format_memories_returns_bullet_list() {
+    fn factual_register_returns_pre_existing_flat_bullet_list() {
         let memories = vec![
             Memory {
                 id: "1".to_string(),
@@ -737,10 +1030,115 @@ mod tests {
                 source_conversation_id: None,
             },
         ];
-        let result = format_memories_for_prompt(&memories).unwrap();
+        let result =
+            format_memories_for_prompt(&memories, SkillRegister::Factual).unwrap();
         assert!(result.contains("Known facts about the user:"));
         assert!(result.contains("- User prefers Rust"));
         assert!(result.contains("- User is a backend engineer"));
+        // Banded headings must NOT appear in factual format.
+        assert!(!result.contains("What you've told me directly"));
+        assert!(!result.contains("What I've inferred"));
+    }
+
+    fn mem(
+        id: &str,
+        content: &str,
+        confidence: f64,
+        created_at: i64,
+        source_conv: Option<&str>,
+    ) -> Memory {
+        Memory {
+            id: id.to_string(),
+            content: content.to_string(),
+            source: "test".to_string(),
+            confidence,
+            created_at,
+            last_used: created_at,
+            version: 0,
+            deleted_at: None,
+            source_conversation_id: source_conv.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn relational_register_splits_into_three_confidence_bands() {
+        // 2026-03-12 00:00:00 UTC = 1773273600
+        let directly = mem("d", "I want to leave the job", 0.92, 1_773_273_600, Some("c-mar"));
+        // 2026-04-08 00:00:00 UTC = 1775606400
+        let inferred = mem("i", "Work and meaning are linked for you", 0.62, 1_775_606_400, Some("c-apr"));
+        let tentative = mem("t", "You may be avoiding conflict with Mark", 0.35, 0, None);
+
+        let result = format_memories_for_prompt(
+            &[directly, inferred, tentative],
+            SkillRegister::Relational,
+        )
+        .unwrap();
+
+        assert!(result.contains("What you've told me directly:"));
+        assert!(result.contains("What I've inferred from earlier conversations:"));
+        assert!(result.contains("Tentative — flag these as guesses"));
+        assert!(result.contains("[2026-03-12]"));
+        assert!(result.contains("[2026-04-08]"));
+        assert!(result.contains("(confidence 0.92)"));
+        assert!(result.contains("(confidence 0.62)"));
+        assert!(result.contains("(confidence 0.35)"));
+        // The flat-list factual heading must NOT appear in relational format.
+        assert!(!result.contains("Known facts about the user:"));
+    }
+
+    #[test]
+    fn relational_register_omits_date_when_no_source_conversation() {
+        let undated = mem("u", "User prefers Rust", 0.95, 1_773_273_600, None);
+        let result = format_memories_for_prompt(
+            &[undated],
+            SkillRegister::Relational,
+        )
+        .unwrap();
+        // Date should not appear because source_conversation_id is None,
+        // even though created_at would resolve to a valid date.
+        assert!(!result.contains("[2026-03-12]"));
+        assert!(result.contains("- User prefers Rust"));
+    }
+
+    #[test]
+    fn relational_register_skips_empty_bands() {
+        let only_directly = mem("d", "I told you X", 0.95, 1_773_273_600, Some("c"));
+        let result = format_memories_for_prompt(
+            &[only_directly],
+            SkillRegister::Relational,
+        )
+        .unwrap();
+        // Only the band that has content should render.
+        assert!(result.contains("What you've told me directly:"));
+        assert!(!result.contains("What I've inferred"));
+        assert!(!result.contains("Tentative —"));
+    }
+
+    #[test]
+    fn relational_register_band_thresholds_are_exact() {
+        // 0.85 — exactly on the directly threshold (inclusive).
+        let m_85 = mem("a", "boundary directly", 0.85, 0, None);
+        // 0.5 — exactly on the inferred threshold (inclusive).
+        let m_50 = mem("b", "boundary inferred", 0.50, 0, None);
+        // 0.4999... — just below inferred threshold.
+        let m_49 = mem("c", "tentative", 0.49, 0, None);
+
+        let result = format_memories_for_prompt(
+            &[m_85, m_50, m_49],
+            SkillRegister::Relational,
+        )
+        .unwrap();
+        // The directly band lists "boundary directly".
+        let directly_idx = result.find("What you've told me directly:").unwrap();
+        let inferred_idx = result.find("What I've inferred").unwrap();
+        let tentative_idx = result.find("Tentative —").unwrap();
+        let directly_block = &result[directly_idx..inferred_idx];
+        let inferred_block = &result[inferred_idx..tentative_idx];
+        let tentative_block = &result[tentative_idx..];
+
+        assert!(directly_block.contains("boundary directly"));
+        assert!(inferred_block.contains("boundary inferred"));
+        assert!(tentative_block.contains("tentative"));
     }
 
     #[test]
@@ -793,5 +1191,190 @@ mod tests {
         let text = "I found some facts about the user";
         let mems = parse_extracted_memories(text).unwrap();
         assert!(mems.is_empty());
+    }
+
+    // ─── R3: Temporal-tension detection ───────────────────────
+
+    use crate::error::Error;
+    use crate::traits::InferenceProvider;
+    use crate::types::{CompletionResponse, Depth, ProviderCapabilities, Speed};
+    use async_trait::async_trait;
+    use futures::Stream;
+    use std::pin::Pin;
+    use std::sync::Mutex;
+
+    /// Minimal mock inference provider for the tension-detector
+    /// tests. Returns whatever was preset; records the prompt the
+    /// caller sent so the tests can pin the prompt shape.
+    struct ScriptedInference {
+        response_text: String,
+        last_prompt: Mutex<Option<String>>,
+    }
+
+    impl ScriptedInference {
+        fn new(response_text: &str) -> Self {
+            Self {
+                response_text: response_text.to_string(),
+                last_prompt: Mutex::new(None),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl InferenceProvider for ScriptedInference {
+        async fn complete(
+            &self,
+            request: &CompletionRequest,
+        ) -> Result<CompletionResponse> {
+            *self.last_prompt.lock().unwrap() = Some(request.prompt.clone());
+            Ok(CompletionResponse {
+                text: self.response_text.clone(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "scripted".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("ScriptedInference: streaming unused".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    fn relational_mem(
+        id: &str,
+        content: &str,
+        confidence: f64,
+        created_at: i64,
+        source_conv: Option<&str>,
+    ) -> Memory {
+        Memory {
+            id: id.to_string(),
+            content: content.to_string(),
+            source: "test".into(),
+            confidence,
+            created_at,
+            last_used: created_at,
+            version: 0,
+            deleted_at: None,
+            source_conversation_id: source_conv.map(|s| s.to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn detect_tensions_returns_empty_when_no_candidate_memories() {
+        let infer = ScriptedInference::new("[]");
+        let out = detect_temporal_tensions(&infer, "anything", &[]).await.unwrap();
+        assert!(out.is_empty());
+        // The provider must NOT have been called when there are no
+        // candidates (zero-cost guarantee for casual chat).
+        assert!(infer.last_prompt.lock().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn detect_tensions_skips_low_confidence_memories() {
+        // 0.6 < RELATIONAL_DIRECT_THRESHOLD (0.85) — should be filtered.
+        let infer = ScriptedInference::new("[]");
+        let mems = vec![relational_mem("a", "guess", 0.6, 0, None)];
+        let out = detect_temporal_tensions(&infer, "anything", &mems).await.unwrap();
+        assert!(out.is_empty());
+        // No directly-stated candidates → no inference call.
+        assert!(infer.last_prompt.lock().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn detect_tensions_returns_only_tension_classifications() {
+        // Three candidates; classifier marks only the middle one as tension.
+        let infer = ScriptedInference::new(
+            r#"[
+                {"index": 0, "relation": "consistent"},
+                {"index": 1, "relation": "tension"},
+                {"index": 2, "relation": "neutral"}
+            ]"#,
+        );
+        let mems = vec![
+            relational_mem("m0", "I love my job", 0.95, 1_773_273_600, Some("c1")),
+            relational_mem("m1", "I want to leave the job", 0.92, 1_773_273_600, Some("c2")),
+            relational_mem("m2", "I cook on Sundays", 0.90, 0, None),
+        ];
+        let out = detect_temporal_tensions(&infer, "this is a place I want to grow", &mems)
+            .await
+            .unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].memory_id, "m1");
+        assert_eq!(out[0].prior_content, "I want to leave the job");
+        assert!(out[0].prior_has_source_conversation);
+        // Excerpt is the user message, possibly truncated; here it's short.
+        assert_eq!(out[0].current_excerpt, "this is a place I want to grow");
+    }
+
+    #[tokio::test]
+    async fn detect_tensions_soft_fails_on_garbage_response() {
+        // Model output that doesn't parse as JSON — must NOT error,
+        // just return empty so the turn proceeds.
+        let infer = ScriptedInference::new("I'm not sure what you mean.");
+        let mems = vec![relational_mem("m", "I told you X", 0.95, 0, Some("c"))];
+        let out = detect_temporal_tensions(&infer, "current", &mems).await.unwrap();
+        assert!(out.is_empty());
+    }
+
+    #[tokio::test]
+    async fn detect_tensions_handles_fenced_response() {
+        let infer = ScriptedInference::new(
+            "Here's the classification:\n```json\n[{\"index\": 0, \"relation\": \"tension\"}]\n```",
+        );
+        let mems = vec![relational_mem("m", "I told you X", 0.95, 0, Some("c"))];
+        let out = detect_temporal_tensions(&infer, "current", &mems).await.unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].memory_id, "m");
+    }
+
+    #[tokio::test]
+    async fn detect_tensions_truncates_long_messages() {
+        let infer = ScriptedInference::new(r#"[{"index": 0, "relation": "tension"}]"#);
+        let mems = vec![relational_mem("m", "prior", 0.95, 0, None)];
+        let long_message = "x".repeat(500);
+        let out = detect_temporal_tensions(&infer, &long_message, &mems).await.unwrap();
+        assert_eq!(out.len(), 1);
+        // Excerpt cap is TENSION_EXCERPT_CHAR_CAP (240) + ellipsis.
+        assert!(out[0].current_excerpt.chars().count() <= TENSION_EXCERPT_CHAR_CAP + 1);
+        assert!(out[0].current_excerpt.ends_with('…'));
+    }
+
+    #[tokio::test]
+    async fn detect_tensions_caps_at_max_candidates() {
+        let infer = ScriptedInference::new(
+            // Classifier asked to evaluate 5 (capped); we send 7.
+            r#"[
+                {"index": 0, "relation": "tension"},
+                {"index": 1, "relation": "tension"},
+                {"index": 2, "relation": "tension"},
+                {"index": 3, "relation": "tension"},
+                {"index": 4, "relation": "tension"}
+            ]"#,
+        );
+        let mems: Vec<Memory> = (0..7)
+            .map(|i| relational_mem(&format!("m{i}"), &format!("memory {i}"), 0.95, 0, None))
+            .collect();
+        let out = detect_temporal_tensions(&infer, "current", &mems).await.unwrap();
+        // At most MAX_TENSION_CANDIDATES (5), regardless of memories supplied.
+        assert!(out.len() <= MAX_TENSION_CANDIDATES);
     }
 }

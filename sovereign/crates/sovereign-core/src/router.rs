@@ -1017,6 +1017,7 @@ Reply with ONLY the letter: A, B, or C"#
                 tools: None,
                 tool_choice: None,
                         model_id: None,
+                        enable_thinking: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify raw output: {:?}", response.text);
@@ -1072,6 +1073,7 @@ Reply with ONLY the letter: A, B, or C"#
                 tools: None,
                 tool_choice: None,
                         model_id: None,
+                        enable_thinking: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify_json raw output: {:?}", response.text);
@@ -1681,6 +1683,7 @@ mod tests {
             document_session: None,
             topic_context: None,
             knowledge_view_digests: None,
+            temporal_tensions: Vec::new(),
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -1715,6 +1718,7 @@ mod tests {
             document_session: None,
             topic_context: None,
             knowledge_view_digests: None,
+            temporal_tensions: Vec::new(),
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);

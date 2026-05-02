@@ -77,6 +77,7 @@ impl WebSearchTool {
             tools: None,
             tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
         };
 
         match self.inference.complete(&request).await {
@@ -203,6 +204,7 @@ impl WebSearchTool {
             tools: None,
             tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
         };
 
         let response = self.inference.complete(&request).await?;

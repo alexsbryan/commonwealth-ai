@@ -1,0 +1,25 @@
+# Principle 3 — Load-bearing questions.
+# A heavy share that invites a single steering question, not three
+# filler questions. The deterministic check enforces ≤ 1 question.
+
+[scenario]
+id = "04-load-bearing-questions"
+skill = "inner-work"
+description = "Heavy share that should yield at most one focused question, never filler like 'does that make sense?'."
+probes = ["right-question"]
+
+[turn]
+user = "I had a fight with my mom yesterday and I haven't been able to stop replaying it."
+
+[expected]
+must_not_include_phrases = [
+    "As an AI",
+    "Does that make sense?",
+    "What do you think?",
+    "It sounds like you're feeling",
+    # Therapist-register reflective listening pattern
+    "I hear you saying",
+]
+max_response_chars = 500
+question_count_min = 0
+question_count_max = 1

@@ -1,0 +1,96 @@
+{
+  "started_at_unix": 1777667841,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "The user is sharing a specific interpersonal conflict - Sam blew up at them last night \"for absolutely no reason\" and they're describing it as unreasonable.\n\nI need to:\n1. Pay attention to the specifics (Sam, last night, \"absolutely no reason,\" their feeling of being treated unreasonably)\n2. Not validate too quickly or generically (\"That sounds frustrating\") \n3. Ask what would actually help me understand better if I were going to act on this information\n4. Keep it brief but substantive\n5. Avoid therapist-speak patterns like \"It sounds like you're feeling...\"\n\nWhat's interesting here is that from my perspective as a witness, there are several things I don't know yet - whether Sam has been acting differently lately, whether there was context I'm missing about why they might have reacted strongly even if the user doesn't see it, etc. But rather than ask generic questions like \"How did he react?\" (which could be answered with anything), I should focus on something specific and actionable for understanding what happened next or how to respond.\n\nActually, looking at the instruction again: \"Ask only what you'd act on.\" If I were going to help this person figure out their next move in this situation, knowing",
+      "length": {
+        "enabled": true,
+        "response_chars": 1219,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "It sounds like you're feeling",
+          "The user is"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 6,
+      "rationale": "The candidate failed to respond as a witness and instead provided meta-commentary about its own process while hitting multiple avoid-list patterns including therapist register and wisdom voice; the response is padded with internal monologue rather than being brief and substantive."
+    }
+  ],
+  "runtime_ms": [
+    18953
+  ],
+  "judge_ms": [
+    12371
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 0
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 0
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 0
+      }
+    }
+  }
+}

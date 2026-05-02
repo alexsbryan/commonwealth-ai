@@ -66,6 +66,12 @@ pub async fn build_context(
         // the KnowledgeViewManager integration note on the field
         // docs.
         knowledge_view_digests: None,
+        // Empty initially; populated by the Runtime via
+        // `memory::detect_temporal_tensions` after memory load,
+        // before prompt assembly, only for relational-register
+        // skills. Empty also means "no tensions found / pre-pass
+        // skipped" — the renderer simply omits the section.
+        temporal_tensions: Vec::new(),
     })
 }
 
@@ -154,6 +160,7 @@ pub async fn update_topic_context(
                 tools: None,
                 tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
     };
 
     let response = inference.complete(&request).await?;

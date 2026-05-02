@@ -271,6 +271,7 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
     };
 
     let t = Instant::now();

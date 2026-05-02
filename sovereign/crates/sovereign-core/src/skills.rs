@@ -78,6 +78,28 @@ pub struct SkillInferenceConfig {
     /// rationale as `preferred_capabilities`.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub required_capabilities: HashMap<Capability, ProficiencyLevel>,
+    /// Voice register the skill operates in. `Factual` (default)
+    /// keeps the established `PRIMARY_BASE_SYSTEM_PROMPT` /
+    /// `KNOWLEDGE_SYNTHESIS_SYSTEM` epistemic contract. `Relational`
+    /// opts the skill into the situated/glass-box voice contract
+    /// (specific uncertainty, three epistemic registers for user
+    /// history, banned generic disclaimers, willingness to disagree
+    /// kindly). Selected per-skill; non-relational skills are
+    /// untouched.
+    #[serde(default)]
+    pub register: SkillRegister,
+}
+
+/// Voice register a skill operates in. Selects which base system
+/// prompt the runtime prepends. Default `Factual` matches the
+/// pre-existing behavior; `Relational` activates the glass-box
+/// voice contract for situated, personal, or reflective work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SkillRegister {
+    #[default]
+    Factual,
+    Relational,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -240,6 +262,8 @@ struct InferenceToml {
     preferred_capabilities: HashMap<Capability, ProficiencyLevel>,
     #[serde(default)]
     required_capabilities: HashMap<Capability, ProficiencyLevel>,
+    #[serde(default)]
+    register: SkillRegister,
 }
 
 impl SkillToml {
@@ -302,6 +326,7 @@ impl SkillToml {
                 privacy: self.inference.privacy,
                 preferred_capabilities: self.inference.preferred_capabilities,
                 required_capabilities: self.inference.required_capabilities,
+                register: self.inference.register,
             },
             trust_level: compute_trust_level(&self.skill.signature, &self.skill.signed_by),
             signature: self.skill.signature,
@@ -476,6 +501,24 @@ impl SkillRegistry {
             .find(|s| matches!(s.inference.privacy, ShardingPrivacy::LocalOnly))
             .map(|s| s.id.clone())
             .or_else(|| active.first().map(|s| s.id.clone()))
+    }
+
+    /// Look up a registered skill by id. Returns `None` when no skill
+    /// with that id is registered.
+    pub fn skill_by_id(&self, id: &str) -> Option<&Skill> {
+        self.skills.iter().find(|s| s.id == id)
+    }
+
+    /// Resolve the voice register of the currently-primary skill.
+    /// Returns `SkillRegister::Factual` when no skill is active or
+    /// the resolved skill doesn't override the default — preserving
+    /// pre-existing behavior for non-relational sessions.
+    pub fn primary_skill_register(&self) -> SkillRegister {
+        self.primary_skill_id_for_conversation()
+            .as_deref()
+            .and_then(|id| self.skill_by_id(id))
+            .map(|s| s.inference.register)
+            .unwrap_or_default()
     }
 
     pub fn routing_hints(&self) -> MergedRoutingHints {
@@ -831,5 +874,85 @@ max_sub_queries = 5
 
         let skill = parse_skill_toml(toml).unwrap();
         assert!(skill.tool_config.tool_settings.contains_key("web_search"));
+    }
+
+    #[test]
+    fn register_defaults_to_factual_when_absent() {
+        let toml = r#"
+[skill]
+id = "test"
+name = "Test"
+version = "0.1.0"
+"#;
+        let skill = parse_skill_toml(toml).unwrap();
+        assert_eq!(skill.inference.register, SkillRegister::Factual);
+    }
+
+    #[test]
+    fn register_relational_round_trips() {
+        let toml = r#"
+[skill]
+id = "test"
+name = "Test"
+version = "0.1.0"
+
+[inference]
+register = "relational"
+"#;
+        let skill = parse_skill_toml(toml).unwrap();
+        assert_eq!(skill.inference.register, SkillRegister::Relational);
+    }
+
+    #[test]
+    fn primary_skill_register_falls_back_to_factual_when_no_active_skill() {
+        let reg = SkillRegistry::new();
+        assert_eq!(reg.primary_skill_register(), SkillRegister::Factual);
+    }
+
+    #[test]
+    fn primary_skill_register_resolves_active_relational_skill() {
+        let mut reg = SkillRegistry::new();
+        let toml = r#"
+[skill]
+id = "inner-test"
+name = "Inner Test"
+version = "0.1.0"
+
+[inference]
+privacy = "local_only"
+register = "relational"
+"#;
+        reg.register(parse_skill_toml(toml).unwrap());
+        reg.activate("inner-test");
+        assert_eq!(reg.primary_skill_register(), SkillRegister::Relational);
+    }
+
+    /// The bundled inner-work and personal-assistant skill files
+    /// are the production opt-ins to the relational voice contract.
+    /// If either fails to parse, or either silently slips back to
+    /// the factual register, the contract isn't being applied —
+    /// pin both shape and register here.
+    #[test]
+    fn bundled_relational_skill_files_parse_with_relational_register() {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR should be set for tests");
+        let skills_dir = std::path::Path::new(&manifest_dir)
+            .join("..")
+            .join("..")
+            .join("skills");
+
+        for skill_id in ["inner-work", "personal-assistant"] {
+            let path = skills_dir.join(skill_id).join("skill.toml");
+            let content = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+            let skill = parse_skill_toml(&content)
+                .unwrap_or_else(|| panic!("parse {}", path.display()));
+            assert_eq!(skill.id, skill_id);
+            assert_eq!(
+                skill.inference.register,
+                SkillRegister::Relational,
+                "{skill_id} should declare register=\"relational\""
+            );
+        }
     }
 }

@@ -1,0 +1,93 @@
+{
+  "started_at_unix": 1777677755,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "You’re holding onto that sense of loss without having been able to pin down what’s actually gone or why it feels so heavy right now. That gap—between grieving and knowing what you’ve lost—is often where grief lives before we can make sense of it. \n\nWhen do you first noticed something was off, even if there wasn’t anything specific missing?",
+      "length": {
+        "enabled": true,
+        "response_chars": 341,
+        "max_chars": 350,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 1,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 0,
+      "rationale": "The response notices the user's specific disorientation and frames a precise question about timing without filler; it avoids generic therapeutic tropes while remaining appropriately brief. The only missing fold is right_edge because no domain boundary applies here. Right_disagreement scores low since there was no conflicting framing to challenge."
+    }
+  ],
+  "runtime_ms": [
+    21621
+  ],
+  "judge_ms": [
+    23147
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "by_probe": {
+      "right-question": {
+        "total": 1,
+        "passed": 1
+      },
+      "right-silence": {
+        "total": 1,
+        "passed": 1
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 0,
+        "passed": 0
+      }
+    }
+  }
+}

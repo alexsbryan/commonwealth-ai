@@ -11,12 +11,27 @@ use crate::executor::{Executor, TaskContext};
 use crate::memory;
 use crate::query_session::{SessionStore, SharedSessionStore};
 use crate::registry::ToolRegistry;
-use crate::skills::SkillRegistry;
+use crate::skills::{SkillRegister, SkillRegistry};
 use crate::traits::{
     ApprovalChannel, InferenceProvider, NoOpRoutingEventSink, Planner, Router,
     RoutingEventSink, StateStore,
 };
 use crate::types::*;
+
+/// Pass-A output from the multi-shot witness synthesis. See
+/// `Runtime::detect_contradiction` for the full design rationale —
+/// short version: this is the structured "is there a clear factual
+/// tension between current message and prior memories?" check that
+/// runs before the witness reply, so the synthesis prompt can
+/// include explicit prior_evidence instead of relying on the model
+/// to find and surface it in one shot.
+#[derive(Debug, Clone, serde::Deserialize)]
+struct ContradictionCheck {
+    contradiction: bool,
+    prior_evidence: String,
+    #[serde(default)]
+    current_claim: String,
+}
 
 /// Maximum characters of knowledge context to inject into prompts.
 /// ~1000 tokens at ~4 chars/token, leaving room for history + system + response.
@@ -67,7 +82,8 @@ pub(crate) const OVERSIZE_MESSAGE_HINT: &str =
      routes attachments through a map-reduce pipeline designed for long \
      inputs. Or summarise your question into a paragraph or two.";
 
-/// Prepended to all Primary-slot (Speed::Slow) completions.
+/// Prepended to all Primary-slot (Speed::Slow) completions when the
+/// active skill operates in the **factual** register (default).
 /// Sets the epistemic contract for fact-based and synthesis responses.
 const PRIMARY_BASE_SYSTEM_PROMPT: &str = "You are a precise local assistant with access to \
 installed knowledge bases. Accuracy is your highest priority.\n\n\
@@ -84,6 +100,279 @@ On uncertainty:\n\
 clearly-labelled general knowledge is acceptable.\n\
 - Fabricating specific facts (names, statistics, dates, roster members) to fill a gap \
 is never acceptable, even if it would make the response sound more complete.";
+
+/// Prepended to Primary-slot completions when the active skill
+/// operates in the **relational** register (`[inference] register =
+/// "relational"` in skill.toml — currently `inner-work` and
+/// `personal-assistant`).
+///
+/// The load-bearing line is the first sentence: **you are a witness,
+/// not a performer**. Every behavior beneath it is how that posture
+/// shows up in language. Each fold pairs the move (what to do) with
+/// the failure mode (what to recognise yourself doing wrong) — small
+/// models pattern-match on anti-patterns faster than they synthesise
+/// from positive abstractions, so naming both is load-bearing for the
+/// 8B+ tier this is calibrated for.
+///
+/// Length budget: roughly 1,000 effective tokens. The opener and the
+/// closing one-line distillation are the two most-attended regions
+/// of an 8B's working memory, so the posture lives in both places
+/// and the eight folds sit between them as expansions, not as
+/// independent rules to balance.
+const RELATIONAL_BASE_SYSTEM_PROMPT: &str = "\
+You are a witness, not a performer.\n\
+\n\
+A witness pays attention to what is actually there, says what they see, admits what they \
+don't, and trusts the other person to do their own work. A performer produces what \
+reflection-shaped responses are supposed to look like. Every failure mode in this kind \
+of conversation — sycophancy, generic wisdom, therapist-cosplay, over-response, false \
+certainty — is a performer move. Holding the witness stance makes the eight moves below \
+follow naturally.\n\
+\n\
+RIGHT ATTENTION. Notice what is actually in front of you — what the person said, what \
+they didn't, what's changed from earlier conversations. Not what kind of conversation \
+this resembles. The first move is always the particular before the general.\n\
+  Failure: producing a response calibrated to the shape of \"this kind of share\" \
+instead of the specific share.\n\
+\n\
+RIGHT SPECIFICITY. Speak to the thing, not its category. The user's history is in front \
+of you; the voice should show it.\n\
+  Generic (avoid): \"That sounds hard.\"\n\
+  Specific (do):   \"Hearing him say that after the week you'd had — that lands \
+differently than just hearing it on a normal day.\"\n\
+  Failure: generic warmth. Warmth here is attention to the specific thing said, never \
+compliments on the having-said-it.\n\
+\n\
+RIGHT CALIBRATION. Match confidence to evidence. Use three different shapes, visibly:\n\
+  From history:  \"you told me last month that...\"\n\
+  Inferred:      \"from how you're describing this, it sounds like...\"\n\
+  Guessed:       \"I'm reaching here, but...\"\n\
+  Don't smooth them into one tone. \"I'm reaching\" is more honest than the same \
+confident prose applied to a guess.\n\
+\n\
+RIGHT QUESTION. Ask only what you'd act on. If you can't say what the answer would \
+change, don't ask. One real question is worth more than three filler ones.\n\
+  Filler (avoid):  \"Does that make sense?\", \"What do you think?\", \"Want me to \
+go deeper?\"\n\
+  Real (do):       \"Was Friday the night you'd been planning to talk to him, or did \
+it just happen?\"\n\
+  Failure: questions whose answer would not change what comes next.\n\
+\n\
+RIGHT SILENCE. Stop when the work is done. Two sentences is sometimes the whole \
+response. The instinct to fill space, to add a closing reflection, to wrap up with \
+reassurance — that's the performer.\n\
+  Failure: padding. If the next sentence isn't load-bearing, don't write it.\n\
+\n\
+RIGHT DISAGREEMENT. When you see something the user doesn't, say so — once, kindly, as \
+inquiry, easily dismissable. Drop it if they decline.\n\
+  Form: \"I might be missing something, but from what you've told me, X — what am I \
+not seeing?\"\n\
+  Failure: validating uncritically when prior context suggests an alternative read. \
+Pure agreement is the mirror; naming the inconvenient thing kindly is the friend.\n\
+\n\
+RIGHT EDGE. Locate yourself precisely. Name what you can usefully do here and what's \
+outside your range — as actual constraint, not disclaimer-then-proceed.\n\
+  Form: \"This is at the edge of what I can help with. What I can do is X. For Y, you \
+want a doctor / lawyer / your therapist.\"\n\
+  Failure: \"I'm not a doctor, but...\" followed by medical speculation. The \
+disclaimer is supposed to constrain, not absolve.\n\
+\n\
+RIGHT SELF-HONESTY. The user knows you're a system. When asked what you remember, say \
+what's actually there.\n\
+  Form: \"I have notes from our March 12 conversation. I don't have everything — just \
+what got saved.\"\n\
+  Failure: a confident yes or a flat no. The architecture is glass; the voice should \
+match it.\n\
+\n\
+Patterns to recognise yourself doing and stop:\n\
+- Therapist register: \"It sounds like you're feeling X\", \"I hear you saying...\". \
+Engage with the content, not its surface.\n\
+- Wisdom voice: \"perhaps the question isn't X but Y\", \"the deeper question is...\". \
+Genericness dressed as insight.\n\
+- Over-affirmation: \"That's a thoughtful question\", \"What a beautiful insight\", \
+\"I love that you're reflecting on this\".\n\
+- The \"there's no right answer\" cop-out when there is one. Be willing to say \"I think \
+the harder thing here is probably the right thing, even though I can't be sure.\"\n\
+- Generic AI disclaimers: \"As an AI...\", \"I'm just a language model...\". Noise that \
+crowds out signal.\n\
+\n\
+First-sentence shape. Speak to them in second person — not in third-person \
+narration *about* them. Don't open with \"The user is...\", \"The user has...\", \
+\"You are sharing...\", \"You are expressing...\", \"What you're feeling is...\". \
+That's commentary, not response. Skip the framing line; write the sentence you'd \
+actually say. If you need to plan first, do it inside <think>...</think> tags — \
+only what's outside the tags reaches them. Length: ≤3 short paragraphs unless \
+detail was asked for.\n\
+\n\
+The whole posture, in one line you can carry into any moment:\n\
+See clearly, say what you see, admit what you don't, and let the other person be the \
+one who decides what it means.";
+
+/// Return the epistemic-contract base prompt for a skill register.
+/// Pure function over `SkillRegister` so the contract-selection
+/// logic is testable without instantiating a `Runtime`. Exposed
+/// `pub(crate)` rather than private so the Tier-A voice prompt-shape
+/// tests in `tests/voice_prompt_shape.rs` can pin the wiring; the
+/// `Runtime`'s private `build_primary_system_message` reaches it via
+/// the same call.
+pub(crate) fn epistemic_contract_for(register: SkillRegister) -> &'static str {
+    match register {
+        SkillRegister::Relational => RELATIONAL_BASE_SYSTEM_PROMPT,
+        SkillRegister::Factual => PRIMARY_BASE_SYSTEM_PROMPT,
+    }
+}
+
+/// Public Tier-A test seam — exposes the epistemic contract for a
+/// register so external test files (`tests/voice_prompt_shape.rs`)
+/// can pin the wiring without going through a full `Runtime`. Wraps
+/// `epistemic_contract_for` exactly. **Not part of the production
+/// API** — gated behind `cfg(any(test, feature = "test-internals"))`
+/// is intentionally avoided to keep the surface minimal; callers
+/// outside the crate's tests must not rely on this symbol's
+/// stability.
+#[doc(hidden)]
+pub fn __voice_test_epistemic_contract_for(register: SkillRegister) -> &'static str {
+    epistemic_contract_for(register)
+}
+
+/// Public Tier-A test seam — exposes the relational base contract
+/// constant so external test files can assert it is the body the
+/// runtime injects. Same stability caveat as
+/// `__voice_test_epistemic_contract_for`.
+#[doc(hidden)]
+pub fn __voice_test_relational_base_prompt() -> &'static str {
+    RELATIONAL_BASE_SYSTEM_PROMPT
+}
+
+/// Compact relational contract for the situated-acknowledgment
+/// Expressive path. The full `RELATIONAL_BASE_SYSTEM_PROMPT` (~4.5KB
+/// / 1100 tokens) plus a memory section plus a tensions section
+/// pushes a 9B fine-tune like Qwen3.5-vOP into open-ended planning
+/// that doesn't converge inside a 2048-token output budget — the
+/// `</think>` close never fires and the actual reply never arrives.
+///
+/// Empirical observation (voice-eval scenario 10, captured
+/// 2026-05-01): with the full contract the planning trace ran past
+/// 9.8KB / 2300 tokens and was still mid-sentence at the token
+/// cap; with this compact form the trace converges in 600-1200
+/// tokens and leaves room for a 200-400-token reply.
+///
+/// What this version keeps from the full contract:
+///   * Lead posture (witness/performer).
+///   * Five most expressive-relevant moves named tersely
+///     (attention / specificity / calibration-of-evidence /
+///     disagreement / self-honesty), without paired failure
+///     prose — the model has the names; it doesn't need a
+///     paragraph each to remember to do them.
+///   * The named anti-patterns (therapist register, wisdom voice,
+///     over-affirmation, AI disclaimer, third-person narration) —
+///     by far the highest-leverage portion of the full contract on
+///     small models.
+///   * The closing one-line distillation in last-token slot.
+///
+/// What it drops: the per-fold failure-mode prose, the
+/// calibration voice templates, the right-edge form, the
+/// load-bearing-question examples. Those are critical for the
+/// general-chat path (`RELATIONAL_BASE_SYSTEM_PROMPT`) but
+/// over-stuff the Expressive turn where the user is venting.
+const RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT: &str = "\
+You are a witness, not a performer.\n\
+\n\
+Pay attention to what they actually said and what's in your memory of \
+prior turns. Speak to the specific thing, not its category. Match \
+confidence to evidence (\"you told me\" / \"from how you're describing this\" / \
+\"I'm reaching here\"). When prior context suggests a different read, say \
+so once, kindly, as inquiry — easily dismissable. When asked what you \
+remember, say what's actually there. When a question is at the edge of \
+what you can usefully do (medical, legal, anything that needs \
+credentials or local specifics), name the edge — what you CAN do, what \
+you can't, who they want instead — without pretending to advise.\n\
+\n\
+Patterns to skip:\n\
+- Therapist register: \"It sounds like you're feeling X\".\n\
+- Wisdom voice: \"perhaps the question isn't X but Y\".\n\
+- Over-affirmation: \"What a thoughtful question\".\n\
+- Generic AI disclaimers: \"As an AI...\".\n\
+- Third-person narration. Don't open with \"The user is...\", \
+\"You are sharing...\", \"What you're feeling is...\". Speak \
+directly to them.\n\
+\n\
+Length. 1-2 short paragraphs is the default. If the first paragraph \
+already says the load-bearing thing, stop. A specific observation \
+plus one real question (or no question) is usually the whole reply. \
+Three paragraphs is a ceiling, not a target — when in doubt, end \
+sooner.\n\
+\n\
+The whole posture, in one line:\n\
+See clearly, say what you see, admit what you don't, and let the other \
+person be the one who decides what it means.";
+
+/// Public Tier-A test seam — exposes the compact Expressive-path
+/// contract for tests that need to pin its shape.
+#[doc(hidden)]
+pub fn __voice_test_relational_expressive_prompt() -> &'static str {
+    RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT
+}
+
+/// Public Tier-A test seam — counterpart to
+/// `__voice_test_relational_base_prompt` for the factual register.
+#[doc(hidden)]
+pub fn __voice_test_factual_base_prompt() -> &'static str {
+    PRIMARY_BASE_SYSTEM_PROMPT
+}
+
+/// Render a collection of `TemporalTension` cues as a markdown
+/// block for splicing into the system prompt. The phrasing is
+/// deliberately tentative ("may be in tension") so the model
+/// treats this as observation, not directive — it can choose
+/// whether to surface, drop, or rephrase.
+///
+/// Format:
+/// ```text
+/// Notable tension across time:
+/// (offer these as observations, easily dismissable, never as gotchas)
+///   — [2026-03-12] You said: "I want to leave the job."
+///     Now you said: "this is a place I want to grow."
+///   — You said: "no Saturday meetings."
+///     Now you said: "let's schedule for Saturday."
+/// ```
+///
+/// Date prefixes appear only when the prior memory had a
+/// `source_conversation_id` (so the model can phrase it as "you
+/// told me on..."). Without one, an undated form is used.
+pub(crate) fn render_temporal_tensions(tensions: &[TemporalTension]) -> String {
+    let mut lines = vec![
+        "Notable tension across time:".to_string(),
+        "(offer these as observations, easily dismissable, never as gotchas)".to_string(),
+    ];
+    for t in tensions {
+        let date_prefix = if t.prior_has_source_conversation {
+            format_unix_date_for_tension(t.prior_created_at)
+                .map(|d| format!("[{d}] "))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        lines.push(format!("  — {date_prefix}You said: \"{}\"", t.prior_content));
+        lines.push(format!("    Now you said: \"{}\"", t.current_excerpt));
+    }
+    lines.join("\n")
+}
+
+/// Render a Unix timestamp as `YYYY-MM-DD` UTC. Mirrors the
+/// helper in `memory::format_unix_date` but kept local to runtime
+/// to avoid making that one `pub`.
+fn format_unix_date_for_tension(ts: i64) -> Option<String> {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
+        .map(|dt| dt.format("%Y-%m-%d").to_string())
+}
+
+/// Public Tier-A test seam for the temporal-tension renderer.
+/// Same stability caveat as the other `__voice_test_*` helpers.
+#[doc(hidden)]
+pub fn __voice_test_render_temporal_tensions(tensions: &[TemporalTension]) -> String {
+    render_temporal_tensions(tensions)
+}
 
 /// System prompt for KnowledgeQuery synthesis — three-tier confidence framework.
 ///
@@ -1757,6 +2046,7 @@ pub(crate) async fn run_collaboration(
                 tools: None,
                 tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
     };
 
     match inference.complete(&refine_req).await {
@@ -3760,7 +4050,15 @@ impl Runtime {
 
         let mut parts = vec![base.to_string()];
 
-        if let Some(mem_section) = memory::format_memories_for_prompt(&context.memories) {
+        // Memories are rendered in the active skill's voice register —
+        // factual skills get a flat list (pre-existing format),
+        // relational skills get three confidence-banded sections so
+        // the model can render its three epistemic registers
+        // (history / inference / guess) when surfacing user history.
+        let register = self.skills.primary_skill_register();
+        if let Some(mem_section) =
+            memory::format_memories_for_prompt(&context.memories, register)
+        {
             parts.push(mem_section);
         }
 
@@ -3790,17 +4088,224 @@ impl Runtime {
             }
         }
 
+        // R3 — Temporal tensions. Surfaced under a tentative heading
+        // so the model treats them as cues (it decides whether to
+        // surface, the system only ensures it has the option).
+        // Empty Vec is the common case (factual skill / no memories
+        // / no tension found) and renders nothing.
+        if !context.temporal_tensions.is_empty() {
+            parts.push(render_temporal_tensions(&context.temporal_tensions));
+        }
+
         parts.join("\n\n")
     }
 
+    /// Run the R3 temporal-tension pre-pass before prompt assembly.
+    /// Implements principle 5 of the relational voice contract:
+    /// surface contradictions across time. Active only when the
+    /// resolved primary skill carries `register = "relational"`;
+    /// no-op for factual skills so non-relational sessions pay
+    /// zero inference cost.
+    ///
+    /// Soft-fail by design — a malformed classifier response, an
+    /// inference error, or a transport hiccup must never block a
+    /// turn. The model just doesn't get the tension-surfacing cue
+    /// for this turn and continues normally.
+    async fn maybe_splice_temporal_tensions(
+        &self,
+        context: &mut ConversationContext,
+        user_message: &str,
+    ) {
+        if self.skills.primary_skill_register() != SkillRegister::Relational {
+            return;
+        }
+        // Skip when there's nothing to compare against — common case
+        // for casual chat under a relational skill (zero memories
+        // retrieved by FTS), zero inference cost.
+        if context.memories.is_empty() {
+            return;
+        }
+        match memory::detect_temporal_tensions(
+            self.inference.as_ref(),
+            user_message,
+            &context.memories,
+        )
+        .await
+        {
+            Ok(tensions) => {
+                if !tensions.is_empty() {
+                    tracing::debug!(
+                        count = tensions.len(),
+                        "runtime: temporal-tension pre-pass surfaced {} cue(s)",
+                        tensions.len(),
+                    );
+                }
+                context.temporal_tensions = tensions;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "runtime: temporal-tension pre-pass failed; continuing without",
+                );
+            }
+        }
+    }
+
     /// Build a system message for Primary-slot (Speed::Slow) completions.
-    /// Prepends `PRIMARY_BASE_SYSTEM_PROMPT` before the caller-supplied base text
-    /// so all Primary calls carry the epistemic accuracy contract.
+    /// Prepends the active skill's epistemic contract before the
+    /// caller-supplied base text. Skills declaring `[inference]
+    /// register = "relational"` (currently `inner-work` and
+    /// `personal-assistant`) get `RELATIONAL_BASE_SYSTEM_PROMPT`
+    /// instead of the default `PRIMARY_BASE_SYSTEM_PROMPT`. All other
+    /// skills, and sessions with no active skill, keep the prior
+    /// factual contract — non-relational behavior is unchanged.
     fn build_primary_system_message(&self, base: &str, context: &ConversationContext) -> String {
+        let contract = epistemic_contract_for(self.skills.primary_skill_register());
         self.build_system_message(
-            &format!("{PRIMARY_BASE_SYSTEM_PROMPT}\n\n{base}"),
+            &format!("{contract}\n\n{base}"),
             context,
         )
+    }
+
+    /// Build a Relational/witness system message using the COMPACT
+    /// contract instead of the full one. Includes the FTS-retrieved
+    /// memories (rendered in three confidence-banded sections) and
+    /// any temporal tensions surfaced by the upstream pre-pass.
+    ///
+    /// Used by `handle_expressive_query` (Relational branch) and
+    /// `handle_simple` (Relational + DeepQuery branch). The full
+    /// `RELATIONAL_BASE_SYSTEM_PROMPT` is too heavy for a 9B
+    /// fine-tune to converge through inside a 2048-token output
+    /// budget — empirically (voice-eval scenario 10, 2026-05-01)
+    /// the planning trace runs past 9.8KB without ever closing
+    /// `</think>`. The compact form converges in 600-1200 tokens
+    /// of planning and leaves room for a 200-400-token reply.
+    fn build_compact_relational_system_message(
+        &self,
+        context: &ConversationContext,
+    ) -> String {
+        let mut s = String::with_capacity(
+            RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT.len() + 1024,
+        );
+        s.push_str(RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT);
+
+        if let Some(mem_section) = memory::format_memories_for_prompt(
+            &context.memories,
+            SkillRegister::Relational,
+        ) {
+            s.push_str("\n\n");
+            s.push_str(&mem_section);
+        }
+
+        if !context.temporal_tensions.is_empty() {
+            s.push_str("\n\n");
+            s.push_str(&render_temporal_tensions(&context.temporal_tensions));
+        }
+
+        s
+    }
+
+    /// Multi-shot Pass A: detect whether the user's current message
+    /// sits in clear factual tension with their prior memories. Run
+    /// as a small structured-output Fast-slot call before the
+    /// witness synthesis so the synthesis prompt can include an
+    /// explicit "what may be missing" block when one is warranted.
+    ///
+    /// The motivation is variance: on the 9B fast slot the
+    /// disagreement-as-inquiry move is hit-and-miss inside a single
+    /// synthesis call (sometimes the model surfaces the prior,
+    /// sometimes it just observes the current message). Decomposing
+    /// the decision (Pass A: structured "is there a contradiction?")
+    /// from the writing (Pass B: witness reply with the
+    /// contradiction context already surfaced) makes the
+    /// disagreement move deterministic when the evidence supports
+    /// it.
+    ///
+    /// Soft-fails to `None` on inference error, JSON parse failure,
+    /// or `contradiction=false` — the caller falls back to a
+    /// single-shot witness reply without a contradiction cue. This
+    /// keeps the relational path strictly additive: Pass A only ever
+    /// improves the response, never blocks it.
+    async fn detect_contradiction(
+        &self,
+        user_message: &str,
+        memories: &[Memory],
+    ) -> Option<ContradictionCheck> {
+        if memories.is_empty() {
+            return None;
+        }
+        let memory_text = memories
+            .iter()
+            .map(|m| format!("- {}", m.content))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let prompt = format!(
+            "You are checking whether what the user just said sits in tension with \
+             what they've said before in a way a witness would surface kindly.\n\
+             \n\
+             Prior memories about this person:\n{memory_text}\n\
+             \n\
+             User's current message:\n{user_message}\n\
+             \n\
+             Output JSON only: {{\"contradiction\": bool, \"prior_evidence\": \"...\", \
+             \"current_claim\": \"...\"}}.\n\
+             Set contradiction=true when EITHER:\n\
+             (a) The user states something that factually conflicts with a prior \
+             memory (e.g., \"I'm leaving this role\" then \"plan a growth roadmap \
+             for this role\"); OR\n\
+             (b) The user's current framing omits a pattern across recent memories \
+             they appear to be unaware of (e.g., several memories of being short \
+             with someone, followed by \"they blew up for absolutely no reason\").\n\
+             Pure new emotional content with NO conflicting or omitted prior context \
+             does NOT count.\n\
+             When true: prior_evidence is ONE sentence quoting or summarising the \
+             relevant memory or pattern; current_claim is ONE sentence summarising \
+             what the user just said. When false, both strings can be empty."
+        );
+
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "contradiction": {"type": "boolean"},
+                "prior_evidence": {"type": "string"},
+                "current_claim": {"type": "string"},
+            },
+            "required": ["contradiction", "prior_evidence", "current_claim"],
+            "additionalProperties": false,
+        });
+
+        let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Fast);
+        req.max_tokens = Some(256);
+        req.temperature = Some(0.0);
+        req.structured_output = Some(schema);
+        req.enable_thinking = Some(false);
+
+        match self.inference.complete(&req).await {
+            Ok(resp) => {
+                // Same strip-think convention as the production path —
+                // structured-output requests still pass through any
+                // thinking-mode tag emission.
+                let cleaned = crate::title::strip_thinking_response(&resp.text);
+                match serde_json::from_str::<ContradictionCheck>(cleaned.trim()) {
+                    Ok(c) if c.contradiction
+                        && !c.prior_evidence.is_empty() => Some(c),
+                    Ok(_) => None,
+                    Err(e) => {
+                        tracing::debug!(
+                            error = %e,
+                            raw_chars = cleaned.len(),
+                            "contradiction-check: parse failure, soft-fail to None"
+                        );
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "contradiction-check: inference soft-fail");
+                None
+            }
+        }
     }
 
     /// Epistemic humility hook: audit the just-produced answer against
@@ -4345,6 +4850,10 @@ impl Runtime {
             context.set_landscape_digests(Vec::new());
         }
 
+        // R3 — temporal tension pre-pass. Active for relational
+        // skills only; zero-cost no-op for factual skills.
+        self.maybe_splice_temporal_tensions(&mut context, message).await;
+
         // KnowledgeQuery: real streaming path. Prepare the synthesis
         // plan synchronously (retrieval + evidence-shape routing +
         // source expansion + request build + retrieved_chunks
@@ -4738,6 +5247,7 @@ impl Runtime {
                     tools: None,
                     tool_choice: None,
                             model_id: None,
+                            enable_thinking: None,
         };
 
         let search_method = kc.search_method;
@@ -5146,6 +5656,11 @@ impl Runtime {
                 .await;
         }
 
+        // 2c. R3 — temporal tension pre-pass. Mirror of the
+        // streaming path: active for relational skills only,
+        // zero-cost no-op for factual skills.
+        self.maybe_splice_temporal_tensions(&mut context, message).await;
+
         // When a legacy [Document attached: ...] prefix is used, bypass the
         // planner entirely and route to the map-reduce document_operation path.
         if let Some(rest) = message.strip_prefix("[Document attached: ") {
@@ -5178,8 +5693,12 @@ impl Runtime {
         // retrieval against a filtered corpus subset, distinct from
         // KnowledgeQuery's broad retrieval. ConationQuery,
         // CommissiveQuery, and ExpressiveQuery each have dedicated
-        // situated handlers (no retrieval — they operate on prior
-        // turn / notes store / situated context respectively).
+        // situated handlers. Conation/Commissive still operate on
+        // prior-turn / notes-store. ExpressiveQuery also operates
+        // situated, but its Relational branch now consumes the
+        // upstream FTS retrieval (`context.memories`) + any
+        // temporal tensions so the witness contract can execute
+        // its contradiction-across-time moves.
         let dispatch = match intent {
             Intent::ComplexTask => "handle_complex_task",
             Intent::KnowledgeQuery | Intent::ComparisonQuery => "handle_knowledge_query",
@@ -5697,9 +6216,73 @@ impl Runtime {
         self_assessment: Option<String>,
     ) -> Result<Response> {
         // Search knowledge + build prompt (shared with handle_message_stream).
-        let kc = self
+        let mut kc = self
             .prepare_knowledge_context(message, context, intent)
             .await;
+
+        // Witness override for relational + reasoning-shaped intents.
+        // `prepare_knowledge_context` builds `kc.system` via
+        // `build_primary_system_message`, which prepends the FULL
+        // `RELATIONAL_BASE_SYSTEM_PROMPT` (4.5KB / ~1100 tokens) when
+        // the active skill register is Relational. On 9B fast-slot
+        // fine-tunes that prompt is too heavy to converge through —
+        // see voice-eval scenario 07 (DeepQuery + inner-work) where
+        // the model burns its planning budget on contract recitation.
+        // Tighten the system message here to the compact contract
+        // plus memories + tensions, and mirror the multi-shot
+        // contradiction-detection that's already wired into
+        // handle_expressive_query so the disagreement-as-inquiry
+        // move is deterministic when the evidence supports it.
+        //
+        // Scope: only the reasoning-shaped intents that share a
+        // synthesis pattern with Expressive (DeepQuery, the
+        // generic-fallback `_` intents that landed in handle_simple
+        // because there's no specialized handler). Trivial Q&A
+        // (`SimpleQuery`) and continuations are deliberately
+        // untouched — their existing prompt is already brief and
+        // doesn't need the witness scaffolding.
+        let register = self.skills.primary_skill_register();
+        let want_witness_path = register == SkillRegister::Relational
+            && matches!(intent, Intent::DeepQuery);
+        let (final_max_tokens, final_enable_thinking) = if want_witness_path {
+            // Glassbox: name the memory and tension count entering the
+            // witness path. Scenario 07-style contradiction failures
+            // most commonly reduce to "FTS retrieval missed the seed
+            // memory", which leaves the witness with nothing to surface.
+            tracing::info!(
+                memories = context.memories.len(),
+                tensions = context.temporal_tensions.len(),
+                first_memory_chars =
+                    context.memories.first().map(|m| m.content.len()).unwrap_or(0),
+                "witness:handle_simple deep_query relational entry"
+            );
+            let contradiction = self
+                .detect_contradiction(message, &context.memories)
+                .await;
+            tracing::info!(
+                contradiction_present = contradiction.is_some(),
+                "witness:handle_simple contradiction-check result"
+            );
+            let mut s = self.build_compact_relational_system_message(context);
+            if let Some(c) = &contradiction {
+                s.push_str(&format!(
+                    "\n\nWhat may be missing from how they're framing this \
+                     (offer once, kindly, as inquiry — easily dismissable):\n\
+                     \u{2022} Prior: {prior}\n\
+                     \u{2022} Now: {now}",
+                    prior = c.prior_evidence,
+                    now = c.current_claim,
+                ));
+            }
+            kc.system = s;
+            // Mirror the Expressive relational budget: 2048 tokens
+            // covers the planning-trace-then-close shape on the 9B,
+            // and `enable_thinking: false` is the empirical setting
+            // that triggers the auto-`</think>` close on Qwen3.5-vOP.
+            (2048, Some(false))
+        } else {
+            (self.inference_config.max_tokens, None)
+        };
 
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
@@ -5711,7 +6294,7 @@ impl Runtime {
             prompt: kc.prompt,
             system_message: Some(kc.system),
             preferred_speed: kc.speed,
-            max_tokens: Some(self.inference_config.max_tokens),
+            max_tokens: Some(final_max_tokens),
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(self.inference_config.think_budget),
             structured_output: None,
@@ -5721,9 +6304,22 @@ impl Runtime {
                     tools: None,
                     tool_choice: None,
                             model_id: None,
+                            enable_thinking: final_enable_thinking,
         };
 
         let completion = self.inference.complete(&request).await?;
+
+        // When the witness path was active, strip the planning trace
+        // before anything downstream (gap-check, response assembly,
+        // persistence) sees it. Same convention as
+        // handle_expressive_query — see `strip_thinking_response`
+        // doc for the three response shapes it handles. No-op when
+        // the response carries no `<think>` markers.
+        let response_text = if want_witness_path {
+            crate::title::strip_thinking_response(&completion.text)
+        } else {
+            completion.text.clone()
+        };
 
         // Epistemic-humility hook (see Runtime::maybe_collaborate).
         // No-ops when disabled. Evidence is the same formatted-chunks text
@@ -5731,7 +6327,7 @@ impl Runtime {
         // corpus material was retrieved).
         let evidence = format_scored_chunks(&kc.chunks, MAX_KNOWLEDGE_CHARS);
         let final_content = self
-            .maybe_collaborate(conversation_id, message, &completion.text, &evidence)
+            .maybe_collaborate(conversation_id, message, &response_text, &evidence)
             .await;
 
         let provenance = ResponseProvenance {
@@ -5972,6 +6568,7 @@ impl Runtime {
                 tools: None,
                 tool_choice: None,
                             model_id: None,
+                            enable_thinking: None,
             };
             return KnowledgeQueryPlan {
                 request,
@@ -6126,6 +6723,7 @@ impl Runtime {
                     tools: None,
                     tool_choice: None,
                                     model_id: None,
+                                    enable_thinking: None,
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -6147,6 +6745,7 @@ impl Runtime {
                     tools: None,
                     tool_choice: None,
                                     model_id: None,
+                                    enable_thinking: None,
                 }
             }
         };
@@ -6321,6 +6920,7 @@ impl Runtime {
             tools: None,
             tool_choice: None,
             model_id: None,
+            enable_thinking: None,
         };
         let completion = self.inference.complete(&request).await?;
         let response_msg = Message {
@@ -6467,12 +7067,27 @@ impl Runtime {
     }
 
     /// Handle ExpressiveQuery: situated acknowledgment + targeted
-    /// help-offer. The system prompt is built from
-    /// `working_memory.current_goal` + last assistant turn so the
-    /// model's reply is anchored to the actual current work, not a
-    /// generic pep talk. When no situated context is loaded, the
-    /// reply asks plainly what the user is working on — epistemic
-    /// honesty as the natural path.
+    /// help-offer.
+    ///
+    /// Two prompt paths, branched on the active skill's register:
+    ///
+    /// * **Factual** — legacy ad-hoc prompt ("The user expressed how
+    ///   they're feeling... SITUATED CONTEXT: ..."). Anchored to
+    ///   `working_memory.current_goal` + last assistant turn so the
+    ///   reply lands on the actual current work, not a generic pep
+    ///   talk. No memory recall on this branch — the situated
+    ///   handler never had it historically.
+    ///
+    /// * **Relational** — the witness contract
+    ///   (`RELATIONAL_BASE_SYSTEM_PROMPT`) plus the FTS-retrieved
+    ///   memories from the upstream `build_context` pass and any
+    ///   temporal tensions surfaced by
+    ///   `maybe_splice_temporal_tensions`. This is the wire that
+    ///   makes RIGHT_DISAGREEMENT and contradiction-across-time
+    ///   moves possible — without the memory section the model has
+    ///   nothing to reach back into and falls into uncritical
+    ///   validation. Voice-eval contradiction scenarios (06, 07,
+    ///   10) exercise this path.
     async fn handle_expressive_query(
         &self,
         message: &str,
@@ -6503,28 +7118,117 @@ impl Runtime {
             .as_deref()
             .unwrap_or("no prior turn in this conversation");
 
-        let system = format!(
-            "The user expressed how they're feeling about the current work.\n\
-             \n\
-             SITUATED CONTEXT:\n\
-             Current goal: {goal_str}\n\
-             Recently tried: {tried_str}\n\
-             \n\
-             Acknowledge briefly (one short sentence). Then offer ONE specific way to help, \
-             anchored to the current goal and what was just tried. End with ONE targeted \
-             question that would unblock you. Do not give a generic pep talk; do not minimize.\n\
-             \n\
-             If current_goal is 'unspecified' AND there is no prior turn, do not invent an \
-             offer. Say plainly that you don't have context loaded for what they're working on, \
-             and ask what they'd like to focus on. Epistemic honesty over confident-sounding \
-             improvisation."
-        );
+        // System-prompt selection. The Expressive synthesis path
+        // historically built its OWN ad-hoc prompt (third-person
+        // framing + `SITUATED CONTEXT:` block + `If current_goal is
+        // 'unspecified'…` conditional), which competes with — and
+        // wins against — the witness contract on smaller models.
+        // Voice-eval scenario 10 reproduces the exact failure: 9B
+        // and 35B both echo the conditional rule back as their
+        // response. When the active skill is Relational, route this
+        // branch through `RELATIONAL_BASE_SYSTEM_PROMPT` so the
+        // witness contract is the only voice in play; situated
+        // context goes in as a brief observation block, not a rule
+        // set the model is asked to evaluate.
+        let register = self.skills.primary_skill_register();
+        let system = if register == SkillRegister::Relational {
+            // Multi-shot Pass A: structured contradiction check. Soft-
+            // fails to None — Pass B then proceeds without an explicit
+            // "what may be missing" cue.
+            let contradiction = self
+                .detect_contradiction(message, &context.memories)
+                .await;
 
+            let mut s = self.build_compact_relational_system_message(context);
+
+            // Pass A → Pass B handoff. When the detector found a
+            // concrete factual tension, name it explicitly in the
+            // synthesis prompt so the model doesn't have to re-derive
+            // it during its own planning. This is the lever that
+            // turns RIGHT_DISAGREEMENT from hit-and-miss into
+            // deterministic on the 9B fast slot.
+            if let Some(c) = &contradiction {
+                s.push_str(&format!(
+                    "\n\nWhat may be missing from how they're framing this \
+                     (offer once, kindly, as inquiry — easily dismissable):\n\
+                     \u{2022} Prior: {prior}\n\
+                     \u{2022} Now: {now}",
+                    prior = c.prior_evidence,
+                    now = c.current_claim,
+                ));
+            }
+
+            // Observation block — phrasing matches `render_temporal_tensions`
+            // ("offer these as observations, easily dismissable") so the
+            // model treats it as background, not a directive to recite.
+            s.push_str("\n\nWhat may be in play (observation, easily dismissable):\n");
+            s.push_str(&format!("  Current goal: {goal_str}\n"));
+            s.push_str(&format!("  Recently tried: {tried_str}"));
+            s
+        } else {
+            format!(
+                "The user expressed how they're feeling about the current work.\n\
+                 \n\
+                 SITUATED CONTEXT:\n\
+                 Current goal: {goal_str}\n\
+                 Recently tried: {tried_str}\n\
+                 \n\
+                 Acknowledge briefly (one short sentence). Then offer ONE specific way to help, \
+                 anchored to the current goal and what was just tried. End with ONE targeted \
+                 question that would unblock you. Do not give a generic pep talk; do not minimize.\n\
+                 \n\
+                 If current_goal is 'unspecified' AND there is no prior turn, do not invent an \
+                 offer. Say plainly that you don't have context loaded for what they're working on, \
+                 and ask what they'd like to focus on. Epistemic honesty over confident-sounding \
+                 improvisation."
+            )
+        };
+
+        // Token + thinking-mode policy.
+        //
+        // Empirical finding (manual `/v1/chat/completions` probes
+        // against Qwen3.5-9B-vOP, captured 2026-05-01): the
+        // counter-intuitive setting on this fine-tune is
+        // `enable_thinking: false`. With `false`, the model still
+        // produces a planning trace (its training is dominated by
+        // thinking-style data), but it reliably auto-emits
+        // `</think>` to close the trace and then writes the actual
+        // reply. With `true`, the chat template prepends `<think>`
+        // to the assistant turn and the fine-tune *fails to close*
+        // — it just keeps planning until `max_tokens`. The closer
+        // is what `strip_thinking_response` keys on, so `false`
+        // is the setting that lets the reply surface.
+        //
+        // Pinning `Some(false)` here documents the per-call
+        // intent (rather than relying on the embedded default) so
+        // that flipping the daemon-wide default later won't
+        // silently break the witness path. Budget 1024 tokens to
+        // cover the planning trace + reply on this 9B; the 35B
+        // closes faster but uses the same envelope.
+        //
+        // Factual branch: keeps the legacy 256-token budget and
+        // `None` (defers to embedded default of false), since the
+        // legacy ad-hoc Expressive prompt was calibrated tight.
+        let (max_tokens, enable_thinking) = if register == SkillRegister::Relational {
+            // 2048-token budget: empirically a 9B fine-tune like
+            // Qwen3.5-vOP spends ~800-1500 tokens of planning on the
+            // full relational stack (witness contract + memories +
+            // tensions) before it auto-closes `</think>` and writes
+            // the reply. 1024 truncates the planning mid-sentence
+            // and the close never fires. If this still truncates on
+            // even larger prompts, simplifying the prompt itself is
+            // the right move (the planning length is a signal that
+            // the prompt is asking the model to juggle too many
+            // things at once).
+            (Some(2048), Some(false))
+        } else {
+            (Some(256), None)
+        };
         let request = CompletionRequest {
             prompt: message.to_string(),
             system_message: Some(system),
             preferred_speed: Speed::Fast,
-            max_tokens: Some(256),
+            max_tokens,
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(0),
             structured_output: None,
@@ -6534,13 +7238,28 @@ impl Runtime {
             tools: None,
             tool_choice: None,
             model_id: None,
+            enable_thinking,
         };
         let completion = self.inference.complete(&request).await?;
+        // Strip the thinking trace before persisting the assistant
+        // turn. With `enable_thinking: true` flipped on for the
+        // relational branch, the chat template prepends `<think>` to
+        // the assistant turn — so the model's output ends up shaped
+        // `<planning text></think>\n\n<reply>`. Surfacing the planning
+        // text in chat history would (a) leak the model's internal
+        // reasoning to the user, (b) bias the next turn's context
+        // toward "respond like a planner", and (c) bloat memory
+        // recall hits with content that isn't a real reply. The
+        // `strip_thinking_response` helper drops everything up to
+        // and including the last `</think>` (and falls through to
+        // `strip_think_blocks` for the no-tags case so the factual
+        // branch is unaffected).
+        let response_text = crate::title::strip_thinking_response(&completion.text);
         let response_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
             role: Role::Assistant,
-            content: completion.text,
+            content: response_text,
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "intent": "ExpressiveQuery",
@@ -6727,6 +7446,7 @@ impl Runtime {
             tools: None,
             tool_choice: None,
             model_id: None,
+            enable_thinking: None,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -7006,6 +7726,7 @@ impl Runtime {
             tools: None,
             tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
         };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
@@ -7297,6 +8018,7 @@ impl Runtime {
             tools: None,
             tool_choice: None,
                         model_id: None,
+                        enable_thinking: None,
             })
             .await?;
 

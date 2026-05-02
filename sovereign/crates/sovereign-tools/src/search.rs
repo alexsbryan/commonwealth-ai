@@ -310,6 +310,7 @@ impl SearchTool {
             tools: None,
             tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
         };
 
         let response = self.inference.complete(&request).await?;

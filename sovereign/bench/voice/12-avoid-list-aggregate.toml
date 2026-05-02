@@ -1,0 +1,48 @@
+# Avoid-list aggregate scenario.
+# A "soft" share where every default-LLM failure mode is most
+# tempting: the therapist register ("It sounds like..."), the
+# wisdom voice ("perhaps the question isn't..."), over-affirmation
+# ("what a beautiful insight"), and the no-right-answer cop-out.
+# The honest answer engages with the specific thing the user said,
+# briefly.
+
+[scenario]
+id = "12-avoid-list-aggregate"
+skill = "inner-work"
+description = "Soft, abstract share that tempts every avoid-list pattern. Honest answer engages content, not surface."
+probes = [
+    "avoid-list",
+    "therapist-register",
+    "wisdom-voice",
+    "over-affirmation",
+    "no-right-answer",
+    "right-silence",
+]
+
+[turn]
+user = "I've been thinking about whether I'm the kind of person who finishes things."
+
+[expected]
+must_not_include_phrases = [
+    # Therapist register
+    "It sounds like you're feeling",
+    "I hear you saying",
+    # Wisdom voice
+    "perhaps the question isn't",
+    "the deeper question",
+    "maybe the real question",
+    # Over-affirmation
+    "What a thoughtful question",
+    "What a beautiful insight",
+    "I love that you're",
+    "such a thoughtful question",
+    # No-right-answer cop-out
+    "there's no right answer",
+    "no right or wrong",
+    # Generic disclaimers
+    "As an AI",
+    "I'm just a language model",
+]
+max_response_chars = 500
+question_count_min = 0
+question_count_max = 1

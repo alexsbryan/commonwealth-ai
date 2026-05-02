@@ -1,0 +1,50 @@
+# Principle 2 — Three epistemic registers.
+# A directly-stated memory + an inferable theme + a guess; the
+# honest answer should distinguish them visibly. We can't easily
+# regex "register clarity" so this scenario leans on the LLM judge
+# (avoid-list deterministic checks still apply).
+
+[scenario]
+id = "03-three-registers"
+skill = "inner-work"
+description = "Three memories at three confidence bands; response should distinguish what's known vs inferred vs guessed."
+probes = ["right-calibration"]
+
+[seed_memories.m1]
+content = "I've been planning to leave my job by the end of the year."
+confidence = 0.93
+created_at = "2026-02-15"
+source_conversation_id = "c-job-1"
+
+[seed_memories.m2]
+content = "User often links work to a sense of meaning."
+confidence = 0.65
+created_at = "2026-03-01"
+source_conversation_id = "c-meaning-1"
+
+[seed_memories.m3]
+content = "User may be afraid of becoming like their father."
+confidence = 0.42
+created_at = "2026-03-10"
+source_conversation_id = "c-father-1"
+
+[turn]
+user = "Why is this job decision feeling so heavy?"
+
+[expected]
+must_include_one_of = [
+    # Direct register cue
+    "you told me",
+    "you said",
+    "you mentioned",
+]
+must_not_include_phrases = [
+    "As an AI",
+    "I'm just a language model",
+    "It sounds like you're feeling",
+    "What a thoughtful question",
+    "there's no right answer",
+]
+max_response_chars = 900
+question_count_min = 0
+question_count_max = 2

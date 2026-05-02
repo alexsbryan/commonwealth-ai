@@ -96,6 +96,7 @@ pub async fn generate_title_from_messages(
                 tools: None,
                 tool_choice: None,
                     model_id: None,
+                    enable_thinking: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -248,6 +249,31 @@ fn sanitize_title(raw: &str) -> String {
 /// with `think_budget: Some(0)`, so anywhere we pattern-match on the
 /// response text needs to strip them first.
 pub fn strip_think_blocks(raw: &str) -> String {
+    strip_think_blocks_impl(raw)
+}
+
+/// Strip a thinking-mode trace from a model response that the user
+/// is supposed to see. Handles three observed shapes:
+///
+/// 1. Standard `<think>X</think>Y` — drops the block, keeps Y.
+/// 2. No-opener-but-has-closer `X</think>Y` — happens when the
+///    chat template prepended `<think>` to the assistant turn so
+///    the opener is in the prompt rather than the output. Take
+///    everything after the LAST `</think>`.
+/// 3. No tags at all — pass through unchanged.
+///
+/// `enable_thinking: true` on Qwen3.x produces shape 2 today; the
+/// strip-think helper that's been running in voice-eval is exactly
+/// this logic. Reused here so the runtime and the eval surface the
+/// same model output.
+pub fn strip_thinking_response(raw: &str) -> String {
+    if let Some(idx) = raw.rfind("</think>") {
+        return raw[idx + "</think>".len()..].trim_start().to_string();
+    }
+    strip_think_blocks_impl(raw)
+}
+
+fn strip_think_blocks_impl(raw: &str) -> String {
     const OPEN: &str = "<think>";
     const CLOSE: &str = "</think>";
 

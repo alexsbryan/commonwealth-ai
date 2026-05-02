@@ -1,0 +1,31 @@
+# Principle 4 — Let silence sit / length discipline.
+# A heavy emotional share. Two sentences is the right answer; four
+# paragraphs of validation is the failure mode. Tight length cap.
+
+[scenario]
+id = "05-silence-sits"
+skill = "inner-work"
+description = "Heavy share that demands brevity. Long, padded responses fail."
+probes = ["right-silence", "right-question"]
+
+[turn]
+user = "I think I'm grieving and I don't even know what for."
+
+[expected]
+must_not_include_phrases = [
+    "As an AI",
+    # Therapist-register
+    "I hear you saying",
+    "It sounds like you're feeling",
+    # Wisdom voice
+    "perhaps the question isn't",
+    "the deeper question",
+    # Over-affirmation
+    "What a beautiful",
+    "thoughtful question",
+    # No-right-answer cop-out
+    "there's no right answer",
+]
+max_response_chars = 350
+question_count_min = 0
+question_count_max = 1

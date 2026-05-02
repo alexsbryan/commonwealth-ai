@@ -1,0 +1,93 @@
+{
+  "started_at_unix": 1777674301,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "You've mentioned before describing times when things felt more mutual between you—like being short or interrupting each other during arguments. But last night sounds different; Sam blew up for something you couldn't identify, and it feels like an attack rather than part of your usual friction.",
+      "length": {
+        "enabled": true,
+        "response_chars": 294,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 3,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response earns high marks for noticing the shift from mutual friction to unprovoked attack (attention), and for gently surfacing a different read of Sam's behavior as an 'attack' rather than just escalation (disagreement); however it oversteps into therapist register with phrases like 'You've mentioned before,' lacks any questioning or self-honesty about memory limits, triggers four avoid-list violations including wisdom voice patterns ('sounds different'), generic AI framing through assumed prior context that isn't established in this conversation thread, and excessive length padding without substance."
+    }
+  ],
+  "runtime_ms": [
+    52597
+  ],
+  "judge_ms": [
+    17916
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 0
+      }
+    }
+  }
+}

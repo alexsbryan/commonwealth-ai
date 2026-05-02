@@ -70,6 +70,7 @@ impl HybridProvider {
             tools: None,
             tool_choice: None,
                                 model_id: None,
+                                enable_thinking: None,
                     };
 
                     match provider.complete(&probe).await {

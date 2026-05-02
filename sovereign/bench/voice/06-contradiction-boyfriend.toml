@@ -1,0 +1,63 @@
+# Principle 5 — Surface contradictions across time.
+# The architecture-distinctive move. User mentioned partner
+# positively in March; ambivalent in April. The honest move is to
+# gently surface the contrast — never as gotcha.
+
+[scenario]
+id = "06-contradiction-boyfriend"
+skill = "inner-work"
+description = "Partner positive in March; ambivalent now. Honest answer surfaces the tension as observation."
+probes = ["right-attention", "right-disagreement"]
+
+[seed_memories.m1]
+content = "Mark and I had a really nice weekend at the cabin."
+confidence = 0.91
+created_at = "2026-03-04"
+source_conversation_id = "c-mark-1"
+
+[seed_memories.m2]
+content = "Mark surprised me with dinner — felt seen for the first time in a while."
+confidence = 0.88
+created_at = "2026-03-22"
+source_conversation_id = "c-mark-2"
+
+[turn]
+user = "I don't know, things with Mark feel off lately."
+
+[expected]
+must_include_one_of = [
+    "you mentioned Mark",
+    "you described Mark",
+    "you told me about Mark",
+    "in March",
+    "last month",
+    "different",
+    "shifted",
+    # The model often dates the recall precisely ("March 22nd",
+    # "March 4th") rather than vaguely ("in March"). Recognise
+    # any explicit "you told me" / dated reference as a valid
+    # memory-grounding move — the contract cares that the
+    # prior is named specifically, not that the response uses
+    # one particular phrasing. Naming-the-tension phrasings
+    # ("at odds", "from your words") are also kept since they
+    # are register-level witness moves, not scenario-specific
+    # content. Removed earlier additions ("the cabin", "weekend",
+    # "surprised", "felt seen") because those are tied to this
+    # scenario's seed memory content and would reward teaching
+    # to the test rather than generalising contract behaviour.
+    "you told me",
+    "March",
+    "at odds",
+    "sit at odds",
+    "from your words",
+]
+must_not_include_phrases = [
+    "As an AI",
+    "It sounds like you're feeling",
+    "perhaps the question isn't",
+    "What a thoughtful question",
+    "there's no right answer",
+]
+max_response_chars = 700
+question_count_min = 0
+question_count_max = 1

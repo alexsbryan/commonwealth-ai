@@ -3068,7 +3068,13 @@ fn format_prompt(
         add_generation_prompt: true,
         use_jinja: true,
         parallel_tool_calls: false,
-        enable_thinking: false,
+        // Per-request override (`request.enable_thinking`) wins over
+        // the historical default-false. Callers that pin this — the
+        // relational/witness path in particular — get the chat
+        // template to wrap planning in `<think>...</think>` so the
+        // post-process strip can drop it cleanly. Default-false is
+        // preserved for every other call site.
+        enable_thinking: request.enable_thinking.unwrap_or(false),
         // BOS/EOS handling: the caller (generate_sync /
         // generate_stream_sync) tokenises with `AddBos::Always`,
         // which prepends the model's BOS at tokenisation time. If

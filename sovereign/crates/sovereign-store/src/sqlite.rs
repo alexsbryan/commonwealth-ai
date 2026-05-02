@@ -588,6 +588,11 @@ impl MemoryStore for SqliteStateStore {
         if fts_context.is_empty() {
             return Ok(Vec::new());
         }
+        tracing::debug!(
+            input_chars = context.len(),
+            fts_query = %fts_context,
+            "memory:fts_match query"
+        );
 
         let mut stmt = conn
             .prepare(
@@ -1483,8 +1488,19 @@ fn sanitize_fts5_query(query: &str) -> String {
         "you", "your", "i", "me", "my",
     ];
 
+    // Split on every non-alphanumeric character, INCLUDING dashes.
+    // FTS5 parses `foo-bar` as `foo NOT bar` (the `-` is the NOT
+    // operator), so a single hyphenated token in the query corrupts
+    // the OR semantics of the surrounding clause and silently
+    // returns zero rows. Splitting `6-month` into `6` + `month`
+    // means the length-1 token drops out and the meaningful token
+    // contributes a clean OR clause — recall behaves as intended.
+    // Voice-eval scenario 07 ("…6-month growth roadmap…") was the
+    // canonical reproduction: seed memories were saved correctly,
+    // the witness path was wired correctly, but FTS returned 0
+    // rows because the query string itself was malformed.
     let words: Vec<&str> = query
-        .split(|c: char| !c.is_alphanumeric() && c != '-')
+        .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty())
         .filter(|w| w.len() > 1)
         .filter(|w| !STOPWORDS.contains(&w.to_lowercase().as_str()))

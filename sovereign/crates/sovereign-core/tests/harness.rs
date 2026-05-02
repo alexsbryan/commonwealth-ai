@@ -77,6 +77,14 @@ impl InferenceProvider for DeterministicInference {
             r#"{"pass": true}"#.to_string()
         } else if prompt_lower.contains("select the best") {
             "1".to_string()
+        } else if prompt_lower.contains("tension-detector")
+            || (prompt_lower.contains("prior memories") && prompt_lower.contains("relation"))
+        {
+            // R3 temporal-tension pre-pass — return empty array
+            // (no tensions found) so functional tests that
+            // happen to exercise relational skills don't see
+            // spurious tension cues.
+            "[]".to_string()
         } else if prompt_lower.contains("extract") && prompt_lower.contains("memor") {
             // Memory extraction — return empty to avoid side effects
             "No new facts to extract.".to_string()

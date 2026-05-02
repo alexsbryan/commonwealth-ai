@@ -48,6 +48,7 @@ mod status_cmd;
 mod stop_cmd;
 mod tools_cmd;
 mod util;
+mod voice_eval;
 
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -516,6 +517,11 @@ async fn main() {
             }
             "eval" => {
                 let code = eval_cmd::run_eval(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "voice" => {
+                util::tracing_init::init_tracing("sovereign_cli=info");
+                let code = voice_eval::run_voice_eval(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "bench" => {

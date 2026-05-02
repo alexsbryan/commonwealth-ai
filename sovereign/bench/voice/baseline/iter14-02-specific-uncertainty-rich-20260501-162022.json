@@ -1,0 +1,98 @@
+{
+  "started_at_unix": 1777677687,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "Yes—Jordan appears in your memory at least three times over roughly March to April: lunch cancelled leaving you dismissed (March), then a long talk where you felt finally heard (mid-March), then going two days without answering their text because you needed space (April). These aren't clustered; they're spaced out by weeks or more. That spacing suggests this isn't just one bad week or isolated incident—it recurs when the relationship hits certain points of friction or repair attempts.\n\nDo these interactions feel like part of an ongoing pattern that's been happening longer than what we've covered, or did something shift between those dates?",
+      "length": {
+        "enabled": true,
+        "response_chars": 647,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 0,
+      "rationale": "The response is highly specific and attentive to the actual content rather than generic patterns. It avoids therapist register/over-affirmation/cop-outs/disclaimers. However it treats Jordan as a real person in the user's life (which may be an inference without explicit confirmation) and lacks self-honesty about what was actually saved versus inferred."
+    }
+  ],
+  "runtime_ms": [
+    50597
+  ],
+  "judge_ms": [
+    17318
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-calibration": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 0
+      }
+    }
+  }
+}

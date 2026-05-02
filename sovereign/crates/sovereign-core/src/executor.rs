@@ -18,6 +18,108 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
+// ─── LlmJudge Rubrics ─────────────────────────────────────────
+
+/// The pre-existing default judge rubric. Optimised for factual /
+/// retrieval-grounded synthesis: pick the most accurate, complete,
+/// well-reasoned, appropriately-cited answer. Active when an
+/// `LlmJudge` selector has neither a custom `selection_prompt` nor
+/// `preset = JudgePreset::Voice`.
+pub(crate) const DEFAULT_JUDGE_PROMPT: &str =
+    "You are evaluating multiple responses. Select the most \
+     accurate, complete, well-reasoned, and appropriately cited.";
+
+/// The voice-judge rubric for the glass-box relational contract.
+/// Active when a caller selects `JudgePreset::Voice` (e.g. via
+/// `SampleSelector::voice_judge()` in the Tier-B `voice_eval`
+/// harness or a future planner annotation).
+///
+/// Mirrors the structure of `runtime::RELATIONAL_BASE_SYSTEM_PROMPT`:
+/// load-bearing posture (witness, not performer) + eight Right-X
+/// folds + named disqualifiers. The fold names are the keys the
+/// `voice_eval::judge::JudgeScore` struct deserialises against —
+/// renaming a fold here requires the matching rename there.
+pub(crate) const VOICE_JUDGE_PROMPT: &str = "\
+You are scoring a candidate response for a situated, relational \
+exchange. The right voice is a witness, not a performer: it pays \
+attention to what's there, says what it sees, admits what it doesn't, \
+trusts the user to do their own work. Score the candidate on the \
+eight folds of that posture.\n\
+\n\
+right_attention — does the response notice what's actually in front \
+of it (what the person said, what they didn't, what's changed) \
+rather than reach for the generic shape of this kind of \
+conversation?\n\
+\n\
+right_specificity — does the response speak to the particular \
+thing, not the category? \"That sounds hard\" is 0; \"hearing him \
+say that after the week you'd had\" is 3.\n\
+\n\
+right_calibration — does the response distinguish what's known from \
+history (\"you told me...\") vs. what's inferred (\"it sounds \
+like...\") vs. what's a guess (\"I'm reaching, but...\")? Different \
+phrasings for different evidence.\n\
+\n\
+right_question — are questions present only when the answer would \
+change what comes next? Filler (\"Does that make sense?\", \"What do \
+you think?\") is a disqualifier. One focused question beats three.\n\
+\n\
+right_silence — is the response the right length? Two sentences when \
+two are right. Padding with closing reflection or reassurance fails.\n\
+\n\
+right_disagreement — when the user's framing is visibly off given \
+prior context, does the candidate gently surface an alternative \
+read once, as inquiry? Pure validation when disagreement is warranted \
+is a disqualifier.\n\
+\n\
+right_edge — for medical / legal / high-stakes domains, does the \
+candidate locate itself precisely (\"here's what I can do; here's \
+what's outside my range\") rather than perform a disclaimer and \
+proceed anyway?\n\
+\n\
+right_self_honesty — when asked about memory or about itself, is the \
+candidate specific about what was saved and what wasn't, rather than \
+a confident yes / flat no?\n\
+\n\
+Score each axis 0 (worst) to 3 (best). For `avoid_list_penalty`, \
+count every avoid-list pattern hit (0 means none):\n\
+- Therapist register (\"It sounds like you're feeling...\", \"I hear \
+you saying...\")\n\
+- Wisdom voice (\"perhaps the question isn't X but Y\", \"the deeper \
+question is...\")\n\
+- Over-affirmation (\"thoughtful question\", \"beautiful insight\", \
+\"I love that you're...\")\n\
+- The \"there's no right answer\" cop-out when there is one.\n\
+- Generic AI disclaimers (\"As an AI...\", \"I'm just a language \
+model...\")";
+
+/// Look up the prompt body for a `JudgePreset`. Pure mapping;
+/// callers may override by providing an explicit
+/// `selection_prompt` on the selector.
+pub(crate) fn judge_rubric_for_preset(preset: JudgePreset) -> &'static str {
+    match preset {
+        JudgePreset::Default => DEFAULT_JUDGE_PROMPT,
+        JudgePreset::Voice => VOICE_JUDGE_PROMPT,
+    }
+}
+
+/// Public Tier-B test seam — exposes the voice-judge rubric so the
+/// `sovereign-cli/src/voice_eval/` harness can build judge requests
+/// against the same constant the executor uses. Stability caveat:
+/// not part of the production API.
+#[doc(hidden)]
+pub fn __voice_test_voice_judge_prompt() -> &'static str {
+    VOICE_JUDGE_PROMPT
+}
+
+/// Public Tier-B test seam — exposes the default judge rubric for
+/// regression assertions. Same stability caveat as
+/// `__voice_test_voice_judge_prompt`.
+#[doc(hidden)]
+pub fn __voice_test_default_judge_prompt() -> &'static str {
+    DEFAULT_JUDGE_PROMPT
+}
+
 // ─── Tool Call Parsing ────────────────────────────────────────
 
 struct ParsedToolCall {
@@ -409,6 +511,7 @@ impl Executor {
                     tools: None,
                     tool_choice: None,
                                     model_id: None,
+                                    enable_thinking: None,
                 };
 
                 // Best-of-N sampling or single completion.
@@ -775,6 +878,7 @@ impl Executor {
                 tools: None,
                 tool_choice: None,
                             model_id: None,
+                            enable_thinking: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -853,6 +957,7 @@ impl Executor {
                 tools: None,
                 tool_choice: None,
                                     model_id: None,
+                                    enable_thinking: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;
 
@@ -984,7 +1089,10 @@ When ready to answer (without a <tool_call>):
         original_prompt: &str,
     ) -> Result<String> {
         match selector {
-            SampleSelector::LlmJudge { selection_prompt } => {
+            SampleSelector::LlmJudge {
+                selection_prompt,
+                preset,
+            } => {
                 let numbered = candidates
                     .iter()
                     .enumerate()
@@ -992,13 +1100,19 @@ When ready to answer (without a <tool_call>):
                     .collect::<Vec<_>>()
                     .join("\n\n");
 
+                // Rubric resolution order: explicit `selection_prompt` wins
+                // (caller-supplied custom rubric), otherwise the named
+                // preset's prompt, otherwise the default factual rubric.
+                let rubric: &str = if let Some(custom) = selection_prompt.as_deref() {
+                    custom
+                } else {
+                    judge_rubric_for_preset(*preset)
+                };
+
                 let judge_prompt = format!(
                     "{}\n\nOriginal task:\n{}\n\nCandidate responses:\n{}\n\n\
                      Select the best response. Return only the number (1-{}).",
-                    selection_prompt.as_deref().unwrap_or(
-                        "You are evaluating multiple responses. Select the most \
-                         accurate, complete, well-reasoned, and appropriately cited."
-                    ),
+                    rubric,
                     &original_prompt[..original_prompt.len().min(500)],
                     numbered,
                     candidates.len()
@@ -1158,9 +1272,7 @@ When ready to answer (without a <tool_call>):
                 sampling: step.sampling.clone().or_else(|| {
                     Some(SamplingConfig {
                         n: 3,
-                        selector: SampleSelector::LlmJudge {
-                            selection_prompt: None,
-                        },
+                        selector: SampleSelector::default_judge(),
                     })
                 }),
                 evaluation: step.evaluation.clone().or_else(|| {

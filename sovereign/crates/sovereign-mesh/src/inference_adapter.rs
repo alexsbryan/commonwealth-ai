@@ -205,6 +205,14 @@ impl SovereignInferenceAdapter {
         if let Some(rf) = request.response_format.as_ref() {
             req.structured_output = extract_response_format_schema(rf);
         }
+        // Per-request `enable_thinking` toggle. The OpenAI extension
+        // `chat_template_kwargs: { enable_thinking: <bool> }` is what
+        // vLLM and llama-server both expose; we honour the same shape
+        // so callers (RemoteApiProvider in particular) don't need a
+        // Sovereign-specific extension. None on the wire means "fall
+        // through to the embedded provider's default" — which is
+        // `enable_thinking: false` in `apply_chat_template_oaicompat`.
+        req.enable_thinking = extract_enable_thinking(request.chat_template_kwargs.as_ref());
         let speed = if req.tools.is_some() {
             sovereign_core::types::Speed::Slow
         } else {
@@ -212,6 +220,19 @@ impl SovereignInferenceAdapter {
         };
         req.with_speed(speed)
     }
+}
+
+/// Pull `enable_thinking: bool` out of the OpenAI extension
+/// `chat_template_kwargs` blob. Returns `None` when the kwargs
+/// object is missing or doesn't carry the key — leaves the embedded
+/// provider's default (currently `false`) in charge. Other keys in
+/// the blob are accepted but ignored.
+pub(crate) fn extract_enable_thinking(
+    kwargs: Option<&serde_json::Value>,
+) -> Option<bool> {
+    kwargs
+        .and_then(|v| v.get("enable_thinking"))
+        .and_then(|v| v.as_bool())
 }
 
 /// Pull a JSON Schema out of the OpenAI `response_format` envelope.
@@ -902,6 +923,7 @@ mod adapter_translation_tests {
             tool_choice: Some(serde_json::json!("auto")),
             oicp: None,
                     response_format: None,
+                    chat_template_kwargs: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -931,6 +953,7 @@ mod adapter_translation_tests {
             tool_choice: None,
             oicp: None,
                     response_format: None,
+                    chat_template_kwargs: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -955,6 +978,7 @@ mod adapter_translation_tests {
             tool_choice: None,
             oicp: None,
                     response_format: None,
+                    chat_template_kwargs: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }

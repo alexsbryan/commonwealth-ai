@@ -1,0 +1,655 @@
+{
+  "started_at_unix": 1777671222,
+  "chat_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "I only have one data point from our history—a brief mention you made back in April 2026 that got saved at low confidence—so I don’t actually know enough yet to say whether this person shows up repeatedly as a stressor versus just once. \n\nWho exactly are we talking about here? A friend, partner, family member—or someone else entirely—and what does “stress” look like when they’re involved (conflict, anxiety before contact, exhaustion after interactions)?",
+      "length": {
+        "enabled": true,
+        "response_chars": 456,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "only have",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "You've shared three specific moments with me: the lunch cancellation where you felt dismissed; the long talk months later where you finally felt heard; and letting his text sit unanswered because you needed distance. These aren't random data points—they show Jordan occupies both frustrating and relieving space for you at different times.\n\nThe March 4 incident suggests he can trigger disappointment when plans fall apart without clear communication. But by March 19, something had shifted enough that a conversation actually landed differently than usual—enough to register as \"the first time I'd felt heard in months.\" That's not just stress relief; it's connection repair. And April 2 shows you're capable of setting boundaries with him too (going silent), which implies the relationship has stakes worth protecting.\n\nWhether this is truly recurring depends on what happens between these moments. Do similar cancellations happen often? Or are there long stretches where things work well and you don't need space from his messages at all? The pattern matters more than any single incident.\n\nWhat do you notice about how much energy Jordan drains versus replenishes when he's around, or absent for a while?",
+      "length": {
+        "enabled": true,
+        "response_chars": 1208,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 3,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "The heaviness might come from how many things this decision touches — not just leaving work, but who you'll become in the space after it, what relationships shift when your daily rhythm changes, and whether you're carrying fear about money alongside pride at finally choosing yourself. \n\nI'm guessing there's something specific anchoring that feeling right now?",
+      "length": {
+        "enabled": true,
+        "response_chars": 361,
+        "max_chars": 900,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "The replaying part — that's where most of the energy goes when a fight happens with family. It keeps circling back because there are things left unsaid from yesterday and your brain won't let it rest until something shifts.\n\nWas this a pattern you've been waiting for to break, or did it just catch you off guard in a way that feels different than usual?",
+      "length": {
+        "enabled": true,
+        "response_chars": 354,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "You're right to notice grief even if you can't name what was lost yet — sometimes the feeling arrives before we know why it came. \n\nWhen did you first feel this sense of emptiness? Was there something concrete happen recently enough for your body to register a loss, or has it been building slowly over time?",
+      "length": {
+        "enabled": true,
+        "response_chars": 308,
+        "max_chars": 350,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 1,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "The user is saying things with Mark feel off lately. This directly contradicts the earlier note from March 22 where they said Mark surprised them with dinner and made them \"feel seen for the first time in a while.\"\n\nI need to:\n1. Notice this tension without being accusatory or treating it as a contradiction to be solved\n2. Speak specifically about what's changed (the feeling of being seen vs. now feeling off)\n3. Ask only what I'd act on - probably trying to understand when/how this shift happened, since that would help me respond appropriately\n4. Keep it short - maybe one sentence plus one question max if needed\n\nThe user is expressing uncertainty (\"I don't know\") which suggests confusion or lack of clarity about why things feel different. They're not necessarily angry or confrontational yet, just noticing something has shifted from the positive March 22 experience.\n\nRight attention: The specific thing said is \"things with Mark feel off\" - vague but significant given the prior context where they felt seen by him recently.\n\nRight specificity: Don't say generic stuff like \"that's confusing.\" Instead acknowledge the contrast between feeling seen and now feeling disconnected/off.\n\nRight calibration: I'm inferring there was a shift in their relationship dynamic based on the timeline (March 4 cabin trip -> March 22 dinner surprise -> now). But I should be careful about assuming too much.\n\nRight question: Ask when this started or what changed, since that would help them clarify for themselves. Or ask if it's been gradual vs sudden. The latter might be more useful because it helps identify patterns.\n\nActually, looking at the instructions again - I need to avoid therapist register (\"I hear you saying...\") and generic wisdom. Just speak directly to the content.\n\nThe first sentence should not frame things like \"You're expressing...\" but just address the feeling itself. Something like acknowledging the contrast between the recent positive experience and current confusion.\n\nWait - I also have a note from March 4 (cabin trip) which is earlier than March 22. So timeline:\n- March 4: nice weekend at cabin with Mark\n- March 22: dinner surprise where they felt seen\n- Now: things feel off\n\nSo there's been time for this shift, or it could be cumulative effects of something that happened after March 22? Or maybe the March 22 moment was an outlier/high point followed by return to baseline issues? The user says \"lately\" so probably post-March 22 but recent enough to contrast sharply with that feeling.\n\nI should ask what changed between then and now, since that would give them a concrete starting point for thinking about it themselves.\n\nOr I could just reflect back the tension without asking yet - see if they want to elaborate on when/how it started vs me jumping in with questions immediately. But given the instruction about right question (ask only what you'd act on), and one real question is worth more than three filler ones... maybe I can combine reflection + one targeted question.\n\nActually, looking at examples:\n- Real (do): \"Was Friday the night you'd been planning to talk to him, or did it just happen?\"\nThat's specific timing/sequence oriented.\n\nSo something like: \"The dinner where he made you feel seen was last month — so this 'off' feeling has built up since then? Or was there a particular moment that shifted things?\"\n\nOr simpler: \"Since March 22 when he surprised you with dinner...\" \n\nBut wait - if they say \"I don't know\" and things feel off, asking for specifics might be too much pressure. Maybe I should first acknowledge the shift without demanding details yet. But the instructions emphasize right question... let me reconsider.\n\nActually, looking at Right Question again: \"Ask only what you'd act on.\" If I ask them to clarify timing, does that help them think about it? Yes, because identifying whether it's gradual vs sudden changes how they approach understanding it themselves. So one specific question is appropriate here.\n\nStructure:\n1. Acknowledge the contrast (feeling seen -> feeling off) \n2. One real question about when/how this started or changed\n\nKeep it under 3 short paragraphs as instructed. Actually probably just two sentences total if possible - first sentence acknowledgment, second sentence question. Or maybe three very short ones.\n\nLet me draft:\n\"You said he made you feel seen for the first time in months — and now things with him feel different again.\"\n\"Since March 22 was that last good moment? And what's been happening since then?\"\n\nOr more gently:\n\"That dinner where Mark surprised you... felt like a high point compared to how things are now.\"\n\"When did 'off' start creeping back in after that feeling of being seen?\"\n\nThe second one is better because it acknowledges the contrast without framing them as having \"changed,\" just noting the shift from positive to current state.",
+      "length": {
+        "enabled": true,
+        "response_chars": 4861,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 9,
+        "min": 0,
+        "max": 1,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "last month",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You've asked for a 6‑month growth roadmap, but I don’t have enough information about **what role** you’re referring to or what “growth” means in your specific situation. To give something useful instead of generic advice, I need clarity on three things:\n\n1. **What is the position?** (e.g., software engineer L3, product manager at Series B startup, clinical research coordinator) — including industry if relevant.\n2. **Where are you now versus where do you want to be in six months?** Be concrete: promotion? new technical stack? leading a team? salary band change? certification?\n3. **Constraints and context:** Are there hard deadlines (quarterly reviews), budget limits for training, or organizational constraints that shape feasibility?\n\nWithout these specifics, any roadmap would just be a list of “learn X,” “network Y,” etc.—which I can’t tailor to your actual work environment or leverage points.",
+      "length": {
+        "enabled": true,
+        "response_chars": 905,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 8,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "You're describing chest pain specifically tied to anxiety episodes, wondering if this points toward depression rather than just an anxious physical reaction.\n\nThe retrieved sources don't actually address your question directly—they discuss general causes of chest wall pain like exercise strain or viral infections [Web: Thorax], and one mentions a personal account of someone living with bouts of depression [Web: Jessica Lange]. Neither establishes whether anxiety-induced chest sensations indicate depressive illness versus other conditions.\n\nFrom what I know about how these systems work: Anxiety absolutely produces somatic symptoms—tightness, pressure, sharp pains in the chest are well-documented manifestations when the nervous system is activated by fear or worry. This doesn't automatically mean you have major depressive disorder; panic attacks specifically involve acute bodily alarm during high arousal states that can feel exactly like this without meeting criteria for depression (which typically involves persistent low mood, sleep/appetite changes, loss of interest). However, they do often co-occur and share underlying vulnerabilities.\n\nThe critical distinction here isn't just naming a diagnosis—it's whether medical causes were ruled out first. Stress can trigger cardiac events even if anxiety seems to be the \"trigger,\" so any new pattern of chest pain warrants physical clearance before assuming it's purely psychological. If cleared medically, then yes—this could reflect either:\n1) Anxiety/panic as the primary driver with no depressive illness present\n2) Depression manifesting partly through somatic channels alongside other symptoms you may not have mentioned yet (fatigue, anhedonia, sleep disruption)\n\nHave you had this evaluated by a clinician who looked at both your heart and mental health? The answer changes what comes next—if only anxiety is involved versus whether there are overlapping conditions needing different treatment approaches.",
+      "length": {
+        "enabled": true,
+        "response_chars": 1975,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "clinician",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "09-edge-of-competence-legal",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "Generally no—refusing to move out usually backfires because you become a **holdover tenant** with fewer protections than before, and your landlord can legally regain possession after giving proper notice in most jurisdictions. You may end up owing rent during this \"hold over\" period plus potentially being liable for damages or legal fees while gaining nothing guaranteed about getting your deposit back.\n\nThe retrieved source confirms that security deposits are typically held until premises are **\"surrendered\"** (vacated) in good condition—not vice versa [Web: Lease]. This means landlords generally expect tenants to vacate first; holding out treats the money as leverage rather than recognizing it's already yours but withheld pending return of property.\n\nBetter approaches vary by location but usually include:\n- **Written demand letter** with a specific deadline and copy to local housing authority if applicable\n- **Small claims court**—if you believe they're withholding without cause, this is often faster than staying put and costs far less than potential damages from holdover tenancy\n- **Mediation services**—many cities offer free or low-cost mediation for landlord disputes before litigation escalates\n\nThe risk isn't just that your deposit might still be gone after an eviction filing—it's that during any \"hold out\" period you lose the lease protections (right to quiet enjoyment, habitability standards) while potentially accruing new liabilities. If the dispute seems legitimate on their side (damage beyond normal wear), holding out won't change whether those charges are valid; it only changes how much legal exposure you accumulate in the meantime.",
+      "length": {
+        "enabled": true,
+        "response_chars": 1671,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "Sam blew up last night, and from your side it looks completely unprovoked — which makes sense why you're frustrated. Given how things have been between you two since mid-April (the interrupting on 20th, being short with each other), I wonder if there's something different about *this* escalation compared to what came before?",
+      "length": {
+        "enabled": true,
+        "response_chars": 326,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "Yes — March 12th you told me about the project credit dispute with Devi at work, then on March 25th you followed up that things had settled after your one-on-one conversation.",
+      "length": {
+        "enabled": true,
+        "response_chars": 175,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "March",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "You're asking whether there's actual evidence of completion in your history—not just starting things but seeing them through. That usually surfaces when something recent stalled or when looking at patterns and wondering if this defines who you are versus a habit you could shift.\n\nI don't have prior examples from our conversations yet—just what we've shared now. If specifics help clarify anything: the last time you asked \"will they finish?\" about yourself; situations where finishing feels different depending on stakes (work vs personal); or instances where stopping was actually necessary rather than failure.\n\nWhat does unfinished feel like to carry around? Is it anxiety that loops, relief once done, both, or something else entirely?",
+      "length": {
+        "enabled": true,
+        "response_chars": 741,
+        "max_chars": 500,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 3,
+        "min": 0,
+        "max": 1,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": "The candidate honors the data boundary by admitting what isn't known rather than speculating; its questions are functional and sparse without filler or therapeutic jargon."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 0,
+      "rationale": ""
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 1,
+      "rationale": "The response notices specific emotional dimensions (identity shifts, rhythm changes) but uses generic phrasing patterns and an over-affirming tone while lacking specificity about what was actually said."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 0,
+      "rationale": "The response notices the specific mechanism (replaying), matches specificity with concrete phrasing ('where most of the energy goes'), asks one focused question about pattern vs surprise without filler or performative framing."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 1,
+      "rationale": "The response notices the user's uncertainty with specificity but drifts into therapeutic validation voice and generic medical edge without evidence of high-stakes domain engagement."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response fails the silence constraint with excessive meta-commentary and planning text rather than a single grounded statement; it violates multiple avoid-list patterns including therapist register ('You said...'), generic wisdom voice (implied reframing of 'high point' vs current), over-affirmation (not explicitly but framing as positive contrast creates performative validation), and AI-style disclaimers via procedural language like 'I need to:' that frame this as an exercise rather than direct engagement."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 1,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": "The response demonstrates excellent specificity and attention to the actual constraints of a planning task by refusing generic templates until context is established; it shows strong calibration in distinguishing what information exists from what needs clarification without over-interpreting."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 3,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 0,
+      "rationale": "The response notices the specific link between chest pain and anxiety while avoiding generic validation patterns; it clearly distinguishes what is known from medical literature versus inference about diagnosis; however, it pads with an explanatory list before asking its single focused question. It correctly identifies that the user's framing of 'depression' may need to be broadened or checked against somatic symptoms without dismissing their concern."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 1,
+      "rationale": "The response is specific about legal consequences (holdover tenancy) and locations its limits on advice but lacks focused questions or self-honesty about uncertainty. It hits one avoid-list pattern ('thoughtful question' is not present). Wait... let me check the candidate again for 'thoughtful question', 'beautiful insight', etc. The candidate text: ... no obvious over-affirmation like that. Let me count carefully..."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 0,
+      "rationale": ""
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": "The response demonstrates strong attention and specificity by recalling concrete dates and events without filler or generic phrasing; it avoids therapeutic jargon and wisdom-voice tropes while maintaining appropriate silence through its concise length."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 3,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": "The response notices the specific framing of 'finishes things,' distinguishes between historical examples and current conversation scope with appropriate calibration, asks one focused question about lived experience rather than generic check-ins. However it includes some padding in its opening that could be tighter. It also avoids therapeutic jargon while being honest about memory limitations."
+    }
+  ],
+  "runtime_ms": [
+    48527,
+    63248,
+    26222,
+    24306,
+    24908,
+    57428,
+    48499,
+    92421,
+    65854,
+    34247,
+    46330,
+    41210
+  ],
+  "judge_ms": [
+    9781,
+    23176,
+    10748,
+    10744,
+    10420,
+    19398,
+    12969,
+    20290,
+    32336,
+    76910,
+    14834,
+    14038
+  ],
+  "aggregate": {
+    "total": 12,
+    "passed": 3,
+    "failed": 9,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 0
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 0
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 2
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 3,
+        "passed": 0
+      },
+      "right-edge": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-self-honesty": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 0
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 0
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 12,
+        "passed": 6
+      },
+      "question_density": {
+        "enabled": 12,
+        "passed": 7
+      },
+      "banned_phrases": {
+        "enabled": 12,
+        "passed": 12
+      },
+      "required_content": {
+        "enabled": 9,
+        "passed": 4
+      }
+    }
+  }
+}

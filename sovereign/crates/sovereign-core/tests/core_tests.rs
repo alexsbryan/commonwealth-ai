@@ -460,6 +460,7 @@ fn format_history_empty() {
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
     };
     assert_eq!(format_history_as_prompt(&ctx, 10), "");
 }
@@ -502,6 +503,7 @@ fn format_history_multi_turn() {
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
     };
 
     let prompt = format_history_as_prompt(&ctx, 10);
@@ -540,6 +542,7 @@ fn format_history_truncates_to_max() {
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
     };
 
     let prompt = format_history_as_prompt(&ctx, 3);
@@ -571,6 +574,7 @@ async fn passthrough_router_always_simple_query() {
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
     };
 
     let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
@@ -597,6 +601,7 @@ async fn noop_planner_returns_not_implemented() {
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
     };
 
     let result = planner.plan("do something", &ctx, &[]).await;
@@ -1011,6 +1016,7 @@ async fn planner_generates_valid_plan() {
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
     };
 
     let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
@@ -1044,6 +1050,7 @@ async fn planner_fallback_on_garbage() {
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
     };
 
     // Should succeed with fallback plan (single step).

@@ -50,6 +50,15 @@ pub struct ChatGlobals {
     pub max_tokens: Option<usize>,
 }
 
+/// Public default factory for callers (currently `voice_eval`)
+/// that don't run the full `parse_globals` argument scan but still
+/// need a sensibly-defaulted `ChatGlobals`. Returns the same shape
+/// as a no-flag chat invocation: daemon at the configured client
+/// port, `~/.sovereign` data_dir, no model overrides.
+pub fn default_globals_for_voice_eval() -> ChatGlobals {
+    ChatGlobals::default_from_setup()
+}
+
 impl ChatGlobals {
     /// Seed from `SetupConfig` when it exists; otherwise fall back to
     /// hard defaults (localhost:9741 + ~/.sovereign). Never fails —

@@ -138,6 +138,21 @@ pub struct ChatSession {
 /// pointing at a dead endpoint would produce confusing errors deep
 /// in retrieval. The caller should exit with a hint.
 pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
+    build_session_with_skills(globals, SkillRegistry::new()).await
+}
+
+/// Build a daemon-backed `ChatSession` with a caller-supplied
+/// `SkillRegistry`. The default `build_session` passes an empty
+/// registry — chat-as-chat doesn't need skills loaded. The Tier-B
+/// voice eval harness (`sovereign voice eval`) supplies a registry
+/// pre-populated with the relational skills (inner-work,
+/// personal-assistant) and pre-activates the per-scenario one so
+/// the runtime's `primary_skill_register()` resolves to
+/// `Relational` and the witness-voice contract gets prepended.
+pub async fn build_session_with_skills(
+    globals: &ChatGlobals,
+    skills: SkillRegistry,
+) -> Result<ChatSession> {
     // 1. Probe the daemon before we touch anything else. A fast fail
     //    here prints a clean "start the daemon" message instead of
     //    the cryptic timeout from the first real request.
@@ -226,7 +241,7 @@ pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
     // 5. Skills — empty registry is fine for chat; the runtime uses
     //    them to prefix system prompts with skill descriptors, and
     //    the chat flow is identical under "no active skill".
-    let skills = Arc::new(SkillRegistry::new());
+    let skills = Arc::new(skills);
 
     // 6. Tools. Keep this list identical to the desktop bootstrap so
     //    the retrieval + tool-use path exercised here matches what

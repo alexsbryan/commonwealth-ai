@@ -276,6 +276,7 @@ pub async fn score_facts_judge(
             tools: None,
             tool_choice: None,
             model_id: None,
+            enable_thinking: None,
         };
 
         match inference.complete(&request).await {

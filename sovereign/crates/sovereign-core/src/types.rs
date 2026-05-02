@@ -73,7 +73,7 @@ impl Default for InferenceConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CompletionRequest {
     pub prompt: String,
     pub system_message: Option<String>,
@@ -127,6 +127,27 @@ pub struct CompletionRequest {
     /// client.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
+    /// Per-request override for the chat template's `enable_thinking`
+    /// kwarg. Affects thinking-mode model families (Qwen3.x, …) where
+    /// the Jinja template prepends a `<think>` block when this is
+    /// `true` and skips it when `false`.
+    ///
+    /// Default (`None`) preserves the historical embedded-path
+    /// behaviour: thinking is OFF, which on a heavily thinking-trained
+    /// model means the planning text leaks as plain assistant prose
+    /// (no `<think>` wrapper, but the verbosity remains). Setting
+    /// this to `Some(true)` for a witness-register call lets the
+    /// template wrap the planning trace formally so callers (or the
+    /// `strip_think_blocks` post-process) can drop it cleanly and
+    /// surface the post-`</think>` reply.
+    ///
+    /// Wire path: serialized into the OpenAI request body as
+    /// `chat_template_kwargs: { enable_thinking: <bool> }` by
+    /// `RemoteApiProvider::build_request`; parsed back out by the
+    /// daemon's `inference_adapter::extract_enable_thinking` and
+    /// applied at `embedded::apply_chat_template_oaicompat` time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enable_thinking: Option<bool>,
 }
 
 /// JSON-Schema view of a function the model may call. Mirrors
@@ -157,6 +178,7 @@ impl CompletionRequest {
             tools: None,
             tool_choice: None,
             model_id: None,
+            enable_thinking: None,
         }
     }
 
@@ -201,6 +223,7 @@ impl CompletionRequest {
             tools: None,
             tool_choice: None,
             model_id: None,
+            enable_thinking: None,
         }
     }
 }
@@ -749,6 +772,45 @@ pub struct ConversationContext {
     /// the oversight.
     #[serde(default)]
     pub knowledge_view_digests: Option<Vec<LandscapeDigest>>,
+    /// Tensions between the current user message and prior
+    /// high-confidence memories, detected by the Quick-slot
+    /// pre-pass `memory::detect_temporal_tensions`. Spliced into
+    /// the system prompt under "Notable tension across time:" by
+    /// `Runtime::build_system_message` when the active skill
+    /// register is `Relational`. Empty (or absent) when no
+    /// tensions were found, the active skill is factual, or the
+    /// pre-pass failed soft (it must never block a turn).
+    #[serde(default)]
+    pub temporal_tensions: Vec<TemporalTension>,
+}
+
+/// A pairwise tension between a prior memory the user expressed
+/// and the user's current message. Produced by
+/// `memory::detect_temporal_tensions`; consumed by the
+/// prompt-assembly layer to surface principle 5 of the relational
+/// voice contract ("you told me X in March; this sounds different
+/// — did something shift?"). The model decides whether to
+/// actually surface it; the system only ensures the cue is in
+/// front of it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemporalTension {
+    /// Id of the prior `Memory` that's in tension. Lets the
+    /// renderer reproduce the exact stored phrasing rather than
+    /// paraphrasing.
+    pub memory_id: String,
+    /// The prior memory's content as the user originally
+    /// expressed it.
+    pub prior_content: String,
+    /// `created_at` of the prior memory, propagated so the
+    /// renderer can show "you told me on YYYY-MM-DD..." for
+    /// memories with `source_conversation_id` set.
+    pub prior_created_at: i64,
+    /// Whether the prior memory carried a source-conversation id
+    /// — controls whether the date prefix renders.
+    pub prior_has_source_conversation: bool,
+    /// The user's current message excerpt (bounded so the prompt
+    /// doesn't bloat for very long messages).
+    pub current_excerpt: String,
 }
 
 /// One view's contribution to the assembled context. Produced by
@@ -1062,14 +1124,67 @@ pub struct SamplingConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SampleSelector {
     /// Fast model reads all candidates and selects the best.
+    /// `selection_prompt` overrides everything when set; otherwise
+    /// `preset` determines the rubric (defaults to general
+    /// accuracy + completeness when also unset).
     LlmJudge {
         #[serde(default)]
         selection_prompt: Option<String>,
+        /// Named rubric preset. `Voice` selects the
+        /// glass-box-voice rubric defined in
+        /// `executor::VOICE_JUDGE_PROMPT` (eight principles +
+        /// avoid-list); `Default` is the pre-existing
+        /// accuracy-focused rubric. Ignored when
+        /// `selection_prompt` is supplied.
+        #[serde(default)]
+        preset: JudgePreset,
     },
     /// Take the most common first-line answer.
     MajorityVote,
     /// Run each candidate through a tool; first to pass wins.
     Verify { tool_id: ToolId },
+}
+
+/// Named rubric preset for `SampleSelector::LlmJudge`. Lets plan
+/// templates and harness callers ask for a specific rubric without
+/// inlining the prompt every time. Backwards-compatible: the
+/// default (`Default`) preserves prior `LlmJudge` behavior.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JudgePreset {
+    /// Pre-existing rubric: accuracy + completeness +
+    /// well-reasoned + appropriately cited.
+    #[default]
+    Default,
+    /// Glass-box-voice rubric. Scores candidates on the eight
+    /// principles in `RELATIONAL_BASE_SYSTEM_PROMPT` (specific
+    /// uncertainty, three registers, load-bearing questions,
+    /// length discipline, edge-of-competence, disagreement
+    /// permission, contradiction-across-time, self-honesty)
+    /// and penalises the four avoid-list patterns. Used by the
+    /// Tier-B `voice_eval` harness in sovereign-cli.
+    Voice,
+}
+
+impl SampleSelector {
+    /// Convenience: build an `LlmJudge` selector with the voice
+    /// rubric preset and no overriding prompt — the rubric loads
+    /// from `executor::VOICE_JUDGE_PROMPT`.
+    pub fn voice_judge() -> Self {
+        Self::LlmJudge {
+            selection_prompt: None,
+            preset: JudgePreset::Voice,
+        }
+    }
+
+    /// Convenience: build an `LlmJudge` selector with the default
+    /// rubric (pre-existing accuracy-focused selector).
+    pub fn default_judge() -> Self {
+        Self::LlmJudge {
+            selection_prompt: None,
+            preset: JudgePreset::Default,
+        }
+    }
 }
 
 /// Evaluation configuration for closed-loop self-correction.
@@ -1967,6 +2082,7 @@ mod knowledge_view_digest_tests {
             document_session: None,
             topic_context: None,
             knowledge_view_digests: None,
+            temporal_tensions: Vec::new(),
         }
     }
 

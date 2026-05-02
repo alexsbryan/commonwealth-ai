@@ -109,6 +109,7 @@ async fn main() {
             tools: None,
             tool_choice: None,
             model_id: None,
+            enable_thinking: None,
     };
 
     if args.stream {
