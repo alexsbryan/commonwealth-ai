@@ -294,6 +294,7 @@ mod tests {
             tool_choice: None,
             oicp: None,
             response_format: None,
+            chat_template_kwargs: None,
         }
     }
 

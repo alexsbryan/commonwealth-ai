@@ -41,6 +41,16 @@ pub struct ChatCompletionRequest {
     /// Commonwealth extension: OICP requirements for model selection.
     #[serde(default)]
     pub oicp: Option<InferenceRequirements>,
+    /// Jinja chat-template kwargs forwarded to the model loader.
+    /// Today only `enable_thinking: bool` is recognised — other keys
+    /// are accepted but ignored. Both vLLM and llama-server accept
+    /// this exact shape on the OpenAI-compatible surface, so callers
+    /// targeting any of them (Sovereign daemon included) can flip
+    /// thinking-mode on a per-request basis without an out-of-band
+    /// extension. The daemon unwraps this in
+    /// `inference_adapter::extract_enable_thinking`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_template_kwargs: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
