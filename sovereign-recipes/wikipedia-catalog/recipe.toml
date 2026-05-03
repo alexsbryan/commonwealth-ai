@@ -50,7 +50,7 @@ vector = true
 # links + properties).
 [catalog]
 id_field = "title"
-download_url_template = "https://en.wikipedia.org/w/api.php?action=parse&page={id}&prop=wikitext%7Csections%7Clinks%7Cproperties&format=json&formatversion=2"
+download_url_template = "https://en.wikipedia.org/w/api.php?action=parse&page={id}&prop=wikitext%7Csections%7Clinks%7Cproperties&format=json&formatversion=2&redirects=1"
 content_recipe = "wikipedia-article"
 ingest_estimate_wpm = 12000
 enrich_estimate_wpm = 600
