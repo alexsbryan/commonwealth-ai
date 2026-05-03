@@ -28,7 +28,13 @@ use std::path::PathBuf;
 /// bundled asset added to `corpus-engine/src/filters/assets.rs` must
 /// also appear here, otherwise the `include_bytes!` macro fails at
 /// the next build with a missing-file error.
-const BUNDLED_ASSETS: &[&str] = &["vital_articles_l5.txt"];
+const BUNDLED_ASSETS: &[&str] = &[
+    "vital_articles_l1.txt",
+    "vital_articles_l2.txt",
+    "vital_articles_l3.txt",
+    "vital_articles_l4.txt",
+    "vital_articles_l5.txt",
+];
 
 fn main() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());

@@ -6,8 +6,13 @@
 //! Subsequent phases land incrementally; each `phase_N_*` method is
 //! additive and does not break the others.
 
+use std::collections::{HashMap, HashSet};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 
 use super::exemplar_bank::{Exemplar, ExemplarBank};
 use super::phase_cache::PhaseCache;
@@ -60,6 +65,139 @@ impl ChapterSelection {
     pub fn should_merge_into_cache(&self) -> bool {
         matches!(self, Self::RetryFailed(_))
     }
+}
+
+// ── Checkpoint (per-chapter, append-only) ────────────────────
+//
+// `_checkpoint.jsonl` is JSONL: one [`Phase1CheckpointEntry`] per
+// line, appended immediately after each chapter completes (success
+// or failure). Crash-resilience for long-running Phase 1 runs
+// (Wikipedia-scale Tier-2 takes hours; a daemon/host crash mid-run
+// would otherwise lose every successful chapter).
+//
+// Resume reads the file, builds a set of chapter ids already
+// processed, and the CLI passes a `Subset` selection of the
+// remainder. After enough invocations to cover every chapter, the
+// `--finalize` path reads the JSONL once more and writes a
+// canonical `Phase1Output` run-file from it.
+
+/// One JSONL row in `_checkpoint.jsonl`. `Success` carries the full
+/// `ExtractedQuestion` so a subsequent `--finalize` can rebuild the
+/// run-file from the checkpoint alone — no need to keep prior
+/// run-files alive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Phase1CheckpointEntry {
+    Success {
+        chapter_id: String,
+        extracted: ExtractedQuestion,
+    },
+    Failure {
+        chapter_id: String,
+        failure: Phase1Failure,
+    },
+}
+
+impl Phase1CheckpointEntry {
+    pub fn chapter_id(&self) -> &str {
+        match self {
+            Self::Success { chapter_id, .. } => chapter_id,
+            Self::Failure { chapter_id, .. } => chapter_id,
+        }
+    }
+}
+
+/// Read every entry from a Phase-1 checkpoint file. Empty / missing
+/// file returns `Ok(Vec::new())` — both mean "nothing processed yet".
+/// Malformed lines abort with an error rather than silently skipping
+/// (a corrupted checkpoint should not produce a quietly-incomplete
+/// resume).
+pub fn read_phase1_checkpoint(path: &Path) -> Result<Vec<Phase1CheckpointEntry>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| Error::Database(format!("read checkpoint {}: {e}", path.display())))?;
+    let mut out = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry: Phase1CheckpointEntry = serde_json::from_str(line).map_err(|e| {
+            Error::Serialization(format!(
+                "checkpoint {} line {}: {e}",
+                path.display(),
+                i + 1
+            ))
+        })?;
+        out.push(entry);
+    }
+    Ok(out)
+}
+
+/// Aggregate a checkpoint into `(extracted, failures)` deduped by
+/// chapter_id with last-write-wins semantics. Used by `--finalize`
+/// when reconstructing a canonical `Phase1Output`.
+pub fn collapse_phase1_checkpoint(
+    entries: Vec<Phase1CheckpointEntry>,
+) -> (Vec<ExtractedQuestion>, Vec<Phase1Failure>) {
+    let mut by_id_success: HashMap<String, ExtractedQuestion> = HashMap::new();
+    let mut by_id_failure: HashMap<String, Phase1Failure> = HashMap::new();
+    for entry in entries {
+        match entry {
+            Phase1CheckpointEntry::Success { chapter_id, extracted } => {
+                by_id_failure.remove(&chapter_id);
+                by_id_success.insert(chapter_id, extracted);
+            }
+            Phase1CheckpointEntry::Failure { chapter_id, failure } => {
+                if !by_id_success.contains_key(&chapter_id) {
+                    by_id_failure.insert(chapter_id, failure);
+                }
+            }
+        }
+    }
+    let mut extracted: Vec<ExtractedQuestion> = by_id_success.into_values().collect();
+    extracted.sort_by(|a, b| a.chapter_id.cmp(&b.chapter_id));
+    let mut failures: Vec<Phase1Failure> = by_id_failure.into_values().collect();
+    failures.sort_by(|a, b| a.chapter_id.cmp(&b.chapter_id));
+    (extracted, failures)
+}
+
+/// Build the set of chapter ids the checkpoint considers processed
+/// (success + failure). Resume callers feed this into the
+/// `ChapterSelection` filter.
+pub fn checkpoint_processed_ids(entries: &[Phase1CheckpointEntry]) -> HashSet<String> {
+    entries
+        .iter()
+        .map(|e| e.chapter_id().to_string())
+        .collect()
+}
+
+/// Append one entry to the checkpoint file. Atomic at the line
+/// level (`writeln!` + `\n`), so a crash mid-write at most truncates
+/// the in-flight line — the reader skips empty lines and aborts on
+/// malformed ones.
+fn append_phase1_checkpoint(path: &Path, entry: &Phase1CheckpointEntry) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            Error::Database(format!(
+                "create checkpoint parent {}: {e}",
+                parent.display()
+            ))
+        })?;
+    }
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|e| Error::Database(format!("open checkpoint {}: {e}", path.display())))?;
+    let line = serde_json::to_string(entry).map_err(|e| {
+        Error::Serialization(format!("serialise checkpoint entry: {e}"))
+    })?;
+    writeln!(f, "{line}").map_err(|e| {
+        Error::Database(format!("write checkpoint {}: {e}", path.display()))
+    })?;
+    Ok(())
 }
 
 /// Streaming progress events for phase 1.
@@ -262,6 +400,14 @@ pub struct PhaseRunner {
     cache: PhaseCache,
     runs: RunOutputWriter,
     exemplars_dir: PathBuf,
+    /// When set, the Phase 1 loop appends one JSONL line per chapter
+    /// (success or failure) to this path immediately after the chapter
+    /// completes, BEFORE moving on to the next. Lets a long run
+    /// survive a crash mid-flight: on restart, the caller reads the
+    /// checkpoint, builds the set of already-processed chapter ids,
+    /// and runs only the remainder. See
+    /// `Phase1CheckpointEntry` for the on-disk shape.
+    checkpoint_path: Option<PathBuf>,
 }
 
 impl PhaseRunner {
@@ -281,6 +427,61 @@ impl PhaseRunner {
             cache,
             runs,
             exemplars_dir: exemplars_dir.as_ref().to_path_buf(),
+            checkpoint_path: None,
+        }
+    }
+
+    /// Append per-chapter results to `path` as JSONL while Phase 1
+    /// runs. The append happens after each chapter is processed, so a
+    /// crash mid-flight loses at most one chapter (the one in flight
+    /// at the moment of the crash). Resume reads the file via
+    /// [`read_phase1_checkpoint`] and skips the recorded chapter ids.
+    ///
+    /// Set this on long runs (Wikipedia-scale Tier-2 enrichment).
+    /// Short runs can leave it unset; the legacy "single run-file
+    /// at the end" behaviour is preserved.
+    pub fn with_checkpoint_path(mut self, path: impl AsRef<Path>) -> Self {
+        self.checkpoint_path = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Best-effort: append a successful chapter to the checkpoint
+    /// file. A write failure is logged but not fatal — the in-memory
+    /// `extracted` vec still holds the result for the final run-file.
+    /// Resume after a crash would lose this chapter, but the run can
+    /// continue.
+    fn persist_success_checkpoint(&self, ch: &ExtractedQuestion) {
+        let Some(path) = self.checkpoint_path.as_deref() else {
+            return;
+        };
+        let entry = Phase1CheckpointEntry::Success {
+            chapter_id: ch.chapter_id.clone(),
+            extracted: ch.clone(),
+        };
+        if let Err(e) = append_phase1_checkpoint(path, &entry) {
+            tracing::warn!(
+                error = %e,
+                chapter_id = %ch.chapter_id,
+                "phase1: checkpoint append (success) failed; run continues but resume may re-process this chapter"
+            );
+        }
+    }
+
+    /// Companion to `persist_success_checkpoint` for failures.
+    fn persist_failure_checkpoint(&self, f: &Phase1Failure) {
+        let Some(path) = self.checkpoint_path.as_deref() else {
+            return;
+        };
+        let entry = Phase1CheckpointEntry::Failure {
+            chapter_id: f.chapter_id.clone(),
+            failure: f.clone(),
+        };
+        if let Err(e) = append_phase1_checkpoint(path, &entry) {
+            tracing::warn!(
+                error = %e,
+                chapter_id = %f.chapter_id,
+                "phase1: checkpoint append (failure) failed; run continues but resume may re-process this chapter"
+            );
         }
     }
 
@@ -505,12 +706,14 @@ impl PhaseRunner {
                     chapter_id: &chapter.chapter_id,
                     reason: &reason,
                 });
-                failures.push(Phase1Failure {
+                let failure = Phase1Failure {
                     chapter_id: chapter.chapter_id.clone(),
                     reason,
                     raw_response_head: None,
                     failure_kind: PhaseFailureKind::Skipped,
-                });
+                };
+                self.persist_failure_checkpoint(&failure);
+                failures.push(failure);
                 continue;
             }
 
@@ -589,13 +792,15 @@ impl PhaseRunner {
                         chapter_id: &chapter.chapter_id,
                         reason: &reason,
                     });
-                    failures.push(Phase1Failure {
+                    let failure = Phase1Failure {
                         chapter_id: chapter.chapter_id.clone(),
                         reason,
                         // No response body ever arrived — nothing to capture.
                         raw_response_head: None,
                         failure_kind: PhaseFailureKind::ChatError,
-                    });
+                    };
+                    self.persist_failure_checkpoint(&failure);
+                    failures.push(failure);
                     continue;
                 }
             };
@@ -619,12 +824,14 @@ impl PhaseRunner {
                         reason: &reason,
                     });
                     let failure_kind = classify_phase1_parse_failure(&response, &e);
-                    failures.push(Phase1Failure {
+                    let failure = Phase1Failure {
                         chapter_id: chapter.chapter_id.clone(),
                         reason,
                         raw_response_head: head,
                         failure_kind,
-                    });
+                    };
+                    self.persist_failure_checkpoint(&failure);
+                    failures.push(failure);
                     continue;
                 }
             };
@@ -662,7 +869,7 @@ impl PhaseRunner {
                     .await;
                 }
             }
-            extracted.push(ExtractedQuestion {
+            let entry = ExtractedQuestion {
                 chapter_id: chapter.chapter_id.clone(),
                 questions: parsed.questions,
                 reveals: parsed.reveals,
@@ -670,7 +877,9 @@ impl PhaseRunner {
                 setting: parsed.setting,
                 plot: parsed.plot,
                 section_extraction,
-            });
+            };
+            self.persist_success_checkpoint(&entry);
+            extracted.push(entry);
         }
 
         // Assemble the Phase1Output. Failures land in the output so

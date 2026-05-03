@@ -68,6 +68,7 @@ impl Default for AtlasIngestionRegistry {
 /// function and this file threads them together.
 fn register_builtins(registry: &mut AtlasIngestionRegistry) {
     crate::enrichment::pipeline::pipelines::literary_atlas::register_extraction_first(registry);
+    crate::enrichment::atlas::strategies::structure_first::register_structure_first(registry);
 }
 
 #[cfg(test)]
@@ -93,5 +94,14 @@ mod tests {
             .get("extraction_first")
             .expect("extraction_first should be registered by builtin");
         assert_eq!(s.id(), "extraction_first");
+    }
+
+    #[test]
+    fn builtin_registers_structure_first() {
+        let r = AtlasIngestionRegistry::builtin();
+        let s = r
+            .get("structure_first")
+            .expect("structure_first should be registered by builtin");
+        assert_eq!(s.id(), "structure_first");
     }
 }

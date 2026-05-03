@@ -53,9 +53,10 @@ pub use progress::{BuildStep, EnrichProgress, EnrichProgressFn};
 pub use registry::PipelineRegistry;
 pub use run_output::RunOutputWriter;
 pub use runner::{
-    CascadeResult, CascadeStep, ChapterSelection, Phase1Progress, Phase1RunResult,
-    Phase2AtlasRunResult, Phase2RunResult, Phase3RunResult, Phase4RunResult, Phase5RunResult,
-    Phase6RunResult, Phase7RunResult, PhaseFailure, PhaseRunResult, PhaseRunner,
+    checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint,
+    CascadeResult, CascadeStep, ChapterSelection, Phase1CheckpointEntry, Phase1Progress,
+    Phase1RunResult, Phase2AtlasRunResult, Phase2RunResult, Phase3RunResult, Phase4RunResult,
+    Phase5RunResult, Phase6RunResult, Phase7RunResult, PhaseFailure, PhaseRunResult, PhaseRunner,
 };
 pub use trait_def::Pipeline;
 pub use validation::{

@@ -27,10 +27,14 @@ pub mod analysis;
 pub mod atoms;
 pub mod cross_corpus;
 pub mod edges;
+pub mod embeddings;
 pub mod ingestion;
 pub mod registry;
 pub mod resolution;
 pub mod schema_validation;
+pub mod strategies;
+pub mod summary;
+pub mod vital_tier;
 pub mod writer;
 
 pub use atoms::{
@@ -49,6 +53,12 @@ pub use cross_corpus::{
     CrossCorpusReport, DetectorSummary, MatchTrace, PeerAtomRef, RejectionBucket,
     RejectionSample,
 };
+pub use embeddings::{
+    atoms_content_hash, read_atlas_embeddings, write_atlas_embeddings, CachedAtlasEntry,
+};
+pub use summary::{compute_summary as compute_atlas_summary,
+    read_or_compute_summary as read_or_compute_atlas_summary, AtlasSummary};
+pub use vital_tier::{tier_sizes as vital_tier_sizes, vital_tier};
 pub use schema_validation::{
     build_report as build_schema_validation_report, compare_across_corpora,
     count_open_questions, count_transitions_without_trigger, count_ungrounded_claims,
