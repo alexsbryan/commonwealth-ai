@@ -54,3 +54,14 @@ download_url_template = "https://en.wikipedia.org/w/api.php?action=parse&page={i
 content_recipe = "wikipedia-article"
 ingest_estimate_wpm = 12000
 enrich_estimate_wpm = 600
+# Single shared corpus for fetched articles. Every wikipedia_fetch
+# call appends into `wikipedia-fetched` rather than spawning a new
+# per-work corpus. Scales to thousands of long-tail articles
+# without polluting installed_indexes() with one entry per fetch.
+target_corpus_id = "wikipedia-fetched"
+# One-hop "minesweeper" expansion: after fetching the requested
+# article, eagerly queue its outgoing links for follow-up fetch.
+# The user has expressed interest in that neighbourhood, so we
+# pre-load the next-most-likely-relevant articles.
+expansion_enabled = true
+expansion_link_cap = 20
