@@ -27,6 +27,30 @@ toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/
 sha256 = ""
 
 [[recipes]]
+id = "wikipedia-catalog"
+name = "Wikipedia Catalog"
+description = "Catalog of all ~6.8M English Wikipedia articles (titles + abstracts + section anchors only — no full text). When a query lands on a catalog hit not yet indexed, the agent's `wikipedia_fetch` tool ingests that single article on-demand under `parent_corpus_id = wikipedia` so it surfaces under the user's existing Wikipedia corpus and is mesh-shared like any other Wikipedia content."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.07
+size_indexed_gb = 4.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-catalog/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "wikipedia-article"
+name = "Wikipedia — Single Article"
+description = "On-demand single-article ingest from the MediaWiki Action API. Not installed standalone — invoked by the `wikipedia-catalog` content_recipe pipeline (and the `wikipedia_fetch` agent tool) when a catalog hit needs full-text. Produces section-level chunks indistinguishable from bulk-dump articles."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+enrichment_enabled = true
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-article/recipe.toml"
+sha256 = ""
+
+[[recipes]]
 id = "sep"
 name = "Stanford Encyclopedia of Philosophy"
 description = "Comprehensive philosophical reference covering 1,800+ entries with claim-level epistemic enrichment and relationship extraction."

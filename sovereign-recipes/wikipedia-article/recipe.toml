@@ -1,0 +1,52 @@
+[corpus]
+# Templated. The CatalogIngestService overrides this id at runtime.
+# By default it would become `wikipedia-catalog-<title>`, but this
+# recipe carries `parent_corpus_id = "wikipedia"` so retrieval and
+# mesh sharing surface fetched articles as part of the user's
+# existing Wikipedia corpus rather than a sea of one-off per-work
+# corpora.
+id = "wikipedia-article"
+name = "Wikipedia — Single Article"
+description = "On-demand single-article ingest from the MediaWiki Action API. Produces section-level chunks with full WikipediaChunkMetadata (section_type, outgoing_links, wikidata_qid, revision_id) — indistinguishable from bulk-dump-extracted docs, so atlas grounding and link-graph expansion work identically."
+license = "CC-BY-SA-4.0"
+kind = "knowledge"
+on_demand = true
+parent_corpus_id = "wikipedia"
+mesh_sharing = true
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+
+# `url` is a placeholder. The CatalogIngestService overrides it at
+# runtime by substituting the article title into the catalog
+# recipe's download_url_template. The plain ingest path refuses to
+# run an on_demand recipe whose id has not been overridden, so the
+# placeholder URL never reaches the network.
+#
+# The catalog template resolves to the MediaWiki Action API
+# endpoint:
+#   https://en.wikipedia.org/w/api.php?action=parse&page=<title>
+#     &prop=wikitext|sections|links|properties&format=json&formatversion=2
+#
+# Returns a single JSON file the wikipedia_api_article extractor
+# decodes into per-section ExtractedDocs.
+[acquire]
+type = "bulk_download"
+url = "https://en.wikipedia.org/w/api.php?action=parse&page=PLACEHOLDER&prop=wikitext%7Csections%7Clinks%7Cproperties&format=json&formatversion=2"
+
+[extract]
+type = "wikipedia_api_article"
+
+[chunk]
+type = "paragraph"
+max_chars = 1024
+overlap_chars = 128
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "field_model"
+domain = "encyclopedic"
+prompt_version = "v1"
