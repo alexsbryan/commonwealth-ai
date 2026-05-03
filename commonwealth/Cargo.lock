@@ -6499,6 +6499,7 @@ dependencies = [
  "async-trait",
  "bzip2 0.5.2",
  "chrono",
+ "commonwealth-core",
  "corpus-engine",
  "flate2",
  "futures",

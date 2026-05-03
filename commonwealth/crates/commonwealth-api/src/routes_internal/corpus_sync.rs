@@ -274,10 +274,38 @@ pub async fn index_transfer(
     }
 
     let bytes = body.len() as u64;
+    // Phase C2: if the unpacked corpus carries an atlas dir, read
+    // its fingerprint + atom counts and include them in the
+    // response so the puller can validate against the gossiped
+    // advertisement. No body re-write — atlas state lives under
+    // `<corpus>/atlas/` and was already inside the transferred tar.
+    //
+    // We also drop the receiver's stale `_summary.json` (the
+    // puller's pre-existing summary, if any, was pre-rename and
+    // now matches no atoms.json on disk) so the next gossip round
+    // recomputes against the just-pulled atoms.json. The embeddings
+    // cache (`atoms.embeddings.bin`) self-invalidates via the
+    // header-mismatch check in `read_atlas_embeddings` when the
+    // pulled atoms_content_hash or embed_model differs.
+    let atlas_dir = final_path.join("atlas");
+    let _ = std::fs::remove_file(atlas_dir.join("_summary.json"));
+    let atlas_summary =
+        corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
+            .ok()
+            .flatten();
+    let atlas_meta = match atlas_summary {
+        Some(s) => serde_json::json!({
+            "atom_count": s.atom_count,
+            "tier2_count": s.tier2_count,
+            "fingerprint": s.fingerprint,
+        }),
+        None => serde_json::json!(null),
+    };
     tracing::info!(
         corpus = %corpus_id,
         bytes,
         path = %final_path.display(),
+        atlas_present = !atlas_meta.is_null(),
         "index_transfer: shard installed successfully"
     );
 
@@ -286,7 +314,8 @@ pub async fn index_transfer(
         Json(serde_json::json!({
             "corpus_id": corpus_id,
             "bytes_received": bytes,
-            "path": final_path.to_string_lossy()
+            "path": final_path.to_string_lossy(),
+            "atlas": atlas_meta,
         })),
     )
 }

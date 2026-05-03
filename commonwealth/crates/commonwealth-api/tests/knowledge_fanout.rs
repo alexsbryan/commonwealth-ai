@@ -133,6 +133,9 @@ fn member(
                     canonical_fingerprint: None,
                     total_shards: None,
                     processed_shards: vec![],
+                    atlas_atom_count: 0,
+                    atlas_tier2_count: 0,
+                    atlas_fingerprint: None,
                 })
                 .collect(),
             reported_at: 1_000,

@@ -18,6 +18,72 @@ use crate::state::AppState;
 
 use super::ErrorBody;
 
+/// Phase C3 — gather peer atlas advice for `corpus_id`.
+///
+/// Walks the live mesh, builds [`PeerAtlasView`]s from each peer's
+/// `hosted_corpora`, reads the local atlas summary, and returns the
+/// best pull candidate (if any) per the rule in
+/// [`evaluate_peer_atlas_advice`].
+///
+/// Returns `None` when no peer is worth pulling from — the post-
+/// install hook then proceeds with the local Tier-2 launch as
+/// usual. Best-effort: any I/O hiccup falls through to "no advice"
+/// rather than blocking the install.
+async fn gather_peer_atlas_advice(
+    state: &AppState,
+    corpus_id: &str,
+    indexes_dir: &std::path::Path,
+) -> Option<sovereign_tools::atlas_peer_advice::PeerAtlasPullCandidate> {
+    use sovereign_tools::atlas_peer_advice::{
+        evaluate_peer_atlas_advice, PeerAtlasView,
+    };
+
+    // Local view: atom counts come from the cached summary; embed
+    // model from our own member record (populated by gossip).
+    let atlas_dir = indexes_dir.join(corpus_id).join("atlas");
+    let local_summary =
+        corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
+            .ok()
+            .flatten();
+    let local_tier2_count = local_summary.as_ref().map(|s| s.tier2_count).unwrap_or(0);
+    let local_fingerprint = local_summary.as_ref().map(|s| s.fingerprint.as_str());
+
+    let self_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let mesh = state.inner.mesh.read().await;
+    let my_embed_model = mesh
+        .members
+        .get(&self_node_id)
+        .and_then(|m| m.capabilities.embed_model.as_ref())
+        .map(|m| m.model_id.clone());
+
+    let mut peer_views: Vec<PeerAtlasView> = Vec::new();
+    for (node_id, member) in mesh.members.iter() {
+        if *node_id == self_node_id {
+            continue;
+        }
+        let model = member
+            .capabilities
+            .embed_model
+            .as_ref()
+            .map(|m| m.model_id.clone());
+        if let Some(view) = PeerAtlasView::from_member(
+            member.name.clone(),
+            model,
+            corpus_id,
+            &member.capabilities.hosted_corpora,
+        ) {
+            peer_views.push(view);
+        }
+    }
+
+    evaluate_peer_atlas_advice(
+        local_tier2_count,
+        local_fingerprint,
+        my_embed_model.as_deref(),
+        &peer_views,
+    )
+}
+
 /// POST /internal/corpus/install — start (or resume) a corpus ingest.
 ///
 /// Thin entry point to [`CorpusEngine::ingest`]. Desktop's Tauri
@@ -654,12 +720,214 @@ pub async fn spawn_corpus_install_with_parameters(
             .remove(&corpus_id_for_task);
 
         match result {
-            Ok(info) => tracing::info!(
-                corpus = %corpus_id_for_task,
-                chunks = info.chunks_created,
-                duration_secs = info.duration_secs,
-                "spawn_corpus_install: ingest complete"
-            ),
+            Ok(info) => {
+                tracing::info!(
+                    corpus = %corpus_id_for_task,
+                    chunks = info.chunks_created,
+                    duration_secs = info.duration_secs,
+                    "spawn_corpus_install: ingest complete"
+                );
+                // Post-install hook: build the structural atlas the
+                // moment chunks are committed. Detached so the route
+                // handler that triggered the install isn't held up
+                // by the atlas pass; idempotent — a re-install or
+                // restart is a no-op once `atlas/atoms.json` exists.
+                let cid = corpus_id_for_task.clone();
+                // structure_first doesn't read recipes — it walks chunks
+                // by metadata. Pass the same path for both to satisfy
+                // the CorpusEngine constructor without a recipe lookup.
+                let indexes = engine.index_dir().to_path_buf();
+                let recipes = indexes.clone();
+                tokio::spawn(async move {
+                    use sovereign_tools::atlas_postinstall::{
+                        build_structural_atlas, build_triage_candidates, effective_tier2_budget,
+                        StructuralAtlasOutcome, TriageOutcome,
+                    };
+                    tracing::info!(corpus = %cid, "post-install: structural atlas — start");
+                    let atlas_ok = match build_structural_atlas(&cid, indexes.clone(), recipes).await {
+                        StructuralAtlasOutcome::Built {
+                            atoms_path,
+                            edges_path,
+                            elapsed_secs,
+                        } => {
+                            tracing::info!(
+                                corpus = %cid,
+                                atoms = %atoms_path.display(),
+                                edges = %edges_path.display(),
+                                elapsed_s = elapsed_secs,
+                                "post-install: structural atlas — built"
+                            );
+                            true
+                        }
+                        StructuralAtlasOutcome::AlreadyPresent { atoms_path } => {
+                            tracing::info!(
+                                corpus = %cid,
+                                atoms = %atoms_path.display(),
+                                "post-install: structural atlas — already present"
+                            );
+                            true
+                        }
+                        StructuralAtlasOutcome::Failed { reason } => {
+                            tracing::warn!(
+                                corpus = %cid,
+                                reason,
+                                "post-install: structural atlas — failed (atlas grounding stays off until rebuilt)"
+                            );
+                            false
+                        }
+                    };
+
+                    // Triage: rank in-corpus articles by centrality
+                    // and persist the top-N for Tier-2 enrichment.
+                    // Output is consumable by `sovereign enrich init
+                    // --include-articles <path>` so the manual flow
+                    // and the future daemon-side scheduler share one
+                    // source of truth.
+                    if atlas_ok {
+                        // Honour per-corpus override (Phase B3) —
+                        // operators set this via `sovereign atlas
+                        // budget <corpus> <n>`. Default is 1000
+                        // articles, which fits L1+L2+L3 with tier
+                        // headroom on a wiki-scale atlas.
+                        let budget = effective_tier2_budget(&indexes, &cid);
+                        tracing::info!(
+                            corpus = %cid,
+                            budget,
+                            "post-install: triage — start"
+                        );
+                        let triage_path_for_tier2 = match build_triage_candidates(
+                            &cid,
+                            indexes.clone(),
+                            budget,
+                        )
+                        .await
+                        {
+                            TriageOutcome::Built {
+                                path,
+                                in_corpus_picked,
+                                elapsed_secs,
+                            } => {
+                                tracing::info!(
+                                    corpus = %cid,
+                                    path = %path.display(),
+                                    articles = in_corpus_picked,
+                                    elapsed_s = elapsed_secs,
+                                    "post-install: triage — built"
+                                );
+                                Some(path)
+                            }
+                            TriageOutcome::NoAtlas => {
+                                tracing::warn!(
+                                    corpus = %cid,
+                                    "post-install: triage skipped (atlas missing)"
+                                );
+                                None
+                            }
+                            TriageOutcome::Failed { reason } => {
+                                tracing::warn!(
+                                    corpus = %cid,
+                                    reason,
+                                    "post-install: triage failed"
+                                );
+                                None
+                            }
+                        };
+
+                        // Tier-2 extraction: kick off the long-running
+                        // background job that runs Phase 1 over every
+                        // chapter of every triaged article. Detached
+                        // subprocess — daemon doesn't block on it,
+                        // logs go to <workspace>/extraction.log, and
+                        // restart safety comes from the per-chapter
+                        // checkpoint inherited from `enrich extract
+                        // --resume`.
+                        if let Some(triage_path) = triage_path_for_tier2 {
+                            use sovereign_tools::atlas_postinstall::{
+                                launch_tier2_extraction_with_advice, Tier2LaunchOutcome,
+                            };
+                            let cli_bin = std::env::current_exe()
+                                .unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
+                            let enrich_dir = indexes
+                                .parent()
+                                .unwrap_or(std::path::Path::new("."))
+                                .join("enrichment");
+
+                            // Phase C3: walk the live mesh and ask
+                            // whether any peer already has a deeper
+                            // atlas. If so, skip local extraction
+                            // and log the recommendation — operator
+                            // pulls via the canonical-sync surface.
+                            let peer_advice =
+                                gather_peer_atlas_advice(&state_for_task, &cid, &indexes)
+                                    .await;
+                            if let Some(advice) = peer_advice.as_ref() {
+                                tracing::info!(
+                                    corpus = %cid,
+                                    peer = %advice.peer_name,
+                                    peer_tier2 = advice.peer_tier2_count,
+                                    local_tier2 = advice.local_tier2_count,
+                                    "post-install: tier-2 extraction — deferring to peer (Phase C3)"
+                                );
+                            } else {
+                                tracing::info!(
+                                    corpus = %cid,
+                                    "post-install: tier-2 extraction — launching background"
+                                );
+                            }
+                            match launch_tier2_extraction_with_advice(
+                                &cid,
+                                triage_path,
+                                cli_bin,
+                                enrich_dir,
+                                indexes.clone(),
+                                peer_advice,
+                            )
+                            .await
+                            {
+                                Tier2LaunchOutcome::Spawned {
+                                    workspace_id,
+                                    log_path,
+                                    pid,
+                                } => tracing::info!(
+                                    corpus = %cid,
+                                    workspace = %workspace_id,
+                                    log = %log_path.display(),
+                                    pid,
+                                    "post-install: tier-2 extraction — spawned (tail extraction.log for progress)"
+                                ),
+                                Tier2LaunchOutcome::AlreadyComplete {
+                                    workspace_id,
+                                    chapters_done,
+                                    chapters_total,
+                                } => tracing::info!(
+                                    corpus = %cid,
+                                    workspace = %workspace_id,
+                                    chapters_done,
+                                    chapters_total,
+                                    "post-install: tier-2 extraction — already complete"
+                                ),
+                                Tier2LaunchOutcome::DeferredToPeer {
+                                    peer_name,
+                                    peer_tier2_count,
+                                    local_tier2_count,
+                                } => tracing::info!(
+                                    corpus = %cid,
+                                    peer = %peer_name,
+                                    peer_tier2 = peer_tier2_count,
+                                    local_tier2 = local_tier2_count,
+                                    "post-install: tier-2 extraction — deferred to peer (run `sovereign mesh canonical-pull {cid} --from {peer_name}` to fetch)"
+                                ),
+                                Tier2LaunchOutcome::InitFailed { reason }
+                                | Tier2LaunchOutcome::SpawnFailed { reason } => tracing::warn!(
+                                    corpus = %cid,
+                                    reason,
+                                    "post-install: tier-2 extraction — launch failed"
+                                ),
+                            }
+                        }
+                    }
+                });
+            }
             Err(corpus_engine::Error::Cancelled(_)) => {
                 // Cancel route handles the wipe; we only clean up
                 // the progress map so the UI returns to

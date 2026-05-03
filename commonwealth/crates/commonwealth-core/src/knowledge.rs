@@ -97,6 +97,30 @@ pub struct CorpusShardInfo {
     /// across peers to compute coverage ratios.
     #[serde(default)]
     pub processed_shards: Vec<usize>,
+    // ── Atlas advertisement (Phase C1) ──────────────────────────
+    //
+    // These three fields let a peer joining the mesh decide
+    // whether to pull this corpus's atlas instead of running
+    // local Tier-2 enrichment. All three default to 0 / `None` so
+    // older peers (and peers whose corpus has no atlas yet)
+    // serialise + deserialise cleanly with no protocol break.
+    /// Total atoms (entities + events + …) in this peer's
+    /// `<corpus>/atlas/atoms.json`. `0` means "no atlas yet" or
+    /// "older peer that doesn't advertise atlas state."
+    #[serde(default)]
+    pub atlas_atom_count: u64,
+    /// Entities at `enrichment_depth = "extracted"` (Tier-2
+    /// enriched). The mesh ranks atlases by this — a peer with a
+    /// higher count has done more deep-extraction work and is the
+    /// preferred atlas source for fresh nodes.
+    #[serde(default)]
+    pub atlas_tier2_count: u64,
+    /// SHA-256 of `atoms.json` (hex). Receipt the puller validates
+    /// against after fetching a peer's atlas — a corrupted /
+    /// poisoned transfer fails closed. `None` = no atlas or
+    /// fingerprint not yet stamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub atlas_fingerprint: Option<String>,
 }
 
 impl CorpusShardInfo {
@@ -409,6 +433,49 @@ mod tests {
         let json = serde_json::to_string(&r).unwrap();
         let back: ChunkRange = serde_json::from_str(&json).unwrap();
         assert_eq!(r, back);
+    }
+
+    #[test]
+    fn corpus_shard_info_serde_roundtrips_atlas_fields() {
+        let info = CorpusShardInfo {
+            corpus_id: "wikipedia".into(),
+            chunk_range: None,
+            is_replica: false,
+            last_updated: 0,
+            chunk_count: 1_000_000,
+            canonical_fingerprint: Some("abc123".into()),
+            total_shards: Some(38),
+            processed_shards: vec![0, 1, 2],
+            atlas_atom_count: 51_280,
+            atlas_tier2_count: 612,
+            atlas_fingerprint: Some(
+                "7c3f8e9b1f0a2d3c4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d".into(),
+            ),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let back: CorpusShardInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.atlas_atom_count, 51_280);
+        assert_eq!(back.atlas_tier2_count, 612);
+        assert!(back.atlas_fingerprint.unwrap().starts_with("7c3f"));
+    }
+
+    /// A blob from an older peer (pre-C1) won't carry the atlas
+    /// fields. Deserialize must succeed with zero counts and `None`
+    /// fingerprint so the upgrade window is graceful.
+    #[test]
+    fn corpus_shard_info_back_compat_without_atlas_fields() {
+        let json = r#"{
+            "corpus_id": "wikipedia",
+            "chunk_range": null,
+            "is_replica": false,
+            "last_updated": 0,
+            "chunk_count": 0,
+            "processed_shards": []
+        }"#;
+        let back: CorpusShardInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(back.atlas_atom_count, 0);
+        assert_eq!(back.atlas_tier2_count, 0);
+        assert!(back.atlas_fingerprint.is_none());
     }
 
     #[test]

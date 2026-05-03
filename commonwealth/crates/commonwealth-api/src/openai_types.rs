@@ -51,6 +51,16 @@ pub struct ChatCompletionRequest {
     /// `inference_adapter::extract_enable_thinking`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_template_kwargs: Option<serde_json::Value>,
+    /// Commonwealth extension: cap on `<think>` block tokens for
+    /// thinking models (Qwen3 / Qwen3.5 / SmolLM3). `Some(0)` causes
+    /// the daemon to inject `/no_think` into the system prompt,
+    /// suppressing the chain-of-thought entirely; useful for
+    /// structured-output tasks where the schema constraint already
+    /// enforces correctness and thinking is pure overhead. `None`
+    /// (default) preserves whatever each model family does by
+    /// default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub think_budget: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
