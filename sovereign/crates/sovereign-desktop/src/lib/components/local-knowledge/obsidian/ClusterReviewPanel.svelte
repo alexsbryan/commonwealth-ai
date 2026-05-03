@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import type { VaultPreview } from "../../../types";
   import ClusterCard from "./ClusterCard.svelte";
   import ClusterDetail from "./ClusterDetail.svelte";
@@ -25,8 +26,13 @@
     onMinConfidenceChange?.(value);
   }
 
+  // Initial selection comes from the prop on first render only —
+  // the `$effect` below keeps `selectedId` in sync with `preview`
+  // changes thereafter. `untrack` silences `state_referenced_locally`.
   let selectedId: number | null = $state(
-    preview.clusters.length > 0 ? preview.clusters[0].cluster.id : null,
+    untrack(() =>
+      preview.clusters.length > 0 ? preview.clusters[0].cluster.id : null,
+    ),
   );
 
   let selected = $derived(

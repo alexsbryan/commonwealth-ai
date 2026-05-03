@@ -810,6 +810,60 @@ loop; preserves the inode for launchd-held FDs.
 `sovereign://join?key=<key>` (with relay hints for NAT traversal). The
 desktop app registers as the system handler.
 
+### 4.10b Glass-box reading surface (desktop)
+
+When the user clicks a citation in a chat answer, the conversation
+column shrinks to the left and a **reading surface** opens to the
+right with the cited chunk plus its immediate textual neighbors. An
+ambient **atom layer** (subtle dotted underlines on entity / state
+terms anchored at atlas atoms in the chunk's section) lets the user
+hover and click into an **atom panel** showing the index card for
+that atom — description, salience, one-hop relations, and a "where
+else this appears" section listing same-corpus sections (with
+section_id → chunk_id resolved server-side so each row is jumpable)
+plus cross-corpus bridges. A breadcrumb traces the inquiry trail
+across citation → chunk → atom-jumps. A **passage-context chip**
+above the chat input lets the user "ask about this passage": the
+focused chunk's text is prepended to the next user message as a
+labelled `▸ passage from "<title>"` block before the runtime sees
+it, scoping the librarian's answer.
+
+```
+┌──────────┬──────────┬────────────┬─────────────┐
+│ Sidebar  │ ChatView │ ReadingSurf│ AtomPanel   │
+│          │ (chip)   │ Breadcrumb │  (slide-in) │
+│          │          │ ChunkRender│             │
+│ 262px    │ shrinks  │ slide-in   │ slide-in    │
+└──────────┴──────────┴────────────┴─────────────┘
+```
+
+CSS Grid layout in `App.svelte` animates `grid-template-columns`
+between `resting` / `reading-open` / `atom-open`. Below 880px the
+reading column overlays chat instead of displacing it; below 600px
+the sidebar collapses too. Esc closes the topmost overlay
+(atom panel first, then reading); `prefers-reduced-motion` kills
+all transitions.
+
+| Layer    | Where                                                                                   |
+|----------|-----------------------------------------------------------------------------------------|
+| Backend  | `corpus-engine/src/index/read.rs` — `CorpusIndex::neighbors`, `resolve_sections_to_chunks` |
+|          | `corpus-engine/src/atlas_traversal/spans.rs` — `detect_atom_spans` (section-id ↔ chunk join) |
+|          | `sovereign-mesh/src/reading_http.rs` — loopback `/internal/corpus/{c}/chunks/{id}` + `/atoms/{id}` |
+|          | Tauri commands in `sovereign-desktop/src-tauri/src/commands.rs` (`read_get_chunk`, `read_get_chunk_neighbors`, `read_get_atom_card`, `read_get_atom_elsewhere`) |
+| Frontend | `lib/stores/readingSession.svelte.ts` — Svelte 5 runes store: `openCitation`, `openAtom`, `closeAtom`, `jumpToChunk`, `closeReading`, `setFocusedPassage`, `clearFocus` |
+|          | `lib/components/reading/{ReadingSurface,ChunkRenderer,Breadcrumb,AtomPanel,PassageContextChip}.svelte` |
+|          | `lib/components/AssistantMessage.svelte` — citation click → `readingSession.openCitation` (chunk_id pathway), `SourcePopover` fallback for synthetic chunks |
+|          | `lib/components/ChatView.svelte` — `handleSend` / `handleNextStep` read `readingSession.focusedPassage` and pass `contextChunks` |
+
+Section-id ↔ chunk_id projection: atom evidence today carries
+section_ids (per `enrichment/atlas/atoms.rs:63-66`); the sectioned
+chunker stamps `section_id` into chunk metadata, so the join
+happens at query time without a schema change. `section_id`-less
+corpora (plaintext) get a chunk-only reading surface — the atom
+layer no-ops gracefully. Section-bounded layer-2 reading is
+deferred until extractors emit section structure as a queryable
+column.
+
 ### 4.11 Knowledge integration
 
 Sovereign hands `corpus-engine` an `EmbedFn` that wraps its local Embed

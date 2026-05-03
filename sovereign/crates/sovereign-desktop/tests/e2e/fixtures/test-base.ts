@@ -79,6 +79,23 @@ interface ChatHarness {
   };
 }
 
+// Substrings that, when they appear in a console.error/warning,
+// indicate a Svelte runtime invariant has been violated and the
+// app is now in a degraded reactive state. Each one corresponds
+// to a documented Svelte error code at https://svelte.dev/e/<code>
+// and would silently freeze a subtree of the UI without this gate.
+const SVELTE_CONSOLE_FAIL_PATTERNS: RegExp[] = [
+  /each_key_duplicate/,
+  /non_reactive_update/,
+  /state_referenced_locally/,
+  /hydration_mismatch/,
+  /store_invalid_shape/,
+  /effect_in_teardown/,
+  /effect_in_unowned_derived/,
+  /derived_references_self/,
+  /Svelte error:/i,
+];
+
 export const test = base.extend<{
   chat: ChatHarness;
   sovereignPage: Page;
@@ -91,9 +108,25 @@ export const test = base.extend<{
   // triggers a JS exception in the WebView fails, even if no explicit
   // assertion noticed. Tests that EXPECT errors (rare) can opt out via
   // testInfo annotations.
+  //
+  // Console.error is also collected — Svelte 5's runtime
+  // diagnostics (`each_key_duplicate`, hydration mismatches, store
+  // contract violations) ride console.error rather than throwing,
+  // so without this gate a freezing reactivity bug like duplicate
+  // each-keys would slip through every existing test. See the
+  // SVELTE_CONSOLE_FAIL_PATTERNS list below for what we treat as
+  // hard failures.
   sovereignPage: async ({ page }, use, testInfo) => {
     const pageErrors: Error[] = [];
+    const fatalConsoleErrors: string[] = [];
     page.on("pageerror", (err) => pageErrors.push(err));
+    page.on("console", (msg) => {
+      if (msg.type() !== "error" && msg.type() !== "warning") return;
+      const text = msg.text();
+      if (SVELTE_CONSOLE_FAIL_PATTERNS.some((p) => p.test(text))) {
+        fatalConsoleErrors.push(text);
+      }
+    });
     await page.addInitScript({ path: SHIM_PATH });
     // TTFI probe installs window.__ttfi__ — independent of the shim,
     // but must load before app code so MutationObserver can be primed
@@ -101,18 +134,23 @@ export const test = base.extend<{
     // markStart() and the probe stays inert.
     await page.addInitScript({ path: TTFI_PROBE_PATH });
     await use(page);
-    if (pageErrors.length > 0) {
-      const allowed = testInfo.annotations.some(
-        (a) => a.type === "allow-page-errors",
+    const allowed = testInfo.annotations.some(
+      (a) => a.type === "allow-page-errors",
+    );
+    if (pageErrors.length > 0 && !allowed) {
+      throw new Error(
+        `Uncaught page errors during test (${pageErrors.length}):\n` +
+          pageErrors
+            .map((e, i) => `  [${i}] ${e.stack ?? String(e)}`)
+            .join("\n"),
       );
-      if (!allowed) {
-        throw new Error(
-          `Uncaught page errors during test (${pageErrors.length}):\n` +
-            pageErrors
-              .map((e, i) => `  [${i}] ${e.stack ?? String(e)}`)
-              .join("\n"),
-        );
-      }
+    }
+    if (fatalConsoleErrors.length > 0 && !allowed) {
+      throw new Error(
+        `Fatal Svelte runtime diagnostics during test ` +
+          `(${fatalConsoleErrors.length}):\n` +
+          fatalConsoleErrors.map((t, i) => `  [${i}] ${t}`).join("\n"),
+      );
     }
   },
 

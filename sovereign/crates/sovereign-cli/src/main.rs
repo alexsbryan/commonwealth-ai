@@ -37,6 +37,7 @@ mod plan_cmd;
 mod plan_composer;
 mod project_cmd;
 mod project_toml;
+mod reading_diag_cmd;
 mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;
@@ -530,6 +531,14 @@ async fn main() {
             }
             "chat" => {
                 let code = chat_cmd::run_chat(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "reading-diag" => {
+                // No tracing init — reading-diag is meant to be
+                // pipeable (`--format json | jq ...`), so we keep
+                // stdout clean. Set RUST_LOG manually if you want
+                // corpus-engine internals on stderr.
+                let code = reading_diag_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "nudge" => {

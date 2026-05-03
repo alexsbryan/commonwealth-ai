@@ -365,6 +365,9 @@ mod tests {
             corpus_id: "wikipedia".into(),
             score: 1.0,
             metadata: HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
         }
     }
 

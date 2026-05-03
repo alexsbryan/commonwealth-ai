@@ -39,6 +39,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="popover-backdrop" onclick={handleBackdropClick}>
   <div class="source-popover" style={style()}>
     <div class="popover-header">

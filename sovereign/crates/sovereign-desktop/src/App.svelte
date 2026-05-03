@@ -18,6 +18,9 @@
   import ChatView from "./lib/components/ChatView.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
   import InsightsPanel from "./lib/components/InsightsPanel.svelte";
+  import ReadingSurface from "./lib/components/reading/ReadingSurface.svelte";
+  import AtomPanel from "./lib/components/reading/AtomPanel.svelte";
+  import { readingSession } from "./lib/stores/readingSession.svelte";
   import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
   import SetupWizard from "./lib/setup/SetupWizard.svelte";
   import FirstCorpusFlow from "./lib/components/onboarding/FirstCorpusFlow.svelte";
@@ -31,6 +34,12 @@
   let selectedConversationId: string | null = $state(null);
   let showSettings = $state(false);
   let showInsights = $state(false);
+
+  // Reading surface visibility — driven entirely by the
+  // readingSession store. Mutually exclusive with InsightsPanel
+  // (the right rail can host at most one).
+  let readingOpen = $derived(readingSession.isOpen);
+  let atomPanelOpen = $derived(readingSession.isAtomPanelOpen);
 
   // Deep-link join dialog state — sourced from `joinLinkStore`. Two
   // writers: the Tauri `deep-link-received` listener (release builds)
@@ -202,7 +211,12 @@
     // add a CLEAR_ALL event to approvalMachine.
   }
 
-  let conversationListRef: ConversationList;
+  // bind:this requires `$state` in Svelte 5 runes mode — without
+  // it, the bound reference doesn't propagate and
+  // `conversationListRef?.loadConversations?.()` becomes a silent
+  // no-op (the sidebar would never refresh after a chat-side
+  // auto-bind). Vite logs `non_reactive_update` when this is wrong.
+  let conversationListRef: ConversationList | null = $state(null);
 
   function handleConversationCreated(id: string) {
     // ChatView auto-created a conversation — update the sidebar
@@ -243,7 +257,11 @@
     onDropToChat={handleDropToChat}
   />
 {:else}
-  <div class="app-layout">
+  <div
+    class="app-layout"
+    class:reading-open={readingOpen}
+    class:atom-open={atomPanelOpen}
+  >
     <aside class="sidebar">
       <ConversationList
         bind:this={conversationListRef}
@@ -270,7 +288,12 @@
         />
       {/if}
     </main>
-    {#if showInsights && !showSettings}
+    {#if readingOpen}
+      <ReadingSurface />
+      {#if atomPanelOpen}
+        <AtomPanel />
+      {/if}
+    {:else if showInsights && !showSettings}
       <InsightsPanel
         conversationId={selectedConversationId}
         onNavigate={(id) => {
@@ -468,26 +491,126 @@
     100% { transform: translateX(520%); }
   }
 
-  /* ── App shell ── */
+  /* ── App shell ──
+     Three-column grid for the glass-box reading layout. The
+     reading column collapses to 0 when no citation is open, so
+     the chat column expands to fill the available width — same
+     behavior as the previous flex layout. When `reading-open` is
+     toggled, the chat column shrinks and the reading column
+     slides in. Animation is on grid-template-columns; modern
+     Chromium / Safari interpolates between fr units smoothly. */
   .app-layout {
-    display: flex;
+    display: grid;
+    grid-template-columns: 262px 1fr 0 0;
     height: 100vh;
+    transition: grid-template-columns 220ms cubic-bezier(.2, .8, .2, 1);
+  }
+
+  .app-layout.reading-open {
+    grid-template-columns: 262px minmax(360px, 1fr) minmax(440px, 2fr) 0;
+  }
+
+  /* Four-column state — atom panel slides in as the rightmost
+     column; the reading column shrinks to make room. */
+  .app-layout.reading-open.atom-open {
+    grid-template-columns:
+      262px
+      minmax(320px, 1fr)
+      minmax(360px, 1.4fr)
+      minmax(300px, 1fr);
+  }
+
+  @media (max-width: 1280px) {
+    /* Smaller windows: atom panel becomes an overlay over the
+       reading column instead of displacing it. The AtomPanel is
+       absolutely positioned via the inline shadow and right-rail
+       border; CSS Grid still tracks 0-width but visually it
+       overlays. */
+    .app-layout.reading-open.atom-open {
+      grid-template-columns: 262px minmax(320px, 1fr) minmax(380px, 1.4fr) 0;
+    }
+  }
+
+  @media (max-width: 1100px) {
+    .app-layout.reading-open {
+      grid-template-columns: 220px minmax(320px, 1fr) minmax(380px, 1.4fr) 0;
+    }
+  }
+
+  /* ── Narrow-window collapse ──
+     Below 880px there isn't room for chat + reading side-by-side
+     comfortably. The reading surface becomes a full-width slide-
+     over above the chat column; chat stays mounted underneath
+     (state preserved) but visually hidden. The atom panel collapses
+     into a bottom sheet within the overlay so it's still
+     reachable. */
+  @media (max-width: 880px) {
+    .app-layout.reading-open,
+    .app-layout.reading-open.atom-open {
+      grid-template-columns: 262px 1fr 0 0;
+    }
+    /* Anchor the reading column outside the grid flow so it
+       overlays chat without breaking the grid track widths. */
+    .app-layout.reading-open > :global(.reading-surface) {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 262px;
+      z-index: 30;
+      background: var(--bg-primary);
+    }
+    /* Atom panel sheet — anchored to the bottom-right inside the
+       overlay so the user can dismiss it without losing the
+       reading context. */
+    .app-layout.reading-open.atom-open > :global(.atom-panel) {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: min(420px, 100vw - 16px);
+      max-height: 60vh;
+      z-index: 40;
+      box-shadow: -4px -4px 18px rgba(0, 0, 0, 0.32);
+      border-radius: 12px 0 0 0;
+    }
+  }
+
+  /* Very narrow (mobile-like) — collapse the sidebar too. The
+     conversation list is reachable via the back action; reading
+     surface takes the full window. */
+  @media (max-width: 600px) {
+    .app-layout {
+      grid-template-columns: 0 1fr 0 0;
+    }
+    .app-layout > .sidebar {
+      display: none;
+    }
+    .app-layout.reading-open > :global(.reading-surface) {
+      left: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-layout {
+      transition: none;
+    }
   }
 
   .sidebar {
     width: 262px;
-    min-width: 262px;
+    min-width: 0;
     background: var(--bg-secondary);
     border-right: 1px solid var(--border-mid);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .main-content {
-    flex: 1;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     background: var(--bg-primary);
+    min-width: 0;
   }
 </style>

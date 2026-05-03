@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { lcValidatePath } from "../../../api";
   import InkStamp from "../../onboarding/InkStamp.svelte";
@@ -11,7 +12,12 @@
 
   let { initialPath = null, onSelected, onCancel }: Props = $props();
 
-  let path: string = $state(initialPath ?? "");
+  // `initialPath` seeds the local editable `path` exactly once.
+  // `untrack` tells Svelte that's intentional — without it the
+  // compiler warns `state_referenced_locally`, which is the right
+  // warning for prop reads that LOOK like they should be reactive
+  // but aren't.
+  let path: string = $state(untrack(() => initialPath ?? ""));
   let status: string = $state("");
   let busy = $state(false);
   let manualOpen = $state(false);

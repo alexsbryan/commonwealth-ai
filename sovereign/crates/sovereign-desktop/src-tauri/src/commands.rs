@@ -315,12 +315,26 @@ pub struct StreamStartedResponse {
 /// transparently falls back to `handle_message` and emits a single
 /// `message-complete` event with the full result. The `streaming` field on the
 /// response indicates which path was taken.
+///
+/// `context_chunks` lets the desktop attach passages the user is
+/// currently reading (the "ask about this passage" handoff). Each
+/// chunk is fetched via the corpus engine and prepended to the
+/// message as a labelled context block before the runtime sees it
+/// — keeping the runtime untouched while still scoping the
+/// librarian's answer to what the user has open.
+#[derive(serde::Deserialize)]
+pub struct FocusedChunkRef {
+    pub corpus_id: String,
+    pub chunk_id: u64,
+}
+
 #[tauri::command]
 pub async fn send_message_stream(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     message: String,
     conversation_id: String,
+    context_chunks: Option<Vec<FocusedChunkRef>>,
 ) -> Result<StreamStartedResponse, String> {
     let guard = require_runtime!(state);
     let runtime = guard.as_ref().unwrap().clone();
@@ -333,9 +347,21 @@ pub async fn send_message_stream(
         guard.as_ref().map(Arc::clone)
     };
 
+    // Build the augmented message: prepend a passage-context block
+    // for each focused chunk so the librarian can scope its answer
+    // to what the user has open. The preamble uses a structured
+    // marker (`▸ passage from "<title>" (corpus: <id>, chunk #N)`)
+    // so chat-UI rendering can detect and present it nicely later.
+    let augmented_message = match &context_chunks {
+        Some(refs) if !refs.is_empty() => {
+            build_context_augmented_message(&state, &message, refs).await
+        }
+        _ => message.clone(),
+    };
+
     // Try streaming path first.
     match runtime
-        .handle_message_stream(&message, &conversation_id)
+        .handle_message_stream(&augmented_message, &conversation_id)
         .await
     {
         Ok(handle) => {
@@ -462,20 +488,110 @@ pub async fn send_message_stream(
     }
 }
 
+/// Per-chunk character budget for the focused-passage preamble.
+/// Bounded so a hugely-long chunk doesn't blow up the runtime's
+/// turn-message size cap. The preamble is meant to scope the
+/// answer, not replace retrieval.
+const CONTEXT_PASSAGE_CHAR_BUDGET: usize = 2000;
+
+/// Build a message with each focused chunk prepended as a labelled
+/// passage block. The marker syntax (`▸ passage from "<title>"`)
+/// is detectable for future chat-UI rendering that wants to show
+/// these as collapsed chips instead of inline text.
+async fn build_context_augmented_message(
+    state: &State<'_, Arc<AppState>>,
+    user_message: &str,
+    refs: &[FocusedChunkRef],
+) -> String {
+    let engine_opt = state.corpus_engine.read().await.clone();
+    let Some(engine) = engine_opt else {
+        return user_message.to_string();
+    };
+
+    // Dedupe by (corpus_id, chunk_id) — preserves first-seen order.
+    let mut seen = std::collections::HashSet::new();
+    let unique: Vec<&FocusedChunkRef> = refs
+        .iter()
+        .filter(|r| seen.insert((r.corpus_id.clone(), r.chunk_id)))
+        .collect();
+
+    let mut blocks: Vec<String> = Vec::new();
+    for r in unique {
+        let index = match engine.open_index_for_corpus(&r.corpus_id).await {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %r.corpus_id,
+                    chunk_id = r.chunk_id,
+                    error = %e,
+                    "context preamble: open_index failed; skipping chunk",
+                );
+                continue;
+            }
+        };
+        let mut rows = match index.chunks_by_ids(&[r.chunk_id]).await {
+            Ok(rs) => rs,
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %r.corpus_id,
+                    chunk_id = r.chunk_id,
+                    error = %e,
+                    "context preamble: chunks_by_ids failed; skipping chunk",
+                );
+                continue;
+            }
+        };
+        let Some(row) = rows.pop() else { continue };
+        let title = row.title.as_deref().unwrap_or("untitled passage");
+        let content = if row.content.chars().count() > CONTEXT_PASSAGE_CHAR_BUDGET {
+            let truncated: String = row
+                .content
+                .chars()
+                .take(CONTEXT_PASSAGE_CHAR_BUDGET)
+                .collect();
+            format!("{truncated}…")
+        } else {
+            row.content.clone()
+        };
+        blocks.push(format!(
+            "▸ passage from \"{title}\" (corpus: {}, chunk #{})\n\n{content}",
+            r.corpus_id, r.chunk_id
+        ));
+    }
+
+    if blocks.is_empty() {
+        return user_message.to_string();
+    }
+
+    format!(
+        "{}\n\n---\n\n{}",
+        blocks.join("\n\n---\n\n"),
+        user_message
+    )
+}
+
 #[tauri::command]
 pub async fn send_message(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     message: String,
     conversation_id: String,
+    context_chunks: Option<Vec<FocusedChunkRef>>,
 ) -> Result<MessageResponse, String> {
     let guard = require_runtime!(state);
     let runtime = guard.as_ref().unwrap();
 
     state.approval.set_task_id(&conversation_id).await;
 
+    let augmented_message = match &context_chunks {
+        Some(refs) if !refs.is_empty() => {
+            build_context_augmented_message(&state, &message, refs).await
+        }
+        _ => message.clone(),
+    };
+
     let response = runtime
-        .handle_message(&message, &conversation_id)
+        .handle_message(&augmented_message, &conversation_id)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -3525,6 +3641,569 @@ pub async fn retry_enrichment_failures(
     );
 
     Ok(salvaged as u64)
+}
+
+// ─── Reading Surface ─────────────────────────────────────────────────────────
+//
+// Backs the desktop's glass-box reading UI. Frontend calls
+// `read_get_chunk_neighbors(corpus, chunkId, radius)` after the user
+// clicks a citation; the response shape mirrors the HTTP routes in
+// `sovereign-mesh::reading_http` so the same UI works against either
+// the in-process daemon (this code path) or a remote daemon (HTTP).
+
+#[derive(Serialize)]
+pub struct ChunkRecordDto {
+    pub chunk_id: u64,
+    pub corpus_id: String,
+    pub content: String,
+    pub title: Option<String>,
+    pub url: Option<String>,
+    pub source_doc_id: Option<String>,
+    pub section_id: Option<String>,
+    /// Atom mentions located in `content` — byte offsets into the
+    /// chunk's text. Empty when the corpus has no atlas, when the
+    /// chunk wasn't produced by a sectioned chunker, or when no
+    /// atom is anchored at this section.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub atom_spans: Vec<AtomSpanDto>,
+    pub metadata: serde_json::Value,
+}
+
+#[derive(Serialize)]
+pub struct AtomSpanDto {
+    pub atom_id: String,
+    pub atom_type: &'static str,
+    pub span_start: usize,
+    pub span_end: usize,
+    pub surface_form: String,
+}
+
+impl From<corpus_engine::atlas_traversal::AtomSpan> for AtomSpanDto {
+    fn from(s: corpus_engine::atlas_traversal::AtomSpan) -> Self {
+        Self {
+            atom_id: s.atom_id,
+            atom_type: s.atom_type,
+            span_start: s.span_start,
+            span_end: s.span_end,
+            surface_form: s.surface_form,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct NeighborWindowDto {
+    pub center: ChunkRecordDto,
+    pub prev: Vec<ChunkRecordDto>,
+    pub next: Vec<ChunkRecordDto>,
+    pub outbound_url: Option<String>,
+    pub ordering: &'static str,
+}
+
+fn chunk_record_dto_from_row(
+    corpus_id: &str,
+    row: &corpus_engine::EnrichmentChunkRow,
+    atoms: Option<&[corpus_engine::enrichment::atlas::AtomEnvelope]>,
+) -> ChunkRecordDto {
+    let metadata: serde_json::Value = row
+        .metadata_raw
+        .as_deref()
+        .and_then(|m| serde_json::from_str(m).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let section_id = metadata
+        .as_object()
+        .and_then(|obj| obj.get("section_id"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let atom_spans: Vec<AtomSpanDto> = match (atoms, section_id.as_deref()) {
+        (Some(atoms), Some(_)) => {
+            corpus_engine::atlas_traversal::detect_atom_spans(
+                &row.content,
+                section_id.as_deref(),
+                atoms,
+            )
+            .into_iter()
+            .map(AtomSpanDto::from)
+            .collect()
+        }
+        _ => Vec::new(),
+    };
+
+    ChunkRecordDto {
+        chunk_id: row.id,
+        corpus_id: corpus_id.to_string(),
+        content: row.content.clone(),
+        title: row.title.clone(),
+        url: row.url.clone(),
+        source_doc_id: row.source_doc_id.clone(),
+        section_id,
+        atom_spans,
+        metadata,
+    }
+}
+
+/// Load atlas atoms for the corpus from `atlas/atoms.json` next to
+/// the index. Returns `None` when no atlas is present (corpus
+/// hasn't been enriched) or when the file is unreadable — the atom
+/// layer no-ops gracefully rather than failing the chunk fetch.
+async fn load_atlas_atoms_for_commands(
+    engine: &Arc<corpus_engine::CorpusEngine>,
+    corpus_id: &str,
+) -> Option<Vec<corpus_engine::enrichment::atlas::AtomEnvelope>> {
+    let installed = engine.installed_indexes().await.ok()?;
+    let entry = installed.iter().find(|i| i.corpus_id == corpus_id)?;
+    let atlas_dir = entry.path.join("atlas");
+    if !atlas_dir.exists() {
+        return None;
+    }
+    match corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir) {
+        Ok(file) => Some(file.atoms),
+        Err(e) => {
+            tracing::warn!(
+                corpus = %corpus_id,
+                ?atlas_dir,
+                error = %e,
+                "read_get_chunk_neighbors: atlas read failed; atom layer disabled",
+            );
+            None
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn read_get_chunk(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    chunk_id: u64,
+) -> Result<Option<ChunkRecordDto>, String> {
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    let index = engine
+        .open_index_for_corpus(&corpus_id)
+        .await
+        .map_err(|e| format!("open index '{corpus_id}': {e}"))?;
+    let mut rows = index
+        .chunks_by_ids(&[chunk_id])
+        .await
+        .map_err(|e| format!("chunks_by_ids: {e}"))?;
+    let atoms = load_atlas_atoms_for_commands(&engine, &corpus_id).await;
+    Ok(rows
+        .pop()
+        .map(|r| chunk_record_dto_from_row(&corpus_id, &r, atoms.as_deref())))
+}
+
+#[tauri::command]
+pub async fn read_get_chunk_neighbors(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    chunk_id: u64,
+    radius: Option<usize>,
+) -> Result<Option<NeighborWindowDto>, String> {
+    let radius = radius.unwrap_or(1).min(5);
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    let index = engine
+        .open_index_for_corpus(&corpus_id)
+        .await
+        .map_err(|e| format!("open index '{corpus_id}': {e}"))?;
+    let window = match index
+        .neighbors(chunk_id, radius)
+        .await
+        .map_err(|e| format!("neighbors: {e}"))?
+    {
+        Some(w) => w,
+        None => return Ok(None),
+    };
+
+    // Load the atlas once and reuse across all three chunks in
+    // the window. atoms.json is small; per-chunk re-reads would
+    // multiply IO without benefit.
+    let atoms = load_atlas_atoms_for_commands(&engine, &corpus_id).await;
+    let atoms_ref = atoms.as_deref();
+
+    let center = chunk_record_dto_from_row(&corpus_id, &window.center, atoms_ref);
+    let outbound_url = center.url.clone();
+    let prev = window
+        .prev
+        .iter()
+        .map(|r| chunk_record_dto_from_row(&corpus_id, r, atoms_ref))
+        .collect();
+    let next = window
+        .next
+        .iter()
+        .map(|r| chunk_record_dto_from_row(&corpus_id, r, atoms_ref))
+        .collect();
+
+    Ok(Some(NeighborWindowDto {
+        center,
+        prev,
+        next,
+        outbound_url,
+        ordering: window.ordering,
+    }))
+}
+
+// ─── Atom Panel ──────────────────────────────────────────────────────────────
+//
+// Two endpoints back the desktop's atom panel: `read_get_atom_card`
+// returns the atom card (canonical_name, description, salience,
+// one-hop relations, cross-corpus bridges) and
+// `read_get_atom_elsewhere` returns the section list + cross-corpus
+// links so the user can jump to other places the atom appears. The
+// section→chunk projection happens here via
+// `index.resolve_sections_to_chunks` so the desktop receives ready-
+// to-click chunk_ids.
+
+#[derive(Serialize)]
+pub struct AtomCardDto {
+    pub atom_id: String,
+    pub atom_type: &'static str,
+    pub corpus_id: String,
+    pub canonical_name: String,
+    pub aliases: Vec<String>,
+    pub description: String,
+    pub salience: Option<f32>,
+    pub enrichment_depth: String,
+    pub related: Vec<RelatedAtomDto>,
+    pub cross_corpus: Vec<CrossCorpusLinkDto>,
+}
+
+#[derive(Serialize)]
+pub struct RelatedAtomDto {
+    pub atom_id: String,
+    pub atom_type: &'static str,
+    pub canonical_name: String,
+    pub edge_type: &'static str,
+    pub role: &'static str,
+    pub confidence: f32,
+}
+
+#[derive(Serialize)]
+pub struct CrossCorpusLinkDto {
+    pub peer_corpus_id: String,
+    pub peer_atom_id: String,
+    pub peer_canonical_name: String,
+    pub edge_type: &'static str,
+    pub signal: String,
+    pub confidence: f32,
+}
+
+#[derive(Serialize)]
+pub struct AtomElsewhereDto {
+    pub atom_id: String,
+    pub corpus_id: String,
+    pub same_corpus: Vec<SectionRefDto>,
+    pub cross_corpus: Vec<CrossCorpusLinkDto>,
+}
+
+#[derive(Serialize)]
+pub struct SectionRefDto {
+    pub section_id: String,
+    pub chunk_id: Option<u64>,
+    pub preview: Option<String>,
+}
+
+async fn atlas_dir_for_atom_commands(
+    engine: &Arc<corpus_engine::CorpusEngine>,
+    corpus_id: &str,
+) -> Option<std::path::PathBuf> {
+    let installed = engine.installed_indexes().await.ok()?;
+    let entry = installed.iter().find(|i| i.corpus_id == corpus_id)?;
+    let atlas_dir = entry.path.join("atlas");
+    if atlas_dir.exists() {
+        Some(atlas_dir)
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+pub async fn read_get_atom_card(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    atom_id: String,
+) -> Result<Option<AtomCardDto>, String> {
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    let Some(atlas_dir) = atlas_dir_for_atom_commands(&engine, &corpus_id).await else {
+        return Ok(None);
+    };
+    let atoms = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("read atoms: {e}"))?
+        .atoms;
+    let target = corpus_engine::enrichment::atlas::AtomId::from_raw(atom_id.clone());
+    let Some(atom) = atoms.iter().find(|a| *a.id() == target) else {
+        return Ok(None);
+    };
+    let edges = corpus_engine::enrichment::atlas::read_atlas_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
+    let cross = corpus_engine::enrichment::atlas::read_atlas_cross_corpus_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
+    Ok(Some(build_atom_card_dto(&corpus_id, atom, &atoms, &edges, &cross)))
+}
+
+#[tauri::command]
+pub async fn read_get_atom_elsewhere(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    atom_id: String,
+) -> Result<Option<AtomElsewhereDto>, String> {
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    let Some(atlas_dir) = atlas_dir_for_atom_commands(&engine, &corpus_id).await else {
+        return Ok(None);
+    };
+    let atoms = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("read atoms: {e}"))?
+        .atoms;
+    let target = corpus_engine::enrichment::atlas::AtomId::from_raw(atom_id.clone());
+    let Some(atom) = atoms.iter().find(|a| *a.id() == target) else {
+        return Ok(None);
+    };
+
+    let evidence = atom_evidence_section_refs_dto(atom);
+    let unique_sections: Vec<String> = {
+        let mut seen = std::collections::HashSet::new();
+        evidence
+            .iter()
+            .map(|(s, _)| s.clone())
+            .filter(|s| seen.insert(s.clone()))
+            .collect()
+    };
+
+    let index = engine
+        .open_index_for_corpus(&corpus_id)
+        .await
+        .map_err(|e| format!("open index '{corpus_id}': {e}"))?;
+    let section_to_chunk = index
+        .resolve_sections_to_chunks(&unique_sections)
+        .await
+        .map_err(|e| format!("resolve_sections: {e}"))?;
+
+    let mut same_corpus: Vec<SectionRefDto> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (section_id, preview) in &evidence {
+        if !seen.insert(section_id.clone()) {
+            continue;
+        }
+        same_corpus.push(SectionRefDto {
+            section_id: section_id.clone(),
+            chunk_id: section_to_chunk.get(section_id).copied(),
+            preview: preview.clone(),
+        });
+    }
+    same_corpus.sort_by(|a, b| a.section_id.cmp(&b.section_id));
+
+    let cross = corpus_engine::enrichment::atlas::read_atlas_cross_corpus_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
+    let cross_corpus = cross_corpus_links_dto(&target, &cross);
+
+    Ok(Some(AtomElsewhereDto {
+        atom_id: target.as_str().to_string(),
+        corpus_id,
+        same_corpus,
+        cross_corpus,
+    }))
+}
+
+fn build_atom_card_dto(
+    corpus_id: &str,
+    atom: &corpus_engine::enrichment::atlas::AtomEnvelope,
+    all_atoms: &[corpus_engine::enrichment::atlas::AtomEnvelope],
+    edges: &[corpus_engine::enrichment::atlas::Edge],
+    cross_edges: &[corpus_engine::enrichment::atlas::CrossCorpusEdge],
+) -> AtomCardDto {
+    let (atom_type, canonical_name, aliases, description, salience) = atom_surface_dto(atom);
+    let target_id = atom.id();
+    let related: Vec<RelatedAtomDto> = edges
+        .iter()
+        .filter(|e| e.source == *target_id || e.target == *target_id)
+        .filter_map(|e| {
+            let (other_id, role) = if e.source == *target_id {
+                (&e.target, "source")
+            } else {
+                (&e.source, "target")
+            };
+            let other = all_atoms.iter().find(|a| *a.id() == *other_id)?;
+            let (other_type, other_name, _, _, _) = atom_surface_dto(other);
+            Some(RelatedAtomDto {
+                atom_id: other_id.as_str().to_string(),
+                atom_type: other_type,
+                canonical_name: other_name,
+                edge_type: edge_type_label_dto(e.edge_type),
+                role,
+                confidence: e.confidence,
+            })
+        })
+        .collect();
+    let cross_corpus = cross_corpus_links_dto(target_id, cross_edges);
+    AtomCardDto {
+        atom_id: target_id.as_str().to_string(),
+        atom_type,
+        corpus_id: corpus_id.to_string(),
+        canonical_name,
+        aliases,
+        description,
+        salience,
+        enrichment_depth: format!("{:?}", atom.enrichment_depth()),
+        related,
+        cross_corpus,
+    }
+}
+
+fn atom_surface_dto(
+    atom: &corpus_engine::enrichment::atlas::AtomEnvelope,
+) -> (&'static str, String, Vec<String>, String, Option<f32>) {
+    use corpus_engine::enrichment::atlas::AtomEnvelope;
+    match atom {
+        AtomEnvelope::Entity(e) => (
+            "entity",
+            e.canonical_name.clone(),
+            e.aliases.clone(),
+            e.description.clone(),
+            Some(e.salience),
+        ),
+        AtomEnvelope::Event(e) => (
+            "event",
+            truncate_dto(&e.description, 80),
+            Vec::new(),
+            e.description.clone(),
+            None,
+        ),
+        AtomEnvelope::State(s) => (
+            "state",
+            s.label.clone(),
+            Vec::new(),
+            format!("State of {}: {}", s.entity_id.as_str(), s.label),
+            s.confidence,
+        ),
+        AtomEnvelope::Relation(r) => (
+            "relation",
+            r.label.clone(),
+            Vec::new(),
+            r.label.clone(),
+            None,
+        ),
+        AtomEnvelope::Claim(c) => (
+            "claim",
+            truncate_dto(&c.content, 80),
+            Vec::new(),
+            c.content.clone(),
+            c.confidence,
+        ),
+        AtomEnvelope::Question(q) => (
+            "question",
+            truncate_dto(&q.content, 80),
+            Vec::new(),
+            q.content.clone(),
+            None,
+        ),
+        AtomEnvelope::Configuration(c) => (
+            "configuration",
+            c.label.clone(),
+            Vec::new(),
+            c.description.clone(),
+            Some(c.confidence),
+        ),
+    }
+}
+
+fn edge_type_label_dto(t: corpus_engine::enrichment::atlas::EdgeType) -> &'static str {
+    use corpus_engine::enrichment::atlas::EdgeType;
+    match t {
+        EdgeType::Transition => "transition",
+        EdgeType::Causes => "causes",
+        EdgeType::Grounds => "grounds",
+        EdgeType::Tension => "tension",
+        EdgeType::Involves => "involves",
+        EdgeType::Composes => "composes",
+        EdgeType::Configures => "configures",
+        EdgeType::Grounding => "grounding",
+        EdgeType::Framing => "framing",
+        EdgeType::Provenance => "provenance",
+    }
+}
+
+fn truncate_dto(s: &str, max_chars: usize) -> String {
+    let trimmed: String = s.chars().take(max_chars).collect();
+    if trimmed.chars().count() < s.chars().count() {
+        format!("{trimmed}…")
+    } else {
+        trimmed
+    }
+}
+
+fn atom_evidence_section_refs_dto(
+    atom: &corpus_engine::enrichment::atlas::AtomEnvelope,
+) -> Vec<(String, Option<String>)> {
+    use corpus_engine::enrichment::atlas::AtomEnvelope;
+    match atom {
+        AtomEnvelope::Entity(e) => vec![(
+            e.first_appearance.chunk_id.clone(),
+            e.first_appearance.passage_preview.clone(),
+        )],
+        AtomEnvelope::Event(e) => {
+            let mut out = vec![(e.section_position.section_id.clone(), None)];
+            for c in &e.evidence {
+                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
+            }
+            out
+        }
+        AtomEnvelope::State(s) => s
+            .evidence
+            .iter()
+            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
+            .collect(),
+        AtomEnvelope::Relation(r) => r
+            .evidence
+            .iter()
+            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
+            .collect(),
+        AtomEnvelope::Claim(c) => c
+            .evidence
+            .iter()
+            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
+            .collect(),
+        AtomEnvelope::Question(q) => q
+            .raised_at
+            .iter()
+            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
+            .collect(),
+        AtomEnvelope::Configuration(c) => c
+            .evidence
+            .iter()
+            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
+            .collect(),
+    }
+}
+
+fn cross_corpus_links_dto(
+    atom_id: &corpus_engine::enrichment::atlas::AtomId,
+    edges: &[corpus_engine::enrichment::atlas::CrossCorpusEdge],
+) -> Vec<CrossCorpusLinkDto> {
+    edges
+        .iter()
+        .filter(|e| e.edge.source == *atom_id || e.edge.target == *atom_id)
+        .map(|e| CrossCorpusLinkDto {
+            peer_corpus_id: e.peer.corpus_id.clone(),
+            peer_atom_id: e.peer.atom_id.as_str().to_string(),
+            peer_canonical_name: e.peer.canonical_name.clone(),
+            edge_type: edge_type_label_dto(e.edge.edge_type),
+            signal: e.trace.signal.clone(),
+            confidence: e.trace.confidence,
+        })
+        .collect()
 }
 
 // ─── Recipe Testing ──────────────────────────────────────────────────────────

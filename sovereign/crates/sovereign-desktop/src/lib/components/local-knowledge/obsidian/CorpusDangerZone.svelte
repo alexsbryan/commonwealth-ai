@@ -221,7 +221,6 @@
     gap: 14px;
     align-items: center;
   }
-  .clean-section .section-head { margin-bottom: 0; }
   .danger-btn {
     border-color: var(--lk-err);
     color: var(--lk-err);

@@ -32,20 +32,33 @@ import type {
 export async function sendMessage(
   message: string,
   conversationId: string,
+  contextChunks?: FocusedPassageRef[],
 ): Promise<MessageResponse> {
   return invoke("send_message", {
     message,
     conversationId,
+    contextChunks,
   });
+}
+
+/** Optional focused-passage context — when present, the desktop
+ *  prepends each chunk's text to the message as a labelled
+ *  "▸ passage from ..." block before the runtime sees it. Used by
+ *  the reading surface's "ask about this passage" handoff. */
+export interface FocusedPassageRef {
+  corpus_id: string;
+  chunk_id: number;
 }
 
 export async function sendMessageStream(
   message: string,
   conversationId: string,
+  contextChunks?: FocusedPassageRef[],
 ): Promise<StreamStartedResponse> {
   return invoke("send_message_stream", {
     message,
     conversationId,
+    contextChunks,
   });
 }
 

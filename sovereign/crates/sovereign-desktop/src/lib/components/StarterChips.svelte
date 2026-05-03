@@ -10,9 +10,17 @@
 <script lang="ts">
   import type { StarterQuestion } from "../types";
 
+  // `atom_id` is only unique WITHIN a corpus's atlas — every atlas
+  // restarts numbering from `question-0001`, so a list merged from
+  // multiple corpora collides on the bare id. Callers that round-
+  // robin across corpora SHOULD pass `corpus_id` per item; we then
+  // key by `${corpus_id}:${atom_id}`. Single-corpus callers can
+  // omit it and rely on `atom_id` alone.
+  type StarterChipQuestion = StarterQuestion & { corpus_id?: string };
+
   interface Props {
-    questions: StarterQuestion[];
-    onPick: (question: StarterQuestion) => void;
+    questions: StarterChipQuestion[];
+    onPick: (question: StarterChipQuestion) => void;
     /// Optional heading rendered above the chips. Default: omitted.
     heading?: string;
     /// Fine-print rendered under the heading. Default: omitted.
@@ -23,6 +31,10 @@
   }
 
   let { questions, onPick, heading, subheading, muted = false }: Props = $props();
+
+  function keyOf(q: StarterChipQuestion): string {
+    return q.corpus_id ? `${q.corpus_id}:${q.atom_id}` : q.atom_id;
+  }
 </script>
 
 {#if questions.length > 0}
@@ -34,7 +46,7 @@
       <p class="starters-sub">{subheading}</p>
     {/if}
     <ul class="chip-row">
-      {#each questions as q (q.atom_id)}
+      {#each questions as q (keyOf(q))}
         <li>
           <button
             type="button"

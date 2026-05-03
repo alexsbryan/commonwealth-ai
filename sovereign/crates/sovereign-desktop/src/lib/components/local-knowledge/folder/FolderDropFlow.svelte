@@ -1,6 +1,6 @@
 <script lang="ts">
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
 
   import {
     enrichBuildAsync,
@@ -137,7 +137,14 @@
     onDropToChat,
   }: Props = $props();
 
-  let step: Step = $state({ kind: "select", initialPath: initialPath ?? undefined });
+  // `initialPath` seeds `step` once. `untrack` documents the
+  // intent and silences the `state_referenced_locally` warning,
+  // which fires whenever a prop is read inside `$state(...)` —
+  // a case where an unsuspecting reader might expect reactive
+  // sync that doesn't actually happen.
+  let step: Step = $state(
+    untrack(() => ({ kind: "select", initialPath: initialPath ?? undefined })),
+  );
   let unlisten: UnlistenFn | null = null;
   let cancelling = $state(false);
   /** Whether the desktop has a working OCR pipeline. Probed once at

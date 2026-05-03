@@ -622,6 +622,15 @@ async fn run_daemon(args: &[String]) -> i32 {
             &daemon,
         )))
         .await;
+    // Reading-surface HTTP routes — `/internal/corpus/{c}/chunks/...`.
+    // Backs the desktop's glass-box reading UI when running against a
+    // standalone daemon (CLI-mode) instead of the in-process Tauri
+    // daemon. Loopback-only.
+    daemon
+        .install_reading_http_router(
+            sovereign_mesh::reading_http::reading_router(Arc::clone(&daemon)),
+        )
+        .await;
     daemon
         .set_provider_factory(Arc::new(LlamaCppFactory {
             daemon: Arc::clone(&daemon),

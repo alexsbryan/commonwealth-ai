@@ -54,6 +54,8 @@
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
   import AttachmentBanner from "./AttachmentBanner.svelte";
   import DocumentPicker from "./DocumentPicker.svelte";
+  import PassageContextChip from "./reading/PassageContextChip.svelte";
+  import { readingSession } from "../stores/readingSession.svelte";
 
   interface Props {
     conversationId: string | null;
@@ -80,7 +82,16 @@
   // not five from whichever one indexed first. Refetched whenever an
   // enrichment job transitions to `complete` so a freshly-built atlas
   // flows into the empty state without a refresh.
-  let starters: StarterQuestion[] = $state([]);
+  // Each starter carries its source corpus_id so the StarterChips
+  // each-block can key by `${corpus_id}:${atom_id}` — atom_ids
+  // (`question-0001`, …) restart at 1 inside every atlas, so a
+  // round-robin merge across corpora collides on the bare id and
+  // crashes Svelte's keyed-each with `each_key_duplicate`. That
+  // crash freezes ChatView's reactive subtree, which is what was
+  // making conversation switches feel "stuck".
+  type StarterWithCorpus = StarterQuestion & { corpus_id: string };
+
+  let starters: StarterWithCorpus[] = $state([]);
   let buildingCorporaCount = $state(0);
 
   async function refreshStarters() {
@@ -90,13 +101,16 @@
         starters = [];
         return;
       }
-      const perCorpus: StarterQuestion[][] = await Promise.all(
-        corpora.map((c) =>
-          enrichGetStarterQuestions(c.corpus_id, 3).catch(() => []),
-        ),
+      const perCorpus: StarterWithCorpus[][] = await Promise.all(
+        corpora.map(async (c) => {
+          const list = await enrichGetStarterQuestions(c.corpus_id, 3).catch(
+            () => [],
+          );
+          return list.map((q) => ({ ...q, corpus_id: c.corpus_id }));
+        }),
       );
       // Round-robin interleave up to 5.
-      const picked: StarterQuestion[] = [];
+      const picked: StarterWithCorpus[] = [];
       let idx = 0;
       while (picked.length < 5 && perCorpus.some((p) => p.length > idx)) {
         for (const row of perCorpus) {
@@ -551,8 +565,27 @@
       return;
     }
 
+    // Eager clear: bind the new conversation id and empty the
+    // message list synchronously, BEFORE awaiting the backend
+    // fetch. Without this, switching to a conversation with a
+    // slow `get_conversation` (large history, cold disk) leaves
+    // the previous conversation's bubbles on screen for the
+    // duration of the await — which the user perceives as the
+    // chat being "stuck on the first conversation that loaded".
+    // Re-HYDRATE below replaces the empty list with the real
+    // messages once they arrive.
+    send({ type: "HYDRATE", conversationId: targetId, messages: [] });
+
     try {
       const detail = await getConversation(targetId);
+      // Stale-response guard: if the user has moved on while
+      // this fetch was in flight, drop the response. The
+      // currently-selected conversation is owned by the parent
+      // prop, not by `activeConversationId` (which we just set
+      // optimistically above). Without this guard a slow A
+      // resolving after the user clicked B would clobber B's
+      // already-hydrated content.
+      if (targetId !== conversationId) return;
       send({
         type: "HYDRATE",
         conversationId: targetId,
@@ -560,9 +593,10 @@
       });
       scrollToBottom();
     } catch {
-      // New conversation — no history yet. HYDRATE with an empty
-      // array so the machine still transitions conversationId.
-      send({ type: "HYDRATE", conversationId: targetId, messages: [] });
+      // Fetch failed (commonly: brand-new conversation that
+      // create_conversation minted but didn't persist). The
+      // eager HYDRATE above already left the chat empty +
+      // bound to `targetId`, so there's nothing to do.
     }
   }
 
@@ -709,7 +743,16 @@
       }
 
       const convoId = await ensureConversation();
-      const started = await sendMessageStream(text, convoId);
+      // Glass-box reading-surface handoff: when the user has
+      // focused a passage, attach it as scoped context so the
+      // librarian's answer scopes to what's open. Focus persists
+      // across turns until the user clears it or closes the
+      // surface, supporting "let's discuss this passage" flows.
+      const focused = readingSession.focusedPassage;
+      const contextChunks = focused
+        ? [{ corpus_id: focused.corpusId, chunk_id: focused.chunkId }]
+        : undefined;
+      const started = await sendMessageStream(text, convoId, contextChunks);
       wordBuffer.reset();
       send({ type: "SEND_START", assistantMessageId: started.message_id });
       scrollToBottom();
@@ -786,7 +829,14 @@
               return null;
             })
           : null;
-      const started = tryResume ?? (await sendMessageStream(text, convoId));
+      // Same focused-passage handoff as handleSend — the next-step
+      // offer is "still about this passage" by default.
+      const focused = readingSession.focusedPassage;
+      const contextChunks = focused
+        ? [{ corpus_id: focused.corpusId, chunk_id: focused.chunkId }]
+        : undefined;
+      const started =
+        tryResume ?? (await sendMessageStream(text, convoId, contextChunks));
 
       wordBuffer.reset();
       send({ type: "SEND_START", assistantMessageId: started.message_id });
@@ -964,6 +1014,7 @@
   </div>
 
   <div class="input-area">
+    <PassageContextChip />
     {#if attachedAsset}
       <AttachmentBanner
         filename={attachedAsset.title || attachedAsset.filename}

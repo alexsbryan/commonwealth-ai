@@ -196,6 +196,9 @@ mod tests {
             corpus_id: "test".into(),
             score,
             metadata: Default::default(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
         }
     }
 

@@ -35,6 +35,7 @@ pub(crate) mod oicp_select;
 pub mod peer_inference;
 pub mod persist;
 pub mod corpus_watch_http;
+pub mod reading_http;
 pub mod state;
 pub mod types;
 pub mod watched_folder_runtime;

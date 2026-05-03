@@ -107,6 +107,14 @@ pub struct EmbeddedDaemon {
     /// Reads the `watched_folder_runtime` singleton internally —
     /// `EmbeddedDaemon` doesn't carry the manager directly.
     corpus_watch_http_router: RwLock<Option<axum::Router>>,
+    /// Reading-surface HTTP router
+    /// (`/internal/corpus/{corpus_id}/chunks/...`,
+    /// `/internal/corpus/{corpus_id}/atoms/...`). Built by
+    /// `reading_http::reading_router(daemon_arc)` and installed by
+    /// the bootstrap before `start_daemon`. `None` means the desktop
+    /// reading surface won't be reachable — the chat UI still works
+    /// (citation popovers fall back to the legacy path).
+    reading_http_router: RwLock<Option<axum::Router>>,
     /// In-memory copy of the `SetupConfig` the daemon booted with.
     /// `admin_http::reload` diffs this against the file on disk so it
     /// knows which fields actually changed. Updated in place after a
@@ -191,6 +199,7 @@ impl EmbeddedDaemon {
             project_http_router: RwLock::new(None),
             knowledge_view_http_router: RwLock::new(None),
             corpus_watch_http_router: RwLock::new(None),
+            reading_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
@@ -213,6 +222,7 @@ impl EmbeddedDaemon {
             project_http_router: RwLock::new(None),
             knowledge_view_http_router: RwLock::new(None),
             corpus_watch_http_router: RwLock::new(None),
+            reading_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
@@ -284,6 +294,16 @@ impl EmbeddedDaemon {
     /// a later install affects only the next restart.
     pub async fn install_corpus_watch_http_router(&self, router: axum::Router) {
         *self.corpus_watch_http_router.write().await = Some(router);
+    }
+
+    /// Install the reading-surface HTTP router
+    /// (`/internal/corpus/{corpus}/chunks/...` and
+    /// `/internal/corpus/{corpus}/atoms/...`). Same lifecycle as
+    /// the other `install_*_http_router` setters: caller builds
+    /// `reading_http::reading_router(Arc::clone(&daemon))` and
+    /// hands it here before `start_daemon`. Loopback-guarded.
+    pub async fn install_reading_http_router(&self, router: axum::Router) {
+        *self.reading_http_router.write().await = Some(router);
     }
 
     /// Record the `SetupConfig` this daemon booted with. The admin
@@ -412,6 +432,14 @@ impl EmbeddedDaemon {
     /// `stop` + restart) will pick up the new one.
     pub async fn set_corpus_engine(&self, engine: Arc<CorpusEngine>) {
         *self.corpus_engine.write().await = Some(engine);
+    }
+
+    /// Borrow the currently-installed `CorpusEngine`, if any. Used
+    /// by HTTP routers (notably `reading_http`) that need to fetch
+    /// chunks on demand without taking ownership. Returns `None`
+    /// when bootstrap hasn't installed an engine yet.
+    pub async fn corpus_engine(&self) -> Option<Arc<CorpusEngine>> {
+        self.corpus_engine.read().await.clone()
     }
 
     /// Install the `InferenceProvider` that answers peer chat
@@ -1250,6 +1278,7 @@ impl EmbeddedDaemon {
         let project_http = self.project_http_router.read().await.clone();
         let knowledge_view_http = self.knowledge_view_http_router.read().await.clone();
         let corpus_watch_http = self.corpus_watch_http_router.read().await.clone();
+        let reading_http = self.reading_http_router.read().await.clone();
 
         // Spawn the API servers in the background.
         let app_state_clone = app_state.clone();
@@ -1291,6 +1320,9 @@ impl EmbeddedDaemon {
             }
             if let Some(corpus_watch_http_router) = corpus_watch_http {
                 client_router = client_router.merge(corpus_watch_http_router);
+            }
+            if let Some(reading_http_router) = reading_http {
+                client_router = client_router.merge(reading_http_router);
             }
             let internal_router =
                 commonwealth_api::server::internal_router(app_state_clone);

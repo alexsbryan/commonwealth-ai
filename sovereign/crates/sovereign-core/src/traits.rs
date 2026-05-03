@@ -479,6 +479,14 @@ pub struct MeshScoredChunk {
     pub url: Option<String>,
     pub score: f32,
     pub peer_name: Option<String>,
+    /// Stable chunk id from the producing peer's index. Forwarded
+    /// from `KnowledgeResult.chunk_id` so the desktop reading
+    /// surface can deref a peer-served citation back to that peer
+    /// (deref still requires reaching the peer's chunk endpoint —
+    /// pre-built only for local citations in v1, but the id needs
+    /// to round-trip so we don't silently lose it).
+    pub chunk_id: Option<u64>,
+    pub source_doc_id: Option<String>,
 }
 
 #[async_trait]

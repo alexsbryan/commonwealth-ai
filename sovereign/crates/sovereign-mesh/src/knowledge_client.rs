@@ -124,6 +124,8 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
                     url: r.url,
                     score: r.score,
                     peer_name,
+                    chunk_id: r.chunk_id,
+                    source_doc_id: r.source_doc_id,
                 }
             })
             .collect();

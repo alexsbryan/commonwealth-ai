@@ -98,6 +98,9 @@ pub fn atlas_top_k_as_chunks(
                 corpus_id: format!("atlas:{}", ctx.atlas_corpus_id),
                 score,
                 metadata,
+                chunk_id: None,
+                source_doc_id: None,
+                vector_distance: None,
             }
         })
         .collect()

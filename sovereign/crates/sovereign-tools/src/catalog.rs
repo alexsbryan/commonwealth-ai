@@ -245,6 +245,9 @@ mod tests {
             corpus_id: corpus.into(),
             score: 0.42,
             metadata,
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
         }
     }
 
@@ -256,6 +259,9 @@ mod tests {
             corpus_id: corpus.into(),
             score: 0.88,
             metadata: HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
         }
     }
 

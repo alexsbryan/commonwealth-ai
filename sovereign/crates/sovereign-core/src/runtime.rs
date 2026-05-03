@@ -612,6 +612,43 @@ fn truncate_chunk_content(content: &str) -> String {
 /// title-overlap term uses token equality (no substring) so the
 /// dominant signal stays clean; content_overlap is a weaker
 /// secondary boost that doesn't outweigh title alone.
+/// Cross-corpus merge sort key.
+///
+/// **Primary**: `vector_distance` (asc) — raw cosine distance from
+/// the query embedding to the chunk's stored embedding. This is the
+/// only signal that's apples-to-apples across different corpora,
+/// because every other score (`_relevance_score` RRF, `_score` BM25)
+/// is a per-index reranker whose scale depends on the corpus's own
+/// rank distribution. Without this, a small corpus's top-1 hit
+/// (RRF ≈ 0.033) beats a large corpus's semantically-better answer
+/// that landed at rank-1 in only one of (vector, FTS) and so got
+/// RRF ≈ 0.017. Real symptom (2026-05-03): SEP "compatibilism"
+/// dropped out of the top 8 for "Is free will compatible with
+/// determinism?" while conversation-history echoes of the user's
+/// own past probes won.
+///
+/// **Fallback**: RRF `score` (desc) for chunks that have no
+/// `vector_distance` — FTS-only paths, mesh-served hits whose
+/// remote search didn't include the embedding column, synthetic
+/// atlas-virtual chunks. Chunks with a real `vector_distance`
+/// always rank above chunks without (None is treated as +infinity).
+pub(crate) fn cross_corpus_sort_cmp(
+    a: &corpus_engine::ScoredChunk,
+    b: &corpus_engine::ScoredChunk,
+) -> std::cmp::Ordering {
+    match (a.vector_distance, b.vector_distance) {
+        (Some(ad), Some(bd)) => ad
+            .partial_cmp(&bd)
+            .unwrap_or(std::cmp::Ordering::Equal),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => b
+            .score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal),
+    }
+}
+
 pub(crate) fn reweight_by_query_relevance(
     chunks: &mut [corpus_engine::ScoredChunk],
     query: &str,
@@ -3621,6 +3658,12 @@ impl Runtime {
                     corpus_id: hit.corpus_id,
                     score: hit.score,
                     metadata,
+                    chunk_id: hit.chunk_id,
+                    source_doc_id: hit.source_doc_id,
+                    // Mesh-served hits don't carry vector_distance
+                    // over the wire today; the cross-corpus merge
+                    // falls back to score-sort for them.
+                    vector_distance: None,
                 });
             }
 
@@ -3679,6 +3722,9 @@ impl Runtime {
                         },
                         score: 0.5,
                         metadata: HashMap::new(),
+                        chunk_id: None,
+                        source_doc_id: None,
+                        vector_distance: None,
                     });
                 }
             }
@@ -3766,11 +3812,7 @@ impl Runtime {
         // Dedupe by (corpus_id, content) before truncating so a
         // corpus that appears both locally and via mesh doesn't
         // waste context budget on duplicate chunks.
-        all_chunks.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        all_chunks.sort_by(cross_corpus_sort_cmp);
 
         // Optional structural-graph one-hop expansion. DeepQuery
         // is *by classifier* always reasoning across sources, so
@@ -3784,11 +3826,7 @@ impl Runtime {
                 let added = neighbors.len();
                 all_chunks.extend(neighbors);
                 reweight_by_query_relevance(&mut all_chunks, message);
-                all_chunks.sort_by(|a, b| {
-                    b.score
-                        .partial_cmp(&a.score)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
+                all_chunks.sort_by(cross_corpus_sort_cmp);
                 tracing::info!(
                     added,
                     total = all_chunks.len(),
@@ -3966,6 +4004,9 @@ impl Runtime {
         };
 
         // 8. Build chunk summaries for frontend source linking.
+        // chunk_id and source_doc_id are emitted (when present) so the
+        // desktop reading surface can deref a citation back to the
+        // source chunk for in-app reading + atom-graph overlay.
         let retrieved_chunks: Vec<serde_json::Value> = all_chunks
             .iter()
             .map(|c| {
@@ -3976,6 +4017,8 @@ impl Runtime {
                     "url": c.url,
                     "snippet": snippet,
                     "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
+                    "chunk_id": c.chunk_id,
+                    "source_doc_id": c.source_doc_id,
                 })
             })
             .collect();
@@ -6842,7 +6885,7 @@ impl Runtime {
         //    `compare_einstein_newton_gravity` regression was Newton-
         //    side chunks losing to Einstein-side at this exact step.
         reweight_by_query_relevance(&mut chunks, message);
-        chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        chunks.sort_by(cross_corpus_sort_cmp);
 
         // 3b. Optional structural-graph expansion (env-gated). The
         //     axis-aware variant works on comparisons too — co-
@@ -6856,9 +6899,7 @@ impl Runtime {
                 let added = neighbors.len();
                 chunks.extend(neighbors);
                 reweight_by_query_relevance(&mut chunks, message);
-                chunks.sort_by(|a, b| {
-                    b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal)
-                });
+                chunks.sort_by(cross_corpus_sort_cmp);
                 tracing::info!(
                     added,
                     total = chunks.len(),
@@ -7108,6 +7149,8 @@ impl Runtime {
                     "url": c.url,
                     "snippet": snippet,
                     "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
+                    "chunk_id": c.chunk_id,
+                    "source_doc_id": c.source_doc_id,
                 })
             })
             .collect();
@@ -7718,7 +7761,7 @@ impl Runtime {
         // Reweight + sort + cap mirror KnowledgeQuery's conditioning so
         // chunk quality is on the same scale.
         reweight_by_query_relevance(&mut chunks, message);
-        chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        chunks.sort_by(cross_corpus_sort_cmp);
         let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
         chunks.truncate(KQ_MERGED_LIMIT);
 
@@ -8525,6 +8568,9 @@ mod query_relevance_tests {
             corpus_id: corpus.into(),
             score,
             metadata: HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
         }
     }
 
@@ -8638,6 +8684,9 @@ mod grounding_filter_tests {
             corpus_id: corpus_id.into(),
             score: 0.03,
             metadata: HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
         }
     }
 
@@ -8822,6 +8871,9 @@ mod evidence_shape_tests {
             corpus_id: corpus.into(),
             score,
             metadata: HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
         }
     }
 

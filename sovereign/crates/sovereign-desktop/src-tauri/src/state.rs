@@ -1196,6 +1196,13 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                 Arc::clone(&daemon_arc),
             ))
             .await;
+        // Reading-surface routes (/internal/corpus/{c}/chunks/...) —
+        // backs the desktop's glass-box reading UI. Loopback-only.
+        daemon_arc
+            .install_reading_http_router(
+                sovereign_mesh::reading_http::reading_router(Arc::clone(&daemon_arc)),
+            )
+            .await;
 
         // 4. /v1/projects — project freshness pipeline.
         let merged_for_indexer = corpus_engine::ScipGraph::open_in_memory("merged")
