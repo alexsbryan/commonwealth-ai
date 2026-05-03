@@ -14,18 +14,19 @@ both the curated head AND the dynamic long tail.\
 license = "CC-BY-SA-4.0"
 kind = "catalog"
 mesh_sharing = true
-size_compressed_gb = 0.07
+size_compressed_gb = 0.3
 size_indexed_gb = 4.0
 
 # The catalog JSONL is produced offline by
 # `sovereign-recipes/wikipedia-catalog/scripts/build_catalog.py` from
-# the Wikimedia abstract dump (~1 GB XML → ~70 MB JSONL.gz with all
-# ~6.8M articles). Once the JSONL is built, `bulk_download` fetches
-# it from wherever it's hosted (the eventual `sovereign-recipes`
-# release URL); the extractor then streams it.
+# the wikimedia/structured-wikipedia ZIP (~17 GB → ~300 MB JSONL.gz
+# with ~7.4M articles). Hosted as an HF dataset because the file is
+# too large for plain `raw.githubusercontent.com` (>100 MB single-
+# file limit); `bulk_download` follows HF's redirect to the xethub
+# CDN transparently.
 [acquire]
 type = "bulk_download"
-url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-catalog/data/wikipedia_abstracts.jsonl.gz"
+url = "https://huggingface.co/datasets/svrnmesh/wikipedia-catalog/resolve/main/wikipedia_abstracts.jsonl.gz"
 
 [extract]
 type = "wikipedia_catalog"

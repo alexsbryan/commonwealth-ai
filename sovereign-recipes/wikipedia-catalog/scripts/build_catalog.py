@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
 """
-Convert Wikimedia's English-Wikipedia abstract dump into one JSONL
-file the corpus-engine `wikipedia_catalog` extractor consumes.
+Build the JSONL the corpus-engine `wikipedia_catalog` extractor consumes.
 
-Source:
-  https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-abstract.xml.gz
-  (~1 GB compressed, ~6.8M articles, refreshed weekly)
+Two input sources are supported (the abstract dump was the original
+plan; the structured-wikipedia ZIP is what we ended up using because
+Wikimedia deprecated the abstract dumps):
 
-Why an offline conversion step:
-  - Parsing the XML in Rust would pull in another XML dep + a slower
-    streaming parser; the abstract dump is published once a week, so
-    a one-shot Python conversion is the cheaper engineering path.
-  - The output JSONL is what the catalog corpus actually ships
-    (or is fetched by recipe install), keeping the runtime ingest
-    fast (no XML decoding on every install).
+  1. `--structured-zip <path>` (preferred) — reads
+     `wikimedia/structured-wikipedia` JSONL shards out of the ZIP the
+     `wikipedia` recipe already pulls (cached at
+     `~/.sovereign/indexes/_downloads/wikipedia.zip`). Each shard
+     record has:
+       - `name`        → title
+       - `url`         → article URL
+       - `description` → short abstract (≈ Wikidata description)
+       - `sections[]`  → table-of-contents
+     Records that are pure REDIRECTs (single Abstract section with a
+     list-item REDIRECT) are skipped.
+
+  2. `--local-file <path>` / `--dump-url <url>` (legacy) — reads an
+     `enwiki-latest-abstract.xml(.gz)` produced by the old Wikimedia
+     `abstract-dump` job. Wikimedia stopped publishing this dump
+     in early 2026, so this path only works against a pre-archived
+     copy.
 
 Output JSONL — one line per article:
   {
@@ -29,13 +38,20 @@ title gives the searcher a strong signal that the article covers
 the queried sub-topic, not just contains the keyword.
 
 Usage:
+  # Recommended path — reuse the structured-wikipedia ZIP we already have:
   python build_catalog.py \\
-      --dump-url https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-abstract.xml.gz \\
+      --structured-zip ~/.sovereign/indexes/_downloads/wikipedia.zip \\
       --out ../data/wikipedia_abstracts.jsonl.gz \\
       [--limit 100000]   # smoke-test mode — only emit first N articles
 
+  # Legacy abstract-dump path (dump file no longer published):
+  python build_catalog.py \\
+      --local-file enwiki-latest-abstract.xml.gz \\
+      --out ../data/wikipedia_abstracts.jsonl.gz
+
 Environment:
-  Set WIKI_USER_AGENT to your contact string per Wikimedia's policy.
+  Set WIKI_USER_AGENT to your contact string per Wikimedia's policy
+  (only matters for the legacy `--dump-url` fetch).
 """
 
 import argparse
@@ -47,6 +63,7 @@ import sys
 import urllib.request
 import json
 import xml.etree.ElementTree as ET
+import zipfile
 from typing import Iterator, Optional
 
 
@@ -165,6 +182,105 @@ def iter_docs(stream: Iterator[bytes]) -> Iterator[dict]:
         elem.clear()
 
 
+# ── structured-wikipedia ZIP path ───────────────────────────────────
+#
+# The ZIP ships one JSONL shard per chunk of mainspace
+# (`enwiki_namespace_0_*.jsonl`). Each record has the structured
+# schema documented at https://enterprise.wikimedia.com — for the
+# catalog we only need title + url + description + section names.
+#
+# REDIRECT entries collapse to one Abstract section whose only
+# `has_parts` is a `list_item` whose `value` starts with "REDIRECT ";
+# we drop those so the catalog index doesn't waste embeddings on
+# titles that don't have actual content.
+SHARD_RE = re.compile(r"^enwiki_namespace_0_\d+\.jsonl$")
+
+
+def iter_structured_zip(zip_path: str) -> Iterator[dict]:
+    """Stream every mainspace article record from the structured-wikipedia ZIP.
+
+    Yields the same `{title, url, abstract, sections}` shape that
+    `iter_docs` produces from the abstract dump, so downstream
+    `write_jsonl_gz` doesn't care which input path we took.
+    """
+    with zipfile.ZipFile(zip_path) as z:
+        shard_names = sorted(
+            n for n in z.namelist() if SHARD_RE.match(os.path.basename(n))
+        )
+        if not shard_names:
+            raise RuntimeError(
+                f"{zip_path}: no `enwiki_namespace_0_*.jsonl` shards found"
+            )
+        for shard in shard_names:
+            print(f"  reading {shard}…", file=sys.stderr)
+            with z.open(shard) as f:
+                # Each line is a complete article JSON record.
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        # Skip malformed lines rather than aborting
+                        # the whole 17 GB run on one bad row.
+                        print(
+                            f"  warning: bad JSON in {shard}: {e}",
+                            file=sys.stderr,
+                        )
+                        continue
+                    title = (rec.get("name") or "").strip()
+                    url = (rec.get("url") or "").strip()
+                    if not title or not url:
+                        continue
+                    if _is_redirect(rec):
+                        continue
+                    abstract = (rec.get("description") or "").strip()
+                    sections = _section_names(rec.get("sections") or [])
+                    yield {
+                        "title": title,
+                        "url": url,
+                        "abstract": abstract,
+                        "sections": sections,
+                    }
+
+
+def _section_names(sections: list) -> list:
+    """Pull readable section names, dropping the synthetic Abstract
+    wrapper (its only purpose is to anchor the lead) and any sections
+    without a name."""
+    out = []
+    for s in sections:
+        name = (s.get("name") or "").strip()
+        if not name or name == "Abstract":
+            continue
+        out.append(name)
+    return out
+
+
+def _is_redirect(rec: dict) -> bool:
+    """A REDIRECT-only article has exactly one Abstract section whose
+    body is a list with a single REDIRECT list_item. They have no
+    real content — keeping them would waste an embed slot."""
+    sections = rec.get("sections") or []
+    if len(sections) != 1:
+        return False
+    s = sections[0]
+    if (s.get("name") or "") != "Abstract":
+        return False
+    parts = s.get("has_parts") or []
+    if len(parts) != 1:
+        return False
+    p = parts[0]
+    if p.get("type") != "list":
+        return False
+    items = p.get("has_parts") or []
+    if not items:
+        return False
+    first = items[0]
+    val = (first.get("value") or "").strip()
+    return val.upper().startswith("REDIRECT ")
+
+
 def write_jsonl_gz(out_path: str, docs: Iterator[dict], limit: int) -> int:
     """Write `docs` as gzipped JSONL. Returns count written."""
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -193,6 +309,15 @@ def main() -> int:
         default=None,
         help="Use a previously-downloaded abstract dump instead of fetching.",
     )
+    parser.add_argument(
+        "--structured-zip",
+        default=None,
+        help=(
+            "Use the wikimedia/structured-wikipedia ZIP "
+            "(typically ~/.sovereign/indexes/_downloads/wikipedia.zip). "
+            "Replaces both --dump-url and --local-file when set."
+        ),
+    )
     parser.add_argument("--out", required=True, help="Output JSONL.gz path.")
     parser.add_argument(
         "--limit",
@@ -206,13 +331,19 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if args.local_file:
+    if args.structured_zip:
+        zip_path = os.path.expanduser(args.structured_zip)
+        print(f"reading structured-wikipedia ZIP {zip_path}…", file=sys.stderr)
+        docs = iter_structured_zip(zip_path)
+    elif args.local_file:
         print(f"reading {args.local_file}…", file=sys.stderr)
         stream = stream_local(args.local_file)
+        docs = iter_docs(stream)
     else:
         print(f"streaming {args.dump_url}…", file=sys.stderr)
         stream = stream_dump(args.dump_url, args.user_agent)
-    n = write_jsonl_gz(args.out, iter_docs(stream), args.limit)
+        docs = iter_docs(stream)
+    n = write_jsonl_gz(args.out, docs, args.limit)
     size_mb = os.path.getsize(args.out) / (1024 * 1024)
     print(
         f"wrote {n:,} articles to {args.out} ({size_mb:.1f} MB)",
