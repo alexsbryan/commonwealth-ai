@@ -790,7 +790,7 @@ governance review process (spec §4.3); **not** the scheduler.
 
 | Frontend            | Purpose                                                                  |
 |---------------------|--------------------------------------------------------------------------|
-| `sovereign-cli`     | Interactive REPL + named subcommands: `setup`, `project` (init/design/plan/charter/found/amend/phase/audit/serve/refresh/install-hooks), `atos` (provision/start-milestone/end-milestone/spec/teardown/doctor/install-plugin), `daemon` (long-running, owns :9741), `doctor`, `mesh`, `corpus`, `code`, `mcp`, `recipe`, `tools`, `reflect` |
+| `sovereign-cli`     | Interactive REPL + named subcommands: `setup`, `project` (init/design/plan/charter/found/amend/phase/audit/serve/refresh/install-hooks), `atos` (provision/start-milestone/end-milestone/spec/teardown/doctor/install-plugin), `daemon` (long-running, owns :9741), `doctor`, `mesh`, `corpus`, `code`, `mcp`, `recipe`, `tools`, `reflect`, `voice` (Tier-B voice-contract harness — see §4.15) |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; SSE + WS streaming; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve` |
 | `sovereign-desktop` | Tauri 2 + Svelte 5; setup wizard, chat w/ streaming + provenance, knowledge management (`KnowledgeStatus`, `CorpusProgressBanner`), skill manager, mesh UI, `sovereign://` deep-link handler, system tray |
 
@@ -1022,6 +1022,69 @@ corpus configured for OCR on a daemon that can't honour it.
   pause/resume/confirm/remove actions; `WatchedFolderBanner` surfaces
   guard-tripped or errored corpora prominently above the source list
   (5-second polling refresh while the section is mounted).
+
+### 4.15 Voice contract — Tier-B harness + situated synthesis path
+
+Deep-dive: `sovereign/bench/voice/README.md`.
+
+The relational voice contract has two prompt forms in
+`sovereign-core::runtime`: `RELATIONAL_BASE_SYSTEM_PROMPT` (full,
+~4.5KB / 1100 tokens — chat-default for general relational turns) and
+`RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT` (compact — situated-handler
+default; the full form pushes 9B fast-slot fine-tunes into
+non-converging planning). `epistemic_contract_for(register)` selects
+between them.
+
+Situated synthesis on relational skills (`inner-work`,
+`personal-assistant`) runs through:
+
+1. **Memory recall** — `build_context` runs FTS5 retrieval over the
+   memories store at top-K=5; `maybe_splice_temporal_tensions` adds
+   the contradiction-across-time pre-pass output for the relational
+   register only.
+2. **Pass A: contradiction detect** —
+   `Runtime::detect_contradiction` runs a small Fast-slot
+   structured-output call (`{contradiction: bool, prior_evidence,
+   current_claim}`). Soft-fails to `None`.
+3. **Pass B: witness synthesis** — system prompt assembled by
+   `build_compact_relational_system_message`: compact contract +
+   memory section + tensions block + (when Pass A returned a
+   contradiction) an explicit "What may be missing" cue plus the
+   three-move dialectical scaffolding (thesis → antithesis →
+   synthesis). `enable_thinking: false`,
+   `max_tokens: 2048`. Reply text passes through
+   `title::strip_thinking_response` so any `</think>` planning trace
+   is dropped before persistence.
+
+The dialectic is **conditional on Pass A's contradiction signal** —
+empirically (iter18 vs iter19) imposing dialectical structure on
+every reply lifts substance axes but pushes pure-uncertainty replies
+past length caps; gating it on contradiction.is_some() recovers the
+lift while keeping non-contradiction replies brief.
+
+Wired through both `handle_expressive_query` and
+`handle_simple` (DeepQuery + Relational branch). Other intents
+(`KnowledgeQuery`, `ComplexTask`, `ConationQuery`) keep their
+existing synthesis paths.
+
+`enable_thinking` flows end-to-end via the OpenAI extension
+`chat_template_kwargs` — added to
+`commonwealth_api::ChatCompletionRequest`, parsed by
+`inference_adapter::extract_enable_thinking`, applied at
+`embedded::apply_chat_template_oaicompat`. Default-false preserves
+historical behaviour for non-relational paths.
+
+The Tier-B harness lives under
+`crates/sovereign-cli/src/voice_eval/`: 12 scenarios at
+`sovereign/bench/voice/<id>.toml`, deterministic checks (length /
+question density / banned phrases / required content) plus an
+LLM-as-judge rubric (`SampleSelector::voice_judge` + the eight
+Right-X axes). Reports archive under `bench/voice/baseline/` tagged
+with `chat_model` + `judge_model` + per-scenario `runtime_ms` /
+`judge_ms` so two reports diff cleanly. Current pass rate on iter19
+(the harness-shipped state): 8/12 small + 8/12 large; with a
+small/large pool, **10/12 unique scenarios passable**. Two scenarios
+remain hard for both models (05-silence-sits, 09-edge-of-competence-legal).
 
 ---
 

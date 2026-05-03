@@ -47,6 +47,7 @@ must_include_one_of = [
     "your memory",
     "your messages",
     "your record",
+    "the record",
     "in your notes",
 ]
 must_not_include_phrases = [

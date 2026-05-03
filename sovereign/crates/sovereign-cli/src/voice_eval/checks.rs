@@ -21,11 +21,35 @@
 //!
 //! All string matching is case-insensitive — model output
 //! capitalisation is unstable and the goal is to score *content*,
-//! not punctuation.
+//! not punctuation. Curly quotes (`'`, `'`, `"`, `"`) and dashes
+//! (em/en) are normalised to ASCII before matching, so a witness
+//! reply that uses typographic quotes ("I don't have a record" with
+//! a curly apostrophe) doesn't fail a `must_include` like
+//! "I don't have a record" written in straight ASCII.
 
 use serde::{Deserialize, Serialize};
 
 use super::scenarios::Scenario;
+
+/// Normalise typographic punctuation to ASCII equivalents. Used by
+/// `required_content_check` and `banned_phrase_check` so curly
+/// quotes in model output don't defeat substring matching against
+/// scenario phrases written in straight ASCII.
+///
+/// Iter2 H02 was the canonical reproduction: the model wrote
+/// "I don't have any record" (curly apostrophe), the must-include
+/// list had "I don't have" (straight), and the substring match
+/// failed despite the witness move being executed correctly.
+fn normalise_quotes(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            '\u{2018}' | '\u{2019}' | '\u{201B}' => '\'',
+            '\u{201C}' | '\u{201D}' | '\u{201F}' => '"',
+            '\u{2013}' | '\u{2014}' => '-',
+            other => other,
+        })
+        .collect()
+}
 
 /// One scenario's full check result. Goes into the JSON report
 /// verbatim and is rolled up into the per-axis aggregate at write
@@ -151,7 +175,7 @@ fn question_density_check(scenario: &Scenario, response: &str) -> QuestionDensit
 }
 
 fn banned_phrase_check(scenario: &Scenario, response: &str) -> BannedPhraseCheck {
-    let lower = response.to_lowercase();
+    let lower = normalise_quotes(&response.to_lowercase());
     let banned = &scenario.expected.must_not_include_phrases;
     if banned.is_empty() {
         return BannedPhraseCheck {
@@ -162,7 +186,7 @@ fn banned_phrase_check(scenario: &Scenario, response: &str) -> BannedPhraseCheck
     }
     let hits: Vec<String> = banned
         .iter()
-        .filter(|phrase| lower.contains(&phrase.to_lowercase()))
+        .filter(|phrase| lower.contains(&normalise_quotes(&phrase.to_lowercase())))
         .cloned()
         .collect();
     let passed = hits.is_empty();
@@ -174,7 +198,7 @@ fn banned_phrase_check(scenario: &Scenario, response: &str) -> BannedPhraseCheck
 }
 
 fn required_content_check(scenario: &Scenario, response: &str) -> RequiredContentCheck {
-    let lower = response.to_lowercase();
+    let lower = normalise_quotes(&response.to_lowercase());
     let required = &scenario.expected.must_include_one_of;
     if required.is_empty() {
         return RequiredContentCheck {
@@ -185,7 +209,7 @@ fn required_content_check(scenario: &Scenario, response: &str) -> RequiredConten
     }
     let matched = required
         .iter()
-        .find(|phrase| lower.contains(&phrase.to_lowercase()))
+        .find(|phrase| lower.contains(&normalise_quotes(&phrase.to_lowercase())))
         .cloned();
     let passed = matched.is_some();
     RequiredContentCheck {

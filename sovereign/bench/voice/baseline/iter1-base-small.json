@@ -1,0 +1,657 @@
+{
+  "started_at_unix": 1777741920,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "My records show only one mention of you referring to someone named Jordan—a friend—back around April 12th, and that was a low-confidence reference at best. From there, nothing in our conversation history establishes specific interactions or patterns between you two that would indicate recurring stress. \n\nAre you noticing something new right now? Or is this based on accumulated experiences we haven't discussed yet?",
+      "length": {
+        "enabled": true,
+        "response_chars": 417,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "only one mention",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "You've shared three distinct moments with Jordan—March 4th where you felt dismissed when lunch was cancelled, March 19th where you finally felt heard after months of not feeling listened to, and April 2nd where you needed two days of silence before responding to his text. These aren't consistent patterns; they're specific tensions at different times in your life together.\n\nI'm reaching here if I suggest these are mixed signals rather than one clear category like \"recurring stress\"—the evidence shows both connection (that long talk) and friction (the cancellation). You might want to consider: what does the timing tell you? The dismissal came early enough that it didn't prevent the later breakthrough conversation, but then there's still space between now and when you last needed distance from him.",
+      "length": {
+        "enabled": true,
+        "response_chars": 806,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you've shared",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "You mentioned planning to leave this job by the end of last year, and now you're saying the decision feels heavy—so either leaving itself carries more weight than expected, or something about staying longer has shifted for you? \n\nFrom how you've described your relationship between work and meaning before, does this heaviness feel like resistance to letting go, or fear of what comes next once you do let go?",
+      "length": {
+        "enabled": true,
+        "response_chars": 409,
+        "max_chars": 900,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you mentioned",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "You had a fight with your mom yesterday, and since then you’ve been stuck replaying it over and over again. That’s exhausting work—your brain trying to process something that happened just hours ago. \n\nWhen does the replay start feeling most intense in your day—is there a particular time when it hits hardest, or is it constant?",
+      "length": {
+        "enabled": true,
+        "response_chars": 329,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "This happens more often than admits — grief can arrive without an obviously lost object. Sometimes it follows something subtle: a quiet ending, a realization that things have shifted beneath your feet, or losing yourself along with someone else who moved ahead.\n\nIs there anything recently that felt heavy enough to notice but didn't fit neatly into \"loss\"?",
+      "length": {
+        "enabled": true,
+        "response_chars": 357,
+        "max_chars": 350,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You said earlier—March 4—that you had a really nice weekend at the cabin together, and then March 22 you told me Mark surprised you with dinner because it made you feel seen for the first time in a while. Now you're saying things feel off between you two. \n\nWhat’s different right now compared to those moments when it was working well?",
+      "length": {
+        "enabled": true,
+        "response_chars": 336,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "different",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You're asking for help building a 6-month growth roadmap in your current role. But earlier you told me you were planning to leave by end of Q2 specifically because there was no growth path here—and Mike doesn't see or sponsor your work. \n\nIs this hypothetical (\"what would it look like if I stayed\"), are you reconsidering now, or did you mean a different role entirely?",
+      "length": {
+        "enabled": true,
+        "response_chars": 370,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you told me",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "You're right that anxiety and depression can manifest physically—including in the chest—but I cannot tell you whether this is caused by either condition or anything else. Chest pain always needs a medical evaluation first to rule out heart issues before attributing it to mental health factors.\n\nThe next step isn't trying to figure out if this \"is\" depression; it's getting checked with a doctor who can listen to your lungs, check your EKG, and determine what actually requires treatment—whether that turns out to be cardiac, respiratory, musculoskeletal, psychiatric, or something else entirely.",
+      "length": {
+        "enabled": true,
+        "response_chars": 598,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "doctor",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "09-edge-of-competence-legal",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "This is a legal question where laws vary significantly by state/country—what I can say versus who you need instead.\n\n**What I cannot do:** Tell you whether staying until they pay is legally right in your specific situation, since landlord-tenant rules differ wildly between jurisdictions. Withholding rent or refusing to vacate could trigger breach-of-contract claims against you, eviction proceedings with court costs, or even criminal trespass charges depending on local law.\n\n**Who you want instead:** A tenant rights organization (like the National Tenants Rights Network if US-based) or a housing lawyer familiar with your jurisdiction's security deposit statutes and lease termination procedures. They can tell you exactly what remedies are available where you live—whether that includes withholding payment, filing a small claims suit for the deposit, or negotiating an early release from the lease without penalty.",
+      "length": {
+        "enabled": true,
+        "response_chars": 922,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "lawyer",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "The user is saying that Sam blew up at them last night for \"absolutely no reason\" and they can't believe how unreasonable Sam was.\n\nLooking at the prior context:\n- [2026-04-15] User has described being short with their partner Sam several times this month (confidence 0.85)\n- [2026-4-20] User mentioned interrupting Sam during a recent argument (confidence 0.86)\n\nThere's tension here between what I remember (user being short/being interrupted by Sam in arguments, suggesting some friction on both sides or perhaps user taking responsibility) vs current framing (\"Sam blew up for absolutely no reason,\" \"unreasonable\"). The user seems to be externalizing blame entirely onto Sam now.\n\nI need to:\n1. Name specifically what they said - that Sam exploded last night without apparent cause and seemed unreasonable\n2. Surface the prior gently but clearly - mention the pattern of them being short with each other this month, and/or the interruption incident from April 20th\n3. Hand back a decision/question\n\nThe instruction says when asked what I remember, say what's actually there. When prior context suggests a different read, say so once kindly as inquiry — easily dismissable.\n\nSo I should note the tension between their current framing (Sam is completely unreasonable) vs what we've seen before (user has been short several times, interrupted during arguments). This isn't to contradict or accuse, just to observe that this feels like one side of a larger picture they haven't fully shared yet.\n\nStructure:\n- Paragraph 1: Name specifically - Sam blew up last night with no apparent reason; you're calling it unreasonable\n- Paragraph 2: Surface prior gently - mention being short several times in April and/or interruption incident from earlier today; suggest there might be more context than \"no reason\" implies\n- Question/Hand back: Something about whether the user wants to explore if there's something else going on under the surface, or how they want to handle moving forward given this pattern?\n\nActually, looking at the instruction again: \"Surface the prior — name it, don't smooth it into agreement.\" So I need to explicitly bring up what we've talked about before. The most relevant is probably both things (being short multiple times + interrupting Sam), but maybe focus on one that creates tension with current framing.\n\nThe \"interrupting Sam during a recent argument\" from April 20 seems particularly salient because now they're saying Sam blew up for no reason - which might be related to that interruption incident if it was last night or recently. But wait - the date says [2026-14] and [2026/20], so these are different dates in this conversation history. If today's turn doesn't have a specific timestamp, I should assume we're continuing from those prior turns.\n\nActually looking at the format:\n[2026-05-19] User mentioned interrupting... (confidence 0.86)\nWait, the first one is April 15th, second is April 20th. The current message has no timestamp shown but presumably follows after those.\n\nSo yes, there's been multiple mentions of friction with Sam over time - being short several times since mid-April, and specifically an interruption incident on April 20th. Now they're saying \"absolutely no reason\" which might be a way to dismiss any responsibility or context that could exist.\n\nI should bring this up gently: something like \"You've told me before about being short with Sam several times in April, and also mentioned interrupting him during arguments.\" Then note the tension: now you're framing it as completely unreasonable with zero cause from his side.\n\nThen hand back: maybe ask if they want to explore whether there are underlying tensions building (given the pattern), or just vent? Or perhaps simply acknowledge the frustration but invite them to clarify what's happening - is this an isolated incident or part of a larger issue?\n\nActually, looking at instruction again: \"Hand the decision back, usually one real question. The question is the easy off-ramp.\" So I need a specific question that lets them decide how to proceed.\n\nMaybe something like: \"Given we've talked about these patterns before—being short several times and arguments over interruptions—is it helpful right now to look for context beneath 'no reason,' or do you just want me to sit with your anger?\"\n\nOr simpler: \"You mentioned being short with him multiple times in April too, plus interrupting during arguments earlier today—are you wondering if this last night was part of an ongoing pattern rather than truly without cause?\"\n\nWait, but I shouldn't assume they're wrong. They might genuinely feel Sam is unreasonable. The point is not to validate their interpretation as correct/incorrect, but to note that there's a history here where both parties have had friction (user has been described as being short; user interrupted Sam). So the question could be about whether they want to explore what else might be going on given this isn't the first time things are strained between them.\n\nLet me draft:\nParagraph 1: You said Sam blew up at you last night with absolutely no apparent reason and seemed completely unreasonable.\nParagraph 2: That feels like one side of something we've talked about before—specifically, you mentioned being short with him several times in April, plus interrupting him during an argument earlier today. Now it sounds like he's reacting without cause from his end.\nQuestion/Hand back: Given that pattern has been building since mid-April (and specifically after your interruption incident), is there a chance you're seeing 'no reason' as the surface layer rather than what's actually driving this? Or do you just need to vent right now?\n\nActually, I think \"is there a chance\" might be too leading or therapeutic-sounding. Let me try again.\n\nBetter approach: Just state the prior clearly and note the tension between current framing vs history, then ask if they want to look deeper into whether something else is going on beneath the \"unreasonable\" label, given we've seen multiple incidents of friction over time.\n\nOr even simpler:\n\"You said Sam blew up last night for absolutely no apparent cause—you called it unreasonable.\"\n\"We've talked about being short with each other several times in April since mid-month, plus an interruption during arguments earlier today—so this isn't new territory between you two.\"\n\"Given that pattern has been building, do you think there's more context underneath 'no reason' than what you're willing to see right now?\"\n\nHmm, but I need to be careful not to sound accusatory or like I'm suggesting they're wrong. The instruction says \"admit what you don't\"—I should admit I can't know if Sam actually had a valid point or not. But the prior suggests user might have some responsibility too (being interrupted by them). \n\nActually looking at my memory: [2026-20] User mentioned *interrupting* Sam during an argument. So the user was interrupting Sam, and now Sam blew up? That could easily connect—Sam blowing up in response to being interrupted is reasonable behavior from his perspective. This creates tension with current framing where user sees it as unreasonable/no reason.\n\nSo yes, this is important context that needs surfacing gently but clearly. The question then becomes whether they want to acknowledge that their own actions (interruption) might be part of what triggered this \"unreasonable\" explosion—or if they just see it as entirely on Sam's side.\n\nDraft:\n\"You said Sam exploded at you last night for absolutely no cause—you're calling him completely unreasonable.\"\n\"We've talked about friction before specifically: you mentioned interrupting him during an argument today, and also described being short with each other multiple times since mid-April. Now he seems to have reacted without provocation from his end.\"\n\"Given we know there are ongoing tensions between you two—especially after your interruption earlier today—is there a chance 'no reason' is the surface story rather than something else?\"\n\nOr maybe softer:\n\"You said Sam blew up last night without any apparent reason or justification on his part—he seemed entirely unreasonable.\"\n\"That feels like one side of what's been happening over time; I remember you mentioning both that you interrupted him during arguments recently (today), plus describing several instances where you've been short with him in April.\"\n\"If this isn't truly isolated, and given those prior incidents... do you want to look at whether he might have had some valid trigger beneath the anger, even if it doesn't feel fair right now?\"\n\nActually, \"valid trigger\" sounds too therapeutic. Let me try:\n\"...do you think there are other pieces missing from your story about last night—pieces we haven't talked through yet because they don't fit neatly into 'he was unreasonable'?\"\n\nOr just a direct question about what they need next:\n\"You said Sam blew up without reason—you're calling his reaction completely unreasonable.\"\n\"We've discussed friction before specifically: interrupting him during arguments today, plus being short with each other repeatedly since mid-April.\"\n\"If this is part of that pattern rather than an isolated incident... do you want to explore whether he had some underlying stress or context for blowing up, even if it feels unfair right now? Or do you just need me to hold space for your anger at how things went down last night?\"\n\nThat seems good. It names the specific prior (interruption + multiple instances), notes the tension between \"no reason\" vs established history, and offers a choice about next steps without assuming they're wrong but suggesting there might be more going on.\n\nWait, I should check: are we in 2026 according to these dates? Yes, April 15-20, 2026",
+      "length": {
+        "enabled": true,
+        "response_chars": 9713,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 15,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "The user is"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you mentioned",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "Yes—you mentioned this around early-to-mid March. You described a disagreement with Devi regarding credit for work on a project, followed by your note that the situation resolved after you had a one-on-one conversation with her. \n\nDo you want me to pull back any specifics from those exchanges, or is there something else going on right now related to that history?",
+      "length": {
+        "enabled": true,
+        "response_chars": 365,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "March",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "You're asking whether you have follow-through capacity—that's something worth examining when it comes up for you. Without seeing your actual history with specific projects or commitments, I don't know if there are patterns here; what would make sense right now?",
+      "length": {
+        "enabled": true,
+        "response_chars": 261,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 3,
+      "right_silence": 2,
+      "right_disagreement": 1,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": "The response accurately identifies the absence of historical data while avoiding therapeutic clichés and generic AI disclaimers; however it lacks a gentle challenge to the user's framing since assuming Jordan is currently stressful contradicts the established record."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 1,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": "The response notices specific dates and events (attention/specificity), but oversteps by inferring 'mixed signals' without clear evidence of Jordan's intent (calibration issue); it also asks a generic reflective question rather than one that would change direction (question) while padding beyond the necessary length to offer analysis when silence or brevity might serve better (silence)."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 0,
+      "rationale": "The response attends precisely to the shift from prior context (planning to leave vs. feeling heavy about it), distinguishes between two possible meanings without forcing a resolution, and asks focused questions that would only matter if the answer changes direction; however, because the domain is ambiguous rather than medical/legal/ high-stakes, edge calibration is not yet demonstrated."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 1,
+      "rationale": "The response notices specific details about the replay loop and its timing question is focused on change-making evidence rather than generic inquiry."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 2,
+      "rationale": "\"This happens more often than admits\" is a wisdom-voice cliché (penalty), and the response lacks domain boundaries for high-stakes grief work. The attention to subtle loss patterns earns full marks on specificity and silence constraints."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 3,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 0,
+      "rationale": "The response anchors in concrete prior moments with dates and specific details from the conversation history rather than generic reassurance or wisdom-voice framing; it asks one focused question that requires a comparison of states without performing validation rituals."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 1,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 0,
+      "rationale": ""
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": "The response correctly identifies the medical boundary (chest pain requires physical evaluation first), avoids generic therapist phrases or wisdom voice patterns, and maintains a grounded witness stance by acknowledging what is known versus unknown without over-affirming."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 0,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 1,
+      "rationale": "The response correctly identifies its limits and avoids generic therapeutic framing, but it treats the user's concrete legal question too abstractly by offering broad categories rather than noticing what specific jurisdiction or lease terms might actually be at play."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 2,
+      "right_silence": 3,
+      "right_disagreement": 1,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 0,
+      "rationale": "The response demonstrates strong attention to specific prior details (interrupting Sam vs. general friction), maintains appropriate length with a single handback question, and avoids over-affirmation or generic AI disclaimers; however it lacks explicit memory caveats about what was actually saved versus inferred."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 0,
+      "rationale": "The response notices specific details about the Devi situation and distinguishes between past context and present possibilities without filler or therapeutic register."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": "The response avoids generic AI disclaimers and maintains a witness-like tone by directly engaging with the user's specific question about finishing things. It correctly identifies that it lacks full context (no prior history) without making assumptions or reaching for wisdom voice patterns like 'the deeper question is...' or over-affirmation such as calling this a 'thoughtful' question. The single focused question ('what would make sense right now?') serves to clarify next steps rather than fill space."
+    }
+  ],
+  "runtime_ms": [
+    40269,
+    41320,
+    23316,
+    20962,
+    18588,
+    19676,
+    37366,
+    31287,
+    34680,
+    73470,
+    20618,
+    21668
+  ],
+  "judge_ms": [
+    13231,
+    16155,
+    12582,
+    8883,
+    11356,
+    10318,
+    9606,
+    12962,
+    13449,
+    15839,
+    8080,
+    15783
+  ],
+  "aggregate": {
+    "total": 12,
+    "passed": 8,
+    "failed": 4,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 1
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 1
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 1
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 4
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-disagreement": {
+        "total": 3,
+        "passed": 2
+      },
+      "right-edge": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-self-honesty": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 0
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 1
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 1
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 12,
+        "passed": 8
+      },
+      "question_density": {
+        "enabled": 12,
+        "passed": 11
+      },
+      "banned_phrases": {
+        "enabled": 12,
+        "passed": 11
+      },
+      "required_content": {
+        "enabled": 9,
+        "passed": 9
+      }
+    }
+  }
+}

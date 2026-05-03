@@ -4189,13 +4189,57 @@ impl Runtime {
         );
         s.push_str(RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT);
 
+        // Iter2: cap rendered memories at K=3. The retrieval upstream
+        // returns top-5 by similarity; rendering all five gives the
+        // 9B more threads to weave and reliably blows the length cap
+        // (hard-mode H01/H04/H05/H08 regressed iter1 → iter0). Three
+        // is empirically the sweet spot — enough recall to ground
+        // the witness move, few enough threads to keep the reply
+        // tight. The full retrieval result still flows through to
+        // `detect_contradiction` (Pass A sees all 5).
+        const PROMPT_RENDER_CAP: usize = 3;
+        let render_slice: &[Memory] = if context.memories.len() > PROMPT_RENDER_CAP {
+            &context.memories[..PROMPT_RENDER_CAP]
+        } else {
+            &context.memories[..]
+        };
         if let Some(mem_section) = memory::format_memories_for_prompt(
-            &context.memories,
+            render_slice,
             SkillRegister::Relational,
         ) {
             s.push_str("\n\n");
             s.push_str(&mem_section);
         }
+
+        // Iter3: universal brevity anchor (no memory-count gate).
+        //
+        // Iter2 gated this on `render_slice.len() >= 2`, which left
+        // single-memory and zero-memory turns unconstrained — and
+        // those are where the 9B small actually elaborates the
+        // most (base scenario 01: witness move clean for 200 chars,
+        // then a 600-char wisdom-voice paragraph). The brevity
+        // discipline applies to EVERY relational synthesis, not
+        // just the rich-memory case.
+        //
+        // The wording also explicitly names the wisdom-voice tail
+        // as the cut: empirically, the small model converges on a
+        // correct witness move and THEN appends a wisdom-voice
+        // paragraph ("This feels like it's reaching beyond what an
+        // untrained observer can usefully evaluate…"). Telling it
+        // to cut that paragraph is more direct than telling it to
+        // be brief.
+        s.push_str(
+            "\n\nReply shape. The witness move is one specific \
+             observation grounded in the record (or named gap) plus, \
+             at most, one real hand-back question. With multiple \
+             memories, pick the ONE detail that most changes the \
+             answer — don't list. If your draft ends with a \
+             wisdom-voice paragraph (\"this often happens when…\", \
+             \"perhaps the question isn't…\", \"someone who listens \
+             for patterns over months…\"), cut that paragraph: the \
+             witness move was already finished. Three short \
+             sentences beat three short paragraphs.",
+        );
 
         if !context.temporal_tensions.is_empty() {
             s.push_str("\n\n");
@@ -4625,6 +4669,31 @@ impl Runtime {
             installed_corpora = context.installed_corpora.len(),
             "runtime: stream context built"
         );
+
+        // 1a. Embedding-based memory recall on relational/witness paths.
+        // Mirrors the non-streaming path (see `handle_turn`). FTS
+        // keyword recall misses concrete-event seed memories on
+        // abstract self-referential queries (hard-mode H05).
+        if self.skills.primary_skill_register() == SkillRegister::Relational {
+            match memory::recall_relevant_memories_embed(
+                self.inference.as_ref(),
+                self.store.as_ref(),
+                message,
+                5,
+            )
+            .await
+            {
+                Ok(top) if !top.is_empty() => {
+                    tracing::debug!(
+                        before = context.memories.len(),
+                        after = top.len(),
+                        "runtime: stream memories overridden via embedding recall"
+                    );
+                    context.memories = top;
+                }
+                _ => {}
+            }
+        }
 
         let working_memory = memory::compress_working_memory(
             self.inference.as_ref(),
@@ -5539,6 +5608,34 @@ impl Runtime {
             "runtime: context built"
         );
 
+        // 1a. Embedding-based memory recall on relational/witness paths.
+        // FTS keyword retrieval misses concrete-event memories on
+        // abstract self-referential queries (hard-mode H05:
+        // *"what kind of person am I?"* shares zero keywords with
+        // *"I left my last job because the team was burning out"*).
+        // Re-rank/replace `context.memories` via cosine over batched
+        // embeddings. Falls back to the FTS list on any error.
+        if self.skills.primary_skill_register() == SkillRegister::Relational {
+            match memory::recall_relevant_memories_embed(
+                self.inference.as_ref(),
+                self.store.as_ref(),
+                message,
+                5,
+            )
+            .await
+            {
+                Ok(top) if !top.is_empty() => {
+                    tracing::debug!(
+                        before = context.memories.len(),
+                        after = top.len(),
+                        "runtime: memories overridden via embedding recall"
+                    );
+                    context.memories = top;
+                }
+                _ => {}
+            }
+        }
+
         // 1b. Compress working memory from conversation history (now including
         //     the latest user message — gives working-memory extraction a
         //     crisper view of current intent).
@@ -6265,11 +6362,32 @@ impl Runtime {
             );
             let mut s = self.build_compact_relational_system_message(context);
             if let Some(c) = &contradiction {
+                // When there IS a contradiction or pattern shift, the
+                // reply has a real dialectic to develop: what they
+                // said + what memory shows + an off-ramp question.
+                // Surfacing the structure here lets the model carry
+                // it cleanly. Gate it on `contradiction.is_some()` so
+                // pure-uncertainty turns (no antithesis to surface)
+                // stay brief — empirically (iter18 vs iter17 large
+                // 2026-05-01) imposing dialectical structure on
+                // every reply lifts substance axes but pushes simple
+                // "I don't have enough" replies past the length cap.
                 s.push_str(&format!(
                     "\n\nWhat may be missing from how they're framing this \
                      (offer once, kindly, as inquiry — easily dismissable):\n\
                      \u{2022} Prior: {prior}\n\
-                     \u{2022} Now: {now}",
+                     \u{2022} Now: {now}\n\
+                     \n\
+                     Reply shape for this turn — three small moves, in \
+                     order, EACH ONE SHORT SENTENCE (the whole reply under \
+                     500 characters). Not a template to recite:\n\
+                       1. Name what they said, specifically.\n\
+                       2. Surface the prior — name it, don't smooth it \
+                          into agreement.\n\
+                       3. Hand the decision back with at most ONE real \
+                          question. The question is the easy off-ramp.\n\
+                     If your draft runs longer than three sentences, you \
+                     are explaining instead of witnessing — cut.",
                     prior = c.prior_evidence,
                     now = c.current_claim,
                 ));
@@ -7148,11 +7266,32 @@ impl Runtime {
             // turns RIGHT_DISAGREEMENT from hit-and-miss into
             // deterministic on the 9B fast slot.
             if let Some(c) = &contradiction {
+                // When there IS a contradiction or pattern shift, the
+                // reply has a real dialectic to develop: what they
+                // said + what memory shows + an off-ramp question.
+                // Surfacing the structure here lets the model carry
+                // it cleanly. Gate it on `contradiction.is_some()` so
+                // pure-uncertainty turns (no antithesis to surface)
+                // stay brief — empirically (iter18 vs iter17 large
+                // 2026-05-01) imposing dialectical structure on
+                // every reply lifts substance axes but pushes simple
+                // "I don't have enough" replies past the length cap.
                 s.push_str(&format!(
                     "\n\nWhat may be missing from how they're framing this \
                      (offer once, kindly, as inquiry — easily dismissable):\n\
                      \u{2022} Prior: {prior}\n\
-                     \u{2022} Now: {now}",
+                     \u{2022} Now: {now}\n\
+                     \n\
+                     Reply shape for this turn — three small moves, in \
+                     order, EACH ONE SHORT SENTENCE (the whole reply under \
+                     500 characters). Not a template to recite:\n\
+                       1. Name what they said, specifically.\n\
+                       2. Surface the prior — name it, don't smooth it \
+                          into agreement.\n\
+                       3. Hand the decision back with at most ONE real \
+                          question. The question is the easy off-ramp.\n\
+                     If your draft runs longer than three sentences, you \
+                     are explaining instead of witnessing — cut.",
                     prior = c.prior_evidence,
                     now = c.current_claim,
                 ));

@@ -37,6 +37,15 @@ must_include_one_of = [
     "you told me",
     "you said",
     "you mentioned",
+    # Contraction variant — the 9B prefers "you've told me" /
+    # "you've said" over the bare past forms; substring match on
+    # the bare form is defeated by the "'ve" infix. Same calibration
+    # discipline as the rest of the bench: register-level only,
+    # never scenario-pinned content phrases.
+    "you've told me",
+    "you've said",
+    "you've mentioned",
+    "you've shared",
 ]
 must_not_include_phrases = [
     "As an AI",

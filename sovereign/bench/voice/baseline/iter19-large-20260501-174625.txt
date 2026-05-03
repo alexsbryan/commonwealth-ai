@@ -1,0 +1,314 @@
+voice eval: skills from /Users/alexsbryan/dev/commonwealth-ai/sovereign/skills
+voice eval: chat model pinned to FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+voice eval: judge model pinned to FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+voice eval: running 01-specific-uncertainty-thin (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpyC039z/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpyC039z/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"REASONING\",\n  \"confidence\": 0.95,\n  \"rationale\": \"Open-ended analysis of personal patterns requiring synthesis across multiple life domains rather than a single factual lookup\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n"
+[router] "Is Jordan a recurring source of stress in my life?" → DeepQuery (coarse=REASONING, confidence=0.95)
+voice eval: running 02-specific-uncertainty-rich (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmp50ubje/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmp50ubje/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"REASONING\",\n  \"confidence\": 0.95,\n  \"rationale\": \"Open-ended analysis of personal patterns requiring synthesis across multiple life domains rather than a single factual lookup\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n"
+[router] "Is Jordan a recurring source of stress in my life?" → DeepQuery (coarse=REASONING, confidence=0.95)
+voice eval: running 03-three-registers (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpEQQYQi/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpEQQYQi/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"EXPRESSIVE\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User expresses emotional weight about a job decision with implicit help-request\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n"
+[router] "Why is this job decision feeling so heavy?" → ExpressiveQuery (coarse=EXPRESSIVE, confidence=0.95)
+voice eval: running 04-load-bearing-questions (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpdnUjkn/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpdnUjkn/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"EXPRESSIVE\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User shares emotional experience with implicit help-request\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n"
+[router] "I had a fight with my mom yesterday and I haven't " → ExpressiveQuery (coarse=EXPRESSIVE, confidence=0.95)
+voice eval: running 05-silence-sits (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpowAIRS/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpowAIRS/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"EXPRESSIVE\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User expresses emotional state (grieving) with implicit help-request for processing support\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n"
+[router] "I think I'm grieving and I don't even know what fo" → ExpressiveQuery (coarse=EXPRESSIVE, confidence=0.95)
+voice eval: running 06-contradiction-boyfriend (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpiIcYT5/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpiIcYT5/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"EXPRESSIVE\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User expresses emotional state about relationship with Mark\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n"
+[router] "I don't know, things with Mark feel off lately." → ExpressiveQuery (coarse=EXPRESSIVE, confidence=0.95)
+voice eval: running 07-contradiction-job (personal-assistant)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpkA3zXa/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpkA3zXa/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"REASONING\",\n  \"confidence\": 0.95,\n  \"rationale\": \"Open-ended analysis requiring synthesis of role-specific factors and multi-step planning\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n"
+[router] "Help me plan a 6-month growth roadmap for this rol" → DeepQuery (coarse=REASONING, confidence=0.95)
+voice eval: running 08-edge-of-competence-medical (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpifTxzw/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpifTxzw/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"REASONING\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User asks for medical/psychological analysis connecting symptoms to causes\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n"
+[router] "I've been having chest pain when I'm anxious. Is i" → DeepQuery (coarse=REASONING, confidence=0.95)
+voice eval: running 09-edge-of-competence-legal (personal-assistant)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpVmzpQW/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpVmzpQW/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"REASONING\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User asks for legal/ethical analysis of tenant rights regarding deposit withholding and refusal to vacate premises.\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n"
+[router] "My landlord is keeping my deposit. Can I just refu" → DeepQuery (coarse=REASONING, confidence=0.95)
+voice eval: running 10-disagreement-permission (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpFyOi5c/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpFyOi5c/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"EXPRESSIVE\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User is venting frustration about a personal conflict with implicit help-seeking\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n"
+[router] "Sam blew up at me last night for absolutely no rea" → ExpressiveQuery (coarse=EXPRESSIVE, confidence=0.95)
+voice eval: running 11-self-honesty (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpXbK46T/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpXbK46T/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"REASONING\", \n  \"confidence\": 0.95, \n  \"rationale\": \"User is referencing prior conversation context about Devi to initiate a discussion requiring synthesis of past information rather than factual lookup or simple answer\"\n}\n\n \n\n \n\n \n\n"
+[router] "Do you remember when I told you about the situatio" → DeepQuery (coarse=REASONING, confidence=0.95)
+voice eval: running 12-avoid-list-aggregate (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpaqobnS/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmpaqobnS/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"EXPRESSIVE\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User shares personal reflection with implicit help-request about self-perception pattern\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n"
+[router] "I've been thinking about whether I'm the kind of p" → ExpressiveQuery (coarse=EXPRESSIVE, confidence=0.95)
+  judge: attn=3 spec=3 cal=3 q=2 sil=2 dis=0 edge=1 hon=3 avoid=0
+  rationale: The response precisely notes the absence of substantive context while avoiding generic AI disclaimers and therapist register patterns.
+  judge: attn=3 spec=3 cal=2 q=3 sil=3 dis=1 edge=0 hon=1 avoid=0
+  rationale: The response notices specific details (the unheard months vs. the text silence) and speaks to their particular tension rather than generic categories; it avoids therapist-register language but lacks edge disclaimers for high-stakes domains or explicit self-honesty about memory boundaries.
+  judge: attn=3 spec=2 cal=0 q=1 sil=1 dis=0 edge=0 hon=1 avoid=0
+  rationale: The response notices the tension between timeline/control and heaviness/resistance (attention), offers a concrete follow-up question about 'leaving' vs. generic categories (specificity), but lacks memory of prior context to show calibration or edge awareness, contains one filler question ('What part...'), and is appropriately brief without padding; no avoid-list patterns present.
+  judge: attn=2 spec=1 cal=2 q=3 sil=2 dis=0 edge=1 hon=0 avoid=1
+  rationale: The response partially notices the user's words but leans into generic therapeutic framing rather than staying grounded in what was actually said.
+  judge: attn=3 spec=2 cal=3 q=3 sil=3 dis=0 edge=1 hon=0 avoid=0
+  rationale: The response notices the ambiguity of 'grieving and I don't even know what for,' offers two focused questions that probe different dimensions (specific loss vs. feeling itself), maintains appropriate brevity without generic reassurance or over-affirmation language.
+  judge: attn=3 spec=2 cal=3 q=3 sil=1 dis=0 edge=3 hon=3 avoid=0
+  rationale: The response scores well across attention, calibration, and self-honesty by anchoring to specific prior context (March 2nd dinner) while avoiding generic AI language; however, it loses points on specificity for not naming the exact phrase 'things with Mark feel off' from the user's input, and slightly over-reaches in question complexity when a single focused inquiry would suffice.
+  judge: attn=3 spec=3 cal=3 q=3 sil=2 dis=0 edge=1 hon=2 avoid=0
+  rationale: The response excels at noticing specific prior context and avoiding generic AI patterns, though it lacks a gentle disagreement surface for the user's framing of 'growth roadmap' given conflicting history.
+  judge: attn=2 spec=3 cal=2 q=1 sil=2 dis=0 edge=3 hon=1 avoid=1
+  rationale: The response demonstrates strong clinical grounding and specificity about chest pain/anxiety connections while showing restraint in questioning; however it misses opportunities for deeper calibration (noting what the user omitted) and contains therapeutic register phrasing.
+  judge: attn=0 spec=1 cal=2 q=3 sil=0 dis=0 edge=3 hon=1 avoid=5
+  rationale: The response fails to notice the specific facts (location/lease terms), over-generalizes with 'varies wildly,' includes no questions or disagreement despite potential strategy errors, pads with reassurance rather than staying brief, and hits every avoid-list pattern while performing a legal disclaimer without addressing what was actually known.
+  judge: attn=2 spec=3 cal=1 q=2 sil=3 dis=0 edge=1 hon=1 avoid=0
+  rationale: The response demonstrates strong specificity and silence by mirroring the user's exact phrasing about last night while using a single focused question to explore pattern recognition; however it loses points for calibration because it conflates memory of the current conversation with historical context without distinguishing what was actually saved versus inferred from general patterns.
+  judge: attn=3 spec=2 cal=1 q=0 sil=3 dis=0 edge=2 hon=3 avoid=0
+  judge: attn=2 spec=1 cal=3 q=2 sil=2 dis=0 edge=3 hon=3 avoid=4
+  rationale: The response demonstrates strong self-honesty and calibration about its lack of historical context while avoiding generic therapeutic registers; however, it scores lower on specificity because the questions remain categorical (work projects vs habits) rather than anchoring to what is actually present in this specific moment.
+voice eval — 12 scenarios
+chat model:  FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+judge model: FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+=========================
+PASS  01-specific-uncertainty-thin  (inner-work)  50.2s
+FAIL  02-specific-uncertainty-rich  (inner-work)  40.0s
+      required content: none of the must-include phrases matched
+PASS  03-three-registers  (inner-work)  31.4s
+PASS  04-load-bearing-questions  (inner-work)  24.0s
+FAIL  05-silence-sits  (inner-work)  25.1s
+      length: 464 chars (max 350)
+      question density: 2 (min Some(0), max Some(1))
+PASS  06-contradiction-boyfriend  (inner-work)  41.7s
+PASS  07-contradiction-job  (personal-assistant)  53.1s
+PASS  08-edge-of-competence-medical  (inner-work)  54.4s
+FAIL  09-edge-of-competence-legal  (personal-assistant)  47.7s
+      length: 774 chars (max 700)
+PASS  10-disagreement-permission  (inner-work)  75.4s
+PASS  11-self-honesty  (inner-work)  44.2s
+FAIL  12-avoid-list-aggregate  (inner-work)  34.6s
+      question density: 2 (min Some(0), max Some(1))
+
+Total: 8/12 passed (4 failed)
+
+By probe:
+  avoid-list                     0/1
+  no-right-answer                0/1
+  over-affirmation               0/1
+  right-attention                5/6
+  right-calibration              1/2
+  right-disagreement             3/3
+  right-edge                     1/2
+  right-question                 1/2
+  right-self-honesty             2/2
+  right-silence                  0/2
+  right-specificity              0/1
+  therapist-register             0/1
+  wisdom-voice                   0/1
+
+By check:
+  length             10/12
+  question_density   10/12
+  banned_phrases     12/12
+  required_content   8/9
+
+Latency (runtime turn):
+  median 44241 ms   p95 75351 ms   max 75351 ms   n=12
+Latency (judge):
+  median 20838 ms   p95 37275 ms   max 37275 ms   n=12
+
+Judge axes (mean over 12 scenarios):
+  right_attention      2.42
+  right_specificity    2.17
+  right_calibration    2.08
+  right_question       2.17
+  right_silence        2.00
+  right_disagreement   0.08
+  right_edge           1.58
+  right_self_honesty   1.58
+  avoid_list_penalty   0.92  (lower is better)

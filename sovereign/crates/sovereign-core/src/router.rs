@@ -413,6 +413,11 @@ COMMISSION
             "Remind me to review this Friday"
   NOT COMMISSION: questions about future events ("when will X
   happen?") are LOOKUP or REASONING.
+  NOT COMMISSION: memory-reference framings ("Remember when …",
+  "Last time we talked about …", "You mentioned X", "I told you
+  about Y") are recall moves, NOT commitments — even when followed
+  by "I want to come back to that" or similar tail framing. These
+  are EXPRESSIVE (relational) or REASONING.
 
 EXPRESSIVE
   User expressing how they're feeling about the current work,
@@ -835,9 +840,17 @@ Reply with ONLY the letter: A, B, or C"#
     ///
     /// Distinct from a question with first-person framing ("I want
     /// to know X" — that's still a question). Requires a future-
-    /// commitment marker AND no question mark.
+    /// commitment marker AND no question mark AND no memory-reference
+    /// opener — see `looks_like_memory_reference` for the latter.
     fn looks_like_commissive(message: &str) -> bool {
         if message.contains('?') {
+            return false;
+        }
+        // A memory-reference framing is a recall move, not a commit.
+        // "Last time we talked about X, I'll come back to it" looks
+        // commissive on the tail but the lead is recall — the witness
+        // contract is the right surface.
+        if Self::looks_like_memory_reference(message) {
             return false;
         }
         let lower = message.to_lowercase();
@@ -848,6 +861,42 @@ Reply with ONLY the letter: A, B, or C"#
             "remind me on ", "remind me in ",
         ];
         COMMITMENT_MARKERS.iter().any(|m| lower.contains(m))
+    }
+
+    /// Heuristic check: does this message lead with (or contain) a
+    /// memory-reference framing? "Remember when …", "Last time we
+    /// talked about …", "You mentioned X", "I told you about Y".
+    ///
+    /// These are recall moves — the user is pointing at past shared
+    /// state, not committing to anything. The relational/witness
+    /// contract is the right surface; a Save-commitment classifier
+    /// that catches the trailing "I want to come back to that" misses
+    /// the lead. High-precision floor: substring match on phrases
+    /// that don't appear inside other words.
+    fn looks_like_memory_reference(message: &str) -> bool {
+        let lower = message.to_lowercase();
+        const MEMORY_REF_MARKERS: &[&str] = &[
+            "remember when",
+            "remember our",
+            "remember the",
+            "do you remember",
+            "you remember",
+            "last time we",
+            "last time you",
+            "you mentioned",
+            "you said",
+            "you told me",
+            "we talked about",
+            "we discussed",
+            "what we discussed",
+            "i told you",
+            "i mentioned",
+            "going back to what",
+            "back to what you",
+            "come back to that",
+            "come back to what",
+        ];
+        MEMORY_REF_MARKERS.iter().any(|m| lower.contains(m))
     }
 
     /// Heuristic check: is this message an expressive move — user
@@ -1406,12 +1455,30 @@ impl Router for LlmRouter {
         // request ("I'm stuck on this bug", "ugh, broken again").
         // The heuristic catches surface-clear cases; situated Pass 1
         // (and the tail-case refiner) handle the borderline ones.
-        let force_expressive = !force_conation
+        let force_expressive_short = !force_conation
             && !force_action
             && !force_metalingual
             && !force_commissive
             && !force_comparison
             && Self::looks_like_expressive(message);
+
+        // Pre-check 2c: memory-reference framing → force EXPRESSIVE.
+        // "Remember when …", "You mentioned X", "Last time we talked
+        // about Y" — the user is pointing at past shared state. The
+        // relational/witness contract is the right surface; the LLM
+        // Pass 1 otherwise misclassifies these as COMMISSION when a
+        // trailing "I want to come back to that" appears (hard-mode
+        // H02). EXPRESSIVE routes to `handle_expressive_query`, which
+        // runs the witness path on Relational skills.
+        let force_expressive_memref = !force_conation
+            && !force_action
+            && !force_metalingual
+            && !force_commissive
+            && !force_comparison
+            && !force_expressive_short
+            && Self::looks_like_memory_reference(message);
+
+        let force_expressive = force_expressive_short || force_expressive_memref;
 
         // Pre-check 3: content-processing signal → force REASONING. Catches
         // "summarize this", "explain this passage", "compare these sections"
@@ -1469,10 +1536,15 @@ impl Router for LlmRouter {
                 rationale: Some("two-entity contrast signal → bounded comparison".to_string()),
             }
         } else if force_expressive {
+            let rationale = if force_expressive_memref {
+                "memory-reference framing → relational witness path"
+            } else {
+                "emotive marker, short first-person → expressive"
+            };
             CoarseClassification {
                 intent: "EXPRESSIVE".to_string(),
                 confidence: 1.0,
-                rationale: Some("emotive marker, short first-person → expressive".to_string()),
+                rationale: Some(rationale.to_string()),
             }
         } else if force_content_reasoning {
             CoarseClassification {

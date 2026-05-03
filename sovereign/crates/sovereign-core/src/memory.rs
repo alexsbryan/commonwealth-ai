@@ -12,6 +12,115 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
+/// Cosine similarity between two equally-sized embedding vectors.
+/// Returns 0.0 when either norm is zero or lengths mismatch — the
+/// caller treats that as "no signal" and falls back to FTS.
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let mut dot = 0.0_f32;
+    let mut na = 0.0_f32;
+    let mut nb = 0.0_f32;
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    if na <= 0.0 || nb <= 0.0 {
+        return 0.0;
+    }
+    dot / (na.sqrt() * nb.sqrt())
+}
+
+/// Embedding-based memory recall — used on relational/witness paths
+/// where keyword FTS misses the seed memories on abstract queries
+/// (hard-mode H05: *"what kind of person am I?"* against concrete-
+/// event memories shares zero keywords). Retrieves all live
+/// memories, batch-embeds their content alongside the query, scores
+/// by cosine similarity, applies the same confidence-decay floor as
+/// FTS, returns top-K.
+///
+/// Falls back to the FTS path on any embedding error (empty query,
+/// dim mismatch, batch failure) so the caller never sees a hard
+/// failure — the retrieval just degrades to keyword.
+///
+/// Cost: 1 query embed + 1 batched embed of all live memories per
+/// turn. For voice-eval scenarios with <10 seeds, this is ~50–200ms.
+/// At production scale (hundreds of memories) the right next step is
+/// schema-side caching of embeddings; this helper keeps the
+/// architectural surface clean for that follow-up.
+pub async fn recall_relevant_memories_embed(
+    inference: &dyn InferenceProvider,
+    store: &dyn StateStore,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<Memory>> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let all = store.get_all_memories().await.unwrap_or_default();
+    if all.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let query_emb = match inference.embed_query(query).await {
+        Ok(e) if !e.is_empty() => e,
+        _ => {
+            tracing::debug!("memory: embed recall — query embed failed, falling back to FTS");
+            return Ok(store
+                .get_relevant_memories(query, limit)
+                .await
+                .unwrap_or_default());
+        }
+    };
+
+    let texts: Vec<String> = all.iter().map(|m| m.content.clone()).collect();
+    let embs = match inference.embed_batch(&texts).await {
+        Ok(es) if es.len() == all.len() => es,
+        _ => {
+            tracing::debug!(
+                memories = all.len(),
+                "memory: embed recall — batch embed failed, falling back to FTS"
+            );
+            return Ok(store
+                .get_relevant_memories(query, limit)
+                .await
+                .unwrap_or_default());
+        }
+    };
+
+    let now_ts = now();
+    let mut scored: Vec<(f32, Memory)> = embs
+        .into_iter()
+        .zip(all.into_iter())
+        .filter_map(|(emb, m)| {
+            // Same confidence-decay floor as FTS path
+            // (sqlite::get_relevant_memories): drop memories whose
+            // decayed confidence falls below 0.2.
+            let months = (now_ts - m.last_used) as f64 / (30.0 * 86400.0);
+            let decayed = m.confidence * 0.9_f64.powf(months.max(0.0));
+            if decayed < 0.2 {
+                return None;
+            }
+            let sim = cosine_similarity(&query_emb, &emb);
+            Some((sim, m))
+        })
+        .collect();
+
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(limit);
+
+    let top = scored.into_iter().map(|(_, m)| m).collect::<Vec<_>>();
+    tracing::debug!(
+        returned = top.len(),
+        limit,
+        "memory: embed recall — returning top-K by cosine"
+    );
+    Ok(top)
+}
+
 // ─── Working Memory Compression ───────────────────────────────
 
 /// Compress recent conversation messages into a structured WorkingMemory.
