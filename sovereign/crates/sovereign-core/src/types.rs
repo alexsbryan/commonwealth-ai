@@ -1224,6 +1224,63 @@ pub struct ComputeBudget {
 pub struct Response {
     pub message: Message,
     pub task: Option<Task>,
+    /// Per-stage timing for diagnostic / perf-bench paths. Populated
+    /// on the witness paths (`handle_expressive_query`,
+    /// `handle_simple` Relational+DeepQuery branch); `None` on
+    /// non-instrumented paths so we can grow the coverage
+    /// incrementally. Voice-eval surfaces these in the report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<RuntimeMetrics>,
+}
+
+/// Per-turn millisecond breakdown across the multi-stage relational
+/// pipeline. Each field is the wall-clock cost of that stage; `None`
+/// means the stage was skipped (e.g. Pass A returns `None` early
+/// when there are no memories).
+///
+/// Iter5 (2026-05-02): added after the 4B parsimony test showed
+/// only ~5% speedup vs the 9B despite half the parameters — model
+/// size isn't the binding constraint, so we need a stage-level
+/// waterfall to know what is.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RuntimeMetrics {
+    /// Router::classify total. Includes Pass 1 LLM call when no
+    /// pre-check fires.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_ms: Option<u64>,
+    /// `memory::recall_relevant_memories_embed` total. Dominated by
+    /// the per-memory `embed_batch` call; FTS fallback is fast.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_recall_ms: Option<u64>,
+    /// Iter6: per-call routing internals — pre-check chain, LLM
+    /// Pass 1, parse. Surfaces whether the 6s routing slice is
+    /// dominated by the LLM call (fast slot is too big) or the
+    /// pre-check chain (heuristics getting fat).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_breakdown: Option<RoutingTiming>,
+    /// Iter6: `memory::compress_working_memory` time. Designed for
+    /// code-task continuity but runs on every turn including
+    /// relational. Hypothesis: skippable on Relational paths.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_memory_ms: Option<u64>,
+    /// Iter6: `context::update_topic_context` time. Same hypothesis
+    /// as working memory — may be a free win to skip on Relational.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub topic_context_ms: Option<u64>,
+    /// `detect_contradiction` Pass A on Fast slot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pass_a_ms: Option<u64>,
+    /// `memory::detect_temporal_tensions` pre-pass on Fast slot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tensions_ms: Option<u64>,
+    /// Pass B synthesis call — the main chat completion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesis_ms: Option<u64>,
+    /// Iter6: total turn wall-clock from `handle_turn` entry to
+    /// return. Used to compute "unaccounted" time = total -
+    /// (sum of named stages).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_turn_ms: Option<u64>,
 }
 
 // ─── Routing Decision ────────────────────────────────────────
@@ -1273,6 +1330,35 @@ pub struct RouterClassification {
     /// went through the gate: "Confident", "Uncertain",
     /// "NeedsWebSearch".
     pub self_assessment: Option<String>,
+    /// Iter6: per-stage routing breakdown for performance
+    /// instrumentation. None on pure-stub classifiers; populated by
+    /// the LLM-backed router so the runtime can roll the slice into
+    /// the response metrics.
+    pub timing: Option<RoutingTiming>,
+}
+
+/// Iter6: per-call routing latency slice. Surfaces the cost of the
+/// pre-check chain vs the LLM Pass 1 vs the parse step so the
+/// 14% / 6s routing slice from the iter5 waterfall can be
+/// diagnosed concretely.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RoutingTiming {
+    /// Wall-clock time spent walking the heuristic pre-check chain
+    /// (force_conation, force_action, force_metalingual,
+    /// force_commissive, force_comparison, force_expressive_short,
+    /// force_expressive_memref, force_content_reasoning, force_deep).
+    /// Sub-millisecond when none fire; instant when any short-circuits
+    /// because we stop walking once the first fires.
+    pub precheck_ms: u64,
+    /// LLM Pass 1 call time (`classify_call_json`). Zero when a
+    /// pre-check fired and the LLM call was skipped.
+    pub llm_ms: u64,
+    /// `parse_coarse` step. Should be sub-millisecond — included for
+    /// completeness so the three slices sum to the router's total.
+    pub parse_ms: u64,
+    /// Whether the LLM Pass 1 actually fired. False = a pre-check
+    /// short-circuited; True = `classify_call_json` ran.
+    pub used_llm: bool,
 }
 
 /// Which of the three antifragile moves the runtime should take.
@@ -2180,6 +2266,7 @@ mod routing_policy_tests {
             rationale: None,
             coarse_intent: Some("SIMPLE".into()),
             self_assessment: None,
+            timing: None,
         }
     }
 

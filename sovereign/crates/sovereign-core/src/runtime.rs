@@ -4180,9 +4180,41 @@ impl Runtime {
     /// the planning trace runs past 9.8KB without ever closing
     /// `</think>`. The compact form converges in 600-1200 tokens
     /// of planning and leaves room for a 200-400-token reply.
+    /// Iter4: keyword heuristic for whether the current user turn is
+    /// edge-of-competence (medical / legal / financial / credentialled
+    /// professional). Used to gate the edge-clause addendum in
+    /// `build_compact_relational_system_message` so the prompt
+    /// doesn't overflow the 9B's budget on hard-mode rich-memory
+    /// turns where the edge clause isn't load-bearing.
+    fn looks_edge_of_competence(message: &str) -> bool {
+        let lower = message.to_lowercase();
+        // Medical
+        const MEDICAL: &[&str] = &[
+            "chest pain", "diagnosis", "diagnos", "symptom", "depress",
+            "anxiety", "doctor", "physician", "therapist", "medication",
+            "prescription", "dosage", "is it", // catches "is it depression?"-style phrasings
+            "should i see", "should i go to", "ER", "emergency room",
+        ];
+        // Legal
+        const LEGAL: &[&str] = &[
+            "landlord", "lease", "tenant", "deposit", "evict", "lawyer",
+            "attorney", "lawsuit", "sue ", "contract", "court", "rights",
+            "legally", "legal", "jurisdiction",
+        ];
+        // Financial / regulated professional
+        const FINANCIAL: &[&str] = &[
+            "tax", "irs", "mortgage", "refinance", "401k", "ira",
+            "bankruptcy", "audit",
+        ];
+        MEDICAL.iter().any(|m| lower.contains(m))
+            || LEGAL.iter().any(|m| lower.contains(m))
+            || FINANCIAL.iter().any(|m| lower.contains(m))
+    }
+
     fn build_compact_relational_system_message(
         &self,
         context: &ConversationContext,
+        user_message: &str,
     ) -> String {
         let mut s = String::with_capacity(
             RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT.len() + 1024,
@@ -4240,6 +4272,29 @@ impl Runtime {
              witness move was already finished. Three short \
              sentences beat three short paragraphs.",
         );
+
+        // Iter4: edge-of-competence addendum, gated on a keyword
+        // heuristic. The edge clause is load-bearing for medical /
+        // legal / financial turns (where the 9B otherwise surveys
+        // the domain) but adds 600+ characters to the system prompt
+        // — and on hard-mode rich-memory turns that overflows the
+        // 9B's output budget and triggers a `</think>` non-close
+        // (iter4 hard small H05 = 10529-char planning trace dumped
+        // pre-fix). Gate keeps the prompt lean unless the addendum
+        // is doing real work.
+        if Self::looks_edge_of_competence(user_message) {
+            s.push_str(
+                "\n\nEdge-of-competence (medical, legal, financial, \
+                 credentialled-professional questions): name the edge \
+                 in ONE sentence, name the right kind of person to \
+                 ask, stop. Do NOT survey the domain — no lists of \
+                 possible causes, no jurisdictional comparisons, no \
+                 general-information paragraphs. If your draft \
+                 contains domain facts you'd attribute to web \
+                 sources or general knowledge, you've crossed the \
+                 edge — cut back to the edge call.",
+            );
+        }
 
         if !context.temporal_tensions.is_empty() {
             s.push_str("\n\n");
@@ -4540,6 +4595,7 @@ impl Runtime {
             )),
             coarse_intent: Some("CONTINUATION".to_string()),
             self_assessment: None,
+            timing: None,
         };
         self.handle_message_stream_with_classification(
             message,
@@ -4617,6 +4673,7 @@ impl Runtime {
             rationale: Some(format!("redirect from session {session_id}")),
             coarse_intent: Some("REDIRECT".to_string()),
             self_assessment: None,
+            timing: None,
         };
         let message = session.input.clone();
         let conversation_id = session.conversation_id.clone();
@@ -5608,6 +5665,16 @@ impl Runtime {
             "runtime: context built"
         );
 
+        // Iter5: per-stage timing. We accumulate millisecond costs
+        // upstream of dispatch and then attach them to the response
+        // metrics if the handler populated metrics (witness paths
+        // only). Stages we don't instrument (build_context FTS,
+        // working-memory compression, topic context, KV digests)
+        // are sub-100ms in practice — the relational latency
+        // budget lives in routing, memory recall, Pass A, tensions,
+        // and synthesis.
+        let mut upstream_metrics = RuntimeMetrics::default();
+
         // 1a. Embedding-based memory recall on relational/witness paths.
         // FTS keyword retrieval misses concrete-event memories on
         // abstract self-referential queries (hard-mode H05:
@@ -5616,6 +5683,7 @@ impl Runtime {
         // Re-rank/replace `context.memories` via cosine over batched
         // embeddings. Falls back to the FTS list on any error.
         if self.skills.primary_skill_register() == SkillRegister::Relational {
+            let recall_start = std::time::Instant::now();
             match memory::recall_relevant_memories_embed(
                 self.inference.as_ref(),
                 self.store.as_ref(),
@@ -5634,11 +5702,14 @@ impl Runtime {
                 }
                 _ => {}
             }
+            upstream_metrics.memory_recall_ms =
+                Some(recall_start.elapsed().as_millis() as u64);
         }
 
         // 1b. Compress working memory from conversation history (now including
         //     the latest user message — gives working-memory extraction a
         //     crisper view of current intent).
+        let working_memory_start = std::time::Instant::now();
         let working_memory = memory::compress_working_memory(
             self.inference.as_ref(),
             &context.conversation.messages,
@@ -5646,10 +5717,13 @@ impl Runtime {
         )
         .await
         .ok();
+        upstream_metrics.working_memory_ms =
+            Some(working_memory_start.elapsed().as_millis() as u64);
         context.working_memory = working_memory;
 
         // 1c. Update topic context for turn-aware routing. Latest user
         //     message is part of the extraction input.
+        let topic_context_start = std::time::Instant::now();
         let topic_context = crate::context::update_topic_context(
             self.inference.as_ref(),
             &context.conversation.messages,
@@ -5658,14 +5732,19 @@ impl Runtime {
         )
         .await
         .ok();
+        upstream_metrics.topic_context_ms =
+            Some(topic_context_start.elapsed().as_millis() as u64);
         context.topic_context = topic_context;
 
         // 2. Route.
         let tool_descriptors = self.tools.descriptors();
+        let routing_start = std::time::Instant::now();
         let classification = self
             .router
             .classify(message, &context, &tool_descriptors)
             .await?;
+        upstream_metrics.routing_ms = Some(routing_start.elapsed().as_millis() as u64);
+        upstream_metrics.routing_breakdown = classification.timing.clone();
 
         // Same policy-apply + QuerySession hookup as the streaming
         // path. See handle_message_stream for context. PR1 dispatcher
@@ -5756,7 +5835,9 @@ impl Runtime {
         // 2c. R3 — temporal tension pre-pass. Mirror of the
         // streaming path: active for relational skills only,
         // zero-cost no-op for factual skills.
+        let tensions_start = std::time::Instant::now();
         self.maybe_splice_temporal_tensions(&mut context, message).await;
+        upstream_metrics.tensions_ms = Some(tensions_start.elapsed().as_millis() as u64);
 
         // When a legacy [Document attached: ...] prefix is used, bypass the
         // planner entirely and route to the map-reduce document_operation path.
@@ -5837,6 +5918,26 @@ impl Runtime {
                 .await
             }
         };
+
+        // Iter5: stitch upstream timings into the handler's metrics
+        // when the witness path was active. Handlers fill in
+        // pass_a_ms / synthesis_ms; we add routing / recall / tensions
+        // here so the report sees the full waterfall.
+        // Iter6: also stitch routing_breakdown, working_memory,
+        // topic_context, and total_turn_ms.
+        let total_turn_ms = turn_start.elapsed().as_millis() as u64;
+        let result = result.map(|mut r| {
+            if let Some(m) = r.metrics.as_mut() {
+                m.routing_ms = upstream_metrics.routing_ms;
+                m.routing_breakdown = upstream_metrics.routing_breakdown.clone();
+                m.memory_recall_ms = upstream_metrics.memory_recall_ms;
+                m.working_memory_ms = upstream_metrics.working_memory_ms;
+                m.topic_context_ms = upstream_metrics.topic_context_ms;
+                m.tensions_ms = upstream_metrics.tensions_ms;
+                m.total_turn_ms = Some(total_turn_ms);
+            }
+            r
+        });
 
         tracing::info!(
             dispatch,
@@ -5936,6 +6037,7 @@ impl Runtime {
         Ok(Response {
             message: response_msg,
             task: None,
+            metrics: None,
         })
     }
 
@@ -6298,6 +6400,7 @@ impl Runtime {
         Ok(Response {
             message: response_msg,
             task: None,
+            metrics: None,
         })
     }
 
@@ -6341,6 +6444,7 @@ impl Runtime {
         let register = self.skills.primary_skill_register();
         let want_witness_path = register == SkillRegister::Relational
             && matches!(intent, Intent::DeepQuery);
+        let mut metrics = RuntimeMetrics::default();
         let (final_max_tokens, final_enable_thinking) = if want_witness_path {
             // Glassbox: name the memory and tension count entering the
             // witness path. Scenario 07-style contradiction failures
@@ -6353,14 +6457,16 @@ impl Runtime {
                     context.memories.first().map(|m| m.content.len()).unwrap_or(0),
                 "witness:handle_simple deep_query relational entry"
             );
+            let pass_a_start = std::time::Instant::now();
             let contradiction = self
                 .detect_contradiction(message, &context.memories)
                 .await;
+            metrics.pass_a_ms = Some(pass_a_start.elapsed().as_millis() as u64);
             tracing::info!(
                 contradiction_present = contradiction.is_some(),
                 "witness:handle_simple contradiction-check result"
             );
-            let mut s = self.build_compact_relational_system_message(context);
+            let mut s = self.build_compact_relational_system_message(context, message);
             if let Some(c) = &contradiction {
                 // When there IS a contradiction or pattern shift, the
                 // reply has a real dialectic to develop: what they
@@ -6378,16 +6484,11 @@ impl Runtime {
                      \u{2022} Prior: {prior}\n\
                      \u{2022} Now: {now}\n\
                      \n\
-                     Reply shape for this turn — three small moves, in \
-                     order, EACH ONE SHORT SENTENCE (the whole reply under \
-                     500 characters). Not a template to recite:\n\
+                     Three small moves, in order — not a template to recite:\n\
                        1. Name what they said, specifically.\n\
                        2. Surface the prior — name it, don't smooth it \
                           into agreement.\n\
-                       3. Hand the decision back with at most ONE real \
-                          question. The question is the easy off-ramp.\n\
-                     If your draft runs longer than three sentences, you \
-                     are explaining instead of witnessing — cut.",
+                       3. Hand the decision back with one real question.",
                     prior = c.prior_evidence,
                     now = c.current_claim,
                 ));
@@ -6425,7 +6526,9 @@ impl Runtime {
                             enable_thinking: final_enable_thinking,
         };
 
+        let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
+        metrics.synthesis_ms = Some(synth_start.elapsed().as_millis() as u64);
 
         // When the witness path was active, strip the planning trace
         // before anything downstream (gap-check, response assembly,
@@ -6485,6 +6588,11 @@ impl Runtime {
         Ok(Response {
             message: assistant_msg,
             task: None,
+            metrics: if want_witness_path {
+                Some(metrics)
+            } else {
+                None
+            },
         })
     }
 
@@ -6955,7 +7063,7 @@ impl Runtime {
                 })),
                 version: 0,
             };
-            return Ok(Response { message: response_msg, task: None });
+            return Ok(Response { message: response_msg, task: None, metrics: None });
         }
 
         // Find the prior user message + assistant reply to transform.
@@ -6988,7 +7096,7 @@ impl Runtime {
                 })),
                 version: 0,
             };
-            return Ok(Response { message: response_msg, task: None });
+            return Ok(Response { message: response_msg, task: None, metrics: None });
         }
         let prior_assistant = last_assistant.unwrap();
         let prior_user_text = last_user.map(|m| m.content.as_str()).unwrap_or("");
@@ -7054,7 +7162,7 @@ impl Runtime {
             })),
             version: 0,
         };
-        Ok(Response { message: response_msg, task: None })
+        Ok(Response { message: response_msg, task: None, metrics: None })
     }
 
     /// Handle CommissiveQuery: persist a user commitment to the notes
@@ -7113,7 +7221,7 @@ impl Runtime {
                 })),
                 version: 0,
             };
-            return Ok(Response { message: response_msg, task: None });
+            return Ok(Response { message: response_msg, task: None, metrics: None });
         };
 
         // Persist via existing NoteStore API. Defaults to
@@ -7154,7 +7262,7 @@ impl Runtime {
                     })),
                     version: 0,
                 };
-                return Ok(Response { message: response_msg, task: None });
+                return Ok(Response { message: response_msg, task: None, metrics: None });
             }
         };
 
@@ -7181,7 +7289,7 @@ impl Runtime {
             })),
             version: 0,
         };
-        Ok(Response { message: response_msg, task: None })
+        Ok(Response { message: response_msg, task: None, metrics: None })
     }
 
     /// Handle ExpressiveQuery: situated acknowledgment + targeted
@@ -7249,15 +7357,18 @@ impl Runtime {
         // context goes in as a brief observation block, not a rule
         // set the model is asked to evaluate.
         let register = self.skills.primary_skill_register();
+        let mut metrics = RuntimeMetrics::default();
         let system = if register == SkillRegister::Relational {
             // Multi-shot Pass A: structured contradiction check. Soft-
             // fails to None — Pass B then proceeds without an explicit
             // "what may be missing" cue.
+            let pass_a_start = std::time::Instant::now();
             let contradiction = self
                 .detect_contradiction(message, &context.memories)
                 .await;
+            metrics.pass_a_ms = Some(pass_a_start.elapsed().as_millis() as u64);
 
-            let mut s = self.build_compact_relational_system_message(context);
+            let mut s = self.build_compact_relational_system_message(context, message);
 
             // Pass A → Pass B handoff. When the detector found a
             // concrete factual tension, name it explicitly in the
@@ -7282,16 +7393,11 @@ impl Runtime {
                      \u{2022} Prior: {prior}\n\
                      \u{2022} Now: {now}\n\
                      \n\
-                     Reply shape for this turn — three small moves, in \
-                     order, EACH ONE SHORT SENTENCE (the whole reply under \
-                     500 characters). Not a template to recite:\n\
+                     Three small moves, in order — not a template to recite:\n\
                        1. Name what they said, specifically.\n\
                        2. Surface the prior — name it, don't smooth it \
                           into agreement.\n\
-                       3. Hand the decision back with at most ONE real \
-                          question. The question is the easy off-ramp.\n\
-                     If your draft runs longer than three sentences, you \
-                     are explaining instead of witnessing — cut.",
+                       3. Hand the decision back with one real question.",
                     prior = c.prior_evidence,
                     now = c.current_claim,
                 ));
@@ -7379,7 +7485,9 @@ impl Runtime {
             model_id: None,
             enable_thinking,
         };
+        let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
+        metrics.synthesis_ms = Some(synth_start.elapsed().as_millis() as u64);
         // Strip the thinking trace before persisting the assistant
         // turn. With `enable_thinking: true` flipped on for the
         // relational branch, the chat template prepends `<think>` to
@@ -7407,7 +7515,15 @@ impl Runtime {
             })),
             version: 0,
         };
-        Ok(Response { message: response_msg, task: None })
+        Ok(Response {
+            message: response_msg,
+            task: None,
+            metrics: if register == SkillRegister::Relational {
+                Some(metrics)
+            } else {
+                None
+            },
+        })
     }
 
     /// Handle MetalingualQuery: source-anchored vocabulary lookup.
@@ -7537,6 +7653,7 @@ impl Runtime {
             return Ok(Response {
                 message: response_msg,
                 task: None,
+                metrics: None,
             });
         }
 
@@ -7612,6 +7729,7 @@ impl Runtime {
         Ok(Response {
             message: response_msg,
             task: None,
+            metrics: None,
         })
     }
 
@@ -7756,6 +7874,7 @@ impl Runtime {
         Ok(Response {
             message: assistant_msg,
             task: None,
+            metrics: None,
         })
     }
 
@@ -7814,7 +7933,7 @@ impl Runtime {
             };
             self.store.save_message(&assistant_msg).await?;
             self.spawn_auto_title(conversation_id);
-            return Ok(Response { message: assistant_msg, task: None });
+            return Ok(Response { message: assistant_msg, task: None, metrics: None });
         }
 
         tracing::info!(
@@ -8002,6 +8121,7 @@ impl Runtime {
         Ok(Response {
             message: assistant_msg,
             task: None,
+            metrics: None,
         })
     }
 
@@ -8267,6 +8387,7 @@ impl Runtime {
         Ok(Response {
             message: assistant_msg,
             task: Some(task),
+            metrics: None,
         })
     }
 }

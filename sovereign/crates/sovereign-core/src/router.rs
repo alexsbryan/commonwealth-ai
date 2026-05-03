@@ -552,6 +552,14 @@ Reply with ONLY the letter: A, B, or C"#
         let lower = message.to_lowercase();
 
         // Explicit analysis/comparison directives — unambiguous DeepQuery signals.
+        // Iter6: added structural causal patterns ("how did X / why
+        // did X" causal openers, "what were the consequences/causes
+        // of X", "what led to X / what caused X", "contribute to" /
+        // "contributed to"). These are general-purpose: they match
+        // any causal question regardless of domain. Surface-y
+        // patterns that only matched specific bank questions
+        // ("is contested today", "shape the", "shaped the") were
+        // explicitly NOT added — those were teaching to the test.
         let analysis_markers = [
             "compare", "contrast", "analyze", "analyse",
             "explain how", "explain why", "explain the difference",
@@ -564,6 +572,14 @@ Reply with ONLY the letter: A, B, or C"#
             "summarize the", "summarise the",
             "history of", "overview of", "evolution of",
             "how have", "how has",
+            // Structural causal patterns (general — any causal-shape
+            // question, not bank-specific):
+            "how did", "why did",
+            "what were the consequences", "what were the effects",
+            "what were the causes", "what were the implications",
+            "what led to", "what caused",
+            "contribute to", "contributed to",
+            "influence on", "influenced the",
         ];
 
         // Complex conceptual domains where even short questions require reasoning.
@@ -861,6 +877,70 @@ Reply with ONLY the letter: A, B, or C"#
             "remind me on ", "remind me in ",
         ];
         COMMITMENT_MARKERS.iter().any(|m| lower.contains(m))
+    }
+
+    /// Heuristic check: factual-lookup shape — the message opens
+    /// with a single-clause "what is/was X" / "who is/was X" /
+    /// "when did/was X" / "where is/was X". Iter6 pre-check added
+    /// to bypass the LLM Pass 1 (median ~3s on the 4B fast slot)
+    /// for unambiguous lookups.
+    ///
+    /// High-precision floor:
+    /// - Lookup-verb opener (first ~6 words contain the trigger).
+    /// - No analytical markers ("and what", "compared to",
+    ///   "compatible", "and how", etc.) — those go through
+    ///   `needs_deep_reasoning` first; this fires only when the
+    ///   message is a clean single-clause lookup.
+    /// - Skipped on long messages (>15 words) — the longer the
+    ///   message, the more likely it embeds a multi-clause shape
+    ///   the LLM should resolve.
+    fn looks_like_factual_lookup(message: &str) -> bool {
+        let lower = message.to_lowercase();
+        let word_count = message.split_whitespace().count();
+        if word_count > 15 {
+            return false;
+        }
+
+        // Opener triggers — checked at the start of the message
+        // (allowing leading punctuation but not nested clauses).
+        const LOOKUP_OPENERS: &[&str] = &[
+            "what is ", "what was ", "what are ", "what were ",
+            "who is ", "who was ", "who are ", "who were ",
+            "when is ", "when was ", "when did ", "when does ",
+            "where is ", "where was ", "where are ",
+            "which ", // "which X is Y" — selection lookup
+            "name the ", "name a ", // direct lookup imperative
+        ];
+        // Trim leading punctuation/whitespace to test opener
+        // positions like "What is X?" or "  who was X?".
+        let trimmed = lower.trim_start_matches(|c: char| !c.is_alphanumeric());
+        let has_opener = LOOKUP_OPENERS.iter().any(|m| trimmed.starts_with(m));
+        if !has_opener {
+            return false;
+        }
+
+        // Multi-clause / analytical exclusions. These drag the
+        // message into deep-reasoning territory regardless of the
+        // lookup opener.
+        const ANALYTICAL_EXCLUSIONS: &[&str] = &[
+            " and what ", " and how ", " and why ",
+            " and were ", " and is ",
+            " compared to ", " compared with ",
+            " compatible ", " incompatible ",
+            " differ ", " differs ", " differences ",
+            " consequences ", " implications ", " causes ",
+            " contributed ", " contribute to ",
+            " led to ", " caused ", " influenced ",
+            " significance ", // "what is the significance of X" — borderline
+            " role of ", // "what was the role of X in Y" — multi-relation
+            " contested ", " debated ",
+            " arguments for ", " arguments against ",
+        ];
+        if ANALYTICAL_EXCLUSIONS.iter().any(|m| lower.contains(m)) {
+            return false;
+        }
+
+        true
     }
 
     /// Heuristic check: does this message lead with (or contain) a
@@ -1403,8 +1483,14 @@ impl Router for LlmRouter {
                 ),
                 coarse_intent: Some("TOPIC_CONTINUITY".to_string()),
                 self_assessment: None,
+                timing: None,
             });
         }
+
+        // Iter6: time the pre-check chain, the LLM Pass 1 (when it
+        // fires), and the parse step separately so the iter5
+        // routing slice (median 6s) can be diagnosed.
+        let precheck_start = Instant::now();
 
         // Pre-check 0: conation shape → force CONATION. Short imperative
         // directed at the assistant about the prior turn ("stop", "try
@@ -1504,6 +1590,31 @@ impl Router for LlmRouter {
             && !force_content_reasoning
             && Self::needs_deep_reasoning(message);
 
+        // Pre-check 5: factual-lookup shape → force LOOKUP. Single-
+        // clause "what is/was X", "who is/was X", "when did X",
+        // "where is/was X" patterns. Iter6: each catch saves a ~3s
+        // LLM Pass 1 call. High-precision floor — requires the
+        // lookup verb at the message start (no "and" / "but" /
+        // multi-clause), no analytical markers (those would have
+        // caught earlier in `force_deep`).
+        let force_lookup = !force_conation
+            && !force_action
+            && !force_metalingual
+            && !force_commissive
+            && !force_comparison
+            && !force_expressive
+            && !force_content_reasoning
+            && !force_deep
+            && Self::looks_like_factual_lookup(message);
+
+        // Iter6: pre-check chain done. Cap timer here — anything
+        // after this is either zero-cost branch selection or the
+        // LLM Pass 1.
+        let precheck_ms = precheck_start.elapsed().as_millis() as u64;
+        let mut llm_ms: u64 = 0;
+        let mut parse_ms: u64 = 0;
+        let mut used_llm = false;
+
         // Pass 1: Coarse classification (skipped for pre-checked cases).
         let coarse = if force_conation {
             CoarseClassification {
@@ -1558,6 +1669,12 @@ impl Router for LlmRouter {
                 confidence: 1.0,
                 rationale: Some("analytical/compatibility signal → deep reasoning".to_string()),
             }
+        } else if force_lookup {
+            CoarseClassification {
+                intent: "LOOKUP".to_string(),
+                confidence: 1.0,
+                rationale: Some("factual-lookup shape (what/who/when/where) → knowledge query".to_string()),
+            }
         } else {
             let pass1_prompt = Self::build_pass1_prompt(
                 message,
@@ -1573,8 +1690,14 @@ impl Router for LlmRouter {
             // can run out at this budget on verbose rationales — bump
             // to 120 ONLY if a small fast slot is in use (set the
             // bumped value via a knob if/when we wire one up).
+            used_llm = true;
+            let llm_start = Instant::now();
             let pass1_response = self.classify_call_json(pass1_prompt, 60).await?;
-            Self::parse_coarse(&pass1_response)
+            llm_ms = llm_start.elapsed().as_millis() as u64;
+            let parse_start = Instant::now();
+            let parsed = Self::parse_coarse(&pass1_response);
+            parse_ms = parse_start.elapsed().as_millis() as u64;
+            parsed
         };
 
         let (intent, self_assessment_outcome) = match coarse.intent.as_str() {
@@ -1650,6 +1773,12 @@ impl Router for LlmRouter {
             rationale: coarse.rationale.clone(),
             coarse_intent: Some(coarse.intent),
             self_assessment: self_assessment_outcome,
+            timing: Some(crate::types::RoutingTiming {
+                precheck_ms,
+                llm_ms,
+                parse_ms,
+                used_llm,
+            }),
         })
     }
 }

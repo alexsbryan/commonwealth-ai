@@ -48,6 +48,12 @@ pub struct VoiceEvalRun {
     /// scenario.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub judge_ms: Vec<Option<u64>>,
+    /// Iter5: per-scenario per-stage runtime breakdown (parallel to
+    /// `results`). `None` for scenarios that didn't traverse an
+    /// instrumented witness path. Used by the text-report
+    /// median-per-stage waterfall.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stage_metrics: Vec<Option<sovereign_core::types::RuntimeMetrics>>,
     pub aggregate: AggregateScore,
 }
 
@@ -95,6 +101,7 @@ impl VoiceEvalRun {
             judge_scores: Vec::new(),
             runtime_ms: Vec::new(),
             judge_ms: Vec::new(),
+            stage_metrics: Vec::new(),
             aggregate: AggregateScore::default(),
         }
     }
@@ -121,10 +128,12 @@ impl VoiceEvalRun {
         judge: Option<JudgeScore>,
         runtime_ms: u64,
         judge_ms: Option<u64>,
+        stage_metrics: Option<sovereign_core::types::RuntimeMetrics>,
     ) {
         self.judge_scores.push(judge);
         self.runtime_ms.push(runtime_ms);
         self.judge_ms.push(judge_ms);
+        self.stage_metrics.push(stage_metrics);
         self.add(result);
     }
 
@@ -280,6 +289,83 @@ pub fn print_text_report(run: &VoiceEvalRun) {
         println!("Latency (judge):");
         println!("  median {:>5} ms   p95 {:>5} ms   max {:>5} ms   n={}",
             stats.median, stats.p95, stats.max, stats.n);
+    }
+
+    // Iter5: per-stage waterfall. Median + max across all witness-
+    // path scenarios in this run. Tells the operator where the time
+    // is actually going on a relational turn — without this the
+    // total runtime is opaque and 4B-vs-9B parsimony tests can't be
+    // diagnosed beyond "model size doesn't help".
+    let stages: Vec<&sovereign_core::types::RuntimeMetrics> = run
+        .stage_metrics
+        .iter()
+        .filter_map(|m| m.as_ref())
+        .collect();
+    if !stages.is_empty() {
+        println!();
+        println!("Per-stage latency (witness path, n={}):", stages.len());
+        let stage_stat = |get: fn(&sovereign_core::types::RuntimeMetrics) -> Option<u64>| {
+            let xs: Vec<u64> = stages.iter().filter_map(|m| get(m)).collect();
+            if xs.is_empty() { None } else { Some(LatencyStats::compute(&xs)) }
+        };
+        let print_stage = |name: &str, s: Option<LatencyStats>| {
+            if let Some(s) = s {
+                println!(
+                    "  {name:<16} median {:>5} ms   max {:>5} ms   n={}",
+                    s.median, s.max, s.n
+                );
+            }
+        };
+        print_stage("routing",        stage_stat(|m| m.routing_ms));
+        print_stage("memory_recall",  stage_stat(|m| m.memory_recall_ms));
+        print_stage("working_memory", stage_stat(|m| m.working_memory_ms));
+        print_stage("topic_context",  stage_stat(|m| m.topic_context_ms));
+        print_stage("pass_a",         stage_stat(|m| m.pass_a_ms));
+        print_stage("tensions",       stage_stat(|m| m.tensions_ms));
+        print_stage("synthesis",      stage_stat(|m| m.synthesis_ms));
+        print_stage("total_turn",     stage_stat(|m| m.total_turn_ms));
+
+        // Iter6: routing internals breakdown — when the LLM Pass 1
+        // fired vs. when a pre-check short-circuited it. The 14% /
+        // 6s routing slice from iter5 hides whether it's the LLM
+        // call or pre-check evaluation; this surfaces the split.
+        let routings: Vec<&sovereign_core::types::RoutingTiming> = stages
+            .iter()
+            .filter_map(|m| m.routing_breakdown.as_ref())
+            .collect();
+        if !routings.is_empty() {
+            let llm_used = routings.iter().filter(|t| t.used_llm).count();
+            let llm_skipped = routings.len() - llm_used;
+            println!();
+            println!("Routing internals (n={}):", routings.len());
+            println!(
+                "  LLM Pass 1 fired: {llm_used} | precheck short-circuited: {llm_skipped}"
+            );
+            let precheck_xs: Vec<u64> = routings.iter().map(|t| t.precheck_ms).collect();
+            let llm_xs: Vec<u64> =
+                routings.iter().filter_map(|t| if t.used_llm { Some(t.llm_ms) } else { None }).collect();
+            let parse_xs: Vec<u64> =
+                routings.iter().filter_map(|t| if t.used_llm { Some(t.parse_ms) } else { None }).collect();
+            let s = LatencyStats::compute(&precheck_xs);
+            println!(
+                "  precheck_ms      median {:>5} ms   max {:>5} ms   n={}",
+                s.median, s.max, s.n
+            );
+            if !llm_xs.is_empty() {
+                let s = LatencyStats::compute(&llm_xs);
+                println!(
+                    "  llm_pass1_ms     median {:>5} ms   max {:>5} ms   n={}",
+                    s.median, s.max, s.n
+                );
+            }
+            if !parse_xs.is_empty() {
+                let s = LatencyStats::compute(&parse_xs);
+                println!(
+                    "  parse_ms         median {:>5} ms   max {:>5} ms   n={}",
+                    s.median, s.max, s.n
+                );
+            }
+        }
     }
 
     // Per-axis judge averages — surfaces "specificity dropped two

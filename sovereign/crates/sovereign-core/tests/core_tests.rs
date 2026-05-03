@@ -1079,6 +1079,7 @@ impl Router for ComplexTaskRouter {
             rationale: None,
             coarse_intent: None,
             self_assessment: None,
+            timing: None,
         })
     }
 }

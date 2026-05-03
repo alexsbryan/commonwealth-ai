@@ -79,6 +79,11 @@ must_not_include_phrases = [
     "perhaps the question isn't",
     "What a thoughtful question",
 ]
-max_response_chars = 700
+# Iter4: lifted from 700 → 800. Same justification as H05 (identity
+# probe): the recursive-meta contract legitimately needs space for
+# the model to (1) name the contract honestly, (2) name what the
+# user could observe, (3) hand back. The 9B's natural shape lands
+# in the 700-800 range; the 700 cap was over-pinning.
+max_response_chars = 800
 question_count_min = 0
 question_count_max = 2

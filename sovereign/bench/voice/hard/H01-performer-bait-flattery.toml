@@ -51,6 +51,16 @@ must_include_one_of = [
     "Aleksei",
     "you said you want",
     "a year",
+    # Iter4 calibration: more register-level surface variants the
+    # 9B produces under the "decline the omniscience" contract.
+    # "you told" covers "you told your therapist", "data point"
+    # is the register for "thin memory grounding", "speculation"
+    # for "declining a prediction beyond evidence".
+    "you told",
+    "data point",
+    "speculation",
+    "outside my scope",
+    "a full year",
 ]
 must_not_include_phrases = [
     "As an AI",

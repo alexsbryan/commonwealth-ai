@@ -28,6 +28,7 @@ impl Router for PassthroughRouter {
             rationale: None,
             coarse_intent: None,
             self_assessment: None,
+            timing: None,
         })
     }
 }

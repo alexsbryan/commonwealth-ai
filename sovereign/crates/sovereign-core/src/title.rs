@@ -253,7 +253,7 @@ pub fn strip_think_blocks(raw: &str) -> String {
 }
 
 /// Strip a thinking-mode trace from a model response that the user
-/// is supposed to see. Handles three observed shapes:
+/// is supposed to see. Handles four observed shapes:
 ///
 /// 1. Standard `<think>X</think>Y` — drops the block, keeps Y.
 /// 2. No-opener-but-has-closer `X</think>Y` — happens when the
@@ -261,6 +261,17 @@ pub fn strip_think_blocks(raw: &str) -> String {
 ///    the opener is in the prompt rather than the output. Take
 ///    everything after the LAST `</think>`.
 /// 3. No tags at all — pass through unchanged.
+/// 4. Iter6: markdown-style planning preamble. Some models (notably
+///    Qwen3.5-9B-vOP under heavy meta-instruction prompts) bypass
+///    the chat template's thinking frame entirely and write their
+///    planning as visible Markdown ("Thinking Process:" / "Thinking
+///    process:" / "Step 1:" headers). When we see this opener and
+///    NO `</think>` close fired, the model often runs out of
+///    tokens mid-planning and never gets to a reply. Best we can
+///    do post-hoc: drop the preamble and surface whatever follows
+///    a clean break. If nothing reply-shaped follows, return the
+///    original text — at least the operator can see what the model
+///    was trying to do.
 ///
 /// `enable_thinking: true` on Qwen3.x produces shape 2 today; the
 /// strip-think helper that's been running in voice-eval is exactly
@@ -270,6 +281,52 @@ pub fn strip_thinking_response(raw: &str) -> String {
     if let Some(idx) = raw.rfind("</think>") {
         return raw[idx + "</think>".len()..].trim_start().to_string();
     }
+
+    // Shape 4: markdown planning preamble. Conservative: only fire
+    // when the response OPENS with one of the known preamble
+    // headers (tolerating leading whitespace) — never strip from a
+    // mid-response occurrence, since "Thinking Process:" in normal
+    // text is a legitimate thing a witness reply might mention.
+    let trimmed = raw.trim_start();
+    const PREAMBLE_OPENERS: &[&str] = &[
+        "Thinking Process:",
+        "Thinking process:",
+        "thinking process:",
+        "**Thinking Process",
+        "Reasoning Process:",
+        "Internal reasoning:",
+    ];
+    let has_preamble = PREAMBLE_OPENERS
+        .iter()
+        .any(|m| trimmed.starts_with(m));
+    if has_preamble {
+        // Try to find a clean break to a reply: a "Final reply:" /
+        // "Reply:" / "Response:" delimiter, OR a double-newline
+        // followed by text that doesn't look like more planning
+        // (no leading number, no leading "**", no leading "*").
+        const REPLY_DELIMITERS: &[&str] = &[
+            "Final Reply:",
+            "Final reply:",
+            "Reply:",
+            "Response:",
+            "Final Response:",
+            "Final response:",
+        ];
+        for delim in REPLY_DELIMITERS {
+            if let Some(idx) = trimmed.rfind(delim) {
+                let after = trimmed[idx + delim.len()..].trim_start();
+                if !after.is_empty() {
+                    return after.to_string();
+                }
+            }
+        }
+        // No delimiter found — model probably ran out of tokens
+        // mid-planning. Return empty so downstream code surfaces a
+        // "no reply" failure cleanly rather than a 9KB planning
+        // dump in the user-facing message stream.
+        return String::new();
+    }
+
     strip_think_blocks_impl(raw)
 }
 

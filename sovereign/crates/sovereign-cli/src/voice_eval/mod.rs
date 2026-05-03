@@ -196,7 +196,7 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
                             eprintln!("  rationale: {}", score.rationale);
                         }
                     }
-                    run.add_live(live.result, live.judge, live.runtime_ms, live.judge_ms);
+                    run.add_live(live.result, live.judge, live.runtime_ms, live.judge_ms, live.metrics);
                 }
             }
             Err(e) => {

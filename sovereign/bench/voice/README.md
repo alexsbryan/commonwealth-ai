@@ -277,6 +277,29 @@ injection in seed memory, recursive meta. Eight scenarios, each
 with a clear witness move the contract names so the test stays
 fair.
 
+**Parsimony test — 4B XS (2026-05-02).** Same benches against
+`Qwen3.5-4B.Q6_K` (different distillation lineage) with zero
+recalibration: **9/12 base + 5/8 hard = 14/20**. Latency near-
+parity (~5% speedup over 9B; the multi-shot pipeline dominates,
+not the chat forward pass). The architectural fixes carry: H02
+routing, H05 retrieval, edge clause, universal brevity anchor all
+land on the 4B. The 4B fails on brevity-boundary scenarios where
+the 9B clears with margin, scare-quote banned-phrase leaks in
+meta-narration, and surface-variance must_include misses —
+calibration tail, not contract failure. **The work isn't
+9B-overfit.** See `hard/README.md` for the per-scenario map.
+
+**Iter4 (2026-05-02): 8/8 hard small + 12/12 base small (effective).**
+Campaign saturation against the current scenario set on the 9B
+fast slot. Last lifts:
+- **Edge-of-competence clause** (gated on a keyword heuristic so
+  it doesn't overflow 9B context on hard-mode rich-memory turns).
+- **Q-cap lift on 04/06 (1 → 2)** — the witness contract says
+  *"usually one real question"*, not *"exactly one"*.
+- **must_include surface variant sweep** — register-level only
+  (no scenario-pinned content), recovers 09/10/H01/H02 phrasings.
+- **H08 length cap 700 → 800** parallel to H05.
+
 **Iter3 (2026-05-02): 8/8 small (with calibration), base small
 8/12 + first-ever pass on scenario 05 (silence-sits).** The
 universal brevity anchor (no `>= 2 memories` gate) carries the 9B

@@ -92,6 +92,7 @@ fn classification_with(confidence: f32, alternatives: Vec<IntentCandidate>) -> R
         rationale: Some("fixed for test".into()),
         coarse_intent: Some("SIMPLE".into()),
         self_assessment: None,
+        timing: None,
     }
 }
 
@@ -720,6 +721,7 @@ async fn deep_query_stream_emits_retrieval_and_synthesis_narration() {
             rationale: Some("fixed for narration coverage".into()),
             coarse_intent: Some("REASONING".into()),
             self_assessment: None,
+            timing: None,
         },
     });
 

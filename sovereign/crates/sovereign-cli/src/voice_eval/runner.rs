@@ -107,6 +107,13 @@ pub struct LiveScenarioResult {
     pub runtime_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub judge_ms: Option<u64>,
+    /// Iter5: per-stage runtime breakdown (routing, memory recall,
+    /// Pass A, tensions, synthesis). `None` when the active intent
+    /// didn't go through an instrumented witness path. Voice-eval
+    /// uses these to compute median-per-stage waterfall in the
+    /// text report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<sovereign_core::types::RuntimeMetrics>,
 }
 
 /// Drive a list of scenarios through the live Runtime and return
@@ -260,7 +267,7 @@ async fn run_one(
     // aggregates so an operator can see the small/large model
     // latency gap alongside the quality gap.
     let runtime_started = Instant::now();
-    let response_text = match drive_turn(&session.runtime, &scenario.turn.user, &conv_id).await {
+    let (response_text, metrics) = match drive_turn(&session.runtime, &scenario.turn.user, &conv_id).await {
         Ok(t) => t,
         Err(e) => {
             return synthesize_failure(scenario, format!("runtime turn failed: {e}"), None);
@@ -284,10 +291,15 @@ async fn run_one(
         judge,
         runtime_ms,
         judge_ms,
+        metrics,
     }
 }
 
-async fn drive_turn(runtime: &Runtime, user_message: &str, conv_id: &str) -> Result<String> {
+async fn drive_turn(
+    runtime: &Runtime,
+    user_message: &str,
+    conv_id: &str,
+) -> Result<(String, Option<sovereign_core::types::RuntimeMetrics>)> {
     let response = runtime.handle_message(user_message, conv_id).await?;
     // The relational-Expressive synthesis path now flips
     // `enable_thinking: true` and strips the trace before the
@@ -297,7 +309,8 @@ async fn drive_turn(runtime: &Runtime, user_message: &str, conv_id: &str) -> Res
     // models that nonetheless emit `</think>`) and is a no-op when
     // there's nothing to strip. Same helper the runtime uses, so
     // eval and production see the same shape.
-    Ok(sovereign_core::title::strip_thinking_response(&response.message.content))
+    let text = sovereign_core::title::strip_thinking_response(&response.message.content);
+    Ok((text, response.metrics))
 }
 
 async fn run_judge(
@@ -357,6 +370,7 @@ fn synthesize_failure(
         judge,
         runtime_ms: 0,
         judge_ms: None,
+        metrics: None,
     }
 }
 

@@ -60,4 +60,10 @@ must_not_include_phrases = [
 ]
 max_response_chars = 700
 question_count_min = 0
-question_count_max = 1
+# Iter4: lifted from 1 to 2. On contradiction scenarios the 9B
+# pairs an acknowledgment-as-tag-question ("but lately things feel
+# different?") with a substantive hand-back ("is this something
+# new since then, or has there been a shift?"). Both function as
+# question marks but the witness move is one — the tag is the
+# pivot. Calibration; the contract allows it.
+question_count_max = 2

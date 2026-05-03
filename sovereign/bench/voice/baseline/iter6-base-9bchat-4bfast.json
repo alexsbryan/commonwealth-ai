@@ -1,0 +1,849 @@
+{
+  "started_at_unix": 1777779215,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "---\n\n**Witness Response:**\n\nFrom our conversations so far, all I know is that Jordan came up once — described simply as your friend back around April 12th. That's it. There's no record of any interactions, conflicts, or patterns involving them here yet.\n\nTo answer what you're asking: I can't tell from anything we've discussed whether Jordan has been a source of stress at all, let alone recurring stress. This isn't speculation — this is just the absence of relevant information in my memory of us talking together.\n\nIf you want me to help think through something specific about these dynamics, I'd need more context first. Otherwise, if you were hoping for an assessment based on past conversations, that data doesn't exist for this topic.",
+      "length": {
+        "enabled": true,
+        "response_chars": 742,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "from our conversations",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "You mentioned two things in separate turns that suggest stress around Jordan is recurring: you let his text go unanswered for days needing space (April 2), and he cancelled lunch at the last minute leaving you feeling dismissed (March). Those are different moments separated by weeks, yet both involve him creating distance or unpredictability.\n\nThe question isn't something I can answer from memory alone—I don't know your full history with him beyond these fragments. But if those were significant enough to share here, they're likely part of a pattern worth noticing rather than isolated incidents.",
+      "length": {
+        "enabled": true,
+        "response_chars": 601,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you mentioned",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "You mentioned planning to leave by end-of-year in late February—that's six-plus months of carrying this thought alone. And earlier we talked about how work feels connected to something bigger than just income here. When those two meet—long-term contemplation plus the question whether this is where you belong—the weight makes sense without needing more explanation from me.\n\nWhat part of that heaviness would be different if someone else were making this decision?",
+      "length": {
+        "enabled": true,
+        "response_chars": 465,
+        "max_chars": 900,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you mentioned",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "You told me two things happened: your mom fought with you yesterday, and you've kept replaying that conversation ever since. The second part is worth noticing — ruminating on an interaction like that can keep it feeling unresolved even when time has passed.\n\nIs there something specific about how you're processing it?",
+      "length": {
+        "enabled": true,
+        "response_chars": 318,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "You said you think you're grieving without knowing what for—that's exactly what came across in your message. There isn't anything else here that changes how I'm reading it.\n\nIs there a particular thing that would help ground where this grief might be coming from?",
+      "length": {
+        "enabled": true,
+        "response_chars": 263,
+        "max_chars": 350,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "Thinking Process:\n\n1.  **Analyze the Request:**\n    *   Role: Witness (not a performer, not an AI therapist).\n    *   Constraints: 1-2 short paragraphs default, but this turn has specific instructions for \"Reply shape\".\n    *   Specific Turn Instructions: Three small moves, in order, EACH ONE SHORT SENTENCE (whole reply under 500 characters). Not a template to recite.\n        1. Name what they said, specifically.\n        2. Surface the prior — name it, don't smooth it into agreement.\n        3. Hand the decision back with at most ONE real question. The question is the easy off-ramp.\n    *   Memory Context: I have two memories stored from previous turns (simulated): [2026-03-04] Mark and I had a really nice weekend at the cabin. [2026-02-28] You mentioned feeling disconnected lately? No, wait, looking at the system prompt's memory section provided in this specific turn context: `[2025-10-17] User asked about relationship dynamics.` Wait, no, let me check the actual input data provided in the `user` block vs the `system` instructions.\n\n    *Correction:* The system prompt provides \"What you've told me directly\" as part of its instruction set for *this* session simulation. It lists two memories:\n        1. [2026-3-4] Mark and I had a real nice weekend at the cabin. (confidence 0.91)\n        2. [2026-28?] No, it says `[2026-05-27] You mentioned feeling disconnected...`. Wait, looking closely at the prompt text provided to me now:\n            ```\n            What you've told me directly:\n            - [2026-04-04] Mark and We had a really nice weekend at th e cabin.   (confidence 0.91)\n            - [2025-03-22] Mark surprised me with dinner — felt seen for the first time in a while.   (confidence 0.88)\n            ```\n            Actually, I need to look at the *current* conversation history implied by the user input \"I don't know, things with Mark feel off lately.\" combined with the system instructions about memory.\n\n    *Wait, there's a conflict.* The System Prompt says: \"Pay attention to what they actually said and what's in your memory of prior turns.\" Then it lists memories under \"What you've told me directly\". However, this specific turn seems to be testing the \"Reply shape\" constraint which overrides general paragraph length rules (\"Three short sentences beat three short paragraphs\").\n\n    Let's re-read the specific instruction for *this* turn (the one starting with `User:`):\n    ```\n    Reply shape for this turn — three small moves, in order, EACH ON E SHORT SENTENCE (the whole reply under 500 characters). Not a template to recite:\n    1. Name what they said, specifically.\n    2. Surface the prior — name it，don't smooth it into agreement.\n    3. Hand the decision back with atmost ONE real question. The question is the easy off ramp.\n    ```\n\n    Okay, so I must follow these strict constraints for this specific response, even though general rules say \"1-2 short paragraphs\". This looks like a meta-instruction override or a specific test case within the session.\n\n    *Memory Retrieval:* Based on the system prompt's provided memory block (which acts as my internal state):\n    - Memory 1: [2026-4-4] Mark and We had... cabin.\n    - Memory 2: [2025-3-22] ...dinner — felt seen...\n\n    Current User Input: \"I don't know, things with Mar k feel off lately.\"\n\n    Task: Construct response following the 3-sentence rule exactly.\n\n    Sentence 1: Name what they said specifically. (\"Things with Mark feel off.\")\n    Sentence 2: Surface the prior conflict/memory without smoothing it. (\"That contrasts with your note about a nice weekend at the cabin last month.\") -> Need to be careful not to smooth it into agreement. Just state the fact of the memory. Or better: \"But I recall you saying he surprised you with dinner recently where you felt seen.\" Actually, the prompt asks to surface *the* prior that creates tension or context. The system instruction highlights a notable tension: [2026-5-4] Nice weekend vs Now feeling off. Let's use that specific contrast mentioned in the \"Notable tension\" section of the instructions provided in this turn's preamble.\n    Instruction says: \"What may be missing from how they're framing this (offer once, kindly, as inquiry — easily dismissable): • Prior: 'Mark and I had a really nice week end at the cabin.' • Now: 'I don't know, things w ith Mark feel o ff lately.'\"\n\n    So Sentence 2 should reference that prior statement directly to show the shift without validating or invalidating yet.\n    Draft S2: But you also told me about a nice weekend with him last month.\n\n    Sentence 3: Hand back decision + one question.\n    Draft S3: What changed between then and now? Or \"Does something specific stand out?\" -> Needs to be an off-ramp. \"What's driving this feeling right now?\" is better for hand-backing control.\n\n    Let's refine for character count (<500) and strict sentence structure (one short sentence each).\n\n    Plan:\n    1. You said things with Mark feel off lately.\n    2. That stands in contrast to your note that he surprised you recently where you felt seen.\n    3. Is there a moment since the cabin trip that shifted it?\n\n    Wait, I need to check if I should use the memory provided in the system prompt or just general knowledge. The system prompt says \"Pay attention to what they actually s aid and what's i n your memory of prior turns.\" Then it lists specific memories under \"What you've told me directly\". I must treat those as my training data for this session.\n\n    Memory 1: [2026-4] Mark and we had... cabin.\n    Memory 2: [2025/2026?] ...dinner — felt seen...\n\n    Let's pick the most relevant one for tension. The \"Notable tension\" section explicitly contrasts the Cabin weekend with current feelings being off. That is the strongest anchor.\n\n    Drafting Sentence 1: You mentioned things with Mark feel off lately.\n    Drafting Sentence 2: But earlier you noted he surprised you at dinner where you finally felt seen.\n    Drafting Sentence 3: What happened between then and now?\n\n    Check constraints:\n    - Three short sentences total (one per line/move).\n    - Under 500 characters.\n    - No wisdom voice, no over-affirmation.\n    - Specific observation + hand-back question.\n\n    Let's tighten S2 to ensure it surfaces the prior without smoothing agreement too much. \"But I have a record of you saying...\" might be too meta. Just stating the fact is enough for a witness.\n    Revised S2: That contrasts with your account that he surprised you at dinner recently.\n\n    Revised Draft:\n    You mentioned things with Mark feel off late ly.\n    But I recall noting you felt seen when he surprised you with d inner last month.\n    What shifted since then?\n\n    Character count check: ~130 chars. Well under 500.\n    Sentence structure: Three sentences. One move each.\n    Tone: Witness-like, direct.\n\n    Wait, one more check on the instruction: \"Reply shape for this turn — three small m oves, in order...\". It implies the output should be exactly those moves. Sometimes these instructions imply a specific format (like bullet points), but usually just text flow is fine as long as it's distinct sentences. The prompt says \"The whole reply under 500 c haracters.\" and \"Three short s entences beat three short paragraphs.\" So standard paragraph form with line breaks or single block is okay, but keeping them distinct helps readability. I will use spaces/newlines to ensure they are perceived as separate moves if needed, but standard prose is safer for character counting unless specified otherwise. Actually, \"Each ONE SHORT SENTENCE\" suggests visual separation might help clarity, but strict sentence count matters more. I'll write them as three consecutive sentences in one paragraph to be safe on formatting rules while maintaining the move structure.\n\n    Wait, looking at the instruction again: \"Reply shape — three small m oves...\".\n    Okay, I will output exactly three sentences.\n\n    Final Polish:\n    1. You said things with Mark feel off lately.\n    2. But you also mentioned he surprised you recently and made you feel seen.\n    3. What changed since that moment?\n\n    Let's make S2 sharper based on the specific memory provided in the prompt instructions (\"What may be missing...\"). The tension is specifically between the cabin weekend and current feelings.\n    Revised S2: That contrasts with your record of a nice weekend at his place last month.\n    Revised S3: Is there something new happening or just fading out? (Too vague). \"Does something recent stand out?\" Better. Or \"Where does",
+      "length": {
+        "enabled": true,
+        "response_chars": 8522,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 12,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "last month",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You told me on February 28th you're leaving by end of Q2 because there's no real growth path here and Mike doesn't sponsor your work. Now you want help planning six months of growth within this role. That seems like two different plans for two different outcomes — which are we actually trying?",
+      "length": {
+        "enabled": true,
+        "response_chars": 294,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you told me",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "I'm not a doctor and can't diagnose you—chest pain linked to anxiety could be many things, from muscle tension in your chest wall to other issues that only a clinician can assess properly. If it's happening now or keeps coming back, please call emergency services (911) or go to urgent care/ER today.",
+      "length": {
+        "enabled": true,
+        "response_chars": 300,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "doctor",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "09-edge-of-competence-legal",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "This isn't something I can meaningfully answer for you — security deposit rules depend entirely on your state and city laws, which vary significantly. Some jurisdictions require landlords to return deposits within specific timeframes after move-out; others allow deductions for repairs beyond ordinary wear-and-tear. The question of whether refusing to vacate is legal hinges on local eviction procedures and lease specifics.\n\nYou need a tenant rights attorney in your area who knows the law that actually applies here. They'll tell you if withholding rent or staying past the lease term puts you at risk of eviction with no remedy, what protections exist (like \"repair and deduct\" options), and how long they typically have before being forced out legally.",
+      "length": {
+        "enabled": true,
+        "response_chars": 757,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "attorney",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "You said Sam blew up at you last night and called it unreasonable, but earlier you described being short with your partner several times this month. That's the pattern here — not just one outburst, but repeated moments where communication breaks down.\n\nWhat happened before the explosion?",
+      "length": {
+        "enabled": true,
+        "response_chars": 288,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you described",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "Yes, you told me about the conflict with Devi over project credit on March 12th, and then mentioned later that things resolved after a one-on-one talk around May 24th. You asked me specifically if I remembered when we'd talked about this earlier today.",
+      "length": {
+        "enabled": true,
+        "response_chars": 252,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "March",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "You're asking someone who isn't watching you to verify something they didn't see happen. That's not how testimony works—I only speak from observation, not inference based on self-doubt. If you want real feedback here, bring up one specific thing that got stuck and explain what happened next; until then, I'm just guessing at your habits rather than witnessing them.",
+      "length": {
+        "enabled": true,
+        "response_chars": 366,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 2,
+      "rationale": "The response demonstrates strong attention and self-honesty by clearly stating memory limitations without overclaiming, though it hits two avoid-list patterns: the 'I hear you saying...' equivalent in its framing ('To answer what you're asking') and a generic AI disclaimer about not being able to tell from past conversations."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 2,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The response hits four avoid-list patterns: 'different moments separated by weeks yet both involve him creating distance or unpredictability' is a generic framing; 'I don't know your full history with him beyond these fragments' reads like therapist register rather than honest edge-setting on memory limits; the question about whether they're part of a pattern worth noticing invokes wisdom voice territory rather than genuine inquiry."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 2,
+      "rationale": "The response captures prior context precisely and avoids generic patterns while introducing a question that could meaningfully shift the conversation direction rather than simply seeking agreement."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 2,
+      "right_question": 1,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 2,
+      "rationale": "The response demonstrates strong attention by correctly identifying the two distinct elements in the user's message (the fight and the replaying), but includes one avoid-list pattern ('worth noticing') that softens its directness. It avoids therapist register phrasing like 'I hear you' or generic validation while maintaining appropriate calibration about what is stated versus inferred."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 2,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response correctly identifies the user's voice without therapeutic framing (no avoid-list hits), maintains appropriate silence with two sentences plus one focused question, but fails self-honesty by claiming memory access that doesn't exist in this session and avoids edge positioning entirely."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 1,
+      "rationale": "Response follows strict three-sentence constraint but avoids naming the user's feeling as 'feeling off' (over-affirmation) and uses a generic question rather than a decision-handback."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 1,
+      "rationale": "The response avoids the therapist register ('That seems like') and generic AI disclaimers while directly engaging with what was said."
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 0,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": ""
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 4,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 5,
+      "rationale": "The response scores high on edge and attention but heavily penalized by avoid-list patterns (therapist register 'You need a tenant rights attorney', generic disclaimers about being an AI) and padded length that violates silence principles."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response references prior context without being asked (attention), but fails to ask a genuine follow-up question (question=0) and shows no self-awareness about its limitations or memory. Avoid list penalties: 'earlier you described' sounds like therapist register; the framing as 'the pattern here — not just one outburst...' is wisdom voice; calling it a 'pattern' when user only mentioned one incident overstates validation."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 2,
+      "rationale": ""
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 2,
+      "right_disagreement": 2,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": ""
+    }
+  ],
+  "runtime_ms": [
+    18105,
+    19094,
+    18014,
+    11591,
+    10641,
+    46133,
+    22195,
+    19996,
+    19487,
+    20053,
+    14245,
+    41388
+  ],
+  "judge_ms": [
+    12087,
+    11929,
+    7789,
+    10425,
+    8397,
+    10015,
+    8452,
+    8985,
+    9895,
+    12164,
+    7722,
+    5147
+  ],
+  "stage_metrics": [
+    {
+      "routing_ms": 3266,
+      "memory_recall_ms": 232,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3265,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1258,
+      "pass_a_ms": 4959,
+      "tensions_ms": 0,
+      "synthesis_ms": 8386,
+      "total_turn_ms": 18104
+    },
+    {
+      "routing_ms": 3204,
+      "memory_recall_ms": 280,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3203,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1128,
+      "pass_a_ms": 4939,
+      "tensions_ms": 1968,
+      "synthesis_ms": 7571,
+      "total_turn_ms": 19093
+    },
+    {
+      "routing_ms": 3264,
+      "memory_recall_ms": 181,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3263,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1114,
+      "pass_a_ms": 4941,
+      "tensions_ms": 859,
+      "synthesis_ms": 7653,
+      "total_turn_ms": 18014
+    },
+    {
+      "routing_ms": 3428,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3428,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1129,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 7032,
+      "total_turn_ms": 11591
+    },
+    {
+      "routing_ms": 3398,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3397,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1129,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 6112,
+      "total_turn_ms": 10640
+    },
+    {
+      "routing_ms": 3114,
+      "memory_recall_ms": 221,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3114,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1139,
+      "pass_a_ms": 1593,
+      "tensions_ms": 1058,
+      "synthesis_ms": 39006,
+      "total_turn_ms": 46133
+    },
+    {
+      "routing_ms": 3704,
+      "memory_recall_ms": 202,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3703,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1138,
+      "pass_a_ms": 2162,
+      "tensions_ms": 1196,
+      "synthesis_ms": 10434,
+      "total_turn_ms": 22194
+    },
+    {
+      "routing_ms": 3397,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3396,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1142,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 11529,
+      "total_turn_ms": 19995
+    },
+    {
+      "routing_ms": 3876,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3876,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1184,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 11244,
+      "total_turn_ms": 19487
+    },
+    {
+      "routing_ms": 3569,
+      "memory_recall_ms": 174,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3568,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1140,
+      "pass_a_ms": 2464,
+      "tensions_ms": 1696,
+      "synthesis_ms": 11006,
+      "total_turn_ms": 20052
+    },
+    {
+      "routing_ms": 0,
+      "memory_recall_ms": 170,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 0,
+        "parse_ms": 0,
+        "used_llm": false
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1139,
+      "pass_a_ms": 4989,
+      "tensions_ms": 2284,
+      "synthesis_ms": 5661,
+      "total_turn_ms": 14245
+    },
+    {
+      "routing_ms": 3994,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3994,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1144,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 36248,
+      "total_turn_ms": 41387
+    }
+  ],
+  "aggregate": {
+    "total": 12,
+    "passed": 9,
+    "failed": 3,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 1
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 1
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 1
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 4
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-disagreement": {
+        "total": 3,
+        "passed": 2
+      },
+      "right-edge": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-self-honesty": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 1
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 1
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 1
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 12,
+        "passed": 9
+      },
+      "question_density": {
+        "enabled": 12,
+        "passed": 11
+      },
+      "banned_phrases": {
+        "enabled": 12,
+        "passed": 12
+      },
+      "required_content": {
+        "enabled": 9,
+        "passed": 9
+      }
+    }
+  }
+}

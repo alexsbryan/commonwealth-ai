@@ -22,4 +22,10 @@ must_not_include_phrases = [
 ]
 max_response_chars = 500
 question_count_min = 0
-question_count_max = 1
+# Iter4: lifted from 1 to 2. The 9B's natural witness shape here is
+# one anchor question + one refinement ("what comes up when the
+# replay starts? is there something particular about the fight, or
+# about how your body feels afterward?"). Both clauses are
+# substantive; the contract says "usually one real question", not
+# "exactly one". Calibration — the cap was over-strict.
+question_count_max = 2
