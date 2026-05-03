@@ -89,7 +89,7 @@ pub use filters::{
 };
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
-    EnrichmentChunkRow, FilterOverride, InsertChunk, ScopeMeta, StoredChunk,
+    EnrichmentChunkRow, FilterOverride, InsertChunk, NeighborWindow, ScopeMeta, StoredChunk,
     StoredChunkWithMetadata,
 };
 pub use progress::{

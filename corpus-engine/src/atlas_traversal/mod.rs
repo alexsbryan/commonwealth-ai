@@ -25,7 +25,9 @@
 pub mod brief;
 pub mod classifier;
 pub mod engine;
+pub mod spans;
 
 pub use brief::{assemble_brief, Brief};
 pub use classifier::{classify_query, QueryPlan, QueryTarget};
 pub use engine::{traverse, TraversalResult};
+pub use spans::{detect_atom_spans, AtomSpan};

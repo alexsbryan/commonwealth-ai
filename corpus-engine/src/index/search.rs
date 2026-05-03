@@ -2,7 +2,45 @@
 
 use std::collections::HashMap;
 
-use arrow_array::{Array, Float32Array, StringArray};
+use arrow_array::{Array, FixedSizeListArray, Float32Array, Int64Array, StringArray};
+
+/// Compute cosine distance (`1 - cos_sim`) between a row in a
+/// `FixedSizeListArray<Float32>` (the chunk's stored embedding) and
+/// the query embedding. Returns `None` when the row is null, the
+/// dimensions don't match, or either vector is zero-norm. The
+/// non-zero-norm guard matters because zero-vector embeddings have
+/// occasionally appeared in older ingest paths (qwen-embedding-0.6b
+/// returns zeros for empty content); cosine is undefined there and
+/// the caller should fall back to RRF score.
+fn cosine_distance_from_fixed_list(
+    list: &FixedSizeListArray,
+    row: usize,
+    query: &[f32],
+) -> Option<f32> {
+    if list.is_null(row) || query.is_empty() {
+        return None;
+    }
+    let value = list.value(row);
+    let arr = value.as_any().downcast_ref::<Float32Array>()?;
+    if arr.len() != query.len() {
+        return None;
+    }
+    let chunk_vec = arr.values();
+    let mut dot = 0.0f32;
+    let mut q_norm = 0.0f32;
+    let mut c_norm = 0.0f32;
+    for (q, c) in query.iter().zip(chunk_vec.iter()) {
+        dot += q * c;
+        q_norm += q * q;
+        c_norm += c * c;
+    }
+    let denom = (q_norm.sqrt()) * (c_norm.sqrt());
+    if denom <= 0.0 || !denom.is_finite() {
+        return None;
+    }
+    let sim = (dot / denom).clamp(-1.0, 1.0);
+    Some(1.0 - sim)
+}
 use futures::TryStreamExt;
 use lancedb::index::scalar::FullTextSearchQuery;
 use lancedb::query::{ExecutableQuery, QueryBase};
@@ -178,6 +216,21 @@ impl CorpusIndex {
             let metadata_col = batch
                 .column_by_name("metadata")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let id_col = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>());
+            let source_doc_id_col = batch
+                .column_by_name("source_doc_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            // The chunk's stored embedding survives in the result
+            // batch (hybrid path retains every base column). When
+            // do_vector is true we use it to compute a real cosine
+            // distance from the query — see `vector_distance` on
+            // ScoredChunk for why this matters for cross-corpus
+            // merge.
+            let embedding_col = batch
+                .column_by_name("embedding")
+                .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>());
             // LanceDB vector-only → _distance; hybrid → _relevance_score or _score.
             // Try all known column names so we can log which one is actually present.
             let distance_col = batch
@@ -245,6 +298,18 @@ impl CorpusIndex {
                     "CorpusIndex::search result"
                 );
 
+                let chunk_id = id_col.map(|c| c.value(i) as u64);
+                let source_doc_id = source_doc_id_col.and_then(|s| {
+                    if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                });
+                let vector_distance = if do_vector {
+                    embedding_col.and_then(|fl| {
+                        cosine_distance_from_fixed_list(fl, i, query_embedding)
+                    })
+                } else {
+                    None
+                };
+
                 scored.push(ScoredChunk {
                     content,
                     title,
@@ -252,6 +317,9 @@ impl CorpusIndex {
                     corpus_id: self.corpus_id.clone(),
                     score,
                     metadata,
+                    chunk_id,
+                    source_doc_id,
+                    vector_distance,
                 });
             }
         }
@@ -338,6 +406,12 @@ impl CorpusIndex {
             let metadata_col = batch
                 .column_by_name("metadata")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let id_col = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>());
+            let source_doc_id_col = batch
+                .column_by_name("source_doc_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
 
             for i in 0..batch.num_rows() {
                 let content = contents
@@ -367,6 +441,11 @@ impl CorpusIndex {
                     })
                     .unwrap_or_default();
 
+                let chunk_id = id_col.map(|c| c.value(i) as u64);
+                let source_doc_id = source_doc_id_col.and_then(|s| {
+                    if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                });
+
                 out.push(ScoredChunk {
                     content,
                     title: chunk_title,
@@ -377,6 +456,11 @@ impl CorpusIndex {
                     // search-scored chunks in a single rank.
                     score: 1.0,
                     metadata,
+                    chunk_id,
+                    source_doc_id,
+                    // Title-cohesion pulls don't run a vector query,
+                    // so there's no comparable distance to record.
+                    vector_distance: None,
                 });
             }
         }

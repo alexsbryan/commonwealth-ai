@@ -222,6 +222,37 @@ pub struct ScoredChunk {
     pub corpus_id: String,
     pub score: f32,
     pub metadata: HashMap<String, String>,
+    /// Stable LanceDB row id for the chunk. `None` for synthetic
+    /// chunks that don't correspond to a row (e.g. atlas-virtual
+    /// summaries, local-doc chunks with String ids). Consumers that
+    /// need to deref a citation back to the source — the desktop
+    /// reading surface, atom-span detection — require this id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_id: Option<u64>,
+    /// The document this chunk belongs to (for grouping neighbors and
+    /// for "elsewhere in this document" lookups). `None` when the
+    /// extractor doesn't tag chunks with a document id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_doc_id: Option<String>,
+    /// Raw cosine distance from the query embedding to this chunk's
+    /// stored embedding (`1 - cosine_similarity`, range `[0, 2]`,
+    /// lower = more semantically similar). Populated when search ran
+    /// with a non-empty query embedding AND the chunk batch carried
+    /// the `embedding` column.
+    ///
+    /// Why it lives alongside `score`: `score` collapses LanceDB's
+    /// `_distance` / `_relevance_score` (RRF) / `_score` (BM25) into
+    /// a single number to keep within-corpus ranking consistent. But
+    /// those three sources have different scales and DON'T compose
+    /// across corpora — RRF's `≈ 1/(60+rank)` saturation pattern
+    /// makes a small corpus's top-1 hit beat a large corpus's
+    /// semantically-better answer that happens to land at rank-1 in
+    /// only one of (vector, FTS). `vector_distance` is the
+    /// apples-to-apples signal cross-corpus consumers can sort by
+    /// to break that tie. `None` for FTS-only paths (no query
+    /// embedding) and for legacy callers that didn't request it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vector_distance: Option<f32>,
 }
 
 // ─── Ingest Result ──────────────────────────────────────

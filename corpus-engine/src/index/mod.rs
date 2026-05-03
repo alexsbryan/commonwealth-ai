@@ -3,8 +3,11 @@
 
 mod create;
 mod enrichment;
+mod read;
 mod search;
 mod write;
+
+pub use read::NeighborWindow;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -965,6 +968,102 @@ mod tests {
         idx.insert_batch(&sample_chunks()).await.unwrap();
 
         assert_eq!(idx.chunk_count().await.unwrap(), 4);
+    }
+
+    /// Build a small multi-doc fixture and assert that
+    /// `neighbors(center, 1)` returns the immediately-adjacent
+    /// chunks within the same `source_doc_id` and never crosses a
+    /// document boundary. This is the contract the desktop reading
+    /// surface depends on.
+    #[tokio::test]
+    async fn neighbors_respects_source_doc_boundary() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        // Two documents — doc-a has 3 chunks (ids 1,2,3), doc-b
+        // has 2 chunks (ids 4,5). insert_batch assigns ids
+        // base_id+1, base_id+2, ... so the first chunk in a fresh
+        // index lands at id=1.
+        let mut batch: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
+        for (i, content) in ["A0", "A1", "A2"].iter().enumerate() {
+            batch.push((
+                InsertChunk {
+                    content: (*content).into(),
+                    title: Some("Doc A".into()),
+                    url: None,
+                    metadata: None,
+                    content_hash: None,
+                    source_doc_id: Some("doc-a".into()),
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[1.0, 0.0, 0.0, 0.0]),
+            ));
+            let _ = i;
+        }
+        for content in ["B0", "B1"].iter() {
+            batch.push((
+                InsertChunk {
+                    content: (*content).into(),
+                    title: Some("Doc B".into()),
+                    url: None,
+                    metadata: None,
+                    content_hash: None,
+                    source_doc_id: Some("doc-b".into()),
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                make_embedding(&[0.0, 1.0, 0.0, 0.0]),
+            ));
+        }
+        idx.insert_batch(&batch).await.unwrap();
+
+        // Middle of doc-a → both neighbors present, both in doc-a.
+        let win = idx
+            .neighbors(2, 1)
+            .await
+            .unwrap()
+            .expect("center exists");
+        assert_eq!(win.center.content, "A1");
+        assert_eq!(win.prev.len(), 1);
+        assert_eq!(win.prev[0].content, "A0");
+        assert_eq!(win.next.len(), 1);
+        assert_eq!(win.next[0].content, "A2");
+
+        // End of doc-a (id 3 → A2) → prev is A1; next must be
+        // empty even though chunk id 4 (B0) exists, because B0 is
+        // in doc-b.
+        let win = idx
+            .neighbors(3, 1)
+            .await
+            .unwrap()
+            .expect("center exists");
+        assert_eq!(win.center.content, "A2");
+        assert_eq!(win.prev.len(), 1);
+        assert_eq!(win.prev[0].content, "A1");
+        assert!(
+            win.next.is_empty(),
+            "next must not bleed into doc-b, got {:?}",
+            win.next.iter().map(|r| &r.content).collect::<Vec<_>>()
+        );
+
+        // Start of doc-b (id 4 → B0) → no prev (doc-b has no
+        // earlier chunks), next is B1.
+        let win = idx
+            .neighbors(4, 1)
+            .await
+            .unwrap()
+            .expect("center exists");
+        assert_eq!(win.center.content, "B0");
+        assert!(win.prev.is_empty());
+        assert_eq!(win.next.len(), 1);
+        assert_eq!(win.next[0].content, "B1");
+
+        // Missing chunk → None, no panic.
+        let absent = idx.neighbors(99, 1).await.unwrap();
+        assert!(absent.is_none());
     }
 
     /// Build an InsertChunk with explicit content + content_hash so
