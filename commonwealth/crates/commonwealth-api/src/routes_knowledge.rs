@@ -180,6 +180,8 @@ pub async fn knowledge_search(
                                     url: r.url,
                                     score: r.score,
                                     metadata: HashMap::new(),
+                                    chunk_id: r.chunk_id,
+                                    source_doc_id: r.source_doc_id,
                                 }
                             }));
                         }
