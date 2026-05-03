@@ -1,3 +1,4 @@
+pub mod atlas_context;
 pub mod context;
 pub mod error;
 pub mod executor;

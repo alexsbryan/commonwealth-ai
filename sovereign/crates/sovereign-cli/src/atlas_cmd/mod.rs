@@ -20,6 +20,7 @@
 //! as additional sub-commands once Layer 0 has demonstrated bench
 //! gains.
 
+pub mod budget;
 pub mod wikipedia;
 
 use crate::util::help::{self, Help, HelpSection};
@@ -28,11 +29,17 @@ const HELP: Help = Help {
     command: "sovereign atlas",
     summary: "Atlas-style structural enrichment of a corpus (Wikipedia today).",
     sections: &[
-        HelpSection::Usage("sovereign atlas <pipeline> <subcommand> [args]"),
-        HelpSection::Subcommands(&[(
-            "wikipedia",
-            "Layer 0: build the link graph from Wikipedia extractor metadata.",
-        )]),
+        HelpSection::Usage("sovereign atlas <subcommand> [args]"),
+        HelpSection::Subcommands(&[
+            (
+                "wikipedia",
+                "Layer 0: build the link graph from Wikipedia extractor metadata.",
+            ),
+            (
+                "budget",
+                "Show or set the per-corpus Tier-2 enrichment budget (top-N articles).",
+            ),
+        ]),
         HelpSection::Notes(
             "Atlas commands operate against an already-installed corpus index. Install \
              the corpus first via `sovereign corpus install <id>` (or `sovereign \
@@ -54,8 +61,9 @@ pub async fn run_atlas(args: &[String]) -> i32 {
     }
     match first {
         "wikipedia" => wikipedia::run(&args[1..]).await,
+        "budget" => budget::run(&args[1..]).await,
         other => {
-            eprintln!("error: unknown atlas pipeline `{other}`");
+            eprintln!("error: unknown atlas subcommand `{other}`");
             help::print(&HELP);
             2
         }

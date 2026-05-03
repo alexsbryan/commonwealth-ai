@@ -371,6 +371,7 @@ mod tests {
             min_section_body_words: 0,
             toc_markers: None,
             max_output_tokens: 4096,
+            phase1b_max_output_tokens: None,
             created_at: "t".into(),
         };
         cfg.save().unwrap();

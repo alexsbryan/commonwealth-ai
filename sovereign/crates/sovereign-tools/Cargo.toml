@@ -5,6 +5,11 @@ edition.workspace = true
 
 [dependencies]
 sovereign-core = { workspace = true }
+# Atlas peer-advice (Phase C3) consumes `CorpusShardInfo` from
+# commonwealth-core's gossip schema. One-way dep: sovereign-tools
+# never re-enters commonwealth-* (path break is enforced by
+# rustc, not just convention).
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # `DriftTool` calls `sovereign_atos::approval::{find_approval,
 # detect_drift, current_spec_hash}` so its verdict matches the
 # daemon's approval_gate middleware exactly. The dep is one-way

@@ -54,6 +54,20 @@ pub struct DaemonInferenceClient {
     /// means "always use `chat_model`", preserving the historical
     /// single-model behaviour.
     chat_models_by_phase: BTreeMap<String, String>,
+    /// Per-phase output-token cap override. When a `ChatPrompt` arrives
+    /// tagged with a `phase_id` present in this map, the client uses
+    /// the mapped value as `max_tokens` for that request, instead of
+    /// the global `max_output_tokens`. Empty map (the default) means
+    /// every phase uses the global cap.
+    ///
+    /// Used to bound Phase 1b (entity / concept coverage). Those
+    /// passes run without a JSON-Schema constraint, so models with
+    /// thinking disabled (Qwen3 / Qwen3.5 with `/no_think`) elaborate
+    /// freely and routinely consume the entire 2048-token Phase-1
+    /// budget per pass — adding ~30s per chapter for limited extra
+    /// signal. A 1024 cap halves that without affecting the
+    /// schema-bound Phase 1 main.
+    max_tokens_by_phase: BTreeMap<String, u32>,
 }
 
 impl DaemonInferenceClient {
@@ -72,6 +86,7 @@ impl DaemonInferenceClient {
             embed_model: embed_model.into(),
             max_output_tokens: None,
             chat_models_by_phase: BTreeMap::new(),
+            max_tokens_by_phase: BTreeMap::new(),
         })
     }
 
@@ -99,6 +114,30 @@ impl DaemonInferenceClient {
         self
     }
 
+    /// Install per-phase max_tokens caps. Phases not in the map fall
+    /// through to the client-level `max_output_tokens`. Empty map is
+    /// a no-op.
+    pub fn with_max_tokens_by_phase(
+        mut self,
+        overrides: BTreeMap<String, u32>,
+    ) -> Self {
+        self.max_tokens_by_phase = overrides;
+        self
+    }
+
+    /// Resolve the max_tokens cap to apply to a prompt tagged with
+    /// `phase_id`. Per-phase override wins over the client-level cap.
+    /// Returns `None` when neither is set, meaning "let the daemon
+    /// decide".
+    fn resolve_max_tokens_for_phase(&self, phase_id: Option<&str>) -> Option<u32> {
+        if let Some(id) = phase_id {
+            if let Some(n) = self.max_tokens_by_phase.get(id) {
+                return Some(*n);
+            }
+        }
+        self.max_output_tokens
+    }
+
     /// Resolve which chat-model id this client will use for a prompt
     /// tagged with `phase_id`. Returns the override if present;
     /// otherwise the default `chat_model`.
@@ -117,20 +156,32 @@ impl DaemonInferenceClient {
     /// every enrich subcommand — keeps all the per-corpus config
     /// surfaces (timeout, output cap, phase-routing) consistent.
     pub fn from_enrich_config(cfg: &super::config::EnrichConfig) -> Result<Self> {
+        let mut max_tokens_by_phase: BTreeMap<String, u32> = BTreeMap::new();
+        if let Some(cap) = cfg.phase1b_max_output_tokens {
+            // Both Phase 1b coverage variants (entity + concept) share
+            // the same shape — schema-free, output-bloated under
+            // thinking-disabled models. Apply the cap to both.
+            max_tokens_by_phase.insert("phase1b_entity".to_string(), cap);
+            max_tokens_by_phase.insert("phase1b_concept".to_string(), cap);
+        }
         Ok(Self::new(
             cfg.base_url.clone(),
             cfg.chat_model.clone(),
             cfg.embed_model.clone(),
         )?
         .with_max_output_tokens(cfg.max_output_tokens)
-        .with_chat_models_by_phase(cfg.chat_models_by_phase_snapshot()))
+        .with_chat_models_by_phase(cfg.chat_models_by_phase_snapshot())
+        .with_max_tokens_by_phase(max_tokens_by_phase))
     }
 
     /// Call `/v1/chat/completions` with a single system + user
-    /// message. Uses the client-level `max_output_tokens` configured
-    /// via `with_max_output_tokens`.
+    /// message. Uses the per-phase cap if `prompt.phase_id` matches
+    /// one configured via `with_max_tokens_by_phase`, otherwise the
+    /// client-level `max_output_tokens` configured via
+    /// `with_max_output_tokens`.
     pub async fn complete(&self, prompt: &ChatPrompt) -> Result<String> {
-        self.complete_inner(prompt, self.max_output_tokens).await
+        let cap = self.resolve_max_tokens_for_phase(prompt.phase_id.as_deref());
+        self.complete_inner(prompt, cap).await
     }
 
     /// Call `/v1/chat/completions` with a per-call output-token
@@ -156,6 +207,14 @@ impl DaemonInferenceClient {
     ) -> Result<String> {
         let url = format!("{}/v1/chat/completions", self.base_url);
         let model = self.resolve_model_for_phase(prompt.phase_id.as_deref());
+        // `think_budget: 0` instructs the daemon to inject `/no_think`
+        // for SystemPromptToken thinking families (Qwen3 / Qwen3.5 /
+        // SmolLM3). The schema constraint already forces JSON
+        // correctness for atlas Phase 1; chain-of-thought tokens are
+        // pure latency cost — Qwen3.5-4B with thinking disabled went
+        // from 60+ s/chapter to ~10 s/chapter on the wiki-tier2-bank
+        // run. Models without SystemPromptToken thinking control
+        // (Gemma 3/4, Llama 3, Phi-4) ignore this field harmlessly.
         let mut body = serde_json::json!({
             "model": model,
             "messages": [
@@ -164,6 +223,7 @@ impl DaemonInferenceClient {
             ],
             "temperature": 0.2,
             "stream": false,
+            "think_budget": 0,
         });
         if let Some(n) = max_tokens {
             if let Some(obj) = body.as_object_mut() {

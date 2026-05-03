@@ -183,6 +183,14 @@ impl SovereignInferenceAdapter {
         req.max_tokens = request.max_tokens.map(|n| n as usize);
         req.temperature = request.temperature;
         req.top_p = request.top_p;
+        // Forward the Commonwealth `think_budget` extension. The
+        // daemon's `format_prompt` reads `req.think_budget == Some(0)`
+        // to inject `/no_think` for SystemPromptToken thinking
+        // families (Qwen3 / Qwen3.5 / SmolLM3). Schema-constrained
+        // structured-output callers (atlas Phase 1) typically set
+        // this so the model spends every output token on the JSON
+        // payload rather than a chain-of-thought.
+        req.think_budget = request.think_budget.map(|n| n as usize);
         if let Some(oicp) = &request.oicp {
             req = req.with_oicp(oicp.clone());
         }

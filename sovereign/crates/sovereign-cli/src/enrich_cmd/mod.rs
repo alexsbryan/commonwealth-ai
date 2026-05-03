@@ -14,6 +14,7 @@
 
 pub mod atlas_configuration;
 pub mod atlas_cross_corpus;
+pub mod atlas_eval;
 pub mod atlas_gaps;
 pub mod atlas_phase_cmd;
 pub mod atlas_query;
@@ -24,6 +25,7 @@ pub mod build;
 pub mod cascade;
 pub mod config;
 pub mod corpus_io;
+pub mod triage;
 pub mod diagnose;
 pub mod diff;
 pub mod errors;
@@ -32,6 +34,7 @@ pub mod eval_median;
 pub mod exemplars;
 pub mod extract;
 pub mod inference_client;
+pub mod ingest;
 pub mod investigation;
 pub mod init;
 pub mod paths;
@@ -62,6 +65,9 @@ const HELP: Help = Help {
             &[
                 ("init", "Scaffold a new corpus's enrichment state."),
                 ("build", "One-shot: run every atlas phase for a corpus (seed → extract → cluster → name → resolve → tensions → gaps → configure → report)."),
+                ("ingest", "Run an AtlasIngestion strategy end-to-end (today: structure_first deterministic Wikipedia parser)."),
+                ("triage-candidates", "Rank atlas entities by inbound link degree to pick Tier-1.5 / Tier-2 enrichment candidates."),
+                ("atlas-eval", "Score the structural atlas against a question bank by tokenized title-overlap retrieval."),
                 ("eval", "Score the resolved atlas against a golden-set TOML; reports per-phase precision/recall/F1."),
                 (
                     "eval-median",
@@ -153,6 +159,9 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         // ── Primary flow ──────────────────────────────────────
         "init" => init::cmd_init(rest).await,
         "build" => build::cmd_build(rest).await,
+        "ingest" => ingest::cmd_ingest(rest).await,
+        "triage-candidates" | "triage" => triage::cmd_triage(rest).await,
+        "atlas-eval" => atlas_eval::cmd_atlas_eval(rest).await,
         "sep-ingest" => sep_ingest::cmd_sep_ingest(rest).await,
         "eval" => eval::cmd_eval(rest).await,
         "eval-median" => eval_median::cmd_eval_median(rest).await,

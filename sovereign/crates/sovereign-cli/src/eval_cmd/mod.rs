@@ -70,6 +70,11 @@ const RUN_HELP: Help = Help {
             ("--no-judge",     "Skip the LLM-as-judge \"instructor mode\" pass under --synth. Default: judge runs alongside the strict scorer to catch paraphrased coverage."),
             ("--format text|json", "Stdout format (default: text)."),
             ("--output <path>", "Also write the full run as pretty JSON to this path."),
+            ("--with-atlas <id>", "Atlas corpus id whose Entity records are embedded once and fused into per-question retrieval (atlas-grounded retrieval). Off by default."),
+            ("--atlas-top-k <N>", "Top-K atlas matches injected per question (default 3). Only used with --with-atlas."),
+            ("--atlas-min-description-chars <N>", "Skip entities whose description is shorter than N chars (default 200 — keeps actually-enriched entities; pass 0 to embed every non-placeholder which can mean ~40min on wiki-scale atlases)."),
+            ("--atlas-depth <list>", "Comma-separated enrichment_depth allowlist (e.g. `extracted` or `extracted,structural_classified`). Empty = accept any depth."),
+            ("--atlas-max-entries <N>", "Hard cap on the number of entities embedded. Useful as a safety net on misconfigured runs."),
             ("--help, -h",     "Show this message."),
         ]),
         HelpSection::Notes(
@@ -122,6 +127,27 @@ struct RunArgs {
     /// alongside the strict scorer in synth mode. Use this on
     /// fast-iteration loops where the strict score alone is enough.
     no_judge: bool,
+    /// Atlas corpus id whose `atoms.json` will be loaded, embedded
+    /// once, and fused into per-question retrieval as virtual chunks.
+    /// Off by default — atlas content is not part of retrieval unless
+    /// explicitly opted in.
+    with_atlas: Option<String>,
+    /// How many atlas Entity matches to fuse per question. Default
+    /// keeps the merged top-K largely chunk-driven while letting the
+    /// strongest entity grounding through.
+    atlas_top_k: usize,
+    /// Drop entities whose `description` is shorter than this many
+    /// chars. Default 200 — keeps actually-enriched entities, drops
+    /// structural one-liners ("X is a Y born in Z."). Set to 0 to
+    /// embed every non-placeholder entity (slow on wiki-scale atlases:
+    /// 50K+ entities × ~50ms/embed = ~40 min).
+    atlas_min_description_chars: usize,
+    /// Optional comma-separated `enrichment_depth` allowlist (e.g.
+    /// `extracted` or `extracted,structural_classified`). Empty =
+    /// accept any depth.
+    atlas_depth: Vec<String>,
+    /// Hard cap on number of entities to embed. None = unlimited.
+    atlas_max_entries: Option<usize>,
 }
 
 impl Default for RunArgs {
@@ -135,6 +161,11 @@ impl Default for RunArgs {
             format: OutputFormat::Text,
             output: None,
             no_judge: false,
+            with_atlas: None,
+            atlas_top_k: 3,
+            atlas_min_description_chars: 200,
+            atlas_depth: Vec::new(),
+            atlas_max_entries: None,
         }
     }
 }
@@ -220,6 +251,44 @@ async fn cmd_run(args: &[String]) -> i32 {
                 };
                 a.output = Some(PathBuf::from(v));
             }
+            "--with-atlas" => {
+                i += 1;
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: --with-atlas needs an atlas-corpus-id value");
+                    return 2;
+                };
+                a.with_atlas = Some(v.clone());
+            }
+            "--atlas-top-k" => {
+                i += 1;
+                a.atlas_top_k = rest
+                    .get(i)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(a.atlas_top_k);
+            }
+            "--atlas-min-description-chars" => {
+                i += 1;
+                a.atlas_min_description_chars = rest
+                    .get(i)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(a.atlas_min_description_chars);
+            }
+            "--atlas-depth" => {
+                i += 1;
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: --atlas-depth needs a comma-separated value");
+                    return 2;
+                };
+                a.atlas_depth = v
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
+            "--atlas-max-entries" => {
+                i += 1;
+                a.atlas_max_entries = rest.get(i).and_then(|s| s.parse().ok());
+            }
             extra => {
                 eprintln!("error: unexpected argument `{extra}`");
                 return 2;
@@ -246,6 +315,15 @@ async fn cmd_run(args: &[String]) -> i32 {
         bank.bank.name,
         bank.questions.len(),
         bank.bank.corpus,
+    );
+
+    // Initialize tracing so the atlas-context manager + other
+    // background-init logs surface to stderr. Default filter is
+    // chatty enough to see the atlas-context lifecycle without
+    // drowning in lance-internal trace.
+    crate::util::tracing_init::init_tracing(
+        "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
+         sovereign_tools::knowledge_view=warn",
     );
 
     let session = match build_session(&globals).await {
@@ -280,11 +358,34 @@ async fn cmd_run(args: &[String]) -> i32 {
         return 0;
     }
 
+    let atlas_ctx = if let Some(id) = a.with_atlas.as_deref() {
+        let filter = runner::AtlasLoadFilter {
+            min_description_chars: a.atlas_min_description_chars,
+            depth_allowlist: a.atlas_depth.clone(),
+            max_entries: a.atlas_max_entries,
+        };
+        match runner::load_atlas_context(&session, id, a.atlas_top_k, &filter).await {
+            Ok(ctx) => Some(ctx),
+            Err(e) => {
+                eprintln!("error: --with-atlas {id}: {e}");
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+
     let run = if a.synth {
         eprintln!(
             "synth mode — driving full chat pipeline. This will take ~one chat-completion \
              per question; sit tight."
         );
+        if atlas_ctx.is_some() {
+            eprintln!(
+                "note: --with-atlas is ignored under --synth (synth path uses runtime \
+                 retrieval, not the eval runner's chunk search)."
+            );
+        }
         match runner::run_bank_synth(&session, &bank, !a.no_judge).await {
             Ok(r) => r,
             Err(e) => {
@@ -293,7 +394,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
         }
     } else {
-        match runner::run_bank(&session, &bank, a.limit).await {
+        match runner::run_bank(&session, &bank, a.limit, atlas_ctx.as_ref()).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");

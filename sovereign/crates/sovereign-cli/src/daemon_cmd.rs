@@ -473,6 +473,54 @@ async fn run_daemon(args: &[String]) -> i32 {
         });
     }
 
+    // Tier-2 enrichment resume: find any `<...>-tier2` workspace
+    // under `<data_dir>/enrichment/` whose checkpoint is incomplete
+    // and re-spawn `enrich extract --resume` for each. Picks up
+    // unfinished work after a daemon restart / host reboot. Safe
+    // to fire on every boot — already-complete workspaces no-op,
+    // and `--resume` skips chapters already in the checkpoint.
+    {
+        let enrich_dir = data_dir.join("enrichment");
+        let idx_dir = data_dir.join("indexes");
+        tokio::spawn(async move {
+            let cli_binary = std::env::current_exe()
+                .unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
+            tracing::info!(
+                enrichment_dir = %enrich_dir.display(),
+                "tier-2 resume: scanning for unfinished workspaces"
+            );
+            let outcomes = sovereign_tools::atlas_postinstall::resume_inflight_tier2(
+                enrich_dir, idx_dir, cli_binary,
+            )
+            .await;
+            for o in outcomes {
+                use sovereign_tools::atlas_postinstall::Tier2LaunchOutcome;
+                match o {
+                    Tier2LaunchOutcome::Spawned {
+                        workspace_id,
+                        log_path,
+                        pid,
+                    } => tracing::info!(
+                        workspace = %workspace_id,
+                        log = %log_path.display(),
+                        pid,
+                        "tier-2 resume: re-spawned"
+                    ),
+                    Tier2LaunchOutcome::AlreadyComplete { .. } => {}
+                    // Resume scan never passes peer advice — this
+                    // arm is unreachable in practice but the
+                    // exhaustiveness check requires us to cover it.
+                    Tier2LaunchOutcome::DeferredToPeer { .. } => {}
+                    Tier2LaunchOutcome::InitFailed { reason }
+                    | Tier2LaunchOutcome::SpawnFailed { reason } => tracing::warn!(
+                        reason,
+                        "tier-2 resume: re-spawn failed"
+                    ),
+                }
+            }
+        });
+    }
+
     // Publish this node's embed model fingerprint so peers can filter
     // us in/out of collaborative ingestion.
     //

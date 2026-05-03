@@ -129,6 +129,11 @@ pub struct ChatSession {
     pub corpus_engine: Arc<corpus_engine::CorpusEngine>,
     pub inference: Arc<dyn InferenceProvider>,
     pub daemon_base: String,
+    /// Resolved embed model id (e.g. `Qwen3-Embedding-0.6B-Q8_0`).
+    /// Surfaced so cache layers (atlas embeddings, future per-corpus
+    /// vector caches) can key on the active model and invalidate when
+    /// the operator swaps it.
+    pub embed_model: String,
 }
 
 /// Build a `Runtime` backed by the daemon over HTTP.
@@ -350,12 +355,46 @@ pub async fn build_session_with_skills(
         runtime = runtime.with_wikipedia_graph(graph);
     }
 
+    // Atlas-grounded retrieval: build the per-process atlas context
+    // manager, attach it to the Runtime, then synchronously load
+    // every atlas whose embeddings are already cached on disk.
+    // Cold-start embed work (uncached atlases) is intentionally NOT
+    // done here — that belongs in the post-install hook so the
+    // first user query has a deterministic latency and isn't gated
+    // by a 40-min wiki-scale embed pass.
+    let atlas_mgr = Arc::new(
+        sovereign_tools::atlas_context_manager::AtlasContextManager::new(
+            indexes_dir.clone(),
+            Arc::clone(&inference),
+            embed_model.clone(),
+        ),
+    );
+    runtime = runtime.with_atlas_context_provider(
+        Arc::clone(&atlas_mgr)
+            as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>,
+    );
+    atlas_mgr.init_from_cache().await;
+    eprintln!(
+        "Atlas: {} corpus context(s) loaded from cache",
+        sovereign_core::atlas_context::AtlasContextProvider::loaded_corpus_ids(
+            atlas_mgr.as_ref()
+        )
+        .len()
+    );
+    // Adaptive triage (Phase B2): start the bump-flusher background
+    // task so query-time hits eventually land on disk and feed the
+    // next triage rebuild. 30s interval — losing up to half a
+    // minute of bumps on a hard kill is acceptable for a statistical
+    // signal.
+    let _bump_flusher = Arc::clone(&atlas_mgr).spawn_bump_flusher(30);
+
     Ok(ChatSession {
         runtime: Arc::new(runtime),
         store,
         corpus_engine,
         inference,
         daemon_base: base,
+        embed_model,
     })
 }
 

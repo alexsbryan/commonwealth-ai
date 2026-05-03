@@ -22,12 +22,20 @@
 
 use std::time::Instant;
 
+use corpus_engine::enrichment::atlas::{
+    atoms_content_hash, read_atlas_atoms, read_atlas_embeddings, write_atlas_embeddings,
+    AtomEnvelope, CachedAtlasEntry, ATLAS_DIRNAME,
+};
 use corpus_engine::ScoredChunk;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use sovereign_core::atlas_context::{
+    atlas_top_k_as_chunks, AtlasContext, AtlasEntry,
+};
 
 use crate::chat_cmd::bootstrap::ChatSession;
 use crate::chat_cmd::render::split_reasoning;
+use crate::enrich_cmd::paths;
 use crate::eval_cmd::bank::{EvalBank, Question};
 use crate::eval_cmd::score::{
     score_facts, score_facts_in_text, score_sources, score_sources_titles, FactScore, SourceScore,
@@ -335,6 +343,249 @@ fn intent_wire_label(intent: &sovereign_core::types::Intent) -> String {
     }
 }
 
+/// Truncate atlas-entity text for embedding. Embed models cap context
+/// somewhere around 8K tokens; entities with augmented descriptions
+/// (questions + anchors aggregated across many sections) routinely run
+/// 18KB chars. 3000 chars (~750 tokens) keeps headroom while still
+/// covering the description and the strongest section signals.
+const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
+
+/// Filters applied during atlas-context loading. Used to keep the
+/// embed pass tractable on large atlases (e.g. wiki-l5-* has 50K+
+/// non-placeholder entities; without filtering, the pre-embed step
+/// dominates wall time).
+#[derive(Debug, Clone, Default)]
+pub struct AtlasLoadFilter {
+    /// Only embed entities whose `description` is at least this many
+    /// chars. Defaults to 200 — structural one-liners ("X is a Y born
+    /// in Z.") sit under that and would dilute retrieval; extracted /
+    /// augmented entities run hundreds-to-thousands of chars.
+    pub min_description_chars: usize,
+    /// Optional comma-separated `enrichment_depth` allowlist. Empty =
+    /// accept any depth. Useful for "only Tier-2 extracted" filters
+    /// (`--atlas-depth extracted`) without relying on the heuristic.
+    pub depth_allowlist: Vec<String>,
+    /// Hard cap on the number of entities embedded. `None` = no cap.
+    /// Set to bound the worst-case wall time on misconfigured runs.
+    pub max_entries: Option<usize>,
+}
+
+/// Stable string capturing the filter so the embeddings cache can
+/// invalidate when the operator changes the filter shape. Order is
+/// deterministic: depth allowlist is sorted before serialisation.
+fn filter_signature(filter: &AtlasLoadFilter) -> String {
+    let mut depths = filter.depth_allowlist.clone();
+    depths.sort();
+    format!(
+        "min_chars={};depth=[{}];max={}",
+        filter.min_description_chars,
+        depths.join(","),
+        filter
+            .max_entries
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+    )
+}
+
+/// Read `atoms.json` for the named atlas corpus and embed each Entity's
+/// `name + aliases + description` once. Embeddings are persisted to
+/// `atoms.embeddings.bin` alongside `atoms.json` and reused when the
+/// `(atoms content, embed model, filter signature)` triple matches —
+/// re-runs against an unchanged atlas are sub-second on cache hit
+/// vs. multi-minute on cold load for wiki-scale atlases.
+pub async fn load_atlas_context(
+    session: &ChatSession,
+    atlas_corpus_id: &str,
+    top_k: usize,
+    filter: &AtlasLoadFilter,
+) -> Result<AtlasContext, String> {
+    let atlas_dir = paths::index_root(atlas_corpus_id).join(ATLAS_DIRNAME);
+    if !atlas_dir.exists() {
+        return Err(format!(
+            "no atlas at {} — `sovereign enrich ingest {atlas_corpus_id} \
+             --strategy structure_first --source-corpus <id>` first",
+            atlas_dir.display()
+        ));
+    }
+
+    let filter_sig = filter_signature(filter);
+
+    // Try the embeddings cache first. A hit returns a fully-populated
+    // entry list and skips both the atoms.json walk and the embed
+    // loop entirely.
+    let atoms_hash = atoms_content_hash(&atlas_dir)
+        .map_err(|e| format!("hash atoms.json for cache lookup: {e}"))?;
+    match read_atlas_embeddings(&atlas_dir, &session.embed_model, &atoms_hash, &filter_sig) {
+        Ok(Some(cached)) => {
+            eprintln!(
+                "atlas-context: cache HIT — {} entries from `{atlas_corpus_id}` \
+                 (model={}, filter_sig={filter_sig}); top-K per question = {top_k}",
+                cached.len(),
+                session.embed_model,
+            );
+            let entries = cached
+                .into_iter()
+                .map(|c| AtlasEntry {
+                    canonical_name: c.canonical_name,
+                    embed_text: c.embed_text,
+                    embedding: c.embedding,
+                })
+                .collect();
+            return Ok(AtlasContext {
+                atlas_corpus_id: atlas_corpus_id.to_string(),
+                entries,
+                top_k,
+            });
+        }
+        Ok(None) => {} // soft miss; fall through to embed
+        Err(e) => {
+            eprintln!(
+                "atlas-context: cache read error ({e}) — re-embedding from atoms.json"
+            );
+        }
+    }
+
+    let atoms = read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("read atlas atoms.json: {e}"))?;
+
+    // Build embed-text per Entity, applying filters. Counters track
+    // why each entity was kept or dropped so the pre-embed log is
+    // diagnostic — operators tuning a Tier-2 atlas need to see "we
+    // dropped 51000 structural one-liners and kept the 52 extracted
+    // entries" rather than just a final total.
+    let mut payloads: Vec<(String, String)> = Vec::new();
+    let mut total_entities = 0usize;
+    let mut drop_placeholder = 0usize;
+    let mut drop_short_desc = 0usize;
+    let mut drop_depth = 0usize;
+    let mut drop_cap = 0usize;
+    for atom in &atoms.atoms {
+        let AtomEnvelope::Entity(e) = atom else {
+            continue;
+        };
+        total_entities += 1;
+        let is_placeholder = e.description.is_empty() && e.salience == 0.0;
+        if is_placeholder {
+            drop_placeholder += 1;
+            continue;
+        }
+        if e.description.len() < filter.min_description_chars {
+            drop_short_desc += 1;
+            continue;
+        }
+        if !filter.depth_allowlist.is_empty() {
+            // Match against the serialised form of EnrichmentDepth.
+            // `serde_json` keeps it lowercase (snake_case) — same form
+            // operators see in atoms.json.
+            let depth_label = serde_json::to_string(&e.enrichment_depth)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            if !filter
+                .depth_allowlist
+                .iter()
+                .any(|d| d.eq_ignore_ascii_case(&depth_label))
+            {
+                drop_depth += 1;
+                continue;
+            }
+        }
+        if let Some(cap) = filter.max_entries {
+            if payloads.len() >= cap {
+                drop_cap += 1;
+                continue;
+            }
+        }
+        let mut text = String::new();
+        text.push_str(&e.canonical_name);
+        text.push('\n');
+        if !e.aliases.is_empty() {
+            text.push_str(&e.aliases.join(", "));
+            text.push('\n');
+        }
+        text.push_str(&e.description);
+        if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+            text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+        }
+        payloads.push((e.canonical_name.clone(), text));
+    }
+
+    eprintln!(
+        "atlas-context: cache MISS — kept {} of {} entities from `{atlas_corpus_id}` \
+         (placeholder: {}, short_desc<{}: {}, depth: {}, over_cap: {}); top-K per question = {top_k}",
+        payloads.len(),
+        total_entities,
+        drop_placeholder,
+        filter.min_description_chars,
+        drop_short_desc,
+        drop_depth,
+        drop_cap,
+    );
+    if payloads.is_empty() {
+        return Err(format!(
+            "atlas-context: filter excluded every entity in `{atlas_corpus_id}`. \
+             Lower --atlas-min-description-chars (currently {}) or check --atlas-depth.",
+            filter.min_description_chars
+        ));
+    }
+
+    let mut entries: Vec<AtlasEntry> = Vec::with_capacity(payloads.len());
+    let t0 = Instant::now();
+    for (name, text) in payloads {
+        match session.inference.embed_query(&text).await {
+            Ok(v) => entries.push(AtlasEntry {
+                canonical_name: name,
+                embed_text: text,
+                embedding: v,
+            }),
+            Err(e) => {
+                eprintln!("  embed atlas entity `{name}` failed: {e} (skipped)");
+            }
+        }
+    }
+    eprintln!(
+        "atlas-context: embedded {} entries in {:.1}s",
+        entries.len(),
+        t0.elapsed().as_secs_f32()
+    );
+
+    // Persist for next run. Persistence failure is non-fatal — log
+    // and continue so a write error (read-only volume, full disk)
+    // doesn't fail the eval that already produced its results.
+    if !entries.is_empty() {
+        let embed_dim = entries[0].embedding.len();
+        let cached: Vec<CachedAtlasEntry> = entries
+            .iter()
+            .map(|e| CachedAtlasEntry {
+                canonical_name: e.canonical_name.clone(),
+                embed_text: e.embed_text.clone(),
+                embedding: e.embedding.clone(),
+            })
+            .collect();
+        match write_atlas_embeddings(
+            &atlas_dir,
+            &session.embed_model,
+            embed_dim,
+            &atoms_hash,
+            &filter_sig,
+            &cached,
+        ) {
+            Ok(p) => eprintln!(
+                "atlas-context: cache WROTE {} entries to {}",
+                cached.len(),
+                p.display()
+            ),
+            Err(e) => eprintln!("atlas-context: cache write failed (non-fatal): {e}"),
+        }
+    }
+
+    Ok(AtlasContext {
+        atlas_corpus_id: atlas_corpus_id.to_string(),
+        entries,
+        top_k,
+    })
+}
+
 /// Run an entire bank, sequentially. Sequential is fine — the daemon's
 /// embed slot serialises anyway, and concurrent searches against the
 /// same Lance table contend on the same index pages.
@@ -342,6 +593,7 @@ pub async fn run_bank(
     session: &ChatSession,
     bank: &EvalBank,
     limit: usize,
+    atlas: Option<&AtlasContext>,
 ) -> Result<EvalRun, String> {
     let started_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -376,7 +628,7 @@ pub async fn run_bank(
 
     let mut results = Vec::with_capacity(bank.questions.len());
     for q in &bank.questions {
-        let result = run_question(session, &target_indexes, q, limit).await;
+        let result = run_question(session, &target_indexes, q, limit, atlas).await;
         results.push(result);
     }
 
@@ -394,6 +646,7 @@ async fn run_question(
     target_indexes: &[&corpus_engine::IndexInfo],
     q: &Question,
     limit: usize,
+    atlas: Option<&AtlasContext>,
 ) -> EvalResult {
     // 1. Embed.
     let t_embed = Instant::now();
@@ -455,6 +708,28 @@ async fn run_question(
         }
     }
     let search_ms = t_search.elapsed().as_millis() as u64;
+
+    // Atlas-grounded retrieval (opt-in via `--with-atlas`): cosine the
+    // query embedding against every pre-embedded Entity and inject the
+    // top-K as virtual chunks. Title=canonical_name → contributes to
+    // source-recall scoring; content=name+aliases+description →
+    // contributes to fact-recall scoring. The lance-table scores and
+    // cosine scores live on different scales, so atlas matches will
+    // generally land near the top of the merged set — that's the
+    // expected "atlas-as-grounding" behaviour, and the per-question
+    // report makes their corpus_id (`atlas:<id>`) visible.
+    if let Some(ctx) = atlas {
+        if !embedding.is_empty() {
+            let virt = atlas_top_k_as_chunks(&embedding, ctx);
+            if !virt.is_empty() {
+                let label = format!("atlas:{}", ctx.atlas_corpus_id);
+                if !corpora_hit.contains(&label) {
+                    corpora_hit.push(label);
+                }
+                all_hits.extend(virt);
+            }
+        }
+    }
 
     // Re-rank merged hits by score descending and trim to limit (we
     // searched up to `limit` per corpus, so the merged set may be

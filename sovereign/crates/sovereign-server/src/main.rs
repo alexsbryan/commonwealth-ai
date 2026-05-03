@@ -389,7 +389,7 @@ async fn main() {
     let approval = Arc::new(approval_channel);
 
     let mut runtime_builder = Runtime::new(
-        inference,
+        Arc::clone(&inference),
         router,
         Box::new(planner),
         Arc::new(tools),
@@ -423,6 +423,43 @@ async fn main() {
         );
         runtime_builder = runtime_builder.with_wikipedia_graph(graph);
     }
+
+    // Atlas-grounded retrieval: scan installed corpora for `atlas/`
+    // dirs, pre-embed Entity descriptions, and stash them on the
+    // Runtime so `prepare_knowledge_query_plan` can fuse atlas
+    // matches into chunk hits as virtual ScoredChunks. Init runs in
+    // the background — daemon listener binds without waiting on the
+    // embed pass (cold first-run on a wiki-scale atlas can be
+    // ~minutes; subsequent boots replay the on-disk cache near
+    // instantly).
+    let embed_model_id = config
+        .inference
+        .model
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+    if embed_model_id.is_empty() {
+        tracing::warn!(
+            "atlas-context: could not derive embed model id from config.inference.model; \
+             atlas grounding will be skipped"
+        );
+    } else {
+        let atlas_mgr = Arc::new(sovereign_tools::atlas_context_manager::AtlasContextManager::new(
+            indexes_dir.clone(),
+            Arc::clone(&inference),
+            embed_model_id,
+        ));
+        runtime_builder = runtime_builder.with_atlas_context_provider(
+            Arc::clone(&atlas_mgr)
+                as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>,
+        );
+        let _atlas_init = Arc::clone(&atlas_mgr).spawn_init();
+        // Phase B2 — bump flusher writes adaptive triage priors to
+        // disk every 30s so the next rebuild picks them up.
+        let _bump_flusher = Arc::clone(&atlas_mgr).spawn_bump_flusher(30);
+    }
+
     let runtime = Arc::new(runtime_builder);
 
     // Auth state.

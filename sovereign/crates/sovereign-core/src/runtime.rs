@@ -660,6 +660,19 @@ pub(crate) fn reweight_by_query_relevance(
 /// than topic. They're not catastrophically wrong but they're not
 /// signal either; they fill prompt budget the model can't use. This
 /// filter removes only the truly-no-overlap cases — chunks where
+/// Production safety valve for atlas-grounded retrieval. Reads
+/// `SOVEREIGN_ATLAS_GROUNDING` at every call (cheap — one env
+/// lookup) so an operator can flip the toggle without restarting
+/// the daemon (set it before the next query). Anything that parses
+/// to "0" / "false" / "off" / "no" disables; missing or any other
+/// value enables.
+pub(crate) fn atlas_grounding_enabled() -> bool {
+    match std::env::var("SOVEREIGN_ATLAS_GROUNDING") {
+        Ok(v) => !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"),
+        Err(_) => true,
+    }
+}
+
 /// neither the title nor the content (lowercased) contains any of the
 /// substantive query tokens. Anything with even one overlap is kept;
 /// the reweight + sort + cap downstream handles ranking.
@@ -2480,6 +2493,13 @@ pub struct Runtime {
     /// Desktop bootstrap injects a `TauriRoutingEventSink`; headless
     /// test/CLI harnesses get the default `NoOpRoutingEventSink`.
     pub routing_events: Arc<dyn RoutingEventSink>,
+    /// Source of pre-embedded atlas Entity contexts, looked up at
+    /// query time and fused into chunk-retrieval results as virtual
+    /// `ScoredChunk`s. The daemon's `AtlasContextManager` populates
+    /// this once at boot per installed corpus that has an `atlas/`
+    /// dir. `None` = atlas-grounded retrieval is off (the pre-atlas
+    /// chunk-only behaviour is preserved exactly).
+    pub atlas_context_provider: Option<Arc<dyn crate::atlas_context::AtlasContextProvider>>,
 }
 
 impl Runtime {
@@ -2510,6 +2530,7 @@ impl Runtime {
             sessions: Arc::new(SessionStore::new()),
             confidence_thresholds: ConfidenceThresholds::default(),
             routing_events: Arc::new(NoOpRoutingEventSink),
+            atlas_context_provider: None,
         }
     }
 
@@ -2541,6 +2562,18 @@ impl Runtime {
 
     pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
         self.corpus_engine = Some(engine);
+        self
+    }
+
+    /// Install a source of pre-embedded atlas Entity contexts.
+    /// Usually `sovereign-tools::AtlasContextManager` constructed by
+    /// the daemon bootstrap; the eval CLI builds inline contexts and
+    /// can call this with a one-shot provider for symmetry.
+    pub fn with_atlas_context_provider(
+        mut self,
+        provider: Arc<dyn crate::atlas_context::AtlasContextProvider>,
+    ) -> Self {
+        self.atlas_context_provider = Some(provider);
         self
     }
 
@@ -3572,14 +3605,57 @@ impl Runtime {
                             .or_insert_with(|| name.clone());
                     }
                 }
+                // Phase C4: stamp peer attribution on the chunk
+                // itself so eval --inspect / desktop hit panels can
+                // show "peer:<name>" inline. peer_attribution above
+                // is corpus-level; metadata is per-chunk.
+                let mut metadata = HashMap::new();
+                if let Some(name) = &hit.peer_name {
+                    metadata.insert("peer".to_string(), name.clone());
+                    metadata.insert("source".to_string(), "mesh".to_string());
+                }
                 all_chunks.push(corpus_engine::ScoredChunk {
                     content: hit.content,
                     title: hit.title,
                     url: hit.url,
                     corpus_id: hit.corpus_id,
                     score: hit.score,
-                    metadata: HashMap::new(),
+                    metadata,
                 });
+            }
+
+            // Atlas grounding — fuse pre-embedded Entity matches as
+            // virtual ScoredChunks (corpus_id = "atlas:<corpus>").
+            // Mirror of the KnowledgeQuery path's 2d step
+            // (`prepare_knowledge_query_plan`); DeepQuery /
+            // ComparisonQuery / contested-style intents take this
+            // route and benefit equally from atlas grounding.
+            // Same env override (`SOVEREIGN_ATLAS_GROUNDING=0`)
+            // applies here.
+            if atlas_grounding_enabled() {
+                if let Some(provider) = self.atlas_context_provider.as_ref() {
+                    if !corpus_embedding.is_empty() {
+                        for corpus_id in provider.loaded_corpus_ids() {
+                            if let Some(ctx) = provider.get(&corpus_id) {
+                                let virt = crate::atlas_context::atlas_top_k_as_chunks(
+                                    &corpus_embedding, &ctx,
+                                );
+                                // Record a triage bump for every match
+                                // surfaced — adaptive prior so user-
+                                // queried entities climb the Tier-2
+                                // queue (Phase B2). Best-effort sync
+                                // call; the manager owns rate-limit /
+                                // persistence behind the trait.
+                                for chunk in &virt {
+                                    if let Some(name) = chunk.title.as_deref() {
+                                        provider.record_match(&corpus_id, name);
+                                    }
+                                }
+                                all_chunks.extend(virt);
+                            }
+                        }
+                    }
+                }
             }
 
             // Also search StateStore for corpus-type documents (used by test
@@ -6713,6 +6789,49 @@ impl Runtime {
                 post_floor = chunks.len(),
                 "KnowledgeQuery: noise floor dropped no-overlap chunks"
             );
+        }
+
+        // 2d. Atlas grounding — fuse pre-embedded Entity matches from
+        //     every installed atlas as virtual ScoredChunks. Each
+        //     fused chunk has `corpus_id = "atlas:<corpus>"` so the
+        //     downstream prompt-assembly + provenance layers can tell
+        //     atlas-derived context from raw chunk hits. The
+        //     pre-embedded contexts are loaded once per process by
+        //     the `AtlasContextManager`; per-question cost here is
+        //     just N cosines (microseconds).
+        //
+        //     Env override `SOVEREIGN_ATLAS_GROUNDING=0` disables
+        //     fusion entirely — the production safety valve for
+        //     "atlas grounding is hurting more than helping on this
+        //     workload, fall back to chunks-only without rebuilding."
+        if atlas_grounding_enabled() {
+            if let Some(provider) = self.atlas_context_provider.as_ref() {
+                if !embedding.is_empty() {
+                    let mut atlas_added = 0usize;
+                    for corpus_id in provider.loaded_corpus_ids() {
+                        if let Some(ctx) = provider.get(&corpus_id) {
+                            let virt = crate::atlas_context::atlas_top_k_as_chunks(
+                                &embedding, &ctx,
+                            );
+                            // Adaptive triage bump (Phase B2) — see
+                            // the DeepQuery site above for rationale.
+                            for chunk in &virt {
+                                if let Some(name) = chunk.title.as_deref() {
+                                    provider.record_match(&corpus_id, name);
+                                }
+                            }
+                            atlas_added += virt.len();
+                            chunks.extend(virt);
+                        }
+                    }
+                    if atlas_added > 0 {
+                        tracing::info!(
+                            atlas_added,
+                            "KnowledgeQuery: atlas-grounding fused"
+                        );
+                    }
+                }
+            }
         }
 
         // 3. Reweight by query relevance (mirrors prepare_knowledge_context),

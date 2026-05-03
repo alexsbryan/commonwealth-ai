@@ -55,6 +55,15 @@ const HELP: Help = Help {
                  before scaling to the full corpus.",
             ),
             (
+                "--include-articles <path>",
+                "Restrict --from-corpus to article titles listed in <path>. Accepts \
+                 plain titles (one per line; lines beginning with # and blank lines \
+                 are ignored) OR the JSON produced by `sovereign enrich \
+                 triage-candidates --json` (reads top_in_corpus_by_centrality[*].name). \
+                 Title match is case + underscore folded. Mutually exclusive with \
+                 --limit-articles.",
+            ),
+            (
                 "--from-template <name>",
                 "Materialise a built-in fixture into a synthesised source file under the corpus dir, then proceed normally. Pins the template's pipeline_id + min-section-body-words=20 unless overridden. Available names: free-will-debate, virtue-ethics-fragments, stoicism-mini (philosophy); bk-book-1, dubliners-3 (literary).",
             ),
@@ -345,6 +354,11 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         min_section_body_words: min_body_words,
         toc_markers,
         max_output_tokens: parsed.max_output_tokens,
+        // Operator-driven; default off. Set in config.json post-init
+        // when running thinking-off models against a referential
+        // pipeline (Phase 1b is schema-free and will bloat without
+        // a per-phase cap).
+        phase1b_max_output_tokens: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {
@@ -435,6 +449,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         &parsed.corpus_id,
         rows,
         parsed.limit_articles,
+        parsed.include_articles.clone(),
     ) {
         Ok(m) => m,
         Err(e) => {
@@ -515,6 +530,11 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         min_section_body_words: parsed.min_section_body_words,
         toc_markers: None,
         max_output_tokens: parsed.max_output_tokens,
+        // Operator-driven; default off. Set in config.json post-init
+        // when running thinking-off models against a referential
+        // pipeline (Phase 1b is schema-free and will bloat without
+        // a per-phase cap).
+        phase1b_max_output_tokens: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {
@@ -528,6 +548,9 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     println!("  ✓ from_corpus   = {source_corpus}");
     if let Some(n) = parsed.limit_articles {
         println!("  ✓ limit_articles = {n}");
+    }
+    if let Some(titles) = parsed.include_articles.as_ref() {
+        println!("  ✓ include_articles = {} title(s)", titles.len());
     }
     println!();
     println!(
@@ -555,6 +578,7 @@ fn build_manifest_from_corpus_rows(
     corpus_id: &str,
     rows: Vec<corpus_engine::EnrichmentChunkRow>,
     limit_articles: Option<usize>,
+    include_articles: Option<Vec<String>>,
 ) -> Result<ChapterManifest, String> {
     use corpus_engine::WikipediaChunkMetadata;
 
@@ -646,12 +670,45 @@ fn build_manifest_from_corpus_rows(
         bucket.chunks.push((row.id, row.content));
     }
 
-    // Apply the per-article cap if requested. Selection is by
-    // first-seen order (insertion order from the LanceDB scan),
-    // which is deterministic per index but not lexicographic —
-    // good enough for "give me a small slice to iterate against".
+    // Apply the per-article cap and/or include-list. `include_articles`
+    // takes precedence — if the operator handed us an explicit title
+    // list (typically the top-K from `enrich triage-candidates`), keep
+    // exactly those articles regardless of order. Otherwise fall back
+    // to the existing first-seen-order limit.
+    //
+    // `--include-articles` is normalised through
+    // `corpus_engine::filters::normalize_title` to be tolerant of the
+    // operator's underscore vs space habits in their title file.
     let total_articles = article_first_seen.len();
-    let kept_articles: std::collections::HashSet<ArticleKey> = if let Some(n) = limit_articles {
+    let kept_articles: std::collections::HashSet<ArticleKey> = if let Some(want) =
+        include_articles.as_ref()
+    {
+        let want_norm: std::collections::HashSet<String> = want
+            .iter()
+            .map(|t| corpus_engine::filters::normalize_title(t))
+            .collect();
+        let mut hits: std::collections::HashSet<ArticleKey> =
+            std::collections::HashSet::new();
+        let mut missing_count = 0usize;
+        for (key, _) in article_first_seen {
+            if want_norm.contains(&corpus_engine::filters::normalize_title(&key)) {
+                hits.insert(key);
+            }
+        }
+        // Diagnostic so the operator knows how many of their listed
+        // titles actually exist in the source corpus.
+        let want_total = want_norm.len();
+        if hits.len() < want_total {
+            missing_count = want_total - hits.len();
+            eprintln!(
+                "manifest: --include-articles matched {}/{} titles ({} not present in source corpus)",
+                hits.len(),
+                want_total,
+                missing_count,
+            );
+        }
+        hits
+    } else if let Some(n) = limit_articles {
         let mut articles: Vec<(ArticleKey, usize)> =
             article_first_seen.into_iter().collect();
         articles.sort_by_key(|(_, ord)| *ord);
@@ -769,6 +826,14 @@ struct ParsedInit {
     /// articles included (sort by source_doc_id, take first N).
     /// `None` means no cap.
     limit_articles: Option<usize>,
+    /// When `from_corpus` is set, optional explicit list of article
+    /// titles to keep (one per line, with comments and blank lines
+    /// ignored). Mutually exclusive with `--limit-articles`.
+    /// Match is case + underscore folded by
+    /// `corpus_engine::filters::normalize_title`. Designed to consume
+    /// the top-K title list from
+    /// `sovereign enrich triage-candidates --json`.
+    include_articles: Option<Vec<String>>,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
@@ -797,6 +862,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     let mut template_path: Option<PathBuf> = None;
     let mut from_corpus: Option<String> = None;
     let mut limit_articles: Option<usize> = None;
+    let mut include_articles_path: Option<PathBuf> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -843,6 +909,13 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                     return Err("--limit-articles must be > 0".into());
                 }
                 limit_articles = Some(n);
+                i += 2;
+            }
+            "--include-articles" => {
+                include_articles_path = Some(PathBuf::from(
+                    args.get(i + 1)
+                        .ok_or("--include-articles requires a path argument".to_string())?,
+                ));
                 i += 2;
             }
             "--chapter-regex" => {
@@ -967,6 +1040,64 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     if limit_articles.is_some() && !corpus_mode {
         return Err("--limit-articles requires --from-corpus".to_string());
     }
+    if include_articles_path.is_some() && !corpus_mode {
+        return Err("--include-articles requires --from-corpus".to_string());
+    }
+    if include_articles_path.is_some() && limit_articles.is_some() {
+        return Err(
+            "--include-articles and --limit-articles are mutually exclusive".to_string(),
+        );
+    }
+    let include_articles: Option<Vec<String>> = if let Some(path) = include_articles_path {
+        let raw = std::fs::read_to_string(&path)
+            .map_err(|e| format!("--include-articles {}: {e}", path.display()))?;
+        // The file can be plain titles (one per line) OR the JSON
+        // produced by `enrich triage-candidates --json`. Detect by
+        // first non-whitespace char.
+        let trimmed = raw.trim_start();
+        let titles: Vec<String> = if trimmed.starts_with('{') || trimmed.starts_with('[') {
+            // JSON: pull `top_in_corpus_by_centrality[*].name`. If
+            // that key is missing, fall back to scanning every
+            // string field that looks like a title (defensive — a
+            // future schema add shouldn't silently break this
+            // path).
+            let v: serde_json::Value = serde_json::from_str(&raw)
+                .map_err(|e| format!("--include-articles JSON parse: {e}"))?;
+            let mut out: Vec<String> = Vec::new();
+            if let Some(arr) = v
+                .get("top_in_corpus_by_centrality")
+                .and_then(|x| x.as_array())
+            {
+                for entry in arr {
+                    if let Some(name) = entry.get("name").and_then(|n| n.as_str()) {
+                        out.push(name.to_string());
+                    }
+                }
+            }
+            if out.is_empty() {
+                return Err(
+                    "--include-articles JSON had no top_in_corpus_by_centrality entries"
+                        .to_string(),
+                );
+            }
+            out
+        } else {
+            raw.lines()
+                .map(|l| l.trim())
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .map(|l| l.to_string())
+                .collect()
+        };
+        if titles.is_empty() {
+            return Err(
+                "--include-articles file contained no titles (after stripping comments + blank lines)"
+                    .to_string(),
+            );
+        }
+        Some(titles)
+    } else {
+        None
+    };
     // Source path is `None` in template / corpus modes; cmd_init resolves
     // it to the materialised file (template mode) or to a placeholder
     // (corpus mode — there's no source file at all).
@@ -1013,6 +1144,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
         template_path,
         from_corpus,
         limit_articles,
+        include_articles,
     })
 }
 

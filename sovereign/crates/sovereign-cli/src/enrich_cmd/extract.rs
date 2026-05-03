@@ -10,8 +10,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    ChapterManifest, ChapterSelection, Phase1Output, Phase1Progress, PhaseCache, PhaseFailureKind,
-    PhaseRunner, PipelineRegistry, RetryMode, RunOutputWriter,
+    checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest,
+    ChapterSelection, Phase1Output, Phase1Progress, PhaseCache, PhaseFailureKind, PhaseRunner,
+    PipelineRegistry, RetryMode, RunOutputWriter,
 };
 
 use super::config::EnrichConfig;
@@ -45,6 +46,22 @@ const HELP: Help = Help {
                  (think-truncation and parse-drift — both benefit from the bumped output \
                  budget). Successful retries merge into cache/questions.json.",
             ),
+            (
+                "--resume",
+                "Crash-resilient resume. Reads the per-chapter JSONL checkpoint at \
+                 runs/_phase1_checkpoint.jsonl and skips chapter ids already recorded \
+                 there (success OR failure). The runner appends to the checkpoint after \
+                 every chapter completes, so a kill / crash / power loss mid-run loses \
+                 at most one chapter. Combine with --full for long Wikipedia-scale Tier-2 \
+                 runs.",
+            ),
+            (
+                "--finalize",
+                "Read runs/_phase1_checkpoint.jsonl, write a canonical run-file from it, \
+                 and (when applicable) update cache/questions.json. Use after a long \
+                 --resume sequence has covered every chapter — no LLM calls fired by this \
+                 mode. Mutually exclusive with --chapters / --full / --retry-failed.",
+            ),
         ]),
         HelpSection::Examples(&[
             (
@@ -70,6 +87,70 @@ const HELP: Help = Help {
     ],
 };
 
+/// `--finalize` mode: read the per-chapter checkpoint, collapse it
+/// to a `Phase1Output`, write the canonical run-file, and update the
+/// cache (so phases 2+ see a complete questions set). Zero LLM calls.
+async fn cmd_finalize(
+    cfg: &EnrichConfig,
+    checkpoint_path: &std::path::Path,
+) -> i32 {
+    use corpus_engine::enrichment::pipeline::{
+        types::PipelinePhase, Phase1Output,
+    };
+    let entries = match read_phase1_checkpoint(checkpoint_path) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("error: reading checkpoint {}: {e}", checkpoint_path.display());
+            return 1;
+        }
+    };
+    if entries.is_empty() {
+        eprintln!(
+            "error: checkpoint {} is empty (or missing). Run `sovereign enrich extract {} --full --resume` first to populate it.",
+            checkpoint_path.display(),
+            cfg.corpus_id
+        );
+        return 1;
+    }
+    let entries_total = entries.len();
+    let (extracted, failures) = collapse_phase1_checkpoint(entries);
+    println!(
+        "  · finalize: {} entries → {} successes + {} failures",
+        entries_total,
+        extracted.len(),
+        failures.len()
+    );
+
+    let output = Phase1Output {
+        schema_version: Phase1Output::SCHEMA_VERSION,
+        pipeline_id: cfg.pipeline_id.clone(),
+        questions_by_chapter: extracted,
+        failures,
+        written_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));
+    let run_path = match runs.write(PipelinePhase::Questions, "finalize", &output) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: writing run-file: {e}");
+            return 1;
+        }
+    };
+    println!("  ✓ wrote run-file {}", run_path.display());
+
+    // Update the cache — finalize is the canonical "promote
+    // checkpoint to authoritative state" pass, so cache semantics
+    // mirror a `--full` run.
+    let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+    if let Err(e) = cache.write(PipelinePhase::Questions, &output) {
+        eprintln!("error: updating cache: {e}");
+        return 1;
+    }
+    println!("  ✓ updated cache/questions.json");
+    0
+}
+
 pub async fn cmd_extract(args: &[String]) -> i32 {
     if help::wants_help(args) {
         help::print(&HELP);
@@ -94,6 +175,15 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             return 1;
         }
     };
+
+    let checkpoint_path = paths::runs_dir(&cfg.corpus_id).join("_phase1_checkpoint.jsonl");
+
+    // Finalize mode: read checkpoint, collapse to Phase1Output,
+    // write the canonical run-file, update cache. Zero LLM calls,
+    // no daemon required.
+    if parsed.finalize {
+        return cmd_finalize(&cfg, &checkpoint_path).await;
+    }
 
     // Probe daemon — fail fast if it's down.
     if !probe_daemon(&cfg.base_url).await {
@@ -137,7 +227,8 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         runs,
         paths::exemplars_dir(&cfg.corpus_id),
     )
-    .with_chat_with_tokens(chat_with_tokens);
+    .with_chat_with_tokens(chat_with_tokens)
+    .with_checkpoint_path(&checkpoint_path);
 
     // Rebuild corpus state.
     let (inputs, manifest) = match rebuild_corpus_state(&cfg) {
@@ -173,10 +264,11 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         SelectionArg::Full => ChapterSelection::Full,
         SelectionArg::RetryFailed => {
             let runs_dir = paths::runs_dir(&cfg.corpus_id);
-            match read_latest_failures(&runs_dir) {
+            let source = read_failures_for_retry(&runs_dir, &checkpoint_path);
+            match source {
                 Ok(Some((path, ids))) if ids.is_empty() => {
                     println!(
-                        "  · no failures in the most recent run ({}) — nothing to retry.",
+                        "  · no failures in {} — nothing to retry.",
                         path.display()
                     );
                     return 0;
@@ -267,6 +359,93 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         }
     };
 
+    // Resume filter — when --resume is set, read the per-chapter
+    // checkpoint and remove ids the runner has already processed
+    // (success OR failure) from the selection. After the filter,
+    // a Full run may demote to Subset (if any chapter ids were
+    // already done), which preserves the "skip processed work"
+    // semantic without changing the schema.
+    // RetryFailed already targets exactly the chapters we want to
+    // re-attempt — those WILL be in the checkpoint as failures, so
+    // applying the resume "skip processed" filter would remove every
+    // candidate and exit. Suppress resume in that case.
+    let resume_active = parsed.resume
+        && !matches!(selection, ChapterSelection::RetryFailed(_));
+    let selection = if resume_active {
+        let entries = match read_phase1_checkpoint(&checkpoint_path) {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("error: reading checkpoint {}: {e}", checkpoint_path.display());
+                return 1;
+            }
+        };
+        let done = checkpoint_processed_ids(&entries);
+        if done.is_empty() {
+            println!(
+                "  · --resume: checkpoint at {} is empty (or missing); proceeding with full selection.",
+                checkpoint_path.display()
+            );
+            selection
+        } else {
+            let before = match &selection {
+                ChapterSelection::Full => inputs.len(),
+                ChapterSelection::Subset(ids) | ChapterSelection::RetryFailed(ids) => ids.len(),
+            };
+            let remaining: Vec<String> = match &selection {
+                ChapterSelection::Full => inputs
+                    .iter()
+                    .map(|c| c.chapter_id.clone())
+                    .filter(|id| !done.contains(id))
+                    .collect(),
+                ChapterSelection::Subset(ids) | ChapterSelection::RetryFailed(ids) => ids
+                    .iter()
+                    .filter(|id| !done.contains(id.as_str()))
+                    .cloned()
+                    .collect(),
+            };
+            if remaining.is_empty() {
+                println!(
+                    "  · --resume: every selected chapter is already in the checkpoint ({} done). \
+                     Run `sovereign enrich extract {} --finalize` to write the canonical run-file.",
+                    done.len(),
+                    cfg.corpus_id
+                );
+                return 0;
+            }
+            println!(
+                "  · --resume: checkpoint covers {} chapter(s) → running {} of {} originally selected.",
+                done.len(),
+                remaining.len(),
+                before
+            );
+            // Preserve the original mode (Full vs RetryFailed)
+            // semantically even though we narrow the id list:
+            // RetryFailed kept its merge-into-cache behaviour, Full
+            // did not. Demote Full to Subset only when something is
+            // already done — otherwise keep Full so the cache is
+            // overwritten on completion.
+            match selection {
+                ChapterSelection::Full => {
+                    if remaining.len() == before {
+                        ChapterSelection::Full
+                    } else {
+                        // We've already processed some chapters in a
+                        // prior invocation — the in-memory result of
+                        // THIS invocation alone wouldn't be a valid
+                        // "full" snapshot to overwrite the cache
+                        // with. Demote to Subset; the operator
+                        // promotes via --finalize.
+                        ChapterSelection::Subset(remaining)
+                    }
+                }
+                ChapterSelection::Subset(_) => ChapterSelection::Subset(remaining),
+                ChapterSelection::RetryFailed(_) => ChapterSelection::RetryFailed(remaining),
+            }
+        }
+    } else {
+        selection
+    };
+
     // Build the retry mode passed to the runner. The terse variant
     // bumps the output cap to double the config's default so a
     // chapter that starved the default pass has room to emit JSON
@@ -280,12 +459,13 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     };
 
     println!(
-        "  running phase 1 ({}) over {} chapter(s)",
+        "  running phase 1 ({}) over {} chapter(s) — checkpoint: {}",
         selection.mode_label(),
         match &selection {
             ChapterSelection::Full => inputs.len(),
             ChapterSelection::Subset(ids) | ChapterSelection::RetryFailed(ids) => ids.len(),
-        }
+        },
+        checkpoint_path.display()
     );
 
     let progress = |ev: Phase1Progress<'_>| match ev {
@@ -411,6 +591,16 @@ struct ParsedExtract {
     /// terse pass is by design a recovery run, not a full-corpus
     /// run.
     terse: bool,
+    /// Set by `--resume`. Reads the per-chapter checkpoint and skips
+    /// chapter ids already recorded there. Compatible with `--full`,
+    /// `--chapters`, and `--retry-failed`; the resume filter applies
+    /// to whichever selection mode is in effect.
+    resume: bool,
+    /// Set by `--finalize`. Read-only mode: reconstructs a run-file
+    /// (and updates the cache when --full-equivalent semantics
+    /// apply) from the checkpoint. Mutually exclusive with the
+    /// selection flags.
+    finalize: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
@@ -419,6 +609,8 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     let mut full = false;
     let mut retry_failed = false;
     let mut terse = false;
+    let mut resume = false;
+    let mut finalize = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -444,6 +636,14 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
                 terse = true;
                 i += 1;
             }
+            "--resume" => {
+                resume = true;
+                i += 1;
+            }
+            "--finalize" => {
+                finalize = true;
+                i += 1;
+            }
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
             }
@@ -462,6 +662,24 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     let selection_count = chapters_csv.is_some() as u8 + full as u8 + retry_failed as u8;
     if selection_count > 1 {
         return Err("--chapters, --full, and --retry-failed are mutually exclusive".into());
+    }
+    if finalize {
+        if selection_count > 0 || terse || resume {
+            return Err(
+                "--finalize is a read-only checkpoint-to-runfile pass; do not pair with \
+                 --chapters / --full / --retry-failed / --terse / --resume".into(),
+            );
+        }
+        // Finalize mode short-circuits the whole flow; we use Full
+        // as a placeholder selection so the rest of the parser
+        // succeeds.
+        return Ok(ParsedExtract {
+            corpus_id,
+            selection: SelectionArg::Full,
+            terse: false,
+            resume: false,
+            finalize: true,
+        });
     }
     if terse && full {
         return Err(
@@ -485,10 +703,64 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
         SelectionArg::Subset(ids)
     } else {
         return Err(
-            "must provide one of --chapters <ids>, --full, or --retry-failed".into(),
+            "must provide one of --chapters <ids>, --full, --retry-failed, or --finalize".into(),
         );
     };
-    Ok(ParsedExtract { corpus_id, selection, terse })
+    Ok(ParsedExtract {
+        corpus_id,
+        selection,
+        terse,
+        resume,
+        finalize: false,
+    })
+}
+
+/// Resolve the failure list `--retry-failed` should target. Prefers
+/// the per-chapter checkpoint (live, written after every chapter)
+/// over the last finalised run-file (only written by `--finalize` or
+/// pre-checkpoint legacy runs). When neither has anything, returns
+/// `Ok(None)`.
+///
+/// The first element of the returned tuple is a path the caller can
+/// surface to the operator so they know where the failure list came
+/// from — the checkpoint or a specific run-file.
+fn read_failures_for_retry(
+    runs_dir: &std::path::Path,
+    checkpoint_path: &std::path::Path,
+) -> Result<Option<(PathBuf, Vec<(String, PhaseFailureKind)>)>, String> {
+    use corpus_engine::enrichment::pipeline::{
+        read_phase1_checkpoint, Phase1CheckpointEntry,
+    };
+
+    if checkpoint_path.exists() {
+        let entries = read_phase1_checkpoint(checkpoint_path)
+            .map_err(|e| format!("read checkpoint {}: {e}", checkpoint_path.display()))?;
+        if !entries.is_empty() {
+            // Last-write-wins on chapter_id: a chapter that failed
+            // in an earlier entry but succeeded later is no longer a
+            // candidate. Walk in order, track the latest verdict per
+            // id, keep only the failures.
+            let mut latest_failure: std::collections::HashMap<String, PhaseFailureKind> =
+                std::collections::HashMap::new();
+            for entry in entries {
+                match entry {
+                    Phase1CheckpointEntry::Success { chapter_id, .. } => {
+                        latest_failure.remove(&chapter_id);
+                    }
+                    Phase1CheckpointEntry::Failure { chapter_id, failure } => {
+                        latest_failure.insert(chapter_id, failure.failure_kind);
+                    }
+                }
+            }
+            let mut ids: Vec<(String, PhaseFailureKind)> =
+                latest_failure.into_iter().collect();
+            ids.sort_by(|a, b| a.0.cmp(&b.0));
+            return Ok(Some((checkpoint_path.to_path_buf(), ids)));
+        }
+        // Checkpoint exists but is empty — fall through to run-file
+        // scan in case a legacy `--full` (no checkpoint) ran prior.
+    }
+    read_latest_failures(runs_dir)
 }
 
 /// Locate the most recent `questions-*.json` run file under the

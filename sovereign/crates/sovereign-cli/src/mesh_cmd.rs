@@ -839,8 +839,124 @@ fn human_bytes(bytes: u64) -> String {
 }
 
 async fn cmd_corpus_status() -> i32 {
-    println!("(corpus status requires a running daemon)");
+    let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        })
+        .join("indexes");
+    let entries = match std::fs::read_dir(&indexes_dir) {
+        Ok(rd) => rd,
+        Err(e) => {
+            eprintln!("error: read {}: {e}", indexes_dir.display());
+            return 1;
+        }
+    };
+    let mut rows: Vec<CorpusStatusRow> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.starts_with('.') || name.starts_with('_') {
+            continue;
+        }
+        rows.push(read_corpus_status_row(name, &path));
+    }
+    rows.sort_by(|a, b| a.corpus_id.cmp(&b.corpus_id));
+    if rows.is_empty() {
+        println!("(no corpora installed at {})", indexes_dir.display());
+        return 0;
+    }
+    println!(
+        "{:<32} {:>14} {:>10} {:>10} {:>10}",
+        "corpus", "chunks", "atlas", "tier-2", "embed-cache"
+    );
+    println!("{}", "─".repeat(80));
+    for r in rows {
+        let chunks = r
+            .chunk_count
+            .map(|n| format_count(n as u64))
+            .unwrap_or_else(|| "—".into());
+        let atlas = r
+            .atlas_entities
+            .map(|n| format_count(n as u64))
+            .unwrap_or_else(|| "—".into());
+        let tier2 = r
+            .atlas_extracted_entities
+            .map(|n| format_count(n as u64))
+            .unwrap_or_else(|| "—".into());
+        let cache: String = if r.atlas_embeddings_cached {
+            "✓".into()
+        } else {
+            "—".into()
+        };
+        println!(
+            "{:<32} {:>14} {:>10} {:>10} {:>10}",
+            r.corpus_id, chunks, atlas, tier2, cache
+        );
+    }
     0
+}
+
+#[derive(Debug)]
+struct CorpusStatusRow {
+    corpus_id: String,
+    chunk_count: Option<usize>,
+    atlas_entities: Option<usize>,
+    atlas_extracted_entities: Option<usize>,
+    atlas_embeddings_cached: bool,
+}
+
+fn read_corpus_status_row(corpus_id: &str, dir: &std::path::Path) -> CorpusStatusRow {
+    // Chunks: read `_corpus_meta.json` for an `enriched_chunks` /
+    // computed count. We don't open lance here — too heavy for a
+    // status command. Instead we report whether the meta file
+    // claims indexed status.
+    let chunk_count = std::fs::read_to_string(dir.join("_corpus_meta.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| {
+            v.get("enriched_chunks")
+                .and_then(|n| n.as_u64())
+                .map(|n| n as usize)
+        });
+
+    // Atlas: use the cached summary helper so a) the count agrees
+    // with what mesh gossip advertises (Phase C1) and b) repeat
+    // status calls don't reparse atoms.json on every invocation.
+    let atlas_dir = dir.join("atlas");
+    let summary =
+        corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
+            .ok()
+            .flatten();
+    let (atlas_entities, atlas_extracted_entities) = match summary {
+        Some(s) => (Some(s.atom_count as usize), Some(s.tier2_count as usize)),
+        None => (None, None),
+    };
+    let atlas_embeddings_cached = atlas_dir.join("atoms.embeddings.bin").exists();
+    CorpusStatusRow {
+        corpus_id: corpus_id.to_string(),
+        chunk_count,
+        atlas_entities,
+        atlas_extracted_entities,
+        atlas_embeddings_cached,
+    }
+}
+
+fn format_count(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}k", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
 }
 
 /// `sovereign corpus diag <corpus_id> [--titles-file <path>]`

@@ -68,6 +68,20 @@ pub struct EnrichConfig {
     /// for verbose models; lower it to force succinct outputs.
     #[serde(default = "default_max_output_tokens")]
     pub max_output_tokens: u32,
+    /// Per-phase override for Phase 1b coverage passes (entity +
+    /// concept). Phase 1b runs without a JSON-Schema constraint, so
+    /// the model is free to elaborate — Qwen3.5-4B with `/no_think`
+    /// routinely emits 700-900 tokens per pass against a default
+    /// 2048 cap, dragging per-chapter wall-time well above what the
+    /// schema-bound Phase 1 main needs. Setting a smaller cap here
+    /// (e.g. 1024) bounds the bloat without touching Phase 1's
+    /// budget.
+    ///
+    /// `None` (the default) falls through to `max_output_tokens`,
+    /// preserving legacy single-cap behaviour for corpora that
+    /// haven't opted in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase1b_max_output_tokens: Option<u32>,
     pub created_at: String,
 }
 
@@ -184,6 +198,7 @@ mod tests {
             min_section_body_words: default_min_section_body_words(),
             toc_markers: None,
             max_output_tokens: default_max_output_tokens(),
+            phase1b_max_output_tokens: None,
             created_at: "2026-04-22T00:00:00Z".into(),
         }
     }
